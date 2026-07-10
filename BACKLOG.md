@@ -1913,6 +1913,40 @@ config (rendering not yet wired). Remaining:
   descriptors' `icon` fields are currently `None`.)
 - [ ] **pane-naming-6** — BUG (needs repro): renaming from the sidebar renames the wrong pane
   (hypothesis: `pending_context` cursor on a non-pane row → falls back to focused pane).
+- [ ] **pane-naming-7** — Remove/clear a custom pane/workspace name (revert to process/default name).
+  **Decision (2026-07-10, user): dedicated action (Option B)** — NOT empty-submit in the rename dialog
+  (keep the dialog's disabled-OK-when-empty guard; empty-submit would trap the capability behind one
+  surface and re-open accidental blanking). Add `ResetPaneName`/`ResetWorkspaceName` (+ sidebar by-id/
+  by-idx variants mirroring `RenamePaneById`/`RenameWorkspaceByIdx`), full 11-step wiring + RPC +
+  context-menu entries (label e.g. *"Use process name"* / *"Use default name"*), reusing
+  `apply_rename(state, target, name)` with a clear path (name → `None`). The model already supports it:
+  `custom_name`/`ws.name` are `Option<String>` and the display falls back to the program/default name
+  when `None`. Do after pane-naming-1..5 on this branch.
+
+### [ ] Requirement: Terminal color reload + theme integration · `terminal-theming` (BUGS, 2026-07-10)
+Two terminal color bugs found during the pane-naming session. **User: fix on a separate branch after
+pane-naming.** Transparency was **off** when Bug 2 was observed (so it is a palette/default-bg issue,
+not z=0 frost compositing).
+- [ ] **terminal-theming-1** — BUG: terminal colors are not reapplied on config reload (`prefix+Shift+r`).
+  **Root-caused:** `reload_config` recomputes the palette and calls `engine.reload_config` →
+  `terminal.set_config(...)`, but wezterm-term's `set_config` only swaps the config Arc — it does **not**
+  reset the *forked* palette override. `TerminalState::palette()` returns `self.palette` (the fork) when
+  set, else `config.color_palette()`. Any program that uses a dynamic-color escape (OSC 4/10/11/104…) —
+  nvim always does, many shell prompts too — forks `self.palette`, so a heca theme reload updates the
+  config but `palette()` (read by the snapshot, `engine.rs` ~578/643) keeps returning the stale fork.
+  Pristine shells (never touched colors) *do* re-theme. **Fix:** in `TerminalEngine::reload_config`
+  (`heca-core/.../engine.rs`), after `set_config`, force the new palette to win — e.g.
+  `*self.terminal.palette_mut() = self.terminal.get_config().color_palette()` (or reset the fork to
+  `None`). wezterm's `implicit_palette_reset_if_same_as_configured` is insufficient (only resets when
+  the fork already equals config). A running nvim reasserts its own colors on its next redraw.
+- [ ] **terminal-theming-2** — BUG: an nvim dark colorscheme has "no effect" under a light UI theme
+  (latte), transparency **off**. Contributing facts: (1) the UI theme does **not** drive the terminal
+  palette — `terminal_palette_defaults` (`heca/src/app/backend_factory.rs`) reads only explicit
+  `theme.terminal_foreground/background/ansi/brights/…` overrides; unset → wezterm `ColorPalette::default()`
+  regardless of mocha/latte. (2) Likely the same fork mechanism as `terminal-theming-1` interacts with a
+  light `terminal_background`. **Needs deeper investigation** on the fix branch (repro: latte + opaque
+  terminal + dark nvim colorscheme; check whether heca's default bg overrides nvim's OSC-set bg, and
+  whether the UI theme *should* map to terminal defaults when no explicit `terminal_*` override exists).
 
 ### [ ] Phase: Top/Bottom Bar Widget System + mainmenu · `topbar-menu` — STUB (vision holder)
 TopBar and BottomBar become **generic, pluggable widget containers** (specular in functioning,
