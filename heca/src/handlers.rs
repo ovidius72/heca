@@ -901,6 +901,39 @@ fn apply_rename(state: &mut AppState, target: RenameTarget, new_name: String) {
     state.needs_redraw = true;
 }
 
+// ── Reset name (clear the custom name → back to the program / default label) ──
+// All reuse `apply_rename` with an empty string, which stores `None` (see its `then_some`),
+// so the pane falls back to the program name and the workspace to `Workspace N`.
+
+/// Clear the **focused** pane's custom name (context menu on a pane / RPC / keybind).
+pub fn handle_reset_pane_name(state: &mut AppState, _action: &WmAction) {
+    if let Some(pane_id) = state.focused_pane {
+        apply_rename(state, RenameTarget::Pane(pane_id), String::new());
+    }
+}
+
+/// Clear a specific pane's custom name by id (sidebar menu / RPC).
+pub fn handle_reset_pane_name_by_id(state: &mut AppState, action: &WmAction) {
+    let WmAction::ResetPaneNameById { pane_id } = action else {
+        return;
+    };
+    apply_rename(state, RenameTarget::Pane(*pane_id), String::new());
+}
+
+/// Clear the **active** workspace's custom name (context menu / RPC / keybind).
+pub fn handle_reset_workspace_name(state: &mut AppState, _action: &WmAction) {
+    let ws_idx = state.session.active_workspace_idx;
+    apply_rename(state, RenameTarget::Workspace(ws_idx), String::new());
+}
+
+/// Clear a specific workspace's custom name by index (sidebar menu / RPC).
+pub fn handle_reset_workspace_name_by_idx(state: &mut AppState, action: &WmAction) {
+    let WmAction::ResetWorkspaceNameByIdx { ws_idx } = action else {
+        return;
+    };
+    apply_rename(state, RenameTarget::Workspace(*ws_idx), String::new());
+}
+
 /// Open the rename dialog for `target`, pre-filled with `current_name`. A host-owned modal
 /// (`OverlayHost::open_modal`) with a single `Input` field (bound to the `"name"` form field)
 /// and **OK / Cancel** buttons; the `Dialog` owns focus/keyboard (Tab / Shift+Tab between the

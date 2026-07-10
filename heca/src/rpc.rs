@@ -376,6 +376,18 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let ws_idx = parse_usize!(arg, "ws_idx");
             Ok(WmAction::RenameWorkspaceByIdx { ws_idx })
         }
+        "reset-pane-name" => Ok(WmAction::ResetPaneName),
+        "reset-pane-name-id" => {
+            let arg = expect_arg!("pane_id");
+            let pane_id = PaneId(parse_u64!(arg, "pane_id"));
+            Ok(WmAction::ResetPaneNameById { pane_id })
+        }
+        "reset-workspace-name" => Ok(WmAction::ResetWorkspaceName),
+        "reset-workspace-name-idx" => {
+            let arg = expect_arg!("ws_idx");
+            let ws_idx = parse_usize!(arg, "ws_idx");
+            Ok(WmAction::ResetWorkspaceNameByIdx { ws_idx })
+        }
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
         // Chrome container placement (plugin-02, §2.9) — RPC parity for the moves.
@@ -688,6 +700,23 @@ mod tests {
                 ws_idx: 1,
                 col_idx: 2
             })
+        );
+    }
+
+    #[test]
+    fn test_reset_name_commands() {
+        assert_eq!(parse_rpc_command("reset-pane-name"), Ok(WmAction::ResetPaneName));
+        assert_eq!(
+            parse_rpc_command("reset-pane-name-id 7"),
+            Ok(WmAction::ResetPaneNameById { pane_id: PaneId(7) })
+        );
+        assert_eq!(
+            parse_rpc_command("reset-workspace-name"),
+            Ok(WmAction::ResetWorkspaceName)
+        );
+        assert_eq!(
+            parse_rpc_command("reset-workspace-name-idx 2"),
+            Ok(WmAction::ResetWorkspaceNameByIdx { ws_idx: 2 })
         );
     }
 

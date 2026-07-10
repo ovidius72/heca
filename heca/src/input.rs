@@ -286,6 +286,18 @@ pub enum WmAction {
         ws_idx: usize,
         col_idx: usize,
     },
+    /// Clear the **focused** pane's custom name, reverting it to the program name.
+    ResetPaneName,
+    /// Clear a specific pane's custom name by id (context menu / RPC / sidebar target).
+    ResetPaneNameById {
+        pane_id: PaneId,
+    },
+    /// Clear the **active** workspace's custom name, reverting it to `Workspace N`.
+    ResetWorkspaceName,
+    /// Clear a specific workspace's custom name by index (context menu / RPC / sidebar target).
+    ResetWorkspaceNameByIdx {
+        ws_idx: usize,
+    },
 
     // ── Quick take (unit) ──
     PaneTake,
@@ -622,6 +634,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
         "rename_column" => Some(WmAction::RenameColumn),
+        "reset_pane_name" => Some(WmAction::ResetPaneName),
+        "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
         "command_palette" => Some(WmAction::CommandPalette),
         "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
             ws_idx: 0,
@@ -792,6 +806,12 @@ pub fn build_action(
             ws_idx: get_usize(args, "ws_idx")?,
             col_idx: get_usize(args, "col_idx")?,
         }),
+        "reset_pane_name_by_id" => Some(WmAction::ResetPaneNameById {
+            pane_id: PaneId(get_u64(args, "pane_id")?),
+        }),
+        "reset_workspace_name_by_idx" => Some(WmAction::ResetWorkspaceNameByIdx {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
         "take_pane" => Some(WmAction::TakePane {
             pane_id: PaneId(get_u64(args, "pane_id")?),
             focus_after: args
@@ -915,6 +935,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::RenameWorkspace
         | WmAction::RenamePane
         | WmAction::RenameColumn
+        | WmAction::ResetPaneName
+        | WmAction::ResetWorkspaceName
         | WmAction::WorkspaceNext
         | WmAction::WorkspacePrev => 1,
         // Swap
@@ -990,6 +1012,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::RenamePaneById { .. }
         | WmAction::RenameWorkspaceByIdx { .. }
         | WmAction::RenameColumnByIdx { .. }
+        | WmAction::ResetPaneNameById { .. }
+        | WmAction::ResetWorkspaceNameByIdx { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. }
         | WmAction::ReloadConfig
@@ -1069,6 +1093,14 @@ mod tests {
             action_from_name("rename_column_by_idx"),
             None,
             "by-idx variants are menu/RPC-only and carry args, so they are not resolvable by bare name"
+        );
+        assert_eq!(
+            action_from_name("reset_pane_name"),
+            Some(WmAction::ResetPaneName)
+        );
+        assert_eq!(
+            action_from_name("reset_workspace_name"),
+            Some(WmAction::ResetWorkspaceName)
         );
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
         assert_eq!(
@@ -1626,6 +1658,21 @@ mod tests {
         assert_eq!(
             build_action("rename_column_by_idx", &std::collections::HashMap::new()),
             None
+        );
+    }
+
+    #[test]
+    fn test_build_reset_name_by_target() {
+        let pane_args =
+            std::collections::HashMap::from([("pane_id".to_string(), "7".to_string())]);
+        assert_eq!(
+            build_action("reset_pane_name_by_id", &pane_args),
+            Some(WmAction::ResetPaneNameById { pane_id: PaneId(7) })
+        );
+        let ws_args = std::collections::HashMap::from([("ws_idx".to_string(), "2".to_string())]);
+        assert_eq!(
+            build_action("reset_workspace_name_by_idx", &ws_args),
+            Some(WmAction::ResetWorkspaceNameByIdx { ws_idx: 2 })
         );
     }
 }

@@ -582,6 +582,14 @@ impl ActionRegistry {
             icon: Some(Glyph::NotePencil),
         },
         ActionDescriptor {
+            name: "reset_pane_name",
+            label: "Use Process Name",
+            description: "Clear the pane's custom name, reverting to the program name.",
+            category: ActionCategory::Pane,
+            default_binding: "unbound",
+            icon: Some(Glyph::Backspace),
+        },
+        ActionDescriptor {
             name: "rename_column",
             label: "Rename Column",
             description: "Rename the active column.",
@@ -605,6 +613,14 @@ impl ActionRegistry {
             category: ActionCategory::Workspace,
             default_binding: "Shift+w",
             icon: Some(Glyph::NotePencil),
+        },
+        ActionDescriptor {
+            name: "reset_workspace_name",
+            label: "Use Default Name",
+            description: "Clear the workspace's custom name, reverting to \"Workspace N\".",
+            category: ActionCategory::Workspace,
+            default_binding: "unbound",
+            icon: Some(Glyph::Backspace),
         },
         ActionDescriptor {
             name: "delete_workspace",

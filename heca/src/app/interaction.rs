@@ -263,6 +263,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ClosePaneById { .. }
         | WmAction::RenamePane
         | WmAction::RenamePaneById { .. }
+        | WmAction::ResetPaneName
+        | WmAction::ResetPaneNameById { .. }
         | WmAction::RenameTarget { .. }
         // OpenContextMenu operates on the focused pane (mouse: the clicked one; keyboard:
         // the focused one) and is allowed in both tiled and floating domains — a floating pane
@@ -313,6 +315,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CreateWorkspace
         | WmAction::RenameWorkspace
         | WmAction::RenameWorkspaceByIdx { .. }
+        | WmAction::ResetWorkspaceName
+        | WmAction::ResetWorkspaceNameByIdx { .. }
         | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
@@ -1127,6 +1131,8 @@ mod tests {
                 ws_idx: 0,
                 col_idx: 0,
             },
+            WmAction::ResetPaneNameById { pane_id: PaneId(0) },
+            WmAction::ResetWorkspaceNameByIdx { ws_idx: 0 },
             WmAction::SpawnCommand {
                 command: String::new(),
                 kind: crate::input::SpawnKind::Terminal,
@@ -1170,6 +1176,15 @@ mod tests {
                 col_idx: 0
             }),
             ActionPolicy::TiledOnly
+        );
+        // Reset-name mirrors rename: pane-local for panes, workspace-level for workspaces.
+        assert_eq!(
+            action_policy(&WmAction::ResetPaneName),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ResetWorkspaceNameByIdx { ws_idx: 0 }),
+            ActionPolicy::WorkspaceLevel
         );
         assert_eq!(
             action_policy(&WmAction::Float),

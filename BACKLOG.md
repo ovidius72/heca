@@ -1920,8 +1920,14 @@ config (rendering not yet wired). Remaining:
   descriptors' `icon` fields are currently `None`.)
 - [ ] **pane-naming-6** — BUG (needs repro): renaming from the sidebar renames the wrong pane
   (hypothesis: `pending_context` cursor on a non-pane row → falls back to focused pane).
-- [ ] **pane-naming-7** — Remove/clear a custom pane/workspace name (revert to process/default name).
-  **Decision (2026-07-10, user): dedicated action (Option B)** — NOT empty-submit in the rename dialog
+- [x] **pane-naming-7** — Remove/clear a custom pane/workspace name (revert to process/default name).
+  **DONE (2026-07-10).** 4 dedicated actions (`ResetPaneName`/`ResetPaneNameById`,
+  `ResetWorkspaceName`/`ResetWorkspaceNameByIdx`), full wiring + RPC (`reset-pane-name[-id]`,
+  `reset-workspace-name[-idx]`) + descriptors (icon `Backspace`, labels "Use process name" / "Use
+  default name"), reusing `apply_rename(target, "")` (empty → `None`). Menu entries are **conditional**
+  (only shown when a custom name exists); the **pane** context menu carries only the pane reset (the
+  workspace reset lives in the workspace menu).
+  **Original decision (2026-07-10, user): dedicated action (Option B)** — NOT empty-submit in the rename dialog
   (keep the dialog's disabled-OK-when-empty guard; empty-submit would trap the capability behind one
   surface and re-open accidental blanking). Add `ResetPaneName`/`ResetWorkspaceName` (+ sidebar by-id/
   by-idx variants mirroring `RenamePaneById`/`RenameWorkspaceByIdx`), full 11-step wiring + RPC +
