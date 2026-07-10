@@ -332,6 +332,12 @@ pub(crate) fn build_pane_info_bar(
                 None => continue,
             },
             PaneSegment::AppName => (view.icon, view.app_name.clone()),
+            PaneSegment::PaneName => {
+                if view.title.is_empty() {
+                    continue;
+                }
+                (view.icon, view.title.clone())
+            }
             PaneSegment::GitBranch => match git.and_then(|info| info.branch.clone()) {
                 Some(branch) => (Glyph::GitBranch, branch),
                 None => continue,
@@ -4170,6 +4176,47 @@ mod tests {
         assert_eq!(view.git_added, None);
         assert_eq!(view.git_modified, None);
         assert_eq!(view.git_deleted, None);
+    }
+
+    #[test]
+    fn pane_name_segment_renders_the_panes_own_name() {
+        use heca_config::appearance::PaneSegment;
+        let programs = ProgramsConfig::default();
+        let theme = GuiTheme::default();
+        let runtime = PaneRuntime {
+            program: Some("v".into()),
+            status: ProcessStatus::Running,
+            ..PaneRuntime::default()
+        };
+
+        // Renamed pane → the `pane_name` segment produces a bar (the custom name wins over
+        // the program name, unlike `app_name` which always tracks the process).
+        let bar = build_pane_info_bar(
+            &programs,
+            "shell",
+            Some("Editor"),
+            Some(&runtime),
+            &[PaneSegment::PaneName],
+            &theme,
+            400.0,
+            13.0,
+            false,
+        );
+        assert!(bar.is_some());
+
+        // Un-renamed pane → still produces a bar (falls back to the program name, never empty).
+        let bar = build_pane_info_bar(
+            &programs,
+            "shell",
+            None,
+            Some(&runtime),
+            &[PaneSegment::PaneName],
+            &theme,
+            400.0,
+            13.0,
+            false,
+        );
+        assert!(bar.is_some());
     }
 
     #[test]

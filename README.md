@@ -873,7 +873,8 @@ With `border_style = "bordered"`, the frame is drawn at `border_width` in
 | Value         | Shows                                                        |
 |---------------|-------------------------------------------------------------|
 | `location`    | Working directory (home-relative path)                      |
-| `app_name`    | Resolved program / app name (from the [Process Catalog](#process-catalog)) |
+| `app_name`    | Resolved program / app name (from the [Process Catalog](#process-catalog)) — always the running program, never a rename |
+| `pane_name`   | The pane's own name: the custom rename when set, else the program name (`custom`-wins). Opt-in — not in the default segments |
 | `git_branch`  | Git branch — hidden outside a repo                          |
 | `git_status`  | Git change counts `+A ~M -D` — hidden when clean / no repo  |
 
