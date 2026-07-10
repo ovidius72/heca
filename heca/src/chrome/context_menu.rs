@@ -374,11 +374,11 @@ fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
             "New column",
             WmAction::AddColumnToWorkspace { ws_idx },
         ),
-        DropdownItem::new(
-            "rename_column",
-            "Rename column",
-            WmAction::RenameColumnByIdx { ws_idx, col_idx },
-        ),
+        // NB: no "Rename column" entry — a column's name is not displayed anywhere yet
+        // (columns render as a MarkerGroup with no header/label), so renaming would have
+        // no visible effect. The RenameColumn / RenameColumnByIdx action stays wired (RPC +
+        // handler) for when columns surface a name; re-add the entry then. See `col_idx`
+        // still threaded below for the delete action.
         DropdownItem::new(
             "close",
             "Delete column",

@@ -1897,9 +1897,16 @@ config (rendering not yet wired). Remaining:
   the now-dead info-bar `add_process_name` plumbing.
 - [ ] **pane-naming-3** — new `[settings] pane_show_cwd: bool` + a **cwd row** (folder icon +
   `home_relative_path(cwd)`) between the name row and the git row in the sidebar pane card.
-- [ ] **pane-naming-4** — column rename is unreachable (no binding, no menu entry): add *Rename column*
-  to the `sidebar.column` menu + a `RenameColumnByIdx { ws_idx, col_idx }` action (mirror
-  `RenameWorkspaceByIdx`).
+- [x] **pane-naming-4** — column rename reachability. Added `RenameColumnByIdx { ws_idx, col_idx }`
+  (full wiring: variant, `build_action`, priority, `TiledOnly` policy, handler, registry, RPC
+  `rename-column-idx`; shared `enter_column_rename`). **Menu entry removed by decision (2026-07-10):**
+  a column's name is **not displayed anywhere** (columns render as a `MarkerGroup` with no header/
+  label), so a *Rename column* menu entry renames something invisible. The action stays wired (RPC +
+  handler) for when columns surface a name. → see follow-up `column-name-display`.
+- [ ] **column-name-display** (follow-up, from pane-naming-4) — surface a column's name in the sidebar
+  (a per-column header/label on the `MarkerGroup`, theme-driven, domain-neutral widget per the grid-ui
+  rules). Only then does renaming a column pay off — re-add the *Rename column* context-menu entry
+  (`RenameColumnByIdx`, already wired) at that point.
 - [ ] **pane-naming-5** — declare **icons on EVERY action** used in menus/buttons, in its
   `ActionDescriptor` (`actions.rs` `ActionRegistry::ALL`) — not just rename. Audit all entries built by
   `chrome/context_menu.rs` (pane + sidebar.pane/column/workspace) and any button: `split_horizontal`
