@@ -12,9 +12,8 @@ use crate::app::terminal_render::{
 };
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::ChromeConfig;
-use crate::{mouse, sidebar};
+use crate::mouse;
 use heca_grid_ui::Component;
-use heca_grid_ui::drag::DragSurfaceId;
 use heca_grid_ui::{
     Point as GuiPoint, Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
 };
@@ -326,9 +325,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         });
     }
 
-    let sidebar_top = chrome.tab_bar_height;
-    let sidebar_bottom = h - chrome.status_bar_height;
-    let sidebar_h = sidebar_bottom - sidebar_top;
     let terminal_font_config = state.font_config.clone();
     // Effective global terminal size (config + global zoom). Per-pane offsets are
     // applied inside `sync_retained_terminal_layers`; this is the base/fallback.
@@ -525,13 +521,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
         );
     }
 
-    let chrome_text = crate::chrome::CHROME_TEXT_SIZE;
     let tb = &chrome;
     // Frosted chrome colors come from the loaded theme's surface tone, with
     // alpha derived from the current appearance settings.
-    let (side_bg, collapsed_sidebar_bg, _) = crate::chrome::chrome_colors(state);
+    let (side_bg, _, _) = crate::chrome::chrome_colors(state);
     let side_bg = side_bg.to_f32x4();
-    let collapsed_sidebar_bg = collapsed_sidebar_bg.to_f32x4();
     state
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
@@ -935,166 +929,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
         heca_core::layout::Size::new(pane_area.size.w, pane_area.size.h),
     );
 
-    // The EXPANDED left sidebar is now drawn by the grid-ui chrome scene
-    // (`build_chrome_scene`). Only the COLLAPSED icon rail is still hand-drawn
-    // here; when expanded we skip the hand-drawn bg/divider/content entirely so it
-    // doesn't paint over the grid sidebar.
-    if chrome.left_sidebar_width > 0.0
-        && chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
-    {
-        let sidebar_gap = chrome.sidebar_gap.max(0.0);
-        let rail_x = sidebar_gap.min(chrome.left_sidebar_width * 0.5);
-        let rail_y = sidebar_top + sidebar_gap;
-        let rail_w = (chrome.left_sidebar_width - rail_x * 2.0).max(0.0);
-        let rail_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-        state
-            .primitive_renderer
-            .draw_rect(rail_x, rail_y, rail_w, rail_h, collapsed_sidebar_bg);
-        state.primitive_renderer.draw_outline(
-            rail_x,
-            rail_y,
-            rail_w,
-            rail_h,
-            [
-                theme.border.to_f32x4()[0],
-                theme.border.to_f32x4()[1],
-                theme.border.to_f32x4()[2],
-                0.35,
-            ],
-            1.0,
-        );
-        state.primitive_renderer.draw_border(
-            rail_x,
-            rail_y,
-            rail_w,
-            rail_h,
-            theme.border.to_f32x4(),
-            1.0,
-        );
-        let candidates = state.input_mode.candidates();
-        let drag_hover = state
-            .mouse
-            .drag_ctx
-            .surface(DragSurfaceId::LeftSidebar)
-            .and_then(|s| s.hover_item);
-        let drag_source = state
-            .mouse
-            .drag_ctx
-            .surface(DragSurfaceId::LeftSidebar)
-            .and_then(|s| s.source_item);
-        let drag_source_bg = theme.drag_source_bg.to_f32x4();
-        let drag_source_border = theme.drag_source_border.to_f32x4();
-        let sidebar_nav_active = state.sidebar_nav_active();
-        sidebar::render_sidebar_collapsed(
-            &mut state.sidebar_tree,
-            rail_x,
-            rail_y,
-            rail_w,
-            rail_h,
-            sidebar_nav_active,
-            theme.accent.to_f32x4(),
-            theme.foreground.to_f32x4(),
-            [
-                theme.accent.to_f32x4()[0],
-                theme.accent.to_f32x4()[1],
-                theme.accent.to_f32x4()[2],
-                0.5,
-            ],
-            [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],
-            candidates,
-            active_pane_id,
-            &mut state.text_renderer,
-            &mut state.primitive_renderer,
-            drag_hover,
-            drag_source,
-            drag_source_bg,
-            drag_source_border,
-            state.mouse.sidebar_hovered_btn_idx,
-            theme.sidebar_label_font_size,
-            theme.sidebar_button_font_size,
-        );
-    }
-
-    // Legacy hand-drawn ghost — only for the COLLAPSED rail. When the sidebar is
-    // expanded the grid-ui chrome shell is painted on top (covering this), so the
-    // ghost is drawn into the chrome scene instead via `paint_drag_overlay` below.
-    if chrome.left_sidebar_width > 0.0
-        && chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
-        && let Some(label) = state
-            .mouse
-            .drag_ctx
-            .surface(DragSurfaceId::LeftSidebar)
-            .and_then(|s| s.ghost_label.as_ref())
-    {
-        let ghost_w = label.width;
-        let ghost_h = 22.0;
-        let ghost_x = label.x + 10.0;
-        let ghost_y = label.y - ghost_h / 2.0;
-
-        state.primitive_renderer.draw_rect(
-            ghost_x,
-            ghost_y,
-            ghost_w,
-            ghost_h,
-            theme.drag_ghost_bg.to_f32x4(),
-        );
-        state.primitive_renderer.draw_border(
-            ghost_x,
-            ghost_y,
-            ghost_w,
-            ghost_h,
-            theme.drag_source_border.to_f32x4(),
-            1.5,
-        );
-        state.text_renderer.queue_text(
-            &label.text,
-            ghost_x + 6.0,
-            ghost_y + 4.0,
-            13.0,
-            theme.drag_ghost_fg.to_f32x4(),
-        );
-    }
-
-    if chrome.right_sidebar_width > 0.0
-        && chrome.right_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
-    {
-        let sidebar_gap = chrome.sidebar_gap.max(0.0);
-        let rail_w = (chrome.right_sidebar_width - sidebar_gap * 2.0).max(0.0);
-        let rail_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-        let rail_x = w - chrome.right_sidebar_width + sidebar_gap;
-        let rail_y = sidebar_top + sidebar_gap;
-        state
-            .primitive_renderer
-            .draw_rect(rail_x, rail_y, rail_w, rail_h, collapsed_sidebar_bg);
-        state.primitive_renderer.draw_outline(
-            rail_x,
-            rail_y,
-            rail_w,
-            rail_h,
-            [
-                theme.border.to_f32x4()[0],
-                theme.border.to_f32x4()[1],
-                theme.border.to_f32x4()[2],
-                0.35,
-            ],
-            1.0,
-        );
-        state.primitive_renderer.draw_border(
-            rail_x,
-            rail_y,
-            rail_w,
-            rail_h,
-            theme.border.to_f32x4(),
-            1.0,
-        );
-        state.text_renderer.queue_text(
-            "D",
-            rail_x + 8.0,
-            rail_y + 8.0,
-            chrome_text,
-            theme.foreground.to_f32x4(),
-        );
-    }
+    // The left sidebar is drawn by the grid-ui chrome scene (`build_chrome_scene`)
+    // when Expanded; when Hidden its width is 0 and nothing is drawn. There is no
+    // collapsed icon rail (dropped — see `docs/sidebar-provider-modes.md`).
 
     mouse::render_detached_pane(state, pane_area_rect);
     mouse::render_insert_hint(state, pane_area_rect);
@@ -1207,9 +1044,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &chrome_theme,
     );
     // F4.5 1b — in-drag visuals on the expanded sidebar: paint the drop indicator +
-    // ghost into the chrome scene so they sit ON TOP of the grid-ui shell. (Collapsed
-    // rail uses the hand-drawn ghost above.)
-    if chrome.left_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+    // ghost into the chrome scene so they sit ON TOP of the grid-ui shell. Width is 0
+    // when Hidden, so a positive width means Expanded.
+    if chrome.left_sidebar_width > 0.0 {
         crate::chrome::paint_drag_overlay(state, &mut chrome_scene, w, h, &chrome_theme);
     }
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,

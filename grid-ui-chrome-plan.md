@@ -5,7 +5,7 @@
 **Pairs with:** [`pluggable-chrome-plugin-plan.md`](./pluggable-chrome-plugin-plan.md) (the **app** side: ChromeHost, AppState, providers, dynamic actions, WASM). This doc realizes that plan's **Phase 7 — "heca-grid-ui Chrome Widget Expansion"**, plus the **flexible item layout** and the **Drag-and-Drop** hooks it implies.
 **Tracker:** progress lives in [`grid-ui-plan.md`](./grid-ui-plan.md); this doc supersedes its old `C6 Sidebar = tree-nav` framing.
 
-> **Decisions locked (2026-06-09):** build the non-DnD vocabulary **now**; region shell is **generic across all 4 regions**; `DockFrame` is a **new widget reusing Pane's brackets**; grid-ui **stays domain-neutral** for status styling; **build on the shipped DnD framework** (`src/drag/`) — extend additively, don't fork; `Grid` exposes **tracks + named areas**; icons via an **embedded, host-registered icon font**; **request renderer `PushClip`/`PopClip`** for scroll; collapsed region = **icon rail, keyboard-expandable**; shared state = a **namespaced signal store** read via signals / written via actions.
+> **Decisions locked (2026-06-09):** build the non-DnD vocabulary **now**; region shell is **generic across all 4 regions**; `DockFrame` is a **new widget reusing Pane's brackets**; grid-ui **stays domain-neutral** for status styling; **build on the shipped DnD framework** (`src/drag/`) — extend additively, don't fork; `Grid` exposes **tracks + named areas**; icons via an **embedded, host-registered icon font**; **request renderer `PushClip`/`PopClip`** for scroll; ~~collapsed region = **icon rail, keyboard-expandable**~~ (**superseded 2026-07-11 — the app collapsed rail is dropped; region is Expanded ⇄ Hidden; the icon rail is a future generic Provider feature, see [`docs/sidebar-provider-modes.md`](./docs/sidebar-provider-modes.md)**); shared state = a **namespaced signal store** read via signals / written via actions.
 
 ---
 
@@ -78,9 +78,18 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 - **Status:** new (Pane exists, has no header/collapse/handle).
 
 ### 2.5 `ChromeRegion` / `Sidebar` shell (generic, all 4 regions)
+
+> **UPDATE 2026-07-11 — the collapsed icon rail is DROPPED for the app.** A region is now
+> **Expanded ⇄ Hidden**; there is no icon rail in heca. The collapsed/rail material in this section
+> (the "two rail flavors", `RailCell`-per-item, `KeyHint`-over-cells) is **deferred**: it is the
+> *future generic* design to build only when a Provider needs an always-visible status rail. `RailCell`
+> and `KeyHint` remain shipped grid-ui widgets, but nothing in the app mounts a rail. Authoritative
+> decision + rationale + the full future spec: **[`docs/sidebar-provider-modes.md`](./docs/sidebar-provider-modes.md)**.
+
 - **Oriented** shell: vertical (sidebars) or horizontal (top/bottom bars). One widget covers all four regions.
-- Toggle/collapse, **mode-aware**: informs children of `Expanded` / `CollapsedRail` / hidden via a signal.
-- **Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/peek — P2). **Two rail flavors (locked 2026-06-10):** a *tool* dock **folds** to a single icon (`DockFrame::rail(mode_signal, Glyph)`); a *list* dock (workspaces/columns/panes) **enumerates** — one `RailCell` (square icon cell) **per item**, so every pane stays visible + addressable when collapsed (matches `heca`'s current `render_sidebar_collapsed`). **Icons by default**, not letters. The move/swap/focus-select **pick letters** appear over the cells via the generic **`KeyHint`** overlay (a reusable wrapper, not rail-specific — also for content-area panes, command palettes), driven by a host-owned `Signal<Option<String>>` so mouse/keyboard/**RPC** all light them up identically (P2). The app feeds those signals from its existing `collect_all_pane_candidates()` flow. **Shipped (grid-ui side):** `RailCell` + `KeyHint` + showcase `p`-pick demo. **Pending:** the app-side mapping in the real `heca` Workspaces dock.
+- Toggle/collapse, **mode-aware**: informs children of the display mode via a signal. **In the app today
+  the modes used are `Expanded` and `Hidden`** (`RegionMode::CollapsedRail` stays in the enum, unused).
+- **[DEFERRED] Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/peek — P2). **Two rail flavors (locked 2026-06-10):** a *tool* dock **folds** to a single icon (`DockFrame::rail(mode_signal, Glyph)`); a *list* dock (workspaces/columns/panes) **enumerates** — one `RailCell` (square icon cell) **per item**. **Icons by default**, not letters. The move/swap/focus-select **pick letters** appear over the cells via the generic **`KeyHint`** overlay, driven by a host-owned `Signal<Option<String>>`. **Shipped (grid-ui side):** `RailCell` + `KeyHint` + showcase `p`-pick demo. **App-side mapping: dropped (see the update note above); revive as the generic render-per-mode path if a Provider needs a rail.**
 - Stacks `DockFrame`s, scrolls (§2.8), exposes **Dock-level drop targets**.
 - **No** workspace/tree/expand/drag *semantics* — those belong to the mounted Dock. Replaces the old "Sidebar = tree-nav".
 - **Status:** new.

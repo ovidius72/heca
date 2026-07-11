@@ -212,6 +212,20 @@ system covers app and plugin widgets alike.
 **Rule of thumb:** `ViewNode` = *mounted content*; **overlays** (context menu / dropdown /
 modal) = *requested* from the host; **KeyHint** = *enabled* by exposing an intent.
 
+## Display modes — you describe your content once
+
+A sidebar region has a **display mode** (today: **Expanded** or **Hidden**). You do **not** write a
+separate "expanded" and "collapsed" UI. You describe your content **once** — a tree of Groups and
+Items, each carrying its `icon`, `label`, `status`, and `on_press` intent — and the **host** renders
+it for the region's current mode. Display mode is the host's job, never yours.
+
+Right now a region is either fully shown (Expanded) or fully hidden, so only your normal (Expanded)
+tree is ever drawn. A future **collapsed icon rail** — where the host draws one status-coloured icon
+per Item instead of full rows — is a **host** capability derived from the *same* single description;
+it is not something you author twice. See
+[`sidebar-provider-modes.md`](./sidebar-provider-modes.md) for the full Provider render-per-mode
+contract.
+
 ## The closed vocabulary (and how to extend it)
 
 Plugins compose from the host's **closed** `WidgetKind` set. You get unlimited

@@ -8,7 +8,7 @@
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, InteractiveMovePhase};
-use crate::chrome::{DEFAULT_COLLAPSED_SIDEBAR_WIDTH, default_column_width};
+use crate::chrome::default_column_width;
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
@@ -26,9 +26,9 @@ pub(crate) fn contains(state: &AppState, pos: (f32, f32)) -> bool {
 
 /// Returns the flat index of the sidebar item at the cursor position.
 pub(crate) fn item_at(state: &AppState, pos: (f32, f32)) -> Option<DragItemId> {
-    let (_sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    let (_sx, _sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
     let sidebar_h = sidebar_bottom - sidebar_top;
-    crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)
+    crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1)
         .map(DragItemId::new)
 }
 
@@ -36,11 +36,9 @@ pub(crate) fn item_at(state: &AppState, pos: (f32, f32)) -> Option<DragItemId> {
 fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
     let chrome = super::chrome_config(state);
     let (_win_w, win_h) = super::window_logical_size(state);
-    let total_w = if state.chrome_state.left_visible() {
-        chrome.left_sidebar_width
-    } else {
-        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-    };
+    // `left_sidebar_width` is 0 when Hidden (no icon rail), so the bounds collapse
+    // to nothing and no click lands in the region — see `docs/sidebar-provider-modes.md`.
+    let total_w = chrome.left_sidebar_width;
     let gap = chrome.sidebar_gap.max(0.0);
     let sx = gap.min(total_w * 0.5);
     let sw = (total_w - sx * 2.0).max(0.0);
@@ -58,7 +56,6 @@ fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
 /// Routes to button clicks, workspace switches, or pane focus actions.
 pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    let was_sidebar_nav = matches!(state.input_mode, crate::app_state::InputMode::SidebarNav);
 
     if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         // Button hits (close, delete) take priority.
@@ -86,42 +83,11 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
             return Some(button);
         }
 
-        // Expanded grid-ui sidebar: dispatch the press into the retained chrome tree
-        // so widget callbacks route their own intents through the app event loop.
-        // Pane cards / workspace headers no longer use a host mailbox path here.
-        if state.chrome_state.left_visible() && sw >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+        // The sidebar is Expanded whenever it is visible (there is no collapsed rail):
+        // dispatch the press into the retained grid-ui chrome tree so widget callbacks
+        // route their own intents through the app event loop.
+        if state.chrome_state.left_visible() {
             crate::chrome::chrome_dispatch_press(state, pos);
-            return None;
-        }
-
-        // Non-button item hits: pane, workspace, column. (legacy collapsed-rail path)
-        let sidebar_h = sidebar_bottom - sidebar_top;
-        if let Some(fi) =
-            crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)
-        {
-            state.sidebar_tree.cursor = fi;
-            state.input_mode = crate::app_state::InputMode::SidebarNav;
-            let item = state.sidebar_tree.current_item().cloned();
-            match item? {
-                crate::sidebar::SidebarItem::Pane { pane_id } => {
-                    if was_sidebar_nav {
-                        return Some(WmAction::FocusPane { pane_id });
-                    }
-                }
-                crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => {
-                    if was_sidebar_nav {
-                        return Some(WmAction::FocusPane { pane_id });
-                    }
-                }
-                crate::sidebar::SidebarItem::Workspace { ws_idx } => {
-                    return Some(WmAction::FocusWorkspace { ws_idx });
-                }
-                crate::sidebar::SidebarItem::Column { ws_idx, .. } => {
-                    if ws_idx != state.session.active_workspace_idx {
-                        return Some(WmAction::FocusWorkspace { ws_idx });
-                    }
-                }
-            }
         }
     }
 
@@ -143,13 +109,7 @@ pub(crate) fn update_hover(state: &mut AppState) {
         .expect("LeftSidebar pre-populated in DragContext::default");
     if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(
-            &state.sidebar_tree,
-            sidebar_top,
-            sidebar_h,
-            sw,
-            pos.1,
-        );
+        let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1);
         if let Some(fi) = fi {
             if matches!(
                 state.sidebar_tree.flat_items.get(fi),
@@ -433,13 +393,8 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     }
 
     let sidebar_h = sidebar_bottom - sidebar_top;
-    let fi = match crate::sidebar::sidebar_hit_test(
-        &state.sidebar_tree,
-        sidebar_top,
-        sidebar_h,
-        sw,
-        pos.1,
-    ) {
+    let fi = match crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1)
+    {
         Some(fi) => fi,
         None => return false,
     };

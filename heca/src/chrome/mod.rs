@@ -68,12 +68,8 @@ use std::time::Duration;
 pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
 /// Default status bar height in logical pixels.
 pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
-/// Default collapsed sidebar width in logical pixels.
-pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
 /// Default expanded sidebar width in logical pixels.
 pub const DEFAULT_SIDEBAR_WIDTH: f32 = 240.0;
-/// Minimum sidebar width to be considered expanded (for rendering decisions).
-pub const SIDEBAR_EXPANDED_THRESHOLD: f32 = 80.0;
 
 // ── Timing ──
 
@@ -1848,100 +1844,49 @@ fn build_workspaces_container(
     col
 }
 
-/// Build the LEFT sidebar **SHELL**: a full-height, bracket-framed, frosted panel
-/// occupying the *whole* left column — a header (collapse toggle) over the body. Per
-/// the chrome plan (F5, `pluggable-chrome-plugin-plan.md` §2.1) the sidebar is a
-/// *shell*; the [`build_workspaces_container`] tree is mounted into the body as the
-/// first container (display-only until the F4 shared-state layer wires interaction).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "chrome shell assembly still threads retained-tree state explicitly during the Phase 0 migration"
-)]
+/// Build a sidebar **SHELL** — a full-height, bracket-framed, frosted panel filling a
+/// sidebar column. This is **one component, two instances**: the left and right
+/// sidebars are the same shell differing only by width/position and the `content`
+/// mounted inside. Per the chrome plan (`pluggable-chrome-plugin-plan.md` §2.1 / §2.8,
+/// `docs/sidebar-provider-modes.md`) the sidebar is a *shell* that hosts a Provider's
+/// content; the left passes its `WorkspacesContainer`, the right passes `None` (empty
+/// placeholder) until it gains a Provider.
+#[allow(clippy::too_many_arguments)]
 fn build_sidebar_shell(
-    tree: &SidebarTree,
-    programs: &ProgramsConfig,
-    left_w: f32,
-    sidebar_h: f32,
-    shell_bg: Color,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    ws_state: &WorkspacesContainerState,
-    sidebar_gap: f32,
-    border_style: heca_config::appearance::BorderStyle,
-    border_width: f32,
-    border_radius: f32,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
-) -> Flex {
-    let inner_w = (left_w - sidebar_gap * 2.0).max(0.0);
-    let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-    // The collapse toggle now lives in the always-visible top bar (sidebar-fu-14), so
-    // the sidebar has no header row — the workspaces container fills the shell.
-    Flex::column()
-        .width(Length::Px(left_w))
-        .height(Length::Px(sidebar_h))
-        .child(
-            Surface::column()
-                .width(Length::Px(left_w))
-                .height(Length::Px(sidebar_h))
-                .background(shell_bg)
-                .padding(sidebar_gap)
-                .child(
-                    apply_pane_frame(Pane::new(), border_style)
-                        .border_width(border_width)
-                        .radius(border_radius)
-                        .width(Length::Px(inner_w))
-                        .height(Length::Px(inner_h))
-                        .padding(10.0)
-                        .gap(8.0)
-                        .background(shell_bg)
-                        .child(build_workspaces_container(
-                            tree,
-                            programs,
-                            theme,
-                            emit_intent,
-                            ws_state,
-                            signals,
-                            drag,
-                            hints,
-                        )),
-                ),
-        )
-}
-
-fn build_right_sidebar_shell(
-    right_w: f32,
+    region_w: f32,
     sidebar_h: f32,
     shell_bg: Color,
     sidebar_gap: f32,
     border_style: heca_config::appearance::BorderStyle,
     border_width: f32,
     border_radius: f32,
+    content: Option<Flex>,
 ) -> Flex {
-    let inner_w = (right_w - sidebar_gap * 2.0).max(0.0);
+    let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-    // The collapse toggle now lives in the top bar (sidebar-fu-14); the right sidebar is
-    // an empty placeholder shell until it gains real content.
+    // The collapse toggle lives in the always-visible top bar (sidebar-fu-14), so the
+    // shell has no header row — the mounted content (if any) fills the body.
+    let mut body = apply_pane_frame(Pane::new(), border_style)
+        .border_width(border_width)
+        .radius(border_radius)
+        .width(Length::Px(inner_w))
+        .height(Length::Px(inner_h))
+        .padding(10.0)
+        .gap(8.0)
+        .background(shell_bg);
+    if let Some(content) = content {
+        body = body.child(content);
+    }
     Flex::column()
-        .width(Length::Px(right_w))
+        .width(Length::Px(region_w))
         .height(Length::Px(sidebar_h))
         .child(
             Surface::column()
-                .width(Length::Px(right_w))
+                .width(Length::Px(region_w))
                 .height(Length::Px(sidebar_h))
                 .background(shell_bg)
                 .padding(sidebar_gap)
-                .child(
-                    apply_pane_frame(Pane::new(), border_style)
-                        .border_width(border_width)
-                        .radius(border_radius)
-                        .width(Length::Px(inner_w))
-                        .height(Length::Px(inner_h))
-                        .padding(10.0)
-                        .gap(8.0)
-                        .background(shell_bg),
-                ),
+                .child(body),
         )
 }
 
@@ -3384,44 +3329,53 @@ pub(crate) fn build_chrome_root(
         });
     });
 
+    // Expanded ⇄ Hidden: width is 0 when the region is Hidden (no icon rail — see
+    // `docs/sidebar-provider-modes.md`), so a positive width means Expanded.
+    // Left and right are two instances of the SAME `build_sidebar_shell` (one
+    // component), differing only by width and mounted content: the left hosts the
+    // `WorkspacesContainer`, the right is an empty placeholder until it gains a Provider.
+    let sidebar_gap = state.appearance.effective_sidebar_gap(&state.theme);
+    let border_style = state.appearance.effective_sidebar_border_style();
+    let border_width = state.appearance.effective_sidebar_border_width(&state.theme);
+    let border_radius = state.appearance.effective_sidebar_border_radius(&state.theme);
+    let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
+
     let left_w = chrome.left_sidebar_width;
-    let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
-        let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
-        Some(build_sidebar_shell(
+    let left_sidebar = (left_w > 0.0).then(|| {
+        let content = build_workspaces_container(
             &state.sidebar_tree,
             &state.programs,
-            left_w,
-            sidebar_h,
-            left_sidebar_shell_background_color(state),
             &theme,
             &emit_intent,
             &state.chrome_state.workspaces,
-            state.appearance.effective_sidebar_gap(&state.theme),
-            state.appearance.effective_sidebar_border_style(),
-            state.appearance.effective_sidebar_border_width(&state.theme),
-            state.appearance.effective_sidebar_border_radius(&state.theme),
             &mut signals,
             &mut drag_items,
             hint_targets,
-        ))
-    } else {
-        None
-    };
+        );
+        build_sidebar_shell(
+            left_w,
+            sidebar_h,
+            left_sidebar_shell_background_color(state),
+            sidebar_gap,
+            border_style,
+            border_width,
+            border_radius,
+            Some(content),
+        )
+    });
     let right_w = chrome.right_sidebar_width;
-    let right_sidebar = if right_w >= SIDEBAR_EXPANDED_THRESHOLD {
-        let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
-        Some(build_right_sidebar_shell(
+    let right_sidebar = (right_w > 0.0).then(|| {
+        build_sidebar_shell(
             right_w,
             sidebar_h,
             right_sidebar_shell_background_color(state),
-            state.appearance.effective_sidebar_gap(&state.theme),
-            state.appearance.effective_sidebar_border_style(),
-            state.appearance.effective_sidebar_border_width(&state.theme),
-            state.appearance.effective_sidebar_border_radius(&state.theme),
-        ))
-    } else {
-        None
-    };
+            sidebar_gap,
+            border_style,
+            border_width,
+            border_radius,
+            None,
+        )
+    });
 
     // Top-bar collapse toggles (sidebar-fu-14): shown for each mounted sidebar so the
     // expand/collapse control is always visible (works in both expanded + collapsed).
@@ -3927,22 +3881,25 @@ mod tests {
         // The shell wraps a bracketed Pane that holds just the WorkspacesContainer (the
         // collapse toggle moved to the top bar, sidebar-fu-14); the container hosts a
         // dock per workspace (so the tree's text is visible).
-        let shell = super::build_sidebar_shell(
+        let content = super::build_workspaces_container(
             &tree,
             &heca_config::programs::ProgramsConfig::default(),
-            280.0,
-            600.0,
-            theme.colors.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+            &mut super::HintTargetRegistry::default(),
+        );
+        let shell = super::build_sidebar_shell(
+            280.0,
+            600.0,
+            theme.colors.background,
             8.0,
             heca_config::appearance::BorderStyle::Bracketed,
             1.0,
             12.0,
-            &mut super::ChromeSignals::default(),
-            &mut super::DragItemRegistry::default(),
-            &mut super::HintTargetRegistry::default(),
+            Some(content),
         );
         assert_eq!(
             shell.base().children.len(),
@@ -4005,22 +3962,25 @@ mod tests {
 
         let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
-        let mut shell = super::build_sidebar_shell(
+        let content = super::build_workspaces_container(
             &tree,
             &heca_config::programs::ProgramsConfig::default(),
-            280.0,
-            600.0,
-            theme.colors.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+            &mut super::HintTargetRegistry::default(),
+        );
+        let mut shell = super::build_sidebar_shell(
+            280.0,
+            600.0,
+            theme.colors.background,
             8.0,
             heca_config::appearance::BorderStyle::Bordered,
             border_w,
             12.0,
-            &mut super::ChromeSignals::default(),
-            &mut super::DragItemRegistry::default(),
-            &mut super::HintTargetRegistry::default(),
+            Some(content),
         );
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);
@@ -4064,19 +4024,14 @@ mod tests {
         let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         let mut drag = super::DragItemRegistry::default();
-        let _ = super::build_sidebar_shell(
+        // Drag items are registered by the WorkspacesContainer content (mounted into the
+        // shell), so build that directly with the drag registry.
+        let _ = super::build_workspaces_container(
             &tree,
             &heca_config::programs::ProgramsConfig::default(),
-            280.0,
-            600.0,
-            theme.colors.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,
-            8.0,
-            heca_config::appearance::BorderStyle::Bracketed,
-            1.0,
-            12.0,
             &mut super::ChromeSignals::default(),
             &mut drag,
             &mut super::HintTargetRegistry::default(),

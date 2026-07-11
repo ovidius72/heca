@@ -1143,7 +1143,9 @@ Per the chrome plan's *read-via-signals, write-via-actions* rule, it reacts to a
   `.with_mode_signal(Signal<RegionMode>)` (adopt a host-owned mode signal).
 - **Accessors / intents**: `.mode_signal() -> Signal<RegionMode>` (binding point — share it with
   rail-aware Docks before `.dock(...)`), `.toggle()` (flip Expanded ⇄ CollapsedRail).
-- **`RegionMode`**: `Expanded`, `CollapsedRail` (thin icon rail), `Hidden` (`display: none`).
+- **`RegionMode`**: `Expanded`, `CollapsedRail` (thin icon rail), `Hidden` (`display: none`). The
+  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the
+  collapsed rail was dropped — see [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md)).
 
 ```rust
 let sidebar = ChromeRegion::vertical().expanded_size(320.0).rail_size(64.0)
@@ -1157,6 +1159,13 @@ A focusable **square icon cell** — the per-item unit a *list* Dock (workspaces
 when collapsed to a rail, so every pane stays visible and addressable (vs a tool Dock folding to
 one icon). Centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash;
 focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick letters.
+
+> **Not currently mounted in the app (2026-07-11).** The heca sidebar collapsed rail was dropped
+> (a region is Expanded ⇄ Hidden), so nothing in the app builds `RailCell`s today. It remains a
+> supported library widget, reserved for a future generic Provider icon rail — see
+> [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md) §4. If a future rail needs
+> a `name`/`number` cell (a short text label instead of a glyph) or a `nav_selected` cursor state,
+> those are additions to make then.
 
 - **Construct**: `RailCell::new(Icon)`.
 - **Builders**: `.cell_size(px)`, `.active(bool)`, `.on_activate(impl Fn())`.

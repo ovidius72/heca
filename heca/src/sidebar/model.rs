@@ -42,6 +42,11 @@ pub struct SidebarPaneEntry {
     pub name: String,
     /// User-set override name (from rename); when present it wins over the process name.
     pub custom_name: Option<String>,
+    /// Active/visited projection of the pane. Populated by `sync_from_session` and
+    /// asserted by tests; the in-app expanded sidebar reads active-state from
+    /// `chrome_state` instead, and this field is the model's own projection that the
+    /// planned `WorkspacesContainerProvider` (plugin-task-10) will consume.
+    #[allow(dead_code)]
     pub state: SidebarItemState,
 }
 
@@ -59,6 +64,8 @@ pub struct SidebarWsEntry {
     pub ws_idx: usize,
     pub name: String,
     pub collapsed: bool,
+    /// Active/visited projection (see [`SidebarPaneEntry::state`]).
+    #[allow(dead_code)]
     pub state: SidebarItemState,
     pub columns: Vec<SidebarColEntry>,
     pub floating_panes: Vec<SidebarPaneEntry>,
@@ -310,38 +317,6 @@ impl SidebarTree {
             self.scroll_offset = self.cursor;
         } else if self.cursor >= self.scroll_offset + visible_lines {
             self.scroll_offset = self.cursor.saturating_sub(visible_lines - 1);
-        }
-    }
-
-    fn is_navigable_collapsed(&self, idx: usize) -> bool {
-        self.flat_items.get(idx).is_some_and(|item| {
-            item.kind() != SidebarItemKind::Column && item.kind() != SidebarItemKind::FloatingPane
-        })
-    }
-
-    /// Move selection up, skipping invisible Column items (for collapsed sidebar nav).
-    pub fn cursor_up_collapsed(&mut self) {
-        loop {
-            if self.cursor == 0 {
-                break;
-            }
-            self.cursor -= 1;
-            if self.is_navigable_collapsed(self.cursor) {
-                break;
-            }
-        }
-    }
-
-    /// Move selection down, skipping invisible Column items (for collapsed sidebar nav).
-    pub fn cursor_down_collapsed(&mut self) {
-        loop {
-            if self.cursor + 1 >= self.item_count {
-                break;
-            }
-            self.cursor += 1;
-            if self.is_navigable_collapsed(self.cursor) {
-                break;
-            }
         }
     }
 

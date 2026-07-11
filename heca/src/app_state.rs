@@ -385,8 +385,6 @@ pub struct MouseState {
     /// Stored here instead of in `DragPhase` to keep the framework
     /// dependency-free (no `WmAction` in `heca-grid-ui`).
     pub pending_click_action: Option<WmAction>,
-    /// Index of the button currently hovered in the sidebar (for hover visual effect).
-    pub sidebar_hovered_btn_idx: Option<usize>,
 }
 
 impl MouseState {
@@ -400,7 +398,6 @@ impl MouseState {
             insert_hint: None,
             last_edge_scroll_time: None,
             pending_click_action: None,
-            sidebar_hovered_btn_idx: None,
         }
     }
 }
@@ -844,27 +841,24 @@ impl AppState {
     }
 
     /// Effective left-sidebar width for layout/hit-testing. `0.0` when the region
-    /// is unmounted via `[settings] show_left_sidebar`; otherwise the expanded
-    /// width, or the collapsed-rail width when the runtime mode is not expanded.
+    /// is unmounted via `[settings] show_left_sidebar` **or** when it is
+    /// `Hidden` (the toggle collapses a sidebar to nothing — there is no icon rail;
+    /// see `docs/sidebar-provider-modes.md`); otherwise the (resizable) expanded width.
     pub fn left_sidebar_width(&self) -> f32 {
-        if !self.show_left_sidebar {
+        if !self.show_left_sidebar || !self.chrome_state.left_visible() {
             0.0
-        } else if self.chrome_state.left_visible() {
-            self.chrome_state.left_size()
         } else {
-            crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
+            self.chrome_state.left_size()
         }
     }
 
-    /// Effective right-sidebar width for layout/hit-testing. `0.0` when the region
-    /// is unmounted via `[settings] show_right_sidebar`.
+    /// Effective right-sidebar width for layout/hit-testing. `0.0` when unmounted via
+    /// `[settings] show_right_sidebar` or when the region is `Hidden`.
     pub fn right_sidebar_width(&self) -> f32 {
-        if !self.show_right_sidebar {
+        if !self.show_right_sidebar || !self.chrome_state.right_visible() {
             0.0
-        } else if self.chrome_state.right_visible() {
-            self.chrome_state.right_size()
         } else {
-            crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
+            self.chrome_state.right_size()
         }
     }
 
