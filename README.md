@@ -1035,6 +1035,23 @@ keys = "prefix+z"
 action = "zoom_column"
 ```
 
+### Menu / list navigation (`menu-nav`)
+
+One configurable set of keys navigates every overlay **list/menu** surface — the context menu and
+the command palette. These apply **only while such an overlay is open** (they never affect
+normal-mode input), so the same keys are the single source of truth across all menus:
+
+```toml
+[keys]
+menu_up       = ["ArrowUp", "Ctrl+k"]    # Move selection up / previous
+menu_down     = ["ArrowDown", "Ctrl+j"]  # Move selection down / next
+menu_activate = "Enter"                  # Run the selected entry
+menu_dismiss  = "Escape"                 # Close the overlay
+```
+
+Entries that carry a quick-pick letter can also be activated by typing that letter; in the command
+palette, all other keys type into its filter field.
+
 ### Unbinding Defaults
 
 To remove a default keybinding, add it to `[keys.unbind]`:

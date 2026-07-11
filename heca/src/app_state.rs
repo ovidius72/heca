@@ -794,6 +794,11 @@ pub struct AppState {
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
     pub prefix_combo: crate::keymap::KeyCombo,
+    /// Overlay list/menu navigation map (`menu-nav`): configurable
+    /// `menu_up`/`menu_down`/`menu_activate`/`menu_dismiss` → semantic [`MenuNav`],
+    /// consumed only while a menu/palette overlay is open (never hijacks normal input).
+    /// Rebuilt on config reload alongside the keymap.
+    pub menu_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::MenuNav>,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,

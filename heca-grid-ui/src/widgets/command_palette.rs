@@ -17,7 +17,7 @@
 //! configurable keys. Open/close is a host-owned [`Signal<bool>`](crate::reactive::Signal).
 
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
+use crate::component::{Base, Component, Event, Handled, MenuNav, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
@@ -504,27 +504,26 @@ impl Component for CommandPalette {
             return Handled::No;
         }
         match ev {
-            Event::Key { key, pressed: true } => {
-                // The query field gets first crack: it owns every editing key
-                // (typing, selection, char/word/line delete, caret moves) and
-                // returns `No` for Ctrl+char / Enter / Esc / Up-Down — which we
-                // then interpret as navigation. Only reset the selection when the
-                // text actually changed (not on bare caret moves).
-                let before = self.query_text();
-                if self.query.borrow_mut().event(ev) == Handled::Yes {
-                    if self.query_text() != before {
-                        self.on_query_changed();
-                    }
-                    return Handled::Yes;
+            // Nav is host-resolved from the configurable `menu_*` keybindings and
+            // arrives as a semantic `MenuNav` — the palette carries NO hardcoded nav
+            // keys. Handled before the query field so a nav key never types.
+            Event::MenuNav(nav) => {
+                match nav {
+                    MenuNav::Dismiss => self.close(),
+                    MenuNav::Activate => self.run_selected(),
+                    MenuNav::Next => self.select_next(),
+                    MenuNav::Prev => self.select_prev(),
                 }
-                match key {
-                    GridKey::Escape => self.close(),
-                    GridKey::Enter => self.run_selected(),
-                    GridKey::ArrowDown => self.select_next(),
-                    GridKey::ArrowUp => self.select_prev(),
-                    GridKey::Char('j') if self.modifiers.ctrl => self.select_next(),
-                    GridKey::Char('k') if self.modifiers.ctrl => self.select_prev(),
-                    _ => {}
+                Handled::Yes
+            }
+            Event::Key { pressed: true, .. } => {
+                // The query field owns every editing key (typing, selection,
+                // char/word/line delete, caret moves). Reset the selection only when
+                // the text actually changed (not on bare caret moves).
+                let before = self.query_text();
+                self.query.borrow_mut().event(ev);
+                if self.query_text() != before {
+                    self.on_query_changed();
                 }
                 Handled::Yes
             }

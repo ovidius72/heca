@@ -136,6 +136,16 @@ swap_down  = "prefix+Ctrl+j"
 command_palette = "prefix+p"        # Open command palette
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
 
+# ── Menu / list navigation (menu-nav) ──
+# One configurable source of truth for navigating overlay list/menu surfaces —
+# the context menu and the command palette. These apply ONLY while such an overlay
+# is open (they never hijack normal-mode input). Entries that carry a quick-pick
+# letter can also be activated by typing that letter.
+menu_up       = ["ArrowUp", "Ctrl+k"]    # Move selection up / previous
+menu_down     = ["ArrowDown", "Ctrl+j"]  # Move selection down / next
+menu_activate = "Enter"                  # Run the selected entry
+menu_dismiss  = "Escape"                 # Close the overlay
+
 # ── Selection (host capability, reusable across pane types) ──
 enter_selection_mode = "prefix+s"        # Enter selection mode (caret-only)
 clear_selection      = "prefix+Shift+s"  # Clear selection; exit selection mode

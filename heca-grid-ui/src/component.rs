@@ -258,6 +258,26 @@ pub enum Event {
     Scroll {
         delta: f32,
     },
+    /// Semantic list/menu navigation for overlay widgets (`ContextMenu`,
+    /// `CommandPalette`). The host resolves the **configurable** `menu_up` /
+    /// `menu_down` / `menu_activate` / `menu_dismiss` keybindings into these, so the
+    /// widgets carry no hardcoded nav keys (only quick-pick letters / text input stay
+    /// as raw [`Event::Key`]). See `docs/widgets.md` and the app's `menu-nav`.
+    MenuNav(MenuNav),
+}
+
+/// Semantic navigation for list/menu overlays — the host-owned, configurable
+/// counterpart to raw arrow/`Ctrl+j`/`k` keys (see [`Event::MenuNav`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuNav {
+    /// Move the selection to the previous entry.
+    Prev,
+    /// Move the selection to the next entry.
+    Next,
+    /// Activate (run) the currently selected entry.
+    Activate,
+    /// Dismiss the overlay without choosing an entry.
+    Dismiss,
 }
 
 /// Behavior shared by all components. Implementors provide access to their

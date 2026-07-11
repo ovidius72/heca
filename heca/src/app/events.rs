@@ -18,7 +18,7 @@ use crate::input::{FontZoomStep, WmAction};
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use heca_core::layout::Point;
-use heca_grid_ui::{Event, GridKey};
+use heca_grid_ui::{Event, GridKey, Handled};
 use std::collections::HashMap;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -123,7 +123,24 @@ pub(crate) fn handle_window_event(
                         | crate::app_state::InputMode::HintPick { .. }
                 );
             if !picker_seq && crate::chrome::top_modal(state).is_some() {
-                if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
+                // menu-nav: a configured `menu_*` key drives a **list/menu** overlay's
+                // selection via a semantic `MenuNav`. If the overlay does not consume it
+                // (a `Dialog`/`Modal` returns `Handled::No`), fall back to the raw key so
+                // Esc still cancels and Enter still submits there — menu-nav only affects
+                // list menus, never dialogs. Non-nav keys (quick-pick letters, palette
+                // typing) are forwarded as raw keys.
+                let consumed = match state.menu_keymap.get(&event_combo).copied() {
+                    Some(nav) => {
+                        state
+                            .layers
+                            .top_modal_root_mut()
+                            .map(|root| root.event(&Event::MenuNav(nav)))
+                            == Some(Handled::Yes)
+                    }
+                    None => false,
+                };
+                if !consumed
+                    && let Some(gk) = winit_key_to_grid_key(&event.logical_key)
                     && let Some(root) = state.layers.top_modal_root_mut()
                 {
                     let _ = root.event(&Event::Key { key: gk, pressed: true });
