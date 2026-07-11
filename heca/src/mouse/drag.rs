@@ -6,7 +6,6 @@
 use heca_grid_ui::drag::{DragItemId, DragLabel, DragPhase, DragSurfaceId};
 
 use crate::app_state::{AppDragPayload, AppState};
-use crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH;
 
 /// Route cursor movement to the active drag phase handler.
 ///
@@ -72,11 +71,8 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
     // Threshold exceeded — promote to an active drag: ghost label + Dragging phase.
     let label = drag_ghost_label(state, &payload);
     let chrome = super::chrome_config(state);
-    let sw = if state.chrome_state.left_visible() {
-        chrome.left_sidebar_width
-    } else {
-        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-    };
+    // 0 when Hidden (no icon rail) — the drag bounds collapse to nothing.
+    let sw = chrome.left_sidebar_width;
     let left = state
         .mouse
         .drag_ctx
@@ -135,11 +131,8 @@ fn update_sidebar_drag_hover(state: &mut AppState) {
     let pos = state.mouse.pos;
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = win_h - chrome.status_bar_height;
-    let sw = if state.chrome_state.left_visible() {
-        chrome.left_sidebar_width
-    } else {
-        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-    };
+    // 0 when Hidden (no icon rail) — the drag bounds collapse to nothing.
+    let sw = chrome.left_sidebar_width;
     let left = state
         .mouse
         .drag_ctx
@@ -147,13 +140,7 @@ fn update_sidebar_drag_hover(state: &mut AppState) {
         .expect("LeftSidebar pre-populated in DragContext::default");
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(
-            &state.sidebar_tree,
-            sidebar_top,
-            sidebar_h,
-            sw,
-            pos.1,
-        );
+        let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1);
         if let Some(fi) = fi {
             if matches!(
                 state.sidebar_tree.flat_items.get(fi),

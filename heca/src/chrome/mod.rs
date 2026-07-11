@@ -68,12 +68,8 @@ use std::time::Duration;
 pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
 /// Default status bar height in logical pixels.
 pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
-/// Default collapsed sidebar width in logical pixels.
-pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
 /// Default expanded sidebar width in logical pixels.
 pub const DEFAULT_SIDEBAR_WIDTH: f32 = 240.0;
-/// Minimum sidebar width to be considered expanded (for rendering decisions).
-pub const SIDEBAR_EXPANDED_THRESHOLD: f32 = 80.0;
 
 // ── Timing ──
 
@@ -3384,8 +3380,10 @@ pub(crate) fn build_chrome_root(
         });
     });
 
+    // Expanded ⇄ Hidden: width is 0 when the region is Hidden (no icon rail — see
+    // `docs/sidebar-provider-modes.md`), so a positive width means Expanded.
     let left_w = chrome.left_sidebar_width;
-    let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
+    let left_sidebar = if left_w > 0.0 {
         let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
         Some(build_sidebar_shell(
             &state.sidebar_tree,
@@ -3408,7 +3406,7 @@ pub(crate) fn build_chrome_root(
         None
     };
     let right_w = chrome.right_sidebar_width;
-    let right_sidebar = if right_w >= SIDEBAR_EXPANDED_THRESHOLD {
+    let right_sidebar = if right_w > 0.0 {
         let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
         Some(build_right_sidebar_shell(
             right_w,

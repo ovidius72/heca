@@ -1512,11 +1512,15 @@ pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
-    // Enter sidebar-nav WITHOUT changing the sidebar's mode or width at all: a
-    // contracted/collapsed sidebar stays exactly as it is, an expanded one stays
-    // expanded (selection-driven). The look is driven by `left_size` (render.rs
-    // uses width < SIDEBAR_EXPANDED_THRESHOLD for the rail), so touching neither
-    // mode nor size here is what keeps the contracted sidebar contracted.
+    // Enter sidebar-nav. A region is Expanded ⇄ Hidden (no icon rail — see
+    // `docs/sidebar-provider-modes.md`); you cannot navigate a Hidden sidebar, so
+    // Expand it if it is currently Hidden. If already Expanded, leave the (possibly
+    // user-resized) width untouched — selection-driven, no width reset.
+    if !state.chrome_state.left_visible() {
+        state
+            .chrome_state
+            .set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
+    }
     state.input_mode = InputMode::SidebarNav;
     update_session_viewport(state);
     after_layout_change(state);
@@ -1524,26 +1528,14 @@ pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.chrome_state.left_visible()
-            || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
-        if is_collapsed {
-            state.sidebar_tree.cursor_up_collapsed();
-        } else {
-            state.sidebar_tree.cursor_up();
-        }
+        state.sidebar_tree.cursor_up();
         state.needs_redraw = true;
     }
 }
 
 pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.chrome_state.left_visible()
-            || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
-        if is_collapsed {
-            state.sidebar_tree.cursor_down_collapsed();
-        } else {
-            state.sidebar_tree.cursor_down();
-        }
+        state.sidebar_tree.cursor_down();
         state.needs_redraw = true;
     }
 }

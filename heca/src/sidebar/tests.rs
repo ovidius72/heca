@@ -269,45 +269,6 @@ fn test_empty_session() {
 }
 
 #[test]
-fn test_cursor_down_collapsed_skips_columns() {
-    let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
-
-    // Start at first workspace (index 0). In collapsed mode cursor_down
-    // should skip the Column item and land on the first Pane.
-    tree.cursor = 0;
-    tree.cursor_down_collapsed();
-    assert!(
-        matches!(tree.flat_items[tree.cursor], SidebarItem::Pane { .. }),
-        "cursor_down_collapsed should skip Column and land on Pane, got {:?}",
-        tree.flat_items[tree.cursor]
-    );
-}
-
-#[test]
-fn test_cursor_up_collapsed_skips_columns() {
-    let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
-
-    // Put cursor on the first Pane item after its Column.
-    // cursor_up_collapsed should skip the Column and land on Workspace.
-    let first_pane_idx = tree
-        .flat_items
-        .iter()
-        .position(|i| matches!(i, SidebarItem::Pane { .. }))
-        .expect("should have a pane");
-    tree.cursor = first_pane_idx;
-    tree.cursor_up_collapsed();
-    assert!(
-        matches!(tree.flat_items[tree.cursor], SidebarItem::Workspace { .. }),
-        "cursor_up_collapsed should skip Column and land on Workspace, got {:?}",
-        tree.flat_items[tree.cursor]
-    );
-}
-
-#[test]
 fn test_toggle_expand_clamps_cursor() {
     let (session, _ids) = make_test_session();
     let mut tree = SidebarTree::new();
@@ -510,14 +471,14 @@ fn test_sidebar_hit_test_expanded() {
 
     // sidebar_top=32, 4px padding, then [+w] button row (24px), then first flat item.
     // First flat item starts at y = 32 + 4 + 24 = 60. Click middle of that row.
-    let fi = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 60.0 + ITEM_HEIGHT / 2.0);
+    let fi = sidebar_hit_test(&tree, 32.0, 400.0, 60.0 + ITEM_HEIGHT / 2.0);
     assert_eq!(fi, Some(0), "click on first line should hit flat item 0");
 
     // Click above sidebar should miss.
-    assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 10.0), None);
+    assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 10.0), None);
 
     // Click in the [+w] button row area should miss (returns None).
-    let btn_row = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 32.0 + 4.0 + BTN_ROW_HEIGHT / 2.0);
+    let btn_row = sidebar_hit_test(&tree, 32.0, 400.0, 32.0 + 4.0 + BTN_ROW_HEIGHT / 2.0);
     assert_eq!(btn_row, None, "click on [+w] button row should miss items");
 }
 
@@ -553,23 +514,3 @@ fn test_collapse_persists_across_rebuild() {
     );
 }
 
-#[test]
-fn test_sidebar_hit_test_collapsed() {
-    let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
-
-    // Collapsed mode (width < 80). Click on second visible line.
-    // Rows: 4px pad, [+w] row (24px), then visible lines.
-    // Visible line 0 = WS (flat idx 0, column idx 1 skipped)
-    // Visible line 1 = first Pane (flat idx 2)
-    // First pane starts at y = 32 + 4 + 24 + 24 = 84.
-    let first_pane_y = 32.0 + 4.0 + BTN_ROW_HEIGHT + ITEM_HEIGHT + ITEM_HEIGHT / 2.0;
-    let fi = sidebar_hit_test(&tree, 32.0, 400.0, 40.0, first_pane_y);
-    // Second visible line should be the first Pane (skipping the Column).
-    assert_eq!(
-        fi,
-        Some(2),
-        "second visible line in collapsed mode should be first Pane (flat idx 2)"
-    );
-}
