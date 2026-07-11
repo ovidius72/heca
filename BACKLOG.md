@@ -1961,6 +1961,33 @@ not z=0 frost compositing).
   terminal + dark nvim colorscheme; check whether heca's default bg overrides nvim's OSC-set bg, and
   whether the UI theme *should* map to terminal defaults when no explicit `terminal_*` override exists).
 
+### [ ] Requirement: Config-reload consistency bugs · `reload-bugs` (found 2026-07-10)
+Two reload-staleness bugs found during the pane-naming session — things that only partly
+re-apply on `prefix+Shift+r`. Same family: a retained/cached tree not invalidated on reload.
+Worked on branch `fix/reload-bugs` (off `main`, after #228/#229 merged).
+- [x] **reload-bug-header-icons** — BUG: pane-header action icons stay **faint/stale on existing
+  panes** after a theme reload (e.g. mocha→latte); a newly-created pane looks correct. **Root-caused
+  + FIXED** (commit on `fix/reload-bugs`). Retained per-pane headers (`state.pane_headers`) bake theme
+  colors (`foreground`/`accent`/`danger.lerp`) + font into their widget tree at build time, and
+  `pane_header_key` deliberately carries **no theme identity** (themes only change on reload), so a
+  theme swap changed no header's key and the stale trees were kept. `reload_config` invalidated the
+  other retained trees (`terminal_layers.clear()`, `chrome_tree = None`) but not `pane_headers`. Fix:
+  new `chrome::clear_pane_headers` (drops each header's `HintTargetRegistry` range, then clears) called
+  from `reload_config`; also de-dups the identical inline cleanup in `sync_pane_headers`.
+- [ ] **reload-bug-terminal-transparency** — REPORTED: changing `[appearance.terminal] transparency` +
+  reload only **partially** applies (old alpha persists until a new pane opens). **The consolidation
+  handoff's hypothesis was wrong** — `terminal_layer_render_key` (`app/terminal_render.rs`) **already
+  hashes `surface_alpha`** (since the `terminal-00b` foundation, with test
+  `terminal_layer_render_key_changes_with_surface_alpha`), and `retained_damage_to_apply` maps any
+  `style_changed` to `TerminalDamage::Full`, so a transparency change forces a full repaint of every
+  pane's retained layer on the next frame (`reload_config` requests a redraw). `terminal_surface_opacity()`
+  reads live `state.appearance`, updated on reload. **Verified statically + via the render-key tests on
+  current `main`; the stated cause does not hold.** Likely the symptom predated the merged
+  **terminal-theming-2** fix (which changed *how* `surface_alpha` is applied — default bg only). **Action:
+  needs a fresh in-app repro on current `main`** before any fix; do not fabricate one. If it still
+  reproduces, capture exactly what stays stale (text area vs pane inset vs border) and which
+  transparency transition (0↔n, n↔m).
+
 ### [ ] Requirement: Chrome interaction bugs · `chrome-bugs` (found 2026-07-10)
 UI/interaction bugs found during the pane-naming session. Not diagnosed yet — capture + repro first.
 - [ ] **chrome-bug-collapsed-sidebar-picks** — BUG: with the sidebar **collapsed** (rail mode), the
