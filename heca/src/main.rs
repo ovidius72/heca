@@ -132,6 +132,14 @@ impl HecaApp {
                 .set_font_family(self.app_config.config.font.family.ui_normal());
             refresh_terminal_cell_size(state);
             state.terminal_layers.clear();
+            // Retained pane headers bake theme colors / fonts into their tree at
+            // build time, and `pane_header_key` intentionally has no theme identity
+            // (themes only change on reload). Drop every header so `sync_pane_headers`
+            // rebuilds them against the new theme next frame. Mirrors
+            // `terminal_layers.clear()` and `chrome_tree = None`; without it, existing
+            // panes keep stale (faint) icon colors after a theme swap while
+            // freshly-created panes look correct.
+            crate::chrome::clear_pane_headers(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.action_shortcuts = crate::chrome::ActionShortcuts::from_config(&self.app_config.config);
             state.mouse_enabled = self.app_config.config.settings.mouse;

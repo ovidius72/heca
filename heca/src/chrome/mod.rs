@@ -999,6 +999,24 @@ pub(crate) fn sync_pane_viewport_widgets(
     state.pane_viewport_widgets.retain(|id, _| seen.contains(id));
 }
 
+/// Drop every retained pane header, first releasing the hint-target ids each one
+/// registered (so the shared [`HintTargetRegistry`] doesn't leak ranges). Used
+/// when headers are globally invalidated: the info-bar is turned off, or a config
+/// reload changes the theme/font baked into the trees (see `reload_config`, which
+/// mirrors this alongside `terminal_layers.clear()`). `sync_pane_headers` rebuilds
+/// them from scratch next frame.
+pub(crate) fn clear_pane_headers(state: &mut crate::app_state::AppState) {
+    let ranges: Vec<_> = state
+        .pane_headers
+        .values()
+        .map(|h| h.hint_range.clone())
+        .collect();
+    for r in ranges {
+        state.hint_targets.remove_range(r);
+    }
+    state.pane_headers.clear();
+}
+
 /// Build/position the retained per-pane info-bar headers for every visible pane.
 /// Runs at the **top** of `render_frame` (before the `scene_view` borrow of
 /// `state.compositor`) so it can mutate `state.pane_headers`; render then paints
@@ -1009,16 +1027,8 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
     let segments = state.appearance.pane.title_segments.clone();
     let actions = state.appearance.pane.title_actions.clone();
     if segments.is_empty() && actions.is_empty() {
-        // Drop any hint targets the headers had registered before clearing them.
-        let ranges: Vec<_> = state
-            .pane_headers
-            .values()
-            .map(|h| h.hint_range.clone())
-            .collect();
-        for r in ranges {
-            state.hint_targets.remove_range(r);
-        }
-        state.pane_headers.clear();
+        // Info bar disabled: drop every header (releasing its hint targets).
+        clear_pane_headers(state);
         return;
     }
     let theme = chrome_gui_theme(state);
