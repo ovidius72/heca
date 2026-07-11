@@ -1096,11 +1096,10 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 - [x] **sidebar-fu-1** — DONE (branch `feat/sidebar-followups`). Collapsed rail initial now
   prefers the user-set `custom_name` over the process name, mirroring the expanded side.
   `collapsed_pane_label` (`heca/src/sidebar/render.rs`) + 4 unit tests.
-- [ ] **sidebar-fu-2** — KeyHint missing in the collapsed rail; bring the universal
-  `KeyHint` into the rail. **Deferred to `app-task-21`** — the hand-drawn rail
-  (`PrimitiveRenderer`) has no rounded-corner or glow primitive, so a faithful keycap
-  needs the collapsed-rail → grid-ui `RailCell` migration. Do it there (RailCell already
-  exists and its docs say to wrap it in `KeyHint`).
+- [~] **sidebar-fu-2** — ~~KeyHint missing in the collapsed rail~~ **MOOT — the collapsed rail is
+  dropped** (`app-task-21`, decided 2026-07-11; a region is Expanded ⇄ Hidden, no rail). There is no
+  rail to put a KeyHint in. If a future Provider brings back an icon rail, KeyHint-over-cells is part
+  of that generic spec — see [`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md) §4.
 - [x] **sidebar-fu-3** — DONE (branch `feat/sidebar-followups`). New `[settings]` bools
   `show_left_sidebar` / `show_right_sidebar` / `show_top_bar` / `show_bottom_bar` (default
   `true`); `false` = fully hide that region (zero width/height, space reclaimed). NOTE: in
@@ -1503,6 +1502,11 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   Migrates the current `heca/src/sidebar/` workspace-tree logic into the provider shape.
   The sidebar shell (already a `ChromeRegion` widget) hosts it; the provider owns tree semantics, search, DnD, row actions.
   Files: `heca/src/providers/workspaces.rs` (new), `heca/src/sidebar/` (reshape as the provider's impl)
+  **Render-per-mode target (future, tied to a collapsed rail):** the eventual Provider shape describes
+  its content **once** as a semantic Group/Item tree (icon/label/status/intent/children), and the host
+  renders it per region display mode — the author never writes an expanded and a collapsed tree. Today
+  a region is Expanded ⇄ Hidden (rail dropped), so a Provider renders only its Expanded form and this
+  is not built yet. Keep this shape compatible. Design: **[`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md)** §3.
 
 - [x] **plugin-task-10a** — **DONE 2026-07-03** (via `origin/main`; full note at the top of this `plugin-03` phase + `handoff-sidebar-nav-task10a.md`). Verified in-tree: `nav_selected` on `Row`/`MarkerGroup`/`DockFrame` + `SidebarSelectionChanged`/`nav_selection` in `heca/src/chrome/`. Original spec (now shipped) below. Bridge sidebar-nav selection into shared chrome/workspaces state.
   Today the expanded sidebar highlights only `active_pane`, while sidebar navigation mutates
@@ -1988,14 +1992,16 @@ Worked on branch `fix/reload-bugs` (off `main`, after #228/#229 merged).
 
 ### [ ] Requirement: Chrome interaction bugs · `chrome-bugs` (found 2026-07-10)
 UI/interaction bugs found during the pane-naming session. Not diagnosed yet — capture + repro first.
-- [ ] **chrome-bug-collapsed-sidebar-picks** — BUG: with the sidebar **collapsed** (rail mode), the
-  quick-pick **letter labels** for workspaces and panes behave wrong: clicking a letter focuses the
-  **wrong pane**, sometimes opens the **delete dialog**, and the **highlight** is wrong. Likely the
-  collapsed rail projects pick candidates / hit-targets with the wrong id mapping (or reuses the
-  expanded-sidebar coordinates), and/or a click falls through to a delete affordance. Investigate the
-  collapsed-rail render + hit-test path (`app/render.rs` collapsed rail, the pick-candidate projection
-  in `sync_chrome_state`/`sync_chrome_signals`, and `handle_hint_pick`). Get exact repro (which
-  letters, collapsed vs expanded) before fixing.
+- [~] **chrome-bug-collapsed-sidebar-picks** — BUG: with the sidebar **collapsed** (rail mode),
+  clicking a rail cell focuses the **wrong pane** / opens the **delete dialog** / shows the wrong
+  highlight. **Root cause found (grill-me, 2026-07-11):** the collapsed rail is hand-drawn
+  (`render_sidebar_collapsed`) and `sidebar_hit_test` **re-derives** the rail geometry with its own
+  magic numbers (`ITEM_HEIGHT`, a phantom `BTN_ROW_HEIGHT` top offset the rail never draws) — the two
+  copies drifted, so clicks map one row off. **Resolution (decided with the user): DROP the collapsed
+  rail entirely** rather than rebuild it — a region is now **Expanded ⇄ Hidden** (no rail). Deleting
+  `render_sidebar_collapsed` + the collapsed branch of `sidebar_hit_test` removes the broken code and
+  closes this bug by construction. Tracked as the "drop the collapsed rail" work under `app-task-21`.
+  Full design + rationale: **[`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md)**.
 - [ ] **chrome-bug-titlebar-doubleclick-fullscreen** — BUG (macOS): double-clicking the top-bar
   sidebar-toggle button enters OS full screen. No app fullscreen/titlebar code exists — the window uses
   `Window::default_attributes()` (native macOS titlebar) and the vibrancy path doesn't touch the style
@@ -2344,33 +2350,43 @@ Complete sidebar DnD — workspaces can be dragged to reorder. Panes and columns
 - [ ] **app-task-20** — Wire sidebar buttons (`+w` workspace, `+c` column, `+p` pane) — `button_hitboxes` are defined but click handlers are not connected.
   Files: `heca/src/sidebar/hit_test.rs`, `heca/src/mouse/surface_left.rs`
 
-- [ ] **app-task-21** — Migrate the collapsed sidebar rail from legacy hand-drawn + `sidebar_hit_test` to `RailCell`/`ChromeRegion` grid-ui widgets. **(EXTENDED SCOPE, 2026-07-02 — regression #2.)** Must also:
-  (a) use `KeyHint` in collapsed mode (consistent with the expanded pick overlays);
-  (b) surface the pane NAME (tooltip/label), updating live on rename — today only the first char shows;
-  (c) render the sidebar-nav CURSOR/selection while in `InputMode::SidebarNav` (collapsed analog of `plugin-task-10a`);
-  (d) be theme-coherent with the expanded side.
-  Files: `heca/src/sidebar/render.rs`, `heca/src/mouse/render.rs`. Coordinate with `theming-task-29`.
-  **Do this INSIDE `plugin-03`** (sidebar → `WorkspacesContainerProvider`) to avoid double rework.
-  - **HEADER/TOGGLE — DONE via `sidebar-fu-10` + `sidebar-fu-14` (2026-07-03):** the collapse
-    toggle now lives in the **top bar** (always visible in both states, mirrored left/right), and
-    the tall sidebar headers + dead icon/label were removed. So this task **no longer owns the
-    collapse toggle** — it only covers the rail's cells/cursor/KeyHint/pane-name/theming (a-d above).
-  - **RIGHT-SIDEBAR MOUSE SURFACE (bug found 2026-07-03):** the right header toggle wired in
-    fu-10 has **no effect** because there is **no right-sidebar mouse surface at all** —
-    `heca/src/mouse/surface_left.rs` is `DragSurfaceId::LeftSidebar` only, and its press handler
-    dispatches into the chrome tree only for the **left** bounds (`sidebar_bounds` = left;
-    `chrome_dispatch_press` gated on `left_visible()` at ~L92). The right sidebar is a decorative
-    placeholder with zero click routing. Fix: add a right-chrome press dispatch (mirror the left)
-    so right-sidebar chrome widgets are clickable; also route **collapsed** clicks through
-    `chrome_dispatch_press` (not the legacy `sidebar_hit_test`) once the rail is grid-ui.
-  - **Supersedes the fu-10 interim wiring:** fu-10 left the left toggle working only when expanded
-    and the right toggle non-functional; this task delivers the real both-states, both-sides version.
+- [ ] **app-task-21** — **DROP the collapsed sidebar rail (decided with the user, grill-me 2026-07-11).**
+  The previous plan (migrate the hand-drawn rail to `RailCell`/`ChromeRegion`) is **abandoned**: the
+  rail's value is modest (heca is keyboard-first; "give me space" is served by fully hiding), and doing
+  it *right* (generic, write-once across all Providers) is a large build for a small convenience. So a
+  region becomes **Expanded ⇄ Hidden** — no icon rail. This also closes
+  `chrome-bug-collapsed-sidebar-picks` by deleting the broken code. **Full design + rationale:
+  [`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md).** Work:
+  (a) **collapse is decided by `RegionMode` state, not width** — `build_chrome_root` + `surface_left.rs`
+    branch on `left_mode()`/`right_mode()`; delete `SIDEBAR_EXPANDED_THRESHOLD` (`80.0`); every input
+    (toggle button, key, RPC, drag-below-min) **writes** the mode signal, the renderer only reads it;
+  (b) **`Hidden` truly reclaims all space** (fix the current ~40px-strip quirk);
+  (c) **Expanded stays resizable** — width (`RegionState.size`) is independent, clamped to a config
+    minimum, and passed to the hosted Provider;
+  (d) **delete** `render_sidebar_collapsed`, the collapsed branch of `sidebar_hit_test`, and
+    `collapsed_pane_label` (`heca/src/sidebar/render.rs`, `hit_test.rs`), plus the collapsed-rail draw
+    calls in `heca/src/app/render.rs`. `RegionMode::CollapsedRail` stays in the enum (unused, for a
+    future rail); `RailCell` stays a library widget but is not mounted.
+  The generic **icon-rail collapsed rendering** (styles, status colors, `RailCell` per item, KeyHint,
+  right-click) is **kept as a FUTURE item** in `docs/sidebar-provider-modes.md` §4 — build it only when
+  a Provider (Docker/AI-Agents) genuinely needs an always-visible status rail, and build it as the
+  **generic host render-per-mode** path, never a workspace-only hand-drawn rail.
+  - **HEADER/TOGGLE — DONE via `sidebar-fu-10` + `sidebar-fu-14` (2026-07-03):** the collapse toggle
+    lives in the top bar (mirrored left/right); it now flips **Expanded ⇄ Hidden**.
+  - **RIGHT-SIDEBAR MOUSE SURFACE (bug found 2026-07-03, STILL OPEN):** the right header toggle has
+    **no effect** because there is **no right-sidebar mouse surface** — `heca/src/mouse/surface_left.rs`
+    is `DragSurfaceId::LeftSidebar` only, and its press handler dispatches into the chrome tree only for
+    the **left** bounds (`chrome_dispatch_press` gated on `left_visible()` ~L92). Fix: add a right-chrome
+    press dispatch mirroring the left so right-sidebar chrome widgets are clickable. (Independent of the
+    rail drop; keep it.)
 
-- [ ] **app-task-31** — **(NEW, 2026-07-02 — regression #3.)** Enter `SidebarNav` WITHOUT force-expanding:
-  `handle_sidebar_focus` must NOT call `set_left_mode(Expanded)` / `set_left_size(DEFAULT_SIDEBAR_WIDTH)` —
-  keep the current collapsed/expanded state so sidebar mode works while collapsed.
-  Small + standalone-able, but DEFERRED with the rest (pairs with `app-task-21`'s collapsed-cursor render).
-  Files: `heca/src/handlers.rs` (`handle_sidebar_focus`, ~line 1309).
+- [~] **app-task-31** — ~~Enter `SidebarNav` WITHOUT force-expanding (stay collapsed)~~ **REVISED — the
+  premise is gone.** With the collapsed rail dropped (`app-task-21`, 2026-07-11) a region is
+  Expanded ⇄ Hidden, and you cannot navigate a Hidden sidebar. So entering `SidebarNav` while **Hidden**
+  should **Expand** it (correct, not a regression); while already Expanded it must **not** resize/reset
+  the user's width. Reduced scope: `handle_sidebar_focus` (`heca/src/handlers.rs` ~L1309) may set
+  `Expanded` when Hidden but must **not** clobber `set_left_size(...)` when already Expanded (preserve
+  the resized width). See [`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md).
 
 ### [ ] Phase: Damage-region render optimization · `app-07`
 Let the compositor's preserved scene texture actually preserve things — partial repaints instead of full-frame clears.

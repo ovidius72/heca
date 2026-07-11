@@ -57,7 +57,13 @@ The left sidebar must no longer be treated as synonymous with the workspace tree
 Instead:
 
 - the **Sidebar widget/shell** is only a visual/layout region shell
-- it may be bordered, toggleable, collapsed/expanded, and capable of informing children about its current display mode
+- it may be bordered, toggleable, and capable of informing children about its current display mode
+  > **Display modes (decided 2026-07-11):** a region is **Expanded ⇄ Hidden**. The **collapsed icon
+  > rail is dropped** for now; the shell still informs children of the mode, but only `Expanded` and
+  > `Hidden` are used, and Expanded is resizable (width passed to the mounted Provider). The generic
+  > "Provider renders an icon rail when collapsed" model — where a Provider describes its content once
+  > and the host renders it per mode (write once) — is a **future** item. Full design + rationale:
+  > **[`docs/sidebar-provider-modes.md`](./docs/sidebar-provider-modes.md)**.
 - it hosts one or more mounted containers
 - the workspace tree becomes a **WorkspacesContainer** mounted inside that shell
 - other containers may also be present in the same sidebar, in a specific order, top-to-bottom
