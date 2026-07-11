@@ -7,12 +7,19 @@
 //! Self-contained like [`Tabs`](super::Tabs): it lays its trigger + rows out from
 //! its own metrics (no child components). Selecting emits
 //! `Action::value("select-change", SignalData::Usize(index))`. Honors
-//! [`Base::disabled`](crate::component::Base); keyboard: ↑/↓ move the highlight,
-//! Enter/Space open/commit, Esc closes.
+//! [`Base::disabled`](crate::component::Base).
+//!
+//! **Open-list navigation is host-configured, not hardcoded** (`widget-keys-config`),
+//! shared with [`ContextMenu`](super::ContextMenu)/[`CommandPalette`](super::CommandPalette):
+//! while open the widget is an overlay and responds to the semantic
+//! [`Event::MenuNav`] (`Prev`/`Next` move the highlight, `Activate` commits, `Dismiss`
+//! closes) — the host resolves the configurable `menu_*` keys (defaults ↑/`Ctrl+k`,
+//! ↓/`Ctrl+j`, Enter, Esc) into it. Only the **closed** trigger keeps raw activation keys
+//! (Enter / Space / ↓ open the list), delivered to the focused widget like a button.
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, MenuNav, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow, TextAlign};
@@ -465,36 +472,36 @@ impl Component for Select {
                 self.scroll = (self.scroll as f32 + delta).clamp(0.0, max).round() as usize;
                 Handled::Yes
             }
-            Event::Key { key, pressed: true } => match key {
-                GridKey::Escape if self.open => {
-                    self.open = false;
-                    Handled::Yes
-                }
-                GridKey::Enter | GridKey::Space => {
-                    if self.open {
-                        self.commit(self.highlight);
-                        self.open = false;
-                    } else {
-                        self.open_list();
+            // Open-list navigation: the widget is an overlay while open, so the host sends the
+            // configurable `menu_*` keys as a semantic `MenuNav` (shared with the context menu /
+            // command palette). No literal nav keys live here.
+            Event::MenuNav(nav) if self.open => {
+                match nav {
+                    MenuNav::Prev => {
+                        self.highlight = self.highlight.saturating_sub(1);
+                        self.scroll_into_view();
                     }
-                    Handled::Yes
-                }
-                GridKey::ArrowDown => {
-                    if self.open {
+                    MenuNav::Next => {
                         self.highlight = (self.highlight + 1).min(self.options.len() - 1);
                         self.scroll_into_view();
-                    } else {
-                        self.open_list();
                     }
-                    Handled::Yes
+                    MenuNav::Activate => {
+                        self.commit(self.highlight);
+                        self.open = false;
+                    }
+                    MenuNav::Dismiss => self.open = false,
                 }
-                GridKey::ArrowUp if self.open => {
-                    self.highlight = self.highlight.saturating_sub(1);
-                    self.scroll_into_view();
-                    Handled::Yes
-                }
-                _ => Handled::No,
-            },
+                Handled::Yes
+            }
+            // Closed + focused (not yet an overlay): raw activation keys open the list, like a
+            // button's Enter/Space. The open list is driven by `MenuNav` above, not raw keys.
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space | GridKey::ArrowDown,
+                pressed: true,
+            } if !self.open => {
+                self.open_list();
+                Handled::Yes
+            }
             _ => Handled::No,
         }
     }

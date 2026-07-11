@@ -1909,10 +1909,21 @@ model to follow), `available-actions`. Scope + phasing decided in the review.
   `Ctrl+a`/`Super+a`. Docs: `docs/widgets.md` (Dialog/Input/Modal note), README. Tests: grid-ui
   widget-side (`DialogNav`/`InputEdit`), app-side `dialog_keymap_maps_default_nav_bindings` /
   `input_keymap_maps_default_edit_bindings`. In-app visual pass by the user pending.
-- [ ] **widget-keys-config-2** — apply the same host-driven pattern to the remaining literal-key
-  widgets: `Select` (`Esc`/`Enter`/`Space`/`Arrow↑↓`) and `Tabs` (`Arrow←→`) list-nav — fold their
-  nav into the shared `MenuNav` vocabulary where it overlaps (they are not top-modal overlays today,
-  so this needs a host delivery path for a focused-but-not-modal widget; scope it in a short review).
+- [~] **widget-keys-config-2** — apply the same host-driven pattern to the remaining literal-key
+  widgets. **`Select` DONE** (branch `feat/widget-keys-config`): its **open-list** nav now consumes
+  `Event::MenuNav` (Prev/Next/Activate/Dismiss), folded into the shared menu-nav vocabulary — so it
+  is navigable with **↑/↓ and vim `Ctrl+k`/`Ctrl+j`** (+ Enter/Esc) with no hardcoded keys; only the
+  **closed** trigger keeps raw activation keys (Enter/Space/↓ open the list, like a button). `Select`
+  and `Tabs` are **showcase-only** (not mounted in the heca app), so there is no `config.toml` surface
+  yet — the demo host resolves keys→`MenuNav` via a new `route_overlay_key` in
+  `heca-renderer/examples/showcase.rs` (this also fixed a latent gap: the showcase never sent
+  `MenuNav`, so the already-converted `ContextMenu`/`CommandPalette` were not keyboard-navigable
+  there). If `Select` is ever mounted in-app it picks up `build_menu_keymap` (config) for free.
+  Docs: `docs/widgets.md` (Select). Tests: `select_keyboard_navigates_and_escape_closes` drives
+  `MenuNav`.
+  - [ ] **Tabs** — left/right list-nav still uses raw `Arrow←→`. **Deferred**: `Tabs` is showcase-only
+    and the user was unsure it is used anywhere; convert it (fold into `MenuNav` or its own nav) when
+    it is actually mounted in the app, alongside a real config surface.
 
 ### [ ] Requirement: Pane naming + sidebar pane rows · `pane-naming`
 Follow-ups from the rename-dialog session (2026-07-10). **Full detail + resume steps in the repo-root

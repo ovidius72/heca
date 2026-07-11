@@ -1887,6 +1887,36 @@ impl GpuState {
         self.window.request_redraw();
     }
 
+    /// Route a key to the active overlay (Select / ContextMenu / CommandPalette / Modal).
+    /// This is the demo host's stand-in for the app's config-driven `menu-nav`: the nav combos
+    /// — arrows plus **vim `Ctrl+j`/`Ctrl+k`**, Enter, Esc — become a semantic
+    /// [`MenuNav`], so those widgets carry no hardcoded nav keys. Anything else (palette typing,
+    /// quick-pick letters, a Modal's own raw keys) is offered raw. Returns whether the overlay
+    /// consumed the key (so a non-grabbing overlay like the toast stack still lets global keys
+    /// through). `offer_to_overlay` no-ops when no overlay is active.
+    fn route_overlay_key(&mut self, gk: GridKey) -> bool {
+        let nav = match gk {
+            GridKey::ArrowUp => Some(MenuNav::Prev),
+            GridKey::ArrowDown => Some(MenuNav::Next),
+            GridKey::Char('k') if self.ctrl => Some(MenuNav::Prev),
+            GridKey::Char('j') if self.ctrl => Some(MenuNav::Next),
+            GridKey::Enter => Some(MenuNav::Activate),
+            GridKey::Escape => Some(MenuNav::Dismiss),
+            _ => None,
+        };
+        if let Some(n) = nav
+            && self
+                .focus
+                .offer_to_overlay(&mut self.ui, &Event::MenuNav(n))
+                == Handled::Yes
+        {
+            return true;
+        }
+        self.focus
+            .offer_to_overlay(&mut self.ui, &Event::Key { key: gk, pressed: true })
+            == Handled::Yes
+    }
+
     /// A key pressed while in zoom mode. The mode stays active (so you can keep
     /// pressing j/k) until Esc/Enter/q.
     fn zoom_mode_key(&mut self, gk: GridKey) {
@@ -2259,16 +2289,12 @@ impl ApplicationHandler for App {
                         _ if state.prefix_pending => state.prefix_command(gk),
                         GridKey::Char('b') if state.ctrl => state.prefix_pending = true,
                         // An open overlay gets first dibs on keys, but only swallows
-                        // the ones it actually consumes: a Modal/palette eats every
-                        // key (Esc/Enter/typing), while the ToastStack eats none — so
-                        // global keys (`t`, `[`, …) still work while toasts show.
-                        gk if state.focus.offer_to_overlay(
-                            &mut state.ui,
-                            &Event::Key {
-                                key: gk,
-                                pressed: true,
-                            },
-                        ) == Handled::Yes => {}
+                        // the ones it actually consumes: a Modal/palette/Select eats the
+                        // keys it uses (nav via `MenuNav`, Esc/Enter/typing), while the
+                        // ToastStack eats none — so global keys (`t`, `[`, …) still work
+                        // while toasts show. Nav combos (arrows + vim Ctrl+j/k) resolve to
+                        // `MenuNav` here (the demo host's stand-in for config-driven menu-nav).
+                        gk if state.route_overlay_key(gk) => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);

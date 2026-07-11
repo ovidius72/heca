@@ -805,16 +805,23 @@ there's no room below, **caps** its visible rows to what fits in the `PaintCx` v
   `.on_change(impl Fn(Action))`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> &str`.
 - **Emits**: `"select-change"` / `SignalData::Usize`.
-- **Keys**: ↑/↓ move highlight (scroll into view), Enter/Space open & commit, Esc closes;
-  click a row to choose, click outside to close. Wheel scrolls the open list.
+- **Keys** (`widget-keys-config`): a **closed** trigger opens on a raw `Enter` / `Space` / `↓`
+  (activation, like a button). The **open** list is an overlay driven by the semantic
+  `Event::MenuNav` — shared with [`ContextMenu`](#contextmenu) / [`CommandPalette`](#commandpalette):
+  `Prev`/`Next` move the highlight (scroll into view), `Activate` commits, `Dismiss` closes. The host
+  resolves the configurable `menu_*` keys into it (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter, Esc). Click
+  a row to choose, click outside to close; wheel scrolls the open list.
 
 ```rust
 Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
     .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
 ```
 
-> **Host wiring**: route pointer + `Esc` + wheel to `FocusManager::deliver_to_overlay` when
-> `overlay_active()` (see [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)).
+> **Host wiring**: while `overlay_active()`, route pointer + wheel to
+> `FocusManager::deliver_to_overlay`, and resolve nav keys → `Event::MenuNav` before offering the raw
+> key (typing / quick-pick letters fall through). See `route_overlay_key` in
+> [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs); in the app this is
+> `build_menu_keymap` → the overlay branch of `heca/src/app/events.rs`.
 
 ### Item
 

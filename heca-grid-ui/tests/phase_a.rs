@@ -1328,29 +1328,28 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
 
 #[test]
 fn select_keyboard_navigates_and_escape_closes() {
+    use heca_grid_ui::MenuNav;
     let mut sel = Select::new(["A", "B", "C"]);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
-    let key = |s: &mut Select, k: GridKey| {
-        s.event(&Event::Key {
-            key: k,
-            pressed: true,
-        })
-    };
+    let raw = |s: &mut Select, k: GridKey| s.event(&Event::Key { key: k, pressed: true });
+    let nav = |s: &mut Select, n: MenuNav| s.event(&Event::MenuNav(n));
 
-    key(&mut sel, GridKey::Enter); // open
+    // A closed Select opens on a raw activation key (Enter/Space/↓), like a button.
+    raw(&mut sel, GridKey::Enter);
     assert!(sel.overlay_active());
-    key(&mut sel, GridKey::ArrowDown);
-    key(&mut sel, GridKey::ArrowDown);
-    key(&mut sel, GridKey::Enter); // commit highlight (index 2)
+    // While open it is an overlay: the host drives it with semantic `MenuNav`.
+    nav(&mut sel, MenuNav::Next);
+    nav(&mut sel, MenuNav::Next);
+    nav(&mut sel, MenuNav::Activate); // commit highlight (index 2)
     assert_eq!(sel.index(), 2);
-    assert!(!sel.overlay_active(), "Enter commits and closes");
+    assert!(!sel.overlay_active(), "Activate commits and closes");
 
-    key(&mut sel, GridKey::Enter); // reopen
+    raw(&mut sel, GridKey::Enter); // reopen
     assert!(sel.overlay_active());
-    key(&mut sel, GridKey::Escape);
+    nav(&mut sel, MenuNav::Dismiss);
     assert!(
         !sel.overlay_active(),
-        "Escape closes without changing selection"
+        "Dismiss closes without changing selection"
     );
     assert_eq!(sel.index(), 2);
 }
