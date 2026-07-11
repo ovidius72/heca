@@ -716,7 +716,8 @@ mouse/keyboard selection + editing model. Focusable.
 > **field-first**). It reads modifiers from the broadcast `Event::ModifiersChanged`, so put an Input
 > in a Dialog body and it types + selects with the full model below — **no re-declaration**.
 
-**Keyboard model** (modifier = Ctrl on Win/Linux, Option/Alt or Cmd on macOS, as noted):
+**Keyboard model** (modifier = Ctrl on Win/Linux, Option/Alt or Cmd on macOS, as noted).
+The **built-in** keys are handled by the widget from a raw `Event::Key`:
 
 | Keys | Action |
 |------|--------|
@@ -727,15 +728,33 @@ mouse/keyboard selection + editing model. Focusable.
 | Home / End | caret to start / end |
 | Shift + (any of the above) | extend/shrink selection the same distance |
 | double / triple click | select word / select all (4th click clears) |
-| Cmd/Ctrl + A | select all |
 | Backspace / Delete | delete char before / after caret (or the selection) |
 | Ctrl/Alt + Backspace/Delete | delete word |
 | Cmd/meta + Backspace/Delete | delete to start / end |
+
+**Configurable editing shortcuts (`widget-keys-config`).** The readline / select-all shortcuts are
+**not** hardcoded — the widget ignores a modified char and instead consumes the semantic
+`Event::InputEdit(InputEdit::{DeleteBackward, DeleteToLineStart, SelectAll})`. The **host** resolves
+these from configurable `[keys]` bindings and delivers them field-first (through a `Dialog` to the
+focused field):
+
+| Intent | Default binding (config name) | Effect |
+|--------|-------------------------------|--------|
+| `InputEdit::DeleteBackward` | `Ctrl+h` (`input_delete_back`) | delete one char before the caret |
+| `InputEdit::DeleteToLineStart` | `Ctrl+u` (`input_delete_to_line_start`) | delete from the caret to line start |
+| `InputEdit::SelectAll` | `Ctrl+a` / `Super+a` (`input_select_all`) | select the whole field |
+
+App wiring: `build_input_keymap` → `AppState.input_keymap`, consumed in the overlay key branch
+(`heca/src/app/events.rs`). See the `widget-keys-config` requirement and README.
 
 ```rust
 let name = Input::new().placeholder("CALLSIGN")
     .on_change(|a| { if let SignalData::String(s) = a.data { store(s); } });
 ```
+
+**From a plugin (`ViewNode`).** A plugin never sends `InputEdit` itself — it declares an `Input`, and
+the host owns the keyboard model + shortcut resolution above. (See the plugin props/events under the
+`ViewNode` note below.)
 
 **From a plugin (`ViewNode`).** Declare an input in a modal / panel body; the host `realize`s it to
 this widget and owns styling + the whole keyboard model above. Supported props / events:
@@ -757,13 +776,18 @@ ViewNode::new(WidgetKind::Input)
 ### Tabs
 
 Horizontal segmented selector with an animated sliding underline; lays its own segments
-from monospace metrics (no child components). Focusable; ←/→ move selection, click selects.
+from monospace metrics (no child components). Focusable; click selects.
 
 - **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`.
 - **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits;
   strip re-measures), `.on_change(impl Fn(Action))`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`.
 - **Emits**: `"tab-change"` / `SignalData::Usize`.
+- **Keys** (`widget-keys-config`): navigation is host-configured, not hardcoded — while focused,
+  the widget moves selection on the semantic `Event::MenuNav` (`Prev`/`Next`), shared with
+  [`Select`](#select)/[`ContextMenu`](#contextmenu). The host resolves the configurable nav keys
+  into it (defaults ←/`Ctrl+h` → prev, →/`Ctrl+l` → next). A host delivers `MenuNav` to the focused
+  widget; see `route_focused_key` in the showcase (in-app it would be the `menu_*` keymap).
 
 ```rust
 Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
@@ -786,16 +810,23 @@ there's no room below, **caps** its visible rows to what fits in the `PaintCx` v
   `.on_change(impl Fn(Action))`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> &str`.
 - **Emits**: `"select-change"` / `SignalData::Usize`.
-- **Keys**: ↑/↓ move highlight (scroll into view), Enter/Space open & commit, Esc closes;
-  click a row to choose, click outside to close. Wheel scrolls the open list.
+- **Keys** (`widget-keys-config`): a **closed** trigger opens on a raw `Enter` / `Space` / `↓`
+  (activation, like a button). The **open** list is an overlay driven by the semantic
+  `Event::MenuNav` — shared with [`ContextMenu`](#contextmenu) / [`CommandPalette`](#commandpalette):
+  `Prev`/`Next` move the highlight (scroll into view), `Activate` commits, `Dismiss` closes. The host
+  resolves the configurable `menu_*` keys into it (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter, Esc). Click
+  a row to choose, click outside to close; wheel scrolls the open list.
 
 ```rust
 Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
     .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
 ```
 
-> **Host wiring**: route pointer + `Esc` + wheel to `FocusManager::deliver_to_overlay` when
-> `overlay_active()` (see [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)).
+> **Host wiring**: while `overlay_active()`, route pointer + wheel to
+> `FocusManager::deliver_to_overlay`, and resolve nav keys → `Event::MenuNav` before offering the raw
+> key (typing / quick-pick letters fall through). See `route_overlay_key` in
+> [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs); in the app this is
+> `build_menu_keymap` → the overlay branch of `heca/src/app/events.rs`.
 
 ### Item
 
@@ -1333,10 +1364,9 @@ let open = modal.open_signal();
 ```
 
 > Host wiring: while `focus.overlay_active(root)`, route pointer **and keys** to the overlay
-> (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog. `Modal::event` already
-> maps Tab / ←→ / Enter / Space / Char / Esc; a host with modifier state can additionally call
-> `focus_prev()` for **Shift+Tab** and `focus_next/prev()` for **Ctrl+l / Ctrl+h** (as `heca` does
-> in `events.rs`).
+> (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog. `Modal::event` self-maps
+> its raw keys (Tab / ←→ / Enter / Space / Char / Esc). Prefer [`Dialog`](#dialog) for new overlays:
+> it carries **no** hardcoded nav keys — the host resolves them from config (`widget-keys-config`).
 
 ### Dialog
 
@@ -1349,30 +1379,40 @@ universal hint picker (`prefix+/`), standard focus traversal, and pointer routin
 this is what makes an overlay's buttons hintable.
 
 Same overlay contract as `Modal`: `overlay_active` + `focusable` only while open, so the host
-routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree with
-the **universal focus-nav set** — **Tab / Shift+Tab**, the **arrow keys** (`→`/`↓` next, `←`/`↑`
-prev), and **Ctrl+h/k** (prev) **/ Ctrl+l/j** (next) all move focus among the body field(s) and
-buttons; **Enter/Space** activate the focused one (firing its `on_click`), and **Esc** or a
-**scrim** click fire the `on_dismiss` callback. (Modifiers are read from host-broadcast state, so
-Shift+Tab / Ctrl-motion work without any host special-casing.) Unlike `Modal`, `Dialog` carries no
-result closures: a button's own `on_click` is the action, and dismissal is a callback the host
-points at its overlay-close path (e.g. emit `CloseOverlay`).
+routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree. Unlike
+`Modal`, `Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal
+is a callback the host points at its overlay-close path (e.g. emit `CloseOverlay`).
 
-**Form bodies (text input).** Keys are routed **field-first**: Esc, Tab/Shift+Tab and Ctrl-motion
-are owned by the dialog, but every other key is handed to the **focused descendant first** — so a
-[`Input`](#input) body (or a `realize`d `ViewNode` form) receives typed characters and caret motion
-normally. Only a key the field *doesn't* consume falls back to container behaviour: **Enter** from a
-text field submits the **primary** (first) action button — so Enter = OK / confirm even while typing
-— and the arrow keys move focus between the field and the buttons. This is what makes the host-owned
-rename / prompt dialogs (an `Input` + OK/Cancel) work.
+**Navigation keys are host-configured, not hardcoded (`widget-keys-config`).** The dialog carries no
+literal nav keys; focus traversal / submit / cancel arrive as the semantic
+`Event::DialogNav(DialogNav::{FocusNext, FocusPrev, Submit, Cancel})`. The **host** resolves these
+from configurable `[keys]` bindings and only sends them after a raw key was **not** consumed by a
+focused field (field-first):
+
+| Intent | Default binding (config name) | Effect |
+|--------|-------------------------------|--------|
+| `DialogNav::FocusNext` | `Tab`, `↓`, `→`, `Ctrl+j` (`dialog_focus_next`) | focus the next field/button |
+| `DialogNav::FocusPrev` | `Shift+Tab`, `↑`, `←`, `Ctrl+k` (`dialog_focus_prev`) | focus the previous field/button |
+| `DialogNav::Submit` | `Enter` (`dialog_submit`) | activate the **primary** (first) action |
+| `DialogNav::Cancel` | `Esc` (`dialog_cancel`) | dismiss (also fired by a **scrim** click) |
+
+**Form bodies (text input) — field-first.** A raw `Event::Key` is handed to the **focused descendant
+first**, so a [`Input`](#input) body (or a `realize`d `ViewNode` form) receives typed characters,
+caret motion, Backspace/Delete, and its own [`InputEdit`](#input) shortcuts. Only a key the field
+*doesn't* consume lets the host apply `DialogNav` — so an arrow moves the caret **inside** the input
+but navigates when a **button** is focused, and `Enter`→`Submit` fires OK even while typing. App
+wiring: `build_dialog_keymap` → `AppState.dialog_keymap`, consumed in the overlay key branch
+(`heca/src/app/events.rs`). This is what makes the host-owned rename / prompt dialogs (an `Input` +
+OK/Cancel) work.
 
 Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
 + `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
 
 - **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
-- **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — Esc/scrim
-  swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on Esc/scrim), `.open(bool)`
+- **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — `Cancel`/scrim
+  swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on `DialogNav::Cancel` / scrim),
+  `.open(bool)`
   (focuses the first focusable — a text field body if present, so the user types immediately;
   otherwise the first button as a safe default), plus `.body_boxed(Box<dyn Component>)` for a body
   from a mapper (e.g. `realize`).

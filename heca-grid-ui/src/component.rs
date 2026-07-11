@@ -264,6 +264,20 @@ pub enum Event {
     /// widgets carry no hardcoded nav keys (only quick-pick letters / text input stay
     /// as raw [`Event::Key`]). See `docs/widgets.md` and the app's `menu-nav`.
     MenuNav(MenuNav),
+    /// Semantic focus navigation for the [`Dialog`](crate::widgets::Dialog) overlay
+    /// panel. The host resolves the **configurable** `dialog_focus_next` /
+    /// `dialog_focus_prev` / `dialog_submit` / `dialog_cancel` keybindings into these
+    /// (defaults include Tab/Shift+Tab, the arrows, and vim `Ctrl+j`/`Ctrl+k`), so the
+    /// dialog carries no hardcoded nav keys. A focused text field still consumes its
+    /// own raw keys first (field-first), so typing/editing is never stolen. See
+    /// `docs/widgets.md` and the app's `widget-keys-config`.
+    DialogNav(DialogNav),
+    /// Semantic editing shortcut for the [`Input`](crate::widgets::Input) field — the
+    /// **configurable** counterpart to the emacs/readline shortcut keys. The host
+    /// resolves `input_delete_back` / `input_delete_to_line_start` / `input_select_all`
+    /// into these; the plain keys (printable, Space, Backspace, Delete, arrows,
+    /// Home/End) stay built-in as raw [`Event::Key`]. See the app's `widget-keys-config`.
+    InputEdit(InputEdit),
 }
 
 /// Semantic navigation for list/menu overlays — the host-owned, configurable
@@ -278,6 +292,34 @@ pub enum MenuNav {
     Activate,
     /// Dismiss the overlay without choosing an entry.
     Dismiss,
+}
+
+/// Semantic focus navigation for a [`Dialog`](crate::widgets::Dialog) — the
+/// host-owned, configurable counterpart to raw Tab/arrow/`Ctrl+j`/`k` keys (see
+/// [`Event::DialogNav`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DialogNav {
+    /// Move keyboard focus to the next focusable (field/button) in the panel.
+    FocusNext,
+    /// Move keyboard focus to the previous focusable in the panel.
+    FocusPrev,
+    /// Submit — activate the primary action (as if the OK button were clicked).
+    Submit,
+    /// Cancel — dismiss the dialog (only when `dismissible`).
+    Cancel,
+}
+
+/// Semantic editing shortcut for an [`Input`](crate::widgets::Input) — the
+/// host-owned, configurable counterpart to the emacs/readline shortcut keys (see
+/// [`Event::InputEdit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputEdit {
+    /// Delete one character before the caret (readline `Ctrl+h`).
+    DeleteBackward,
+    /// Delete from the caret to the start of the line (readline `Ctrl+u`).
+    DeleteToLineStart,
+    /// Select the whole field (`Ctrl+a` / `Cmd+a`).
+    SelectAll,
 }
 
 /// Behavior shared by all components. Implementors provide access to their

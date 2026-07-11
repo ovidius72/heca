@@ -799,6 +799,16 @@ pub struct AppState {
     /// consumed only while a menu/palette overlay is open (never hijacks normal input).
     /// Rebuilt on config reload alongside the keymap.
     pub menu_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::MenuNav>,
+    /// Dialog focus-nav map (`widget-keys-config`): configurable
+    /// `dialog_focus_next`/`dialog_focus_prev`/`dialog_submit`/`dialog_cancel` → semantic
+    /// [`DialogNav`](heca_grid_ui::DialogNav), consumed only while a `Dialog` overlay is open.
+    /// Rebuilt on config reload alongside the keymap.
+    pub dialog_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::DialogNav>,
+    /// Input editing-shortcut map (`widget-keys-config`): configurable
+    /// `input_delete_back`/`input_delete_to_line_start`/`input_select_all` → semantic
+    /// [`InputEdit`](heca_grid_ui::InputEdit), delivered field-first to a focused `Input` inside
+    /// an overlay. Rebuilt on config reload alongside the keymap.
+    pub input_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::InputEdit>,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,

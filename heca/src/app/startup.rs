@@ -408,6 +408,8 @@ pub(crate) async fn init_state(
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         menu_keymap: crate::app::registry::build_menu_keymap(&app_config.config),
+        dialog_keymap: crate::app::registry::build_dialog_keymap(&app_config.config),
+        input_keymap: crate::app::registry::build_input_keymap(&app_config.config),
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,

@@ -1043,25 +1043,20 @@ fn shift_alt_arrow_selects_by_word() {
 }
 
 #[test]
-fn cmd_a_selects_all_without_typing() {
-    use heca_grid_ui::Modifiers;
+fn input_edit_select_all_selects_without_typing() {
+    use heca_grid_ui::InputEdit;
+    // Select-all is host-configured (`input_select_all`, default Ctrl+a / Cmd+a) and arrives as
+    // the semantic `InputEdit::SelectAll`; a raw modified 'a' is never typed (covered separately).
     let mut input = Input::new().value("hello world");
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
-    input.event(&Event::ModifiersChanged(Modifiers {
-        meta: true,
-        ..Default::default()
-    }));
-    input.event(&Event::Key {
-        key: GridKey::Char('a'),
-        pressed: true,
-    });
+    input.event(&Event::InputEdit(InputEdit::SelectAll));
     assert_eq!(
         input.selected_text().as_deref(),
         Some("hello world"),
-        "Cmd+A selects all"
+        "SelectAll selects the whole field"
     );
-    assert_eq!(input.value_str(), "hello world", "the 'a' is not typed");
+    assert_eq!(input.value_str(), "hello world", "nothing is typed");
 }
 
 #[test]
@@ -1333,35 +1328,34 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
 
 #[test]
 fn select_keyboard_navigates_and_escape_closes() {
+    use heca_grid_ui::MenuNav;
     let mut sel = Select::new(["A", "B", "C"]);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
-    let key = |s: &mut Select, k: GridKey| {
-        s.event(&Event::Key {
-            key: k,
-            pressed: true,
-        })
-    };
+    let raw = |s: &mut Select, k: GridKey| s.event(&Event::Key { key: k, pressed: true });
+    let nav = |s: &mut Select, n: MenuNav| s.event(&Event::MenuNav(n));
 
-    key(&mut sel, GridKey::Enter); // open
+    // A closed Select opens on a raw activation key (Enter/Space/↓), like a button.
+    raw(&mut sel, GridKey::Enter);
     assert!(sel.overlay_active());
-    key(&mut sel, GridKey::ArrowDown);
-    key(&mut sel, GridKey::ArrowDown);
-    key(&mut sel, GridKey::Enter); // commit highlight (index 2)
+    // While open it is an overlay: the host drives it with semantic `MenuNav`.
+    nav(&mut sel, MenuNav::Next);
+    nav(&mut sel, MenuNav::Next);
+    nav(&mut sel, MenuNav::Activate); // commit highlight (index 2)
     assert_eq!(sel.index(), 2);
-    assert!(!sel.overlay_active(), "Enter commits and closes");
+    assert!(!sel.overlay_active(), "Activate commits and closes");
 
-    key(&mut sel, GridKey::Enter); // reopen
+    raw(&mut sel, GridKey::Enter); // reopen
     assert!(sel.overlay_active());
-    key(&mut sel, GridKey::Escape);
+    nav(&mut sel, MenuNav::Dismiss);
     assert!(
         !sel.overlay_active(),
-        "Escape closes without changing selection"
+        "Dismiss closes without changing selection"
     );
     assert_eq!(sel.index(), 2);
 }
 
 #[test]
-fn tabs_arrow_keys_and_click_change_selection() {
+fn tabs_menu_nav_and_click_change_selection() {
     use heca_grid_ui::{Action, SignalData};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -1372,28 +1366,22 @@ fn tabs_arrow_keys_and_click_change_selection() {
         Tabs::new(["ALPHA", "BETA", "GAMMA"]).on_change(move |a| sink.borrow_mut().push(a));
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
+    use heca_grid_ui::MenuNav;
     assert_eq!(tabs.index(), 0);
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    // Nav arrives as the semantic `MenuNav` (the host maps the configurable nav keys —
+    // ←/Ctrl+h → Prev, →/Ctrl+l → Next — to it). The widget carries no literal keys.
+    tabs.event(&Event::MenuNav(MenuNav::Next));
     assert_eq!(tabs.index(), 1);
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("tab-change", SignalData::Usize(1))),
     );
 
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    tabs.event(&Event::MenuNav(MenuNav::Next));
     assert_eq!(tabs.index(), 2);
     let before = log.borrow().len();
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
-    assert_eq!(tabs.index(), 2, "ArrowRight clamps at the last tab");
+    tabs.event(&Event::MenuNav(MenuNav::Next));
+    assert_eq!(tabs.index(), 2, "Next clamps at the last tab");
     assert_eq!(
         log.borrow().len(),
         before,
@@ -1429,10 +1417,7 @@ fn tabs_underline_slides_toward_selection() {
     let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
     let x0 = underline_x(&tabs);
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    tabs.event(&Event::MenuNav(heca_grid_ui::MenuNav::Next));
     for _ in 0..40 {
         tabs.tick(0.016);
     }
@@ -2662,17 +2647,31 @@ fn command_palette_query_reuses_input_word_delete() {
 }
 
 #[test]
-fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
-    use heca_grid_ui::{Input, Modifiers};
+fn input_edit_deletes_char_and_deletes_to_line_start() {
+    use heca_grid_ui::{Input, InputEdit};
+    // The readline shortcuts are host-configured (`input_delete_back` / `input_delete_to_line_start`,
+    // default Ctrl+h / Ctrl+u) and arrive as the semantic `InputEdit`, not a raw key.
     let mut inp = Input::new().value("hello world");
 
+    inp.event(&Event::InputEdit(InputEdit::DeleteBackward));
+    assert_eq!(inp.value_str(), "hello worl", "DeleteBackward removes one char back");
+    inp.event(&Event::InputEdit(InputEdit::DeleteToLineStart));
+    assert_eq!(inp.value_str(), "", "DeleteToLineStart clears to the start of the line");
+}
+
+#[test]
+fn input_raw_ctrl_char_is_ignored_not_typed() {
+    use heca_grid_ui::{Input, Modifiers};
+    // A modified char is never typed as text — it is left for the host to resolve into an
+    // `InputEdit` shortcut (Ctrl+h, Ctrl+u, Ctrl/Cmd+A). The widget ignores the raw key.
+    let mut inp = Input::new().value("hi");
     inp.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
-    // Ctrl+H = delete one char back.
-    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true });
-    assert_eq!(inp.value_str(), "hello worl", "Ctrl+H deletes one char back");
-    // Ctrl+U = delete from caret to line start.
-    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
-    assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
+    assert_eq!(
+        inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true }),
+        heca_grid_ui::Handled::No,
+        "a raw Ctrl+char is not consumed by the input",
+    );
+    assert_eq!(inp.value_str(), "hi", "the modified char is not typed");
 }
 
 // --- Toast ------------------------------------------------------------------

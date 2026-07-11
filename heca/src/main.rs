@@ -142,6 +142,8 @@ impl HecaApp {
             crate::chrome::clear_pane_headers(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.menu_keymap = crate::app::registry::build_menu_keymap(&self.app_config.config);
+            state.dialog_keymap = crate::app::registry::build_dialog_keymap(&self.app_config.config);
+            state.input_keymap = crate::app::registry::build_input_keymap(&self.app_config.config);
             state.action_shortcuts = crate::chrome::ActionShortcuts::from_config(&self.app_config.config);
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;

@@ -1893,9 +1893,37 @@ Design directions to weigh (pick in the review):
   breaks when unconfigured.
 Cross-refs: [`menu-nav`](#requirement-shared-listmenu-navigation-keybindings--menu-nav) (DONE — the
 model to follow), `available-actions`. Scope + phasing decided in the review.
-- [ ] **widget-keys-config-1** — audit every `heca-grid-ui` widget that matches literal keys in
+- [~] **widget-keys-config-1** — audit every `heca-grid-ui` widget that matches literal keys in
   `event()`; propose the configurable model (intents + injected keymap); wire `Dialog` + `Input`
   first as the reference, then the list-nav widgets (folds in `menu-nav`).
+  **Model chosen (approved 2026-07-11): host-driven semantic events (menu-nav parity)** — the widget
+  carries a semantic event, the host owns config→event resolution. **`Dialog` + `Input` DONE**
+  (branch `feat/widget-keys-config`): new `Event::DialogNav{FocusNext,FocusPrev,Submit,Cancel}` +
+  `Event::InputEdit{DeleteBackward,DeleteToLineStart,SelectAll}` (`heca-grid-ui/src/component.rs`);
+  `Dialog::event` is now **field-first** (raw key → focused field; unconsumed → host applies
+  `DialogNav`) with no literal nav keys, `Input` shortcuts moved out of `handle_key` to `InputEdit`;
+  `FocusManager::deliver_event` added. App: `dialog_keymap`/`input_keymap` on `AppState`
+  (`build_dialog_keymap`/`build_input_keymap`, rebuilt on reload), resolved in the overlay key branch
+  (`heca/src/app/events.rs`) in order raw → `input_*` → `menu_*` → `dialog_*`. Defaults in
+  `keybindings.default.toml` include **vim `Ctrl+j`/`Ctrl+k`** (per user); `input_select_all` =
+  `Ctrl+a`/`Super+a`. Docs: `docs/widgets.md` (Dialog/Input/Modal note), README. Tests: grid-ui
+  widget-side (`DialogNav`/`InputEdit`), app-side `dialog_keymap_maps_default_nav_bindings` /
+  `input_keymap_maps_default_edit_bindings`. In-app visual pass by the user pending.
+- [~] **widget-keys-config-2** — apply the same host-driven pattern to the remaining literal-key
+  widgets. **`Select` DONE** (branch `feat/widget-keys-config`): its **open-list** nav now consumes
+  `Event::MenuNav` (Prev/Next/Activate/Dismiss), folded into the shared menu-nav vocabulary — so it
+  is navigable with **↑/↓ and vim `Ctrl+k`/`Ctrl+j`** (+ Enter/Esc) with no hardcoded keys; only the
+  **closed** trigger keeps raw activation keys (Enter/Space/↓ open the list, like a button). `Select`
+  and `Tabs` are **showcase-only** (not mounted in the heca app), so there is no `config.toml` surface
+  yet — the demo host resolves keys→`MenuNav` via a new `route_overlay_key` in
+  `heca-renderer/examples/showcase.rs` (this also fixed a latent gap: the showcase never sent
+  `MenuNav`, so the already-converted `ContextMenu`/`CommandPalette` were not keyboard-navigable
+  there). If `Select` is ever mounted in-app it picks up `build_menu_keymap` (config) for free.
+  Docs: `docs/widgets.md` (Select). Tests: `select_keyboard_navigates_and_escape_closes` drives
+  `MenuNav`.
+  - [ ] **Tabs** — left/right list-nav still uses raw `Arrow←→`. **Deferred**: `Tabs` is showcase-only
+    and the user was unsure it is used anywhere; convert it (fold into `MenuNav` or its own nav) when
+    it is actually mounted in the app, alongside a real config surface.
 
 ### [ ] Requirement: Pane naming + sidebar pane rows · `pane-naming`
 Follow-ups from the rename-dialog session (2026-07-10). **Full detail + resume steps in the repo-root
