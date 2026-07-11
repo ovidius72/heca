@@ -123,7 +123,14 @@ pub(crate) fn handle_window_event(
                         | crate::app_state::InputMode::HintPick { .. }
                 );
             if !picker_seq && crate::chrome::top_modal(state).is_some() {
-                if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
+                // menu-nav: a configured `menu_*` key drives the overlay's selection via a
+                // semantic `MenuNav`; every other key (quick-pick letter, palette typing) is
+                // forwarded to the widget as a raw key. One configurable source of truth.
+                if let Some(nav) = state.menu_keymap.get(&event_combo).copied() {
+                    if let Some(root) = state.layers.top_modal_root_mut() {
+                        let _ = root.event(&Event::MenuNav(nav));
+                    }
+                } else if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
                     && let Some(root) = state.layers.top_modal_root_mut()
                 {
                     let _ = root.event(&Event::Key { key: gk, pressed: true });

@@ -1832,9 +1832,16 @@ widget `event()`; the host resolves via the configurable keymap and dispatches n
 
 Config lives in one place (`[keys] menu_up`/`menu_down`/`menu_activate`/`menu_dismiss`);
 document in README + `keybindings.default.toml`.
-- [ ] **menu-nav-1** — define the shared nav binding set + config surface; wire the contextual menu
-  + command palette to it (widgets go intent-only); remove the duplicated per-surface nav keys.
-  Sidebar nav is untouched.
+- [x] **menu-nav-1** — **DONE 2026-07-11.** Configurable `[keys] menu_up`/`menu_down`/`menu_activate`/
+  `menu_dismiss` (defaults ↑/Ctrl+k, ↓/Ctrl+j, Enter, Esc) as the single source of truth for overlay
+  list/menu nav. `heca-grid-ui` gained a semantic `Event::MenuNav(MenuNav{Prev,Next,Activate,Dismiss})`;
+  `ContextMenu` + `CommandPalette` `event()` are now **intent-only for nav** (hardcoded
+  arrow/Ctrl+j/k/Enter/Esc removed — quick-pick letters + palette typing stay raw `Event::Key`). The
+  host resolves the configured keys via a dedicated `build_menu_keymap` (`KeyCombo → MenuNav`, on
+  `AppState.menu_keymap`, rebuilt on reload) consumed only in the overlay key branch
+  (`app/events.rs`), so menu keys never hijack normal-mode input (kept out of the main keymap). Docs:
+  README (`menu-nav` section), `docs/widgets.md` (ContextMenu/CommandPalette), `keybindings.default.toml`.
+  Sidebar nav untouched. Unit tests + updated widget/integration tests; clippy clean.
 
 ### [ ] Requirement: Context-aware available-actions query · `available-actions`
 A single query that answers **"which actions are applicable right now"**, given the current

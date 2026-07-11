@@ -86,6 +86,39 @@ fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
 }
 
 /// Build the keymap registry from a config.
+/// Build the overlay list/menu navigation map (`menu-nav`): the configurable
+/// `menu_up` / `menu_down` / `menu_activate` / `menu_dismiss` bindings resolved to
+/// semantic [`MenuNav`]. Consumed **only** while an overlay (context menu / command
+/// palette) is open, so it is kept out of the main keymap — these keys must never
+/// hijack normal-mode input. Single source of truth for menu navigation; see
+/// `docs/widgets.md` (`ContextMenu`/`CommandPalette`) and README.
+pub fn build_menu_keymap(
+    config: &heca_config::theme::Config,
+) -> HashMap<KeyCombo, heca_grid_ui::MenuNav> {
+    use heca_grid_ui::MenuNav;
+    let defaults = heca_config::theme::KeysConfig::default();
+    let mut map = HashMap::new();
+    for (name, nav) in [
+        ("menu_up", MenuNav::Prev),
+        ("menu_down", MenuNav::Next),
+        ("menu_activate", MenuNav::Activate),
+        ("menu_dismiss", MenuNav::Dismiss),
+    ] {
+        // User binding wins when set (arrays replace wholesale), else the default.
+        let value = config
+            .keys
+            .bindings
+            .get(name)
+            .or_else(|| defaults.bindings.get(name));
+        if let Some(value) = value {
+            for key_str in value.keys() {
+                map.insert(KeyCombo::parse(key_str.trim()), nav);
+            }
+        }
+    }
+    map
+}
+
 pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     let mut keymap = KeymapRegistry::new();
     let mut conflicts = Vec::new();
@@ -676,11 +709,37 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_keymap, build_modes};
+    use super::{build_keymap, build_menu_keymap, build_modes};
     use crate::input::WmAction;
     use crate::keymap::KeyCombo;
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
+
+    #[test]
+    fn menu_keymap_maps_default_nav_bindings() {
+        use heca_grid_ui::MenuNav;
+        let map = build_menu_keymap(&heca_config::theme::Config::default());
+        // Both the arrow and the Ctrl+j/k aliases resolve to the same semantic nav.
+        assert_eq!(map.get(&KeyCombo::parse("ArrowUp")), Some(&MenuNav::Prev));
+        assert_eq!(map.get(&KeyCombo::parse("Ctrl+k")), Some(&MenuNav::Prev));
+        assert_eq!(map.get(&KeyCombo::parse("ArrowDown")), Some(&MenuNav::Next));
+        assert_eq!(map.get(&KeyCombo::parse("Ctrl+j")), Some(&MenuNav::Next));
+        assert_eq!(map.get(&KeyCombo::parse("Enter")), Some(&MenuNav::Activate));
+        assert_eq!(map.get(&KeyCombo::parse("Escape")), Some(&MenuNav::Dismiss));
+    }
+
+    #[test]
+    fn menu_nav_names_are_not_wm_actions() {
+        // menu_* live only in the dedicated menu keymap — they are NOT WmActions, so
+        // `build_keymap` silently skips them and they never bind into normal/global
+        // (where they'd hijack arrows/Enter/Esc).
+        for name in ["menu_up", "menu_down", "menu_activate", "menu_dismiss"] {
+            assert!(
+                crate::input::action_from_name(name).is_none(),
+                "{name} must not be a WmAction (menu-nav is a separate map)",
+            );
+        }
+    }
 
     #[test]
     fn chrome_container_placement_actions_have_handlers() {

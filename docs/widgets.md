@@ -1468,9 +1468,11 @@ Selecting a command fires its callback and closes.
 - **Construct**: `CommandPalette::new()`; add commands with `.command(Command::new(label, on_run)
   .icon(Glyph)?.key("⌘K")?)`; `.placeholder(text)`, `.open(bool)`.
 - **Accessor**: `.open_signal() -> Signal<bool>` — bind a chord (e.g. Ctrl+K) to open it.
-- **Nav (built-in)**: ↑/↓ and **Ctrl+J / Ctrl+K** move; **Enter** runs; **Esc** / scrim-click
-  close. Also exposed as intents — `select_next()`, `select_prev()`, `run_selected()` — so a host
-  can bind its own configurable keys.
+- **Nav (host-driven, configurable)**: the palette carries **no hardcoded nav keys**. It responds
+  to the semantic `Event::MenuNav(MenuNav::{Prev,Next,Activate,Dismiss})`; the **host** resolves the
+  configurable `menu_up` / `menu_down` / `menu_activate` / `menu_dismiss` keybindings into these
+  (defaults: ↑/Ctrl+K, ↓/Ctrl+J, Enter, Esc). Raw `Event::Key` goes to the query field (typing /
+  editing). App wiring lives in the `menu-nav` requirement / `build_menu_keymap`.
 
 ```rust
 let palette = CommandPalette::new()
@@ -1501,9 +1503,11 @@ cursor and flips `open`. The panel sizes to its content and flips/clamps to stay
 - **Dismiss callback**: `.on_dismiss(impl Fn())` — fired on **Esc / outside-click** (a *dismissal*,
   not a selection; selecting an entry runs its `on_select` instead). The host points this at its
   overlay-close path (in `heca`, emit `CloseOverlay`), mirroring [`Dialog::on_dismiss`](#dialog).
-- **Nav (built-in)**: ↑/↓ move (skipping disabled), **Enter** runs, a **quick-pick key** runs its
-  entry directly, **Esc** / outside-click dismiss. Hover highlights; click runs. Also `select_next()`,
-  `select_prev()`, `run_selected()`.
+- **Nav (host-driven, configurable)**: **no hardcoded nav keys** — the menu responds to
+  `Event::MenuNav(MenuNav::{Prev,Next,Activate,Dismiss})`, which the host resolves from the
+  configurable `menu_*` keybindings (defaults ↑/Ctrl+K, ↓/Ctrl+J, Enter, Esc; the `menu-nav`
+  requirement). Raw `Event::Key` is only a **quick-pick letter** that runs its entry directly.
+  Hover highlights; click runs; outside-click dismisses.
 
 ```rust
 let menu = ContextMenu::new()

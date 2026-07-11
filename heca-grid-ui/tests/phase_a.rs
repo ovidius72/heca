@@ -2612,8 +2612,8 @@ fn command_palette_is_overlay_active_only_while_open() {
 }
 
 #[test]
-fn command_palette_typing_filters_then_enter_runs_top_result() {
-    use heca_grid_ui::{Component, GridKey};
+fn command_palette_typing_filters_then_activate_runs_top_result() {
+    use heca_grid_ui::{Component, GridKey, MenuNav};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
@@ -2621,31 +2621,29 @@ fn command_palette_typing_filters_then_enter_runs_top_result() {
     for c in "tog".chars() {
         p.event(&Event::Key { key: GridKey::Char(c), pressed: true });
     }
-    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
-    assert_eq!(ran.get(), 3, "Enter runs the filtered top result (Toggle sidebar)");
+    // Nav is host-resolved: `menu_activate` arrives as MenuNav::Activate.
+    p.event(&Event::MenuNav(MenuNav::Activate));
+    assert_eq!(ran.get(), 3, "activate runs the filtered top result (Toggle sidebar)");
     assert!(!p.overlay_active(), "palette closes after running a command");
 }
 
 #[test]
-fn command_palette_navigates_with_arrows_and_ctrl_jk() {
-    use heca_grid_ui::{Component, GridKey, Modifiers};
+fn command_palette_navigates_via_menu_nav() {
+    use heca_grid_ui::{Component, MenuNav};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
-    // No query → all three; selection starts at 0. Ctrl+J moves down twice → idx 2.
-    p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
-    p.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
-    p.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
-    // ArrowUp moves back to idx 1.
-    p.event(&Event::ModifiersChanged(Modifiers::default()));
-    p.event(&Event::Key { key: GridKey::ArrowUp, pressed: true });
-    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
-    assert_eq!(ran.get(), 2, "Ctrl+J ×2 then ArrowUp lands on the 2nd command (Close pane)");
+    // No query → all three; selection starts at 0. Next ×2 → idx 2, Prev → idx 1.
+    p.event(&Event::MenuNav(MenuNav::Next));
+    p.event(&Event::MenuNav(MenuNav::Next));
+    p.event(&Event::MenuNav(MenuNav::Prev));
+    p.event(&Event::MenuNav(MenuNav::Activate));
+    assert_eq!(ran.get(), 2, "Next ×2 then Prev lands on the 2nd command (Close pane)");
 }
 
 #[test]
 fn command_palette_query_reuses_input_word_delete() {
-    use heca_grid_ui::{GridKey, Modifiers};
+    use heca_grid_ui::{GridKey, MenuNav, Modifiers};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
@@ -2659,7 +2657,7 @@ fn command_palette_query_reuses_input_word_delete() {
     p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
     p.event(&Event::Key { key: GridKey::Backspace, pressed: true });
     p.event(&Event::ModifiersChanged(Modifiers::default()));
-    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    p.event(&Event::MenuNav(MenuNav::Activate));
     assert_eq!(ran.get(), 3, "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar");
 }
 
