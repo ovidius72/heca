@@ -392,6 +392,7 @@ pub(crate) async fn init_state(
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,
         pane_renamed_add_process_name: app_config.config.settings.pane_renamed_add_process_name,
+        pane_show_cwd: app_config.config.settings.pane_show_cwd,
         terminal_scrollback_lines: app_config.config.settings.terminal_scrollback_lines,
         terminal_mouse_enabled: app_config.config.settings.terminal_mouse,
         terminal_wheel_scroll_lines: app_config.config.settings.terminal_wheel_scroll_lines,

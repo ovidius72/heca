@@ -300,25 +300,63 @@ pub(crate) struct PendingContext {
 /// The common pane actions every content-pane context menu offers. The item id doubles as the
 /// action name its icon resolves from (`ActionCatalog::icon`). Shared by the mouse-open and
 /// keyboard-open paths so the two never drift.
-fn pane_action_items() -> Vec<DropdownItem> {
-    vec![
+/// Whether pane `pane_id` has a user-set custom name (so "Use process name" is meaningful).
+/// Reads the session — the source of truth for `custom_name`.
+fn pane_has_custom_name(state: &AppState, pane_id: PaneId) -> bool {
+    state
+        .session
+        .workspaces
+        .iter()
+        .find_map(|ws| ws.find_pane(pane_id))
+        .is_some_and(|pane| pane.custom_name.is_some())
+}
+
+/// Whether workspace `ws_idx` has a user-set custom name (so "Use default name" is meaningful).
+fn workspace_has_custom_name(state: &AppState, ws_idx: usize) -> bool {
+    state
+        .session
+        .workspaces
+        .get(ws_idx)
+        .is_some_and(|ws| ws.name.is_some())
+}
+
+/// Pane context-menu items. `pane_has_custom_name` gates the "Use process name" reset entry —
+/// it only appears when there is a custom name to clear. This is a **pane** menu, so it carries
+/// no workspace-reset action.
+fn pane_action_items(pane_has_custom_name: bool) -> Vec<DropdownItem> {
+    let mut items = vec![
         DropdownItem::new("split_horizontal", "New column", WmAction::SplitHorizontal),
-        DropdownItem::new("split_vertical", "Split down", WmAction::SplitVertical),
+        // "Add a pane" reads consistently everywhere: same label + FolderSimplePlus icon
+        // (via the `add_pane_to_column` id) as the sidebar "New pane" and the pane-header
+        // "+" button. Still emits SplitVertical (adds a pane to the active column; `v`).
+        DropdownItem::new("add_pane_to_column", "New pane", WmAction::SplitVertical),
         DropdownItem::new("zoom_column", "Zoom / unzoom", WmAction::ZoomColumn),
         DropdownItem::new("float", "Float / unfloat", WmAction::Float),
         DropdownItem::new("rename_pane", "Rename", WmAction::RenamePane),
-        DropdownItem::new("rename_workspace", "Rename workspace", WmAction::RenameWorkspace),
-        DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true),
-    ]
+    ];
+    if pane_has_custom_name {
+        items.push(DropdownItem::new(
+            "reset_pane_name",
+            "Use process name",
+            WmAction::ResetPaneName,
+        ));
+    }
+    items.push(DropdownItem::new(
+        "rename_workspace",
+        "Rename workspace",
+        WmAction::RenameWorkspace,
+    ));
+    items.push(DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true));
+    items
 }
 
 /// Provider for [`ContextPath::PANE`] — a content pane. "Open link" first only when the mouse
 /// click carried a hyperlink (keyboard-opened menus have `None` → no link entry).
-fn build_pane_menu(_state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::Pane { hyperlink, .. } = target else {
+fn build_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
+    let ContextTarget::Pane { hyperlink, pane_id } = target else {
         return Vec::new();
     };
-    let mut items = pane_action_items();
+    let mut items = pane_action_items(pane_has_custom_name(state, *pane_id));
     if let Some(url) = hyperlink {
         items.insert(0, DropdownItem::new("open_link", "Open link", WmAction::OpenLink { url: url.clone() }));
     }
@@ -334,7 +372,7 @@ fn build_sidebar_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<Drop
     let mut items = Vec::new();
     if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, *pane_id) {
         items.push(DropdownItem::new(
-            "split_vertical",
+            "add_pane_to_column",
             "New pane",
             WmAction::AddPaneToColumn { ws_idx, col_idx },
         ));
@@ -344,6 +382,13 @@ fn build_sidebar_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<Drop
         "Rename pane",
         WmAction::RenamePaneById { pane_id: *pane_id },
     ));
+    if pane_has_custom_name(state, *pane_id) {
+        items.push(DropdownItem::new(
+            "reset_pane_name",
+            "Use process name",
+            WmAction::ResetPaneNameById { pane_id: *pane_id },
+        ));
+    }
     items.push(
         DropdownItem::new("close", "Delete pane", WmAction::ClosePaneById { pane_id: *pane_id })
             .danger(true),
@@ -365,7 +410,7 @@ fn build_sidebar_column_menu(_state: &AppState, target: &ContextTarget) -> Vec<D
 fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
     vec![
         DropdownItem::new(
-            "split_vertical",
+            "add_pane_to_column",
             "New pane",
             WmAction::AddPaneToColumn { ws_idx, col_idx },
         ),
@@ -374,8 +419,13 @@ fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
             "New column",
             WmAction::AddColumnToWorkspace { ws_idx },
         ),
+        // NB: no "Rename column" entry — a column's name is not displayed anywhere yet
+        // (columns render as a MarkerGroup with no header/label), so renaming would have
+        // no visible effect. The RenameColumn / RenameColumnByIdx action stays wired (RPC +
+        // handler) for when columns surface a name; re-add the entry then. See `col_idx`
+        // still threaded below for the delete action.
         DropdownItem::new(
-            "close",
+            "delete_column",
             "Delete column",
             WmAction::DeleteColumn { ws_idx, col_idx },
         )
@@ -385,17 +435,17 @@ fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
 
 /// Provider for [`ContextPath::SIDEBAR_WORKSPACE`] — a workspace row. "New column" + "New
 /// workspace" + "Delete workspace" (danger).
-fn build_sidebar_workspace_menu(_state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
+fn build_sidebar_workspace_menu(state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
     let ContextTarget::SidebarWorkspace { ws_idx } = target else {
         return Vec::new();
     };
-    sidebar_workspace_items(*ws_idx)
+    sidebar_workspace_items(*ws_idx, workspace_has_custom_name(state, *ws_idx))
 }
 
-/// Menu items for a sidebar **workspace** row (state-free, so unit-testable): new column,
-/// new workspace, delete workspace (danger).
-fn sidebar_workspace_items(ws_idx: usize) -> Vec<DropdownItem> {
-    vec![
+/// Menu items for a sidebar **workspace** row. `has_custom_name` gates the "Use default name"
+/// reset entry — it only appears when there is a custom name to clear.
+fn sidebar_workspace_items(ws_idx: usize, has_custom_name: bool) -> Vec<DropdownItem> {
+    let mut items = vec![
         DropdownItem::new(
             "split_horizontal",
             "New column",
@@ -407,13 +457,23 @@ fn sidebar_workspace_items(ws_idx: usize) -> Vec<DropdownItem> {
             "Rename workspace",
             WmAction::RenameWorkspaceByIdx { ws_idx },
         ),
+    ];
+    if has_custom_name {
+        items.push(DropdownItem::new(
+            "reset_workspace_name",
+            "Use default name",
+            WmAction::ResetWorkspaceNameByIdx { ws_idx },
+        ));
+    }
+    items.push(
         DropdownItem::new(
-            "close",
+            "delete_workspace",
             "Delete workspace",
             WmAction::DeleteWorkspace { ws_idx },
         )
         .danger(true),
-    ]
+    );
+    items
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -437,7 +497,7 @@ mod tests {
 
     #[test]
     fn pane_action_items_include_rename_and_end_in_close() {
-        let items = pane_action_items();
+        let items = pane_action_items(true);
         assert_eq!(items[0].id, "split_horizontal");
         assert!(items.iter().any(|i| i.id == "rename_pane"), "has Rename");
         assert!(
@@ -447,6 +507,35 @@ mod tests {
         let last = items.last().unwrap();
         assert_eq!(last.id, "close");
         assert!(last.danger, "close is danger-styled");
+        // Pane menu carries no workspace-reset action (that lives in the workspace menu).
+        assert!(
+            !items.iter().any(|i| i.id == "reset_workspace_name"),
+            "pane menu must not reset the workspace"
+        );
+    }
+
+    #[test]
+    fn reset_name_entries_are_conditional_on_a_custom_name() {
+        // "Use process name" only when the pane has a custom name.
+        assert!(
+            pane_action_items(true).iter().any(|i| i.id == "reset_pane_name"),
+            "reset shows with a custom name"
+        );
+        assert!(
+            !pane_action_items(false).iter().any(|i| i.id == "reset_pane_name"),
+            "reset hidden without a custom name"
+        );
+        // "Use default name" only when the workspace has a custom name.
+        assert!(
+            sidebar_workspace_items(0, true)
+                .iter()
+                .any(|i| i.id == "reset_workspace_name")
+        );
+        assert!(
+            !sidebar_workspace_items(0, false)
+                .iter()
+                .any(|i| i.id == "reset_workspace_name")
+        );
     }
 
     #[test]
@@ -528,9 +617,9 @@ mod tests {
     fn context_menus_differ_by_where_opened() {
         // The content each context produces is distinct — proving the menu adapts to where
         // it is opened (pane vs sidebar column vs sidebar workspace).
-        let pane = pane_action_items();
+        let pane = pane_action_items(true);
         let col = sidebar_column_items(0, 0);
-        let ws = sidebar_workspace_items(0);
+        let ws = sidebar_workspace_items(0, true);
         let labels = |v: &[DropdownItem]| v.iter().map(|i| i.label.clone()).collect::<Vec<_>>();
         let has = |v: &[DropdownItem], s: &str| v.iter().any(|i| i.label == s);
 
@@ -543,9 +632,11 @@ mod tests {
         assert!(has(&pane, "Zoom / unzoom") && has(&pane, "Float / unfloat"));
         assert!(has(&col, "Delete column"));
         assert!(has(&ws, "New workspace") && has(&ws, "Delete workspace"));
-        // Each sidebar context still ends in a danger `close`-id action (delete) for its own scope.
-        assert_eq!(col.last().map(|i| i.id.as_str()), Some("close"));
+        // Each sidebar context ends in a danger delete action, keyed by its own action
+        // name so it shows that action's icon (Trash / StackMinus), not the pane `close` one.
+        assert_eq!(col.last().map(|i| i.id.as_str()), Some("delete_column"));
         assert!(col.last().map(|i| i.danger).unwrap_or(false));
-        assert_eq!(ws.last().map(|i| i.id.as_str()), Some("close"));
+        assert_eq!(ws.last().map(|i| i.id.as_str()), Some("delete_workspace"));
+        assert!(ws.last().map(|i| i.danger).unwrap_or(false));
     }
 }

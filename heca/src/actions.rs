@@ -277,7 +277,9 @@ impl ActionRegistry {
             description: "Create a new column to the right.",
             category: ActionCategory::Layout,
             default_binding: "Enter",
-            icon: Some(Glyph::Plus),
+            // New column opens to the right (see the description); ColumnsPlusLeft stays
+            // in the Glyph set for a future "add column to the left" action.
+            icon: Some(Glyph::ColumnsPlusRight),
         },
         ActionDescriptor {
             name: "split_vertical",
@@ -285,7 +287,19 @@ impl ActionRegistry {
             description: "Add a new pane below the current one in the same column.",
             category: ActionCategory::Layout,
             default_binding: "v",
-            icon: Some(Glyph::SquareSplitVertical),
+            icon: Some(Glyph::SquareHalfBottom),
+        },
+        ActionDescriptor {
+            // Add-pane-to-a-specific-column (the pane-header "+" button and the sidebar
+            // column "New Pane" entry, which target a column by index — distinct from
+            // `split_vertical` which splits the active column). Menu/button-only, so no
+            // binding; the "+" button still shows the `v` hint via `pane_action_name`.
+            name: "add_pane_to_column",
+            label: "New Pane in Column",
+            description: "Add a new pane to this column.",
+            category: ActionCategory::Layout,
+            default_binding: "unbound",
+            icon: Some(Glyph::FolderSimplePlus),
         },
         ActionDescriptor {
             name: "zoom_column",
@@ -454,7 +468,7 @@ impl ActionRegistry {
             description: "Delete the focused column and all its panes.",
             category: ActionCategory::Layout,
             default_binding: "unbound",
-            icon: None,
+            icon: Some(Glyph::Trash),
         },
         // ── Pane ──
         ActionDescriptor {
@@ -463,7 +477,9 @@ impl ActionRegistry {
             description: "Close the active pane.",
             category: ActionCategory::Pane,
             default_binding: "x",
-            icon: Some(Glyph::XSquare),
+            // Remove/close pane; pairs with add-pane's FolderSimplePlus (both act on a
+            // pane "slot" in a column).
+            icon: Some(Glyph::FolderSimpleMinus),
         },
         ActionDescriptor {
             name: "float",
@@ -563,7 +579,15 @@ impl ActionRegistry {
             description: "Rename the active pane/tab.",
             category: ActionCategory::Pane,
             default_binding: "$",
-            icon: None,
+            icon: Some(Glyph::NotePencil),
+        },
+        ActionDescriptor {
+            name: "reset_pane_name",
+            label: "Use Process Name",
+            description: "Clear the pane's custom name, reverting to the program name.",
+            category: ActionCategory::Pane,
+            default_binding: "unbound",
+            icon: Some(Glyph::Backspace),
         },
         ActionDescriptor {
             name: "rename_column",
@@ -571,7 +595,7 @@ impl ActionRegistry {
             description: "Rename the active column.",
             category: ActionCategory::Layout,
             default_binding: "Shift+c",
-            icon: None,
+            icon: Some(Glyph::NotePencil),
         },
         // ── Workspace ──
         ActionDescriptor {
@@ -580,7 +604,7 @@ impl ActionRegistry {
             description: "Create a new workspace and switch to it.",
             category: ActionCategory::Workspace,
             default_binding: "w",
-            icon: None,
+            icon: Some(Glyph::StackPlus),
         },
         ActionDescriptor {
             name: "rename_workspace",
@@ -588,7 +612,15 @@ impl ActionRegistry {
             description: "Rename the current workspace.",
             category: ActionCategory::Workspace,
             default_binding: "Shift+w",
-            icon: None,
+            icon: Some(Glyph::NotePencil),
+        },
+        ActionDescriptor {
+            name: "reset_workspace_name",
+            label: "Use Default Name",
+            description: "Clear the workspace's custom name, reverting to \"Workspace N\".",
+            category: ActionCategory::Workspace,
+            default_binding: "unbound",
+            icon: Some(Glyph::Backspace),
         },
         ActionDescriptor {
             name: "delete_workspace",
@@ -596,7 +628,7 @@ impl ActionRegistry {
             description: "Delete a workspace and all its panes (not the last workspace).",
             category: ActionCategory::Workspace,
             default_binding: "unbound",
-            icon: None,
+            icon: Some(Glyph::StackMinus),
         },
         // ── Chrome ──
         ActionDescriptor {

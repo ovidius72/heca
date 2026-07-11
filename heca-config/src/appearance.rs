@@ -44,8 +44,15 @@ pub enum Vibrancy {
 pub enum PaneSegment {
     /// Working directory (home-relative path).
     Location,
-    /// Resolved program/app name (process catalog).
+    /// Resolved program/app name (process catalog). Always the running program's
+    /// name, never a user rename — so the info bar keeps showing what runs in the pane.
     AppName,
+    /// The pane's own name: the user's custom rename when set, else the program name
+    /// (`custom`-wins). Opt-in — not in the default segments. Contrast with [`AppName`],
+    /// which always shows the program name regardless of any rename.
+    ///
+    /// [`AppName`]: PaneSegment::AppName
+    PaneName,
     /// Git branch (hidden outside a repo).
     GitBranch,
     /// Git change counts `+A ~M -D` (hidden when clean / outside a repo).

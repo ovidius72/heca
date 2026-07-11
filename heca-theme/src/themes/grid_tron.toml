@@ -22,7 +22,7 @@ intensity = "medium"
 show_focus_border = true
 # focus_ring = "#7fd3ff"  # keyboard focus-outline color; unset = accent shifted toward `foreground`
 #                         # (auto-lighter on dark themes, darker on light); danger ring derives too
-icon_secondary_alpha = 0.45
+icon_secondary_alpha = 0.30
 active_wash_alpha = 0.11
 card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }

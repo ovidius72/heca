@@ -217,6 +217,7 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ResizePaneHeightBy { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::RenameColumn
+        | WmAction::RenameColumnByIdx { .. }
         | WmAction::DeleteColumn { .. }
         | WmAction::DeleteCurrentColumn
         | WmAction::AddPaneToColumn { .. }
@@ -262,6 +263,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ClosePaneById { .. }
         | WmAction::RenamePane
         | WmAction::RenamePaneById { .. }
+        | WmAction::ResetPaneName
+        | WmAction::ResetPaneNameById { .. }
         | WmAction::RenameTarget { .. }
         // OpenContextMenu operates on the focused pane (mouse: the clicked one; keyboard:
         // the focused one) and is allowed in both tiled and floating domains — a floating pane
@@ -312,6 +315,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CreateWorkspace
         | WmAction::RenameWorkspace
         | WmAction::RenameWorkspaceByIdx { .. }
+        | WmAction::ResetWorkspaceName
+        | WmAction::ResetWorkspaceNameByIdx { .. }
         | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
@@ -1122,6 +1127,12 @@ mod tests {
                 pane_id: PaneId(0),
                 name: String::new(),
             },
+            WmAction::RenameColumnByIdx {
+                ws_idx: 0,
+                col_idx: 0,
+            },
+            WmAction::ResetPaneNameById { pane_id: PaneId(0) },
+            WmAction::ResetWorkspaceNameByIdx { ws_idx: 0 },
             WmAction::SpawnCommand {
                 command: String::new(),
                 kind: crate::input::SpawnKind::Terminal,
@@ -1154,6 +1165,27 @@ mod tests {
 
         // Spot-check specific classifications
         assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
+        // Column rename (active or by-idx) is a tiled-layout op → TiledOnly, like RenameColumn.
+        assert_eq!(
+            action_policy(&WmAction::RenameColumn),
+            ActionPolicy::TiledOnly
+        );
+        assert_eq!(
+            action_policy(&WmAction::RenameColumnByIdx {
+                ws_idx: 0,
+                col_idx: 0
+            }),
+            ActionPolicy::TiledOnly
+        );
+        // Reset-name mirrors rename: pane-local for panes, workspace-level for workspaces.
+        assert_eq!(
+            action_policy(&WmAction::ResetPaneName),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ResetWorkspaceNameByIdx { ws_idx: 0 }),
+            ActionPolicy::WorkspaceLevel
+        );
         assert_eq!(
             action_policy(&WmAction::Float),
             ActionPolicy::FocusedPaneLocal

@@ -59,6 +59,13 @@ fn default_pane_renamed_add_process_name() -> bool {
     true
 }
 
+/// Default for showing a pane's working directory as its own row in the sidebar card.
+/// Off by default — it is opt-in extra detail (the cwd is also available as the info-bar
+/// `location` segment).
+fn default_pane_show_cwd() -> bool {
+    false
+}
+
 /// Default host terminal scrollback capacity in rows.
 ///
 /// Mirrors `wezterm-term`'s `TerminalConfiguration::scrollback_size()` default
@@ -163,6 +170,11 @@ pub struct SettingsConfig {
         alias = "pane-renamed-add-process-name"
     )]
     pub pane_renamed_add_process_name: bool,
+    /// Show each pane's working directory as its own row (folder icon + home-relative path)
+    /// in the sidebar pane card, between the name row and the git-status row. Off by default;
+    /// the cwd is also available as the info-bar `location` segment.
+    #[serde(default = "default_pane_show_cwd", alias = "pane-show-cwd")]
+    pub pane_show_cwd: bool,
     /// Host terminal scrollback capacity in rows.
     ///
     /// This is the number of history rows the terminal engine retains above the
@@ -246,6 +258,7 @@ impl Default for SettingsConfig {
             always_center_single_column: default_always_center_single_column(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),
+            pane_show_cwd: default_pane_show_cwd(),
             terminal_scrollback_lines: default_terminal_scrollback_lines(),
             terminal_mouse: default_terminal_mouse(),
             terminal_wheel_scroll_lines: default_terminal_wheel_scroll_lines(),

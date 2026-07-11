@@ -474,8 +474,8 @@ Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).paddi
             )
             .child(
                 Flex::row().gap(2.0)
-                    .child(Tooltip::new(IconButton::new(Icon::new(Glyph::SquareSplitVertical)), "Add pane"))
-                    .child(Tooltip::new(IconButton::new(Icon::new(Glyph::XSquare).color(theme.danger)), "Close")),
+                    .child(Tooltip::new(IconButton::new(Icon::new(Glyph::FolderSimplePlus)), "Add pane"))
+                    .child(Tooltip::new(IconButton::new(Icon::new(Glyph::FolderSimpleMinus).color(theme.danger)), "Close")),
             ),
     );
 ```
@@ -1005,16 +1005,29 @@ A single **duotone** glyph from the embedded Phosphor Duotone font. Renders two 
 theme-driven (primary defaults to the foreground; secondary = primary at
 `theme.icon_secondary_alpha`), never baked in. Square, font-sized.
 
-- **Construct**: `Icon::new(Glyph)` (curated set) or `Icon::from_codepoint(secondary_cp)`.
+- **Construct**: `Icon::new(Glyph)`.
 - **Builders**: `.size(px)`, `.color(Color)` (primary), `.secondary_color(Color)`.
-- **`Glyph`**: a curated enum — `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`,
-  `GitCommit`, `GitMerge`, `GitPullRequest`, `Terminal`, `Gear`, `Search`, `Close`, `Check`,
-  `Play`, `Pause`, `Stop`, `Warning`, `Info`, `Lightning`, `List`, `Sidebar`, the pane-action
-  set (`SquareSplitVertical`, `ArrowLineLeft`, `ArrowLineRight`, `FrameCorners`, `Cards`,
-  `XSquare`), … (or use `from_codepoint` for any glyph).
+- **`Glyph`**: the curated icon set. **`Glyph::ALL` is the authoritative, enumerable list** —
+  the showcase (`cargo run -p heca-renderer --example showcase`) renders every glyph by iterating
+  it, and `Glyph::secondary()` gives each one's Phosphor Duotone codepoint. To **add** a glyph:
+  add the variant, its codepoint in `secondary()`, and the variant to `ALL` (a unit test enforces
+  unique codepoints). Enum names are heca-local and sometimes differ from the Phosphor icon name
+  (shown in parentheses below only when they differ):
+
+  > `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`, `GitCommit`, `GitMerge`,
+  > `GitPullRequest`, `Terminal` (`terminal-window`), `Gear` (`gear-six`),
+  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CaretRight`, `CaretDown`, `Play`,
+  > `Pause`, `Stop`, `Warning`, `WarningCircle`, `Info`, `Circle`, `Lightning`, `List`,
+  > `Sidebar` (`sidebar-simple`), `DotsThreeVertical`, `ArrowRight`, `ArrowLineLeft`,
+  > `ArrowLineRight`, `Plus`, `Minus`, `SquareSplitVertical`, `XSquare`, `FrameCorners`, `Cards`,
+  > `Pencil`, `NotePencil`, `Backspace`, `Trash`, `XCircle`, `PlusCircle`, `FolderSimpleMinus`,
+  > `FolderSimplePlus`, `PlusSquare`, `StackPlus`, `StackMinus`, `ColumnsPlusLeft`,
+  > `ColumnsPlusRight`, `SquareHalf`, `SquareSplitHorizontal`, `SquareHalfBottom`
 
 ```rust
 Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);
+// Render the whole set (what the showcase does):
+for &g in Glyph::ALL { /* Icon::new(g) … */ }
 ```
 
 ### Tag

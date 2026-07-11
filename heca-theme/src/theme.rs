@@ -478,7 +478,9 @@ fn default_true() -> bool {
     true
 }
 fn default_icon_secondary_alpha() -> f32 {
-    0.45
+    // Kept low so the duotone secondary layer stays a subtle wash — a higher value makes
+    // solid/filled glyphs (Stop, Circle, filled Play) collapse into a flat, muddy blob.
+    0.30
 }
 fn default_active_wash_alpha() -> f32 {
     0.11

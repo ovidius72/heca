@@ -48,6 +48,11 @@ shell_integration = true
 # rename. Set false to show just the custom name.
 pane_renamed_add_process_name = true
 
+# Show each pane's working directory as its own row (folder icon + home-relative
+# path) in the sidebar pane card, between the name row and the git-status row.
+# Off by default; the cwd is also available as the info-bar `location` segment.
+pane_show_cwd = false
+
 # Host terminal scrollback capacity in rows (history retained above the
 # visible viewport). The host scrollback viewport scrolls within this range.
 # Mirrors wezterm-term's default of 3500 when unset.
@@ -259,9 +264,11 @@ bell_audible = false
 #
 # Info bar (segmented pill inside the pane top + action buttons on the right):
 # title_segments : left side, in order. [] hides it.
-#                  "location" | "app_name" | "git_branch" | "git_status"
+#                  "location" | "app_name" | "pane_name" | "git_branch" | "git_status"
 #                  (a segment with no data for a pane — e.g. git outside a repo —
-#                   is skipped). Default ["location", "app_name"].
+#                   is skipped). "app_name" is always the running program; "pane_name"
+#                   is the pane's own name (custom rename wins, else the program name).
+#                   Default ["location", "app_name"].
 # title_actions  : right side, in order. [] hides it.
 #                  "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
 #                  Default ["split", "close"] (panes are already movable by drag).

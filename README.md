@@ -689,6 +689,7 @@ auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
+pane_show_cwd = false         # Show each pane's cwd as a row in the sidebar card (folder icon + path)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
@@ -838,10 +839,12 @@ under `[appearance.pane]` as ordered lists — order in the list is the order sh
 (left → right). An empty list hides that side; if **both** are empty the bar (and
 its reserved space) disappears entirely.
 
-When a pane is **renamed** (given a custom name), the `AppName` segment shows the
-custom name followed by the process name in a small dimmed label — e.g. `MyPane (nvim)`.
-The process label is not part of the name (it's never edited by rename); toggle it with
-`[settings] pane_renamed_add_process_name` (default `true`).
+When a pane is **renamed** (given a custom name), its **sidebar card** shows the custom
+name followed by the process name in a small dimmed label — e.g. `MyPane (nvim)` — so the
+sidebar keeps surfacing what's actually running. The process label is not part of the name
+(it's never edited by rename); toggle it with `[settings] pane_renamed_add_process_name`
+(default `true`). In the pane **info bar**, the `app_name` segment always shows the program
+name regardless of a rename; add the `pane_name` segment to show the custom name there.
 
 ```toml
 [appearance.pane]
@@ -873,7 +876,8 @@ With `border_style = "bordered"`, the frame is drawn at `border_width` in
 | Value         | Shows                                                        |
 |---------------|-------------------------------------------------------------|
 | `location`    | Working directory (home-relative path)                      |
-| `app_name`    | Resolved program / app name (from the [Process Catalog](#process-catalog)) |
+| `app_name`    | Resolved program / app name (from the [Process Catalog](#process-catalog)) — always the running program, never a rename |
+| `pane_name`   | The pane's own name: the custom rename when set, else the program name (`custom`-wins). Opt-in — not in the default segments |
 | `git_branch`  | Git branch — hidden outside a repo                          |
 | `git_status`  | Git change counts `+A ~M -D` — hidden when clean / no repo  |
 

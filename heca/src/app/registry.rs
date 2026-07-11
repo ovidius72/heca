@@ -452,6 +452,13 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::RenamePane, handle_rename_pane);
     registry.register(&WmAction::RenameColumn, handle_rename_column);
     registry.register(
+        &WmAction::RenameColumnByIdx {
+            ws_idx: 0,
+            col_idx: 0,
+        },
+        handle_rename_column_by_idx,
+    );
+    registry.register(
         &WmAction::FloatAt {
             pane_id: PaneId(0),
             x: 0.0,
@@ -476,6 +483,11 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::RenamePaneById { pane_id: PaneId(0) },
         handle_rename_pane_by_id,
     );
+    registry.register(&WmAction::ResetPaneName, handle_reset_pane_name);
+    registry.register(
+        &WmAction::ResetPaneNameById { pane_id: PaneId(0) },
+        handle_reset_pane_name_by_id,
+    );
 
     // ── Workspace ──
     registry.register(&WmAction::CreateWorkspace, handle_create_workspace);
@@ -483,6 +495,11 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         &WmAction::RenameWorkspaceByIdx { ws_idx: 0 },
         handle_rename_workspace_by_idx,
+    );
+    registry.register(&WmAction::ResetWorkspaceName, handle_reset_workspace_name);
+    registry.register(
+        &WmAction::ResetWorkspaceNameByIdx { ws_idx: 0 },
+        handle_reset_workspace_name_by_idx,
     );
 
     // ── Sidebar / Chrome ──
