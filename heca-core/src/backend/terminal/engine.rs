@@ -337,8 +337,18 @@ impl TerminalEngine {
         palette_defaults: Option<TerminalPaletteDefaults>,
         scrollback_size: usize,
     ) {
-        self.terminal
-            .set_config(terminal_config(palette_defaults, scrollback_size));
+        let config = terminal_config(palette_defaults, scrollback_size);
+        // Force the freshly-configured palette to win. `set_config` only swaps the config
+        // Arc — wezterm keeps any palette a program forked via dynamic-color escapes (OSC
+        // 4/10/11, which nvim and many shell prompts emit), and `palette()` (read by the
+        // snapshot) returns that fork over the config. So without this, a theme reload
+        // (`prefix+Shift+r`) appears to do nothing for panes that touched colors. Overwrite
+        // the fork with the new config palette; programs reassert their own colors on their
+        // next redraw. (`implicit_palette_reset_if_same_as_configured` is insufficient — it
+        // only resets when the fork already equals the config, i.e. never after a theme change.)
+        let palette = config.color_palette();
+        self.terminal.set_config(config);
+        *self.terminal.palette_mut() = palette;
         let max_offset = self.max_viewport_offset();
         if self.viewport_offset > max_offset {
             self.viewport_offset = max_offset;
@@ -1583,6 +1593,58 @@ mod tests {
         fn flush(&mut self) -> IoResult<()> {
             Ok(())
         }
+    }
+
+    /// Palette defaults with only the background set — the rest inherit wezterm's default.
+    fn bg_defaults(bg: [u8; 4]) -> TerminalPaletteDefaults {
+        TerminalPaletteDefaults {
+            foreground: None,
+            background: Some(bg),
+            cursor_fg: None,
+            cursor_bg: None,
+            cursor_border: None,
+            selection_fg: None,
+            selection_bg: None,
+            ansi: None,
+            brights: None,
+        }
+    }
+
+    #[test]
+    fn reload_config_reapplies_palette_over_a_program_fork() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(
+            6,
+            2,
+            (8.0, 16.0),
+            writer,
+            Some(bg_defaults([10, 20, 30, 255])),
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("engine should initialize");
+
+        // The configured background is in effect.
+        assert_eq!(engine.terminal.palette().background, rgba_u8([10, 20, 30, 255]));
+
+        // A program forks the palette via OSC 11 (set the default background). After this,
+        // `palette()` returns the fork, not the config.
+        engine.advance_bytes(b"\x1b]11;rgb:ff/00/00\x07");
+        assert_ne!(
+            engine.terminal.palette().background,
+            rgba_u8([10, 20, 30, 255]),
+            "OSC 11 should fork the palette away from the configured background"
+        );
+
+        // Reloading with a new theme background must win over the fork (the bug: it didn't).
+        engine.reload_config(
+            Some(bg_defaults([40, 50, 60, 255])),
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        );
+        assert_eq!(
+            engine.terminal.palette().background,
+            rgba_u8([40, 50, 60, 255]),
+            "reload must re-theme even after a program forked the palette"
+        );
     }
 
     #[test]

@@ -306,13 +306,11 @@ fn render_terminal_lines(
         return;
     }
     // The terminal owns the translucent surface inside the pane content rect.
-    // The outer pane shell owns border/radius/highlight only.
-    let surface_bg = [
-        default_bg[0],
-        default_bg[1],
-        default_bg[2],
-        default_bg[3] * style.surface_alpha,
-    ];
+    // The outer pane shell owns border/radius/highlight only. Terminal transparency
+    // (`surface_alpha`) applies ONLY to this default/base background, so the frost shows
+    // through the empty terminal — explicit program-set cell backgrounds stay opaque (see
+    // the cell-bg loop below).
+    let surface_bg = with_surface_alpha(default_bg, style.surface_alpha);
     let full_redraw = dirty_rows.is_none();
     if full_redraw && surface_bg[3] > 0.0 {
         primitive_renderer.draw_rect(px, py, pw, ph, surface_bg);
@@ -363,7 +361,10 @@ fn render_terminal_lines(
                     bg_end += 1;
                 }
                 if !is_default_bg(bg_color, default_bg) {
-                    let bg_color = with_surface_alpha(bg_color, style.surface_alpha);
+                    // Explicit (program-set) backgrounds stay opaque — terminal transparency
+                    // applies only to the default background (above). Otherwise a TUI's own
+                    // solid fills (e.g. an opaque nvim colorscheme) get washed out by the
+                    // frost, badly so over a light theme. Matches kitty/wezterm/iterm.
                     if bg_color[3] > 0.0 {
                         let x = px + bg_start as f32 * cell_w;
                         let w = (bg_end - bg_start) as f32 * cell_w;
