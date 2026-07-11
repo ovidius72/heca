@@ -328,6 +328,14 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             .child(Label::new(label).color(color))
     };
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
+    // A small accent title naming the widget(s) a demo row shows, so each widget in the
+    // showcase is quickly recognizable at a glance.
+    let caption = |name: &str| {
+        Label::new(name)
+            .color(theme.colors.accent)
+            .font_scale(0.72)
+            .bold(true)
+    };
 
     // 20-entry list so the dropdown caps its height and shows a scrollbar.
     let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
@@ -348,6 +356,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
+        .child(caption("Card"))
         .child(
             Flex::row()
                 .gap(28.0)
@@ -356,6 +365,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(card("GRID NODES", "1024")),
         )
         // Dropdowns near the top: open downward and must overlap the rows below.
+        .child(caption("Select"))
         .child(
             Flex::row()
                 .gap(16.0)
@@ -366,6 +376,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Select::new(workspaces).selected(3).on_change(report)),
         )
         // One button per GridCN variant.
+        .child(caption("Button"))
         .child(
             Flex::row()
                 .gap(14.0)
@@ -387,6 +398,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 ),
         )
         // Change widgets: Toggles across their states (on / off / disabled).
+        .child(caption("Toggle"))
         .child(
             Flex::column()
                 .gap(16.0)
@@ -414,6 +426,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 )),
         )
         // Checkboxes: integrated labels (clickable), with one label on the left.
+        .child(caption("Checkbox"))
         .child(
             Flex::row()
                 .gap(24.0)
@@ -439,6 +452,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 ),
         )
         // Text inputs: empty-with-placeholder, pre-filled, and disabled.
+        .child(caption("Input"))
         .child(
             Flex::row()
                 .gap(20.0)
@@ -448,9 +462,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Input::new().value("LOCKED").disabled(true)),
         )
         // Tabs: segmented selector with a sliding underline.
+        .child(caption("Tabs"))
         .child(Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).on_change(report))
+        .child(caption("Separator"))
         .child(Separator::horizontal().length(440.0))
         // Display widgets: status dot + badges across variants.
+        .child(caption("StatusDot · Badge"))
         .child(
             Flex::row()
                 .gap(12.0)
@@ -464,6 +481,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         )
         // Tags (G8): metadata chips that can carry a leading icon and multiple
         // segments (a status-bar pill). Quieter than a Badge; hue configurable.
+        .child(caption("Tag"))
         .child(
             Flex::row()
                 .gap(12.0)
@@ -497,6 +515,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Tag::new("rust").color(theme.colors.success)),
         )
         // Spinner + Alert.
+        .child(caption("Spinner · Alert"))
         .child(
             Flex::row()
                 .gap(20.0)
@@ -509,6 +528,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // here the example plays the "host" (its callbacks just print); a real app
         // owns the queue + lifecycle. Stacked like a notification list (also the
         // shape they take inline in a sidebar).
+        .child(caption("Toast"))
         .child(
             Flex::column()
                 .gap(10.0)
@@ -523,6 +543,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Toast::info("New message from GRID-7").on_click(click("toast-open"))),
         )
         // Value displays: progress bar + energy gauge.
+        .child(caption("ProgressBar · Gauge"))
         .child(
             Flex::row()
                 .gap(24.0)
@@ -532,6 +553,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Gauge::new().value(0.85)),
         )
         // Dropdown (overlay layer): opens over the content below it.
+        .child(caption("Select — live theme / appearance controls"))
         .child(
             Flex::row()
                 .gap(16.0)
@@ -637,6 +659,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // Item rows: a single-select menu panel. Clicking a row highlights it and
         // clears the others. Immediate-mode (no reactive effects): each row's
         // `active` signal is set directly on click via a shared list.
+        .child(caption("Item · Pane"))
         .child({
             let selected = signal(0usize);
             let states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
@@ -684,6 +707,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // hand-maintained list. Each is two stacked layers: a dimmed secondary wash + a
         // full primary on top, same hue (secondary = primary at the theme's
         // icon_secondary_alpha). Wraps across rows so the whole set stays visible.
+        .child(caption("Icon"))
         .child({
             const PER_ROW: usize = 8;
             // One labelled cell per glyph: the icon over its `Glyph` enum name (via Debug,
@@ -714,6 +738,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
         // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.
+        .child(caption("IconButton · Tooltip"))
         .child(
             Flex::row()
                 .gap(8.0)
@@ -772,6 +797,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // activate the focused one, and the letter fires it directly. Cancel takes
         // initial focus (safe default for a destructive dialog). Renders nothing
         // until opened.
+        .child(caption("Modal"))
         .child({
             let modal = Modal::new("Delete pane?", "This action cannot be undone.")
                 .button(
@@ -800,6 +826,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // buttons close it via the open signal; Esc / scrim fire `on_dismiss` (here it
         // closes the demo; in `heca` the host points it at a `CloseOverlay` action).
         // Renders nothing until opened.
+        .child(caption("Dialog"))
         .child({
             let dialog = Dialog::new("Delete pane?");
             let open = dialog.open_signal();
@@ -829,6 +856,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // and Bracketed modes. Each has a background + border so the decoration
         // is visible. Click and keyboard interactivity via the `.on_activate`
         // on each child Item.
+        .child(caption("Pane — frame variants"))
         .child({
             Flex::row()
                 .gap(8.0)
@@ -880,6 +908,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // separate widget, so frame decoration and header stay independent. Left =
         // metadata segments (location · app · branch · diff-stat); the app adds the
         // action-button cluster on the right.
+        .child(caption("Pane — in-pane info bar"))
         .child(
             Flex::row()
                 .gap(12.0)
@@ -997,10 +1026,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // their visual position while scrolled. (The chrome sidebar itself is
         // not yet wired to it — that needs scroll-aware DnD hit-testing, a
         // follow-up.)
+        .child(caption("ScrollRegion"))
         .child(
             Flex::column()
                 .gap(8.0)
-                .child(Label::new("SCROLL REGION").color(theme.colors.muted).font_scale(0.8))
                 .child({
                     let mut list = ScrollRegion::new()
                         .height(Length::Px(180.0))
@@ -1018,10 +1047,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // terminal panes — a draggable vertical thumb plus a clickable
         // "N lines above" chip. Generic widgets; the app wires them to terminal
         // viewport state.
+        .child(caption("ScrollBar · BadgeButton"))
         .child(
             Flex::column()
                 .gap(8.0)
-                .child(Label::new("SCROLLBAR + BADGE BUTTON").color(theme.colors.muted).font_scale(0.8))
                 .child({
                     let bar = ScrollBar::new().height(Length::Px(180.0));
                     bar.content_extent_signal().set(240.0);
@@ -1038,6 +1067,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the
         // file rows respond to click and keyboard (Tab to focus, Enter to activate).
+        .child(caption(
+            "Chrome — ChromeRegion · DockFrame · ItemGroup · MarkerGroup · KeyHint · RailCell · Row",
+        ))
         .child({
             // Single-select highlight shared across the explorer's file rows: the
             // clicked row goes active (accent bar), the rest clear. Immediate-mode.
@@ -1476,6 +1508,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(panes_col)
         })
         // The command palette overlays everything when open (Ctrl+K).
+        .child(caption("CommandPalette — press Ctrl+K"))
         .child(palette)
         // The right-click context menu overlays at the cursor when open.
         .child(menu)
