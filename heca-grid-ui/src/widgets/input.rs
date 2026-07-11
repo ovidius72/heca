@@ -6,13 +6,21 @@
 //!
 //! Editing keys (delivered to the focused field): printable
 //! [`Char`](crate::component::GridKey::Char)/Space insert at the caret;
-//! Backspace/Delete remove; Left/Right move the caret. A pointer press places
-//! the caret by x. Monospace advance (`font_size * MONO_ADVANCE_RATIO`) drives
-//! both caret placement and click hit-testing.
+//! Backspace/Delete remove; Left/Right move the caret; Home/End jump to the line
+//! ends (Ctrl/Cmd/Alt on these keys widen the granularity to line/word). A pointer
+//! press places the caret by x. Monospace advance (`font_size * MONO_ADVANCE_RATIO`)
+//! drives both caret placement and click hit-testing.
+//!
+//! The readline/select-all **shortcuts** are host-configured, not baked in
+//! (`widget-keys-config`): Ctrl+h (delete back), Ctrl+u (delete to line start), and
+//! Ctrl/Cmd+A (select all) arrive as the semantic
+//! [`Event::InputEdit`](crate::component::Event::InputEdit), which the host resolves
+//! from the configurable `input_delete_back` / `input_delete_to_line_start` /
+//! `input_select_all` bindings.
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, InputEdit, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, TextAlign};
@@ -285,24 +293,13 @@ impl Input {
         self.commit(chars.into_iter().collect());
     }
 
-    /// Handle an editing key. Returns whether it was consumed.
+    /// Handle a plain editing key. Returns whether it was consumed. The emacs/readline
+    /// shortcuts (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+A select-all) are **not** here —
+    /// they are host-configured (`input_*` bindings) and arrive as
+    /// [`Event::InputEdit`](crate::component::Event::InputEdit). A modified char is ignored
+    /// so it is never typed as text (and so the host's shortcut resolution can act on it).
     fn handle_key(&mut self, key: GridKey) -> Handled {
         match key {
-            // Cmd/Ctrl+A selects all; other modified chars are ignored so they
-            // aren't typed as text.
-            GridKey::Char(c)
-                if (self.mods.ctrl || self.mods.meta) && c.eq_ignore_ascii_case(&'a') =>
-            {
-                self.select_all();
-            }
-            // Emacs/readline backspace bindings: Ctrl+H deletes one char back,
-            // Ctrl+U deletes from the caret to the start of the line.
-            GridKey::Char(c) if self.mods.ctrl && c.eq_ignore_ascii_case(&'h') => {
-                self.backspace(Granularity::Char)
-            }
-            GridKey::Char(c) if self.mods.ctrl && c.eq_ignore_ascii_case(&'u') => {
-                self.backspace(Granularity::Line)
-            }
             GridKey::Char(_) if self.mods.ctrl || self.mods.meta => return Handled::No,
             GridKey::Char(c) => self.insert(c),
             GridKey::Space => self.insert(' '),
@@ -585,6 +582,16 @@ impl Component for Input {
                 Handled::Yes
             }
             Event::Key { key, pressed: true } => self.handle_key(*key),
+            // Host-resolved editing shortcuts (`input_*` bindings → `InputEdit`). The plain
+            // keys stay in `handle_key`; only the readline/select-all shortcuts are configurable.
+            Event::InputEdit(edit) => {
+                match edit {
+                    InputEdit::DeleteBackward => self.backspace(Granularity::Char),
+                    InputEdit::DeleteToLineStart => self.backspace(Granularity::Line),
+                    InputEdit::SelectAll => self.select_all(),
+                }
+                Handled::Yes
+            }
             _ => Handled::No,
         }
     }

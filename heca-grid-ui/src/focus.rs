@@ -100,6 +100,14 @@ impl FocusManager {
 
     /// Deliver a key press to the focused component. Returns whether it consumed it.
     pub fn deliver_key(&mut self, root: &mut dyn Component, key: GridKey) -> Handled {
+        self.deliver_event(root, &Event::Key { key, pressed: true })
+    }
+
+    /// Deliver an arbitrary event to the focused component only. Returns whether it
+    /// consumed it. Used for field-first delivery of semantic events (e.g. a
+    /// [`Event::InputEdit`](crate::component::Event::InputEdit) forwarded to the
+    /// focused text field inside a `Dialog`).
+    pub fn deliver_event(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
         let Some(target) = self.focused else {
             return Handled::No;
         };
@@ -107,7 +115,7 @@ impl FocusManager {
         let mut idx = 0;
         for_each_focusable(root, &mut idx, &mut |i, c| {
             if i == target {
-                handled = c.event(&Event::Key { key, pressed: true });
+                handled = c.event(ev);
             }
         });
         handled

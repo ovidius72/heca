@@ -1043,25 +1043,20 @@ fn shift_alt_arrow_selects_by_word() {
 }
 
 #[test]
-fn cmd_a_selects_all_without_typing() {
-    use heca_grid_ui::Modifiers;
+fn input_edit_select_all_selects_without_typing() {
+    use heca_grid_ui::InputEdit;
+    // Select-all is host-configured (`input_select_all`, default Ctrl+a / Cmd+a) and arrives as
+    // the semantic `InputEdit::SelectAll`; a raw modified 'a' is never typed (covered separately).
     let mut input = Input::new().value("hello world");
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
-    input.event(&Event::ModifiersChanged(Modifiers {
-        meta: true,
-        ..Default::default()
-    }));
-    input.event(&Event::Key {
-        key: GridKey::Char('a'),
-        pressed: true,
-    });
+    input.event(&Event::InputEdit(InputEdit::SelectAll));
     assert_eq!(
         input.selected_text().as_deref(),
         Some("hello world"),
-        "Cmd+A selects all"
+        "SelectAll selects the whole field"
     );
-    assert_eq!(input.value_str(), "hello world", "the 'a' is not typed");
+    assert_eq!(input.value_str(), "hello world", "nothing is typed");
 }
 
 #[test]
@@ -2662,17 +2657,31 @@ fn command_palette_query_reuses_input_word_delete() {
 }
 
 #[test]
-fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
-    use heca_grid_ui::{Input, Modifiers};
+fn input_edit_deletes_char_and_deletes_to_line_start() {
+    use heca_grid_ui::{Input, InputEdit};
+    // The readline shortcuts are host-configured (`input_delete_back` / `input_delete_to_line_start`,
+    // default Ctrl+h / Ctrl+u) and arrive as the semantic `InputEdit`, not a raw key.
     let mut inp = Input::new().value("hello world");
 
+    inp.event(&Event::InputEdit(InputEdit::DeleteBackward));
+    assert_eq!(inp.value_str(), "hello worl", "DeleteBackward removes one char back");
+    inp.event(&Event::InputEdit(InputEdit::DeleteToLineStart));
+    assert_eq!(inp.value_str(), "", "DeleteToLineStart clears to the start of the line");
+}
+
+#[test]
+fn input_raw_ctrl_char_is_ignored_not_typed() {
+    use heca_grid_ui::{Input, Modifiers};
+    // A modified char is never typed as text — it is left for the host to resolve into an
+    // `InputEdit` shortcut (Ctrl+h, Ctrl+u, Ctrl/Cmd+A). The widget ignores the raw key.
+    let mut inp = Input::new().value("hi");
     inp.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
-    // Ctrl+H = delete one char back.
-    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true });
-    assert_eq!(inp.value_str(), "hello worl", "Ctrl+H deletes one char back");
-    // Ctrl+U = delete from caret to line start.
-    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
-    assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
+    assert_eq!(
+        inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true }),
+        heca_grid_ui::Handled::No,
+        "a raw Ctrl+char is not consumed by the input",
+    );
+    assert_eq!(inp.value_str(), "hi", "the modified char is not typed");
 }
 
 // --- Toast ------------------------------------------------------------------

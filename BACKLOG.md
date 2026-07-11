@@ -1893,9 +1893,26 @@ Design directions to weigh (pick in the review):
   breaks when unconfigured.
 Cross-refs: [`menu-nav`](#requirement-shared-listmenu-navigation-keybindings--menu-nav) (DONE — the
 model to follow), `available-actions`. Scope + phasing decided in the review.
-- [ ] **widget-keys-config-1** — audit every `heca-grid-ui` widget that matches literal keys in
+- [~] **widget-keys-config-1** — audit every `heca-grid-ui` widget that matches literal keys in
   `event()`; propose the configurable model (intents + injected keymap); wire `Dialog` + `Input`
   first as the reference, then the list-nav widgets (folds in `menu-nav`).
+  **Model chosen (approved 2026-07-11): host-driven semantic events (menu-nav parity)** — the widget
+  carries a semantic event, the host owns config→event resolution. **`Dialog` + `Input` DONE**
+  (branch `feat/widget-keys-config`): new `Event::DialogNav{FocusNext,FocusPrev,Submit,Cancel}` +
+  `Event::InputEdit{DeleteBackward,DeleteToLineStart,SelectAll}` (`heca-grid-ui/src/component.rs`);
+  `Dialog::event` is now **field-first** (raw key → focused field; unconsumed → host applies
+  `DialogNav`) with no literal nav keys, `Input` shortcuts moved out of `handle_key` to `InputEdit`;
+  `FocusManager::deliver_event` added. App: `dialog_keymap`/`input_keymap` on `AppState`
+  (`build_dialog_keymap`/`build_input_keymap`, rebuilt on reload), resolved in the overlay key branch
+  (`heca/src/app/events.rs`) in order raw → `input_*` → `menu_*` → `dialog_*`. Defaults in
+  `keybindings.default.toml` include **vim `Ctrl+j`/`Ctrl+k`** (per user); `input_select_all` =
+  `Ctrl+a`/`Super+a`. Docs: `docs/widgets.md` (Dialog/Input/Modal note), README. Tests: grid-ui
+  widget-side (`DialogNav`/`InputEdit`), app-side `dialog_keymap_maps_default_nav_bindings` /
+  `input_keymap_maps_default_edit_bindings`. In-app visual pass by the user pending.
+- [ ] **widget-keys-config-2** — apply the same host-driven pattern to the remaining literal-key
+  widgets: `Select` (`Esc`/`Enter`/`Space`/`Arrow↑↓`) and `Tabs` (`Arrow←→`) list-nav — fold their
+  nav into the shared `MenuNav` vocabulary where it overlaps (they are not top-modal overlays today,
+  so this needs a host delivery path for a focused-but-not-modal widget; scope it in a short review).
 
 ### [ ] Requirement: Pane naming + sidebar pane rows · `pane-naming`
 Follow-ups from the rename-dialog session (2026-07-10). **Full detail + resume steps in the repo-root

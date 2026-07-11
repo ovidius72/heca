@@ -1052,6 +1052,32 @@ menu_dismiss  = "Escape"                 # Close the overlay
 Entries that carry a quick-pick letter can also be activated by typing that letter; in the command
 palette, all other keys type into its filter field.
 
+### Dialog & input keys (`widget-keys-config`)
+
+Widget keys pass through config too, on the same host-resolved model as `menu-nav`. Both sets apply
+**only while the relevant overlay is open**.
+
+Dialog focus navigation (e.g. the rename dialog) — a focused text field keeps its own keys first
+(field-first), so these navigate only when the focused widget ignores the key:
+
+```toml
+[keys]
+dialog_focus_next = ["Tab", "ArrowDown", "ArrowRight", "Ctrl+j"]     # Next field/button (vim Ctrl+j)
+dialog_focus_prev = ["Shift+Tab", "ArrowUp", "ArrowLeft", "Ctrl+k"]  # Previous (vim Ctrl+k)
+dialog_submit     = "Enter"                                          # Activate the primary action
+dialog_cancel     = "Escape"                                         # Dismiss the dialog
+```
+
+Text-input editing shortcuts. The plain keys (typing, Backspace/Delete, arrows, Home/End, and
+Ctrl/Alt/Cmd word/line motion) are built in; only these named shortcuts are configurable:
+
+```toml
+[keys]
+input_delete_back          = "Ctrl+h"               # Delete one character before the caret
+input_delete_to_line_start = "Ctrl+u"               # Delete from the caret to line start
+input_select_all           = ["Ctrl+a", "Super+a"]  # Select the whole field (Cmd+a on macOS)
+```
+
 ### Unbinding Defaults
 
 To remove a default keybinding, add it to `[keys.unbind]`:

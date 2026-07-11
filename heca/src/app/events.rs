@@ -123,27 +123,39 @@ pub(crate) fn handle_window_event(
                         | crate::app_state::InputMode::HintPick { .. }
                 );
             if !picker_seq && crate::chrome::top_modal(state).is_some() {
-                // menu-nav: a configured `menu_*` key drives a **list/menu** overlay's
-                // selection via a semantic `MenuNav`. If the overlay does not consume it
-                // (a `Dialog`/`Modal` returns `Handled::No`), fall back to the raw key so
-                // Esc still cancels and Enter still submits there — menu-nav only affects
-                // list menus, never dialogs. Non-nav keys (quick-pick letters, palette
-                // typing) are forwarded as raw keys.
-                let consumed = match state.menu_keymap.get(&event_combo).copied() {
-                    Some(nav) => {
-                        state
-                            .layers
-                            .top_modal_root_mut()
-                            .map(|root| root.event(&Event::MenuNav(nav)))
-                            == Some(Handled::Yes)
-                    }
-                    None => false,
-                };
-                if !consumed
-                    && let Some(gk) = winit_key_to_grid_key(&event.logical_key)
+                // Overlay key resolution — **field-first, then host-configured semantic events**
+                // (`widget-keys-config` / `menu-nav`). Order matters:
+                //   1. Raw key → the focused widget first, so an `Input`'s typing / caret motion /
+                //      Backspace and a menu's quick-pick letters are never stolen by navigation.
+                //   2. `input_*` → `InputEdit` (Ctrl+h/u, select-all) — the field's shortcuts.
+                //   3. `menu_*`  → `MenuNav` (list overlays: context menu / command palette).
+                //   4. `dialog_*` → `DialogNav` (Dialog focus-nav / submit / cancel).
+                // Each layer only acts if the previous did not consume the key; the widget itself
+                // ignores events it does not understand (a Dialog ignores `MenuNav`, a menu ignores
+                // `DialogNav`), so the same combo can serve both without conflict.
+                let mut consumed = false;
+                if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
                     && let Some(root) = state.layers.top_modal_root_mut()
                 {
-                    let _ = root.event(&Event::Key { key: gk, pressed: true });
+                    consumed = root.event(&Event::Key { key: gk, pressed: true }) == Handled::Yes;
+                }
+                if !consumed
+                    && let Some(edit) = state.input_keymap.get(&event_combo).copied()
+                    && let Some(root) = state.layers.top_modal_root_mut()
+                {
+                    consumed = root.event(&Event::InputEdit(edit)) == Handled::Yes;
+                }
+                if !consumed
+                    && let Some(nav) = state.menu_keymap.get(&event_combo).copied()
+                    && let Some(root) = state.layers.top_modal_root_mut()
+                {
+                    consumed = root.event(&Event::MenuNav(nav)) == Handled::Yes;
+                }
+                if !consumed
+                    && let Some(dnav) = state.dialog_keymap.get(&event_combo).copied()
+                    && let Some(root) = state.layers.top_modal_root_mut()
+                {
+                    let _ = root.event(&Event::DialogNav(dnav));
                 }
                 state.mark_full_redraw();
                 return;

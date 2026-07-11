@@ -146,6 +146,24 @@ menu_down     = ["ArrowDown", "Ctrl+j"]  # Move selection down / next
 menu_activate = "Enter"                  # Run the selected entry
 menu_dismiss  = "Escape"                 # Close the overlay
 
+# ── Dialog focus navigation (widget-keys-config) ──
+# Focus traversal + submit/cancel inside a Dialog overlay (e.g. the rename dialog).
+# Applies ONLY while a Dialog is open. A focused text field keeps its own keys first
+# (field-first), so these move focus only when the focused widget ignores the key —
+# e.g. an arrow moves the caret inside an Input but navigates when a button is focused.
+dialog_focus_next = ["Tab", "ArrowDown", "ArrowRight", "Ctrl+j"]  # Next field/button (vim Ctrl+j)
+dialog_focus_prev = ["Shift+Tab", "ArrowUp", "ArrowLeft", "Ctrl+k"]  # Previous (vim Ctrl+k)
+dialog_submit     = "Enter"    # Activate the primary action (OK)
+dialog_cancel     = "Escape"   # Dismiss the dialog
+
+# ── Input editing shortcuts (widget-keys-config) ──
+# Readline/select-all shortcuts for a text Input. The plain editing keys (typing,
+# Backspace/Delete, arrows, Home/End, word/line motion via Ctrl/Alt/Cmd) are built in;
+# only these named shortcuts are configurable.
+input_delete_back          = "Ctrl+h"            # Delete one character before the caret
+input_delete_to_line_start = "Ctrl+u"            # Delete from the caret to line start
+input_select_all           = ["Ctrl+a", "Super+a"]  # Select the whole field (Cmd+a on macOS)
+
 # ── Selection (host capability, reusable across pane types) ──
 enter_selection_mode = "prefix+s"        # Enter selection mode (caret-only)
 clear_selection      = "prefix+Shift+s"  # Clear selection; exit selection mode

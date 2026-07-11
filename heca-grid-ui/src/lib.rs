@@ -49,8 +49,8 @@ pub use action::{Action, SignalData};
 pub use builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
-    Base, Component, Event, GridKey, Handled, MenuNav, Modifiers, PaintCx, collect_damage,
-    install_frame_request, request_frame,
+    Base, Component, DialogNav, Event, GridKey, Handled, InputEdit, MenuNav, Modifiers, PaintCx,
+    collect_damage, install_frame_request, request_frame,
 };
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
 pub use hint::{HintTargetId, collect_hint_targets};
@@ -73,7 +73,7 @@ pub mod prelude {
     pub use crate::action::{Action, SignalData};
     pub use crate::builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
-    pub use crate::component::{Component, Event, GridKey, Handled, MenuNav, Modifiers};
+    pub use crate::component::{Component, DialogNav, Event, GridKey, Handled, InputEdit, MenuNav, Modifiers};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
     pub use crate::hint::{HintTargetId, collect_hint_targets};
     pub use crate::focus::FocusManager;
