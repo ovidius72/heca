@@ -2,14 +2,18 @@
 //! that slides to the active tab. A change widget: selecting a tab emits
 //! `Action::value("tab-change", SignalData::Usize(index))`.
 //!
-//! It lays its own segments out from monospace metrics (no child components),
-//! hit-tests pointer presses by x, and moves selection with Left/Right while
-//! focused. Reuses [`Base::disabled`](crate::component::Base) and the
-//! focus-visible ring; the underline animates via [`Component::tick`].
+//! It lays its own segments out from monospace metrics (no child components) and
+//! hit-tests pointer presses by x. **Keyboard nav is host-configured, not hardcoded**
+//! (`widget-keys-config`): while focused it moves selection on the semantic
+//! [`Event::MenuNav`] (`Prev`/`Next`) — the same vocabulary as
+//! [`Select`](super::Select)/[`ContextMenu`](super::ContextMenu). The host resolves the
+//! configurable nav keys into it (defaults ←/`Ctrl+h` → prev, →/`Ctrl+l` → next). Reuses
+//! [`Base::disabled`](crate::component::Base) and the focus-visible ring; the underline
+//! animates via [`Component::tick`].
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, Handled, MenuNav, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
@@ -261,17 +265,13 @@ impl Component for Tabs {
                 }
                 Handled::Yes
             }
-            Event::Key {
-                key: GridKey::ArrowLeft,
-                pressed: true,
-            } => {
+            // Host-resolved navigation (`MenuNav`): Prev/Next move the selection. No literal
+            // arrow/Ctrl keys live here — the host maps the configurable nav keys to this.
+            Event::MenuNav(MenuNav::Prev) => {
                 self.select(self.selected.get_untracked().saturating_sub(1));
                 Handled::Yes
             }
-            Event::Key {
-                key: GridKey::ArrowRight,
-                pressed: true,
-            } => {
+            Event::MenuNav(MenuNav::Next) => {
                 let next = (self.selected.get_untracked() + 1).min(self.labels.len() - 1);
                 self.select(next);
                 Handled::Yes

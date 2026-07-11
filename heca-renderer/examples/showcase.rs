@@ -1950,6 +1950,40 @@ impl GpuState {
             == Handled::Yes
     }
 
+    /// Route a key to the FOCUSED (non-overlay) widget — the demo host's stand-in for the
+    /// app's config-driven resolution of `input_*` / list-nav keys. Editing shortcuts become an
+    /// [`InputEdit`] (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+a select-all) and list nav becomes a
+    /// [`MenuNav`] (←/Ctrl+h → prev, →/Ctrl+l → next; drives [`Tabs`]). Both are delivered to the
+    /// focused widget, which consumes whichever it understands — an `Input` takes the `InputEdit`,
+    /// a `Tabs` takes the `MenuNav` (so the shared `Ctrl+h` disambiguates by which widget has
+    /// focus). Anything unconsumed falls back to the raw key (typing / caret / Backspace).
+    fn route_focused_key(&mut self, gk: GridKey) -> bool {
+        let edit = match gk {
+            GridKey::Char('h') if self.ctrl => Some(InputEdit::DeleteBackward),
+            GridKey::Char('u') if self.ctrl => Some(InputEdit::DeleteToLineStart),
+            GridKey::Char('a') if self.ctrl || self.meta => Some(InputEdit::SelectAll),
+            _ => None,
+        };
+        if let Some(e) = edit
+            && self.focus.deliver_event(&mut self.ui, &Event::InputEdit(e)) == Handled::Yes
+        {
+            return true;
+        }
+        let nav = match gk {
+            GridKey::ArrowLeft => Some(MenuNav::Prev),
+            GridKey::ArrowRight => Some(MenuNav::Next),
+            GridKey::Char('h') if self.ctrl => Some(MenuNav::Prev),
+            GridKey::Char('l') if self.ctrl => Some(MenuNav::Next),
+            _ => None,
+        };
+        if let Some(n) = nav
+            && self.focus.deliver_event(&mut self.ui, &Event::MenuNav(n)) == Handled::Yes
+        {
+            return true;
+        }
+        self.focus.deliver_key(&mut self.ui, gk) == Handled::Yes
+    }
+
     /// A key pressed while in zoom mode. The mode stays active (so you can keep
     /// pressing j/k) until Esc/Enter/q.
     fn zoom_mode_key(&mut self, gk: GridKey) {
@@ -2384,9 +2418,11 @@ impl ApplicationHandler for App {
                             });
                             state.window.request_redraw();
                         }
-                        // Space/Enter (and others) go to the focused widget.
+                        // Space/Enter/typing and nav go to the focused widget — via
+                        // `route_focused_key`, which resolves editing shortcuts → `InputEdit`
+                        // and ←→/Ctrl+h/l → `MenuNav` (Tabs) before the raw fallback.
                         other => {
-                            state.focus.deliver_key(&mut state.ui, other);
+                            state.route_focused_key(other);
                         }
                     }
                     state.layout_dirty = true; // a key can change content/size

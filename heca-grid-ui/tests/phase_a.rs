@@ -1355,7 +1355,7 @@ fn select_keyboard_navigates_and_escape_closes() {
 }
 
 #[test]
-fn tabs_arrow_keys_and_click_change_selection() {
+fn tabs_menu_nav_and_click_change_selection() {
     use heca_grid_ui::{Action, SignalData};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -1366,28 +1366,22 @@ fn tabs_arrow_keys_and_click_change_selection() {
         Tabs::new(["ALPHA", "BETA", "GAMMA"]).on_change(move |a| sink.borrow_mut().push(a));
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
+    use heca_grid_ui::MenuNav;
     assert_eq!(tabs.index(), 0);
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    // Nav arrives as the semantic `MenuNav` (the host maps the configurable nav keys —
+    // ←/Ctrl+h → Prev, →/Ctrl+l → Next — to it). The widget carries no literal keys.
+    tabs.event(&Event::MenuNav(MenuNav::Next));
     assert_eq!(tabs.index(), 1);
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("tab-change", SignalData::Usize(1))),
     );
 
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    tabs.event(&Event::MenuNav(MenuNav::Next));
     assert_eq!(tabs.index(), 2);
     let before = log.borrow().len();
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
-    assert_eq!(tabs.index(), 2, "ArrowRight clamps at the last tab");
+    tabs.event(&Event::MenuNav(MenuNav::Next));
+    assert_eq!(tabs.index(), 2, "Next clamps at the last tab");
     assert_eq!(
         log.borrow().len(),
         before,
@@ -1423,10 +1417,7 @@ fn tabs_underline_slides_toward_selection() {
     let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
     let x0 = underline_x(&tabs);
-    tabs.event(&Event::Key {
-        key: GridKey::ArrowRight,
-        pressed: true,
-    });
+    tabs.event(&Event::MenuNav(heca_grid_ui::MenuNav::Next));
     for _ in 0..40 {
         tabs.tick(0.016);
     }

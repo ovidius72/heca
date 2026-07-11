@@ -776,13 +776,18 @@ ViewNode::new(WidgetKind::Input)
 ### Tabs
 
 Horizontal segmented selector with an animated sliding underline; lays its own segments
-from monospace metrics (no child components). Focusable; ←/→ move selection, click selects.
+from monospace metrics (no child components). Focusable; click selects.
 
 - **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`.
 - **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits;
   strip re-measures), `.on_change(impl Fn(Action))`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`.
 - **Emits**: `"tab-change"` / `SignalData::Usize`.
+- **Keys** (`widget-keys-config`): navigation is host-configured, not hardcoded — while focused,
+  the widget moves selection on the semantic `Event::MenuNav` (`Prev`/`Next`), shared with
+  [`Select`](#select)/[`ContextMenu`](#contextmenu). The host resolves the configurable nav keys
+  into it (defaults ←/`Ctrl+h` → prev, →/`Ctrl+l` → next). A host delivers `MenuNav` to the focused
+  widget; see `route_focused_key` in the showcase (in-app it would be the `menu_*` keymap).
 
 ```rust
 Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
