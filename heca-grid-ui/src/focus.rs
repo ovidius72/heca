@@ -105,7 +105,7 @@ impl FocusManager {
 
     /// Deliver an arbitrary event to the focused component only. Returns whether it
     /// consumed it. Used for field-first delivery of semantic events (e.g. a
-    /// [`Event::InputEdit`](crate::component::Event::InputEdit) forwarded to the
+    /// [`Event::Widget`](crate::component::Event::Widget) intent forwarded to the
     /// focused text field inside a `Dialog`).
     pub fn deliver_event(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
         let Some(target) = self.focused else {

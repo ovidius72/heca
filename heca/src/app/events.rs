@@ -123,39 +123,22 @@ pub(crate) fn handle_window_event(
                         | crate::app_state::InputMode::HintPick { .. }
                 );
             if !picker_seq && crate::chrome::top_modal(state).is_some() {
-                // Overlay key resolution — **field-first, then host-configured semantic events**
-                // (`widget-keys-config` / `menu-nav`). Order matters:
-                //   1. Raw key → the focused widget first, so an `Input`'s typing / caret motion /
-                //      Backspace and a menu's quick-pick letters are never stolen by navigation.
-                //   2. `input_*` → `InputEdit` (Ctrl+h/u, select-all) — the field's shortcuts.
-                //   3. `menu_*`  → `MenuNav` (list overlays: context menu / command palette).
-                //   4. `dialog_*` → `DialogNav` (Dialog focus-nav / submit / cancel).
-                // Each layer only acts if the previous did not consume the key; the widget itself
-                // ignores events it does not understand (a Dialog ignores `MenuNav`, a menu ignores
-                // `DialogNav`), so the same combo can serve both without conflict.
-                let mut consumed = false;
-                if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
-                    && let Some(root) = state.layers.top_modal_root_mut()
-                {
-                    consumed = root.event(&Event::Key { key: gk, pressed: true }) == Handled::Yes;
-                }
-                if !consumed
-                    && let Some(edit) = state.input_keymap.get(&event_combo).copied()
-                    && let Some(root) = state.layers.top_modal_root_mut()
-                {
-                    consumed = root.event(&Event::InputEdit(edit)) == Handled::Yes;
-                }
-                if !consumed
-                    && let Some(nav) = state.menu_keymap.get(&event_combo).copied()
-                    && let Some(root) = state.layers.top_modal_root_mut()
-                {
-                    consumed = root.event(&Event::MenuNav(nav)) == Handled::Yes;
-                }
-                if !consumed
-                    && let Some(dnav) = state.dialog_keymap.get(&event_combo).copied()
-                    && let Some(root) = state.layers.top_modal_root_mut()
-                {
-                    let _ = root.event(&Event::DialogNav(dnav));
+                // Overlay key resolution via the single host-owned widget keymap
+                // (`widget-keys-config`). `Keymap::dispatch` delivers the raw key to the overlay
+                // **field-first** (so an `Input`'s typing / caret and a menu's quick-pick letters
+                // win), then the semantic `WidgetIntent`(s) the chord resolves to — a `Dialog`
+                // takes `Item*`/`Activate`/`Dismiss`, a menu/`Select` takes `Menu*`, a focused
+                // field takes `Edit*` (forwarded field-first by the overlay). One dispatch, one map.
+                if let Some(key) = winit_key_to_grid_key(&event.logical_key) {
+                    let mods = grid_modifiers(state.modifiers);
+                    let keymap = state.widget_keymap.clone();
+                    keymap.dispatch(key, mods, |ev| {
+                        state
+                            .layers
+                            .top_modal_root_mut()
+                            .map(|root| root.event(ev))
+                            .unwrap_or(Handled::No)
+                    });
                 }
                 state.mark_full_redraw();
                 return;

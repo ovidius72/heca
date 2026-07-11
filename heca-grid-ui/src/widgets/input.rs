@@ -13,14 +13,14 @@
 //!
 //! The readline/select-all **shortcuts** are host-configured, not baked in
 //! (`widget-keys-config`): Ctrl+h (delete back), Ctrl+u (delete to line start), and
-//! Ctrl/Cmd+A (select all) arrive as the semantic
-//! [`Event::InputEdit`](crate::component::Event::InputEdit), which the host resolves
-//! from the configurable `input_delete_back` / `input_delete_to_line_start` /
-//! `input_select_all` bindings.
+//! Ctrl/Cmd+A (select all) arrive as the semantic [`Event::Widget`] intents
+//! `EditDeleteBack` / `EditDeleteToLineStart` / `EditSelectAll`, which the host resolves
+//! from the configurable `[keys.widgets]` `edit_delete_back` / `edit_delete_to_line_start` /
+//! `edit_select_all` bindings.
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, InputEdit, Modifiers, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, TextAlign};
@@ -295,9 +295,9 @@ impl Input {
 
     /// Handle a plain editing key. Returns whether it was consumed. The emacs/readline
     /// shortcuts (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+A select-all) are **not** here —
-    /// they are host-configured (`input_*` bindings) and arrive as
-    /// [`Event::InputEdit`](crate::component::Event::InputEdit). A modified char is ignored
-    /// so it is never typed as text (and so the host's shortcut resolution can act on it).
+    /// they are host-configured (`[keys.widgets]` `edit_*` bindings) and arrive as the
+    /// [`Event::Widget`](crate::component::Event::Widget) `Edit*` intents. A modified char is
+    /// ignored so it is never typed as text (and so the host's shortcut resolution can act on it).
     fn handle_key(&mut self, key: GridKey) -> Handled {
         match key {
             GridKey::Char(_) if self.mods.ctrl || self.mods.meta => return Handled::No,
@@ -582,14 +582,19 @@ impl Component for Input {
                 Handled::Yes
             }
             Event::Key { key, pressed: true } => self.handle_key(*key),
-            // Host-resolved editing shortcuts (`input_*` bindings → `InputEdit`). The plain
-            // keys stay in `handle_key`; only the readline/select-all shortcuts are configurable.
-            Event::InputEdit(edit) => {
-                match edit {
-                    InputEdit::DeleteBackward => self.backspace(Granularity::Char),
-                    InputEdit::DeleteToLineStart => self.backspace(Granularity::Line),
-                    InputEdit::SelectAll => self.select_all(),
-                }
+            // Host-resolved editing shortcuts (`[keys.widgets]` `edit_*` → `WidgetIntent`). The
+            // plain keys stay in `handle_key`; only these shortcuts are configurable. Nav intents
+            // (`Item*`/`Menu*`) are ignored so they fall through to any surrounding widget.
+            Event::Widget(WidgetIntent::EditDeleteBack) => {
+                self.backspace(Granularity::Char);
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::EditDeleteToLineStart) => {
+                self.backspace(Granularity::Line);
+                Handled::Yes
+            }
+            Event::Widget(WidgetIntent::EditSelectAll) => {
+                self.select_all();
                 Handled::Yes
             }
             _ => Handled::No,

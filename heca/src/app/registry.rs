@@ -85,90 +85,80 @@ fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
     }
 }
 
-/// Build a **dedicated overlay keymap**: resolve a fixed set of `(config-name, intent)`
-/// entries into a `KeyCombo → intent` map. Shared by every host-owned, overlay-only nav
-/// vocabulary (`menu-nav`, `widget-keys-config`). Each entry's user binding wins when set
-/// (arrays replace wholesale), else the bundled default. These names are **not** `WmAction`s,
-/// so `build_keymap` skips them — they live only here and never hijack normal-mode input.
-fn build_overlay_keymap<T: Copy>(
-    config: &heca_config::theme::Config,
-    entries: &[(&str, T)],
-) -> HashMap<KeyCombo, T> {
+/// Convert a parsed [`KeyCombo`] into a renderer-agnostic `heca_grid_ui` chord
+/// (`GridKey` + `Modifiers`), or `None` for a key name grid-ui does not model. The app's
+/// config strings (`"Ctrl+h"`, `"ArrowDown"`, `"Super+a"`) parse to a `KeyCombo` whose
+/// lowercase key name maps onto a `GridKey`; the modifiers map straight across
+/// (`super_` → `meta`).
+fn combo_to_grid(combo: &KeyCombo) -> Option<(heca_grid_ui::GridKey, heca_grid_ui::Modifiers)> {
+    use heca_grid_ui::GridKey;
+    let key = match combo.key.as_str() {
+        "enter" | "return" => GridKey::Enter,
+        "space" => GridKey::Space,
+        "tab" => GridKey::Tab,
+        "escape" | "esc" => GridKey::Escape,
+        "backspace" => GridKey::Backspace,
+        "delete" | "del" => GridKey::Delete,
+        "arrowleft" | "left" => GridKey::ArrowLeft,
+        "arrowright" | "right" => GridKey::ArrowRight,
+        "arrowup" | "up" => GridKey::ArrowUp,
+        "arrowdown" | "down" => GridKey::ArrowDown,
+        "home" => GridKey::Home,
+        "end" => GridKey::End,
+        s => {
+            let mut chars = s.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => GridKey::Char(c),
+                _ => return None,
+            }
+        }
+    };
+    let mods = heca_grid_ui::Modifiers {
+        ctrl: combo.ctrl,
+        alt: combo.alt,
+        shift: combo.shift,
+        meta: combo.super_,
+    };
+    Some((key, mods))
+}
+
+/// Build the **widget keymap** (`widget-keys-config`): the `[keys.widgets]` bindings resolved
+/// into a `heca_grid_ui::Keymap` (`key chord → WidgetIntent`), the single host-owned map every
+/// interactive widget/overlay consults. User bindings win when set (arrays replace wholesale),
+/// else the bundled default. These names are **not** `WmAction`s, so `build_keymap` skips them —
+/// they live only here and never hijack normal-mode input. `edit_*` entries are bound **first**
+/// so a focused `Input` wins the `Ctrl+h` overload (field-first). See `docs/widgets.md` + README.
+pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui::Keymap {
+    use heca_grid_ui::WidgetIntent;
     let defaults = heca_config::theme::KeysConfig::default();
-    let mut map = HashMap::new();
+    // Edit shortcuts bound before the nav overload (so `Ctrl+h` resolves EditDeleteBack first).
+    let entries = [
+        ("edit_delete_back", WidgetIntent::EditDeleteBack),
+        ("edit_delete_to_line_start", WidgetIntent::EditDeleteToLineStart),
+        ("edit_select_all", WidgetIntent::EditSelectAll),
+        ("item_previous", WidgetIntent::ItemPrevious),
+        ("item_next", WidgetIntent::ItemNext),
+        ("menu_up", WidgetIntent::MenuUp),
+        ("menu_down", WidgetIntent::MenuDown),
+        ("activate", WidgetIntent::Activate),
+        ("dismiss", WidgetIntent::Dismiss),
+    ];
+    let mut km = heca_grid_ui::Keymap::new();
     for (name, intent) in entries {
         let value = config
             .keys
-            .bindings
-            .get(*name)
-            .or_else(|| defaults.bindings.get(*name));
+            .widgets
+            .get(name)
+            .or_else(|| defaults.widgets.get(name));
         if let Some(value) = value {
             for key_str in value.keys() {
-                map.insert(KeyCombo::parse(key_str.trim()), *intent);
+                if let Some((key, mods)) = combo_to_grid(&KeyCombo::parse(key_str.trim())) {
+                    km.bind(key, mods, intent);
+                }
             }
         }
     }
-    map
-}
-
-/// Build the overlay list/menu navigation map (`menu-nav`): the configurable
-/// `menu_up` / `menu_down` / `menu_activate` / `menu_dismiss` bindings resolved to
-/// semantic [`MenuNav`]. Consumed **only** while an overlay (context menu / command
-/// palette) is open. Single source of truth for menu navigation; see `docs/widgets.md`
-/// (`ContextMenu`/`CommandPalette`) and README.
-pub fn build_menu_keymap(
-    config: &heca_config::theme::Config,
-) -> HashMap<KeyCombo, heca_grid_ui::MenuNav> {
-    use heca_grid_ui::MenuNav;
-    build_overlay_keymap(
-        config,
-        &[
-            ("menu_up", MenuNav::Prev),
-            ("menu_down", MenuNav::Next),
-            ("menu_activate", MenuNav::Activate),
-            ("menu_dismiss", MenuNav::Dismiss),
-        ],
-    )
-}
-
-/// Build the `Dialog` focus-navigation map (`widget-keys-config`): the configurable
-/// `dialog_focus_next` / `dialog_focus_prev` / `dialog_submit` / `dialog_cancel`
-/// bindings resolved to semantic [`DialogNav`]. Consumed **only** while a `Dialog`
-/// overlay is open. Single source of truth for dialog navigation; see `docs/widgets.md`
-/// (`Dialog`) and README.
-pub fn build_dialog_keymap(
-    config: &heca_config::theme::Config,
-) -> HashMap<KeyCombo, heca_grid_ui::DialogNav> {
-    use heca_grid_ui::DialogNav;
-    build_overlay_keymap(
-        config,
-        &[
-            ("dialog_focus_next", DialogNav::FocusNext),
-            ("dialog_focus_prev", DialogNav::FocusPrev),
-            ("dialog_submit", DialogNav::Submit),
-            ("dialog_cancel", DialogNav::Cancel),
-        ],
-    )
-}
-
-/// Build the `Input` editing-shortcut map (`widget-keys-config`): the configurable
-/// `input_delete_back` / `input_delete_to_line_start` / `input_select_all` bindings
-/// resolved to semantic [`InputEdit`]. Consumed **only** while an overlay hosting a
-/// focused `Input` is open; the plain editing keys (typing, Backspace/Delete, arrows,
-/// Home/End) stay built into the widget. Single source of truth for input shortcuts;
-/// see `docs/widgets.md` (`Input`) and README.
-pub fn build_input_keymap(
-    config: &heca_config::theme::Config,
-) -> HashMap<KeyCombo, heca_grid_ui::InputEdit> {
-    use heca_grid_ui::InputEdit;
-    build_overlay_keymap(
-        config,
-        &[
-            ("input_delete_back", InputEdit::DeleteBackward),
-            ("input_delete_to_line_start", InputEdit::DeleteToLineStart),
-            ("input_select_all", InputEdit::SelectAll),
-        ],
-    )
+    km
 }
 
 pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
@@ -761,73 +751,54 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_dialog_keymap, build_input_keymap, build_keymap, build_menu_keymap, build_modes};
+    use super::{build_keymap, build_modes, build_widget_keymap};
     use crate::input::WmAction;
     use crate::keymap::KeyCombo;
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
 
     #[test]
-    fn menu_keymap_maps_default_nav_bindings() {
-        use heca_grid_ui::MenuNav;
-        let map = build_menu_keymap(&heca_config::theme::Config::default());
-        // Both the arrow and the Ctrl+j/k aliases resolve to the same semantic nav.
-        assert_eq!(map.get(&KeyCombo::parse("ArrowUp")), Some(&MenuNav::Prev));
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+k")), Some(&MenuNav::Prev));
-        assert_eq!(map.get(&KeyCombo::parse("ArrowDown")), Some(&MenuNav::Next));
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+j")), Some(&MenuNav::Next));
-        assert_eq!(map.get(&KeyCombo::parse("Enter")), Some(&MenuNav::Activate));
-        assert_eq!(map.get(&KeyCombo::parse("Escape")), Some(&MenuNav::Dismiss));
+    fn widget_keymap_maps_default_bindings_by_axis() {
+        use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
+        let km = build_widget_keymap(&heca_config::theme::Config::default());
+        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        let meta = Modifiers { meta: true, ..Default::default() };
+        let none = Modifiers::default();
+        // Horizontal item_* (←/→, Ctrl+h/l).
+        assert_eq!(km.resolve(GridKey::ArrowRight, none), &[WidgetIntent::ItemNext]);
+        assert_eq!(km.resolve(GridKey::Char('l'), ctrl), &[WidgetIntent::ItemNext]);
+        assert_eq!(km.resolve(GridKey::ArrowLeft, none), &[WidgetIntent::ItemPrevious]);
+        // Vertical menu_* (↑/↓, Ctrl+k/j).
+        assert_eq!(km.resolve(GridKey::ArrowDown, none), &[WidgetIntent::MenuDown]);
+        assert_eq!(km.resolve(GridKey::Char('j'), ctrl), &[WidgetIntent::MenuDown]);
+        assert_eq!(km.resolve(GridKey::Char('k'), ctrl), &[WidgetIntent::MenuUp]);
+        // Shared + edits.
+        assert_eq!(km.resolve(GridKey::Enter, none), &[WidgetIntent::Activate]);
+        assert_eq!(km.resolve(GridKey::Escape, none), &[WidgetIntent::Dismiss]);
+        assert_eq!(km.resolve(GridKey::Char('u'), ctrl), &[WidgetIntent::EditDeleteToLineStart]);
+        assert_eq!(km.resolve(GridKey::Char('a'), ctrl), &[WidgetIntent::EditSelectAll]);
+        assert_eq!(km.resolve(GridKey::Char('a'), meta), &[WidgetIntent::EditSelectAll]);
+        // The Ctrl+h overload: edit-first (field-first), then the horizontal nav.
+        assert_eq!(
+            km.resolve(GridKey::Char('h'), ctrl),
+            &[WidgetIntent::EditDeleteBack, WidgetIntent::ItemPrevious],
+        );
     }
 
     #[test]
-    fn menu_nav_names_are_not_wm_actions() {
-        // menu_* live only in the dedicated menu keymap — they are NOT WmActions, so
-        // `build_keymap` silently skips them and they never bind into normal/global
-        // (where they'd hijack arrows/Enter/Esc).
-        for name in ["menu_up", "menu_down", "menu_activate", "menu_dismiss"] {
-            assert!(
-                crate::input::action_from_name(name).is_none(),
-                "{name} must not be a WmAction (menu-nav is a separate map)",
-            );
-        }
-    }
-
-    #[test]
-    fn dialog_keymap_maps_default_nav_bindings() {
-        use heca_grid_ui::DialogNav;
-        let map = build_dialog_keymap(&heca_config::theme::Config::default());
-        // Tab, arrows, and the vim Ctrl+j/k aliases all resolve to focus nav.
-        assert_eq!(map.get(&KeyCombo::parse("Tab")), Some(&DialogNav::FocusNext));
-        assert_eq!(map.get(&KeyCombo::parse("ArrowDown")), Some(&DialogNav::FocusNext));
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+j")), Some(&DialogNav::FocusNext));
-        assert_eq!(map.get(&KeyCombo::parse("Shift+Tab")), Some(&DialogNav::FocusPrev));
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+k")), Some(&DialogNav::FocusPrev));
-        assert_eq!(map.get(&KeyCombo::parse("Enter")), Some(&DialogNav::Submit));
-        assert_eq!(map.get(&KeyCombo::parse("Escape")), Some(&DialogNav::Cancel));
-    }
-
-    #[test]
-    fn input_keymap_maps_default_edit_bindings() {
-        use heca_grid_ui::InputEdit;
-        let map = build_input_keymap(&heca_config::theme::Config::default());
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+h")), Some(&InputEdit::DeleteBackward));
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+u")), Some(&InputEdit::DeleteToLineStart));
-        assert_eq!(map.get(&KeyCombo::parse("Ctrl+a")), Some(&InputEdit::SelectAll));
-        assert_eq!(map.get(&KeyCombo::parse("Super+a")), Some(&InputEdit::SelectAll));
-    }
-
-    #[test]
-    fn widget_nav_names_are_not_wm_actions() {
-        // dialog_* / input_* live only in their dedicated maps — never in normal/global.
+    fn widget_key_names_are_not_wm_actions() {
+        // The [keys.widgets] names live only in the widget keymap — NOT WmActions, so
+        // `build_keymap` skips them and they never bind into normal/global.
         for name in [
-            "dialog_focus_next",
-            "dialog_focus_prev",
-            "dialog_submit",
-            "dialog_cancel",
-            "input_delete_back",
-            "input_delete_to_line_start",
-            "input_select_all",
+            "item_previous",
+            "item_next",
+            "menu_up",
+            "menu_down",
+            "activate",
+            "dismiss",
+            "edit_delete_back",
+            "edit_delete_to_line_start",
+            "edit_select_all",
         ] {
             assert!(
                 crate::input::action_from_name(name).is_none(),

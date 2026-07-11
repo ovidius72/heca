@@ -17,7 +17,7 @@
 //! configurable keys. Open/close is a host-owned [`Signal<bool>`](crate::reactive::Signal).
 
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, Handled, MenuNav, Modifiers, PaintCx};
+use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
@@ -504,18 +504,29 @@ impl Component for CommandPalette {
             return Handled::No;
         }
         match ev {
-            // Nav is host-resolved from the configurable `menu_*` keybindings and
-            // arrives as a semantic `MenuNav` — the palette carries NO hardcoded nav
-            // keys. Handled before the query field so a nav key never types.
-            Event::MenuNav(nav) => {
-                match nav {
-                    MenuNav::Dismiss => self.close(),
-                    MenuNav::Activate => self.run_selected(),
-                    MenuNav::Next => self.select_next(),
-                    MenuNav::Prev => self.select_prev(),
+            // Nav is host-resolved from the configurable `[keys.widgets]` bindings and
+            // arrives as a semantic `WidgetIntent` — the palette carries NO hardcoded nav
+            // keys. Handled before the query field so a nav key never types. A vertical
+            // list: `MenuUp`/`MenuDown` (not the horizontal `Item*`).
+            Event::Widget(intent) => match intent {
+                WidgetIntent::Dismiss => {
+                    self.close();
+                    Handled::Yes
                 }
-                Handled::Yes
-            }
+                WidgetIntent::Activate => {
+                    self.run_selected();
+                    Handled::Yes
+                }
+                WidgetIntent::MenuDown => {
+                    self.select_next();
+                    Handled::Yes
+                }
+                WidgetIntent::MenuUp => {
+                    self.select_prev();
+                    Handled::Yes
+                }
+                _ => Handled::No,
+            },
             Event::Key { pressed: true, .. } => {
                 // The query field owns every editing key (typing, selection,
                 // char/word/line delete, caret moves). Reset the selection only when

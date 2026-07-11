@@ -12,14 +12,14 @@
 //! `open`. Each entry carries a label, an optional [`Glyph`] icon, an optional
 //! shortcut hint, a `danger` flag (destructive actions, e.g. Close/Delete), an
 //! `enabled` flag, and an `on_select` callback fired when chosen. Navigation carries
-//! **no hardcoded keys**: the widget responds to the semantic [`Event::MenuNav`]
-//! (`Prev`/`Next`/`Activate`/`Dismiss`) that the host resolves from the configurable
-//! `menu_*` keybindings. Raw [`Event::Key`] is only a quick-pick letter that activates
-//! its entry directly. (App wiring: the `menu-nav` requirement.)
+//! **no hardcoded keys**: as a vertical list the widget responds to the semantic
+//! [`Event::Widget`] intents `MenuUp`/`MenuDown`/`Activate`/`Dismiss`, which the host
+//! resolves from the configurable `[keys.widgets]` bindings. Raw [`Event::Key`] is only a
+//! quick-pick letter that activates its entry directly. (App wiring: `widget-keys-config`.)
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
-use crate::component::{Base, Component, Event, GridKey, Handled, MenuNav, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign};
@@ -465,17 +465,28 @@ impl Component for ContextMenu {
             return Handled::No;
         }
         match ev {
-            // Nav is host-resolved from the configurable `menu_*` keybindings and
-            // arrives as a semantic `MenuNav` — the menu carries NO hardcoded nav keys.
-            Event::MenuNav(nav) => {
-                match nav {
-                    MenuNav::Dismiss => self.fire_dismiss(),
-                    MenuNav::Activate => self.run_selected(),
-                    MenuNav::Next => self.select_next(),
-                    MenuNav::Prev => self.select_prev(),
+            // Nav is host-resolved from the configurable `[keys.widgets]` bindings and
+            // arrives as a semantic `WidgetIntent` — the menu carries NO hardcoded nav keys.
+            // A vertical list: it uses `MenuUp`/`MenuDown` (not the horizontal `Item*`).
+            Event::Widget(intent) => match intent {
+                WidgetIntent::Dismiss => {
+                    self.fire_dismiss();
+                    Handled::Yes
                 }
-                Handled::Yes
-            }
+                WidgetIntent::Activate => {
+                    self.run_selected();
+                    Handled::Yes
+                }
+                WidgetIntent::MenuDown => {
+                    self.select_next();
+                    Handled::Yes
+                }
+                WidgetIntent::MenuUp => {
+                    self.select_prev();
+                    Handled::Yes
+                }
+                _ => Handled::No,
+            },
             // Raw keys are only quick-pick letters: a letter activates its entry
             // directly (case-insensitive).
             Event::Key { key: GridKey::Char(c), pressed: true } => {
@@ -554,9 +565,9 @@ mod tests {
             .open(true)
             .on_dismiss(move || d.set(d.get() + 1));
 
-        // MenuNav::Dismiss (host-resolved from `menu_dismiss`) → dismiss (fires
+        // WidgetIntent::Dismiss (host-resolved from `dismiss`) → dismiss (fires
         // callback, closes), no entry run.
-        m.event(&Event::MenuNav(MenuNav::Dismiss));
+        m.event(&Event::Widget(WidgetIntent::Dismiss));
         assert_eq!(dismissed.get(), 1, "dismiss fired on_dismiss");
         assert_eq!(ran.get(), 0);
         assert!(!m.is_open(), "closed after dismiss");

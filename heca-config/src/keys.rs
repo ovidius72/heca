@@ -121,9 +121,16 @@ pub struct KeysConfig {
     /// Accepts both `prefix` and `prefix_key` for compatibility.
     #[serde(default = "default_prefix_key", alias = "prefix_key")]
     pub prefix: String,
-    /// Flat action bindings (any key not named "prefix", "command", "mode", or "unbind").
+    /// Flat action bindings (any key not named "prefix", "command", "mode", "unbind", or
+    /// "widgets").
     #[serde(flatten)]
     pub bindings: KeybindingMap,
+    /// Widget-internal keybindings (`[keys.widgets]`): the generic, cross-widget navigation +
+    /// editing vocabulary (`item_next`/`item_previous`, `menu_up`/`menu_down`, `activate`,
+    /// `dismiss`, `edit_*`) that the app resolves into a `heca_grid_ui::Keymap`. Applies only
+    /// while an interactive widget/overlay is focused; never hijacks normal-mode input.
+    #[serde(default)]
+    pub widgets: KeybindingMap,
     /// Key combos to remove from the keymap (e.g. to free a default binding).
     /// Each entry is a combo string like "prefix+w" or "Alt+1".
     #[serde(default)]

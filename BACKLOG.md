@@ -1870,7 +1870,24 @@ UI itself; this requirement is the **query/infrastructure** it will read.
   `action_policy`/`resolve_active_context`/`ActionCatalog`; pure + unit-tested; RPC-introspectable.
   (Feeds the command palette — a later phase.)
 
-### [ ] Requirement: In-widget keys should be customizable · `widget-keys-config`
+### [x] Requirement: In-widget keys should be customizable · `widget-keys-config`
+> **DONE (2026-07-12) — unified `WidgetIntent` + host-owned `Keymap` + `[keys.widgets]`.** Branch
+> `feat/widget-keymap-unify` (off `feat/widget-keymap` PR #234). The three per-widget event
+> vocabularies (`MenuNav`/`DialogNav`/`InputEdit`) and the three app maps
+> (`menu_keymap`/`dialog_keymap`/`input_keymap`) were collapsed into **one** `heca_grid_ui::WidgetIntent`
+> (`ItemPrevious`/`ItemNext` = horizontal, `MenuUp`/`MenuDown` = vertical, `Activate`/`Dismiss`,
+> `EditDeleteBack`/`EditDeleteToLineStart`/`EditSelectAll`) delivered as `Event::Widget(..)`, and a
+> **host-owned** `heca_grid_ui::Keymap` (`keymap.rs`): `key chord → Vec<WidgetIntent>` + `Keymap::dispatch`
+> (raw key **field-first**, then resolved intents; the `Ctrl+h` overload disambiguates by focus). NOT a
+> global — each host owns its `Keymap` (`AppState.widget_keymap` in the app, `Keymap::with_defaults()` in
+> the showcase), so detached-pane/multi-window is safe. Config moved to a **`[keys.widgets]`** table
+> (`item_next`/`item_previous`, `menu_up`/`menu_down`, `activate`/`dismiss`, `edit_*`); `heca-config`
+> `KeysConfig.widgets` field; `build_widget_keymap` (`registry.rs`) + `combo_to_grid`. Tab/Shift+Tab
+> stay the universal focus primitive (FocusManager + trapped in a modal Dialog), **not** configurable.
+> Docs: `docs/widgets.md` (Input/Select/Tabs/Dialog/ContextMenu/CommandPalette), README (`[keys.widgets]`),
+> rustdoc. Gates: workspace clippy 0, all tests green (grid-ui 128+69, heca 333+89, heca-config 78).
+> In-app visual pass by the user pending.
+
 Today several `heca-grid-ui` widgets **hardcode their internal keys** in the widget `event()`:
 `Dialog` focus-nav (Tab/Shift+Tab, arrows, Ctrl+h/j/k/l, Enter=submit-primary, Esc=cancel),
 `Input` editing (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+A select-all, arrow caret motion),

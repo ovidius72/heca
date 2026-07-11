@@ -205,7 +205,7 @@ pub enum Handled {
 
 /// A renderer-agnostic keyboard key. No `winit` types leak into this crate; the
 /// host maps its platform keys onto this enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GridKey {
     Char(char),
     Enter,
@@ -224,7 +224,7 @@ pub enum GridKey {
 
 /// Keyboard modifier state, renderer-agnostic. The host maps its platform
 /// modifiers onto this and broadcasts changes via [`Event::ModifiersChanged`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub struct Modifiers {
     pub ctrl: bool,
     pub alt: bool,
@@ -258,68 +258,44 @@ pub enum Event {
     Scroll {
         delta: f32,
     },
-    /// Semantic list/menu navigation for overlay widgets (`ContextMenu`,
-    /// `CommandPalette`). The host resolves the **configurable** `menu_up` /
-    /// `menu_down` / `menu_activate` / `menu_dismiss` keybindings into these, so the
-    /// widgets carry no hardcoded nav keys (only quick-pick letters / text input stay
-    /// as raw [`Event::Key`]). See `docs/widgets.md` and the app's `menu-nav`.
-    MenuNav(MenuNav),
-    /// Semantic focus navigation for the [`Dialog`](crate::widgets::Dialog) overlay
-    /// panel. The host resolves the **configurable** `dialog_focus_next` /
-    /// `dialog_focus_prev` / `dialog_submit` / `dialog_cancel` keybindings into these
-    /// (defaults include Tab/Shift+Tab, the arrows, and vim `Ctrl+j`/`Ctrl+k`), so the
-    /// dialog carries no hardcoded nav keys. A focused text field still consumes its
-    /// own raw keys first (field-first), so typing/editing is never stolen. See
-    /// `docs/widgets.md` and the app's `widget-keys-config`.
-    DialogNav(DialogNav),
-    /// Semantic editing shortcut for the [`Input`](crate::widgets::Input) field — the
-    /// **configurable** counterpart to the emacs/readline shortcut keys. The host
-    /// resolves `input_delete_back` / `input_delete_to_line_start` / `input_select_all`
-    /// into these; the plain keys (printable, Space, Backspace, Delete, arrows,
-    /// Home/End) stay built-in as raw [`Event::Key`]. See the app's `widget-keys-config`.
-    InputEdit(InputEdit),
+    /// A **semantic widget intent** — the host-owned, configurable counterpart to raw
+    /// keys, shared by every interactive widget. The host resolves the `[keys.widgets]`
+    /// bindings (via a [`Keymap`](crate::keymap::Keymap)) into these, so widgets carry no
+    /// hardcoded nav/edit keys. A focused text field still consumes its own raw keys first
+    /// (field-first), so typing is never stolen. See [`WidgetIntent`] and
+    /// `docs/widgets.md`.
+    Widget(WidgetIntent),
 }
 
-/// Semantic navigation for list/menu overlays — the host-owned, configurable
-/// counterpart to raw arrow/`Ctrl+j`/`k` keys (see [`Event::MenuNav`]).
+/// A **semantic widget intent** — one shared vocabulary every interactive widget speaks
+/// instead of hardcoding keys (the host maps `[keys.widgets]` → these via a
+/// [`Keymap`](crate::keymap::Keymap)). Split by **axis**: horizontal (`Item*`), vertical
+/// (`Menu*`), the shared `Activate`/`Dismiss`, and text-field edits (`Edit*`).
+///
+/// A single key may resolve to **several** intents (e.g. `Ctrl+h` → `EditDeleteBack`
+/// *then* `ItemPrevious`); the host delivers them in order to the focused widget, which
+/// consumes the one it understands (an `Input` deletes, a `Tabs`/`Dialog` moves) — so the
+/// overload disambiguates by focus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MenuNav {
-    /// Move the selection to the previous entry.
-    Prev,
-    /// Move the selection to the next entry.
-    Next,
-    /// Activate (run) the currently selected entry.
+pub enum WidgetIntent {
+    /// Horizontal previous (left) — `Tabs`, a `Dialog`'s button row. `item_previous`.
+    ItemPrevious,
+    /// Horizontal next (right) — `Tabs`, a `Dialog`'s button row. `item_next`.
+    ItemNext,
+    /// Vertical up — menus, `Select` lists, the command palette. `menu_up`.
+    MenuUp,
+    /// Vertical down — menus, `Select` lists, the command palette. `menu_down`.
+    MenuDown,
+    /// Activate / commit / submit the current entry or primary action. `activate`.
     Activate,
-    /// Dismiss the overlay without choosing an entry.
+    /// Dismiss / cancel / close the overlay. `dismiss`.
     Dismiss,
-}
-
-/// Semantic focus navigation for a [`Dialog`](crate::widgets::Dialog) — the
-/// host-owned, configurable counterpart to raw Tab/arrow/`Ctrl+j`/`k` keys (see
-/// [`Event::DialogNav`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DialogNav {
-    /// Move keyboard focus to the next focusable (field/button) in the panel.
-    FocusNext,
-    /// Move keyboard focus to the previous focusable in the panel.
-    FocusPrev,
-    /// Submit — activate the primary action (as if the OK button were clicked).
-    Submit,
-    /// Cancel — dismiss the dialog (only when `dismissible`).
-    Cancel,
-}
-
-/// Semantic editing shortcut for an [`Input`](crate::widgets::Input) — the
-/// host-owned, configurable counterpart to the emacs/readline shortcut keys (see
-/// [`Event::InputEdit`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InputEdit {
-    /// Delete one character before the caret (readline `Ctrl+h`).
-    DeleteBackward,
-    /// Delete from the caret to the start of the line (readline `Ctrl+u`).
-    DeleteToLineStart,
-    /// Select the whole field (`Ctrl+a` / `Cmd+a`).
-    SelectAll,
+    /// [`Input`](crate::widgets::Input): delete one char before the caret. `edit_delete_back`.
+    EditDeleteBack,
+    /// [`Input`](crate::widgets::Input): delete from the caret to line start. `edit_delete_to_line_start`.
+    EditDeleteToLineStart,
+    /// [`Input`](crate::widgets::Input): select the whole field. `edit_select_all`.
+    EditSelectAll,
 }
 
 /// Behavior shared by all components. Implementors provide access to their

@@ -1698,6 +1698,9 @@ struct GpuState {
     applied_scroll: f32,
     focus: FocusManager,
     shift: bool,
+    /// The widget keymap (`widget-keys-config`) — this demo host uses the built-in defaults;
+    /// the heca app builds its own from `[keys.widgets]`.
+    keymap: Keymap,
 }
 
 impl GpuState {
@@ -1836,6 +1839,7 @@ impl GpuState {
             applied_scroll: 0.0,
             focus: FocusManager::new(),
             shift: false,
+            keymap: Keymap::with_defaults(),
         }
     }
 
@@ -1920,68 +1924,37 @@ impl GpuState {
         self.window.request_redraw();
     }
 
-    /// Route a key to the active overlay (Select / ContextMenu / CommandPalette / Modal).
-    /// This is the demo host's stand-in for the app's config-driven `menu-nav`: the nav combos
-    /// — arrows plus **vim `Ctrl+j`/`Ctrl+k`**, Enter, Esc — become a semantic
-    /// [`MenuNav`], so those widgets carry no hardcoded nav keys. Anything else (palette typing,
-    /// quick-pick letters, a Modal's own raw keys) is offered raw. Returns whether the overlay
-    /// consumed the key (so a non-grabbing overlay like the toast stack still lets global keys
-    /// through). `offer_to_overlay` no-ops when no overlay is active.
-    fn route_overlay_key(&mut self, gk: GridKey) -> bool {
-        let nav = match gk {
-            GridKey::ArrowUp => Some(MenuNav::Prev),
-            GridKey::ArrowDown => Some(MenuNav::Next),
-            GridKey::Char('k') if self.ctrl => Some(MenuNav::Prev),
-            GridKey::Char('j') if self.ctrl => Some(MenuNav::Next),
-            GridKey::Enter => Some(MenuNav::Activate),
-            GridKey::Escape => Some(MenuNav::Dismiss),
-            _ => None,
-        };
-        if let Some(n) = nav
-            && self
-                .focus
-                .offer_to_overlay(&mut self.ui, &Event::MenuNav(n))
-                == Handled::Yes
-        {
-            return true;
+    /// The renderer-agnostic modifier state for the widget keymap.
+    fn grid_mods(&self) -> Modifiers {
+        Modifiers {
+            ctrl: self.ctrl,
+            alt: false,
+            shift: self.shift,
+            meta: self.meta,
         }
-        self.focus
-            .offer_to_overlay(&mut self.ui, &Event::Key { key: gk, pressed: true })
+    }
+
+    /// Route a key to the active **overlay** (Select / ContextMenu / CommandPalette / Modal) via
+    /// the widget [`Keymap`]. `dispatch` offers the raw key first (palette typing, quick-pick
+    /// letters, a Modal's own keys), then the semantic `WidgetIntent`(s) the chord resolves to.
+    /// `offer_to_overlay` no-ops when no overlay is active, so this returns `false` and the key
+    /// falls through to the host's global bindings.
+    fn route_overlay_key(&mut self, gk: GridKey) -> bool {
+        let mods = self.grid_mods();
+        let keymap = self.keymap.clone();
+        keymap.dispatch(gk, mods, |ev| self.focus.offer_to_overlay(&mut self.ui, ev))
             == Handled::Yes
     }
 
-    /// Route a key to the FOCUSED (non-overlay) widget — the demo host's stand-in for the
-    /// app's config-driven resolution of `input_*` / list-nav keys. Editing shortcuts become an
-    /// [`InputEdit`] (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+a select-all) and list nav becomes a
-    /// [`MenuNav`] (←/Ctrl+h → prev, →/Ctrl+l → next; drives [`Tabs`]). Both are delivered to the
-    /// focused widget, which consumes whichever it understands — an `Input` takes the `InputEdit`,
-    /// a `Tabs` takes the `MenuNav` (so the shared `Ctrl+h` disambiguates by which widget has
-    /// focus). Anything unconsumed falls back to the raw key (typing / caret / Backspace).
-    fn route_focused_key(&mut self, gk: GridKey) -> bool {
-        let edit = match gk {
-            GridKey::Char('h') if self.ctrl => Some(InputEdit::DeleteBackward),
-            GridKey::Char('u') if self.ctrl => Some(InputEdit::DeleteToLineStart),
-            GridKey::Char('a') if self.ctrl || self.meta => Some(InputEdit::SelectAll),
-            _ => None,
-        };
-        if let Some(e) = edit
-            && self.focus.deliver_event(&mut self.ui, &Event::InputEdit(e)) == Handled::Yes
-        {
-            return true;
-        }
-        let nav = match gk {
-            GridKey::ArrowLeft => Some(MenuNav::Prev),
-            GridKey::ArrowRight => Some(MenuNav::Next),
-            GridKey::Char('h') if self.ctrl => Some(MenuNav::Prev),
-            GridKey::Char('l') if self.ctrl => Some(MenuNav::Next),
-            _ => None,
-        };
-        if let Some(n) = nav
-            && self.focus.deliver_event(&mut self.ui, &Event::MenuNav(n)) == Handled::Yes
-        {
-            return true;
-        }
-        self.focus.deliver_key(&mut self.ui, gk) == Handled::Yes
+    /// Route a key to the **focused** (non-overlay) widget via the widget [`Keymap`] — the demo
+    /// host's stand-in for the app's config-driven resolution. `dispatch` delivers the raw key
+    /// first (an `Input`'s typing / caret / Backspace), then the semantic `WidgetIntent`(s); the
+    /// focused widget consumes whichever it understands — an `Input` takes the `Edit*` shortcut, a
+    /// `Tabs` takes the horizontal `Item*` nav (so a shared `Ctrl+h` disambiguates by focus).
+    fn route_focused_key(&mut self, gk: GridKey) {
+        let mods = self.grid_mods();
+        let keymap = self.keymap.clone();
+        keymap.dispatch(gk, mods, |ev| self.focus.deliver_event(&mut self.ui, ev));
     }
 
     /// A key pressed while in zoom mode. The mode stays active (so you can keep
@@ -2357,10 +2330,10 @@ impl ApplicationHandler for App {
                         GridKey::Char('b') if state.ctrl => state.prefix_pending = true,
                         // An open overlay gets first dibs on keys, but only swallows
                         // the ones it actually consumes: a Modal/palette/Select eats the
-                        // keys it uses (nav via `MenuNav`, Esc/Enter/typing), while the
+                        // keys it uses (nav via `WidgetIntent`, Esc/Enter/typing), while the
                         // ToastStack eats none — so global keys (`t`, `[`, …) still work
-                        // while toasts show. Nav combos (arrows + vim Ctrl+j/k) resolve to
-                        // `MenuNav` here (the demo host's stand-in for config-driven menu-nav).
+                        // while toasts show. `route_overlay_key` resolves the key via the widget
+                        // `Keymap` (the demo host's stand-in for config-driven `[keys.widgets]`).
                         gk if state.route_overlay_key(gk) => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
@@ -2419,8 +2392,8 @@ impl ApplicationHandler for App {
                             state.window.request_redraw();
                         }
                         // Space/Enter/typing and nav go to the focused widget — via
-                        // `route_focused_key`, which resolves editing shortcuts → `InputEdit`
-                        // and ←→/Ctrl+h/l → `MenuNav` (Tabs) before the raw fallback.
+                        // `route_focused_key`, which dispatches via the widget `Keymap`: raw key
+                        // first, then the resolved `WidgetIntent`s (Input edits, Tabs item-nav).
                         other => {
                             state.route_focused_key(other);
                         }
