@@ -1884,11 +1884,15 @@ Design directions to weigh (pick in the review):
   `DeleteBackward`, `SelectAll`, …) resolved by a configurable `[keys.widget]` / per-widget keymap
   the host injects, instead of matching literal `GridKey`s. Mirrors the app's `KeymapRegistry`.
 - **Converge with `menu-nav`** (`ContextMenu`/`CommandPalette` list-nav) and the app keymap so
-  there is a single configurable nav vocabulary across app + widgets.
+  there is a single configurable nav vocabulary across app + widgets. **`menu-nav` shipped 2026-07-11
+  as the precedent**: the widgets carry a semantic host-driven event (`Event::MenuNav`) instead of
+  literal keys, and the app owns the config→event resolution (`build_menu_keymap` →
+  `AppState.menu_keymap`, consumed in the overlay key branch). Apply the SAME pattern to the remaining
+  widgets — a widget emits/consumes semantic nav intents; the host resolves the configurable keys.
 - Keep sensible built-in defaults (in `keybindings.default.toml`, the single source) so nothing
   breaks when unconfigured.
-Cross-refs: [`menu-nav`](#requirement-shared-listmenu-navigation-keybindings--menu-nav),
-`available-actions`. Scope + phasing decided in the review.
+Cross-refs: [`menu-nav`](#requirement-shared-listmenu-navigation-keybindings--menu-nav) (DONE — the
+model to follow), `available-actions`. Scope + phasing decided in the review.
 - [ ] **widget-keys-config-1** — audit every `heca-grid-ui` widget that matches literal keys in
   `event()`; propose the configurable model (intents + injected keymap); wire `Dialog` + `Input`
   first as the reference, then the list-nav widgets (folds in `menu-nav`).
