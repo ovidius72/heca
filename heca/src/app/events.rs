@@ -18,7 +18,7 @@ use crate::input::{FontZoomStep, WmAction};
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use heca_core::layout::Point;
-use heca_grid_ui::{Event, GridKey, Handled};
+use heca_grid_ui::{Event, Handled};
 use std::collections::HashMap;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -129,8 +129,12 @@ pub(crate) fn handle_window_event(
                 // win), then the semantic `WidgetIntent`(s) the chord resolves to — a `Dialog`
                 // takes `Item*`/`Activate`/`Dismiss`, a menu/`Select` takes `Menu*`, a focused
                 // field takes `Edit*` (forwarded field-first by the overlay). One dispatch, one map.
-                if let Some(key) = winit_key_to_grid_key(&event.logical_key) {
-                    let mods = grid_modifiers(state.modifiers);
+                // Use the already-normalized `event_combo` (which carries the macOS
+                // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
+                // `Ctrl+h/j/k/l` resolve to the right chord.
+                if let Some((key, mods)) =
+                    crate::app::registry::combo_to_grid(&event_combo)
+                {
                     let keymap = state.widget_keymap.clone();
                     keymap.dispatch(key, mods, |ev| {
                         state
@@ -364,30 +368,6 @@ fn handle_wheel_font_zoom(
     };
     dispatch_action(state, registry, InteractionSource::MouseContent, &action);
     true
-}
-
-/// Map a winit key to the grid-ui [`GridKey`] an overlay widget understands (context menu,
-/// modal `Dialog`, …). Returns `None` for keys with no grid equivalent (still swallowed while
-/// the overlay is open). The overlay widget self-handles them (focus/activation/dismiss);
-/// modifiers reach it via the broadcast `Event::ModifiersChanged`.
-fn winit_key_to_grid_key(key: &winit::keyboard::Key) -> Option<GridKey> {
-    use winit::keyboard::{Key, NamedKey};
-    match key {
-        Key::Named(NamedKey::Escape) => Some(GridKey::Escape),
-        Key::Named(NamedKey::Enter) => Some(GridKey::Enter),
-        Key::Named(NamedKey::Space) => Some(GridKey::Space),
-        Key::Named(NamedKey::Tab) => Some(GridKey::Tab),
-        Key::Named(NamedKey::Backspace) => Some(GridKey::Backspace),
-        Key::Named(NamedKey::Delete) => Some(GridKey::Delete),
-        Key::Named(NamedKey::ArrowUp) => Some(GridKey::ArrowUp),
-        Key::Named(NamedKey::ArrowDown) => Some(GridKey::ArrowDown),
-        Key::Named(NamedKey::ArrowLeft) => Some(GridKey::ArrowLeft),
-        Key::Named(NamedKey::ArrowRight) => Some(GridKey::ArrowRight),
-        Key::Named(NamedKey::Home) => Some(GridKey::Home),
-        Key::Named(NamedKey::End) => Some(GridKey::End),
-        Key::Character(s) => s.chars().next().map(GridKey::Char),
-        _ => None,
-    }
 }
 
 /// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state

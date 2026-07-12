@@ -90,7 +90,9 @@ fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
 /// config strings (`"Ctrl+h"`, `"ArrowDown"`, `"Super+a"`) parse to a `KeyCombo` whose
 /// lowercase key name maps onto a `GridKey`; the modifiers map straight across
 /// (`super_` → `meta`).
-fn combo_to_grid(combo: &KeyCombo) -> Option<(heca_grid_ui::GridKey, heca_grid_ui::Modifiers)> {
+pub(crate) fn combo_to_grid(
+    combo: &KeyCombo,
+) -> Option<(heca_grid_ui::GridKey, heca_grid_ui::Modifiers)> {
     use heca_grid_ui::GridKey;
     let key = match combo.key.as_str() {
         "enter" | "return" => GridKey::Enter,
