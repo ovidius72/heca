@@ -85,13 +85,25 @@ impl Keymap {
         mods: Modifiers,
         mut deliver: impl FnMut(&Event) -> Handled,
     ) -> Handled {
-        if deliver(&Event::Key { key, pressed: true }) == Handled::Yes {
+        // A `Ctrl`/`Alt`/`Cmd`-modified key is a *command*, never typing or a quick-pick letter
+        // (an `Event::Key` carries no modifiers, so a widget can't tell `Ctrl+j` from `j` — a menu
+        // would eat `Ctrl+j` as the quick-pick `j`). So:
+        //   • unmodified  → **field-first**: raw key first (typing / caret / quick-pick win), then
+        //     the resolved intents;
+        //   • modified    → intents first (the command), then the raw key as a fallback (e.g.
+        //     `Ctrl+Arrow` word/line motion in an `Input`, which has no bound intent).
+        // (`Shift` is not a command modifier — Shift+Tab and capital quick-pick letters stay raw.)
+        let command = mods.ctrl || mods.alt || mods.meta;
+        if !command && deliver(&Event::Key { key, pressed: true }) == Handled::Yes {
             return Handled::Yes;
         }
         for intent in self.resolve(key, mods) {
             if deliver(&Event::Widget(*intent)) == Handled::Yes {
                 return Handled::Yes;
             }
+        }
+        if command {
+            return deliver(&Event::Key { key, pressed: true });
         }
         Handled::No
     }
@@ -172,12 +184,13 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_is_field_first_then_intents() {
+    fn dispatch_modified_key_offers_intents_before_raw() {
         use std::cell::RefCell;
         let km = Keymap::with_defaults();
         let ctrl = Modifiers { ctrl: true, ..Default::default() };
-        // A widget that only consumes ItemPrevious (like Tabs): the raw key is offered first
-        // (ignored), then the edit intent (ignored), then the nav intent (consumed).
+        // Ctrl+h is a COMMAND: intents are offered first (so a menu never eats it as the
+        // quick-pick letter `h`). A widget consuming ItemPrevious (like Tabs) sees the edit intent
+        // (ignored) then the nav intent (consumed); the raw key is never reached.
         let seen = RefCell::new(Vec::new());
         let handled = km.dispatch(GridKey::Char('h'), ctrl, |ev| {
             seen.borrow_mut().push(*ev);
@@ -191,11 +204,29 @@ mod tests {
         assert_eq!(
             *seen.borrow(),
             vec![
-                Event::Key { key: GridKey::Char('h'), pressed: true },
                 Event::Widget(WidgetIntent::EditDeleteBack),
                 Event::Widget(WidgetIntent::ItemPrevious),
             ],
-            "raw key first (field-first), then edit intent, then nav consumed",
+            "modified key: intents offered first, nav consumed, raw never reached",
+        );
+    }
+
+    #[test]
+    fn dispatch_modified_key_falls_back_to_raw() {
+        use std::cell::RefCell;
+        let km = Keymap::with_defaults();
+        let ctrl = Modifiers { ctrl: true, ..Default::default() };
+        // Ctrl+ArrowLeft has no bound intent, so after the (empty) intent pass it falls back to
+        // the raw key — this is how an Input keeps Ctrl+Arrow word/line caret motion.
+        let seen = RefCell::new(Vec::new());
+        km.dispatch(GridKey::ArrowLeft, ctrl, |ev| {
+            seen.borrow_mut().push(*ev);
+            Handled::No
+        });
+        assert_eq!(
+            *seen.borrow(),
+            vec![Event::Key { key: GridKey::ArrowLeft, pressed: true }],
+            "no intent bound → raw key delivered as the fallback",
         );
     }
 

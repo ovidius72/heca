@@ -497,10 +497,17 @@ impl Component for ContextMenu {
                 {
                     self.selected = i;
                     self.run_selected();
+                    Handled::Yes
+                } else {
+                    // Not a quick-pick letter — report unhandled so the host can resolve it as a
+                    // `WidgetIntent` (nav/activate). Modal capture is the HOST's job (the overlay
+                    // branch swallows), not a `Handled::Yes` hardcoded here.
+                    Handled::No
                 }
-                Handled::Yes
             }
-            Event::Key { pressed: true, .. } => Handled::Yes,
+            // Other raw keys (arrows, Enter, Tab) are NOT swallowed: report unhandled so the host
+            // offers the resolved `WidgetIntent`. The host owns modal capture.
+            Event::Key { pressed: true, .. } => Handled::No,
             Event::PointerMoved { pos } => {
                 let panel = self.layout();
                 for i in 0..self.entries.len() {

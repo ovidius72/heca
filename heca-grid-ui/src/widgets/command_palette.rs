@@ -528,15 +528,17 @@ impl Component for CommandPalette {
                 _ => Handled::No,
             },
             Event::Key { pressed: true, .. } => {
-                // The query field owns every editing key (typing, selection,
-                // char/word/line delete, caret moves). Reset the selection only when
-                // the text actually changed (not on bare caret moves).
+                // The query field owns editing keys (typing, selection, char/word/line delete,
+                // caret moves). Return **what the field did**: a single-line `Input` ignores
+                // ArrowUp/Down/Enter (returns `No`), so those fall through to the host, which
+                // resolves them to a `WidgetIntent` (MenuUp/MenuDown/Activate). Modal capture is
+                // the host's job — do NOT hardcode `Handled::Yes` here.
                 let before = self.query_text();
-                self.query.borrow_mut().event(ev);
+                let handled = self.query.borrow_mut().event(ev);
                 if self.query_text() != before {
                     self.on_query_changed();
                 }
-                Handled::Yes
+                handled
             }
             Event::PointerMoved { pos } => {
                 // Hover-select a row.

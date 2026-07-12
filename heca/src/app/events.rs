@@ -132,9 +132,7 @@ pub(crate) fn handle_window_event(
                 // Use the already-normalized `event_combo` (which carries the macOS
                 // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
                 // `Ctrl+h/j/k/l` resolve to the right chord.
-                if let Some((key, mods)) =
-                    crate::app::registry::combo_to_grid(&event_combo)
-                {
+                if let Some((key, mods)) = crate::app::registry::combo_to_grid(&event_combo) {
                     let keymap = state.widget_keymap.clone();
                     keymap.dispatch(key, mods, |ev| {
                         state
