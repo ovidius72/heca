@@ -86,15 +86,17 @@ fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
 }
 
 /// Convert a parsed [`KeyCombo`] into a renderer-agnostic `heca_grid_ui` chord
-/// (`GridKey` + `Modifiers`), or `None` for a key name grid-ui does not model. The app's
-/// config strings (`"Ctrl+h"`, `"ArrowDown"`, `"Super+a"`) parse to a `KeyCombo` whose
-/// lowercase key name maps onto a `GridKey`; the modifiers map straight across
-/// (`super_` → `meta`).
+/// (`GridKey` + `Modifiers`), or `None` for a key name grid-ui does not model. Handles both
+/// key-name sources: config strings parsed by `KeyCombo::parse` (lowercase, e.g. `"arrowdown"`)
+/// **and** live events from `build_event_combo`/`normalize_key_text`, which name a `NamedKey`
+/// via `{:?}` (capitalised, e.g. `"ArrowDown"`, `"Tab"`, `"Enter"`). The name is matched
+/// **case-insensitively** so both resolve; modifiers map straight across (`super_` → `meta`).
 pub(crate) fn combo_to_grid(
     combo: &KeyCombo,
 ) -> Option<(heca_grid_ui::GridKey, heca_grid_ui::Modifiers)> {
     use heca_grid_ui::GridKey;
-    let key = match combo.key.as_str() {
+    let lowered = combo.key.to_lowercase();
+    let key = match lowered.as_str() {
         "enter" | "return" => GridKey::Enter,
         "space" => GridKey::Space,
         "tab" => GridKey::Tab,
