@@ -616,12 +616,29 @@ A single text run bound to a `Signal<String>`.
 - **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
   `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy),
   `.bold(bool)`.
-- **Accessor**: `.text_signal() -> Signal<String>` (set it to update reactively).
+- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively),
+  `.bold_signal() -> Signal<bool>` (re-weight **in place**, no rebuild — an enclosing widget drives
+  it for a state-dependent weight; this is how [`Item`](#item) bolds its label while active, since
+  the inherited paint context carries a color but not a weight).
+
+**Color is inherited when unset.** With no explicit `.color(..)` the label paints in the
+[content color](#scene--drawcommand--paintcx-for-building-widgets) published by an enclosing control
+(`Button`, `Item`), falling back to `theme.foreground` when there is none. That is what makes a label
+composed inside a button track that button's hover/disabled state with no wiring between the two.
+Calling `.color(..)` opts out of the inheritance.
+
+**Native:**
 
 ```rust
 let status = Label::new("ONLINE").color(theme.foreground).font_size(14.0);
 let sig = status.text_signal();
 // later: sig.set("OFFLINE".into());
+```
+
+**Declarative** (`WidgetKind::Label`, prop `text`):
+
+```rust
+ViewNode::new(WidgetKind::Label).text("ONLINE")
 ```
 
 ### Button
@@ -634,6 +651,63 @@ border, hover sweep, press flash, focus ring, all from the `Theme`) and lets the
 its children, which paint themselves. So a button can hold a label, an icon + a label, or an
 arbitrary tree of any depth. The convenience forms are **sugar that builds those same children**;
 there is no separate "simple mode".
+
+#### The two ways to build a Button — same widget, same retained tree
+
+Native code (chrome/sidebar) uses the **builder API** because it needs closures and signals;
+plugins / RPC / modal bodies use the **declarative `ViewNode`** because it must serialize. `realize`
+turns the second into the first. Both spellings, in both forms:
+
+| | Native (builder API) | Declarative (`ViewNode`) |
+|---|---|---|
+| **Simple** — a label | `Button::destructive("Delete")` | `ViewNode::new(WidgetKind::Button).text("Delete").prop("variant", …Destructive)` |
+| **Simple + icon** | `Button::destructive("Delete").icon(Glyph::Trash)` | …the same, plus `.prop("icon", PropValue::Glyph("trash".into()))` |
+| **Composed** — any tree | `Button::empty().child(…)` | `ViewNode::new(WidgetKind::Button).child(…)` |
+
+```rust
+// ── 1. SIMPLE (native) ───────────────────────────────────────────────────────────────
+// The label is sugar: it becomes a bold `Label` child. Every existing call site is this.
+Button::destructive("Delete").on_click(|| confirm_delete());
+
+// With a leading icon — sugar again: children become [Icon, Label].
+Button::destructive("Delete").icon(Glyph::Trash).on_click(|| confirm_delete());
+
+// ── 2. SIMPLE (declarative) ──────────────────────────────────────────────────────────
+// A CHILDLESS node: the scalar props describe the content, and realize() builds the very
+// same [Icon, Label] children the native sugar does.
+ViewNode::new(WidgetKind::Button)
+    .text("Delete")
+    .prop("icon", PropValue::Glyph("trash".into()))
+    .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+    .on_press(Intent::new("confirm_ok"));
+
+// ── 3. COMPOSED (native) ─────────────────────────────────────────────────────────────
+// Content is just children — any tree, any depth. The Icon and both Labels carry no color
+// of their own, so they inherit the button's state color and animate with its hover.
+Button::empty()
+    .variant(ButtonVariant::Destructive)
+    .child(Flex::column().gap(4.0)
+        .child(Flex::row().gap(6.0)
+            .child(Icon::new(Glyph::Trash))
+            .child(Label::new("Delete")))
+        .child(Label::new("Ctrl+D").font_scale(0.75)))
+    .on_click(|| confirm_delete());
+
+// ── 4. COMPOSED (declarative) ────────────────────────────────────────────────────────
+// The identical tree, as data. Children WIN: with children present, `text`/`icon` are ignored.
+ViewNode::new(WidgetKind::Button)
+    .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+    .on_press(Intent::new("confirm_ok"))
+    .child(ViewNode::new(WidgetKind::Column).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetKind::Row)
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("Delete")))
+        .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
+```
+
+**Precedence: children win.** A node *with* children is realized as an empty button holding them; a
+**childless** node falls back to the scalar sugar (`text` + optional `icon`). One content model, two
+spellings — never two paint paths.
 
 - **Construct**: `Button::new(label)` (= primary, one bold `Label` child) ·
   `Button::{primary,secondary,destructive,outline,ghost,link}(label)` · **`Button::empty()`** (no
@@ -950,6 +1024,16 @@ let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 > fires `on_activate`, so a single source of truth can own which row is active (set the
 > clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
+**Declarative** (`WidgetKind::Item`): prop `text` (the label), event `press`.
+
+```rust
+ViewNode::new(WidgetKind::Item).text("main.rs").on_press(Intent::new("open_file"))
+```
+
+Its **slots are not modelled in `ViewNode` yet** — a declarative `Item` gets a label and an intent,
+but no leading/trailing content. That needs *named* children in the model (structured props), which
+is `viewnode-task-1`. Native code composes the slots freely today.
+
 ### Row
 
 `Item`'s open cousin: the same interactive chrome (hover tint, active/selected pill +
@@ -1127,11 +1211,23 @@ Gauge::new().value(0.85);
 
 A single **duotone** glyph from the embedded Phosphor Duotone font. Renders two stacked layers
 — a dimmed *secondary* wash + a full-strength *primary* — in the same hue. Colors are
-theme-driven (primary defaults to the foreground; secondary = primary at
-`theme.icon_secondary_alpha`), never baked in. Square, font-sized.
+theme-driven, never baked in. Square, font-sized.
+
+**Color is inherited when unset** (like [`Label`](#label)): with no explicit `.color(..)` the primary
+layer takes the [content color](#scene--drawcommand--paintcx-for-building-widgets) published by an
+enclosing control, falling back to `theme.foreground`; the secondary layer follows the primary at
+`theme.icon_secondary_alpha`. So an icon composed inside a `Button` tints and fades with it.
 
 - **Construct**: `Icon::new(Glyph)`.
-- **Builders**: `.size(px)`, `.color(Color)` (primary), `.secondary_color(Color)`.
+- **Builders**: `.size(px)` (glyph pixels — **not** the `WidgetSize` variant; use
+  `Style::set_size` for that, since `size` is taken), `.color(Color)` (primary — opts out of
+  inheritance), `.secondary_color(Color)`.
+- **Declarative**: `WidgetKind::Icon`, prop `icon` (a Glyph **name**, e.g. `"trash"`, `"git_branch"`
+  — resolved by `glyph_from_name` in `realize.rs`; an unknown name renders no icon, never panics).
+
+```rust
+ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into()))
+```
 - **`Glyph`**: the curated icon set. **`Glyph::ALL` is the authoritative, enumerable list** —
   the showcase (`cargo run -p heca-renderer --example showcase`) renders every glyph by iterating
   it, and `Glyph::secondary()` gives each one's Phosphor Duotone codepoint. To **add** a glyph:
@@ -1701,13 +1797,21 @@ a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Co
 
 Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input.
 
+> **A `Button`'s children are its content, and they win.** A Button node *with* children is realized
+> as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
+> its scalar sugar — `text` → a bold `Label`, `icon` → a leading `Icon` — which builds the very same
+> children. See [Button → the two ways to build one](#the-two-ways-to-build-a-button--same-widget-same-retained-tree).
+> Widgets whose *content* is still scalar-only (`Item`'s slots, for instance) need **named** children
+> in the model; that's `viewnode-task-1`.
+
 | Kind | Props it reads | Events |
 |------|----------------|--------|
 | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
 | `Card` | `text` (title) + children | — |
 | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
 | `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
-| `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
+| **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
+| `BadgeButton` | `text`, `variant`, `size` | `press` |
 | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
 | `Input` | `text` (value), `name` | `change` |
 | `Toggle` | `on` (Bool), `name` | `change` |
