@@ -389,14 +389,26 @@ pub(crate) fn action_allowed_when_floating(action: &WmAction) -> bool {
 
 /// Decide whether an interaction is allowed under the current state.
 ///
-/// Delegates to `route_interaction_for_session()` with `state.session`.
-/// Applies floating-domain policy: when `FocusDomain::Floating` is active,
-/// only `FocusedPaneLocal` actions are allowed from keyboard/mouse sources.
+/// Two policy layers, outermost first:
+/// 1. **Overlay-capture policy** — while a modal overlay (a confirm `Dialog`, a context menu /
+///    dropdown) owns input, every interaction is **Blocked** here. This is what stops a stray
+///    keybinding / mouse / RPC (e.g. `prefix+e`, `prefix+>`, focus/split) from driving the app
+///    behind an open dialog. Overlay *control* (`SubmitOverlay` / `CloseOverlay`) never reaches
+///    here — it is intercepted in [`dispatch_intent`] before routing — and the overlay's own
+///    Esc / Space / Enter / nav reach the widget through the widget-keymap path, not the WM action
+///    system. This is state-level (which overlay is open), so it lives here rather than in the
+///    session-only [`route_interaction_for_session`].
+/// 2. **Focus-domain policy** — delegated to [`route_interaction_for_session`] with
+///    `state.session`: when `FocusDomain::Floating` is active, only `FocusedPaneLocal` actions
+///    are allowed from keyboard/mouse sources.
 pub(crate) fn route_interaction(
     state: &AppState,
     source: InteractionSource,
     intent: InteractionIntent,
 ) -> RouteDecision {
+    if crate::chrome::top_modal(state).is_some() {
+        return RouteDecision::Block;
+    }
     route_interaction_for_session(&state.session, source, intent)
 }
 

@@ -1304,7 +1304,7 @@ fn builtin_confirm_specs() -> HashMap<&'static str, ConfirmSpec> {
         default_enabled: true,
     };
     HashMap::from([
-        ("delete_pane", mk("delete_pane", "Close")),
+        ("delete_pane", mk("delete_pane", "Delete")),
         ("delete_column", mk("delete_column", "Delete")),
         ("delete_workspace", mk("delete_workspace", "Delete")),
     ])
