@@ -195,6 +195,7 @@ impl Toast {
     /// Make the whole card clickable (fires before any dismiss/action hit-test miss).
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
+        self.base.focusable = true; // a clickable toast is focusable (Component::focusable)
         self
     }
 
@@ -288,10 +289,6 @@ impl Component for Toast {
     }
 
     /// Focusable when the card itself is clickable (Enter/Space activates it).
-    fn focusable(&self) -> bool {
-        self.on_click.is_some() && !self.base.disabled.get_untracked()
-    }
-
     /// Height = padding + title + optional body + optional action, from the font.
     fn remeasure(&mut self) {
         let mut h = self.line_h(1.0);

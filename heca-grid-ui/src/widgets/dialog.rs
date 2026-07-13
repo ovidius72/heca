@@ -1,14 +1,12 @@
 //! [`Dialog`] — a centered overlay **panel that holds real child components**.
 //!
-//! Unlike [`Modal`](super::Modal) — which draws its title/message/buttons **manually** and
-//! therefore has no child subtree (so its buttons can't be hint targets, focus-traversed as
-//! components, or hold arbitrary content) — `Dialog` is a true container: it lays out a
-//! centered panel over a dimming scrim and paints its **children** (a title, an arbitrary
-//! `body`, and a row of real action [`Button`](super::Button)s). Because the buttons are
-//! real components, they participate in the universal hint picker, standard focus traversal,
-//! and pointer routing for free.
+//! `Dialog` is a true container: it lays out a centered panel over a dimming scrim and paints
+//! its **children** (a title, an arbitrary `body`, and a row of real action
+//! [`Button`](super::Button)s). Because the buttons are real components, they participate in the
+//! universal hint picker, standard focus traversal, and pointer routing for free (a hand-drawn
+//! panel that painted its own buttons could do none of those).
 //!
-//! It uses the same overlay contract as `Modal`/[`Select`](super::Select): it reports
+//! It uses the same overlay contract as [`Select`](super::Select): it reports
 //! [`overlay_active`](Component::overlay_active) + [`focusable`](Component::focusable) while
 //! open, so the host routes input here first.
 //!
@@ -52,7 +50,7 @@ const GAP: f32 = 14.0;
 /// Gap between adjacent action buttons.
 const BTN_GAP: f32 = 10.0;
 /// Multiplier on the theme `shadow.blur` token — the panel is large and wants a wider,
-/// softer halo than the small-surface base token (mirrors [`Modal`](super::Modal)).
+/// softer halo than the small-surface base token.
 const SHADOW_BLUR_MULT: f32 = 4.0;
 /// Downward offset lifting the panel off the scrim.
 const SHADOW_DROP: f32 = 12.0;
@@ -293,7 +291,7 @@ impl Component for Dialog {
             cx.rect(scrim, background.with_alpha(scrim_a), None, 0.0, None);
 
             // Lift the panel off the scrim, then fill it + stamp the shared bracket reticle
-            // (same visual language as Modal / Pane / DockFrame).
+            // (same visual language as Pane / DockFrame).
             cx.drop_shadow(
                 panel,
                 radius,

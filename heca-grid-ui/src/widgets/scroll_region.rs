@@ -106,6 +106,7 @@ impl ScrollRegion {
     /// A new vertical scroll region.
     pub fn new() -> Self {
         let mut base = Base::new();
+        base.focusable = true; // focus-gated keyboard scroll (Component::focusable)
         base.style.direction = Direction::Column;
         Self {
             base,
@@ -280,12 +281,6 @@ impl Component for ScrollRegion {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    /// Participates in keyboard focus so the host can focus it (click or Tab)
-    /// and deliver scroll keys (`Event::Key` goes to the focused component only).
-    fn focusable(&self) -> bool {
-        true
     }
 
     /// Layout just re-computed every bound to its natural position — clear the

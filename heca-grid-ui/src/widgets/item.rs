@@ -162,6 +162,7 @@ impl Item {
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
+        self.base.focusable = true; // interactive rows are focusable (Component::focusable)
         self
     }
 
@@ -212,10 +213,6 @@ impl Component for Item {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        self.interactive() && !self.base.disabled.get_untracked()
     }
 
     /// Row height scales with the resolved font (keeps the default 38px at 15px).

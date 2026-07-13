@@ -66,7 +66,7 @@ pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, MarkerGroup, Modal, ModalButton, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
+    LabelSide, MarkerGroup, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeycapVariant, keycap_size, paint_keycap,
 };
 
@@ -88,7 +88,7 @@ pub mod prelude {
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
         ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, MarkerGroup, MenuEntry, Modal, ModalButton, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
+        LabelSide, MarkerGroup, MenuEntry, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     };
 }

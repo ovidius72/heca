@@ -68,6 +68,7 @@ impl Checkbox {
     /// A new checkbox, unchecked and label-less by default.
     pub fn new() -> Self {
         let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         base.style.width = Length::Px(BOX_SIZE as f32);
         base.style.height = Length::Px(BOX_SIZE as f32);
         Self {
@@ -194,10 +195,6 @@ impl Component for Checkbox {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
     }
 
     fn paint(&self, cx: &mut PaintCx) {

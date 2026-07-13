@@ -77,6 +77,7 @@ impl Select {
     pub fn new(options: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let options: Vec<String> = options.into_iter().map(Into::into).collect();
         let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         base.style.width = Length::Px(DEFAULT_WIDTH);
         base.style.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD_V as f32);
         Self {
@@ -263,10 +264,6 @@ impl Component for Select {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
     }
 
     fn overlay_active(&self) -> bool {

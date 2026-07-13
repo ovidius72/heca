@@ -5,7 +5,7 @@
 //! | Variant | Hover behavior |
 //! |---------|----------------|
 //! | Primary (default) | solid border + accent fill that **sweeps bottom→top** with a glow |
-//! | Secondary | no glow; border **firms up** (rest semi-opaque → solid) |
+//! | Secondary | subtle `muted` fill + `muted` border (theme-consistent — never rides on `surface`); both firm toward `foreground` on hover, no glow |
 //! | Destructive | like default but red, **fades in** (no sweep) |
 //! | Outline | dim border → accent, faint fill + glow |
 //! | Ghost | no border/bg at rest → **opaque bg + border fade in** |
@@ -36,6 +36,13 @@ const HOVER_DURATION: f32 = 0.10;
 const GLOW_RADIUS: f32 = 30.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
 const GLOW_INTENSITY: f32 = 0.12;
+/// Opacity of the `Secondary` variant's **fill** — a faint `theme.muted` tint. Using `muted`
+/// (a foreground-family token that always contrasts the surface and never equals it) instead of
+/// `theme.surface` gives Secondary a consistent "subtly filled" identity on **every** theme:
+/// `surface` sits near `background` on some themes (fill vanishes) and can even equal `theme.border`
+/// on others (border vanishes). A widget-level constant like `DISABLED_CONTENT_ALPHA`; promote to a
+/// theme token if it needs per-theme tuning.
+const SECONDARY_FILL_ALPHA: u8 = 36;
 /// Opacity of a **disabled** button's label. It is drawn in the theme `muted` tone at this
 /// reduced alpha so the disabled state reads clearly on every variant — including the
 /// transparent Ghost/Link, whose *enabled* rest label is already `muted` (so only the lowered
@@ -87,7 +94,8 @@ pub struct Button {
 impl Button {
     /// A primary button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
-        let base = Base::new();
+        let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         // Padding + font derive from the size variant (default `Normal`) in
         // `remeasure`; the size is set via `LayoutExt::size`.
         let mut button = Self {
@@ -246,10 +254,6 @@ impl Component for Button {
         &mut self.base
     }
 
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
-    }
-
     /// Width + height track the resolved font (which already includes the size
     /// scale) plus size-scaled padding, so the whole button grows/shrinks together.
     fn remeasure(&mut self) {
@@ -337,11 +341,14 @@ impl Component for Button {
                 self.paint_label(cx, danger.lerp(on_danger, p));
             }
             ButtonVariant::Secondary => {
-                // Border becomes more vivid on hover (brighter + solid).
-                let bc = border_c.lerp(foreground, 0.4 * p);
+                // Subtle `muted` fill + `muted` border (both firm toward `foreground` on hover) —
+                // a theme-consistent identity. `muted` always contrasts the background and is never
+                // equal to `surface`/`border`, unlike the old `surface` fill + `theme.border` border
+                // (which vanished on themes where surface≈background or border==surface).
+                let bc = muted.lerp(foreground, 0.4 * p);
                 cx.rect(
                     b,
-                    surface,
+                    muted.with_alpha(SECONDARY_FILL_ALPHA),
                     self.animated_border(bc, p, border_width, ia.control_rest_border as f32),
                     radius,
                     None,

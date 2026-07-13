@@ -2,8 +2,8 @@
 //!
 //! The pointer counterpart to the keyboard pick flows: a floating list of
 //! [`MenuEntry`]s opened at a point (typically the right-click cursor). It uses the
-//! same input-capturing overlay contract as [`CommandPalette`](super::CommandPalette)
-//! / [`Modal`](super::Modal): `overlay_active` + `focusable` only while open, content
+//! same input-capturing overlay contract as [`CommandPalette`](super::CommandPalette):
+//! `overlay_active` + `focusable` only while open, content
 //! **drawn + hit-tested manually** on the overlay layer.
 //!
 //! Open/close and the anchor point are **host-owned** [`Signal`]s, so right-click

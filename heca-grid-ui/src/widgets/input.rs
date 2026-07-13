@@ -73,6 +73,7 @@ impl Input {
     /// A new empty input.
     pub fn new() -> Self {
         let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         base.style.width = Length::Px(DEFAULT_WIDTH);
         base.style.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
         Self {
@@ -433,10 +434,6 @@ impl Component for Input {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
     }
 
     /// Field height tracks the resolved font + size-scaled padding.

@@ -45,6 +45,7 @@ impl BadgeButton {
     /// A new accent badge button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         base.style.font_scale = BADGE_FONT_SCALE;
         let mut button = Self {
             base,
@@ -113,10 +114,6 @@ impl Component for BadgeButton {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
     }
 
     fn remeasure(&mut self) {

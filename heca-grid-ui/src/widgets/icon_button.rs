@@ -100,6 +100,7 @@ impl IconButton {
     /// Set the click callback (also makes it focusable).
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
+        self.base.focusable = true; // clickable icon buttons are focusable (Component::focusable)
         self
     }
 
@@ -122,10 +123,6 @@ impl Component for IconButton {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        self.on_click.is_some() && !self.base.disabled.get_untracked()
     }
 
     /// A pinned square, or auto (hug the icon + padding) when unset. The size

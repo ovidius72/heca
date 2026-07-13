@@ -53,6 +53,7 @@ impl Toggle {
     /// A new toggle, off by default.
     pub fn new() -> Self {
         let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         base.style.width = Length::Px(TRACK_W as f32);
         base.style.height = Length::Px(TRACK_H as f32);
         Self {
@@ -110,10 +111,6 @@ impl Component for Toggle {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
     }
 
     /// The switch is fixed-size (no text); scale the track by the size variant.

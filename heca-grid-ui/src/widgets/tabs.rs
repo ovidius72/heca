@@ -50,7 +50,8 @@ impl Tabs {
     /// New tabs from `labels`; the first tab is selected.
     pub fn new(labels: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let labels: Vec<String> = labels.into_iter().map(Into::into).collect();
-        let base = Base::new();
+        let mut base = Base::new();
+        base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         let mut tabs = Self {
             base,
             labels,
@@ -174,10 +175,6 @@ impl Component for Tabs {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        !self.base.disabled.get_untracked()
     }
 
     /// Strip width + height track the resolved font.
