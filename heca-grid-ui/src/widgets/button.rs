@@ -13,6 +13,12 @@
 //!
 //! Hover progress animates over time via [`Component::tick`]. Glow and border
 //! are toggleable (`.glow(bool)`, `.bordered(bool)`).
+//!
+//! **Disabled look.** When `disabled`, a button drops its vivid accent/danger chrome to the
+//! theme `muted` tone and draws its label in `muted` at a reduced alpha
+//! (`DISABLED_CONTENT_ALPHA`). This reads clearly as inactive on **every** variant —
+//! including the transparent Ghost/Link, where a background scrim would be invisible — and is
+//! fully theme-driven (no hardcoded colours). Disabled buttons are also inert and unfocusable.
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
@@ -30,6 +36,11 @@ const HOVER_DURATION: f32 = 0.10;
 const GLOW_RADIUS: f32 = 30.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
 const GLOW_INTENSITY: f32 = 0.12;
+/// Opacity of a **disabled** button's label. It is drawn in the theme `muted` tone at this
+/// reduced alpha so the disabled state reads clearly on every variant — including the
+/// transparent Ghost/Link, whose *enabled* rest label is already `muted` (so only the lowered
+/// alpha distinguishes disabled from a normal low-emphasis button).
+const DISABLED_CONTENT_ALPHA: f32 = 0.38;
 
 /// Visual variant of a [`Button`] (GridCN/shadcn set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -171,6 +182,17 @@ impl Button {
 
     /// Bold label, centered in the button box by the renderer (real metrics).
     fn paint_label(&self, cx: &mut PaintCx, color: Color) {
+        // A disabled button shows a faded, muted label — the one universal, theme-driven
+        // "inactive" cue that reads on every variant. Applied centrally here so all six
+        // variants (which each pass their own enabled color) inherit it without repeating.
+        let color = if self.base.disabled.get_untracked() {
+            cx.theme()
+                .colors
+                .muted
+                .with_alpha((DISABLED_CONTENT_ALPHA * 255.0).round() as u8)
+        } else {
+            color
+        };
         cx.text(
             self.base.bounds,
             &self.label.get_untracked(),
@@ -274,7 +296,12 @@ impl Component for Button {
                 t.colors.interaction,
             )
         };
-        let p = self.progress.clamp(0.0, 1.0);
+        // A disabled button never hovers/presses: pin progress to the rest state and strip the
+        // vivid accent/danger chrome to `muted` so the whole affordance — border and fill, not
+        // just the label — reads as inactive on every variant.
+        let disabled = self.base.disabled.get_untracked();
+        let p = if disabled { 0.0 } else { self.progress.clamp(0.0, 1.0) };
+        let (accent, danger) = if disabled { (muted, muted) } else { (accent, danger) };
         let b = self.base.bounds;
 
         match self.variant {
@@ -369,15 +396,14 @@ impl Component for Button {
             cx.flash(b, self.flash.amount() * strength, radius);
         }
 
-        // Dim the whole button when disabled.
-        if self.base.disabled.get_untracked() {
-            cx.dim(b, radius);
-        }
+        // No background scrim for the disabled state: it barely shows on transparent variants
+        // (Ghost/Link) and keeps the label's bright hue. Instead the muted chrome above +
+        // faded `muted` label (see `paint_label`) carry the disabled look on every variant.
 
         // Focus ring — shown whenever the button is focused (not keyboard-only) and enabled. It
         // follows the button's own tone (a destructive button rings in `danger`, not `accent`) so
         // the focus cue matches the widget's border colour instead of clashing with it.
-        if self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
             // Focus-outline tone (theme-driven, light/dark-aware): the accent case uses the
             // theme's `focus_ring` token or the accent shifted toward `foreground`; a destructive
             // button derives the same shift from its own `danger` tone. Both stay distinct from the

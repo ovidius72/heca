@@ -628,6 +628,12 @@ press flash. Focusable; Space/Enter activate like a click.
   `.glow(bool)`, `.bordered(bool)`, `.on_click(impl Fn() + 'static)`.
 - **Accessor**: `.hovered() -> Signal<bool>`.
 - **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
+- **Disabled look** (`.disabled(true)`): a disabled button drops its vivid accent/danger chrome to
+  the theme `muted` tone and draws its **label in `muted` at a reduced alpha**, so the inactive
+  state reads clearly on **every** variant — including transparent `Ghost`/`Link`, where a
+  background scrim is invisible. Theme-driven (no hardcoded colours); the button is also inert and
+  unfocusable. Used e.g. by a modal's OK button while a required form field is blank
+  ([`Dialog`](#dialog) → *Declaring a modal from data*).
 
 ```rust
 Button::destructive("DEREZ")

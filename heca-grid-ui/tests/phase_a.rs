@@ -576,6 +576,55 @@ fn disabled_button_ignores_clicks_and_focus() {
     assert!(!button.focusable(), "disabled button is unfocusable");
 }
 
+/// The label color of a button after layout + paint (its single Text run).
+fn button_label_color(button: &mut Button, theme: &Theme) -> Color {
+    LayoutEngine::new().compute(button, Size::new(200.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, theme);
+        button.paint(&mut cx);
+    }
+    scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.color),
+            _ => None,
+        })
+        .expect("button paints a label text run")
+}
+
+#[test]
+fn disabled_button_label_is_muted_and_faded_on_every_variant() {
+    use heca_grid_ui::ButtonVariant;
+    let theme = Theme::default();
+    let muted = theme.colors.muted;
+    for variant in [
+        ButtonVariant::Primary,
+        ButtonVariant::Secondary,
+        ButtonVariant::Destructive,
+        ButtonVariant::Outline,
+        ButtonVariant::Ghost,
+        ButtonVariant::Link,
+    ] {
+        let disabled =
+            button_label_color(&mut Button::new("OK").variant(variant).disabled(true), &theme);
+        let enabled = button_label_color(&mut Button::new("OK").variant(variant), &theme);
+        // Disabled label is the theme `muted` hue (not the variant's vivid color)…
+        assert_eq!(
+            disabled.with_alpha(255),
+            muted.with_alpha(255),
+            "disabled label should use the theme muted hue",
+        );
+        // …at a clearly reduced opacity, so the disabled state reads even on Ghost/Link
+        // (whose enabled rest label is already `muted` at full alpha).
+        assert!(disabled.a < 255, "disabled label should be faded");
+        assert!(
+            disabled.a < enabled.a,
+            "disabled label must be fainter than the enabled label",
+        );
+    }
+}
+
 #[test]
 fn checkbox_toggle_emits_change_action_with_new_value() {
     use heca_grid_ui::{Action, SignalData};
