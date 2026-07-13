@@ -790,39 +790,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     .side(TooltipSide::Bottom),
                 ),
         )
-        // Modal: a centered confirm dialog over a scrim. The destructive button
-        // opens it; Esc / scrim / the dialog buttons close it (keys route to the
-        // overlay while open). N data-driven `ModalButton`s each carry a letter
-        // shortcut shown as `Label (x)`: Tab / ←→ move the focus ring, Enter/Space
-        // activate the focused one, and the letter fires it directly. Cancel takes
-        // initial focus (safe default for a destructive dialog). Renders nothing
-        // until opened.
-        .child(caption("Modal"))
-        .child({
-            let modal = Modal::new("Delete pane?", "This action cannot be undone.")
-                .button(
-                    ModalButton::new("Cancel", || println!("[showcase] cancelled"))
-                        .shortcut('n')
-                        .cancel(),
-                )
-                .button(
-                    ModalButton::new("Delete", || println!("[showcase] pane deleted"))
-                        .shortcut('y')
-                        .danger(true),
-                )
-                // Destructive → force an explicit choice: Esc / scrim won't dismiss.
-                .dismissible(false);
-            let open = modal.open_signal();
-            Flex::row()
-                .gap(12.0)
-                .align(Align::Center)
-                .child(Button::destructive("DELETE PANE…").on_click(move || open.set(true)))
-                .child(modal)
-        })
-        // Dialog: the container counterpart to Modal — a centered panel over a scrim
-        // that holds REAL child components (the body + real action `Button`s), so its
-        // buttons are hint targets + focus-traversed as components (unlike Modal, which
-        // draws its buttons manually). Tab / ←→ move focus, Enter/Space activate. The
+        // Dialog: a centered confirm panel over a scrim that holds REAL child components
+        // (the body + real action `Button`s), so its buttons are hint targets +
+        // focus-traversed as components (a hand-drawn panel could do neither). The
+        // destructive button opens it. Tab / ←→ move focus, Enter/Space activate. The
         // buttons close it via the open signal; Esc / scrim fire `on_dismiss` (here it
         // closes the demo; in `heca` the host points it at a `CloseOverlay` action).
         // Renders nothing until opened.

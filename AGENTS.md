@@ -710,9 +710,26 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 - The existing chrome becomes a **consumer** of `heca-grid-ui`; over time this should evolve toward a pluggable chrome host with left/right/top/bottom regions.
 - Important separation: the `Sidebar` in `heca-grid-ui` is a **shell/layout widget**, while the current workspace tree should evolve into a built-in `WorkspacesContainer` mounted inside that shell.
 
+### ⭐ THE WIDGET ARCHITECTURE — `ViewNode` + composition (READ FIRST; applies to EVERY widget change)
+
+**heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
+
+- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling is NOT a prop** — a node carries only *semantic* `ViewVariant`/`ViewSize`/`ViewAlign` (+ `Glyph`/color *names*); the host resolves the actual pixels from `Theme`. **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
+
+**THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
+- it is **realizable via `ViewNode`** (a `WidgetKind` + props + events + a `realize` arm), and
+- it is **extended by composition, not rewrite** — a new affordance (e.g. a button's accelerator = an `Icon(CaretUp) + Label`) is a **child/slot**, not a hand-positioned `cx.icon`/`cx.text` call.
+
+**When you touch a widget, you MUST refactor it toward this.** Any leaf that hand-draws its content (e.g. `Button` drawing its label text directly, so it can't hold an `Icon`) is a **refactor target**: make it compose its content as children (a content slot: leading / label / trailing, like `Item` already does) before adding to it. Do not bolt a hand-drawn extra onto a hand-drawn widget — that is the anti-pattern this rule exists to kill. Extending the vocabulary (a new `WidgetKind`, a new prop) is **host-side** work (widget + `realize` arm + showcase + `docs/widgets.md`); plugins only *compose* existing kinds.
+
+> **Authoritative design:** `pluggable-chrome-plugin-plan.md` §2.6.2 (the model) + §2.7.2 (intent dispatch); `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`. Realize coverage today (`realize.rs`) still misses `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` (need structured props, `plugin-task-ui-9`) — filling these + composing the leaf widgets is the standing refactor.
+
+---
+
 ### Creating new widgets / components (MANDATORY — read before adding ANY UI element)
 
-Any new visual or interactive element belongs in **`heca-grid-ui` as a proper widget** — **never** as ad-hoc inline composition in the app (`heca/src/chrome.rs`, sidebar, …) with hardcoded sizes/colors/alphas. **Plan the widget, build it in `heca-grid-ui`, integrate it into the catalog — then have the app compose it.**
+Any new visual or interactive element belongs in **`heca-grid-ui` as a proper widget** — **never** as ad-hoc inline composition in the app (`heca/src/chrome.rs`, sidebar, …) with hardcoded sizes/colors/alphas. **Plan the widget, build it in `heca-grid-ui`, integrate it into the catalog — then have the app compose it.** It must also follow **THE WIDGET ARCHITECTURE** above — composed content, `ViewNode`-realizable, refactor-toward-composition when touched.
 
 A new widget **MUST**:
 

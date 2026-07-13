@@ -34,6 +34,32 @@
 
 ---
 
+## ⭐ SESSION STATUS — 2026-07-13 (branch `feat/base-focusable`, stacked on PR #235)
+
+> Full detail + resume steps: **`HANDOFF.md`** (authoritative for this arc).
+
+### [ ] Phase: ViewNode → all widgets (compositional refactor) · `viewnode-all-widgets` — **TOP PRIORITY, standing**
+Now a **prime project rule** (`AGENTS.md` ⭐ WIDGET ARCHITECTURE): every widget's *content* must be composed from child `Component`s (the tree `realize` produces) and be `ViewNode`-realizable; **refactor the widget you touch toward this**. Two parts:
+- **viewnode-task-1 — complete `realize` coverage** (`heca/src/chrome/realize.rs`): missing `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` (structured props, was `plugin-task-ui-9`).
+- **viewnode-task-2 — compose the leaf widgets** so content = child components, not hand-drawn. **`Button` is the first target** (it hand-draws its label → make it a container with a content slot `leading/label/trailing`, like `Item`). This unblocks the button-accelerator feature. **Do in a FRESH session (large refactor).**
+
+### [ ] Phase: Button accelerator / shortcut · `button-shortcut` — BLOCKED on `viewnode-all-widgets` (Button) + NerdFont
+`Button::shortcut(char)` → composed `Icon(NerdFont ⌃) + Label(letter)` trailing slot rendered **inside** the button; `Ctrl+<c>` self-submit + `FocusManager::deliver_accelerator`. `ModalAction.shortcut` prop set by the confirm builder (n=cancel, y=proceed). Needs **NerdFont embedding** first (`gridui-03` `NfIcon`). `Glyph::CaretUp` (0xe13c) stays in the enum but the accelerator uses NerdFont (Phosphor caret judged ugly). Detail: HANDOFF §3b.
+
+### [x] Done this session (detail in HANDOFF §1)
+- **[x] Removed legacy `Modal` widget** (superseded by `Dialog`; app uses only `Dialog`). Deleted `modal.rs` + exports + tests + showcase demo + docs.
+- **[x] Centralized `focusable()`** onto `Base.focusable` (13 overrides removed; dynamic overlays keep theirs).
+- **[x] `Button` styling** — disabled reads on every variant (`e2ec620`); **Secondary** now `muted` fill+border (theme-consistent across Tron/Mocha/Latte — `surface`/`border` collapsed on some themes).
+- **[x] Overlay-capture interaction policy** — `route_interaction` `Block`s all actions while a modal overlay is open (fixes `prefix+e`/`prefix+>` leaking behind a dialog). A router STATE gate, **not** a new `ActionPolicy` variant.
+- **[x] Text-field uppercase** — overlay `Input` types Shift/`!@#` (deliver real `key_text` char, not the lowercased combo).
+- **[x] Confirm dialog** — "Delete Pane?"/"Delete <custom>?"; verb "Close"→"Delete"; **random pane names removed** (`pane_name` → empty).
+- **[x] `Glyph::CaretUp`** added (0xe13c) — KEEP.
+- **[x] AGENTS.md** — ⭐ ViewNode WIDGET ARCHITECTURE section added.
+
+### Open follow-ups (HANDOFF §3c): Dialog font-derived `min-width` (needs `Style.min_width`); context-menu nav (Ctrl-j/k/arrows) needs runtime repro; remove stale `Modal` from the AGENTS.md STOP widget list.
+
+---
+
 ## Terminal
 
 > Source: terminal design, now consolidated into this backlog.
