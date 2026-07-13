@@ -1035,48 +1035,38 @@ keys = "prefix+z"
 action = "zoom_column"
 ```
 
-### Menu / list navigation (`menu-nav`)
+### Widget navigation & editing (`[keys.widgets]`)
 
-One configurable set of keys navigates every overlay **list/menu** surface — the context menu and
-the command palette. These apply **only while such an overlay is open** (they never affect
-normal-mode input), so the same keys are the single source of truth across all menus:
-
-```toml
-[keys]
-menu_up       = ["ArrowUp", "Ctrl+k"]    # Move selection up / previous
-menu_down     = ["ArrowDown", "Ctrl+j"]  # Move selection down / next
-menu_activate = "Enter"                  # Run the selected entry
-menu_dismiss  = "Escape"                 # Close the overlay
-```
-
-Entries that carry a quick-pick letter can also be activated by typing that letter; in the command
-palette, all other keys type into its filter field.
-
-### Dialog & input keys (`widget-keys-config`)
-
-Widget keys pass through config too, on the same host-resolved model as `menu-nav`. Both sets apply
-**only while the relevant overlay is open**.
-
-Dialog focus navigation (e.g. the rename dialog) — a focused text field keeps its own keys first
-(field-first), so these navigate only when the focused widget ignores the key:
+**One generic, cross-widget vocabulary** drives every interactive widget/overlay — the context
+menu, command palette, `Select` lists, `Tabs`, and `Dialog` focus. These apply **only while such a
+widget/overlay is focused** (they never affect normal-mode input). They are split by **axis**:
 
 ```toml
-[keys]
-dialog_focus_next = ["Tab", "ArrowDown", "ArrowRight", "Ctrl+j"]     # Next field/button (vim Ctrl+j)
-dialog_focus_prev = ["Shift+Tab", "ArrowUp", "ArrowLeft", "Ctrl+k"]  # Previous (vim Ctrl+k)
-dialog_submit     = "Enter"                                          # Activate the primary action
-dialog_cancel     = "Escape"                                         # Dismiss the dialog
+[keys.widgets]
+# Horizontal (left/right) — Tabs, a dialog's button row.
+item_previous = ["ArrowLeft", "Ctrl+h"]   # vim Ctrl+h
+item_next     = ["ArrowRight", "Ctrl+l"]   # vim Ctrl+l
+# Vertical (up/down) — menus, Select lists, the command palette.
+menu_up       = ["ArrowUp", "Ctrl+k"]      # vim Ctrl+k
+menu_down     = ["ArrowDown", "Ctrl+j"]    # vim Ctrl+j
+# Shared.
+activate      = "Enter"                     # Commit / submit the selected entry or primary action
+dismiss       = "Escape"                    # Close / cancel the overlay
+# Text-input editing shortcuts (plain typing / Backspace / arrows / word-motion are built in).
+edit_delete_back          = "Ctrl+h"                 # Delete one char before the caret
+edit_delete_to_line_start = "Ctrl+u"                 # Delete from the caret to line start
+edit_select_all           = ["Ctrl+a", "Super+a"]    # Select the whole field (Cmd+a on macOS)
 ```
 
-Text-input editing shortcuts. The plain keys (typing, Backspace/Delete, arrows, Home/End, and
-Ctrl/Alt/Cmd word/line motion) are built in; only these named shortcuts are configurable:
+Notes:
 
-```toml
-[keys]
-input_delete_back          = "Ctrl+h"               # Delete one character before the caret
-input_delete_to_line_start = "Ctrl+u"               # Delete from the caret to line start
-input_select_all           = ["Ctrl+a", "Super+a"]  # Select the whole field (Cmd+a on macOS)
-```
+- **Tab / Shift+Tab** are the universal focus-traversal primitive (handled by the focus system, and
+  trapped inside a modal dialog) — always on, **not** listed here.
+- A focused text field keeps its own keys first (**field-first**): `←` moves the caret inside an
+  `Input` but navigates when a button is focused. The shared `Ctrl+h` disambiguates by focus — it
+  deletes in an `Input` but is `item_previous` on a `Tabs`/dialog.
+- Menu/palette entries with a quick-pick letter can also be run by typing that letter; in the command
+  palette, all other keys type into its filter field.
 
 ### Unbinding Defaults
 

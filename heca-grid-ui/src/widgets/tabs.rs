@@ -4,16 +4,15 @@
 //!
 //! It lays its own segments out from monospace metrics (no child components) and
 //! hit-tests pointer presses by x. **Keyboard nav is host-configured, not hardcoded**
-//! (`widget-keys-config`): while focused it moves selection on the semantic
-//! [`Event::MenuNav`] (`Prev`/`Next`) — the same vocabulary as
-//! [`Select`](super::Select)/[`ContextMenu`](super::ContextMenu). The host resolves the
-//! configurable nav keys into it (defaults ←/`Ctrl+h` → prev, →/`Ctrl+l` → next). Reuses
-//! [`Base::disabled`](crate::component::Base) and the focus-visible ring; the underline
-//! animates via [`Component::tick`].
+//! (`widget-keys-config`): as a **horizontal** selector it moves selection on the semantic
+//! [`Event::Widget`] intents `ItemPrevious`/`ItemNext` (left/right). The host resolves the
+//! configurable `item_previous`/`item_next` keys into it (defaults ←/`Ctrl+h` → previous,
+//! →/`Ctrl+l` → next). Reuses [`Base::disabled`](crate::component::Base) and the focus-visible
+//! ring; the underline animates via [`Component::tick`].
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, Handled, MenuNav, PaintCx};
+use crate::component::{Base, Component, Event, Handled, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
@@ -265,13 +264,14 @@ impl Component for Tabs {
                 }
                 Handled::Yes
             }
-            // Host-resolved navigation (`MenuNav`): Prev/Next move the selection. No literal
-            // arrow/Ctrl keys live here — the host maps the configurable nav keys to this.
-            Event::MenuNav(MenuNav::Prev) => {
+            // Host-resolved navigation: a **horizontal** selector, so it moves on the
+            // `ItemPrevious`/`ItemNext` intents (left/right — ←/→, `Ctrl+h`/`Ctrl+l`), not the
+            // vertical `Menu*`. No literal keys live here; the host maps `[keys.widgets]` to this.
+            Event::Widget(WidgetIntent::ItemPrevious) => {
                 self.select(self.selected.get_untracked().saturating_sub(1));
                 Handled::Yes
             }
-            Event::MenuNav(MenuNav::Next) => {
+            Event::Widget(WidgetIntent::ItemNext) => {
                 let next = (self.selected.get_untracked() + 1).min(self.labels.len() - 1);
                 self.select(next);
                 Handled::Yes

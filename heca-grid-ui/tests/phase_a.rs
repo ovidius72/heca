@@ -576,6 +576,55 @@ fn disabled_button_ignores_clicks_and_focus() {
     assert!(!button.focusable(), "disabled button is unfocusable");
 }
 
+/// The label color of a button after layout + paint (its single Text run).
+fn button_label_color(button: &mut Button, theme: &Theme) -> Color {
+    LayoutEngine::new().compute(button, Size::new(200.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, theme);
+        button.paint(&mut cx);
+    }
+    scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.color),
+            _ => None,
+        })
+        .expect("button paints a label text run")
+}
+
+#[test]
+fn disabled_button_label_is_muted_and_faded_on_every_variant() {
+    use heca_grid_ui::ButtonVariant;
+    let theme = Theme::default();
+    let muted = theme.colors.muted;
+    for variant in [
+        ButtonVariant::Primary,
+        ButtonVariant::Secondary,
+        ButtonVariant::Destructive,
+        ButtonVariant::Outline,
+        ButtonVariant::Ghost,
+        ButtonVariant::Link,
+    ] {
+        let disabled =
+            button_label_color(&mut Button::new("OK").variant(variant).disabled(true), &theme);
+        let enabled = button_label_color(&mut Button::new("OK").variant(variant), &theme);
+        // Disabled label is the theme `muted` hue (not the variant's vivid color)…
+        assert_eq!(
+            disabled.with_alpha(255),
+            muted.with_alpha(255),
+            "disabled label should use the theme muted hue",
+        );
+        // …at a clearly reduced opacity, so the disabled state reads even on Ghost/Link
+        // (whose enabled rest label is already `muted` at full alpha).
+        assert!(disabled.a < 255, "disabled label should be faded");
+        assert!(
+            disabled.a < enabled.a,
+            "disabled label must be fainter than the enabled label",
+        );
+    }
+}
+
 #[test]
 fn checkbox_toggle_emits_change_action_with_new_value() {
     use heca_grid_ui::{Action, SignalData};
@@ -1044,13 +1093,13 @@ fn shift_alt_arrow_selects_by_word() {
 
 #[test]
 fn input_edit_select_all_selects_without_typing() {
-    use heca_grid_ui::InputEdit;
-    // Select-all is host-configured (`input_select_all`, default Ctrl+a / Cmd+a) and arrives as
-    // the semantic `InputEdit::SelectAll`; a raw modified 'a' is never typed (covered separately).
+    use heca_grid_ui::WidgetIntent;
+    // Select-all is host-configured (`edit_select_all`, default Ctrl+a / Cmd+a) and arrives as
+    // the semantic `WidgetIntent::EditSelectAll`; a raw modified 'a' is never typed (separately).
     let mut input = Input::new().value("hello world");
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
-    input.event(&Event::InputEdit(InputEdit::SelectAll));
+    input.event(&Event::Widget(WidgetIntent::EditSelectAll));
     assert_eq!(
         input.selected_text().as_deref(),
         Some("hello world"),
@@ -1328,25 +1377,25 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
 
 #[test]
 fn select_keyboard_navigates_and_escape_closes() {
-    use heca_grid_ui::MenuNav;
+    use heca_grid_ui::WidgetIntent;
     let mut sel = Select::new(["A", "B", "C"]);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
     let raw = |s: &mut Select, k: GridKey| s.event(&Event::Key { key: k, pressed: true });
-    let nav = |s: &mut Select, n: MenuNav| s.event(&Event::MenuNav(n));
+    let nav = |s: &mut Select, i: WidgetIntent| s.event(&Event::Widget(i));
 
     // A closed Select opens on a raw activation key (Enter/Space/↓), like a button.
     raw(&mut sel, GridKey::Enter);
     assert!(sel.overlay_active());
-    // While open it is an overlay: the host drives it with semantic `MenuNav`.
-    nav(&mut sel, MenuNav::Next);
-    nav(&mut sel, MenuNav::Next);
-    nav(&mut sel, MenuNav::Activate); // commit highlight (index 2)
+    // While open it is a vertical overlay: the host drives it with `MenuUp`/`MenuDown`.
+    nav(&mut sel, WidgetIntent::MenuDown);
+    nav(&mut sel, WidgetIntent::MenuDown);
+    nav(&mut sel, WidgetIntent::Activate); // commit highlight (index 2)
     assert_eq!(sel.index(), 2);
     assert!(!sel.overlay_active(), "Activate commits and closes");
 
     raw(&mut sel, GridKey::Enter); // reopen
     assert!(sel.overlay_active());
-    nav(&mut sel, MenuNav::Dismiss);
+    nav(&mut sel, WidgetIntent::Dismiss);
     assert!(
         !sel.overlay_active(),
         "Dismiss closes without changing selection"
@@ -1366,22 +1415,22 @@ fn tabs_menu_nav_and_click_change_selection() {
         Tabs::new(["ALPHA", "BETA", "GAMMA"]).on_change(move |a| sink.borrow_mut().push(a));
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
-    use heca_grid_ui::MenuNav;
+    use heca_grid_ui::WidgetIntent;
     assert_eq!(tabs.index(), 0);
-    // Nav arrives as the semantic `MenuNav` (the host maps the configurable nav keys —
-    // ←/Ctrl+h → Prev, →/Ctrl+l → Next — to it). The widget carries no literal keys.
-    tabs.event(&Event::MenuNav(MenuNav::Next));
+    // A horizontal selector: nav arrives as `ItemPrevious`/`ItemNext` (the host maps the
+    // configurable item keys — ←/Ctrl+h → previous, →/Ctrl+l → next). No literal keys.
+    tabs.event(&Event::Widget(WidgetIntent::ItemNext));
     assert_eq!(tabs.index(), 1);
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("tab-change", SignalData::Usize(1))),
     );
 
-    tabs.event(&Event::MenuNav(MenuNav::Next));
+    tabs.event(&Event::Widget(WidgetIntent::ItemNext));
     assert_eq!(tabs.index(), 2);
     let before = log.borrow().len();
-    tabs.event(&Event::MenuNav(MenuNav::Next));
-    assert_eq!(tabs.index(), 2, "Next clamps at the last tab");
+    tabs.event(&Event::Widget(WidgetIntent::ItemNext));
+    assert_eq!(tabs.index(), 2, "ItemNext clamps at the last tab");
     assert_eq!(
         log.borrow().len(),
         before,
@@ -1417,7 +1466,7 @@ fn tabs_underline_slides_toward_selection() {
     let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
     let x0 = underline_x(&tabs);
-    tabs.event(&Event::MenuNav(heca_grid_ui::MenuNav::Next));
+    tabs.event(&Event::Widget(heca_grid_ui::WidgetIntent::ItemNext));
     for _ in 0..40 {
         tabs.tick(0.016);
     }
@@ -2598,7 +2647,7 @@ fn command_palette_is_overlay_active_only_while_open() {
 
 #[test]
 fn command_palette_typing_filters_then_activate_runs_top_result() {
-    use heca_grid_ui::{Component, GridKey, MenuNav};
+    use heca_grid_ui::{Component, GridKey, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
@@ -2606,29 +2655,29 @@ fn command_palette_typing_filters_then_activate_runs_top_result() {
     for c in "tog".chars() {
         p.event(&Event::Key { key: GridKey::Char(c), pressed: true });
     }
-    // Nav is host-resolved: `menu_activate` arrives as MenuNav::Activate.
-    p.event(&Event::MenuNav(MenuNav::Activate));
+    // Nav is host-resolved: `activate` arrives as WidgetIntent::Activate.
+    p.event(&Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), 3, "activate runs the filtered top result (Toggle sidebar)");
     assert!(!p.overlay_active(), "palette closes after running a command");
 }
 
 #[test]
 fn command_palette_navigates_via_menu_nav() {
-    use heca_grid_ui::{Component, MenuNav};
+    use heca_grid_ui::{Component, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
-    // No query → all three; selection starts at 0. Next ×2 → idx 2, Prev → idx 1.
-    p.event(&Event::MenuNav(MenuNav::Next));
-    p.event(&Event::MenuNav(MenuNav::Next));
-    p.event(&Event::MenuNav(MenuNav::Prev));
-    p.event(&Event::MenuNav(MenuNav::Activate));
-    assert_eq!(ran.get(), 2, "Next ×2 then Prev lands on the 2nd command (Close pane)");
+    // No query → all three; selection starts at 0. Down ×2 → idx 2, Up → idx 1.
+    p.event(&Event::Widget(WidgetIntent::MenuDown));
+    p.event(&Event::Widget(WidgetIntent::MenuDown));
+    p.event(&Event::Widget(WidgetIntent::MenuUp));
+    p.event(&Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), 2, "MenuDown ×2 then MenuUp lands on the 2nd command (Close pane)");
 }
 
 #[test]
 fn command_palette_query_reuses_input_word_delete() {
-    use heca_grid_ui::{GridKey, MenuNav, Modifiers};
+    use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
@@ -2642,28 +2691,28 @@ fn command_palette_query_reuses_input_word_delete() {
     p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
     p.event(&Event::Key { key: GridKey::Backspace, pressed: true });
     p.event(&Event::ModifiersChanged(Modifiers::default()));
-    p.event(&Event::MenuNav(MenuNav::Activate));
+    p.event(&Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), 3, "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar");
 }
 
 #[test]
 fn input_edit_deletes_char_and_deletes_to_line_start() {
-    use heca_grid_ui::{Input, InputEdit};
-    // The readline shortcuts are host-configured (`input_delete_back` / `input_delete_to_line_start`,
-    // default Ctrl+h / Ctrl+u) and arrive as the semantic `InputEdit`, not a raw key.
+    use heca_grid_ui::{Input, WidgetIntent};
+    // The readline shortcuts are host-configured (`edit_delete_back` / `edit_delete_to_line_start`,
+    // default Ctrl+h / Ctrl+u) and arrive as semantic `Edit*` intents, not a raw key.
     let mut inp = Input::new().value("hello world");
 
-    inp.event(&Event::InputEdit(InputEdit::DeleteBackward));
-    assert_eq!(inp.value_str(), "hello worl", "DeleteBackward removes one char back");
-    inp.event(&Event::InputEdit(InputEdit::DeleteToLineStart));
-    assert_eq!(inp.value_str(), "", "DeleteToLineStart clears to the start of the line");
+    inp.event(&Event::Widget(WidgetIntent::EditDeleteBack));
+    assert_eq!(inp.value_str(), "hello worl", "EditDeleteBack removes one char back");
+    inp.event(&Event::Widget(WidgetIntent::EditDeleteToLineStart));
+    assert_eq!(inp.value_str(), "", "EditDeleteToLineStart clears to the start of the line");
 }
 
 #[test]
 fn input_raw_ctrl_char_is_ignored_not_typed() {
     use heca_grid_ui::{Input, Modifiers};
     // A modified char is never typed as text — it is left for the host to resolve into an
-    // `InputEdit` shortcut (Ctrl+h, Ctrl+u, Ctrl/Cmd+A). The widget ignores the raw key.
+    // `Edit*` shortcut (Ctrl+h, Ctrl+u, Ctrl/Cmd+A). The widget ignores the raw key.
     let mut inp = Input::new().value("hi");
     inp.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
     assert_eq!(

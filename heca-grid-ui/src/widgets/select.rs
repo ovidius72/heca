@@ -11,15 +11,15 @@
 //!
 //! **Open-list navigation is host-configured, not hardcoded** (`widget-keys-config`),
 //! shared with [`ContextMenu`](super::ContextMenu)/[`CommandPalette`](super::CommandPalette):
-//! while open the widget is an overlay and responds to the semantic
-//! [`Event::MenuNav`] (`Prev`/`Next` move the highlight, `Activate` commits, `Dismiss`
-//! closes) — the host resolves the configurable `menu_*` keys (defaults ↑/`Ctrl+k`,
-//! ↓/`Ctrl+j`, Enter, Esc) into it. Only the **closed** trigger keeps raw activation keys
-//! (Enter / Space / ↓ open the list), delivered to the focused widget like a button.
+//! while open the widget is an overlay and responds to the semantic [`Event::Widget`] intents
+//! `MenuUp`/`MenuDown` (move the highlight), `Activate` (commit), `Dismiss` (close) — the host
+//! resolves the configurable `[keys.widgets]` keys (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter,
+//! Esc) into it. Only the **closed** trigger keeps raw activation keys (Enter / Space / ↓ open
+//! the list), delivered to the focused widget like a button.
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, MenuNav, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow, TextAlign};
@@ -473,28 +473,33 @@ impl Component for Select {
                 Handled::Yes
             }
             // Open-list navigation: the widget is an overlay while open, so the host sends the
-            // configurable `menu_*` keys as a semantic `MenuNav` (shared with the context menu /
-            // command palette). No literal nav keys live here.
-            Event::MenuNav(nav) if self.open => {
-                match nav {
-                    MenuNav::Prev => {
-                        self.highlight = self.highlight.saturating_sub(1);
-                        self.scroll_into_view();
-                    }
-                    MenuNav::Next => {
-                        self.highlight = (self.highlight + 1).min(self.options.len() - 1);
-                        self.scroll_into_view();
-                    }
-                    MenuNav::Activate => {
-                        self.commit(self.highlight);
-                        self.open = false;
-                    }
-                    MenuNav::Dismiss => self.open = false,
+            // configurable `[keys.widgets]` keys as a semantic `WidgetIntent` (shared with the
+            // context menu / command palette). A vertical list: `MenuUp`/`MenuDown` (not the
+            // horizontal `Item*`). No literal nav keys live here.
+            Event::Widget(intent) if self.open => match intent {
+                WidgetIntent::MenuUp => {
+                    self.highlight = self.highlight.saturating_sub(1);
+                    self.scroll_into_view();
+                    Handled::Yes
                 }
-                Handled::Yes
-            }
+                WidgetIntent::MenuDown => {
+                    self.highlight = (self.highlight + 1).min(self.options.len() - 1);
+                    self.scroll_into_view();
+                    Handled::Yes
+                }
+                WidgetIntent::Activate => {
+                    self.commit(self.highlight);
+                    self.open = false;
+                    Handled::Yes
+                }
+                WidgetIntent::Dismiss => {
+                    self.open = false;
+                    Handled::Yes
+                }
+                _ => Handled::No,
+            },
             // Closed + focused (not yet an overlay): raw activation keys open the list, like a
-            // button's Enter/Space. The open list is driven by `MenuNav` above, not raw keys.
+            // button's Enter/Space. The open list is driven by `WidgetIntent` above, not raw keys.
             Event::Key {
                 key: GridKey::Enter | GridKey::Space | GridKey::ArrowDown,
                 pressed: true,

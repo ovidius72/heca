@@ -794,21 +794,13 @@ pub struct AppState {
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
     pub prefix_combo: crate::keymap::KeyCombo,
-    /// Overlay list/menu navigation map (`menu-nav`): configurable
-    /// `menu_up`/`menu_down`/`menu_activate`/`menu_dismiss` → semantic [`MenuNav`],
-    /// consumed only while a menu/palette overlay is open (never hijacks normal input).
-    /// Rebuilt on config reload alongside the keymap.
-    pub menu_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::MenuNav>,
-    /// Dialog focus-nav map (`widget-keys-config`): configurable
-    /// `dialog_focus_next`/`dialog_focus_prev`/`dialog_submit`/`dialog_cancel` → semantic
-    /// [`DialogNav`](heca_grid_ui::DialogNav), consumed only while a `Dialog` overlay is open.
-    /// Rebuilt on config reload alongside the keymap.
-    pub dialog_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::DialogNav>,
-    /// Input editing-shortcut map (`widget-keys-config`): configurable
-    /// `input_delete_back`/`input_delete_to_line_start`/`input_select_all` → semantic
-    /// [`InputEdit`](heca_grid_ui::InputEdit), delivered field-first to a focused `Input` inside
-    /// an overlay. Rebuilt on config reload alongside the keymap.
-    pub input_keymap: std::collections::HashMap<crate::keymap::KeyCombo, heca_grid_ui::InputEdit>,
+    /// Widget keymap (`widget-keys-config`): the single host-owned `[keys.widgets]`-derived map
+    /// from a key chord to the semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent)s it triggers.
+    /// Every interactive widget/overlay (context menu, palette, `Select`, `Tabs`, `Dialog`,
+    /// `Input`) consults it via [`Keymap::dispatch`](heca_grid_ui::Keymap::dispatch); consumed
+    /// only while such a widget/overlay is focused (never hijacks normal input). Rebuilt on config
+    /// reload alongside the keymap.
+    pub widget_keymap: heca_grid_ui::Keymap,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,
