@@ -1793,6 +1793,12 @@ similar activity (see the stub phase below) — build the shared pieces here reu
     `paint_keycap` (`heca-grid-ui/src/widgets/key_hint.rs`); `ContextMenu` uses `Bordered` (outline,
     no fill, full-accent border, small `KEYCAP_FONT_SCALE`) — NOT hand-drawn. Showcase + `docs/widgets.md`
     + rustdoc updated.
+  - **Code-verified + planner synced 2026-07-13:** all four items confirmed present in code —
+    `KeycapVariant`/`paint_keycap` at `key_hint.rs:78`/`:99`, `ContextMenu` call at `context_menu.rs:448`;
+    `window_center_logical` at `mouse.rs:89`; `prefix+>` at `keybindings.default.toml:39`;
+    `FocusedPaneLocal` arm at `interaction.rs:273` + spot-check at `:1210`. The planner task had been
+    left stale (`in-progress`, unchecked checklist, description still listing 3.1 as "Remaining") even
+    though the code + this BACKLOG entry were already done 2026-07-10 — planner task now closed.
   See `HANDOFF-context-menu.md` + `HANDOFF-pane-rename-naming.md` for full detail.
 - [x] **context-menu-4 — DONE (2026-07-08, GUI-verified in-app by the user), commit `7d031c5`.**
   Both `open_context_menu`/`open_sidebar_context_menu` (`mouse.rs`) build a `DropdownSpec` + open via

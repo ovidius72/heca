@@ -125,8 +125,8 @@
       "number": 3,
       "shortName": "context-menu-3",
       "title": "context-menu-3: OpenContextMenu keyboard/RPC action + item polish",
-      "status": "in-progress",
-      "description": "OpenContextMenu keyboard/RPC action + item polish. NOTE 2026-07-09: the keyboard-open context-awareness (sidebar vs pane, mode-restore) and the unified open path moved to context-menu-6 (registry + open_context_menu_for) and context-menu-7 (resolve_active_context + prefix arm + pending_context + mode-restore). This task keeps the already-done items below and the remaining bordered-keycap polish.\n\nDone this session (verified in code):\n- 3.2 anchor: keyboard-open anchors at center of app window (window_center_logical in mouse.rs; DropdownSpec.centered + ContextMenu::centered() builder in heca-grid-ui context_menu.rs layout centers panel on anchor; open_dropdown passes it; keyboard centered=true, mouse false). Unit test centered_places_panel_center_on_asserts panel center==anchor.\n- 3.3 binding: default binding prefix+. → prefix+> (keybindings.default.toml:39, actions.rs:303 default_binding=\">\") — resolved a live conflict with sidebar_right (also prefix+.).\n- Policy: OpenContextMenu reclassified TiledOnly → FocusedPaneLocal (interaction.rs:265-269) so it shows with a floating pane active. Spot-check assertion + routing test.\n\nRemaining:\n- 3.1 bordered keycap via shared paint_keycap: the keycap in ContextMenu::paint (context_menu.rs ~L95-113) is hand-drawn with cx.rect + cx.text. Replace with a shared `paint_keycap` bordered variant added to heca-grid-ui/src/widgets/key_hint.rs (paint_keycap/keycap_size exist at :64/:80, only filled-glowing chip today — add a bordered variant). Caller picks variant; widget owns styling. No hardcode.",
+      "status": "done",
+      "description": "OpenContextMenu keyboard/RPC action + item polish. NOTE 2026-07-09: the keyboard-open context-awareness (sidebar vs pane, mode-restore) and the unified open path moved to context-menu-6 (registry + open_context_menu_for) and context-menu-7 (resolve_active_context + prefix arm + pending_context + mode-restore). This task keeps the already-done items below and the remaining bordered-keycap polish.\n\nDone this session (verified in code):\n- 3.2 anchor: keyboard-open anchors at center of app window (window_center_logical in mouse.rs; DropdownSpec.centered + ContextMenu::centered() builder in heca-grid-ui context_menu.rs layout centers panel on anchor; open_dropdown passes it; keyboard centered=true, mouse false). Unit test centered_places_panel_center_on_asserts panel center==anchor.\n- 3.3 binding: default binding prefix+. → prefix+> (keybindings.default.toml:39, actions.rs:303 default_binding=\">\") — resolved a live conflict with sidebar_right (also prefix+.).\n- Policy: OpenContextMenu reclassified TiledOnly → FocusedPaneLocal (interaction.rs:265-269) so it shows with a floating pane active. Spot-check assertion + routing test.\n\nRemaining:\n- 3.1 bordered keycap via shared paint_keycap: the keycap in ContextMenu::paint (context_menu.rs ~L95-113) is hand-drawn with cx.rect + cx.text. Replace with a shared `paint_keycap` bordered variant added to heca-grid-ui/src/widgets/key_hint.rs (paint_keycap/keycap_size exist at :64/:80, only filled-glowing chip today — add a bordered variant). Caller picks variant; widget owns styling. No hardcode.\n\n---\n**Completion summary:**\nDONE — all four items verified present in code on 2026-07-13 (planner was stale: task left in-progress, checklist boxes unchecked, description still listed 3.1 as \"Remaining\" even though the code + BACKLOG already had it done 2026-07-10).\n\nCode-verified:\n- 3.1 bordered keycap: `KeycapVariant::{Filled,Bordered}` at `heca-grid-ui/src/widgets/key_hint.rs:78`; `paint_keycap(..., variant)` at `:99` (Bordered = outline, no fill, full-accent border, no glow); `ContextMenu` uses it at `context_menu.rs:448` `paint_keycap(cx, cap, &k.to_string(), self.keycap_font(), Some(cap_color), KeycapVariant::Bordered)`. No hand-drawn keycap remains.\n- 3.2 keyboard-open anchor = window center: `window_center_logical` `mouse.rs:89` (used `handlers.rs:196` + `mouse.rs:125`); `DropdownSpec.centered` `context_menu.rs:122`; `ContextMenu::centered()` `:168`; layout branch `:309`; unit test `centered_places_panel_center_on_anchor` `:593`.\n- 3.3 binding `prefix+>`: `keybindings.default.toml:39`; descriptor `actions.rs:313`.\n- Policy `OpenContextMenu` → `FocusedPaneLocal`: `interaction.rs:273` (arm, comment :269-272); spot-check `interaction.rs:1210-1213`.\n\nChecklist boxes were left unchecked (the planner has no checklist-toggle tool — only replace-as-plain-strings, which loses the checked state); the description_update + this completion record the done state. BACKLOG already carried `[x] DONE (2026-07-10)` for this task.\n\nRemaining phase work (separate task): `context-menu-5` — plugin `Contribution::ContextMenu` (still planned). The `context-menu` phase stays in-progress on its account.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -156,9 +156,9 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-09T09:25:14.679Z",
-      "completedAt": "",
+      "completedAt": "2026-07-13T15:48:37.380Z",
       "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-09T13:43:22.858Z"
+      "updatedAt": "2026-07-13T15:48:37.380Z"
     },
     {
       "id": "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
@@ -242,5 +242,5 @@
     }
   ],
   "createdAt": "2026-07-09T09:24:46.628Z",
-  "updatedAt": "2026-07-09T15:00:45.024Z"
+  "updatedAt": "2026-07-13T15:48:37.380Z"
 }

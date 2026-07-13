@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-10T16:14:18.900Z
+**Last updated:** 2026-07-13T15:48:37.485Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -80,11 +80,11 @@ Status: ✅ `done`
 
 **Work remaining:** Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.
 
-### 🚧 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
+### 📋 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
 
 Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.
 
-Status: 🚧 `in-progress`
+Status: 📋 `planned`
 
 **Phases:**
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
@@ -98,9 +98,10 @@ Status: 🚧 `in-progress`
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (2/3 tasks)
 - 📋 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (4/9 tasks)
-- 🚧 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (5/7 tasks)
+- 📋 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (6/7 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
+- 📋 **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (0/2 tasks)
 
 ### ⏸️ cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -116,6 +117,7 @@ Status: ⏸️ `deferred`
 - 📋 **35d74cc9-a3df-49c9-a5bb-59e12a88b49c** P005 — gridui-06: Additional widgets (0/6 tasks)
 - 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** P006 — gridui-07: Crate-review debt (0/8 tasks)
 - 📋 **36628b50-a0b5-4974-852e-96d68c09f11f** P007 — gridui-03: Nerd-Font icon widget (0/4 tasks)
+- 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P008 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
 
 ### 📋 b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -142,7 +144,7 @@ Status: 📋 `planned`
 - 📋 **f6a5aa17-dbbf-4463-8ae1-744ab1ba886f** P003 — app-01: Niri layout parity audit (0/3 tasks)
 - 📋 **9e5ec754-ebf3-47f9-9850-378dd75b8e1c** P004 — app-07: Damage-region render optimization (0/5 tasks)
 - 📋 **c192c5ca-f6ac-493a-bd8d-d95117c430aa** P005 — app-10: Sidebar/chrome leftovers (2/3 tasks)
-- 📋 **5cab2dbb-ce1b-4a33-b6bc-ede8437fca09** P006 — app-11: Right-click context menu (0/3 tasks)
+- 📋 **5cab2dbb-ce1b-4a33-b6bc-ede8437fca09** P006 — app-11: Right-click context menu (2/3 tasks)
 - 📋 **00afc6e8-101c-47e3-8739-5a8b216c81c4** P007 — app-04: Pane numbering (0/3 tasks)
 - 📋 **50c22c08-b639-4a1a-a3cb-2a9f7084c0f9** P008 — app-05: Workspace drag-to-reorder (0/4 tasks)
 - 📋 **a6831878-0168-4261-935e-818cc9b9a909** P009 — app-03: App-wide zoom and font-size controls (0/3 tasks)
@@ -207,7 +209,102 @@ Status: 📋 `planned`
 ---
 ## Requirements
 
-_No requirements defined yet._
+### 37773571-97a9-4732-9472-a4b1091508a7 — widget-keys-config: In-widget keys should be customizable
+
+DONE (2026-07-12) — unified `WidgetIntent` + host-owned `Keymap` + `[keys.widgets]`. Branch `feat/widget-keymap-unify` (off `feat/widget-keymap` PR #234). The three per-widget event vocabularies (`MenuNav`/`DialogNav`/`InputEdit`) and the three app maps (`menu_keymap`/`dialog_keymap`/`input_keymap`) were collapsed into **one** `heca_grid_ui::WidgetIntent` (`ItemPrevious`/`ItemNext` = horizontal, `MenuUp`/`MenuDown` = vertical, `Activate`/`Dismiss`, `EditDeleteBackward`/`EditDeleteToLineStart`/`EditSelectAll`) delivered as `Event::Widget(..)`, and a **host-owned** `heca_grid_ui::Keymap` (`keymap.rs`): `key chord → Vec<WidgetIntent>` + `Keymap::dispatch` (raw key field-first, then resolved intents; the `Ctrl+h` overload disambiguates by focus). NOT a global — each host owns its `Keymap` (`AppState.widget_keymap` in the app, `Keymap::with_defaults()` in the showcase). Config moved to a `[keys.widgets]` table; `heca-config` `KeysConfig.widgets` field; `build_widget_keymap` (`registry.rs`) + `combo_to_grid`. Tab/Shift+Tab stay the universal focus primitive (FocusManager + trapped in a modal Dialog), **not** configurable.
+
+Bug fixes (2026-07-12) after user testing, on `feat/widget-keymap-unify`:
+- `5127604` — macOS `Ctrl+letter` gave a control char via winit logical key → resolve from the normalized `event_combo` (physical-key fallback) + `combo_to_grid`.
+- `83f8361` — `normalize_key_text` names `NamedKey`s capitalised (`"ArrowDown"`/`"Tab"`/`"Enter"`), but `combo_to_grid` matched lowercase → returned `None` for every named key → overlay dispatch was skipped entirely. FIX: lowercase the key name in `combo_to_grid`. Trap: any KeyCombo→grid conversion MUST be case-insensitive on the key name.
+
+Sub-tasks:
+- [x] widget-keys-config-1 — audit every heca-grid-ui widget that matches literal keys in `event()`; propose the configurable model (intents + injected keymap); wire `Dialog` + `Input` first. DONE (model chosen 2026-07-11: host-driven semantic events, menu-nav parity).
+- [~] widget-keys-config-2 — apply the same host-driven pattern to the remaining literal-key widgets. `Select` DONE (open-list nav consumes `Event::MenuNav`, folded into shared menu-nav vocabulary). `Tabs` DEFERRED (showcase-only; convert when actually mounted in-app).
+- [ ] widget-focusable-centralize — 18 widgets re-implement `Component::focusable()`; make it a `Base.focusable` property defaulted per widget (set in constructor / when a callback is wired), with `disabled` handled centrally in the trait default (`base.focusable && !base.disabled`). Drop the 18 overrides; keep a small override only for genuinely dynamic cases (`Dialog` = while open). Top next task.
+- [ ] widget-keys-bug-dialog-ok-focus — BUG (needs running app): rename-dialog Tab traverses Input↔Cancel but never the OK/primary button. Check the `Tooltip` wrapper in `overlay.rs build_modal_root` (~L338–363) and the `spec.actions` order. Do after focusable-centralize.
+- [ ] widget-keys-verify-inapp — verify the key fixes in the GPU app + showcase.
+
+Docs: `docs/widgets.md` (Input/Select/Tabs/Dialog/ContextMenu/CommandPalette), README (`[keys.widgets]`), rustdoc. Gates: workspace clippy 0, all tests green (grid-ui 128+69, heca 333+89, heca-config 78). In-app visual pass by the user pending. Full detail + resume steps: repo-root `HANDOFF.md`.
+
+Source: BACKLOG.md (Requirement, requested 2026-07-09).
+
+Status: ✅ `done`
+Phases: `05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9`, `99d19246-1ba9-4720-9895-e70c66acf144`
+
+### 4f66a18a-8805-4dd1-a9d6-63f5c51e9be3 — terminal-theming: Terminal color reload + theme integration (BUGS)
+
+Two terminal color bugs found during the pane-naming session (2026-07-10). User: fix on a separate branch after pane-naming. Transparency was **off** when Bug 2 was observed (so it is a palette/default-bg issue, not z=0 frost compositing).
+
+Sub-tasks:
+- [ ] terminal-theming-1 — BUG: terminal colors are not reapplied on config reload (`prefix+Shift+r`). Root-caused: `reload_config` recomputes the palette and calls `engine.reload_config` → `terminal.set_config(...)`, but wezterm-term's `set_config` only swaps the config Arc — it does **not** reset the *forked* palette override. `TerminalState::palette()` returns `self.palette` (the fork) when set, else `config.color_palette()`. Any program that uses a dynamic-color escape (OSC 4/10/11/104…) — nvim always does, many shell prompts too — forks `self.palette`, so a heca theme reload updates the config but `palette()` (read by the snapshot, `engine.rs` ~578/643) keeps returning the stale fork. Pristine shells (never touched colors) *do* re-theme. Fix: in `TerminalEngine::reload_config` (`heca-core/.../engine.rs`), after `set_config`, force the new palette to win — e.g. `*self.terminal.palette_mut() = self.terminal.get_config().color_palette()` (or reset the fork to `None`). wezterm's `implicit_palette_reset_if_same_as_configured` is insufficient (only resets when the fork already equals config). A running nvim reasserts its own colors on its next redraw.
+- [ ] terminal-theming-2 — BUG: an nvim dark colorscheme has "no effect" under a light UI theme (latte), transparency off. Contributing facts: (1) the UI theme does **not** drive the terminal palette — `terminal_palette_defaults` (`heca/src/app/backend_factory.rs`) reads only explicit `theme.terminal_foreground/background/ansi/brights/…` overrides; unset → wezterm `ColorPalette::default()` regardless of mocha/latte. (2) Likely the same fork mechanism as terminal-theming-1 interacts with a light `terminal_background`. Needs deeper investigation on the fix branch (repro: latte + opaque terminal + dark nvim colorscheme; check whether heca's default bg overrides nvim's OSC-set bg, and whether the UI theme *should* map to terminal defaults when no explicit `terminal_*` override exists).
+
+Source: BACKLOG.md (Requirement, BUGS 2026-07-10).
+
+Status: 📋 `planned`
+
+### 31551e80-42a5-4e36-ac31-a71594de2545 — available-actions: Context-aware available-actions query
+
+A single query answering "which actions are applicable right now", given the current context — so a surface (first consumer: the command palette; also future context-aware help / which-key) can list exactly the actions the user can take at this moment. This is the *general* form of what the context menu already does per-target: the context menu maps a `ContextPath`/`ContextTarget` to a curated entry list; this maps the **whole live context** (focus domain, `InputMode`, focused pane / sidebar cursor, floating-vs-tiled) to the **full set of currently-available `WmAction`s**.
+
+Build on the pieces already in place — do NOT invent a parallel system:
+- `action_policy()` (`app/interaction.rs`) already classifies every `WmAction` by where it is allowed (Tiled/Floating/Workspace/etc.); the availability filter is the same predicate the interaction router uses (`route_action`), so "available" == "the router would Allow it now".
+- `ContextPath`/`ContextTarget` + `resolve_active_context` (`chrome/context_menu.rs`) already resolve the active context; extend that resolution to also drive action availability.
+- `ActionRegistry::ALL` + `ActionCatalog` (`actions.rs`) is the enumerable action set with names/icons/descriptions the palette renders.
+
+Target shape (subject to design): `available_actions(state) -> Vec<ActionAvailability { action_name, allowed: bool, reason }>` (or an iterator of allowed actions), computed from `action_policy` + current focus domain + `InputMode` + context, reachable from keyboard/RPC and consumed by the command palette. Unit-testable as a pure mapping (mirror `resolve_context_for`). Defer the palette UI itself; this requirement is the **query/infrastructure** it will read.
+
+Sub-tasks:
+- [ ] available-actions-1 — design + implement the context→available-actions query on top of `action_policy`/`resolve_active_context`/`ActionCatalog`; pure + unit-tested; RPC-introspectable. (Feeds the command palette — a later phase.)
+
+Source: BACKLOG.md (Requirement, asked by user 2026-07-09 while context-menu context system was being built).
+
+Status: 📋 `planned`
+Phases: `8f760a9b-3ce8-4932-8286-67d742397f2e`
+
+### 2458a02c-31e2-4b09-9bdb-fe1e56d9d68e — pane-naming: Pane naming + sidebar pane rows
+
+Follow-ups from the rename-dialog session (2026-07-10). Full detail + resume steps in the repo-root `HANDOFF-pane-rename-naming.md` §1. Done this session (uncommitted on `feat/planner-backlog-sync`): rename→modal dialog, by-id rename actions, sidebar-mode rename bindings, `AppName` segment shows the program name (not the rename), prefill fixes, sidebar-rename mode-restore, `pane_renamed_add_process_name` config (rendering not yet wired).
+
+Sub-tasks:
+- [ ] pane-naming-1 — new `[appearance.pane] title_segments` value **`pane_name`** (shows `view.title` = original/renamed name; NOT default). `PaneSegment::PaneName` in `heca-config/src/appearance.rs` + `build_pane_info_bar` arm + README/config.default.toml.
+- [ ] pane-naming-2 — sidebar pane card: append the small dimmed **`(process)`** suffix when the pane has a custom name + `pane_renamed_add_process_name`. Carry the flag on `WorkspacesContainerState` (signal, set in `sync_chrome_state`) — read in `pane_card`; then remove the now-dead info-bar `add_process_name` plumbing.
+- [ ] pane-naming-3 — new `[settings] pane_show_cwd: bool` + a **cwd row** (folder icon + `home_relative_path(cwd)`) between the name row and the git row in the sidebar pane card.
+- [x] pane-naming-4 — column rename reachability. Added `RenameColumnByIdx { ws_idx, col_idx }` (full wiring). Menu entry removed by decision (2026-07-10): a column's name is not displayed anywhere (columns render as a `MarkerGroup` with no header/label), so a Rename-column menu entry renames something invisible. The action stays wired (RPC + handler) for when columns surface a name.
+- [ ] column-name-display (follow-up, from pane-naming-4) — surface a column's name in the sidebar (a per-column header/label on the `MarkerGroup`, theme-driven, domain-neutral widget per the grid-ui rules). Only then does renaming a column pay off — re-add the Rename-column context-menu entry at that point.
+- [ ] pane-naming-5 — declare **icons on EVERY action** used in menus/buttons, in its `ActionDescriptor` (`actions.rs` `ActionRegistry::ALL`) — not just rename. Audit all entries built by `chrome/context_menu.rs` (pane + sidebar.pane/column/workspace) and any button: `split_horizontal`, `split_vertical`, `zoom_column`, `float`, `close`, `create_workspace`, `add_pane_to_column`, `add_column_to_workspace`, `delete_column`, `delete_workspace`, `rename_pane`/`rename_workspace`/`rename_column`, `open_link`, … Each gets `icon: Some(Glyph::…)`. Add any missing glyphs (e.g. `Pencil` for rename) to the central `Glyph` enum + icon-font mapping + `docs/widgets.md`.
+- [ ] pane-naming-6 — BUG (needs repro): renaming from the sidebar renames the wrong pane (hypothesis: `pending_context` cursor on a non-pane row → falls back to focused pane).
+- [x] pane-naming-7 — Remove/clear a custom pane/workspace name (revert to process/default name). DONE (2026-07-10). 4 dedicated actions (`ResetPaneName`/`ResetPaneNameById`, `ResetWorkspaceName`/`ResetWorkspaceNameByIdx`), full wiring + RPC + descriptors (icon `Backspace`, labels "Use process name"/"Use default name"), reusing `apply_rename(target, "")`. Menu entries conditional (only shown when a custom name exists). Original decision (2026-07-10, user): dedicated action (Option B) — NOT empty-submit in the rename dialog.
+
+Source: BACKLOG.md (Requirement).
+
+Status: 🚧 `in-progress`
+Phases: `3bdc254b-4b5c-4f74-a783-8de4ae1628fa`
+
+### 7340431a-5569-4383-ab54-978c2b2b338f — reload-bugs: Config-reload consistency bugs
+
+Two reload-staleness bugs found during the pane-naming session (2026-07-10) — things that only partly re-apply on `prefix+Shift+r`. Same family: a retained/cached tree not invalidated on reload. Worked on branch `fix/reload-bugs` (off `main`, after #228/#229 merged). DONE 2026-07-11.
+
+Sub-tasks:
+- [x] reload-bug-header-icons — BUG: pane-header action icons stay **faint/stale on existing panes** after a theme reload (e.g. mocha→latte); a newly-created pane looks correct. Root-caused + FIXED. Retained per-pane headers (`state.pane_headers`) bake theme colors + font into their widget tree at build time, and `pane_header_key` deliberately carries no theme identity (themes only change on reload), so a theme swap changed no header's key and the stale trees were kept. `reload_config` invalidated the other retained trees (`terminal_layers.clear()`, `chrome_tree = None`) but not `pane_headers`. Fix: new `chrome::clear_pane_headers` (drops each header's `HintTargetRegistry` range, then clears) called from `reload_config`; also de-dups the identical inline cleanup in `sync_pane_headers`.
+- [x] reload-bug-terminal-transparency — REPORTED: changing `[appearance.terminal] transparency` + reload only partially applies (old alpha persists until a new pane opens). Resolved — no code change needed; user-verified fixed on current `main` (2026-07-11). `terminal_layer_render_key` (`app/terminal_render.rs`) already hashes `surface_alpha` (since the `terminal-00b` foundation, test `terminal_layer_render_key_changes_with_surface_alpha`), and `retained_damage_to_apply` maps any `style_changed` to `TerminalDamage::Full`, so a transparency change forces a full repaint of every pane's retained layer on the next frame. The symptom predated the merged terminal-theming-2 fix; on current `main` it no longer reproduces.
+
+Source: BACKLOG.md (Requirement, found 2026-07-10, done 2026-07-11).
+
+Status: ✅ `done`
+
+### de43129f-eb37-4e1a-bd7f-2ba52c5a9c99 — chrome-bugs: Chrome interaction bugs
+
+UI/interaction bugs found during the pane-naming session (2026-07-10). Not diagnosed yet — capture + repro first.
+
+Sub-tasks:
+- [~] chrome-bug-collapsed-sidebar-picks — BUG: with the sidebar **collapsed** (rail mode), clicking a rail cell focuses the **wrong pane** / opens the **delete dialog** / shows the wrong highlight. Root cause found (grill-me, 2026-07-11): the collapsed rail is hand-drawn (`render_sidebar_collapsed`) and `sidebar_hit_test` re-derives the rail geometry with its own magic numbers (`ITEM_HEIGHT`, a phantom `BTN_ROW_HEIGHT` top offset the rail never draws) — the two copies drifted, so clicks map one row off. Resolution (decided with the user): DROP the collapsed rail entirely rather than rebuild it — a region is now **Expanded ⇄ Hidden** (no rail). Deleting `render_sidebar_collapsed` + the collapsed branch of `sidebar_hit_test` removes the broken code and closes this bug by construction. Tracked as the "drop the collapsed rail" work under `app-task-21`. Full design + rationale: `docs/sidebar-provider-modes.md`.
+- [ ] chrome-bug-titlebar-doubleclick-fullscreen — BUG (macOS): double-clicking the top-bar sidebar-toggle button enters OS full screen. No app fullscreen/titlebar code exists — the window uses `Window::default_attributes()` (native macOS titlebar) and the vibrancy path doesn't touch the style mask, so this is macOS's native "double-click title bar to zoom/fill/full screen" firing because the top-bar interactive regions sit in the OS titlebar's draggable band (button eats the first click, the OS titlebar gets the second). Fix is macOS-specific: exclude the top-bar buttons from the drag/titlebar region (`mouseDownCanMoveWindow = NO` on those NSViews) or disable titlebar double-click zoom for the window. Files: `heca/src/app/startup.rs` (window/NSWindow setup). Needs on-machine repro.
+
+Source: BACKLOG.md (Requirement, found 2026-07-10).
+
+Status: 🚧 `in-progress`
+Phases: `c192c5ca-f6ac-493a-bd8d-d95117c430aa`, `5cab2dbb-ce1b-4a33-b6bc-ede8437fca09`
 
 ---
 ## Phases
@@ -332,7 +429,7 @@ Context menu keyboard-navigable con azioni chrome e terminal pane.
 
 Status: 📋 `planned`
 
-**Tasks:** 0/3
+**Tasks:** 2/3
 
 ### 📋 00afc6e8-101c-47e3-8739-5a8b216c81c4 — P007 — app-04: Pane numbering
 
@@ -590,6 +687,15 @@ Status: 📋 `planned`
 
 **Tasks:** 0/4
 
+### 📋 402d22d4-a658-47d7-8481-fb074ce43a00 — P008 — button-shortcut: Button accelerator / shortcut
+
+Button::shortcut(char) → composed Icon(NfIcon ⌃)+Label(letter) trailing slot inside the button; Ctrl+<c> self-submit + FocusManager::deliver_accelerator. Blocked on viewnode-all-widgets (Button) + gridui-03 NerdFont.
+
+Status: 📋 `planned`
+Dependencies: 68a01ad8-1026-4c09-b516-2e2838723903, 36628b50-a0b5-4974-852e-96d68c09f11f
+
+**Tasks:** 0/2
+
 ### 📋 09bcb3cf-f8ea-454a-913e-ea377c53d37e — P001 — plugin-08: WASM plugin runtime
 
 Runtime WASM per plugin, event bus, contributi alle regioni e action registration.
@@ -678,11 +784,11 @@ Status: 📋 `planned`
 
 **Tasks:** 4/9
 
-### 🚧 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
+### 📋 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
 
 Context menus as a host-owned, context-resolved overlay. Foundation: ContextPath (dotted) + ContextMenuRegistry (built-in providers + plugin Contribution::ContextMenu) + resolve_active_context (keyboard implicit) + unified open_context_menu_for + overlay_origin_mode (mode-restore after close). Keyboard prefix+> works everywhere via prefix arm in SidebarNav; after close the user returns to the origin mode (e.g. stays in sidebar). Mouse right-click refactored to the same unified path (parity preserved, Open-link via target hyperlink). Plugin menus attach by context_path and appear when that context is active/clicked.
 
-Status: 🚧 `in-progress`
+Status: 📋 `planned`
 
 **Accepted decisions:**
 - **ContextPath dotted + target opaco**
@@ -716,7 +822,7 @@ Status: 🚧 `in-progress`
   - Implementation: Contribution::ContextMenu { context_path, weight: Vec<i64>, build } (C1/C2/C3 già locked in context-menu-5).
   - Accepted at: 2026-07-09T16:00:00Z
 
-**Tasks:** 5/7
+**Tasks:** 6/7
 
 ### 📋 05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9 — P013 — menu-nav: Shared list/menu navigation keybindings
 
@@ -733,6 +839,14 @@ STUB. A top-bar Menu/menubar is a separate activity, similar to the contextual m
 Status: 📋 `planned`
 
 **Tasks:** 0/1
+
+### 📋 68a01ad8-1026-4c09-b516-2e2838723903 — P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor)
+
+TOP PRIORITY standing: every widget's content composed from child Components (the tree realize produces) and ViewNode-realizable; refactor touched widgets toward this.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/2
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P001 — agents-01: Agent status tracking and sounds
 

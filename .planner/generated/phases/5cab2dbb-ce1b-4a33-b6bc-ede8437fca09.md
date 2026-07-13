@@ -2,21 +2,21 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-07-01T18:09:59.861Z
-**Updated:** 2026-07-01T18:14:56.477Z
+**Updated:** 2026-07-13T15:32:06.296Z
 
 Context menu keyboard-navigable con azioni chrome e terminal pane.
 
 ## Tasks
 
-### 📋 967a121b-9003-4abe-bc42-294f25b6fb90 — T001 — Build ContextMenu grid-ui widget
+### ✅ 967a121b-9003-4abe-bc42-294f25b6fb90 — T001 — Build ContextMenu grid-ui widget
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Widget ContextMenu keyboard-navigable.
 
-### 📋 c511a0ad-6883-4b81-a160-c1e6c97516ed — T002 — Sidebar right-click context menu
+### ✅ c511a0ad-6883-4b81-a160-c1e6c97516ed — T002 — Sidebar right-click context menu
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Context menu per tree/sidebar.
 

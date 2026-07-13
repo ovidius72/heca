@@ -62,7 +62,7 @@
       "number": 3,
       "name": "🧩 Pluggable Chrome Architecture",
       "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
-      "status": "in-progress",
+      "status": "planned",
       "discussedAt": "",
       "contextReady": false,
       "contextReadyReason": "",
@@ -85,11 +85,12 @@
         "99d19246-1ba9-4720-9895-e70c66acf144",
         "8f760a9b-3ce8-4932-8286-67d742397f2e",
         "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
-        "7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4"
+        "7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4",
+        "68a01ad8-1026-4c09-b516-2e2838723903"
       ],
       "dependsOn": [],
       "createdAt": "2026-07-01T18:08:37.398Z",
-      "updatedAt": "2026-07-09T09:24:47.001Z"
+      "updatedAt": "2026-07-13T15:29:44.427Z"
     },
     {
       "id": "cd083ad1-8310-4368-981b-d14c73c20d96",
@@ -112,11 +113,12 @@
         "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
         "35d74cc9-a3df-49c9-a5bb-59e12a88b49c",
         "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
-        "36628b50-a0b5-4974-852e-96d68c09f11f"
+        "36628b50-a0b5-4974-852e-96d68c09f11f",
+        "402d22d4-a658-47d7-8481-fb074ce43a00"
       ],
       "dependsOn": [],
       "createdAt": "2026-07-01T18:08:37.398Z",
-      "updatedAt": "2026-07-01T18:09:59.861Z"
+      "updatedAt": "2026-07-13T15:29:44.427Z"
     },
     {
       "id": "b5d04826-7fd8-4094-ace5-96dc93b825a0",

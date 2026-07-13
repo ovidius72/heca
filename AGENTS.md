@@ -723,7 +723,21 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 
 **When you touch a widget, you MUST refactor it toward this.** Any leaf that hand-draws its content (e.g. `Button` drawing its label text directly, so it can't hold an `Icon`) is a **refactor target**: make it compose its content as children (a content slot: leading / label / trailing, like `Item` already does) before adding to it. Do not bolt a hand-drawn extra onto a hand-drawn widget — that is the anti-pattern this rule exists to kill. Extending the vocabulary (a new `WidgetKind`, a new prop) is **host-side** work (widget + `realize` arm + showcase + `docs/widgets.md`); plugins only *compose* existing kinds.
 
-> **Authoritative design:** `pluggable-chrome-plugin-plan.md` §2.6.2 (the model) + §2.7.2 (intent dispatch); `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`. Realize coverage today (`realize.rs`) still misses `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` (need structured props, `plugin-task-ui-9`) — filling these + composing the leaf widgets is the standing refactor.
+> **📕 AUTHORITATIVE, READ IT BEFORE PROPOSING ANYTHING: [`docs/widget-architecture.md`](docs/widget-architecture.md).**
+> It is **SETTLED**. Its §5 lists the questions that are already decided — do **not** re-derive or
+> re-propose them. The load-bearing ones, inline so you cannot miss them:
+>
+> - **`heca-grid-ui` NEVER depends on `heca`.** `ViewNode` lives in the **app**
+>   (`heca/src/chrome/view.rs`). Therefore **`Button::new(ViewNode)` is impossible — never propose
+>   it**, and **do not propose moving `ViewNode` into `heca-grid-ui`** (it can't carry the
+>   closures/signals the native chrome needs — every state change would become a rebuild).
+> - **`realize` is the ONE bridge** (app-side): `ViewNode` (data) → `Box<dyn Component>` (widgets).
+>   Both authoring paths — declarative `ViewNode` (plugins/RPC/modal bodies) and the native builder
+>   API (chrome, with closures + signals) — converge on the **same retained tree**.
+> - **Widgets hold children** (`impl Component`, never a closed `Icon|Label` enum). A realized
+>   subtree enters via a `*_boxed` setter (`Dialog::body_boxed` is the precedent).
+>
+> Supporting design: `pluggable-chrome-plugin-plan.md` §2.6.2 (the model) + §2.7.2 (intent dispatch); `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`. Realize coverage today (`realize.rs`) still misses `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` (need structured props, `plugin-task-ui-9`) — filling these + composing the leaf widgets is the standing refactor.
 
 ---
 
