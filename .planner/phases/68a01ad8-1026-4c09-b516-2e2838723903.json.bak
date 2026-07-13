@@ -4,7 +4,7 @@
   "number": 15,
   "slug": "viewnode-all-widgets-viewnode-all-widgets-compositional-refactor",
   "title": "viewnode-all-widgets: ViewNode → all widgets (compositional refactor)",
-  "status": "done",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -23,7 +23,8 @@
   "taskIds": [
     "c9937902-a2bd-4ed3-8115-551bf87a7396",
     "3d8841ae-3adc-4016-a83d-dec93a4c942b",
-    "23d2e8b8-e251-4ae5-9f74-cd28ae96ff4b"
+    "23d2e8b8-e251-4ae5-9f74-cd28ae96ff4b",
+    "ee13e1f3-f329-46be-9c2a-6552d245e627"
   ],
   "tasks": [
     {
@@ -94,8 +95,28 @@
       "completedAt": "2026-07-13T20:32:16.544Z",
       "createdAt": "2026-07-13T20:30:39.956Z",
       "updatedAt": "2026-07-13T20:32:16.544Z"
+    },
+    {
+      "id": "ee13e1f3-f329-46be-9c2a-6552d245e627",
+      "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
+      "number": 4,
+      "shortName": "viewnode-task-4-retire-root-ha",
+      "title": "viewnode-task-4 retire root HANDOFF and fix stale Modal reference",
+      "status": "in-progress",
+      "description": "Retire the root `HANDOFF.md` (the planner + `.planner/HANDOFF.md` are the handoff mechanism now) and fix the one stale claim it flagged.\n\n## 1. Delete `HANDOFF.md` from the repo root\nEverything in it is either **done and merged**, or **rescued into the planner** (verified before deletion):\n- §1a–1h (Modal removal, `Base.focusable`, Button disabled/Secondary styling, overlay-capture policy, text-field uppercase, confirm dialog + random pane names, `Glyph::CaretUp`, the AGENTS.md ⭐ block) — **all shipped**, on `main` or PR #237.\n- §2 accelerator decisions + §3b — **rescued into the planner phase `button-shortcut`** (`402d22d4`) description, which is now marked UNBLOCKED on the Button side.\n- §3a (ViewNode → all widgets) — **done/superseded**: `viewnode-task-2`/`-3` shipped (PR #237), and `viewnode-task-1` was replaced by the phase `viewnode-choice` (`1df9c36c`, 8 tasks).\n- §3c leftovers — **rescued as tasks**: Dialog font-derived min-width → `gridui-07` task `bd6b5935`; context-menu keyboard nav bug → `context-menu` task `bc9ca992`; the stale `Modal` reference → this task.\n\n## 2. Fix the stale `Modal` in AGENTS.md\nThe ⛔ STOP list (~line 20) still names `Modal` in \"Widgets available today\": `…Label, Input, Select, Modal, CommandPalette, Toast, Tabs, Pane, …`. The **`Modal` widget was deleted** (superseded by `Dialog`; the app builds a `Dialog` from `ModalSpec` via `OverlayHost::open_modal`). Advertising a widget that no longer exists sends the next agent looking for it. Replace `Modal` with `Dialog` in that list.\n\nNB: the app-side types `ModalSpec` / `ModalResult` / `ModalAction` and the `Modal` **layer band** are still real — only the *widget* is gone. Don't over-correct.\n\n## Gates\nNo code change; `cargo test -p heca-grid-ui -p heca` unaffected. Commit with the docs.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-13T21:20:54.878Z",
+      "completedAt": "",
+      "createdAt": "2026-07-13T21:20:41.307Z",
+      "updatedAt": "2026-07-13T21:20:54.878Z"
     }
   ],
   "createdAt": "2026-07-13T15:29:44.427Z",
-  "updatedAt": "2026-07-13T20:48:19.980Z"
+  "updatedAt": "2026-07-13T21:20:54.878Z"
 }

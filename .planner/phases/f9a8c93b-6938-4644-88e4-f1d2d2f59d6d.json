@@ -28,7 +28,8 @@
     "5c2c4288-1f53-42f3-9440-2427038494f9",
     "37651e5d-a62e-4dbe-8f32-7cb8e1e1ffd7",
     "ef50268d-2dcf-412b-904f-e995c6d314dc",
-    "cc10bb1a-e295-467f-8017-8261065bb21b"
+    "cc10bb1a-e295-467f-8017-8261065bb21b",
+    "bd6b5935-a55b-4ad0-b26d-fcfd3985c611"
   ],
   "tasks": [
     {
@@ -190,8 +191,28 @@
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:56.078Z",
       "updatedAt": "2026-07-01T18:13:56.078Z"
+    },
+    {
+      "id": "bd6b5935-a55b-4ad0-b26d-fcfd3985c611",
+      "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 9,
+      "shortName": "gridui-debt-dialog-font-derive",
+      "title": "gridui-debt Dialog font-derived min-width needs Style min_width",
+      "status": "planned",
+      "description": "**Rescued from the old root `HANDOFF.md` §3c (deleted 2026-07-13); do not lose this.**\n\nA short confirm dialog (\"Delete Pane?\") renders **cramped** — the panel hugs its content, so a two-word title + two buttons produces a tiny box, and dialogs of different content have visibly different widths with no shared baseline.\n\n## The gap\n`Style` (`heca-grid-ui/src/style.rs`) has **no `min_width`** — only `width`/`height` (`Length::{Auto, Px}`). So `Dialog` cannot express \"hug the content, but never below a sensible floor\".\n\n## Work\n1. Add `min_width: Length` (and probably `min_height` for symmetry — decide) to `Style`, defaulting to `Length::Auto`, and wire it into `Style::to_taffy()` (taffy has `min_size`). Add the builder to `LayoutExt`.\n2. Give `Dialog`'s panel a **font-derived** minimum — the note said **~22em** (i.e. `22 × base font`), so it scales with the theme font instead of being a magic pixel count. Verify against the real dialogs (delete-pane confirm, the rename form).\n3. Tests: a `min_width` smaller than the content is a no-op; larger than the content floors the box; it scales with the base font.\n4. `docs/widgets.md`: the `Style`/`LayoutExt` tables + the `Dialog` entry.\n\n## Why it's here\n`gridui-07` (crate-review debt) is the right home: it is a missing primitive in the layout style, not a feature.\n\n## Gates\nclippy 0; `cargo test -p heca-grid-ui -p heca`; showcase green; no `cargo fmt`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-13T21:19:50.592Z",
+      "updatedAt": "2026-07-13T21:19:50.592Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:13:56.078Z"
+  "updatedAt": "2026-07-13T21:19:50.592Z"
 }

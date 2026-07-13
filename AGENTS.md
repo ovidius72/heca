@@ -17,7 +17,10 @@ These are made over and over. **Violating either = redo.**
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
     `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
-    `Label`, `Input`, `Select`, `Modal`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
+    `Label`, `Input`, `Select`, `Choice`, `Dialog`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
+    (There is **no `Modal` widget** — it was deleted; `Dialog` is the only confirm/overlay widget, and
+    the app builds one from a `ModalSpec` via `OverlayHost::open_modal`. The app-side `ModalSpec` /
+    `ModalResult` / `ModalAction` types and the `Modal` layer *band* are still real.)
 - **New UI = a proper, GENERIC, theme-driven `heca-grid-ui` widget** — embed `Base`, impl
   `Component` + builder traits, read **ALL** styling from `Theme` (colors/font/radius/border).
   **NEVER** ad-hoc inline `Flex`/`Surface` with hardcoded sizes/colors in the app. Domain-neutral
