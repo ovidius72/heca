@@ -76,7 +76,8 @@
     "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
     "3724e701-8519-4dfc-bed2-7aa978b96979",
     "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
-    "a721d49b-827e-4dce-bffb-2e4270c08c5d"
+    "a721d49b-827e-4dce-bffb-2e4270c08c5d",
+    "bc9ca992-57d9-4c4b-bc19-b92fa948d1f9"
   ],
   "tasks": [
     {
@@ -239,8 +240,28 @@
       "completedAt": "2026-07-09T15:00:45.024Z",
       "createdAt": "2026-07-09T13:43:10.939Z",
       "updatedAt": "2026-07-09T15:00:45.024Z"
+    },
+    {
+      "id": "bc9ca992-57d9-4c4b-bc19-b92fa948d1f9",
+      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
+      "number": 8,
+      "shortName": "context-menu-bug-keyboard-navi",
+      "title": "context-menu-bug keyboard navigation of an open menu does nothing",
+      "status": "planned",
+      "description": "**BUG, rescued from the old root `HANDOFF.md` §3c (deleted 2026-07-13); do not lose this.**\n\nThe user reported that **`Ctrl+j`/`Ctrl+k` and the arrow keys do not navigate an open context menu** — the highlight does not move.\n\n## What was already checked (the code path *traces* correct)\n1. `top_modal(state)` matches while the menu is open, so the overlay-capture gate in `route_interaction` blocks WM actions — that part works.\n2. The **widget keymap** path delivers the key (`heca/src/app/events.rs`, overlay key branch → `Keymap::dispatch`).\n3. `ContextMenu::event` returns `Handled::No` on a **raw** arrow, which is what lets the host resolve it into the semantic `WidgetIntent::{MenuUp, MenuDown}` and re-deliver it.\n4. `input_mode` is reset to `Normal` at `heca/src/input.rs:229`.\n\nSo the trace looks right and the bug is **not** where it was expected. **It needs a runtime repro.**\n\n## Prime suspects (from the note)\n- The **`[keys.widgets]` defaults** — are `menu_up`/`menu_down` actually bound to `↑`/`Ctrl+k` and `↓`/`Ctrl+j` in `keybindings.default.toml`, and does `build_widget_keymap` pick them up?\n- The **`>` shifted-binding match** — a shifted-symbol binding may be swallowing or mis-resolving the combo before the menu ever sees it.\n\n## How to work it\nReproduce in the running app: open a context menu, press the keys, and instrument the four trace points above to see which one does not fire. Do **NOT** attempt a fix from the code trace alone — that is exactly what already failed once.\n\n## Gates\nclippy 0; `cargo test -p heca`; the user confirms the menu navigates in the real app; no `cargo fmt`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-13T21:20:20.133Z",
+      "updatedAt": "2026-07-13T21:20:20.133Z"
     }
   ],
   "createdAt": "2026-07-09T09:24:46.628Z",
-  "updatedAt": "2026-07-13T15:48:37.380Z"
+  "updatedAt": "2026-07-13T21:20:20.133Z"
 }
