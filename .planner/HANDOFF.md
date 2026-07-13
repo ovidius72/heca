@@ -1,0 +1,50 @@
+# Handoff
+
+Created at: 2026-07-13T21:22:00.000Z
+Updated at: 2026-07-13T21:22:00.000Z
+Reason: End of session. Everything is committed and pushed. `choice-2` is the biggest task in the phase and should start in a fresh session.
+
+## Current focus
+- **Feature:** `ebb9ceb0` — 🧩 Pluggable Chrome Architecture
+- **Phase:** `1df9c36c` — **viewnode-choice** (8 tasks, choice-1..8), created this session with the user
+- **NEXT TASK:** `6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf` — **choice-2**: refactor `Select` onto `Choice` children
+
+**Branch:** `feat/viewnode-button-composition`. **PR #237 → main is OPEN** with 4 commits: `07d4c1a` (Button/Item composition), `cbada04` (docs), `e7af2c9` (`Choice`), `db1d2c1` (retire root HANDOFF). Working tree clean; all gates green.
+
+## What was done this session
+**1. Button + Item now COMPOSE their content** (was: hand-drawn in `paint`). Three foundations came with it — everything later depends on them:
+- **Content color is INHERITED, not assigned** — `PaintCx::with_content_color(c, |cx| …)`; unstyled `Label`/`Icon` fall back to it. A control cannot set its children's colors (they are `impl Component`; `Theme` only exists inside `paint`), so it publishes one state-derived color per frame and children pull it → composed content animates with hover / fades when disabled with **zero** per-child wiring.
+- **The size variant CASCADES down the tree** (like the base font) — `Style::size_explicit` / `Style::set_size()`, `layout.rs::build(c, inherited_size)`. `IconButton`'s manual copy-into-child hack was deleted.
+- **A control is ONE Tab stop** — `Base.focus_barrier`, honoured by `focus.rs::for_each_focusable`.
+Also: `realize_button` now attaches `node.children` (it silently DROPPED them before, so a declarative `Button(Icon+Label)` rendered bare); `Label.bold` is a `Signal`; AGENTS.md now requires widget docs to be exhaustive with examples for **both** audiences.
+
+**2. `Choice` (choice-1, DONE)** — the option primitive: a selectable container carrying a **value** and composing **arbitrary content**. Chrome only (same interaction tokens as `Item`), publishes its state color, one Tab stop, hugs its content. Plus **`choice_at(&children, point)`**, which resolves a pick from the children's **real bounds** — it exists so choice-2/3 cannot fall back to row arithmetic.
+
+**3. The root `HANDOFF.md` was retired** (`db1d2c1`) — the planner is the handoff mechanism now. Its content was audited and rescued: the **button-accelerator decisions** into phase `button-shortcut` (`402d22d4`, now marked UNBLOCKED on the Button side); **Dialog min-width** → `gridui-07` task `bd6b5935`; the **context-menu keyboard-nav bug** → `context-menu` task `bc9ca992`. AGENTS.md's STOP list no longer advertises the deleted `Modal` widget.
+
+## How to resume
+1. **Read AGENTS.md** — the ⭐ WIDGET ARCHITECTURE block and its **⛔ SETTLED** table. Do **not** re-propose `Button::new(ViewNode)` or moving `ViewNode` into `heca-grid-ui`; both are impossible and have been re-litigated too many times.
+2. `planner-task-start 6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf` **before editing** (the guard blocks edits otherwise), then delete this handoff.
+3. Work choice-2 from its task description (full brief there).
+
+## Blockers
+None. heca-grid-ui 134 + 71 + 1, heca 335, clippy clean.
+
+## Next steps
+**choice-2 — the hard one.** `Select` (`heca-grid-ui/src/widgets/select.rs:77`) stores `options: Vec<String>`, paints its dropdown rows itself and **hit-tests them by arithmetic**. The rows must become `Choice` children whose **bounds are real** — but the panel is an **overlay** (`cx.with_overlay`), and hit-testing, the KeyHint picker and `FocusManager` all read bounds. Documented fallback: lay the children out in the trigger's flow and **bake the panel offset into their bounds**, exactly as `ScrollRegion` bakes `-scroll_offset`. Invariant: **bounds === what is drawn === what is clickable**. Use the new `choice_at()`.
+Preserve: `overlay_active()`, flip/cap against the viewport, internal scroll + scrollbar, wheel, the `MenuUp`/`MenuDown`/`Activate`/`Dismiss` intents, the `select-change` payload. `Select::new([..])` stays as **sugar** building `Choice::labeled` children so every existing call site compiles (the `Button::new(label)` pattern).
+Then: choice-3 (`Tabs`), choice-4 (realize `Choice`/`Select`/`Tabs` + **value→intent args**), choice-5 (`ItemGroup`/`MarkerGroup`), choice-6 (`PropValue::List` + `Grid`), choice-7 (named `slot` prop → `DockFrame`/`Item`/`Toast`), choice-8 (close the vocabulary).
+
+## Recent decisions
+- **The option model (user):** an option is **a node with a value and arbitrary content**, and options are **children** — NOT a `props["options"]` string list. Named `Choice` because a widget named `Option` would shadow `std::Option` at every call site.
+- **`Choice` and `Item` COEXIST** (user): `Item` = a *row* (leading/label/trailing, fixed height, `ActiveMarker`); `Choice` = *any content + a value*. Comparison table + rule of thumb already in `docs/widgets.md`.
+- **`Choice`'s value is a plain `String`** — `heca-grid-ui` never depends on `heca`, so it cannot store `PropValue`; `realize` converts at the boundary (choice-4). A `ChoiceValue{Text,Int}` enum was rejected.
+- **`ScrollBar` is HOST-ONLY**: its state is live host signals, which static serializable data cannot drive. General principle: *a widget whose state is a live host signal is host-only.* Plugins use `Scroll`.
+- **Grid tracks are CSS-like strings** (`"1fr"`, `"22px"`, `"auto"`); unknown tokens degrade to `Auto`. **Named slots via a `slot` prop** on the child node — no change to the `ViewNode` shape.
+- **`viewnode-task-1` CANCELED as superseded** (it assumed structured props sufficed; `Select`/`Tabs` actually need a widget refactor).
+
+## Reminder
+- Gates every task: `cargo clippy --workspace --all-targets --all-features` (0 warnings; the transitive `block v0.1.6` note is pre-existing), `cargo test -p heca-grid-ui -p heca`, showcase builds. **Do NOT run `cargo fmt`.** Load `~/.agents/skills/rust/SKILL.md` and review before committing. **No commit until the user has tested.**
+- `heca-core::terminal_backend_nvim_tui_produces_non_default_background_cells` flakes under workspace-parallel load; passes in isolation, unrelated.
+- **Planner discipline (user, explicit):** open the task before editing, keep its status current, delete this handoff when work resumes.
+- **Possible re-scope:** PR #237 is getting broad (Button, Item, docs, Choice). The user may prefer the remaining `choice-*` work on a fresh branch off `main` once #237 merges — ask.
