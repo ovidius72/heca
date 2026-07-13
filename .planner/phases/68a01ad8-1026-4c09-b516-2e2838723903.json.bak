@@ -4,7 +4,7 @@
   "number": 15,
   "slug": "viewnode-all-widgets-viewnode-all-widgets-compositional-refactor",
   "title": "viewnode-all-widgets: ViewNode → all widgets (compositional refactor)",
-  "status": "in-progress",
+  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -32,19 +32,28 @@
       "number": 1,
       "shortName": "realize-coverage",
       "title": "viewnode-task-1: Complete realize coverage",
-      "status": "planned",
+      "status": "canceled",
       "description": "Complete `realize` coverage in `heca/src/chrome/realize.rs`. Missing `WidgetKind` arms: `Select`, `Tabs`, `Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast` (was `plugin-task-ui-9`). Each arm: build the heca-grid-ui widget from `ViewNode` props resolved against `Theme`, wire events to `Intent`s, recurse children, attach via `.child(...)` (or `*_boxed` setters for body subtrees).\n\nCurrent state: `realize.rs` covers the basic containers + leaf widgets but these structured-prop widgets still lack a `realize` arm — they cannot be authored declaratively via `ViewNode` (plugins/RPC/modal bodies) yet.\n\nBehaviors to preserve: existing arms unchanged; `WidgetKind` closed vocabulary; props are semantic (`ViewVariant`/`ViewSize`/`ViewAlign` + Glyph/color names) resolved by the host; `Intent`-based events stay serializable. Add showcase coverage + `docs/widgets.md` + rustdoc for each new arm.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "c9937902-a2bd-4ed3-8115-551bf87a7396-check-001-in-progress-canceled",
+          "date": "2026-07-13T20:48:19.980Z",
+          "fromStatus": "in-progress",
+          "toStatus": "canceled",
+          "title": "SUPERSEDED by phase `viewnode-choice` (1df9c36c, 8 tasks: choice-1..8) — created 2026-07-13 with the user.",
+          "description": "SUPERSEDED by phase `viewnode-choice` (1df9c36c, 8 tasks: choice-1..8) — created 2026-07-13 with the user.\n\nThis task assumed the 8 missing kinds only needed *structured props*. Investigation showed that is wrong: they split into three different gaps, and the option-shaped ones need a **widget refactor**, not a prop. `Select` (`select.rs:77`) and `Tabs` (`tabs.rs:51`) are **self-contained** — they hand-draw their options/segments and hit-test by arithmetic, with no child components — so they violate the standing composition rule and must be refactored the way `Button` was (`07d4c1a`, PR #237).\n\nThe user also chose a better model than a `props[\"options\"]` string list: an option is a **node with a value and arbitrary content**, and options are **children** — a new `Choice` primitive (`<option value=…>` / SwiftUI `.tag()`), reused by `Select`, `Tabs`, and later `ContextMenu`/`CommandPalette`. `Choice` and `Item` coexist (documented guidance in choice-8).\n\nAll of this task's scope is carried by the new phase: `Select`/`Tabs` (choice-2/3/4), `ItemGroup`/`MarkerGroup` (choice-5), `Grid` + `PropValue::List` (choice-6), `DockFrame`/`Toast` + named slots (choice-7), `ScrollBar` documented host-only + a coverage guard test (choice-8)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-13T20:34:57.403Z",
       "completedAt": "",
       "createdAt": "2026-07-13T15:30:01.843Z",
-      "updatedAt": "2026-07-13T15:30:01.843Z"
+      "updatedAt": "2026-07-13T20:48:19.980Z"
     },
     {
       "id": "3d8841ae-3adc-4016-a83d-dec93a4c942b",
@@ -72,8 +81,8 @@
       "number": 3,
       "shortName": "viewnode-task-3-exhaustive-wid",
       "title": "viewnode-task-3: Exhaustive widget docs for the composition changes (both audiences)",
-      "status": "in-progress",
-      "description": "Complete `docs/widgets.md` for everything `viewnode-task-2` (commit `07d4c1a`, PR #237) introduced, to the standard AGENTS.md now mandates: **every** builder/prop/event/signal documented, with **runnable code examples for BOTH audiences** — the native builder API *and* the declarative `ViewNode` form — including precedence rules.\n\n## Current state (what `viewnode-task-2` already documented)\n- `### Button` — rewritten: content-is-children, sugar vs composed, size hugging, inherited content color, one-Tab-stop; native + `ViewNode` examples incl. the children-win precedence.\n- `### Item` — composition note (label is a `Label` child; state color inherited; active-bold via signal; `focus_barrier`).\n- `#### Base` table — new `focus_barrier` row.\n- `PaintCx` table — `with_content_color` / `content_color` rows.\n- `### Size variants` — the variant now cascades down the tree (`Style::size_explicit` / `Style::set_size`).\n\n## Gaps to close (this task)\n1. **`### Label`** (`docs/widgets.md:611`) — document the new `bold_signal()` accessor and that **color is inherited when unset** (falls back to `cx.content_color()`, then theme foreground; an explicit `.color()` opts out). Add the `ViewNode` form (`WidgetKind::Label`, prop `text`).\n2. **`### Icon`** — same inheritance note (primary layer falls back to the inherited content color), plus its `ViewNode` form (`WidgetKind::Icon`, prop `icon` = Glyph **name**).\n3. **`### Item`** — add the declarative example (`WidgetKind::Item`: prop `text`, event `press`) and state plainly that its slots/children are **not** yet modelled in `ViewNode` (needs structured/named children — belongs to `viewnode-task-1`).\n4. **Declarative UI model table** (`docs/widgets.md:1710`) — the `Button` row must now read `text`, `icon`, `variant`, `size` **+ children**, and the section must state the **precedence: children win; the scalar props are the childless sugar**.\n5. **A single side-by-side \"both ways\" Button example** near the Button entry, so the two spellings and their identical outcome are visible at a glance (the user asked for this explicitly).\n\n## Files\n`docs/widgets.md` only (rustdoc already landed in `07d4c1a`). Cross-check against `heca-grid-ui/src/widgets/{button,item,label,icon}.rs`, `heca-grid-ui/src/component.rs` (`Base.focus_barrier`, `PaintCx::with_content_color`), `heca-grid-ui/src/style.rs` (`size_explicit`/`set_size`), `heca/src/chrome/realize.rs` (`realize_button` precedence + `glyph_from_name`).\n\n## Edge cases\n- Do not document props `realize` does not actually read (the model is untrusted input; realize is total and ignores unknown/mistyped props).\n- Keep the `Not realized yet` list accurate (`Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast`).\n- Ships on the existing PR branch `feat/viewnode-button-composition` (PR #237) as a follow-up commit.",
+      "status": "done",
+      "description": "Complete `docs/widgets.md` for everything `viewnode-task-2` (commit `07d4c1a`, PR #237) introduced, to the standard AGENTS.md now mandates: **every** builder/prop/event/signal documented, with **runnable code examples for BOTH audiences** — the native builder API *and* the declarative `ViewNode` form — including precedence rules.\n\n## Current state (what `viewnode-task-2` already documented)\n- `### Button` — rewritten: content-is-children, sugar vs composed, size hugging, inherited content color, one-Tab-stop; native + `ViewNode` examples incl. the children-win precedence.\n- `### Item` — composition note (label is a `Label` child; state color inherited; active-bold via signal; `focus_barrier`).\n- `#### Base` table — new `focus_barrier` row.\n- `PaintCx` table — `with_content_color` / `content_color` rows.\n- `### Size variants` — the variant now cascades down the tree (`Style::size_explicit` / `Style::set_size`).\n\n## Gaps to close (this task)\n1. **`### Label`** (`docs/widgets.md:611`) — document the new `bold_signal()` accessor and that **color is inherited when unset** (falls back to `cx.content_color()`, then theme foreground; an explicit `.color()` opts out). Add the `ViewNode` form (`WidgetKind::Label`, prop `text`).\n2. **`### Icon`** — same inheritance note (primary layer falls back to the inherited content color), plus its `ViewNode` form (`WidgetKind::Icon`, prop `icon` = Glyph **name**).\n3. **`### Item`** — add the declarative example (`WidgetKind::Item`: prop `text`, event `press`) and state plainly that its slots/children are **not** yet modelled in `ViewNode` (needs structured/named children — belongs to `viewnode-task-1`).\n4. **Declarative UI model table** (`docs/widgets.md:1710`) — the `Button` row must now read `text`, `icon`, `variant`, `size` **+ children**, and the section must state the **precedence: children win; the scalar props are the childless sugar**.\n5. **A single side-by-side \"both ways\" Button example** near the Button entry, so the two spellings and their identical outcome are visible at a glance (the user asked for this explicitly).\n\n## Files\n`docs/widgets.md` only (rustdoc already landed in `07d4c1a`). Cross-check against `heca-grid-ui/src/widgets/{button,item,label,icon}.rs`, `heca-grid-ui/src/component.rs` (`Base.focus_barrier`, `PaintCx::with_content_color`), `heca-grid-ui/src/style.rs` (`size_explicit`/`set_size`), `heca/src/chrome/realize.rs` (`realize_button` precedence + `glyph_from_name`).\n\n## Edge cases\n- Do not document props `realize` does not actually read (the model is untrusted input; realize is total and ignores unknown/mistyped props).\n- Keep the `Not realized yet` list accurate (`Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast`).\n- Ships on the existing PR branch `feat/viewnode-button-composition` (PR #237) as a follow-up commit.\n\n---\n**Completion summary:**\nDONE 2026-07-13 — commit `cbada04`, pushed to `feat/viewnode-button-composition` (PR #237).\n\n## Shipped in `docs/widgets.md`\n1. **`### Button` → new subsection \"The two ways to build a Button — same widget, same retained tree\"**: a 3-row matrix (simple / simple+icon / composed × native builder vs declarative `ViewNode`) plus four runnable, commented examples — simple native, simple declarative (childless sugar), composed native (arbitrary tree), composed declarative (identical tree as data). Ends with the **precedence rule: children win; the scalar props are the childless sugar** — one content model, two spellings, never two paint paths.\n2. **`### Label`**: added `bold_signal()` accessor (re-weight in place; how `Item` bolds while active, since the inherited paint context carries a color but not a weight) + **color is inherited when unset** (`cx.content_color()` → `theme.foreground`; explicit `.color()` opts out) + `ViewNode` form.\n3. **`### Icon`**: same inheritance for the primary layer (secondary follows it); clarified `.size(px)` is **glyph pixels**, NOT the `WidgetSize` variant (use `Style::set_size`, since `size` is taken) + `ViewNode` form + glyph-name resolution (unknown name → no icon, never a panic).\n4. **`### Item`**: `ViewNode` form (prop `text`, event `press`) + an explicit statement that its **slots are not modelled declaratively yet** (needs *named* children in the model → `viewnode-task-1`); native code composes them freely today.\n5. **Declarative model table**: `Button` row split out — now reads `variant`, `size`, **+ children (the content)**, with `text`/`icon` as the childless sugar; added a callout above the table pointing at the Button section.\n\n(The Base `focus_barrier` row, the `PaintCx::with_content_color`/`content_color` rows and the size-variant cascade were already documented in `07d4c1a`.)\n\n## Gates\nDocs-only change; no code touched. Workspace unaffected (last full run: 759 passed / 0 failed, clippy clean).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -82,11 +91,11 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-13T20:30:44.043Z",
-      "completedAt": "",
+      "completedAt": "2026-07-13T20:32:16.544Z",
       "createdAt": "2026-07-13T20:30:39.956Z",
-      "updatedAt": "2026-07-13T20:30:44.043Z"
+      "updatedAt": "2026-07-13T20:32:16.544Z"
     }
   ],
   "createdAt": "2026-07-13T15:29:44.427Z",
-  "updatedAt": "2026-07-13T20:30:44.043Z"
+  "updatedAt": "2026-07-13T20:48:19.980Z"
 }

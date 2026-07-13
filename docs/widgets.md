@@ -21,7 +21,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
+  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
   - Overlays: [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
@@ -988,6 +988,65 @@ Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
 > the resolved `WidgetIntent`s). See `route_overlay_key` in
 > [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs); in the app this is
 > `build_widget_keymap` → `AppState.widget_keymap` → the overlay branch of `heca/src/app/events.rs`.
+
+### Choice
+
+The **option primitive**: a selectable container that carries a **value** and composes **arbitrary
+content**. One `Choice` = one alternative the user can pick. [`Select`](#select) mounts them as its
+dropdown rows and [`Tabs`](#tabs) as its segments, so the *look* of an option is written once and its
+*content* is whatever the caller composes.
+
+The **value** is what the option *means* (`"high"`), independent of what it *shows* (an icon and the
+word `HIGH`). Containers report a pick by index; the host maps that index back to this value — which
+is what lets a declarative author receive `{"value": "high"}` instead of an opaque `1`.
+
+- **Construct**: `Choice::new(value)` (no content — compose it) · `Choice::labeled(value, label)`
+  (sugar → one `Label` child, exactly what you'd compose by hand).
+- **Content**: `.child(impl Component)` (`Parent`) — any component, any depth.
+- **Builders**: `.selected(bool)`, `.on_activate(impl Fn())` (click / `Enter` / `Space`; also makes
+  it focusable), plus `LayoutExt` (`.size(WidgetSize)`, `.disabled(bool)`, …).
+- **Accessors**: `.value() -> &str`, `.state() -> Signal<bool>` (selected — flip it in place, no
+  rebuild), `.hovered() -> Signal<bool>`.
+- **Chrome only**: it paints the selected pill / hover tint / press flash / focus ring from the
+  `Theme` (the same interaction tokens as `Item`), and **publishes its state color** so unstyled
+  `Label`/`Icon` children tint with the selection — a child with its own color keeps it.
+- **One Tab stop** ([`Base.focus_barrier`](#base)), whatever it contains. It **hugs its content**
+  (no char-count arithmetic), and the size variant cascades into the content.
+- **Picking from real bounds**: `widgets::choice_at(&children, point) -> Option<usize>` resolves a
+  pick from the children's laid-out bounds. Containers must use it (or the same rule) rather than
+  row arithmetic, so what is drawn and what is clickable can never disagree.
+
+#### `Choice` vs [`Item`](#item) — when to use which
+
+Both are selectable, both compose their content, both are a single Tab stop. They differ in shape
+and purpose:
+
+| | [`Item`](#item) | [`Choice`](#choice) |
+|---|---|---|
+| Shape | a **row**: leading · label · trailing, fixed row height | **any content**, hugging it |
+| Carries | a label | a **value** — the thing chosen |
+| Marker | `ActiveMarker` (bar / check) | a selected pill |
+| Use for | sidebar / menu lists that look like rows | choosing among **alternatives** (`Select`, `Tabs`) |
+
+**Rule of thumb:** building a list of rows → `Item`. The user is **picking one of several** → `Choice`.
+
+```rust
+// Sugar — a plain text option.
+Choice::labeled("high", "HIGH");
+
+// Composed — any tree. The Icon + Labels inherit the option's state color.
+Choice::new("high")
+    .child(Flex::column().gap(2.0)
+        .child(Flex::row().gap(6.0)
+            .child(Icon::new(Glyph::Lightning))
+            .child(Label::new("HIGH")))
+        .child(Label::new("uses more power").font_scale(0.75)))
+    .selected(true)
+    .on_activate(|| set_level("high"));
+```
+
+> **Declarative form**: `WidgetKind::Choice` (prop `value`, `text` as the childless sugar, children =
+> content) lands with the `Select`/`Tabs` realize arms — phase `viewnode-choice`, task `choice-4`.
 
 ### Item
 

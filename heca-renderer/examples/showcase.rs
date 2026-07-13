@@ -437,6 +437,44 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .size(WidgetSize::Small),
                 ),
         )
+        // `Choice` — the option primitive behind Select/Tabs: a VALUE plus composed content.
+        // The selected one tints its whole content (icon + label) via the inherited state color.
+        .child(caption("Choice — a value + composed content (the option primitive)"))
+        .child(
+            Flex::row()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(Choice::labeled("low", "LOW").on_activate(click("LOW")))
+                .child(
+                    Choice::new("medium")
+                        .child(
+                            Flex::row()
+                                .gap(6.0)
+                                .align(Align::Center)
+                                .child(Icon::new(Glyph::Warning))
+                                .child(Label::new("MEDIUM")),
+                        )
+                        .selected(true)
+                        .on_activate(click("MEDIUM")),
+                )
+                // Arbitrary content: two lines, a badge — still one option, one click target.
+                .child(
+                    Choice::new("high")
+                        .child(
+                            Flex::column()
+                                .gap(2.0)
+                                .child(
+                                    Flex::row()
+                                        .gap(6.0)
+                                        .align(Align::Center)
+                                        .child(Icon::new(Glyph::Lightning))
+                                        .child(Label::new("HIGH")),
+                                )
+                                .child(Label::new("uses more power").font_scale(0.75)),
+                        )
+                        .on_activate(click("HIGH")),
+                ),
+        )
         // Change widgets: Toggles across their states (on / off / disabled).
         .child(caption("Toggle"))
         .child(
