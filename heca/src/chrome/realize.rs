@@ -105,7 +105,7 @@ pub(crate) fn realize(
 
         // ── Leaves ──
         WidgetKind::Label => Box::new(Label::new(text_of(node))),
-        WidgetKind::Button => realize_button(node, emit, hints),
+        WidgetKind::Button => realize_button(node, emit, hints, forms),
         WidgetKind::Badge => Box::new(Badge::new(text_of(node))),
         WidgetKind::Tag => Box::new(Tag::new(text_of(node))),
         WidgetKind::Alert => Box::new(Alert::new(text_of(node))),
@@ -277,12 +277,33 @@ fn realize_flex(
 
 /// Realize a [`Button`], wiring its `"press"` intent to both a click handler and a hint
 /// target (the same intent for either input path — a click emits it, the picker fires it).
+///
+/// **The button's content is its children** (the widget composes, it does not draw text), so a
+/// node can carry an arbitrary subtree — `Button > Column > [Row > [Icon, Label], Label]` — and it
+/// is realized and mounted like any other content.
+///
+/// Precedence, so the two spellings never fight: **children win.** A node *with* children is
+/// realized as an empty button holding them; a **childless** node falls back to the scalar sugar
+/// (`text` → a bold `Label`, plus an optional leading `icon`), which is the common case and what
+/// every existing caller writes. The sugar produces exactly the children the explicit form
+/// would — there is one content model underneath.
 fn realize_button(
     node: &ViewNode,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
+    forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let mut button = Button::new(text_of(node));
+    let mut button = if node.children.is_empty() {
+        // Sugar: the scalar props describe the content.
+        let mut b = Button::new(text_of(node));
+        if let Some(glyph) = glyph_prop(node) {
+            b = b.icon(glyph);
+        }
+        b
+    } else {
+        // Composed: the children are the content.
+        Button::empty()
+    };
     if let Some(variant) = variant_prop(node) {
         button = button.variant(variant);
     }
@@ -298,7 +319,16 @@ fn realize_button(
             .hint_target(id)
             .on_click(move || emit(carrier.clone()));
     }
-    Box::new(button)
+    // Attach the composed content. (`Box<dyn Component>` isn't `Component`, so it can't go through
+    // `Parent::child`; push it the way every other container here does.)
+    let mut button: Box<dyn Component> = Box::new(button);
+    for child in &node.children {
+        button
+            .base_mut()
+            .children
+            .push(realize(child, emit, hints, forms));
+    }
+    button
 }
 
 // ── Prop readers ──────────────────────────────────────────────────────────────────────
@@ -390,6 +420,7 @@ fn glyph_from_name(name: &str) -> Option<Glyph> {
         "x_square" => Glyph::XSquare,
         "frame_corners" => Glyph::FrameCorners,
         "cards" => Glyph::Cards,
+        "trash" => Glyph::Trash,
         _ => return None,
     };
     Some(g)
@@ -520,6 +551,57 @@ mod tests {
         assert!(
             matches!(delete, InteractionIntent::View(i) if i.action == "confirm_ok"),
             "second target = Delete's View intent, got {delete:?}",
+        );
+    }
+
+    /// A `Button` node's **children are its content**: an arbitrary subtree is realized and mounted
+    /// inside the button. Before the button composed its content, `realize` had nowhere to put them
+    /// and dropped them silently — a declarative `Button(Icon + Label)` rendered as a bare button.
+    #[test]
+    fn button_children_are_realized_as_its_content() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Button)
+            .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+            .on_press(Intent::new("confirm_ok"))
+            .child(
+                ViewNode::new(WidgetKind::Column)
+                    .prop("gap", PropValue::Int(4))
+                    .child(
+                        ViewNode::new(WidgetKind::Row)
+                            .child(
+                                ViewNode::new(WidgetKind::Icon)
+                                    .prop("icon", PropValue::Glyph("trash".into())),
+                            )
+                            .child(ViewNode::new(WidgetKind::Label).text("Delete")),
+                    )
+                    .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")),
+            );
+
+        let button = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let column = &button.base().children;
+        assert_eq!(column.len(), 1, "the button holds its composed subtree");
+        let column = &column[0].base().children;
+        assert_eq!(column.len(), 2, "column: the icon+label row, then the accelerator label");
+        assert_eq!(column[0].base().children.len(), 2, "row: icon + label");
+
+        // The button is still one actionable target, whatever it composes.
+        assert_eq!(hints.checkpoint(), 1, "one hint target: the button itself, not its content");
+    }
+
+    /// A **childless** Button node falls back to the scalar sugar — `text` (+ an optional leading
+    /// `icon`) — which builds the very same children the explicit form would. One content model,
+    /// two spellings.
+    #[test]
+    fn childless_button_node_uses_the_scalar_sugar() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Button)
+            .text("Delete")
+            .prop("icon", PropValue::Glyph("trash".into()));
+        let button = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(
+            button.base().children.len(),
+            2,
+            "text + icon props desugar into [Icon, Label] children",
         );
     }
 

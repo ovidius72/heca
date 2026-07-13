@@ -16,7 +16,7 @@ use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
 use crate::style::{Align, Direction, Justify, Length};
-use crate::widgets::Flex;
+use crate::widgets::{Flex, Label};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Row height (logical px).
@@ -42,9 +42,14 @@ const SEL_INSET: f64 = 4.0;
 /// Size of the [`ActiveMarker::Check`] pip (logical px).
 const CHECK_SIZE: f64 = 10.0;
 
-/// Index of the leading / trailing slot within `base.children`.
+/// Index of the leading slot / the label / the trailing slot within `base.children`.
+///
+/// The label is a real [`Label`] child (not text drawn by `Item`), so the row is composed like
+/// every other widget: the engine lays the three out, each paints itself, and the label can be
+/// swapped or extended without touching `Item::paint`.
 const LEADING: usize = 0;
-const TRAILING: usize = 1;
+const LABEL: usize = 1;
+const TRAILING: usize = 2;
 
 /// How an [`Item`]'s active state is indicated. Set per context; the row carries
 /// the `active` bool, the marker decides how it's shown.
@@ -62,9 +67,21 @@ pub enum ActiveMarker {
 }
 
 /// A generic list row with leading/trailing slots and a label.
+///
+/// **Content is composed**: the label is a [`Label`] child and the slots are arbitrary components,
+/// so the row draws only its own chrome (selection pill, marker, hover/press, focus ring) and lets
+/// the engine lay the content out. The row's **state color** (active → accent, muted → muted) is
+/// published once per paint via [`PaintCx::with_content_color`] and inherited by the label; its
+/// **bold-when-active** weight rides the label's own `bold` signal.
 pub struct Item {
     base: Base,
+    /// The label child's text signal (the child owns the text; this is the handle callers get).
     label: Signal<String>,
+    /// The label child's bold signal — flipped in `tick` when `active` changes, because weight (
+    /// unlike color) is not part of the inherited paint context.
+    label_bold: Signal<bool>,
+    /// Last `active` value seen by `tick`, so the bold signal is written only on a real change.
+    seen_active: bool,
     /// Active (clicked-and-stays current item): tinted bg + accent label, plus
     /// an optional indicator controlled by [`ActiveMarker`].
     active: Signal<bool>,
@@ -85,16 +102,29 @@ impl Item {
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
         base.style.direction = Direction::Row;
-        base.style.justify = Justify::SpaceBetween; // leading left, trailing right
+        base.style.justify = Justify::Start; // the growing label pushes the trailing slot right
         base.style.align = Align::Center; // center slots vertically (kbd hint, dot)
         base.style.padding = PAD_H as f32;
+        base.style.gap = GAP as f32;
         base.style.height = Length::Px(ROW_H);
-        // children[LEADING], children[TRAILING] — replaced by the slot builders.
+        // One control = one Tab stop: focus never descends into the composed content.
+        base.focus_barrier = true;
+
+        // children[LEADING], children[LABEL], children[TRAILING]. The slots are placeholders until
+        // a builder replaces them; the label is a real child that grows to take the middle, so the
+        // text starts hard left after the leading slot and the trailing slot sits at the far edge.
+        let label = Label::new(label).align(TextAlign::Start).grow(1.0);
+        let text = label.text_signal();
+        let label_bold = label.bold_signal();
         base.children.push(Box::new(Flex::empty()));
+        base.children.push(Box::new(label));
         base.children.push(Box::new(Flex::empty()));
+
         Self {
             base,
-            label: signal(label.into()),
+            label: text,
+            label_bold,
+            seen_active: false,
             active: signal(false),
             marker: ActiveMarker::None,
             muted: false,
@@ -107,9 +137,16 @@ impl Item {
     }
 
     /// Explicit label font size — overrides the inherited theme font.
+    ///
+    /// Applied to the label **child** as well: an explicit `font_size` pins one node only (unlike
+    /// the size *variant*, which the layout pass inherits down the tree), so the row and its text
+    /// would otherwise disagree.
     pub fn font_size(mut self, fs: f32) -> Self {
         self.base.style.font_size = fs;
         self.base.font = fs;
+        let label = self.base.children[LABEL].base_mut();
+        label.style.font_size = fs;
+        label.font = fs;
         self.remeasure();
         self
     }
@@ -189,21 +226,6 @@ impl Item {
         if let Some(f) = &self.on_activate {
             f();
         }
-    }
-
-    /// The label rect: the gap between the leading and trailing slots.
-    fn label_rect(&self) -> Rectangle {
-        let b = self.base.bounds;
-        let lead = self.base.children[LEADING].base().bounds;
-        let trail = self.base.children[TRAILING].base().bounds;
-        let lead_w = lead.size.w;
-        let trail_w = trail.size.w;
-        let x0 = lead.loc.x + lead_w + if lead_w > 0.1 { GAP } else { 0.0 };
-        let x1 = trail.loc.x - if trail_w > 0.1 { GAP } else { 0.0 };
-        Rectangle::new(
-            Point::new(x0, b.loc.y),
-            Size::new((x1 - x0).max(0.0), b.size.h),
-        )
     }
 }
 
@@ -305,22 +327,17 @@ impl Component for Item {
             }
         }
 
-        // Label (state-driven color).
-        let color = if active {
+        // The row's state color. It is not applied to anything here: it is *published*, and the
+        // composed content (the label, and any unstyled icon in a slot) inherits it — the same
+        // mechanism a Button uses for its hover/disabled content. Bold-when-active rides the
+        // label's own signal instead (weight is not part of the inherited context) — see `tick`.
+        let content_color = if active {
             accent
         } else if self.muted {
             muted_c
         } else {
             foreground
         };
-        cx.text(
-            self.label_rect(),
-            &self.label.get_untracked(),
-            color,
-            self.base.font,
-            TextAlign::Start,
-            active,
-        );
 
         // Optional chip border around a present slot (drawn behind its content).
         let slot_border = |cx: &mut PaintCx, slot: Rectangle| {
@@ -355,10 +372,13 @@ impl Component for Item {
             slot_border(cx, self.base.children[TRAILING].base().bounds);
         }
 
-        // Slots (leading + trailing) draw themselves.
-        for child in &self.base.children {
-            child.paint(cx);
-        }
+        // The composed content (leading slot, label, trailing slot) draws itself, under the row's
+        // state color.
+        cx.with_content_color(content_color, |cx| {
+            for child in &self.base.children {
+                child.paint(cx);
+            }
+        });
 
         if self.interactive() && !disabled {
             cx.flash(b, self.flash.amount() * 0.5, 0.0);
@@ -404,6 +424,15 @@ impl Component for Item {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
+        // The active row bolds its label. Color is inherited at paint time, but weight is not part
+        // of the paint context, so the row drives the label's own `bold` signal — written only on a
+        // real change, so a stable row never marks itself dirty.
+        let active = self.active.get_untracked();
+        if active != self.seen_active {
+            self.seen_active = active;
+            self.label_bold.set(active);
+        }
+
         let mut animating = self.flash.tick(dt);
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);

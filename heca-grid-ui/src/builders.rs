@@ -21,8 +21,14 @@ pub trait LayoutExt: Component + Sized {
     /// Size variant — scales the widget's font and intrinsic padding together
     /// (`Small`/`Normal`/`Big`). Available on every widget; controls honor it in
     /// their `remeasure`, and text simply inherits the scaled font.
+    ///
+    /// The variant **cascades to composed content**: children that don't set their own inherit
+    /// it during layout, so `Button::new("Save").icon(Glyph::Check).size(WidgetSize::Small)`
+    /// shrinks the button *and* its `Icon`/`Label`. Setting it here marks it explicit
+    /// ([`Style::size_explicit`](crate::style::Style::size_explicit)), which both pins this
+    /// widget's variant and makes **it** the one its own children inherit.
     fn size(mut self, size: WidgetSize) -> Self {
-        self.base_mut().style.size = size;
+        self.base_mut().style.set_size(size);
         self
     }
     /// Main-axis direction.

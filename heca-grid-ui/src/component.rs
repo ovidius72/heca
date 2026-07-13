@@ -116,6 +116,19 @@ pub struct Base {
     /// A genuinely dynamic widget (e.g. an overlay focusable only while open) still
     /// overrides [`Component::focusable`] instead of setting this flag.
     pub focusable: bool,
+    /// Whether this widget is the **only** focus target in its subtree: focus traversal does not
+    /// descend past it, so its children can never be Tab-focused.
+    ///
+    /// Set by **controls that compose their content from children** — a [`Button`](crate::widgets::Button)
+    /// is one click target and one Tab stop no matter what it holds. Without this, a focusable
+    /// descendant (say a `Toggle` used as decoration) would take its own Tab stop while being
+    /// click-dead, because the control consumes the press in its own `event` and never routes it
+    /// to children. That mismatch — focusable but inert — is the bug this prevents.
+    ///
+    /// Honoured by [`focus`](crate::focus) traversal. Orthogonal to
+    /// [`Style::hidden`](crate::style::Style::hidden), which removes a subtree from layout *and*
+    /// focus; a barrier keeps the subtree visible and laid out, and only stops focus descent.
+    pub focus_barrier: bool,
     /// Explicit Tab-order index (like HTML `tabindex`). Focusables with an index
     /// are visited first in ascending order; those without (`None`) follow in
     /// tree position order. Set via [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
@@ -161,6 +174,7 @@ impl Base {
             focused: signal(false),
             focus_visible: signal(false),
             focusable: false,
+            focus_barrier: false,
             tab_index: None,
             children: Vec::new(),
             drag_source: None,
@@ -527,6 +541,9 @@ pub struct PaintCx<'a> {
     /// `Select` dropdown) use it to flip/cap against the screen. Defaults to
     /// "infinite" so non-host callers (tests) keep the open-below behavior.
     viewport: Size,
+    /// The **inherited content color** for the subtree currently being painted — see
+    /// [`with_content_color`](Self::with_content_color). `None` at the root.
+    content_color: Option<Color>,
 }
 
 impl<'a> PaintCx<'a> {
@@ -536,6 +553,7 @@ impl<'a> PaintCx<'a> {
             scene,
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
+            content_color: None,
         }
     }
 
@@ -585,6 +603,46 @@ impl<'a> PaintCx<'a> {
     /// The active theme.
     pub fn theme(&self) -> &Theme {
         self.theme
+    }
+
+    /// Paint `f`'s subtree with `color` as the **inherited content color** — the color that
+    /// unstyled text and glyphs ([`Label`](crate::widgets::Label), [`Icon`](crate::widgets::Icon))
+    /// use when the caller gave them none. This is `color` inheritance in the CSS sense, and it is
+    /// how a control tints the content it *composes* rather than draws.
+    ///
+    /// A control (e.g. [`Button`](crate::widgets::Button)) cannot set its children's colors
+    /// directly: children are `impl Component`, so it doesn't know their types, and the
+    /// [`Theme`] its state color derives from is only reachable here, in `paint`. So instead of
+    /// pushing color *into* the children, it publishes one value they *pull*:
+    ///
+    /// ```ignore
+    /// // In the control's `paint`, after its own chrome:
+    /// let tint = accent.lerp(on_accent, hover_progress);          // state-derived, per frame
+    /// cx.with_content_color(tint, |cx| {
+    ///     for child in &self.base.children { child.paint(cx); }   // children just paint themselves
+    /// });
+    /// ```
+    ///
+    /// The control repaints every frame while its hover/press animation runs, so the value changes
+    /// each frame and **the children animate without knowing anything about hover, or the parent,
+    /// or animation at all**.
+    ///
+    /// The fallback is deliberately narrow. It applies only where a widget has no color of its own:
+    /// an explicit `.color(..)` always wins, and a widget with an *intrinsic semantic* color
+    /// (`Badge::danger`, `StatusDot::online`) ignores it entirely — exactly as a `.badge-danger`
+    /// stays red inside a colored parent on the web. Nesting restores the outer value on exit.
+    pub fn with_content_color(&mut self, color: Color, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.content_color.replace(color);
+        f(self);
+        self.content_color = previous;
+    }
+
+    /// The inherited content color, if a parent published one via
+    /// [`with_content_color`](Self::with_content_color). Widgets that render bare text or glyphs
+    /// resolve their color as: **own explicit color → this → a theme token** (usually
+    /// `theme.colors.foreground`).
+    pub fn content_color(&self) -> Option<Color> {
+        self.content_color
     }
 
     /// Queue a rounded rectangle with optional border and glow.

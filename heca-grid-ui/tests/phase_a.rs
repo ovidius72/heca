@@ -2049,7 +2049,10 @@ fn icon_lays_out_as_a_square() {
     use heca_grid_ui::{Glyph, Icon};
     let mut icon = Icon::new(Glyph::GitBranch).size(24.0);
     // Large == the reference (un-scaled) size; the explicit px is taken verbatim.
-    icon.base_mut().style.size = WidgetSize::Large;
+    // `set_size` (not a raw `style.size = ..`) because the variant must be marked *explicit*,
+    // or the layout pass replaces it with the one inherited from the parent — here, the root
+    // default. `Icon::size` is glyph pixels, so it can't be the variant builder.
+    icon.base_mut().style.set_size(WidgetSize::Large);
     LayoutEngine::new().compute(&mut icon, Size::new(200.0, 200.0));
     let b = icon.base().bounds;
     assert_eq!(b.size.w, 24.0, "icon width = glyph size");
@@ -2058,7 +2061,7 @@ fn icon_lays_out_as_a_square() {
     // The size variant scales an explicit glyph size too (so icon-only buttons
     // resize): Small renders the same icon smaller.
     let mut small = Icon::new(Glyph::GitBranch).size(24.0);
-    small.base_mut().style.size = WidgetSize::Small;
+    small.base_mut().style.set_size(WidgetSize::Small);
     LayoutEngine::new().compute(&mut small, Size::new(200.0, 200.0));
     assert!(small.base().bounds.size.w < 24.0, "Small scales the explicit glyph size down");
 }
@@ -3213,4 +3216,146 @@ fn collect_damage_unions_dirty_widgets_then_clears_flags() {
         d.loc.x <= b.loc.x && d.loc.x + d.size.w >= b.loc.x + b.size.w,
         "damage horizontally covers the marked widget"
     );
+}
+
+// ── Button: content is composed from children (viewnode-all-widgets) ────────────────────────
+
+/// The sugar builders are exactly that: they build **children**. There is no separate "simple
+/// mode" — `Button::new(..)` and `.icon(..)` produce the same child vector a caller (or the
+/// `ViewNode` mapper) would compose by hand, so there is one layout and one paint path.
+#[test]
+fn button_sugar_desugars_into_children() {
+    assert_eq!(Button::empty().base().children.len(), 0, "empty button has no content");
+    assert_eq!(Button::new("Delete").base().children.len(), 1, "label sugar → one Label child");
+
+    let with_icon = Button::new("Delete").icon(Glyph::Trash);
+    assert_eq!(with_icon.base().children.len(), 2, "icon sugar prepends → [Icon, Label]");
+
+    // Arbitrary content, any depth — the same vector, composed instead of sugared.
+    let composed = Button::empty().child(
+        Flex::column()
+            .child(Flex::row().child(Icon::new(Glyph::Trash)).child(Label::new("Delete")))
+            .child(Label::new("Ctrl+D")),
+    );
+    assert_eq!(composed.base().children.len(), 1, "one composed subtree");
+    assert_eq!(
+        composed.base().children[0].base().children.len(),
+        2,
+        "the subtree keeps its own structure (row + accelerator label)",
+    );
+}
+
+/// The button no longer computes its own width from a character count — it **hugs its content**
+/// and taffy measures it. The resulting box must still match the old hand-computed geometry
+/// exactly: label (`chars × font × advance`) + one character of breathing room per side + the
+/// size-scaled base padding.
+#[test]
+fn button_hugs_its_content_at_the_historical_size() {
+    use heca_grid_ui::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
+    const BASE_PAD: f32 = 10.0; // Button::BASE_PAD (private)
+
+    let mut b = Button::new("DELETE").size(WidgetSize::Large); // Large ⇒ pad_scale == 1.0
+    LayoutEngine::new().compute(&mut b, Size::new(400.0, 200.0));
+    let fs = b.base().font;
+    let bounds = b.base().bounds;
+
+    let chars = "DELETE".chars().count() as f32;
+    let expected_w = (chars + 2.0) * fs * MONO_ADVANCE_RATIO + BASE_PAD * 2.0;
+    let expected_h = fs * MONO_LINE_RATIO + BASE_PAD * 2.0;
+    assert!(
+        (bounds.size.w - expected_w as f64).abs() < 0.5,
+        "width hugs content at the historical size: got {}, want {expected_w}",
+        bounds.size.w,
+    );
+    assert!(
+        (bounds.size.h - expected_h as f64).abs() < 0.5,
+        "height hugs content at the historical size: got {}, want {expected_h}",
+        bounds.size.h,
+    );
+}
+
+/// A button's content is sized by the tree, so richer content makes the button grow — the thing a
+/// hand-computed, label-only width could never do.
+#[test]
+fn button_grows_to_fit_composed_content() {
+    let measure = |mut b: Button| {
+        LayoutEngine::new().compute(&mut b, Size::new(500.0, 200.0));
+        b.base().bounds.size
+    };
+    let plain = measure(Button::new("Delete"));
+    let with_icon = measure(Button::new("Delete").icon(Glyph::Trash));
+    let stacked = measure(Button::empty().child(
+        Flex::column().child(Label::new("Delete")).child(Label::new("Ctrl+D")),
+    ));
+
+    assert!(with_icon.w > plain.w, "a leading icon widens the button");
+    assert!(stacked.h > plain.h, "a two-line column makes the button taller");
+}
+
+/// The size variant cascades into composed content: a `Small` button's `Label` must shrink with
+/// it. Before the layout pass inherited the variant, a child kept the default and a small button
+/// rendered full-size text.
+#[test]
+fn button_size_variant_cascades_to_composed_content() {
+    let label_font = |size: WidgetSize| {
+        let mut b = Button::new("SAVE").icon(Glyph::Check).size(size);
+        LayoutEngine::new().compute(&mut b, Size::new(400.0, 200.0));
+        // children = [Icon, Label]; read the label's resolved font.
+        b.base().children[1].base().font
+    };
+    assert!(
+        label_font(WidgetSize::Small) < label_font(WidgetSize::Large),
+        "the button's size variant reaches its composed Label",
+    );
+
+    // An explicit choice on the child wins over the inherited one.
+    let mut b = Button::new("SAVE").size(WidgetSize::Small);
+    b.base_mut().children[0].base_mut().style.set_size(WidgetSize::Large);
+    LayoutEngine::new().compute(&mut b, Size::new(400.0, 200.0));
+    let pinned = b.base().children[0].base().font;
+    assert!(pinned > label_font(WidgetSize::Small), "an explicit child variant is not overwritten");
+}
+
+/// Composed content inherits the button's **state color**: the button publishes one color per
+/// frame and unstyled children pick it up, which is what makes them animate with the hover sweep
+/// and fade when disabled — with no wiring between the two widgets.
+#[test]
+fn composed_content_inherits_the_buttons_state_color() {
+    let theme = Theme::default();
+
+    // Disabled ⇒ the content fades to `muted` at reduced alpha, on every variant.
+    let disabled = button_label_color(&mut Button::primary("OK").disabled(true), &theme);
+    assert_eq!(disabled.r, theme.colors.muted.r, "disabled content takes the muted tone");
+    assert!(disabled.a < 255, "disabled content is faded");
+
+    // Enabled ⇒ the variant's own tone, not the theme foreground.
+    let enabled = button_label_color(&mut Button::primary("OK"), &theme);
+    assert_ne!(enabled, disabled, "enabled and disabled content differ");
+
+    // An explicit child color opts out of inheritance entirely.
+    let pinned = button_label_color(
+        &mut Button::empty().child(Label::new("OK").color(theme.colors.success)),
+        &theme,
+    );
+    assert_eq!(pinned, theme.colors.success, "an explicit child color wins over the inherited one");
+}
+
+/// A control is **one** Tab stop, whatever it composes. Focus traversal must not descend into a
+/// button's content — otherwise a focusable child would take its own Tab stop while being
+/// click-dead (the button consumes the press and never routes it to children).
+#[test]
+fn a_button_is_one_tab_stop_whatever_it_contains() {
+    let mut ui = Flex::row()
+        .child(Button::new("A").child(Toggle::new())) // an interactive child, as decoration
+        .child(Button::new("B"));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut ui, true);
+    let first = focus.focused();
+    focus.advance(&mut ui, true);
+    let second = focus.focused();
+    focus.advance(&mut ui, true);
+
+    assert_eq!(focus.focused(), first, "exactly two focusables: focus wraps after the 2nd button");
+    assert_ne!(first, second, "each button is its own (single) Tab stop");
 }

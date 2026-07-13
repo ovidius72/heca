@@ -9,6 +9,7 @@
 //! [`Style`]: crate::style::Style
 
 use crate::component::Component;
+use crate::style::WidgetSize;
 use heca_core::layout::{Point, Rectangle, Size};
 use taffy::prelude::*;
 
@@ -43,7 +44,8 @@ impl LayoutEngine {
     /// absolute bounds into every component's `Base.bounds`.
     pub fn compute(&mut self, root: &mut dyn Component, available: Size) {
         self.tree.clear();
-        let node = self.build(root);
+        // The root has no parent to inherit a size variant from — start at the default.
+        let node = self.build(root, WidgetSize::default());
         let space = taffy::Size {
             width: AvailableSpace::Definite(available.w as f32),
             height: AvailableSpace::Definite(available.h as f32),
@@ -55,7 +57,21 @@ impl LayoutEngine {
     }
 
     /// Recursively create taffy nodes for `c` and its children.
-    fn build(&mut self, c: &mut dyn Component) -> taffy::NodeId {
+    ///
+    /// `inherited_size` is the size variant flowing down from the parent (see
+    /// [`Style::size_explicit`](crate::style::Style::size_explicit)). The root starts at the
+    /// default.
+    fn build(&mut self, c: &mut dyn Component, inherited_size: WidgetSize) -> taffy::NodeId {
+        // Resolve the size variant *before* the font: a widget that didn't choose one adopts its
+        // parent's, so a control's composed content (`Icon`/`Label`, at any depth) scales with the
+        // control instead of staying at the default. Written back into the style so the widget's
+        // own `remeasure` / `Base::size_scale` see the effective variant without extra plumbing.
+        let size = {
+            let s = &c.base().style;
+            if s.size_explicit { s.size } else { inherited_size }
+        };
+        c.base_mut().style.size = size;
+
         // Resolve the inherited font (own `style.font_size` if set, else the base)
         // and let the widget re-measure from it before we read its taffy style.
         let resolved = {
@@ -66,7 +82,7 @@ impl LayoutEngine {
                 // The size variant scales the inherited font too, so text adapts for
                 // every widget without per-widget wiring (controls scale their own
                 // padding in `remeasure`).
-                self.base_font * s.font_scale * s.size.font_scale()
+                self.base_font * s.font_scale * size.font_scale()
             }
         };
         c.base_mut().font = resolved;
@@ -87,7 +103,8 @@ impl LayoutEngine {
         let mut child_nodes = Vec::with_capacity(child_count);
         for i in 0..child_count {
             let child = &mut c.base_mut().children[i];
-            child_nodes.push(self.build(child.as_mut()));
+            // Children inherit this node's effective variant unless they chose their own.
+            child_nodes.push(self.build(child.as_mut(), size));
         }
         let node = self
             .tree

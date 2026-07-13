@@ -32,19 +32,28 @@
       "number": 1,
       "shortName": "build-contextmenu",
       "title": "Build ContextMenu grid-ui widget",
-      "status": "planned",
+      "status": "done",
       "description": "Widget ContextMenu keyboard-navigable.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "967a121b-9003-4abe-bc42-294f25b6fb90-check-001-planned-done",
+          "date": "2026-07-13T15:32:06.296Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-13T15:32:06.296Z",
+      "completedAt": "2026-07-13T15:32:06.296Z",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-07-13T15:32:06.296Z"
     },
     {
       "id": "c511a0ad-6883-4b81-a160-c1e6c97516ed",
@@ -52,19 +61,28 @@
       "number": 2,
       "shortName": "sidebar-contextmenu",
       "title": "Sidebar right-click context menu",
-      "status": "planned",
+      "status": "done",
       "description": "Context menu per tree/sidebar.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "c511a0ad-6883-4b81-a160-c1e6c97516ed-check-001-planned-done",
+          "date": "2026-07-13T15:32:06.296Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-13T15:32:06.296Z",
+      "completedAt": "2026-07-13T15:32:06.296Z",
       "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
+      "updatedAt": "2026-07-13T15:32:06.296Z"
     },
     {
       "id": "479bf80c-6b3d-4e28-8df1-19f509eb3569",
@@ -88,5 +106,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:14:56.477Z"
+  "updatedAt": "2026-07-13T15:32:06.296Z"
 }
