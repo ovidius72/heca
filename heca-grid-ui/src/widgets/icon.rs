@@ -6,12 +6,15 @@
 //! spot. The widget emits both runs via [`PaintCx::icon`](crate::component::PaintCx::icon),
 //! shaped with the icon family.
 //!
-//! Colors are **theme/config-driven**, never baked in: the primary defaults to
-//! the theme foreground, and the secondary defaults to the primary at the theme's
-//! [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha). A caller
-//! (or a Dock) can override either with [`color`](Icon::color) /
-//! [`secondary_color`](Icon::secondary_color) to tint icons by state. Only the
-//! font *bytes* are static (embedded); the look is configurable.
+//! Colors are **theme/config-driven**, never baked in. With no explicit
+//! [`color`](Icon::color) the primary layer takes the
+//! [content color](crate::component::PaintCx::with_content_color) inherited from an enclosing
+//! control — so an icon composed inside a [`Button`](super::Button) tints with that button's
+//! hover/disabled state — falling back to the theme foreground when there is none. The secondary
+//! layer follows the primary at the theme's
+//! [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha) unless set via
+//! [`secondary_color`](Icon::secondary_color). Only the font *bytes* are static (embedded); the
+//! look is configurable.
 
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
@@ -262,7 +265,13 @@ impl Component for Icon {
             return;
         }
         let size = self.glyph_size();
-        let primary = self.color.unwrap_or_else(|| cx.theme().colors.foreground);
+        // Own color → the enclosing control's inherited content color → the theme foreground, so a
+        // glyph composed inside a control (a Button's leading icon, an accelerator) tracks that
+        // control's hover/disabled state. The secondary layer keeps following the primary.
+        let primary = self
+            .color
+            .or_else(|| cx.content_color())
+            .unwrap_or_else(|| cx.theme().colors.foreground);
         let secondary = self.secondary.unwrap_or_else(|| {
             let a = (cx.theme().colors.icon_secondary_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
             primary.with_alpha(a)

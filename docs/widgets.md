@@ -160,6 +160,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `disabled` | `Signal<bool>` | Dimmed + inert + skipped by focus. Set via `LayoutExt::disabled`. |
 | `focused` | `Signal<bool>` | Holds keyboard focus. |
 | `focusable` | `bool` | Whether the widget **opts into** keyboard focus (default `false`). Interactive widgets set it `true` — in the constructor (always-focusable controls) or when a callback is wired (e.g. a `Row`'s `.on_activate`). The `Component::focusable()` default is `focusable && !disabled`, so widgets no longer re-implement that check; only genuinely dynamic ones (an overlay focusable only while open) override the method. |
+| `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
 | `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`). Widgets now draw their `focus_ring` whenever `focused`, so the ring shows for both; this flag is retained for widgets that still want a keyboard-only distinction. |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
 | `children` | `Vec<Box<dyn Component>>` | Child components. |
@@ -257,6 +258,14 @@ widget owns the resulting geometry.
 | `Normal` *(default)* | `0.9` | `0.9` | The compact baseline for most controls. |
 | `Large` | `1.0` | `1.0` | Roomy controls at the full base font — the historical un-sized look. |
 | `Header` | `1.25` | `0.4` | Emphasized header / info-bar action buttons: glyph out-sizes the body text while a snug padding keeps the button cluster tight. |
+
+**The variant cascades into composed content.** Like the base font, `WidgetSize` is **inherited down
+the tree** by the layout pass: a child that never called `.size(..)` adopts its parent's variant, so
+`Button::new("Save").icon(Glyph::Check).size(WidgetSize::Small)` shrinks the button *and* its `Icon`
+and `Label`, at any depth. A child that *did* set one keeps it (and passes **that** to its own
+children). `Style::size_explicit` records the difference — a raw `style.size = …` assignment is not
+"explicit" and will be overwritten by the inherited value; use `LayoutExt::size` (or
+`Style::set_size` for widgets whose own `size(..)` means something else, like `Icon`'s glyph pixels).
 
 `font_scale` multiplies the inherited base font (applied centrally in layout); `pad_scale`
 multiplies the widget's intrinsic padding in its `remeasure`. `Header`'s padding is
@@ -361,6 +370,8 @@ stay DRY):
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. |
+| `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
+| `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
 
 `DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `Gradient`, `PushClip`/`PopClip`
 (clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
@@ -618,29 +629,97 @@ let sig = status.text_signal();
 Interactive surface; look driven by variant × size, with animated per-variant hover and a
 press flash. Focusable; Space/Enter activate like a click.
 
+**Its content is composed from child components** — the button paints only its own chrome (fill,
+border, hover sweep, press flash, focus ring, all from the `Theme`) and lets the layout engine place
+its children, which paint themselves. So a button can hold a label, an icon + a label, or an
+arbitrary tree of any depth. The convenience forms are **sugar that builds those same children**;
+there is no separate "simple mode".
+
+- **Construct**: `Button::new(label)` (= primary, one bold `Label` child) ·
+  `Button::{primary,secondary,destructive,outline,ghost,link}(label)` · **`Button::empty()`** (no
+  content — compose it yourself).
+- **Content builders**: `.icon(Glyph)` (prepend a leading `Icon` → children `[Icon, Label]`) ·
+  `.child(impl Component)` (`Parent` — append **any** component, at any depth) ·
+  `.content_boxed(Box<dyn Component>)` (mount a subtree from a mapper — what `realize(&ViewNode)`
+  returns; mirrors `Dialog::body_boxed`).
+- **Look builders**: `.variant(ButtonVariant)` · `.size(WidgetSize)` (`Small`/`Normal`/`Large`/`Header`
+  — scales font **and** padding, and **cascades into the content**) · `.font_size(f32)` (pin an
+  explicit size) · `.glow(bool)` (hover glow, default on) · `.bordered(bool)` (default on).
+- **Behavior builders**: `.on_click(impl Fn() + 'static)`, plus the shared `LayoutExt`
+  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …) and `.hint_target(id)`.
+- **Accessor**: `.hovered() -> Signal<bool>`.
+- **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
+
+**Sizing — the button doesn't compute it.** It hugs its content (`Auto` + padding), so taffy
+measures whatever it holds; richer content simply makes the button bigger. Horizontal padding
+carries one character of breathing room per side, which reproduces the historical label-only
+geometry exactly.
+
+**Content color is inherited, not assigned.** Each frame the button publishes one state-derived
+color via [`PaintCx::with_content_color`](#scene--drawcommand--paintcx-for-building-widgets), and
+unstyled children (`Label`, `Icon`) pick it up — which is how composed content **animates with the
+hover sweep and fades when disabled** without the button knowing its children's types. A child with
+its own `.color(..)`, or an intrinsic semantic color (`Badge::danger`, `StatusDot::online`), keeps it.
+
+**One control, one target.** The button is a single click target and — via
+[`Base.focus_barrier`](#base) — a single **Tab stop**, whatever it contains. An interactive child
+(a `Toggle`) would render but never get its own clicks or focus.
+
 - **Focus indicator**: like every widget, Button draws `PaintCx::focus_ring` — a thin accent-toned
   **outline just outside** the button (so it shows even on borderless `Ghost`/`Link`), tinted by the
   theme's `focus_ring` token / `effective_focus_ring()` for accent variants and
-  `focus_ring_tone(danger)` for `Destructive`. Shown whenever the button is `focused` (not
-  keyboard-only).
-- **Construct**: `Button::new(label)` (= primary) or `Button::{primary,secondary,destructive,outline,ghost,link}(label)`.
-- **Builders**: `.variant(ButtonVariant)`, `.size(ButtonSize)` (`Small`/`Medium`/`Large` — a
-  font multiplier on the base font + padding), `.font_size(f32)` (pin an explicit size),
-  `.glow(bool)`, `.bordered(bool)`, `.on_click(impl Fn() + 'static)`.
-- **Accessor**: `.hovered() -> Signal<bool>`.
-- **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
-- **Disabled look** (`.disabled(true)`): a disabled button drops its vivid accent/danger chrome to
-  the theme `muted` tone and draws its **label in `muted` at a reduced alpha**, so the inactive
-  state reads clearly on **every** variant — including transparent `Ghost`/`Link`, where a
-  background scrim is invisible. Theme-driven (no hardcoded colours); the button is also inert and
-  unfocusable. Used e.g. by a modal's OK button while a required form field is blank
-  ([`Dialog`](#dialog) → *Declaring a modal from data*).
+  `focus_ring_tone(danger)` for `Destructive`. Shown whenever the button is `focused`.
+- **Disabled look** (`.disabled(true)`): the chrome drops its vivid accent/danger tone to `muted`
+  and the **content color** fades to `muted` at a reduced alpha, so the inactive state reads on
+  **every** variant — including transparent `Ghost`/`Link`, where a background scrim is invisible.
+  Theme-driven (no hardcoded colours); the button is also inert and unfocusable. Used e.g. by a
+  modal's OK button while a required form field is blank ([`Dialog`](#dialog) → *Declaring a modal
+  from data*).
+
+**Native (builder API):**
 
 ```rust
-Button::destructive("DEREZ")
-    .size(ButtonSize::Large)
-    .on_click(|| wm.derez_focused());
+// Sugar — the common cases.
+Button::destructive("DEREZ").size(WidgetSize::Large).on_click(|| wm.derez_focused());
+Button::primary("Save").icon(Glyph::Check);          // → children [Icon, Label]
+
+// Composed — arbitrary tree, any depth. The Icon/Labels inherit the button's state color.
+Button::empty()
+    .variant(ButtonVariant::Destructive)
+    .child(Flex::column().gap(4.0)
+        .child(Flex::row().gap(6.0)
+            .child(Icon::new(Glyph::Trash))
+            .child(Label::new("Delete")))
+        .child(Label::new("Ctrl+D")))
+    .on_click(|| confirm_delete());
 ```
+
+**Declarative (`ViewNode` — plugins / RPC / modal bodies):** `realize` reads `text`, `icon`
+(Glyph **name**), `variant`, `size`, and the `press` event. **Precedence: `children` win** — a node
+*with* children is realized as an empty button holding them; a **childless** node falls back to the
+scalar sugar (`text` + optional `icon`), which produces the identical children.
+
+```rust
+// Sugar form (childless) — text + icon props.
+ViewNode::new(WidgetKind::Button)
+    .text("Delete")
+    .prop("icon", PropValue::Glyph("trash".into()))
+    .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+    .on_press(Intent::new("confirm_ok"));
+
+// Composed form — children are the content (the props above are then ignored).
+ViewNode::new(WidgetKind::Button)
+    .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+    .on_press(Intent::new("confirm_ok"))
+    .child(ViewNode::new(WidgetKind::Column).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetKind::Row)
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("Delete")))
+        .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
+```
+
+Both spellings produce the **same retained tree** — see
+[the declarative UI model](#declarative-ui-model-viewnode).
 
 ### IconButton
 
@@ -843,6 +922,13 @@ slot, with hover, active (selected), and click-to-activate states. Slots accept 
 (a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). Row height tracks the font; the
 active/hover highlight is an inset pill (rounds with the theme radius, so it tucks inside a
 rounded `Pane`). Becomes focusable/clickable once `.on_activate(...)` is set.
+
+**Content is composed** (like [`Button`](#button)): the label is a real `Label` child that grows to
+fill the middle, so the row draws only its chrome. Its **state color** (active → accent, muted →
+muted, else foreground) is published via `PaintCx::with_content_color` and inherited by the label
+and any unstyled slot icon; the **bold-when-active** weight rides the label's own `bold` signal.
+The row is a single Tab stop ([`Base.focus_barrier`](#base)) — its slots are content, not
+independent focus targets.
 
 - **Construct**: `Item::new(label)`.
 - **Builders**: `.leading(impl Component)`, `.trailing(impl Component)`,

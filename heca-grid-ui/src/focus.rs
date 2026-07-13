@@ -16,6 +16,12 @@ use heca_core::layout::Point;
 /// is skipped entirely — matching the web, where `display: none` removes an
 /// element and its descendants from the tab order — so collapsed content can't
 /// be Tab-focused or receive key events while invisible.
+///
+/// A subtree under a [`Base::focus_barrier`](crate::component::Base::focus_barrier) is not
+/// descended into: the barrier widget itself is visited (if focusable), its children never are.
+/// That's what makes a control which *composes* its content — a [`Button`](crate::widgets::Button)
+/// holding an `Icon` + `Label`, or any deeper tree — stay exactly **one** Tab stop, matching the
+/// single click target its `event` implements.
 fn for_each_focusable(
     c: &mut dyn Component,
     idx: &mut usize,
@@ -27,6 +33,9 @@ fn for_each_focusable(
     if c.focusable() {
         f(*idx, c);
         *idx += 1;
+    }
+    if c.base().focus_barrier {
+        return;
     }
     let count = c.base().children.len();
     for i in 0..count {

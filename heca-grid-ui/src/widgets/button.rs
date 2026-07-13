@@ -20,14 +20,15 @@
 //! including the transparent Ghost/Link, where a background scrim would be invisible — and is
 //! fully theme-driven (no hardcoded colours). Disabled buttons are also inert and unfocusable.
 
-use crate::builders::LayoutExt;
+use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
+use crate::font::MONO_ADVANCE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, Glow, TextAlign};
-use crate::style::Length;
+use crate::scene::{Border, Glow};
+use crate::style::{Align, Direction, Justify, Length};
+use crate::widgets::{Glyph, Icon, Label};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Seconds for a full hover transition.
@@ -71,15 +72,65 @@ pub enum ButtonVariant {
 /// down by [`WidgetSize::pad_scale`] (tighter than the font at `Small`). The font
 /// scales centrally, so the box stays balanced at every size.
 const BASE_PAD: f32 = 10.0;
+/// Gap between composed content items (icon ↔ label …), as a fraction of the resolved font, so the
+/// cluster breathes proportionally at every size instead of at a fixed px.
+///
+/// `0.5` = **half a character** at the button's own font: the text advance is
+/// [`MONO_ADVANCE_RATIO`] (`0.6`) of the font size, so this is a hair under one character width —
+/// the same optical spacing a space would give between an icon and the word after it, without the
+/// pair drifting apart. It also keeps the gap consistent with the horizontal padding, which adds
+/// exactly one character per side.
+const GAP_RATIO: f32 = 0.5;
 
 fn alpha(p: f32) -> u8 {
     (p.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// A clickable button. Its look comes from its [`ButtonVariant`].
+/// A clickable button. Its look comes from its [`ButtonVariant`]; its **content is composed from
+/// child components**, not drawn by the button.
+///
+/// # Content is children
+/// The button paints only its own *chrome* (fill, border, hover sweep, press flash, focus ring —
+/// all from the [`Theme`](crate::theme::Theme)) and lets the layout engine place its children,
+/// which paint themselves. So a button can hold anything: a label, an icon + a label, or an
+/// arbitrary tree.
+///
+/// ```ignore
+/// Button::destructive("Delete").icon(Glyph::Trash)   // sugar → children [Icon, Label]
+///
+/// Button::empty()                                     // arbitrary tree, any depth
+///     .variant(ButtonVariant::Destructive)
+///     .child(Flex::column().gap(4.0)
+///         .child(Flex::row().gap(6.0)
+///             .child(Icon::new(Glyph::Trash))
+///             .child(Label::new("Delete")))
+///         .child(Label::new("Ctrl+D")))
+/// ```
+///
+/// The convenience forms are **sugar that builds those same children at construction time** —
+/// there is no separate "simple mode": one child vector, one layout, one paint path. This is what
+/// makes the button [`ViewNode`]-realizable (the host mapper attaches the node's children here) and
+/// extensible by composition rather than by adding hand-drawn extras.
+///
+/// # Size and color come from the tree, not from arithmetic
+/// - **Size**: the button does not compute its width. It hugs its content (`Auto` + padding), so
+///   taffy measures whatever it holds — at any depth. The [size variant](LayoutExt::size) cascades
+///   to the content automatically (see [`Style::size_explicit`](crate::style::Style::size_explicit)).
+/// - **Color**: the button publishes one state-derived color per frame via
+///   [`PaintCx::with_content_color`], and unstyled children ([`Label`], [`Icon`]) pick it up. That
+///   is how composed content animates with the hover sweep and fades when disabled, while a child
+///   with its own color (e.g. `Badge::danger`) keeps it.
+///
+/// # One control, one target
+/// The button is a single click target and — via
+/// [`Base::focus_barrier`](crate::component::Base::focus_barrier) — a single Tab stop, whatever it
+/// contains. An interactive child would render but never receive its own clicks or focus.
+///
+/// **Disabled look.** When `disabled`, the chrome drops to the theme `muted` tone and the content
+/// color fades to `muted` at [`DISABLED_CONTENT_ALPHA`], which reads on every variant — including
+/// the transparent Ghost/Link, where a background scrim would be invisible.
 pub struct Button {
     base: Base,
-    label: Signal<String>,
     variant: ButtonVariant,
     show_glow: bool,
     show_border: bool,
@@ -92,15 +143,23 @@ pub struct Button {
 }
 
 impl Button {
-    /// A primary button showing `label`.
-    pub fn new(label: impl Into<String>) -> Self {
+    /// An **empty** primary button — no content. Compose it with [`child`](Parent::child) /
+    /// [`icon`](Self::icon) / [`content_boxed`](Self::content_boxed).
+    ///
+    /// [`new`](Self::new) is the common case (a single label); this is the entry point when the
+    /// content is a tree.
+    pub fn empty() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        // Padding + font derive from the size variant (default `Normal`) in
-        // `remeasure`; the size is set via `LayoutExt::size`.
+        // One control = one Tab stop: focus never descends into composed content.
+        base.focus_barrier = true;
+        // Content is laid out as a centered row; padding/gap derive from the size variant in
+        // `remeasure`, and the variant itself is set via `LayoutExt::size`.
+        base.style.direction = Direction::Row;
+        base.style.align = Align::Center;
+        base.style.justify = Justify::Center;
         let mut button = Self {
             base,
-            label: signal(label.into()),
             variant: ButtonVariant::Primary,
             show_glow: true,
             show_border: true,
@@ -111,6 +170,27 @@ impl Button {
         };
         button.remeasure();
         button
+    }
+
+    /// A primary button showing `label` — sugar for [`empty`](Self::empty) plus a bold
+    /// [`Label`] child.
+    pub fn new(label: impl Into<String>) -> Self {
+        Self::empty().child(Label::new(label).bold(true))
+    }
+
+    /// Prepend a leading [`Icon`] — sugar for a child, so `Button::new("Save").icon(Glyph::Check)`
+    /// holds `[Icon, Label]`. The icon inherits the button's state color and size variant.
+    pub fn icon(mut self, glyph: Glyph) -> Self {
+        self.base.children.insert(0, Box::new(Icon::new(glyph)));
+        self
+    }
+
+    /// Append an already-boxed component — the seam for a subtree built by a mapper
+    /// (`realize(&ViewNode)` returns `Box<dyn Component>`, which is not itself `Component` and so
+    /// cannot go through [`Parent::child`]). Mirrors `Dialog::body_boxed`.
+    pub fn content_boxed(mut self, content: Box<dyn Component>) -> Self {
+        self.base.children.push(content);
+        self
     }
 
     /// Convenience constructors, one per variant.
@@ -188,11 +268,17 @@ impl Button {
         })
     }
 
-    /// Bold label, centered in the button box by the renderer (real metrics).
-    fn paint_label(&self, cx: &mut PaintCx, color: Color) {
-        // A disabled button shows a faded, muted label — the one universal, theme-driven
-        // "inactive" cue that reads on every variant. Applied centrally here so all six
-        // variants (which each pass their own enabled color) inherit it without repeating.
+    /// Paint the composed content (the children) under the button's **state color**.
+    ///
+    /// The button never draws its content and never touches its children: it publishes one
+    /// theme-derived color for this frame, and unstyled children ([`Label`]/[`Icon`]) inherit it
+    /// (see [`PaintCx::with_content_color`]). Because the button repaints every frame while its
+    /// hover progress eases, the value changes per frame and the content animates with it — with
+    /// no knowledge of hover, and no per-child wiring. A child with its own color keeps it.
+    ///
+    /// A disabled button fades the content to `muted` — the one universal, theme-driven "inactive"
+    /// cue that reads on every variant, including transparent Ghost/Link where a scrim would not.
+    fn paint_content(&self, cx: &mut PaintCx, color: Color) {
         let color = if self.base.disabled.get_untracked() {
             cx.theme()
                 .colors
@@ -201,14 +287,23 @@ impl Button {
         } else {
             color
         };
-        cx.text(
-            self.base.bounds,
-            &self.label.get_untracked(),
-            color,
-            self.base.font,
-            TextAlign::Center,
-            true,
-        );
+        cx.with_content_color(color, |cx| {
+            for child in &self.base.children {
+                child.paint(cx);
+            }
+        });
+    }
+
+    /// The content box: the bounds minus the horizontal padding — i.e. the strip the children
+    /// occupy. Used by the [`Link`](ButtonVariant::Link) underline, which therefore spans the real
+    /// content whatever it is, instead of a width faked from a character count.
+    fn content_box(&self) -> Rectangle {
+        let b = self.base.bounds;
+        let pad = self.base.style.padding_x.unwrap_or(self.base.style.padding) as f64;
+        Rectangle::new(
+            Point::new(b.loc.x + pad, b.loc.y),
+            Size::new((b.size.w - 2.0 * pad).max(0.0), b.size.h),
+        )
     }
 
     /// A fill rising from the bottom by fraction `p`, with a glow (the
@@ -228,16 +323,15 @@ impl Button {
         cx.rect(rect, fill, None, radius, g);
     }
 
-    /// A thin underline beneath the centered label.
+    /// A thin underline beneath the content, spanning the [content box](Self::content_box).
     fn paint_underline(&self, cx: &mut PaintCx, color: Color) {
-        let b = self.base.bounds;
-        let fs = self.base.font;
-        let chars = self.label.get_untracked().chars().count() as f32;
-        let tw = (chars * fs * MONO_ADVANCE_RATIO) as f64;
-        let x = b.loc.x + (b.size.w - tw) / 2.0;
-        let y = b.loc.y + b.size.h / 2.0 + (fs as f64 * 0.5);
+        let content = self.content_box();
+        let y = content.loc.y + content.size.h / 2.0 + (self.base.font as f64 * 0.5);
         cx.rect(
-            Rectangle::new(Point::new(x, y), Size::new(tw, 1.5)),
+            Rectangle::new(
+                Point::new(content.loc.x, y),
+                Size::new(content.size.w, 1.5),
+            ),
             color,
             None,
             0.0,
@@ -254,15 +348,25 @@ impl Component for Button {
         &mut self.base
     }
 
-    /// Width + height track the resolved font (which already includes the size
-    /// scale) plus size-scaled padding, so the whole button grows/shrinks together.
+    /// The button **hugs its content**: `Auto` in both axes, so taffy measures whatever tree it
+    /// holds (a label, an icon + label, a multi-line column) and the box follows. Only the padding
+    /// and the gap are the button's own, and both derive from the resolved font + size variant, so
+    /// the whole affordance scales together.
+    ///
+    /// Horizontal padding carries one character of breathing room per side on top of the base pad.
+    /// That reproduces the old hand-computed width exactly — it was
+    /// `(chars + 2) × font × advance + pad × 2`, i.e. the label plus two characters — but now the
+    /// *label* is measured by the layout engine instead of by a character count, so the same
+    /// spacing holds for content that isn't text at all.
     fn remeasure(&mut self) {
-        let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.font;
         let pad = BASE_PAD * self.base.size_scale();
         self.base.style.padding = pad;
-        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad * 2.0);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad * 2.0);
+        self.base.style.padding_x = Some(pad + fs * MONO_ADVANCE_RATIO);
+        self.base.style.padding_y = Some(pad);
+        self.base.style.gap = fs * GAP_RATIO;
+        self.base.style.width = Length::Auto;
+        self.base.style.height = Length::Auto;
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -320,7 +424,7 @@ impl Component for Button {
                 if p > 0.0 {
                     self.paint_rising_fill(cx, accent, glow_c, p, radius);
                 }
-                self.paint_label(cx, accent.lerp(on_accent, p));
+                self.paint_content(cx, accent.lerp(on_accent, p));
             }
             ButtonVariant::Destructive => {
                 cx.rect(
@@ -338,7 +442,7 @@ impl Component for Button {
                     });
                     cx.rect(b, danger.with_alpha(alpha(p)), None, radius, g);
                 }
-                self.paint_label(cx, danger.lerp(on_danger, p));
+                self.paint_content(cx, danger.lerp(on_danger, p));
             }
             ButtonVariant::Secondary => {
                 // Subtle `muted` fill + `muted` border (both firm toward `foreground` on hover) —
@@ -353,7 +457,7 @@ impl Component for Button {
                     radius,
                     None,
                 );
-                self.paint_label(cx, foreground);
+                self.paint_content(cx, foreground);
             }
             ButtonVariant::Outline => {
                 // Hover: vivid accent border, text → primary (accent), lightest glow.
@@ -370,7 +474,7 @@ impl Component for Button {
                     radius,
                     g,
                 );
-                self.paint_label(cx, muted.lerp(accent, p));
+                self.paint_content(cx, muted.lerp(accent, p));
             }
             ButtonVariant::Ghost => {
                 let border = if self.show_border && p > 0.0 && border_width > 0.0 {
@@ -382,11 +486,11 @@ impl Component for Button {
                     None
                 };
                 cx.rect(b, surface.with_alpha(alpha(p)), border, radius, None);
-                self.paint_label(cx, muted.lerp(foreground, p));
+                self.paint_content(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Link => {
                 // Color stays constant on hover; press flashes the TEXT (no bg).
-                self.paint_label(cx, accent.lerp(foreground, self.flash.amount() * 0.7));
+                self.paint_content(cx, accent.lerp(foreground, self.flash.amount() * 0.7));
                 if p > 0.0 {
                     self.paint_underline(cx, accent.with_alpha(alpha(p)));
                 }
@@ -404,8 +508,9 @@ impl Component for Button {
         }
 
         // No background scrim for the disabled state: it barely shows on transparent variants
-        // (Ghost/Link) and keeps the label's bright hue. Instead the muted chrome above +
-        // faded `muted` label (see `paint_label`) carry the disabled look on every variant.
+        // (Ghost/Link) and keeps the content's bright hue. Instead the muted chrome above +
+        // the faded `muted` content color (see `paint_content`) carry the disabled look on
+        // every variant.
 
         // Focus ring — shown whenever the button is focused (not keyboard-only) and enabled. It
         // follows the button's own tone (a destructive button rings in `danger`, not `accent`) so
@@ -481,6 +586,13 @@ impl Component for Button {
         // Press flash fades out.
         animating |= self.flash.tick(dt);
 
+        // Composed content animates itself (e.g. a Spinner child): the button drives its own
+        // hover/press, the children drive theirs. (The *color* of the content needs no ticking —
+        // it is inherited at paint time; see `paint_content`.)
+        for child in self.base.children.iter_mut() {
+            animating |= child.tick(dt);
+        }
+
         // Damage just our own rect each frame so the hover/press animation doesn't
         // force a whole-scene redraw (host safety net). Mirrors `Spinner`.
         if animating {
@@ -491,3 +603,6 @@ impl Component for Button {
 }
 
 impl LayoutExt for Button {}
+/// Content is children: `.child(..)` appends any component (sugar like [`Button::new`] /
+/// [`Button::icon`] builds those same children).
+impl Parent for Button {}

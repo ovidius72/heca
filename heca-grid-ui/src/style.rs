@@ -256,7 +256,21 @@ pub struct Style {
     pub font_scale: f32,
     /// Overall size variant — scales font + intrinsic padding together. Composes
     /// with [`font_scale`](Self::font_scale) (both multiply the base font).
+    ///
+    /// **Inherited down the tree** (like the base font): a node that never called
+    /// [`LayoutExt::size`](crate::builders::LayoutExt::size) adopts its parent's variant during
+    /// layout, so a `Small` button's composed content (`Icon`/`Label`, at any depth) shrinks with
+    /// it. A node that *did* set one keeps it — see [`size_explicit`](Self::size_explicit).
     pub size: WidgetSize,
+    /// Whether [`size`](Self::size) was set **explicitly** by the caller (via
+    /// [`LayoutExt::size`](crate::builders::LayoutExt::size)) rather than left at its default.
+    ///
+    /// This exists because `size` is not an `Option`: its default (`Normal`) is
+    /// indistinguishable from an explicit `.size(WidgetSize::Normal)`, so the layout pass could
+    /// not otherwise know whether it may overwrite the field with the inherited variant. `false`
+    /// ⇒ inherit from the parent; `true` ⇒ keep this node's own (and pass **it** to the node's
+    /// children).
+    pub size_explicit: bool,
     /// When true the node is removed from layout entirely (`display: none`) — it
     /// takes no space and paints nothing. Used by collapsible containers
     /// (e.g. [`ItemGroup`](crate::widgets::ItemGroup)) to fold rows away.
@@ -264,6 +278,22 @@ pub struct Style {
     /// Placement when this component is a child of a [`Grid`](crate::widgets::Grid).
     /// `None` ⇒ grid auto-placement. Set by `Grid::cell`/`Grid::area`.
     pub grid_cell: Option<GridCell>,
+}
+
+impl Style {
+    /// Choose the [size variant](Self::size) **explicitly**, marking it as the caller's choice.
+    ///
+    /// This is the single place explicitness is recorded: layout then leaves this node's variant
+    /// alone (instead of replacing it with the parent's) and passes **this** variant down to the
+    /// node's children. [`LayoutExt::size`](crate::builders::LayoutExt::size) is the public
+    /// builder over it; widgets that expose their own `size(..)` for something else (e.g.
+    /// [`Icon::size`](crate::widgets::Icon::size), which takes glyph pixels) reach the variant
+    /// through here. Assigning [`size`](Self::size) directly does **not** mark it explicit, so the
+    /// layout pass will overwrite it.
+    pub fn set_size(&mut self, size: WidgetSize) {
+        self.size = size;
+        self.size_explicit = true;
+    }
 }
 
 impl Default for Style {
@@ -297,6 +327,8 @@ impl Default for Style {
             font_size: 0.0,
             font_scale: 1.0,
             size: WidgetSize::Normal,
+            // Not explicitly chosen ⇒ the layout pass may replace it with the parent's variant.
+            size_explicit: false,
             hidden: false,
             grid_cell: None,
         }

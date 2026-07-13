@@ -4,19 +4,28 @@ use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{Signal, SignalGet, signal};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::TextAlign;
 use crate::style::Length;
 
 /// A text label. Its content is a [`Signal`], so updating it marks the label
 /// dirty and triggers a repaint.
+///
+/// **Color is inherited when unset.** With no explicit [`color`](Label::color), the label paints
+/// in the [content color](crate::component::PaintCx::with_content_color) published by an enclosing
+/// control — which is how a `Label` composed inside a [`Button`](super::Button) tracks that
+/// button's hover/disabled state without either widget knowing about the other. With no inherited
+/// color either, it falls back to the theme foreground.
 pub struct Label {
     base: Base,
     text: Signal<String>,
     seen_text: String,
     align: TextAlign,
     color: Option<Color>,
-    bold: bool,
+    /// Bold weight. A [`Signal`] because it can be **state-driven by an enclosing widget** — an
+    /// [`Item`](super::Item) bolds its label while the row is active — and the inherited paint
+    /// context carries only a color, not a weight. The parent flips this in its `tick`.
+    bold: Signal<bool>,
 }
 
 impl Label {
@@ -31,7 +40,7 @@ impl Label {
             seen_text,
             align: TextAlign::Start,
             color: None,
-            bold: false,
+            bold: signal(false),
         };
         label.remeasure();
         label
@@ -43,16 +52,25 @@ impl Label {
         self
     }
 
-    /// Explicit text color (defaults to the theme foreground).
+    /// Explicit text color. Unset ⇒ the enclosing control's
+    /// [content color](crate::component::PaintCx::with_content_color), else the theme foreground.
+    /// Setting it opts the label **out** of that inheritance.
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
         self
     }
 
     /// Render the label with bold weight.
-    pub fn bold(mut self, bold: bool) -> Self {
-        self.bold = bold;
+    pub fn bold(self, bold: bool) -> Self {
+        self.bold.set(bold);
         self
+    }
+
+    /// The bold-weight signal — set it to re-weight the label in place, without rebuilding the
+    /// tree. An enclosing widget uses this to drive a state-dependent weight (e.g. an
+    /// [`Item`](super::Item) bolding its label while active).
+    pub fn bold_signal(&self) -> Signal<bool> {
+        self.bold
     }
 
     /// Explicit font size in logical px — overrides the inherited theme font.
@@ -99,14 +117,20 @@ impl Component for Label {
             return;
         }
         cx.paint_base(&self.base);
-        let color = self.color.unwrap_or_else(|| cx.theme().colors.foreground);
+        // Own color → the enclosing control's inherited content color → the theme foreground.
+        // The middle step is what makes a composed label track its parent's state (a Button's
+        // hover sweep / disabled fade) with no wiring between the two widgets.
+        let color = self
+            .color
+            .or_else(|| cx.content_color())
+            .unwrap_or_else(|| cx.theme().colors.foreground);
         cx.text(
             self.base.bounds,
             &self.text.get_untracked(),
             color,
             self.base.font,
             self.align,
-            self.bold,
+            self.bold.get_untracked(),
         );
     }
 

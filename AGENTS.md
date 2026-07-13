@@ -723,21 +723,56 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 
 **When you touch a widget, you MUST refactor it toward this.** Any leaf that hand-draws its content (e.g. `Button` drawing its label text directly, so it can't hold an `Icon`) is a **refactor target**: make it compose its content as children (a content slot: leading / label / trailing, like `Item` already does) before adding to it. Do not bolt a hand-drawn extra onto a hand-drawn widget — that is the anti-pattern this rule exists to kill. Extending the vocabulary (a new `WidgetKind`, a new prop) is **host-side** work (widget + `realize` arm + showcase + `docs/widgets.md`); plugins only *compose* existing kinds.
 
-> **📕 AUTHORITATIVE, READ IT BEFORE PROPOSING ANYTHING: [`docs/widget-architecture.md`](docs/widget-architecture.md).**
-> It is **SETTLED**. Its §5 lists the questions that are already decided — do **not** re-derive or
-> re-propose them. The load-bearing ones, inline so you cannot miss them:
->
-> - **`heca-grid-ui` NEVER depends on `heca`.** `ViewNode` lives in the **app**
->   (`heca/src/chrome/view.rs`). Therefore **`Button::new(ViewNode)` is impossible — never propose
->   it**, and **do not propose moving `ViewNode` into `heca-grid-ui`** (it can't carry the
->   closures/signals the native chrome needs — every state change would become a rebuild).
-> - **`realize` is the ONE bridge** (app-side): `ViewNode` (data) → `Box<dyn Component>` (widgets).
->   Both authoring paths — declarative `ViewNode` (plugins/RPC/modal bodies) and the native builder
->   API (chrome, with closures + signals) — converge on the **same retained tree**.
-> - **Widgets hold children** (`impl Component`, never a closed `Icon|Label` enum). A realized
->   subtree enters via a `*_boxed` setter (`Dialog::body_boxed` is the precedent).
->
-> Supporting design: `pluggable-chrome-plugin-plan.md` §2.6.2 (the model) + §2.7.2 (intent dispatch); `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`. Realize coverage today (`realize.rs`) still misses `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` (need structured props, `plugin-task-ui-9`) — filling these + composing the leaf widgets is the standing refactor.
+#### ⛔ SETTLED — never re-derive or re-propose these
+
+> These are **decided**. They have been re-explained to agents many times; re-opening them wastes
+> the maintainer's time. They are written **here**, in the file you read every session, on purpose
+> — not behind a link, because you will not open the link.
+
+**The dependency rule — this is why the model looks the way it does:**
+
+```
+heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the reverse
+```
+
+| Question | Answer — do NOT re-propose |
+|---|---|
+| Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / `HintTargetRegistry` / theme wiring). |
+| Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in the **app** (`heca/src/chrome/view.rs`); the library cannot see it. |
+| Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_activate(move \|\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
+| Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge, app-side (`heca/src/chrome/realize.rs`). |
+| Do widgets hold children, or hand-draw content? | **CHILDREN.** Hand-drawn content is a refactor target (THE RULE above). |
+| What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
+| How does a **realized** subtree enter a widget? | Via a **`*_boxed` setter**: `realize` returns `Box<dyn Component>`, which is not itself `Component`, so it cannot go through `Parent::child`. `Dialog::body_boxed(Box<dyn Component>)` is the precedent. |
+| How does behaviour cross the plugin boundary? | As an **`Intent`** (action id + args), never a callback. Click, KeyHint pick, and RPC all fire the same intent. |
+| Is styling a prop? | **NO.** Only semantic `ViewVariant` / `ViewSize` / `ViewAlign` + color/glyph **names**; the host resolves the pixels from `Theme`. |
+
+**Both authoring paths converge on the same retained tree — that is the whole point:**
+
+```rust
+// Declarative (plugins, RPC, modal/menu bodies) — arbitrary tree, arbitrary depth:
+ViewNode::new(WidgetKind::Button)
+    .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+    .on_press(Intent::new("confirm_ok"))
+    .child(ViewNode::new(WidgetKind::Row)
+        .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
+        .child(ViewNode::new(WidgetKind::Label).text("Delete")))
+
+// …realize() produces exactly this — which native code (chrome: closures + signals) writes directly:
+Button::destructive("Delete")
+    .child(Icon::new(Glyph::Trash))
+    .on_click(move || emit(intent))
+```
+
+**Genuinely OPEN (the live design space):** `realize` coverage still misses `Select` / `Tabs` /
+`Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `ScrollBar` / `Toast` (need structured props,
+`plugin-task-ui-9`); composing the leaf widgets (**`Button` first** — it hand-draws its label);
+how a child inherits its parent's **per-state content color** (an unstyled child `Label`/`Icon`
+must tint with the parent's hover/disabled state — the `Theme` is only reachable in `paint`); and
+a typed builder SDK over `ViewNode`.
+
+Background reading (the rules above are self-contained — you do **not** need these to avoid the
+mistakes): `docs/widget-architecture.md` (same content, with rationale); `pluggable-chrome-plugin-plan.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`.
 
 ---
 
@@ -762,10 +797,20 @@ props, `Intent`s), you MUST update **both** of these (not one or the other):
    This is the authoritative in-code reference; **never reduce it to a bare pointer.**
 2. **`docs/widgets.md` — supplementary human documentation.** The reader-friendly catalog entry.
 
-Both must show how to **create, declare, use, or extend** the thing for **BOTH audiences**:
-**internal code** (native Rust builder API) **AND plugins** (declarative `ViewNode` — `WidgetKind`
-+ props + `Intent`s). Keep the two in sync (cross-reference them). This is in addition to the
-showcase-demo requirement above.
+**Both must be EXHAUSTIVE, and both must carry CODE EXAMPLES for BOTH audiences.** A widget's entry
+is incomplete — and the task is not done — unless it documents:
+
+- **every** builder / property / event / signal accessor it exposes (not a subset, not "the main
+  ones"), what each does, and its default;
+- a **runnable native example** — the Rust builder API (`Button::destructive("Delete").icon(Glyph::Trash)`);
+- a **runnable declarative example** — the `ViewNode` form a plugin/RPC would author (`WidgetKind`
+  + props + `children` + `Intent`s), including which props `realize` reads and any **precedence**
+  rules (e.g. a Button's `children` win over its `text`/`icon` sugar);
+- how to **compose/extend** it (what may go inside it, and what the widget owns vs. what the caller
+  provides).
+
+Keep the two in sync (cross-reference them). This is in addition to the showcase-demo requirement
+above. A widget landed with thin docs, or documented for only one audience, is unfinished work.
 
 The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widgets and project app state into them** — it must not invent visual primitives or hardcode styling inline.
 

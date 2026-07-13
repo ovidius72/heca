@@ -126,13 +126,11 @@ impl Component for IconButton {
     }
 
     /// A pinned square, or auto (hug the icon + padding) when unset. The size
-    /// variant scales the padding and cascades to the icon child so the whole
-    /// affordance grows/shrinks together.
+    /// variant scales the padding; the **icon child inherits the variant from the layout pass**
+    /// (see [`Style::size_explicit`](crate::style::Style::size_explicit)), so the whole affordance
+    /// grows/shrinks together without this widget copying the variant into its child.
     fn remeasure(&mut self) {
         let size = self.base.style.size;
-        if let Some(icon) = self.base.children.first_mut() {
-            icon.base_mut().style.size = size;
-        }
         self.base.style.padding = DEFAULT_PAD * size.pad_scale();
         let len = self.cell.map(Length::Px).unwrap_or(Length::Auto);
         self.base.style.width = len;
