@@ -1,7 +1,7 @@
 //! [`CommandPalette`] — a fuzzy command launcher (overlay).
 //!
 //! A centered-near-top overlay (same input-capturing contract as
-//! [`Modal`](super::Modal) / [`Select`](super::Select): `overlay_active` +
+//! [`Select`](super::Select): `overlay_active` +
 //! `focusable` only while open, content **drawn + hit-tested manually** on the
 //! overlay layer): a query line over a scrollable list of [`Command`]s. Typing
 //! filters the list with a **fuzzy subsequence** match (chars in order),

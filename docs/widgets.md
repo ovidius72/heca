@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Overlays: [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -159,6 +159,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `visible` | `Signal<bool>` | Whether the component renders. |
 | `disabled` | `Signal<bool>` | Dimmed + inert + skipped by focus. Set via `LayoutExt::disabled`. |
 | `focused` | `Signal<bool>` | Holds keyboard focus. |
+| `focusable` | `bool` | Whether the widget **opts into** keyboard focus (default `false`). Interactive widgets set it `true` — in the constructor (always-focusable controls) or when a callback is wired (e.g. a `Row`'s `.on_activate`). The `Component::focusable()` default is `focusable && !disabled`, so widgets no longer re-implement that check; only genuinely dynamic ones (an overlay focusable only while open) override the method. |
 | `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`). Widgets now draw their `focus_ring` whenever `focused`, so the ring shows for both; this flag is retained for widgets that still want a keyboard-only distinction. |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
 | `children` | `Vec<Box<dyn Component>>` | Child components. |
@@ -170,7 +171,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 |--------|---------|---------|
 | `base(&self) -> &Base` | — | Required. |
 | `base_mut(&mut self) -> &mut Base` | — | Required. |
-| `focusable(&self) -> bool` | `false` | Interactive widgets return `true` (and `!disabled`). |
+| `focusable(&self) -> bool` | `base.focusable && !disabled` | Set `base.focusable = true` on an interactive widget instead of overriding this; override only for dynamic focusability (focusable only while open). |
 | `overlay_active(&self) -> bool` | `false` | `true` while the widget owns an open overlay (e.g. a `Select` dropdown), so the host routes input to it first. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
@@ -352,9 +353,9 @@ stay DRY):
 | `.theme() -> &Theme` | Active theme tokens. |
 | `.viewport() -> Size` | Visible window size (set by the host via `.with_viewport(size)`); overlay widgets use it to flip/cap their popup. Defaults to "infinite" for headless callers. |
 | `.rect(rect, fill, Option<Border>, radius, Option<Glow>)` | Rounded rect + optional border + glow. |
-| `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Modal` to lift off the scrim. |
+| `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Dialog` to lift off the scrim. |
 | `.focus_ring(rect, color, radius)` | **The** keyboard focus outline for every widget — a thin accent-toned ring drawn *just outside* `rect` (CSS-`outline` style, offset gap), corner radius widened to stay concentric. Visible whether or not the widget has its own border (works on borderless Ghost/Link buttons). Width = `focus_border_width`; halo tracks `glow_size`. Pair with the theme's `focus_ring`/`effective_focus_ring()`/`focus_ring_tone()` for the color. |
-| `.bracket_frame(rect)` | Decorative L-shaped corner-bracket reticle (Pane/DockFrame/Modal/Dialog chrome) — **decoration, not focus** (focus uses `.focus_ring`). |
+| `.bracket_frame(rect)` | Decorative L-shaped corner-bracket reticle (Pane/DockFrame/Dialog chrome) — **decoration, not focus** (focus uses `.focus_ring`). |
 | `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
@@ -987,7 +988,7 @@ Alert::warning("LINK UNSTABLE").body("retrying handshake…");
 
 ### Toast
 
-A compact **notification card**: a bracket-framed surface (the shared Pane/Modal reticle frame)
+A compact **notification card**: a bracket-framed surface (the shared Pane/Dialog reticle frame)
 with a severity-toned leading `Icon`, a strong title, optional small body, an optional inline
 **action** button, and an optional **×** dismiss. **Presentation only** — it holds no queue,
 timer, or global state; the host app owns lifecycle (when it appears, how long it lives,
@@ -1335,59 +1336,18 @@ row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
   `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
   Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
-### Modal
-
-A centered **confirm / alert dialog** over a dimming scrim. Like `Select`, it captures input
-while open — it reports `overlay_active` + is `focusable` only while open, so the host routes
-pointer/keys to it first; its content (title, message, and a row of **N action buttons**) is
-**drawn + hit-tested manually** on the overlay layer (no child subtree to relocate). Open/close is
-a host-owned `Signal<bool>` (mouse/keyboard/RPC all drive it). Dismissal: a button, **Esc**
-(= cancel), or a **scrim** click (= cancel) — each fires its callback and closes.
-
-**Buttons are data-driven `ModalButton`s.** One button is **focused** (an accent focus ring);
-the host moves focus and activates it (`focus_next` / `focus_prev` / `activate_focused`), each
-button may carry a **letter shortcut** shown as `Label (x)` and fired by `activate_shortcut(c)`,
-and `request_cancel()` activates the cancel button (or closes if dismissible). Initial focus is
-the cancel button (safe default for a destructive dialog).
-
-- **Construct**: `Modal::new(title, message)`.
-- **Buttons**: `.button(ModalButton)` (general, N buttons). A `ModalButton::new(label, impl Fn())`
-  takes `.shortcut(char)` (the `(x)` label + host-fired key), `.danger(bool)` (destructive tint),
-  and `.cancel()` (Esc / scrim activate it; takes initial focus).
-- **Convenience builders**: `.confirm(label, impl Fn())` (primary button), `.cancel(label, impl Fn())`,
-  `.danger(bool)` (tints the primary), `.dismissible(bool)` (default `true`; `false` =
-  **forced-decision** — Esc/scrim are swallowed, only the buttons close it), `.open(bool)`.
-- **Host-driven keyboard** (the host supplies modifier awareness the widget lacks):
-  `focus_next()` / `focus_prev()`, `activate_focused()`, `activate_shortcut(char) -> bool`,
-  `request_cancel()`.
-- **Accessor**: `.open_signal() -> Signal<bool>` — bind a trigger to it to show the dialog.
-
-```rust
-let modal = Modal::new("Delete pane?", "This action cannot be undone.")
-    .button(ModalButton::new("Cancel", || {}).shortcut('n').cancel())
-    .button(ModalButton::new("Delete", || wm.delete_focused()).shortcut('y').danger(true));
-let open = modal.open_signal();
-// … Button::destructive("DELETE").on_click(move || open.set(true)); add `modal` to the tree
-```
-
-> Host wiring: while `focus.overlay_active(root)`, route pointer **and keys** to the overlay
-> (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog. `Modal::event` self-maps
-> its raw keys (Tab / ←→ / Enter / Space / Char / Esc). Prefer [`Dialog`](#dialog) for new overlays:
-> it carries **no** hardcoded nav keys — the host resolves them from config (`widget-keys-config`).
-
 ### Dialog
 
-A centered overlay **panel that holds real child components** — the container counterpart to
-[`Modal`](#modal). Where `Modal` draws its title/message/buttons **manually** (no child subtree,
-so its buttons can't be hint targets or focus-traversed as components), `Dialog` lays out a
+A centered overlay **panel that holds real child components**. It lays out a
 padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and each
-action is a real [`Button`](#button). Because the buttons are real children, they get the
+action is a real [`Button`](#button). Because the buttons are real children (not manually
+painted), they get the
 universal hint picker (`prefix+/`), standard focus traversal, and pointer routing **for free** —
 this is what makes an overlay's buttons hintable.
 
-Same overlay contract as `Modal`: `overlay_active` + `focusable` only while open, so the host
-routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree. Unlike
-`Modal`, `Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal
+Same overlay contract as [`Select`](#select): `overlay_active` + `focusable` only while open, so the host
+routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree.
+`Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal
 is a callback the host points at its overlay-close path (e.g. emit `CloseOverlay`).
 
 **Nav keys are host-configured, except the universal focus primitive (`widget-keys-config`).**
@@ -1508,7 +1468,7 @@ like a native one. (A first-class typed builder — `Column::new().gap(8).child(
 
 ### CommandPalette
 
-A fuzzy **command launcher** overlay (same input-capturing contract as `Modal`): a query line
+A fuzzy **command launcher** overlay (same input-capturing contract as `Dialog`): a query line
 over a scrollable list of commands. The query line is a real [`Input`](#input), so full editing
 comes for free — selection, multi-click, and char/word/line delete (Ctrl/Alt/⌘ + Backspace/Delete).
 Typing filters with a **fuzzy subsequence** match, **smart-case** (case-insensitive unless the
@@ -1532,13 +1492,13 @@ let open = palette.open_signal();
 // host: on Ctrl+K → open.set(true); add `palette` to the tree
 ```
 
-> Needs the same host wiring as `Modal` (route keys to the overlay). Because it tracks `Ctrl` for
+> Needs the same host wiring as `Dialog` (route keys to the overlay). Because it tracks `Ctrl` for
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
 
 ### ContextMenu
 
 A **cursor-anchored action menu** overlay — the pointer counterpart to the keyboard pick flows
-(same input-capturing contract as `CommandPalette`/`Modal`). A floating list of entries, each with
+(same input-capturing contract as `CommandPalette`). A floating list of entries, each with
 an optional **icon**, an optional **quick-pick keycap** (the shared
 [`paint_keycap`](#standalone-keycap--paint_keycap--keycap_size--keycapvariant) primitive in its
 `Bordered` variant — press the letter to run; never hand-drawn), an optional textual shortcut hint,
@@ -1568,7 +1528,7 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 // host: on right-click → anchor.set(cursor); open.set(true); add `menu` to the tree
 ```
 
-> Same host wiring as `Modal`/`CommandPalette` (route keys to the overlay). The app decides *when*
+> Same host wiring as `CommandPalette` (route keys to the overlay). The app decides *when*
 > (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
 
 > **Declaring from data — host + plugins (shipped, `context-menu` phase).** The preferred path is a
@@ -1624,7 +1584,7 @@ let stack = ToastStack::new(toasts)
 // app pushes:  toasts.update(|v| v.push(ToastSpec::new(1, "Saved").severity(ToastSeverity::Success)));
 ```
 
-> Same host wiring as `Modal` (route pointer to the overlay first). Auto-dismiss/timers live in the
+> Same host wiring as `Dialog` (route pointer to the overlay first). Auto-dismiss/timers live in the
 > app: run a timer, then remove the id from `items`.
 
 ---
@@ -1819,6 +1779,12 @@ Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed, 
 `remeasure` if the widget's size depends on the font — read `self.base.font`), and opt into
 builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
+
+If the widget is **interactive**, set `base.focusable = true` (in the constructor for an
+always-focusable control, or inside the `.on_click`/`.on_activate` builder for one that is
+interactive only once a callback is wired) — do **not** re-implement `Component::focusable()`. The
+trait default already returns `base.focusable && !disabled`; override the method only for genuinely
+dynamic focusability (e.g. an overlay focusable only while its `open` signal is set).
 
 ### Drag and drop
 

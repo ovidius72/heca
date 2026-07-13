@@ -1828,14 +1828,16 @@ fn ws_label(state: &AppState, ws_idx: usize) -> String {
 fn confirm_title(state: &AppState, action: &WmAction) -> String {
     match action {
         WmAction::ClosePaneById { pane_id } => {
+            // Use the pane's **custom name** if it has one, else a generic "Pane" — never a
+            // placeholder/process title, so an unnamed pane reads "Delete Pane?" not "Delete Yellow?".
             let label = state
                 .session
                 .workspaces
                 .iter()
                 .find_map(|ws| ws.find_pane(*pane_id))
-                .map(|p| p.title.clone())
-                .unwrap_or_else(|| format!("pane {}", pane_id));
-            format!("Close {}?", label)
+                .and_then(|p| p.custom_name.clone())
+                .unwrap_or_else(|| "Pane".to_string());
+            format!("Delete {}?", label)
         }
         WmAction::DeleteColumn { ws_idx, col_idx } => {
             format!("Delete column {} from {}?", col_idx + 1, ws_label(state, *ws_idx))

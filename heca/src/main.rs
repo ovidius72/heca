@@ -38,17 +38,12 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy}
 
 use winit::window::WindowId;
 
-/// Distinct pane names so you can visually identify what's moving.
-const PANE_NAMES: &[&str] = &[
-    "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Orange", "Purple", "Lime", "Pink",
-    "Teal", "Coral",
-];
-
-pub(crate) fn pane_name(id: PaneId) -> String {
-    PANE_NAMES
-        .get((id.0 as usize).saturating_sub(1) % PANE_NAMES.len())
-        .unwrap_or(&"?")
-        .to_string()
+/// A newly spawned pane has **no name** until the user renames it — its display falls back to
+/// the running program (a separate chrome segment), never a placeholder. Kept as a function (not
+/// an inline `String::new()`) because it is threaded as a `pane_name_fn` pointer into the layout
+/// swap/placeholder path.
+pub(crate) fn pane_name(_id: PaneId) -> String {
+    String::new()
 }
 
 struct HecaApp {

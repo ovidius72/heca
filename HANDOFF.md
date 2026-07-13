@@ -1,266 +1,107 @@
-# HANDOFF — widget-keys-config + WidgetIntent/Keymap unification (2026-07-12)
+# HANDOFF — focusable refactor · button styling · overlay policy · ViewNode architecture (2026-07-13)
 
-> **Read first:** `AGENTS.md` (⛔ STOP rules), `docs/widgets.md`, `docs/surface-compositor.md`,
-> `docs/sidebar-provider-modes.md`. This handoff supersedes the previous one for the
-> `widget-keys-config` arc. It is intentionally exhaustive: an agent resuming should need nothing else.
-
----
-
-## 0. Cardinal rules (obey)
-- **Never hardcode** style/colors/sizes/keys — all from `Theme`, a widget **variant**, or the
-  action/keymap registries. No magic numbers.
-- **Reuse/extend existing widgets**; never hand-draw in a consumer's `paint`.
-- Every setting → `config.default.toml`; every keybound action → `keybindings.default.toml`.
-- Docs in **both** rustdoc AND `docs/widgets.md` for any widget/UI-model change.
-- **Don't run `cargo fmt`**; verify with `cargo clippy --workspace --all-targets --all-features`.
-- **Communication: plain simple English, no jargon.**
-- **Centralize, don't re-declare per widget/host.** (The recurring theme of this arc — see §2.)
+> **Read first:** `AGENTS.md` (esp. the new **⭐ THE WIDGET ARCHITECTURE — `ViewNode`** block),
+> `docs/widgets.md`, `pluggable-chrome-plugin-plan.md` §2.6.2/§2.7.2, `docs/plugin-authoring.md`.
+> This handoff replaces the previous one. It is exhaustive on purpose.
 
 ---
 
-## 1. Branch / PR state
-- **PR #234** (`feat/widget-keys-config` → `main`, OPEN): the first pass — per-widget configurable
-  keys using three separate event vocabularies (`MenuNav`/`DialogNav`/`InputEdit`) + three app maps.
-  **Superseded in design** by the unification below, but still the open PR.
-- **Branch `feat/widget-keymap-unify`** (off `feat/widget-keys-config`, NOT yet PR'd): the unification
-  — one `WidgetIntent` + one host-owned `Keymap` + `[keys.widgets]`. Commits:
-  - `e5753c6` refactor: unify to WidgetIntent + host-owned Keymap + [keys.widgets]
-  - `5127604` fix: resolve overlay keys via macOS-robust event_combo (Ctrl+letter)
-  - `83f8361` fix: case-insensitive combo_to_grid restores named keys (Tab/arrows/Enter)
-- **Decision pending (user):** fold the unification into PR #234 (retarget), or open a 2nd stacked PR.
+## 0. Branch / PR state
+- **Working branch: `feat/base-focusable`**, stacked on **`feat/widget-keymap-unify`** (**PR #235**, still OPEN → main). So this branch already contains #235's commits (widget-keys unification + disabled-button styling `e2ec620`) + a merge of `origin/main` (`d075ded`) + this session's work.
 - Remote: `git@github.com:ovidius72/heca.git` (gh authed as `ovidius72`).
-- Gates on `feat/widget-keymap-unify`: workspace clippy 0; all tests green (grid-ui 128+69, heca
-  333+89, heca-config 78); showcase builds.
+- **When #235 merges:** rebase `feat/base-focusable` onto `main` so its PR shows only this session's commits.
+- Gates: `cargo build --workspace --all-targets` clean (only pre-existing transitive `block v0.1.6` note); `heca` 333 tests, `heca-grid-ui` 124+71 tests + doctests; `cargo clippy --workspace --all-targets --all-features` clean.
 
 ---
 
-## 2. The problem & the decisions (WHY) — read before touching anything
+## 1. What was DONE this session (with files)
 
-### 2.1 The problem
-Several `heca-grid-ui` widgets **hardcoded their internal keys** in `event()` (Dialog focus-nav,
-Input editing, Select/Tabs/ContextMenu/CommandPalette list-nav). This violates the project rule that
-**keys pass through config**. Requested by the user 2026-07-09.
+### 1a. Removed the legacy `Modal` widget (superseded by `Dialog`)
+- **Why:** `Modal` (hand-drew its own buttons) and `Dialog` (real `Button` children) were two divergent widgets; the app uses only `Dialog` (`heca/src/chrome/overlay.rs` `build_modal_root` → `OverlayHost`). `Modal` was dead except the showcase + tests, and caused visible inconsistency (two different "Delete pane?" dialogs in the showcase).
+- **Files:** deleted `heca-grid-ui/src/widgets/modal.rs`; removed exports (`widgets/mod.rs`, `lib.rs` both lists); fixed now-broken intra-doc links (`dialog.rs`, `command_palette.rs`, `context_menu.rs`); removed 6 Modal tests (`tests/phase_a.rs`); removed the showcase "Modal" demo (`heca-renderer/examples/showcase.rs`); removed the `### Modal` section + all widget-`Modal` refs in `docs/widgets.md` (kept app types `ModalSpec`/`ModalResult`/`ModalAction` + `Modal`-band).
 
-### 2.2 The model we chose (approved by the user) — host-driven semantic events
-Widgets are **headless and config-agnostic** (same boundary as "no GPU/winit"). They must NOT read
-`config.toml`. So:
-- **Widgets speak semantic intents**, never keys. The key→intent mapping is the **host's** job
-  (keys are configurable; the library is headless; mouse=keyboard=RPC parity).
-- **One shared vocabulary** across all widgets (the user rejected per-widget vocabularies as
-  redundant — same instinct as "don't re-declare"): `WidgetIntent` (see §3.1).
-- **One host-owned `Keymap`**, built once from config + rebuilt on reload, consulted once at
-  dispatch. **NOT a global** — each host/window owns its `Keymap` (the user asked about detached
-  panes / multi-window: a `thread_local`/`static` would break because grid-ui is `Rc`-single-threaded
-  and each UI thread is its own world; a per-host `Keymap` is safe).
+### 1b. Centralized `focusable()` onto `Base`
+- Added `pub focusable: bool` to `Base` (`heca-grid-ui/src/component.rs`, default `false`); changed the `Component::focusable()` **trait default** to `self.base().focusable && !self.base().disabled.get_untracked()`.
+- **Per widget:** removed 13 boilerplate `focusable()` overrides and set the flag instead:
+  - **Static (flag in constructor):** `button`, `checkbox`, `input`, `select`, `tabs`, `toggle`, `badge_button`, `scroll_region`.
+  - **Callback-conditional (flag set inside `.on_click`/`.on_activate`):** `item`, `row`, `rail_cell`, `icon_button`, `toast`.
+  - **Kept dynamic overrides:** `dialog`, `modal`(removed), `context_menu`, `command_palette`, `toast_stack` (`is_open()` / `!entries.empty()`).
+- **NOTE — deviation from the old handoff §6.1 sketch:** it listed Toast/Modal/ContextMenu/CommandPalette/ToastStack as "drop to non-focusable" — but their code is dynamic/callback-based, so dropping would have *changed behavior*. Behavior was preserved exactly instead.
+- Test: `focusable_is_driven_by_the_base_flag_and_disabled` (`tests/phase_a.rs`). Docs updated in `docs/widgets.md` (Base table, Component table, "Building a custom widget").
 
-### 2.3 Naming/axis decisions (user, 2026-07-12) — IMPORTANT, do not relitigate
-- **`item_previous` / `item_next` = HORIZONTAL** (left/right). Keys: `Ctrl+h` / `Ctrl+l` (+ ←/→).
-  Used by **Tabs** and a **Dialog's button row**.
-- **`menu_up` / `menu_down` = VERTICAL** (up/down). Keys: `Ctrl+k` / `Ctrl+j` (+ ↑/↓).
-  Used by **menus, Select lists, command palette**.
-- **`activate` (Enter) / `dismiss` (Esc)** shared. **`edit_*`** for Input.
-- **Tab / Shift+Tab are NOT configurable.** They are the universal focus-traversal primitive
-  handled by the `FocusManager` (main tree) and trapped inside a modal `Dialog`. Always on.
-- **Config table is `[keys.widgets]`** (a dedicated table, not flat `[keys]`).
-- **Buttons activate on Space/Enter** (classic; `Button::event` already does this — button.rs:414).
-- **`Ctrl+h` overload** (delete in an Input, previous in Tabs/dialog) disambiguates **by focus**: the
-  keymap resolves `Ctrl+h` to `[EditDeleteBack, ItemPrevious]`; delivered to the focused widget,
-  which consumes the one it understands. Edit intents are bound **first** (field-first).
+### 1c. `Button` styling — disabled + Secondary theme-consistency (`heca-grid-ui/src/widgets/button.rs`)
+- **Disabled look** (committed in #235 as `e2ec620`, refined here): a disabled button drops accent/danger chrome to `muted`, label rendered `muted` at `DISABLED_CONTENT_ALPHA` (0.38), progress pinned to rest, weak scrim removed. Reads on every variant incl. transparent Ghost/Link.
+- **Secondary theme-consistency (this session):** Secondary now fills with `theme.muted` at `SECONDARY_FILL_ALPHA` (36) + border from `theme.muted` (was `theme.surface` fill + `theme.border` border). Root cause: `surface`≈`background` on Tron (fill vanished) and `border`==`surface` on Mocha (border vanished); `muted` always contrasts the surface and never equals it. Fixes the cross-theme identity swing.
+- Regression test `disabled_button_label_is_muted_and_faded_on_every_variant`; `docs/widgets.md` Button section updated.
 
-### 2.4 The next decision (user, 2026-07-12) — NOT YET DONE (see §6.1)
-**Centralize `focusable()`.** 18 widgets re-implement `Component::focusable()`. The user wants
-focusability to be a **property on `Base`**, defaulted per widget in its constructor, with `disabled`
-handled centrally — not a re-implemented method. Same "centralize, don't re-declare" principle as the
-keymap. **This is the top next task.** Full design in §6.1.
+### 1d. Overlay-capture **interaction policy** (`heca/src/app/interaction.rs`)
+- **In `route_interaction`** (the policy router `dispatch_intent` consults), added at the top: `if crate::chrome::top_modal(state).is_some() { return RouteDecision::Block; }`.
+- **This is a STATE condition (like `is_floating_domain`), NOT a new `ActionPolicy` variant** — `action_policy()` classifies actions on the *focus-domain* axis; overlay-open is orthogonal, so it lives in the router as `Block`. (Rationale is in the function doc comment; also see the memory `use-existing-policy-systems-never-hardcode`.)
+- **Effect:** while a modal overlay (confirm `Dialog`, context menu / dropdown) is open, every WM action from keyboard/mouse/RPC is blocked — fixes `prefix+e`/`prefix+>` leaking behind a dialog. `SubmitOverlay`/`CloseOverlay` are intercepted **earlier** in `dispatch_intent`, so they still resolve; the overlay's own Esc/Space/Enter/nav go via the widget-keymap path (`events.rs`).
 
----
+### 1e. Text-field uppercase fix (`heca/src/app/events.rs`)
+- In the overlay key dispatch, for **printable** input the raw key is now taken from the actual `key_text` (case-preserved, shifted symbols intact) instead of the lowercased `combo_to_grid` key; the combo is used only for chord matching (which `Keymap::resolve` lowercases anyway). Space stays `GridKey::Space` (so it still activates a focused button); Ctrl/Meta combos + named keys keep the combo key. Fixes: Shift+letter → uppercase, `!@#` etc., in overlay `Input`s.
 
-## 3. Architecture as built (the unification)
+### 1f. Confirm dialog + random pane names (`heca/src/handlers.rs`, `actions.rs`, `main.rs`)
+- **Confirm title:** `confirm_title` for `ClosePaneById` → `"Delete Pane?"` (unnamed) / `"Delete <custom_name>?"` (named) — uses `custom_name`, never a placeholder title.
+- **Button verb:** `builtin_confirm_specs` `delete_pane` verb `"Close"` → `"Delete"` (`actions.rs`).
+- **Random names removed:** `pane_name()` (`main.rs`) now returns `String::new()` (was the `PANE_NAMES` color list "Red"/"Green"/…). An unnamed pane shows no name (program/icon only). Fn kept (threaded as `pane_name_fn` pointer).
 
-### 3.1 `heca_grid_ui::WidgetIntent` + `Event::Widget` — `heca-grid-ui/src/component.rs`
-Replaces the three enums (`MenuNav`/`DialogNav`/`InputEdit`). Delivered as `Event::Widget(WidgetIntent)`.
-```rust
-pub enum WidgetIntent {
-    ItemPrevious, ItemNext,          // horizontal (Tabs, dialog button row)
-    MenuUp, MenuDown,                // vertical (menus, Select list, palette)
-    Activate, Dismiss,               // shared
-    EditDeleteBack, EditDeleteToLineStart, EditSelectAll, // Input only
-}
-```
+### 1g. `Glyph::CaretUp` (`heca-grid-ui/src/widgets/icon.rs`)
+- Added variant + codepoint `0xe13c` (inferred from the alphabetical layout: down=`E136`, right=`E13A`) + entry in `ALL`. Renders in the showcase glyph grid **as an up-caret** (user confirmed the shape). **KEEP THIS — do not remove** (user directive). It was intended as the `Ctrl` (`⌃`) accelerator glyph but the user finds Phosphor's caret ugly → the accelerator will use **NerdFont** instead once embedded (see §3).
 
-### 3.2 `heca_grid_ui::Keymap` — `heca-grid-ui/src/keymap.rs` (NEW FILE)
-Host-owned `key chord → Vec<WidgetIntent>`. Key methods:
-- `Keymap::new()` (empty), `Keymap::with_defaults()` (built-in vim-friendly defaults for config-less
-  hosts like the showcase), `bind(key, mods, intent)`, `resolve(key, mods) -> &[WidgetIntent]`.
-- **`dispatch(key, mods, deliver)`** — the one resolution point. **Field-first**:
-  ```rust
-  // 1. raw Event::Key first (focused widget's own typing/caret/quick-pick wins)
-  if deliver(&Event::Key{key,pressed:true}) == Yes { return Yes; }
-  // 2. then each resolved Event::Widget(intent), in order (edit-first), stop at first consumed
-  for intent in self.resolve(key, mods) { if deliver(&Event::Widget(*intent)) == Yes { return Yes } }
-  ```
-  `deliver` is host-specific (a focused component, or an overlay's root that forwards field-first).
-- `KeyChord { key: GridKey, mods: Modifiers }` — letters normalised to lowercase.
-- `GridKey` and `Modifiers` now derive `Hash` (for the map). Tests in the file cover axis resolution,
-  the Ctrl+h overload ordering, case normalisation, and field-first dispatch.
-
-### 3.3 Widget consumption (which intents each widget handles)
-- **ContextMenu / CommandPalette** (`context_menu.rs`, `command_palette.rs`): vertical →
-  `MenuUp`/`MenuDown`/`Activate`/`Dismiss`; raw `Char` = quick-pick letter / palette typing.
-- **Select** (`select.rs`): CLOSED trigger opens on raw `Enter`/`Space`/`↓`; OPEN list (overlay) →
-  `MenuUp`/`MenuDown`/`Activate`/`Dismiss`.
-- **Tabs** (`tabs.rs`): horizontal → `ItemPrevious`/`ItemNext`. No raw key handling (pointer + Widget).
-- **Dialog** (`dialog.rs`): `ItemPrevious`/`ItemNext` = focus_prev/next, `Activate` = submit primary,
-  `Dismiss` = fire_dismiss. `Edit*` (and any `Menu*`) are **forwarded field-first** to the focused
-  child. Raw `Event::Key` field-first; **Tab/Shift+Tab handled internally** (classic, uses `self.mods`
-  from `ModifiersChanged`). See dialog.rs `event()`.
-- **Input** (`input.rs`): `EditDeleteBack`/`EditDeleteToLineStart`/`EditSelectAll`. Plain keys
-  (typing, Backspace/Delete, arrows, Home/End, word/line motion) stay in `handle_key` (built-in).
-  A modified char is ignored so the host can resolve it into an Edit intent.
-
-### 3.4 App wiring (heca)
-- **`AppState.widget_keymap: heca_grid_ui::Keymap`** (`heca/src/app_state.rs`) — replaces the three
-  old maps. Built by `build_widget_keymap` at startup (`heca/src/app/startup.rs`) and rebuilt on
-  reload (`heca/src/main.rs` `reload_config`).
-- **`build_widget_keymap(config)`** (`heca/src/app/registry.rs`) — reads `[keys.widgets]`
-  (`config.keys.widgets`, falling back to `KeysConfig::default().widgets`), binds `edit_*` FIRST
-  (field-first ordering), converts each config string via `combo_to_grid`.
-- **`combo_to_grid(&KeyCombo) -> Option<(GridKey, Modifiers)>`** (`registry.rs`) — converts a parsed
-  `KeyCombo` to a grid chord. **Matches the key name case-INSENSITIVELY** (critical — see §5).
-- **events.rs overlay branch** (`heca/src/app/events.rs`, in the keyboard handler, gated on
-  `!picker_seq && crate::chrome::top_modal(state).is_some()`):
-  ```rust
-  if let Some((key, mods)) = crate::app::registry::combo_to_grid(&event_combo) {
-      let keymap = state.widget_keymap.clone();
-      keymap.dispatch(key, mods, |ev|
-          state.layers.top_modal_root_mut().map(|root| root.event(ev)).unwrap_or(Handled::No));
-  }
-  ```
-  Uses `event_combo` (from `build_event_combo`, which has the macOS physical-key fallback), NOT the
-  raw logical key. Modifiers are also broadcast to the overlay as `Event::ModifiersChanged` (so the
-  Dialog can tell Tab from Shift+Tab).
-- **heca-config**: `KeysConfig.widgets: KeybindingMap` field (`heca-config/src/keys.rs`) parses the
-  `[keys.widgets]` table (a named field so serde's `#[serde(flatten)] bindings` doesn't swallow it).
-- **`keybindings.default.toml`**: the `[keys.widgets]` table (placed BEFORE `[[keys.mode]]`; TOML does
-  not allow re-opening `[keys]` after a subtable). Defaults: `item_previous=[ArrowLeft,Ctrl+h]`,
-  `item_next=[ArrowRight,Ctrl+l]`, `menu_up=[ArrowUp,Ctrl+k]`, `menu_down=[ArrowDown,Ctrl+j]`,
-  `activate=Enter`, `dismiss=Escape`, `edit_delete_back=Ctrl+h`, `edit_delete_to_line_start=Ctrl+u`,
-  `edit_select_all=[Ctrl+a,Super+a]`.
-
-### 3.5 Showcase wiring (`heca-renderer/examples/showcase.rs`)
-- `GpuState.keymap: Keymap` = `Keymap::with_defaults()`.
-- `route_overlay_key(gk)` → `keymap.dispatch(gk, mods, |ev| focus.offer_to_overlay(&mut ui, ev))`.
-- `route_focused_key(gk)` → `keymap.dispatch(gk, mods, |ev| focus.deliver_event(&mut ui, ev))`.
-- `grid_mods()` builds `Modifiers` from `self.ctrl/shift/meta`.
-- Every widget demo has a visible `caption("Name")` title (from PR #234).
+### 1h. AGENTS.md — the ViewNode architecture (the big directive)
+- Added **⭐ THE WIDGET ARCHITECTURE — `ViewNode` + composition** block above "Creating new widgets". States the mandatory rule: widget *content* is composed from child `Component`s (the tree `realize` produces), realizable via `ViewNode`; **when you touch a widget you refactor it toward this** (no hand-drawn content; affordances are child slots). This is now a prime project rule.
 
 ---
 
-## 4. What is DONE (with code refs)
-- ✅ `WidgetIntent` + `Event::Widget` (component.rs); `MenuNav`/`DialogNav`/`InputEdit` deleted.
-- ✅ `Keymap` (keymap.rs) + `FocusManager::deliver_event` (focus.rs, for field-first non-key delivery).
-- ✅ All 6 widgets migrated (context_menu/command_palette/select/tabs/dialog/input). Tests migrated
-  (`heca-grid-ui/tests/phase_a.rs`, dialog.rs `#[cfg(test)]`).
-- ✅ App: `widget_keymap`, `build_widget_keymap`, `combo_to_grid`, events.rs dispatch, startup/reload.
-- ✅ heca-config `[keys.widgets]`; `keybindings.default.toml`.
-- ✅ Showcase migrated; `route_*` now call `Keymap::dispatch`.
-- ✅ Docs: `docs/widgets.md` (Input/Select/Tabs/Dialog/ContextMenu/CommandPalette), `README.md`
-  (`[keys.widgets]` section), rustdoc.
-- ✅ **Bug fixes this session:** macOS `Ctrl+letter` (`5127604` — use `event_combo` not logical key);
-  named-key regression (`83f8361` — `combo_to_grid` case-insensitive).
+## 2. DECISIONS locked (do not relitigate)
+- **`Modal` widget is gone.** `Dialog` is the only confirm/overlay widget. `OverlayHost::open_modal` (`heca/src/chrome/overlay.rs`) builds a `Dialog` from `ModalSpec`.
+- **`focusable` is a `Base` flag**, not a per-widget override (except genuinely dynamic overlays).
+- **Overlay capture is a router `Block`** in `route_interaction`, **not** an `ActionPolicy` variant (state axis ≠ action axis). If per-action granularity is ever needed, add a *separate* `overlay_policy(action)` dimension, never a variant of the focus-domain enum.
+- **Button accelerators / shortcuts:** decided model = per-button explicit `shortcut` (a prop/builder), triggered by **`Ctrl+<letter>`** (works in confirm AND form dialogs — no typing conflict), rendered **inside the button** as a **composed `Icon + Label`** (NOT hand-drawn `cx.icon`/`cx.text`, NOT adjacent/outside). The Button self-submits on `Ctrl+<c>`; a host helper (`FocusManager::deliver_accelerator`) routes the accelerator to the matching non-focused button. Letter is semantic (n=cancel/negative, y=confirm/positive), assigned by the caller/confirm-builder (a widget can't infer "Cancel"="No").
+- **Glyph for the accelerator:** use **NerdFont**, not Phosphor `CaretUp` (kept in the enum but not used for this).
+- **THE WIDGET ARCHITECTURE:** all widgets must move to the `ViewNode`/compositional model; refactor the widget you touch.
 
 ---
 
-## 5. The two bugs found & fixed this session (so you understand the traps)
-1. **macOS `Ctrl+letter` → control char.** `winit`'s `logical_key` for `Ctrl+j` is a control char, not
-   `Char('j')`. FIX: resolve from `event_combo` (which uses `normalize_key_text`'s physical-key
-   fallback), via `combo_to_grid`. (`5127604`)
-2. **Named keys capitalised.** `normalize_key_text` names a `NamedKey` via `format!("{:?}", n)` →
-   `"ArrowDown"`, `"Tab"`, `"Enter"`, `"Escape"` (capitalised). `combo_to_grid` matched lowercase →
-   returned `None` for every named key → the overlay dispatch was **skipped entirely**, breaking
-   Tab/arrows/Enter/Escape AND Space/Enter button activation in overlays. FIX: lowercase the key name
-   in `combo_to_grid` before matching. (`83f8361`)
+## 3. PLANNED / NOT DONE (the resume queue)
 
-**Trap for the next agent:** any conversion from the app's `KeyCombo` to a grid chord must be
-**case-insensitive** on the key name — config strings are lowercased by `KeyCombo::parse`, but live
-events name `NamedKey`s capitalised via `{:?}`.
+### 3a. [BIG, TOP] ViewNode → all widgets refactor (`plugin-ui` / `plugin-task-ui-9`)
+The standing refactor AGENTS.md now mandates. Two parts:
+1. **Complete `realize` coverage** (`heca/src/chrome/realize.rs`): currently missing `Select`, `Tabs`, `Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast` (need structured/list props — `plugin-task-ui-9`).
+2. **Compose the leaf widgets** so their content is child `Component`s, not hand-drawn — the enabler for extension-by-slot. **`Button` is the first target** (it hand-draws its label text; it must become a container with a content slot [leading / label / trailing], mirroring `Item`'s slots). This unblocks the button-shortcut feature.
+- **Do this in a FRESH session** (needs full context). Model + refs: `pluggable-chrome-plugin-plan.md` §2.6.2; `heca/src/chrome/{view.rs,realize.rs}`; `docs/widgets.md` "Declarative UI model".
 
----
+### 3b. Button accelerator / shortcut (blocked on 3a Button compositional refactor + NerdFont)
+- Add `Button::shortcut(char)` → composes an inner `Icon(NerdFont control glyph) + Label(letter)` trailing slot; renders inside; `Ctrl+<c>` self-submit; `FocusManager::deliver_accelerator`.
+- `ModalAction.shortcut: Option<char>` prop set by the confirm builder (n=cancel, y=proceed).
+- **NerdFont embedding first** (`gridui-03` `NfIcon`): vendor "Symbols Nerd Font Mono", confirm license, add a renderer font family/role, an `NfIcon` widget + curated `NfGlyph`. Then use its control/⌃ glyph.
 
-## 6. WHAT TO DO NEXT (ranked)
-
-### 6.1 [TOP] Centralize `focusable()` — a `Base` property, not 18 method overrides
-**Decision (user 2026-07-12):** `Button::focusable()` returning `!disabled` is boilerplate repeated by
-18 widgets. Make focusability a **declared property**, defaulted per widget, with `disabled` central.
-
-**Design (locked):**
-- Add `pub focusable: bool` to `Base` (`heca-grid-ui/src/component.rs`), default `false`.
-- Change the `Component::focusable()` **trait default** to the single definition:
-  `self.base().focusable && !self.base().disabled.get_untracked()`.
-- Each widget **sets the property**, removes its method override:
-  - always-focusable (`Input`, `Select`, `Tabs`, `Checkbox`, `Toggle`, `ScrollRegion`, `RailCell`) →
-    `base.focusable = true` in the constructor.
-  - conditional → set the flag when the callback is wired: `Button` in constructor (disabled now
-    central), `IconButton`/`Item`/`Row`/`BadgeButton` inside `.on_click()`/`.on_activate()`.
-  - non-focusable (`Toast`, `ToastStack`, `Modal`, `ContextMenu`, `CommandPalette`) → drop the
-    override (default false).
-  - **genuinely dynamic** (`Dialog` = focusable only while open) → keep a small override; that is the
-    rare exception the escape hatch exists for.
-- Find them: `grep -rn "fn focusable" heca-grid-ui/src/widgets/` (18 files).
-- **Verify:** every currently-focusable widget stays focusable (run the showcase; Tab must still
-  cycle Button/Input/Tabs/Select/Checkbox/Toggle). Grid-ui tests + clippy green.
-
-### 6.2 [BUG] Dialog Tab reaches Input↔Cancel but **never OK** (needs the running app)
-The rename dialog (app): Tab traverses Input and Cancel but skips the OK/primary button. Focus
-enumeration IS centralized (`Base` focus signals + `FocusManager::advance`/`for_each_focusable`), so
-this is NOT decentralization — a specific focusable isn't enumerated/reached. Leads:
-- The action buttons are built in `heca/src/chrome/overlay.rs` `build_modal_root` (~line 338–363):
-  `Button::new(action.label).on_click(...)` then wrapped by `super::action_tooltip(button, ...)` and
-  added via `dialog.action(...)`. **Check the `Tooltip` wrapper** — does `for_each_focusable` recurse
-  into a `Tooltip`'s child? And **check `spec.actions` order** for the rename modal.
-- `Button::focusable()` is `!disabled` (button.rs:227) — so OK *should* be focusable. Instrument the
-  dialog's embedded `FocusManager` to log how many focusables it yields and their identity.
-- Likely interacts with §6.1 (do the focusable refactor first, then this may be clearer).
-
-### 6.3 [VERIFY] Confirm the key fixes in-app (GPU app — user/next agent must run)
-After `83f8361`, verify in `cargo run -p heca-renderer --example showcase` AND the heca app:
-- Context menu: ↑/↓ and `Ctrl+k`/`Ctrl+j` navigate; Enter runs; Esc closes.
-- Dialog: Tab/Shift+Tab traverse; `Ctrl+h`/`Ctrl+l` traverse; Enter submits / Space activates focused
-  button; Esc cancels.
-- Select: ↑/↓ and `Ctrl+k`/`Ctrl+j`; Input: `Ctrl+h`/`Ctrl+u`/`Ctrl+a`.
-
-### 6.4 [DECISION] PR strategy
-Fold `feat/widget-keymap-unify` into PR #234 (retarget/rebase), or open a 2nd stacked PR. User's call.
+### 3c. Smaller follow-ups
+- **Dialog font-derived min-width** — `Style` has no `min_width`; needs a field + `to_taffy()` wiring, then set a `~22em` min on the Dialog panel so short confirms aren't cramped and dialogs share a baseline.
+- **Confirm buttons — Ctrl+y/Ctrl+n universal accelerators** (agreed as the primary mechanism; part of 3b).
+- **Context-menu nav (Ctrl-j/k/arrows)** — user reported it not navigating an open context menu. Code path traces correct (top_modal matches → widget-keymap delivers → `ContextMenu::event` returns `Handled::No` on raw arrows so the `Menu*` intent fires → `input_mode` reset to Normal at `input.rs:229`). **Needs a runtime repro** to find the real failure (likely the widget keymap defaults, or the `>` shifted-binding match).
+- **AGENTS.md STOP list (line ~20)** still names `Modal` as an available widget — stale, remove it.
 
 ---
 
-## 7. File reference map
+## 4. HOW TO RESUME
+1. Read `AGENTS.md` ⭐ WIDGET ARCHITECTURE block + this file.
+2. If PR #235 merged: `git fetch origin && git rebase origin/main` (drop the now-merged commits from `feat/base-focusable`).
+3. Start the **ViewNode → all widgets** refactor (§3a) in a fresh session, beginning with **making `Button` compositional** (content slot), which then unblocks the accelerator feature (§3b).
+4. Gates before any commit: `cargo clippy --workspace --all-targets --all-features` (0 warnings bar `block v0.1.6`), `cargo test -p heca-grid-ui -p heca`, don't run `cargo fmt`, load the rust SKILL and review.
+
+## 5. File reference map
 | Concern | File |
 |---|---|
-| `WidgetIntent` + `Event::Widget`, `GridKey`/`Modifiers` (Hash) | `heca-grid-ui/src/component.rs` |
-| `Keymap`/`KeyChord`/`dispatch`/`with_defaults` | `heca-grid-ui/src/keymap.rs` |
-| `FocusManager` (advance, for_each_focusable, deliver_event, offer_to_overlay) | `heca-grid-ui/src/focus.rs` |
-| `Base` (focus signals; add `focusable` in §6.1) | `heca-grid-ui/src/component.rs` |
-| widgets consuming intents | `heca-grid-ui/src/widgets/{context_menu,command_palette,select,tabs,dialog,input}.rs` |
-| widget tests | `heca-grid-ui/tests/phase_a.rs`, `.../widgets/dialog.rs` `#[cfg(test)]` |
-| `AppState.widget_keymap` | `heca/src/app_state.rs` |
-| `build_widget_keymap`, `combo_to_grid`, registry tests | `heca/src/app/registry.rs` |
-| overlay key dispatch | `heca/src/app/events.rs` (keyboard handler, `top_modal` branch) |
-| `build_event_combo`/`normalize_key_text` (KEY NAMING — capitalised NamedKey) | `heca/src/app/keyboard.rs` |
-| app context menu / dialog build (modal layers) | `heca/src/chrome/overlay.rs`, `heca/src/chrome/context_menu.rs` |
-| top_modal / layer stack | `heca/src/chrome/overlay.rs` (`top_modal`), `heca/src/chrome/layers.rs` (`top_modal_root_mut`) |
-| config table field | `heca-config/src/keys.rs` (`KeysConfig.widgets`) |
-| default bindings | `keybindings.default.toml` (`[keys.widgets]`) |
-| showcase host | `heca-renderer/examples/showcase.rs` (`route_overlay_key`/`route_focused_key`/`keymap`) |
-
----
-
-## 8. Gotchas
-- **`cargo fmt` is banned** here; hand-format, verify with clippy.
-- **KeyCombo→grid conversion must be case-insensitive** (§5).
-- **`[keys.widgets]` must sit before `[[keys.mode]]`** in the TOML (no re-opening `[keys]`).
-- **Keymap is host-owned, never a global** (detached-pane safety; grid-ui is `Rc`-single-threaded).
-- **Widget unit tests drive semantic events** (`Event::Widget(..)`) directly — they never touch the
-  `Keymap`, which is only exercised at the thin dispatch boundary + the `keymap.rs`/registry tests.
-- **In-app visual pass is the user's** (GPU app). This session's fixes are verified by build/tests
-  only; the interactive behavior (§6.3) still needs a human at the keyboard.
+| ViewNode model / WidgetKind / PropValue / Intent | `heca/src/chrome/view.rs` |
+| `realize(&ViewNode) -> Box<dyn Component>` (partial) | `heca/src/chrome/realize.rs` |
+| Overlay build (Dialog from ModalSpec) | `heca/src/chrome/overlay.rs` (`build_modal_root`, `open_modal`, `open_dropdown`) |
+| Overlay-capture policy | `heca/src/app/interaction.rs` (`route_interaction`) |
+| Overlay key dispatch + uppercase fix | `heca/src/app/events.rs` |
+| Confirm title/verb/names | `heca/src/handlers.rs` (`confirm_title`), `actions.rs`, `main.rs` (`pane_name`) |
+| `Base.focusable` + `Component::focusable/shortcut` | `heca-grid-ui/src/component.rs` |
+| Button (disabled + Secondary; the compositional refactor target) | `heca-grid-ui/src/widgets/button.rs` |
+| `Glyph::CaretUp` | `heca-grid-ui/src/widgets/icon.rs` |
+| Widget architecture rule | `AGENTS.md` (⭐ block) |

@@ -83,6 +83,7 @@ impl RailCell {
     /// host maps activation to its intent (focus the pane, pick the swap target…).
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
+        self.base.focusable = true; // interactive cells are focusable (Component::focusable)
         self
     }
 
@@ -104,10 +105,6 @@ impl Component for RailCell {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    fn focusable(&self) -> bool {
-        self.interactive() && !self.base.disabled.get_untracked()
     }
 
     /// A fixed square along both axes.

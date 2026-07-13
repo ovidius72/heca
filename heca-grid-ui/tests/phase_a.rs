@@ -576,6 +576,35 @@ fn disabled_button_ignores_clicks_and_focus() {
     assert!(!button.focusable(), "disabled button is unfocusable");
 }
 
+#[test]
+fn focusable_is_driven_by_the_base_flag_and_disabled() {
+    // Non-interactive widgets stay unfocusable (default `Base.focusable == false`).
+    assert!(!Label::new("x").focusable(), "a plain label is not focusable");
+
+    // Always-focusable controls opt in from their constructor…
+    assert!(Input::new().focusable(), "an input is focusable");
+    assert!(Button::new("OK").focusable(), "a button is focusable");
+    // …and the centralized default excludes disabled widgets.
+    assert!(
+        !Button::new("OK").disabled(true).focusable(),
+        "a disabled button is not focusable",
+    );
+
+    // Conditionally-interactive rows opt in only once a callback is wired.
+    assert!(
+        !Row::new().focusable(),
+        "a row with no on_activate is not focusable",
+    );
+    assert!(
+        Row::new().on_activate(|| {}).focusable(),
+        "a row becomes focusable once on_activate is wired",
+    );
+    assert!(
+        !Row::new().on_activate(|| {}).disabled(true).focusable(),
+        "a disabled interactive row is not focusable",
+    );
+}
+
 /// The label color of a button after layout + paint (its single Text run).
 fn button_label_color(button: &mut Button, theme: &Theme) -> Color {
     LayoutEngine::new().compute(button, Size::new(200.0, 80.0));
@@ -2490,139 +2519,6 @@ fn tooltip_flips_to_fit_the_viewport() {
     );
 }
 
-#[test]
-fn modal_captures_input_only_while_open() {
-    use heca_grid_ui::{Component, Modal};
-    let closed = Modal::new("Title", "msg").confirm("OK", || {});
-    assert!(!closed.overlay_active() && !closed.focusable(), "inert while closed");
-    let open = Modal::new("Title", "msg").confirm("OK", || {}).open(true);
-    assert!(open.overlay_active() && open.focusable(), "captures input while open");
-}
-
-#[test]
-fn modal_enter_activates_focused_escape_cancels() {
-    use heca_grid_ui::{Component, Modal};
-    use std::cell::Cell;
-    use std::rc::Rc;
-
-    let confirms = Rc::new(Cell::new(0u32));
-    let cancels = Rc::new(Cell::new(0u32));
-    let (c1, c2) = (confirms.clone(), cancels.clone());
-    let mut m = Modal::new("Delete pane?", "This cannot be undone")
-        .confirm("Delete", move || c1.set(c1.get() + 1))
-        .cancel("Cancel", move || c2.set(c2.get() + 1))
-        .open(true);
-
-    // Initial focus is the Cancel button (safe default) → Enter activates it.
-    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
-    assert_eq!(cancels.get(), 1, "Enter on the default-focused Cancel cancels");
-    assert_eq!(confirms.get(), 0);
-    assert!(!m.overlay_active(), "closed after cancel");
-
-    // Reopen; move focus to the primary (Delete) → Enter now confirms.
-    m.open_signal().set(true);
-    m.focus_prev(); // Cancel → Delete
-    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
-    assert_eq!(confirms.get(), 1, "Enter on the focused Delete confirms");
-    assert!(!m.overlay_active(), "closed after confirm");
-
-    // Reopen; Esc = cancel regardless of focus.
-    m.open_signal().set(true);
-    m.event(&Event::Key { key: heca_grid_ui::GridKey::Escape, pressed: true });
-    assert_eq!(cancels.get(), 2, "Escape cancels");
-    assert!(!m.overlay_active(), "closed after cancel");
-}
-
-#[test]
-fn modal_letter_shortcut_activates_its_button() {
-    use heca_grid_ui::widgets::ModalButton;
-    use heca_grid_ui::{Component, Modal};
-    use std::cell::Cell;
-    use std::rc::Rc;
-
-    let done = Rc::new(Cell::new(0u32));
-    let d = done.clone();
-    let mut m = Modal::new("Confirm?", "body")
-        .button(ModalButton::new("Cancel", || {}).shortcut('n').cancel())
-        .button(ModalButton::new("Done", move || d.set(d.get() + 1)).shortcut('y'))
-        .open(true);
-
-    // Pressing the letter fires that button (case-insensitive), regardless of focus.
-    m.event(&Event::Key { key: heca_grid_ui::GridKey::Char('Y'), pressed: true });
-    assert_eq!(done.get(), 1, "shortcut y activates Done");
-    assert!(!m.overlay_active(), "closed after shortcut");
-}
-
-#[test]
-fn modal_scrim_click_dismisses_but_panel_body_does_not() {
-    use heca_grid_ui::{Component, Modal};
-    use std::cell::Cell;
-    use std::rc::Rc;
-
-    let cancels = Rc::new(Cell::new(0u32));
-    let c = cancels.clone();
-    let mut m = Modal::new("Title", "a message")
-        .confirm("OK", || {})
-        .cancel("Cancel", move || c.set(c.get() + 1))
-        .open(true);
-
-    // Paint once so the modal caches the viewport for hit-testing.
-    let vp = Size::new(400.0, 300.0);
-    LayoutEngine::new().compute(&mut m, vp);
-    let theme = Theme::default();
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        m.paint(&mut cx);
-    }
-
-    // A click in the far corner (scrim) dismisses (= cancel).
-    m.event(&Event::PointerPressed { pos: Point::new(3.0, 3.0) });
-    assert_eq!(cancels.get(), 1, "scrim click cancels");
-    assert!(!m.overlay_active(), "closed after scrim dismiss");
-
-    // Reopen; a click in the panel body (its center, not a button) must NOT close.
-    m.open_signal().set(true);
-    m.event(&Event::PointerPressed { pos: Point::new(200.0, 150.0) });
-    assert_eq!(cancels.get(), 1, "clicking the panel body does not dismiss");
-    assert!(m.overlay_active(), "panel-body click keeps the dialog open");
-}
-
-#[test]
-fn modal_non_dismissible_forces_a_button_choice() {
-    use heca_grid_ui::{Component, Modal};
-    use std::cell::Cell;
-    use std::rc::Rc;
-
-    let confirms = Rc::new(Cell::new(0u32));
-    let c = confirms.clone();
-    let mut m = Modal::new("Apply changes?", "Pick one")
-        .confirm("Apply", move || c.set(c.get() + 1))
-        .cancel("Cancel", || {})
-        .dismissible(false)
-        .open(true);
-
-    let vp = Size::new(400.0, 300.0);
-    LayoutEngine::new().compute(&mut m, vp);
-    let theme = Theme::default();
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        m.paint(&mut cx);
-    }
-
-    // Esc + scrim click are swallowed but DON'T close a non-dismissible dialog.
-    m.event(&Event::Key { key: heca_grid_ui::GridKey::Escape, pressed: true });
-    m.event(&Event::PointerPressed { pos: Point::new(3.0, 3.0) });
-    assert!(m.overlay_active(), "non-dismissible dialog ignores Esc + scrim");
-
-    // Only a button closes it. Focus the primary (Apply) and press Enter.
-    m.focus_prev(); // Cancel → Apply
-    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
-    assert_eq!(confirms.get(), 1, "a focused button still works");
-    assert!(!m.overlay_active(), "closed once a button is chosen");
-}
-
 // --- CommandPalette --------------------------------------------------------
 
 fn palette_with_markers() -> (heca_grid_ui::CommandPalette, std::rc::Rc<std::cell::Cell<u8>>) {
@@ -3102,22 +2998,6 @@ fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
         cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow_color().with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
     }
     assert!(scene.is_empty(), "a zero-alpha shadow draws nothing (shadows-off)");
-}
-
-#[test]
-fn open_modal_casts_a_drop_shadow() {
-    use heca_grid_ui::{Component, Modal};
-    let theme = Theme::default();
-    let mut m = Modal::new("Delete?", "Cannot undo").confirm("OK", || {}).open(true);
-    let vp = Size::new(400.0, 300.0);
-    LayoutEngine::new().compute(&mut m, vp);
-    let mut scene = Scene::new();
-    {
-        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        m.paint(&mut cx);
-    }
-    let has_shadow = scene.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.shadow.is_some()));
-    assert!(has_shadow, "an open modal lifts off the scrim with a drop shadow");
 }
 
 #[test]

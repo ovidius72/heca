@@ -42,6 +42,10 @@ pub enum Glyph {
     Check,
     CaretRight,
     CaretDown,
+    /// Up chevron — the polished form of the macOS Control symbol (`⌃`), used to render a
+    /// button's `Ctrl` accelerator. Inferred codepoint (`0xe13c`) — confirm visually in the
+    /// showcase glyph grid.
+    CaretUp,
     Play,
     Pause,
     Stop,
@@ -92,7 +96,7 @@ impl Glyph {
         Glyph::Folder, Glyph::FolderOpen, Glyph::File, Glyph::FileCode,
         Glyph::GitBranch, Glyph::GitCommit, Glyph::GitMerge, Glyph::GitPullRequest,
         Glyph::Terminal, Glyph::Gear, Glyph::Search, Glyph::Close,
-        Glyph::Check, Glyph::CaretRight, Glyph::CaretDown, Glyph::Play,
+        Glyph::Check, Glyph::CaretRight, Glyph::CaretDown, Glyph::CaretUp, Glyph::Play,
         Glyph::Pause, Glyph::Stop, Glyph::Warning, Glyph::WarningCircle,
         Glyph::Info, Glyph::Circle, Glyph::Lightning, Glyph::List,
         Glyph::Sidebar, Glyph::DotsThreeVertical, Glyph::ArrowRight, Glyph::ArrowLineLeft,
@@ -122,6 +126,7 @@ impl Glyph {
             Glyph::Check => 0xe182,
             Glyph::CaretRight => 0xe13a,
             Glyph::CaretDown => 0xe136,
+            Glyph::CaretUp => 0xe13c,
             Glyph::Play => 0xe3d0,
             Glyph::Pause => 0xe39e,
             Glyph::Stop => 0xe46c,

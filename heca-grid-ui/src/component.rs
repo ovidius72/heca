@@ -107,6 +107,15 @@ pub struct Base {
     /// Whether the focus ring should show — true for keyboard focus, false for
     /// mouse focus (focus-visible behavior).
     pub focus_visible: Signal<bool>,
+    /// Whether this component **opts into keyboard focus**. Defaults to `false`;
+    /// interactive widgets set it `true` — in their constructor (always-focusable
+    /// controls) or when a click/activate callback is wired (conditionally
+    /// interactive rows/buttons). The [`Component::focusable`] trait default
+    /// combines it with [`disabled`](Self::disabled): a widget is focusable iff
+    /// `focusable && !disabled`, so widgets no longer re-implement that boilerplate.
+    /// A genuinely dynamic widget (e.g. an overlay focusable only while open) still
+    /// overrides [`Component::focusable`] instead of setting this flag.
+    pub focusable: bool,
     /// Explicit Tab-order index (like HTML `tabindex`). Focusables with an index
     /// are visited first in ascending order; those without (`None`) follow in
     /// tree position order. Set via [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
@@ -151,6 +160,7 @@ impl Base {
             disabled: signal(false),
             focused: signal(false),
             focus_visible: signal(false),
+            focusable: false,
             tab_index: None,
             children: Vec::new(),
             drag_source: None,
@@ -307,9 +317,22 @@ pub trait Component {
     fn base_mut(&mut self) -> &mut Base;
 
     /// Whether this component participates in keyboard focus traversal
-    /// (Tab/Shift+Tab). Interactive widgets override this to `true`.
+    /// (Tab/Shift+Tab). The default reads the declared [`Base::focusable`] flag and
+    /// excludes disabled widgets — so an interactive widget just sets
+    /// `base.focusable = true` (in its constructor, or when a callback is wired)
+    /// rather than re-implementing this. Override only for genuinely dynamic
+    /// focusability (e.g. an overlay focusable only while open).
     fn focusable(&self) -> bool {
-        false
+        self.base().focusable && !self.base().disabled.get_untracked()
+    }
+
+    /// A single-letter **accelerator** for this component, if any (e.g. a confirm button's
+    /// `y` / `n`). The widget renders it (`Label (x)`); a host that owns the keypress activates
+    /// the matching component — a confirm [`Dialog`](crate::widgets::Dialog) fires the button
+    /// whose `shortcut()` matches a typed letter, but only when it is a confirm (no text field to
+    /// steal the key). Default `None`.
+    fn shortcut(&self) -> Option<char> {
+        None
     }
 
     /// Whether this component currently has an **open overlay** (e.g. a `Select`
