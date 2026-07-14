@@ -245,6 +245,25 @@ impl ChromeHost {
         Ok(())
     }
 
+    /// Reorder a container within its region, inserting it immediately **after** `after`.
+    ///
+    /// The mirror of [`reorder`](Self::reorder). "Put X after Y" is not expressible as "put X before
+    /// Z" without knowing what follows Y, which only the host knows — a caller (a plugin, a drag
+    /// landing on the *trailing* edge of an item) cannot compute it. An `after` that names a
+    /// container not in the region is an error ([`MoveError::TargetNotFound`]); when `after` is the
+    /// last container, X lands at the end. Emits [`ChromeEvent::ContainerPlacementChanged`].
+    pub fn reorder_after(&mut self, id: &str, after: &str) -> Result<(), MoveError> {
+        let region = self.placement.get(id).copied().ok_or(MoveError::UnknownContainer)?;
+        let list = &self.regions[region.index()].contributions;
+        // The container that follows `after` is the one to insert before; none ⇒ append (`None`).
+        let after_idx = list
+            .iter()
+            .position(|m| m.id() == after)
+            .ok_or(MoveError::TargetNotFound)?;
+        let before = list.get(after_idx + 1).map(|m| m.id().to_string());
+        self.reorder(id, before.as_deref())
+    }
+
     /// Set a region's host-level visibility.
     ///
     /// **plugin-02 caveat:** this flag has no visual effect yet. Region *shell*
@@ -418,6 +437,37 @@ mod tests {
         // A missing `before` target errors and leaves the order untouched.
         assert_eq!(h.reorder("a", Some("zzz")), Err(MoveError::TargetNotFound));
         assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "b", "c"]);
+    }
+
+    /// `reorder_after` is the mirror of `reorder(before)` — "put X after Y" resolves to "before
+    /// whatever follows Y", which only the host can compute.
+    #[test]
+    fn reorder_moves_after_target() {
+        let mut h = host();
+        for (id, order) in [("a", 0), ("b", 1), ("c", 2)] {
+            h.register(Box::new(TestProvider::new(
+                id,
+                RegionSet::sidebars(),
+                RegionId::LeftSidebar,
+                order,
+            )));
+        }
+        assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "b", "c"]);
+        // Move "a" after "b" → it lands before "c".
+        h.reorder_after("a", "b").unwrap();
+        assert_eq!(ids(&h, RegionId::LeftSidebar), ["b", "a", "c"]);
+        // After the LAST container ⇒ the end.
+        h.reorder_after("b", "c").unwrap();
+        assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
+        // Already immediately after the target ⇒ no-op, not a shuffle.
+        h.reorder_after("c", "a").unwrap();
+        assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
+        // A missing target errors and leaves the order untouched.
+        assert_eq!(
+            h.reorder_after("a", "zzz"),
+            Err(MoveError::TargetNotFound)
+        );
+        assert_eq!(ids(&h, RegionId::LeftSidebar), ["a", "c", "b"]);
     }
 
     #[test]

@@ -2768,6 +2768,20 @@ pub fn handle_reorder_container_before(state: &mut AppState, action: &WmAction) 
     }
 }
 
+/// Reorder a mounted container within its region, immediately after `after_id`.
+pub fn handle_reorder_container_after(state: &mut AppState, action: &WmAction) {
+    let WmAction::ReorderContainerAfter {
+        container_id,
+        after_id,
+    } = action
+    else {
+        return;
+    };
+    if let Err(e) = state.chrome_host.reorder_after(container_id, after_id) {
+        eprintln!("[heca] reorder container '{container_id}' after '{after_id}' failed: {e}");
+    }
+}
+
 /// Set a chrome region's host-level visibility.
 pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) {
     let WmAction::SetRegionVisible { region, visible } = action else {

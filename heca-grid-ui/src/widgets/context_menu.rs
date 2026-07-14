@@ -586,6 +586,54 @@ mod tests {
         assert_eq!(dismissed.get(), 1, "a selection is not a dismissal");
     }
 
+    /// Regression (context-menu-bug, 2026-07-13→14): keyboard navigation of an open menu did
+    /// nothing — the highlight would not move for `Ctrl+j`/`Ctrl+k` or the arrows. The whole
+    /// path was untested end to end, which is why it broke silently and why nobody could tell
+    /// when it started working again.
+    ///
+    /// This is the widget half: given the semantic intent the host resolves from
+    /// `[keys.widgets]`, the selection MOVES (and disabled entries are skipped). The host half
+    /// — that the default config actually binds those keys to those intents — is asserted in
+    /// `heca`'s `build_widget_keymap` test.
+    #[test]
+    fn menu_intents_move_the_highlight_and_skip_disabled_entries() {
+        let noop = || {};
+        let mut m = ContextMenu::new()
+            .entry(MenuEntry::new("First", noop))
+            .entry(MenuEntry::new("Disabled", noop).enabled(false))
+            .entry(MenuEntry::new("Last", noop))
+            .open(true);
+
+        assert_eq!(m.selected, 0, "starts on the first entry");
+
+        // Down: skips the disabled middle entry.
+        assert_eq!(m.event(&Event::Widget(WidgetIntent::MenuDown)), Handled::Yes);
+        assert_eq!(m.selected, 2, "MenuDown moved past the disabled entry");
+
+        // Down again at the end: stays put (no wrap, no panic).
+        m.event(&Event::Widget(WidgetIntent::MenuDown));
+        assert_eq!(m.selected, 2, "no wrap past the last enabled entry");
+
+        // Up: back to the first, skipping the disabled entry again.
+        assert_eq!(m.event(&Event::Widget(WidgetIntent::MenuUp)), Handled::Yes);
+        assert_eq!(m.selected, 0, "MenuUp moved back past the disabled entry");
+
+        // Up at the top: stays put.
+        m.event(&Event::Widget(WidgetIntent::MenuUp));
+        assert_eq!(m.selected, 0);
+
+        // A raw arrow is NOT swallowed: the widget reports it unhandled so the host can resolve
+        // it into a `WidgetIntent` and re-deliver. Swallowing it here is what would break nav.
+        assert_eq!(
+            m.event(&Event::Key {
+                key: GridKey::ArrowDown,
+                pressed: true
+            }),
+            Handled::No,
+            "raw keys stay unhandled so the host can map them to intents",
+        );
+    }
+
     /// `centered: true` places the **panel center** on the anchor (so a keyboard-opened menu is
     /// centered on screen), not the top-left. `centered: false` keeps the down-right cursor
     /// placement. Both still clamp to the viewport.

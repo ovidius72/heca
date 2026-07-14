@@ -1594,7 +1594,10 @@ Actions declare, **as data**, whether they need a prompt (confirm / choice) and 
 buttons + outcomes. One central gate at the dispatch chokepoint reads it and drives
 `OverlayHost::open_modal`; built-ins **and plugins** declare it the same way, so no surface
 re-implements confirmation (the guard lives on the action, not the call site). Full design +
-decisions + phases: **`action-interaction-plan.md`** (design locked with the user 2026-07-07).
+decisions + phases: the **planner** phase `action-interaction` (design locked with the user
+2026-07-07). It used to live in `action-interaction-plan.md`; that file was **deleted
+2026-07-14** and its content absorbed verbatim into the phase description, so the design has
+one home instead of two.
 
 > **Decisions (locked):** (1) native `Outcome::Callback` included now, native-only, documented
 > meticulously; (2) **runtime** action registry now (replace the `const ALL` catalog); (3) generic

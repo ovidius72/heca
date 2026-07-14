@@ -97,17 +97,13 @@ impl std::error::Error for RpcError {}
 // Transitional: will be used by the RPC server / socket listener in Phase 5.
 /// Parse an RPC region token (`left-sidebar`/`left`, `right-sidebar`/`right`,
 /// `top-bar`/`top`, `bottom-bar`/`bottom`) into a [`RegionId`](crate::chrome::RegionId).
+/// Parse a region name for an RPC command. The spellings live on
+/// [`RegionId`](crate::chrome::RegionId)'s `FromStr` — the single parser shared with config binding
+/// args — so RPC and config can never accept different names for the same region.
 fn parse_region_id(cmd: &str, value: &str) -> Result<crate::chrome::RegionId, RpcError> {
-    use crate::chrome::RegionId;
-    match value {
-        "left-sidebar" | "left" => Ok(RegionId::LeftSidebar),
-        "right-sidebar" | "right" => Ok(RegionId::RightSidebar),
-        "top-bar" | "top" => Ok(RegionId::TopBar),
-        "bottom-bar" | "bottom" => Ok(RegionId::BottomBar),
-        _ => Err(RpcError::UnknownCommand(format!(
-            "{cmd}: unknown region '{value}'"
-        ))),
-    }
+    value
+        .parse()
+        .map_err(|()| RpcError::UnknownCommand(format!("{cmd}: unknown region '{value}'")))
 }
 
 pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
@@ -424,6 +420,16 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             Ok(WmAction::ReorderContainerBefore {
                 container_id,
                 before_id,
+            })
+        }
+        "reorder-container-after" => {
+            let container_id = expect_arg!("container_id").to_string();
+            // Required, unlike `before`: "after nothing" has no meaning (use
+            // `reorder-container-before <id>` with no target to move to the end).
+            let after_id = expect_arg!("after_id").to_string();
+            Ok(WmAction::ReorderContainerAfter {
+                container_id,
+                after_id,
             })
         }
         "set-region-visible" => {

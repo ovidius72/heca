@@ -99,6 +99,109 @@ pub struct ActionDescriptor {
 ///   the action to extract arguments).
 pub struct ActionRegistry {
     handlers: HashMap<std::mem::Discriminant<crate::input::WmAction>, ActionHandler>,
+    /// Handlers for **name-keyed** actions registered at runtime by providers (and later WASM
+    /// plugins) — the actions that have no [`WmAction`](crate::input::WmAction) variant because the
+    /// enum is closed and a plugin cannot extend it. Their *metadata* lives in the one
+    /// [`ActionCatalog`], next to the built-ins; only the handler lives here. See [`Dispatch`].
+    dyn_handlers: HashMap<String, DynHandler>,
+}
+
+/// How an action is run — the three back ends behind the one dispatch door
+/// (`dispatch_view_intent`). There is no parallel dispatch path.
+///
+/// This is a *description* of the registry's contents, used by
+/// [`ActionRegistry::dispatch_of`] to answer "how would this name run?" for introspection and
+/// tests; the dispatch itself is keyed by discriminant (built-ins) or by name (the rest).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dispatch {
+    /// A built-in: `fn(&mut AppState, &WmAction)` keyed by `Discriminant<WmAction>`. Parameterized
+    /// variants share one handler (it destructures the action for its args).
+    Native,
+    /// Name-keyed **with** a native host handler — a first-party provider contributing an action of
+    /// its own, before any WASM exists. Receives the `Intent`, so its args arrive as data.
+    NativeDyn,
+    /// Name-keyed with **no** host handler: the action is declared (it has metadata, a policy, a
+    /// name) but the host cannot run it — it is forwarded to its owner across the plugin boundary
+    /// (WASM, plugin-08). Dispatching one today is a no-op with a debug warning.
+    Declarative,
+}
+
+/// The handler for a name-keyed action. Unlike [`ActionHandler`] (a bare `fn` pointer keyed by
+/// discriminant), this is a closure — a provider closes over its own state — and it receives the
+/// [`Intent`](crate::chrome::Intent), so its arguments arrive as serializable data rather than as
+/// an enum variant's fields.
+///
+/// It takes `&mut AppState` deliberately: §2.3 forbids a provider from mutating app state from its
+/// *build/observe* path, but an action handler **is** the sanctioned write path — dispatching an
+/// action is exactly how a provider is supposed to change things.
+pub type DynHandler = std::rc::Rc<dyn Fn(&mut crate::app_state::AppState, &crate::chrome::Intent)>;
+
+/// RAII handle for a registered dynamic action.
+///
+/// Held by the provider that registered the action (in `ProviderHandles`, alongside its event
+/// subscriptions) so that unmounting the provider retires its actions. The handle carries only the
+/// id: the registry and the catalog are reached from `HecaApp`/`AppState`, not from `Drop`; the
+/// host calls [`unregister_dynamic`] with this id when it drops the provider — the same lifetime,
+/// without wrapping the registry in a `RefCell`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionHandle(pub String);
+
+/// Register a **name-keyed** action: its metadata joins the one [`ActionCatalog`] (so it gets an
+/// icon, a label, introspection and a declared policy exactly like a built-in) and its handler —
+/// when it has one — joins the [`ActionRegistry`].
+///
+/// This takes both halves because they live in different places for a borrow reason, not a design
+/// one: an action handler is `fn(&mut AppState, …)` and gets **no** registry, so action *metadata*
+/// must be reachable from `AppState` (the catalog), while the handler table must be borrowable
+/// alongside `&mut AppState` (the registry). Metadata is still stored exactly once.
+///
+/// `handler: None` registers a [`Dispatch::Declarative`] action (declared, host cannot run it —
+/// plugin-08 forwards it to its owner). Re-registering the same id replaces the previous entry (a
+/// provider remounting). Returns the [`ActionHandle`] the provider keeps and hands back to
+/// [`unregister_dynamic`] on unmount.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "plugin-04 seam: the first registrant is T1 (chrome placement actions) / a provider; exercised by tests today"
+    )
+)]
+pub fn register_dynamic(
+    registry: &mut ActionRegistry,
+    catalog: &mut ActionCatalog,
+    meta: ActionMeta,
+    handler: Option<DynHandler>,
+) -> ActionHandle {
+    let id = meta.name.clone();
+    catalog.insert(meta);
+    match handler {
+        Some(h) => {
+            registry.dyn_handlers.insert(id.clone(), h);
+        }
+        None => {
+            registry.dyn_handlers.remove(&id);
+        }
+    }
+    ActionHandle(id)
+}
+
+/// Retire a name-keyed action — drops both its handler and its metadata. `true` if it was
+/// registered. Built-ins cannot be retired (their names are not removable from the catalog).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "plugin-04 seam: providers retire their actions on unmount once T1 registers the first one; exercised by tests today"
+    )
+)]
+pub fn unregister_dynamic(
+    registry: &mut ActionRegistry,
+    catalog: &mut ActionCatalog,
+    id: &str,
+) -> bool {
+    let had_handler = registry.dyn_handlers.remove(id).is_some();
+    let had_meta = catalog.remove_dynamic(id);
+    had_handler || had_meta
 }
 
 impl ActionRegistry {
@@ -106,7 +209,48 @@ impl ActionRegistry {
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
+            dyn_handlers: HashMap::new(),
         }
+    }
+
+    /// How the action named `name` would run, if at all — see [`Dispatch`]. `None` when the name is
+    /// unknown to both back ends. `catalog` supplies the name→built-in resolution and the set of
+    /// declared name-keyed actions.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "plugin-04 seam: RPC/palette introspection of how an action runs; exercised by tests today"
+        )
+    )]
+    pub fn dispatch_of(&self, catalog: &ActionCatalog, name: &str) -> Option<Dispatch> {
+        if crate::input::action_from_name(name).is_some() || catalog.is_builtin(name) {
+            return Some(Dispatch::Native);
+        }
+        if self.dyn_handlers.contains_key(name) {
+            return Some(Dispatch::NativeDyn);
+        }
+        catalog.find(name).map(|_| Dispatch::Declarative)
+    }
+
+    /// Run a name-keyed action, passing the intent through so the handler reads its own args.
+    /// `false` when no *handler* is registered under `id` — either the id is unknown, or the action
+    /// is [`Dispatch::Declarative`] (declared but host-unrunnable). Neither is a crash: a binding or
+    /// a menu item may legitimately name an action whose provider is not mounted.
+    pub fn execute_dynamic(
+        &self,
+        id: &str,
+        state: &mut crate::app_state::AppState,
+        intent: &crate::chrome::Intent,
+    ) -> bool {
+        let Some(handler) = self.dyn_handlers.get(id) else {
+            return false;
+        };
+        // Clone the `Rc` so the borrow of `self` ends before the handler runs (it takes
+        // `&mut AppState`).
+        let handler = handler.clone();
+        handler(state, intent);
+        true
     }
 
     /// Register a handler for all variants that share `action`'s discriminant.
@@ -761,6 +905,53 @@ impl ActionRegistry {
             default_binding: "",
             icon: None,
         },
+        // ── Chrome container placement (plugin-04/T1) ──
+        // The ONLY built-ins with dotted, namespaced names. Deliberate: this is the id scheme
+        // plugins use, and container placement is the first host capability a plugin drives by
+        // name. The other ~115 built-ins keep their snake_case config names — renaming them is a
+        // migration nobody has decided on, so there are no snake_case aliases for these either
+        // (one action, one name). All are parameterized, so they are built through `build_action`
+        // and carry no default binding.
+        ActionDescriptor {
+            name: "chrome.container.move_to_region",
+            label: "Move Container to Region",
+            description: "Move a chrome container to another region (left/right sidebar, top/bottom bar).",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: Some(Glyph::ArrowLineRight),
+        },
+        ActionDescriptor {
+            name: "chrome.container.move_left_sidebar",
+            label: "Move Container to Left Sidebar",
+            description: "Move a chrome container into the left sidebar.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: Some(Glyph::ArrowLineLeft),
+        },
+        ActionDescriptor {
+            name: "chrome.container.move_right_sidebar",
+            label: "Move Container to Right Sidebar",
+            description: "Move a chrome container into the right sidebar.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: Some(Glyph::ArrowLineRight),
+        },
+        ActionDescriptor {
+            name: "chrome.container.reorder_before",
+            label: "Reorder Container Before",
+            description: "Move a chrome container before another in its region (omit the target to move it to the end).",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "chrome.container.reorder_after",
+            label: "Reorder Container After",
+            description: "Move a chrome container after another in its region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
         ActionDescriptor {
             name: "sidebar_create_workspace",
             label: "Sidebar Create Workspace",
@@ -1097,57 +1288,149 @@ impl ActionRegistry {
 
 }
 
+/// Runtime metadata for **one action** — a built-in or a name-keyed one contributed by a provider
+/// or plugin. The single entry type of the [`ActionCatalog`]: built-in and plugin actions have the
+/// *same* shape, so every surface (icons, tooltips, command palette, RPC introspection) treats them
+/// identically.
+///
+/// Owned (`String`, not `&'static str`) precisely so a runtime-registered action can join the
+/// catalog. The zero-copy `&'static ActionDescriptor` form was the deliberate Phase-A shortcut
+/// (action-interaction plan §8b) that deferred this ripple; this is that ripple.
+///
+/// `policy` is **required, no default**. A built-in gets it from [`action_policy`]'s exhaustive
+/// `match` — forgetting to classify a new variant there is a *compile error*, and this field is
+/// **computed** from that match at registration, never hand-written, so the match stays the single
+/// authority. A name-keyed action has no variant, so nothing else would force the question; a
+/// permissive default would mean "the author forgot" silently resolves to the most permissive
+/// setting in the system. It is a plain field so an action cannot be registered without answering
+/// it.
+///
+/// [`action_policy`]: crate::app::interaction::action_policy
+#[derive(Debug, Clone)]
+pub struct ActionMeta {
+    /// Stable id — the identity used by config bindings, RPC, menus, and `Intent.action`.
+    pub name: String,
+    pub label: String,
+    pub description: String,
+    pub category: ActionCategory,
+    /// Default keybinding string (e.g. "h,ArrowLeft"); empty / "unbound" when it has none.
+    // Preserved for the command palette + RPC introspection (read in tests only for now).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub default_binding: String,
+    /// Centralized action icon — the single source of an action's [`Glyph`]. Every surface that
+    /// renders this action reads it from here instead of inventing its own.
+    pub icon: Option<Glyph>,
+    /// Allow/Block classification for the interaction router. Required — see the type docs.
+    pub policy: crate::app::interaction::ActionPolicy,
+}
+
 /// Runtime catalog of action metadata, owned by [`AppState`](crate::app_state::AppState).
 ///
-/// Seeded from the built-in [`ActionRegistry::ALL`] descriptors at startup and (plugin action API)
-/// extended by plugins. The single runtime home every UI surface resolves action metadata through —
-/// replacing the old `ActionRegistry::find/icon/label/...` statics, so the set of actions (and their
-/// icons/labels/confirmation) is a runtime, extensible surface rather than a compile-time constant.
+/// **The single metadata home for every action**, built-in or plugin. Seeded from the built-in
+/// [`ActionRegistry::ALL`] descriptors at startup and extended at runtime through
+/// [`register_dynamic`]. Every UI surface resolves action metadata through here — icons, labels,
+/// the pick prompts, the command palette, RPC introspection.
 ///
-/// Phase A holds built-ins as `&'static ActionDescriptor` (zero-copy). Owned plugin entries (with
-/// `String` metadata) arrive with the plugin action API.
+/// It lives on `AppState` (rather than inside `ActionRegistry`) for a borrow reason: an action
+/// handler is `fn(&mut AppState, &WmAction)` and receives no registry, so metadata must be
+/// reachable from the state. The registry holds the *handlers*; this holds the *metadata*. One of
+/// each — never two of either.
 pub struct ActionCatalog {
-    by_name: HashMap<&'static str, &'static ActionDescriptor>,
-    order: Vec<&'static ActionDescriptor>,
-    /// Declarative confirmation requirement per action **config name** (see [`ConfirmSpec`]). The
+    by_name: HashMap<String, ActionMeta>,
+    /// Names in stable order (built-ins in `ALL` order, then registration order).
+    order: Vec<String>,
+    /// The built-in names, so a dynamic action can never shadow or retire one.
+    builtins: std::collections::HashSet<&'static str>,
+    /// Declarative confirmation requirement per **confirm config name** (see [`ConfirmSpec`]). The
     /// central gate reads this to decide whether an action needs a confirm/response prompt — the
-    /// guard lives on the action, not the call site. Seeded with the built-in destructive actions;
-    /// plugins register their own with the plugin action API.
-    confirm: HashMap<&'static str, ConfirmSpec>,
+    /// guard lives on the action, not the call site.
+    ///
+    /// Keyed by the confirm name, which is **not always the action's own name**: pane close
+    /// (`ClosePane` + `ClosePaneById`, descriptor name `close`) maps to the confirm key
+    /// `delete_pane`, so either dispatch confirms identically (action-interaction plan §5.1). That
+    /// is why this is a separate index rather than a field on [`ActionMeta`] — moving it onto the
+    /// meta is `action-task-C`'s graft point, together with `register(ActionSpec)`.
+    confirm: HashMap<String, ConfirmSpec>,
 }
 
 impl ActionCatalog {
     /// Build the catalog seeded from the built-in [`ActionRegistry::ALL`] descriptors.
+    ///
+    /// Each built-in's `policy` is **computed** from [`action_policy`](crate::app::interaction::action_policy)
+    /// via [`builtin_policy`] — never hand-written here — so the exhaustive `match` in
+    /// `interaction.rs` remains the only authority on built-in policy and the two cannot drift.
     pub fn with_builtins() -> Self {
-        let order: Vec<&'static ActionDescriptor> = ActionRegistry::ALL.iter().collect();
-        let by_name = order.iter().map(|d| (d.name, *d)).collect();
-        Self {
-            by_name,
-            order,
+        let mut catalog = Self {
+            by_name: HashMap::new(),
+            order: Vec::new(),
+            builtins: ActionRegistry::ALL.iter().map(|d| d.name).collect(),
             confirm: builtin_confirm_specs(),
+        };
+        for d in ActionRegistry::ALL {
+            catalog.insert(ActionMeta {
+                name: d.name.to_string(),
+                label: d.label.to_string(),
+                description: d.description.to_string(),
+                category: d.category,
+                default_binding: d.default_binding.to_string(),
+                icon: d.icon,
+                policy: builtin_policy(d.name),
+            });
         }
+        catalog
     }
 
-    /// The declarative confirmation spec for an action **config name**, if it needs confirmation.
+    /// Add or replace an action's metadata. Re-registering an id replaces it (a provider
+    /// remounting) while keeping its position in the stable order.
+    pub(crate) fn insert(&mut self, meta: ActionMeta) {
+        if !self.by_name.contains_key(&meta.name) {
+            self.order.push(meta.name.clone());
+        }
+        self.by_name.insert(meta.name.clone(), meta);
+    }
+
+    /// Remove a **dynamic** action's metadata. Built-ins are never removable, so a provider
+    /// unmounting can't retire `close`. `true` if a dynamic entry was removed.
+    pub(crate) fn remove_dynamic(&mut self, name: &str) -> bool {
+        if self.is_builtin(name) || !self.by_name.contains_key(name) {
+            return false;
+        }
+        self.by_name.remove(name);
+        self.order.retain(|n| n != name);
+        true
+    }
+
+    /// Whether `name` is one of the compiled-in built-in actions.
+    pub fn is_builtin(&self, name: &str) -> bool {
+        self.builtins.contains(name)
+    }
+
+    /// The declarative confirmation spec for a **confirm config name**, if it needs confirmation.
     pub fn confirm_spec(&self, name: &str) -> Option<&ConfirmSpec> {
         self.confirm.get(name)
     }
 
-    /// Look up an action descriptor by its config name.
-    pub fn find(&self, name: &str) -> Option<&'static ActionDescriptor> {
-        self.by_name.get(name).copied()
+    /// Look up an action's metadata by its name.
+    pub fn find(&self, name: &str) -> Option<&ActionMeta> {
+        self.by_name.get(name)
     }
 
-    /// The icon [`Glyph`] for an action, by config name — the single source of action iconography
+    /// The declared interaction policy for a name-keyed action — how the router judges a plugin
+    /// action by exactly the same rules as a built-in.
+    pub fn policy(&self, name: &str) -> Option<crate::app::interaction::ActionPolicy> {
+        self.find(name).map(|m| m.policy)
+    }
+
+    /// The icon [`Glyph`] for an action, by name — the single source of action iconography
     /// (pane-action bar, context menu, command palette all resolve through here).
     pub fn icon(&self, name: &str) -> Option<Glyph> {
-        self.find(name).and_then(|d| d.icon)
+        self.find(name).and_then(|m| m.icon)
     }
 
-    /// The human-readable label for an action, by config name — so a caller names the action
+    /// The human-readable label for an action, by name — so a caller names the action
     /// rather than re-spelling the label.
-    pub fn label(&self, name: &str) -> Option<&'static str> {
-        self.find(name).map(|d| d.label)
+    pub fn label(&self, name: &str) -> Option<&str> {
+        self.find(name).map(|m| m.label.as_str())
     }
 
     /// All actions in a given category, in stable order.
@@ -1155,11 +1438,11 @@ impl ActionCatalog {
         not(test),
         expect(dead_code, reason = "preserved for the command palette + RPC introspection")
     )]
-    pub fn by_category(
-        &self,
-        category: ActionCategory,
-    ) -> impl Iterator<Item = &'static ActionDescriptor> + '_ {
-        self.order.iter().copied().filter(move |d| d.category == category)
+    pub fn by_category(&self, category: ActionCategory) -> impl Iterator<Item = &ActionMeta> + '_ {
+        self.order
+            .iter()
+            .filter_map(move |n| self.by_name.get(n))
+            .filter(move |m| m.category == category)
     }
 
     /// Total number of catalogued actions.
@@ -1170,6 +1453,42 @@ impl ActionCatalog {
     pub fn count(&self) -> usize {
         self.order.len()
     }
+}
+
+/// The interaction policy of a **built-in**, derived from the one authority:
+/// [`action_policy`](crate::app::interaction::action_policy)'s exhaustive `match`.
+///
+/// Most names resolve straight through `action_from_name`. The two that don't are parameterized and
+/// never reachable from a bare name — they are constructed programmatically (mouse / HintKey /
+/// selection / context menu / RPC / the GUI scrollbar) — so a representative variant stands in for
+/// them purely to read the policy off the same match. Never classify an action here: classify it in
+/// `action_policy` and it lands here automatically.
+fn builtin_policy(name: &str) -> crate::app::interaction::ActionPolicy {
+    use crate::chrome::RegionId;
+    use crate::input::WmAction;
+    let action = crate::input::action_from_name(name).unwrap_or_else(|| match name {
+        "open_link" => WmAction::OpenLink { url: String::new() },
+        "scroll_to_offset" => WmAction::ScrollToOffset { rows: 0 },
+        "chrome.container.move_to_region"
+        | "chrome.container.move_left_sidebar"
+        | "chrome.container.move_right_sidebar" => WmAction::MoveContainerToRegion {
+            container_id: String::new(),
+            region: RegionId::LeftSidebar,
+        },
+        "chrome.container.reorder_before" => WmAction::ReorderContainerBefore {
+            container_id: String::new(),
+            before_id: None,
+        },
+        "chrome.container.reorder_after" => WmAction::ReorderContainerAfter {
+            container_id: String::new(),
+            after_id: String::new(),
+        },
+        other => unreachable!(
+            "built-in action {other:?} has no WmAction: add it to action_from_name, or map a \
+             representative variant here"
+        ),
+    });
+    crate::app::interaction::action_policy(&action)
 }
 
 impl Default for ActionCatalog {
@@ -1300,7 +1619,7 @@ pub struct ConfirmSpec {
 
 /// The built-in confirmation specs, keyed by action config name. The three destructive actions —
 /// close pane / delete column / delete workspace — each get a `[Cancel] [<verb>]` forced prompt.
-fn builtin_confirm_specs() -> HashMap<&'static str, ConfirmSpec> {
+fn builtin_confirm_specs() -> HashMap<String, ConfirmSpec> {
     let mk = |config_name: &'static str, verb: &str| ConfirmSpec {
         message: "This action cannot be undone.".to_string(),
         buttons: vec![
@@ -1312,9 +1631,12 @@ fn builtin_confirm_specs() -> HashMap<&'static str, ConfirmSpec> {
         default_enabled: true,
     };
     HashMap::from([
-        ("delete_pane", mk("delete_pane", "Delete")),
-        ("delete_column", mk("delete_column", "Delete")),
-        ("delete_workspace", mk("delete_workspace", "Delete")),
+        ("delete_pane".to_string(), mk("delete_pane", "Delete")),
+        ("delete_column".to_string(), mk("delete_column", "Delete")),
+        (
+            "delete_workspace".to_string(),
+            mk("delete_workspace", "Delete"),
+        ),
     ])
 }
 
@@ -1404,12 +1726,209 @@ mod tests {
         assert_eq!(names.len(), original_len, "all action names must be unique");
     }
 
+    // ── plugin-04 / T3: the one runtime registry ──
+
+    /// The built-in metadata after seeding is IDENTICAL to the `const ALL` descriptors it came
+    /// from — the owned-`String` ripple must not have changed a single value (the non-regression
+    /// test the task asks for).
+    #[test]
+    fn builtin_metadata_survives_the_owned_ripple_unchanged() {
+        let catalog = ActionCatalog::with_builtins();
+        assert_eq!(catalog.count(), ActionRegistry::ALL.len());
+        for d in ActionRegistry::ALL {
+            let m = catalog
+                .find(d.name)
+                .unwrap_or_else(|| panic!("missing meta for {}", d.name));
+            assert_eq!(m.name, d.name);
+            assert_eq!(m.label, d.label);
+            assert_eq!(m.description, d.description);
+            assert_eq!(m.category, d.category);
+            assert_eq!(m.default_binding, d.default_binding);
+            assert_eq!(m.icon, d.icon);
+            assert!(catalog.is_builtin(d.name));
+        }
+    }
+
+    /// Every built-in's `policy` is COMPUTED from `action_policy`'s exhaustive match, never
+    /// hand-written — so the match stays the single authority and the two cannot drift. This also
+    /// proves `builtin_policy` resolves all 115 names (it would `unreachable!` otherwise).
+    #[test]
+    fn builtin_policy_is_derived_from_the_exhaustive_match() {
+        use crate::app::interaction::{action_policy, ActionPolicy};
+        let catalog = ActionCatalog::with_builtins();
+        for d in ActionRegistry::ALL {
+            let meta = catalog.find(d.name).unwrap();
+            if let Some(action) = crate::input::action_from_name(d.name) {
+                assert_eq!(
+                    meta.policy,
+                    action_policy(&action),
+                    "{}: catalog policy diverged from action_policy()",
+                    d.name
+                );
+            }
+        }
+        // Spot-check the two parameterized names that have no bare-name variant.
+        assert_eq!(
+            catalog.find("scroll_to_offset").unwrap().policy,
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            catalog.find("open_link").unwrap().policy,
+            action_policy(&WmAction::OpenLink { url: String::new() })
+        );
+    }
+
+    fn dyn_meta(name: &str, policy: crate::app::interaction::ActionPolicy) -> ActionMeta {
+        ActionMeta {
+            name: name.to_string(),
+            label: "Restart Container".to_string(),
+            description: "Restart the selected Docker container.".to_string(),
+            category: ActionCategory::System,
+            default_binding: String::new(),
+            icon: Some(Glyph::Trash),
+            policy,
+        }
+    }
+
+    /// A name-keyed action joins the SAME catalog as the built-ins — so it gets a label, an icon and
+    /// introspection exactly like `close` does. This is the whole point of the owned ripple: before
+    /// it, a plugin action could only be dispatched, never rendered.
+    #[test]
+    fn a_dynamic_action_lives_in_the_same_catalog_as_the_builtins() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        let builtins = catalog.count();
+
+        let handle = register_dynamic(
+            &mut registry,
+            &mut catalog,
+            dyn_meta("plugin.docker.restart", ActionPolicy::Global),
+            Some(std::rc::Rc::new(|_state, _intent| {})),
+        );
+
+        assert_eq!(handle, ActionHandle("plugin.docker.restart".to_string()));
+        assert_eq!(catalog.count(), builtins + 1);
+        assert_eq!(
+            catalog.label("plugin.docker.restart"),
+            Some("Restart Container")
+        );
+        assert_eq!(catalog.icon("plugin.docker.restart"), Some(Glyph::Trash));
+        assert_eq!(
+            catalog.policy("plugin.docker.restart"),
+            Some(ActionPolicy::Global),
+            "the router reads the DECLARED policy"
+        );
+        assert!(!catalog.is_builtin("plugin.docker.restart"));
+        assert_eq!(
+            registry.dispatch_of(&catalog, "plugin.docker.restart"),
+            Some(Dispatch::NativeDyn)
+        );
+        // A built-in still reports as Native, through the same one door.
+        assert_eq!(
+            registry.dispatch_of(&catalog, "close"),
+            Some(Dispatch::Native)
+        );
+        assert_eq!(registry.dispatch_of(&catalog, "nope.not.a.thing"), None);
+    }
+
+    /// `unregister` (the provider unmounting and dropping its handle) retires BOTH halves — the
+    /// handler and the metadata — so the id is no longer dispatchable or renderable.
+    #[test]
+    fn unregister_retires_both_the_handler_and_the_metadata() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        register_dynamic(
+            &mut registry,
+            &mut catalog,
+            dyn_meta("plugin.docker.restart", ActionPolicy::TiledOnly),
+            Some(std::rc::Rc::new(|_state, _intent| {})),
+        );
+
+        assert!(unregister_dynamic(
+            &mut registry,
+            &mut catalog,
+            "plugin.docker.restart"
+        ));
+        assert!(catalog.find("plugin.docker.restart").is_none());
+        assert_eq!(registry.dispatch_of(&catalog, "plugin.docker.restart"), None);
+        // Idempotent: retiring it twice is not an error.
+        assert!(!unregister_dynamic(
+            &mut registry,
+            &mut catalog,
+            "plugin.docker.restart"
+        ));
+    }
+
+    /// Re-registering an id (a provider remounting) REPLACES the entry rather than duplicating it.
+    #[test]
+    fn re_registering_an_id_replaces_it() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        let before = catalog.count();
+        register_dynamic(
+            &mut registry,
+            &mut catalog,
+            dyn_meta("plugin.x", ActionPolicy::Global),
+            None,
+        );
+        let mut second = dyn_meta("plugin.x", ActionPolicy::TiledOnly);
+        second.label = "Second".to_string();
+        register_dynamic(&mut registry, &mut catalog, second, None);
+
+        assert_eq!(catalog.count(), before + 1, "replaced, not duplicated");
+        assert_eq!(catalog.label("plugin.x"), Some("Second"));
+        assert_eq!(catalog.policy("plugin.x"), Some(ActionPolicy::TiledOnly));
+    }
+
+    /// A DECLARATIVE action (no host handler — its owner is a WASM plugin) is declared and
+    /// policy-classified, but the host cannot run it. Dispatching it is a no-op, never a crash.
+    #[test]
+    fn a_declarative_action_is_declared_but_has_no_host_handler() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        register_dynamic(
+            &mut registry,
+            &mut catalog,
+            dyn_meta("plugin.wasm.thing", ActionPolicy::FocusedPaneLocal),
+            None, // no host handler
+        );
+        assert_eq!(
+            registry.dispatch_of(&catalog, "plugin.wasm.thing"),
+            Some(Dispatch::Declarative)
+        );
+        assert_eq!(
+            catalog.policy("plugin.wasm.thing"),
+            Some(ActionPolicy::FocusedPaneLocal)
+        );
+    }
+
+    /// A dynamic action can neither shadow nor retire a built-in.
+    #[test]
+    fn a_dynamic_action_cannot_retire_a_builtin() {
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        assert!(!unregister_dynamic(&mut registry, &mut catalog, "close"));
+        assert!(catalog.find("close").is_some(), "built-in survives");
+    }
+
     #[test]
     fn test_descriptors_are_populated() {
         // Actions invoked only programmatically / by mouse / by context menu have no
         // global keybinding, so their `default_binding` is intentionally empty.
         const UNBOUND: &[&str] = &[
             "open_link",
+            // Chrome container placement (plugin-04/T1): parameterized (they name a container),
+            // so they are dispatched by name+args from a menu / drag / RPC / a config binding
+            // that supplies the args — never from a bare default keybinding.
+            "chrome.container.move_to_region",
+            "chrome.container.move_left_sidebar",
+            "chrome.container.move_right_sidebar",
+            "chrome.container.reorder_before",
+            "chrome.container.reorder_after",
             // Chrome region show/hide (sidebar-fu-6): intentionally unbound — the
             // user binds the wanted ones in config.
             "show_left_sidebar",
