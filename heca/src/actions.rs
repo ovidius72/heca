@@ -239,6 +239,14 @@ impl ActionRegistry {
             icon: None,
         },
         ActionDescriptor {
+            name: "sidebar_peek",
+            label: "Sidebar Peek",
+            description: "Focus the selected pane or workspace without leaving sidebar mode.",
+            category: ActionCategory::Navigation,
+            default_binding: "Space",
+            icon: None,
+        },
+        ActionDescriptor {
             name: "workspace_next",
             label: "Next Workspace",
             description: "Switch to the next workspace.",

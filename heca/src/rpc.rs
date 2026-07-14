@@ -388,8 +388,26 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let ws_idx = parse_usize!(arg, "ws_idx");
             Ok(WmAction::ResetWorkspaceNameByIdx { ws_idx })
         }
+        // ── Sidebar ──
+        // Every sidebar action is reachable from here, not just the region toggles. A
+        // capability that only the keyboard can reach is trapped behind one surface; the
+        // nav + mutation actions used to be exactly that. A script drives the sidebar the
+        // way a user does: `sidebar-focus` to enter nav mode, then move/act.
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
+        "sidebar-focus" => Ok(WmAction::SidebarFocus),
+        "sidebar-up" => Ok(WmAction::SidebarUp),
+        "sidebar-down" => Ok(WmAction::SidebarDown),
+        "sidebar-left-nav" => Ok(WmAction::SidebarLeftNav),
+        "sidebar-right-nav" => Ok(WmAction::SidebarRightNav),
+        // Focus the row under the sidebar cursor without changing the input mode.
+        "sidebar-peek" => Ok(WmAction::SidebarPeek),
+        "sidebar-expand-toggle" => Ok(WmAction::SidebarExpandToggle),
+        "sidebar-create-workspace" => Ok(WmAction::SidebarCreateWorkspace),
+        "sidebar-create-column" => Ok(WmAction::SidebarCreateColumn),
+        "sidebar-split-in-column" => Ok(WmAction::SidebarSplitInColumn),
+        "sidebar-zoom-selected-column" => Ok(WmAction::SidebarZoomSelectedColumn),
+        "sidebar-delete-selected" => Ok(WmAction::SidebarDeleteSelected),
         // Chrome container placement (plugin-02, §2.9) — RPC parity for the moves.
         "move-container-to-region" => {
             let container_id = expect_arg!("container_id").to_string();
@@ -886,6 +904,47 @@ mod tests {
         assert_eq!(
             parse_rpc_command("sidebar-right"),
             Ok(WmAction::SidebarRight)
+        );
+        // The whole sidebar family is RPC-reachable, not just the region toggles: a
+        // capability the keyboard alone can reach is trapped behind one surface.
+        assert_eq!(
+            parse_rpc_command("sidebar-focus"),
+            Ok(WmAction::SidebarFocus)
+        );
+        assert_eq!(parse_rpc_command("sidebar-up"), Ok(WmAction::SidebarUp));
+        assert_eq!(parse_rpc_command("sidebar-down"), Ok(WmAction::SidebarDown));
+        assert_eq!(
+            parse_rpc_command("sidebar-left-nav"),
+            Ok(WmAction::SidebarLeftNav)
+        );
+        assert_eq!(
+            parse_rpc_command("sidebar-right-nav"),
+            Ok(WmAction::SidebarRightNav)
+        );
+        assert_eq!(parse_rpc_command("sidebar-peek"), Ok(WmAction::SidebarPeek));
+        assert_eq!(
+            parse_rpc_command("sidebar-expand-toggle"),
+            Ok(WmAction::SidebarExpandToggle)
+        );
+        assert_eq!(
+            parse_rpc_command("sidebar-create-workspace"),
+            Ok(WmAction::SidebarCreateWorkspace)
+        );
+        assert_eq!(
+            parse_rpc_command("sidebar-create-column"),
+            Ok(WmAction::SidebarCreateColumn)
+        );
+        assert_eq!(
+            parse_rpc_command("sidebar-split-in-column"),
+            Ok(WmAction::SidebarSplitInColumn)
+        );
+        assert_eq!(
+            parse_rpc_command("sidebar-zoom-selected-column"),
+            Ok(WmAction::SidebarZoomSelectedColumn)
+        );
+        assert_eq!(
+            parse_rpc_command("sidebar-delete-selected"),
+            Ok(WmAction::SidebarDeleteSelected)
         );
         assert_eq!(
             parse_rpc_command("collapse-current-workspace"),

@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-14T13:46:44.201Z
+**Last updated:** 2026-07-14T15:45:01.862Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -90,7 +90,7 @@ Status: 📋 `planned`
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
 - 📋 **099e2eb5-30be-4f3c-ab57-a4f111cdc44c** P002 — plugin-06: Placeholder token system (0/3 tasks)
 - 📋 **88b87a32-ff00-4044-9a32-c575e3ed5401** P003 — plugin-04: Dynamic action registry (0/3 tasks)
-- 📋 **73c320aa-b8b7-4fb3-9421-5c741b1771ff** P004 — plugin-03: Built-in provider + WorkspacesContainer migration (3/6 tasks)
+- ✅ **73c320aa-b8b7-4fb3-9421-5c741b1771ff** P004 — plugin-03: Built-in provider + WorkspacesContainer migration (6/6 tasks)
 - ✅ **9ec31d60-7dfa-4dcc-9797-b265a4d30562** P005 — plugin-01: Formal architecture contracts (4/4 tasks)
 - ✅ **7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c** P006 — plugin-02: ChromeHost and region hosts (4/4 tasks)
 - 📋 **f94d6da1-43b0-4b6a-a954-b404164126bd** P007 — plugin-09: Multi-region proof + config integration (0/3 tasks)
@@ -133,18 +133,18 @@ Status: 📋 `planned`
 
 **Work remaining:** La pipeline base è merged. Il tentativo di visual tuning (compositor-05) è stato rifiutato; la review finale/compositor-06 è differita e non è lavoro attivo in questo momento.
 
-### 📋 2809a7a4-6d53-4a58-b776-bac164bb5d03 — F006 — 🛠️ App / Chrome Features
+### 🚧 2809a7a4-6d53-4a58-b776-bac164bb5d03 — F006 — 🛠️ App / Chrome Features
 
 Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Phases:**
 - 📋 **f6476b06-0938-4fa1-88ab-23e0283036fa** P001 — app-02: Split render.rs into render folder (0/6 tasks)
 - 📋 **621e6f47-a0e2-4d0d-9012-e6feadb70097** P002 — app-06: Sidebar wiring + collapsed rail (0/3 tasks)
 - 📋 **f6a5aa17-dbbf-4463-8ae1-744ab1ba886f** P003 — app-01: Niri layout parity audit (0/3 tasks)
 - 📋 **9e5ec754-ebf3-47f9-9850-378dd75b8e1c** P004 — app-07: Damage-region render optimization (0/5 tasks)
-- 📋 **c192c5ca-f6ac-493a-bd8d-d95117c430aa** P005 — app-10: Sidebar/chrome leftovers (2/3 tasks)
+- 🚧 **c192c5ca-f6ac-493a-bd8d-d95117c430aa** P005 — app-10: Sidebar/chrome leftovers (2/6 tasks)
 - 📋 **5cab2dbb-ce1b-4a33-b6bc-ede8437fca09** P006 — app-11: Right-click context menu (2/3 tasks)
 - 📋 **00afc6e8-101c-47e3-8739-5a8b216c81c4** P007 — app-04: Pane numbering (0/3 tasks)
 - 📋 **50c22c08-b639-4a1a-a3cb-2a9f7084c0f9** P008 — app-05: Workspace drag-to-reorder (0/4 tasks)
@@ -416,13 +416,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/5
 
-### 📋 c192c5ca-f6ac-493a-bd8d-d95117c430aa — P005 — app-10: Sidebar/chrome leftovers
+### 🚧 c192c5ca-f6ac-493a-bd8d-d95117c430aa — P005 — app-10: Sidebar/chrome leftovers
 
 Leftovers sidebar/chrome in corso: app-task-29 e app-task-31 sono done; resta app-task-30 column-level pick keycaps.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
-**Tasks:** 2/3
+**Tasks:** 2/6
 
 ### 📋 5cab2dbb-ce1b-4a33-b6bc-ede8437fca09 — P006 — app-11: Right-click context menu
 
@@ -721,13 +721,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/3
 
-### 📋 73c320aa-b8b7-4fb3-9421-5c741b1771ff — P004 — plugin-03: Built-in provider + WorkspacesContainer migration
+### ✅ 73c320aa-b8b7-4fb3-9421-5c741b1771ff — P004 — plugin-03: Built-in provider + WorkspacesContainer migration
 
 Migrare la sidebar attuale (façade hardcoded in sidebar/model.rs) nel primo provider built-in (WorkspacesContainerProvider) montato via ChromeHost + ContainerContribution, implementando il render seam build_contribution. Prova che l'architettura pluggable chrome ospita un container reale, non solo un TestProvider.
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
-**Tasks:** 3/6
+**Tasks:** 6/6
 
 ### ✅ 9ec31d60-7dfa-4dcc-9797-b265a4d30562 — P005 — plugin-01: Formal architecture contracts
 

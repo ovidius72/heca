@@ -230,6 +230,7 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
         | WmAction::SidebarRightNav
+        | WmAction::SidebarPeek
         | WmAction::SidebarExpandToggle
         | WmAction::SidebarCreateWorkspace
         | WmAction::SidebarCreateColumn
@@ -1027,6 +1028,7 @@ mod tests {
             WmAction::SidebarDown,
             WmAction::SidebarLeftNav,
             WmAction::SidebarRightNav,
+            WmAction::SidebarPeek,
             WmAction::SidebarExpandToggle,
             WmAction::SidebarCreateWorkspace,
             WmAction::SidebarCreateColumn,
@@ -1177,6 +1179,9 @@ mod tests {
 
         // Spot-check specific classifications
         assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
+        // Peek focuses a tiled pane/workspace from the sidebar — same domain as every
+        // other Sidebar* action, so it must not fire while a floating pane is active.
+        assert_eq!(action_policy(&WmAction::SidebarPeek), ActionPolicy::TiledOnly);
         // Column rename (active or by-idx) is a tiled-layout op → TiledOnly, like RenameColumn.
         assert_eq!(
             action_policy(&WmAction::RenameColumn),

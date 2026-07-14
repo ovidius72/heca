@@ -589,6 +589,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarDown, handle_sidebar_down);
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
     registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
+    registry.register(&WmAction::SidebarPeek, handle_sidebar_peek);
     registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
     registry.register(
         &WmAction::SidebarCreateWorkspace,
@@ -1140,9 +1141,11 @@ mod tests {
             keymap.resolve("sidebar", &KeyCombo::parse("ArrowRight")),
             Some(&WmAction::SidebarRightNav)
         );
+        // Space is the "focus but stay" key (`sidebar_peek`), distinct from `l`/Right,
+        // which focus and leave the mode.
         assert_eq!(
             keymap.resolve("sidebar", &KeyCombo::parse("Space")),
-            Some(&WmAction::SidebarRightNav)
+            Some(&WmAction::SidebarPeek)
         );
     }
 

@@ -315,6 +315,11 @@ pub enum WmAction {
     SidebarDown,
     SidebarLeftNav,
     SidebarRightNav,
+    /// Focus the row under the sidebar-nav cursor **without leaving sidebar mode** — so
+    /// the tree can be walked with `j`/`k`, previewing each pane/workspace in the main
+    /// view. This is what separates it from [`SidebarRightNav`](WmAction::SidebarRightNav),
+    /// which focuses and *exits*.
+    SidebarPeek,
     SidebarExpandToggle,
     SidebarCreateWorkspace,
     SidebarCreateColumn,
@@ -530,6 +535,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_down" => Some(WmAction::SidebarDown),
         "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
         "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
+        "sidebar_peek" => Some(WmAction::SidebarPeek),
         "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
         "sidebar_create_workspace" => Some(WmAction::SidebarCreateWorkspace),
         "sidebar_create_column" => Some(WmAction::SidebarCreateColumn),
@@ -899,6 +905,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
         | WmAction::SidebarRightNav
+        | WmAction::SidebarPeek
         | WmAction::SidebarExpandToggle
         | WmAction::SidebarCreateWorkspace
         | WmAction::SidebarCreateColumn
@@ -1077,6 +1084,7 @@ mod tests {
         assert_eq!(action_from_name("focus_left"), Some(WmAction::FocusLeft));
         assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
         assert_eq!(action_from_name("zoom_column"), Some(WmAction::ZoomColumn));
+        assert_eq!(action_from_name("sidebar_peek"), Some(WmAction::SidebarPeek));
         assert_eq!(
             action_from_name("toggle_current_workspace_collapsed"),
             Some(WmAction::ToggleCurrentWorkspaceCollapsed)

@@ -219,7 +219,17 @@ return `Self` for chaining.
 > Layout-only `Flex` deliberately does **not** implement `StyleExt` — wrap content in a
 > `Surface`/`Card` to give it a background.
 
-**`Parent`** (containers): `.child(impl Component + 'static)` appends a child.
+**`Parent`** (containers):
+
+| Method | Effect |
+|--------|--------|
+| `.child(impl Component + 'static)` | Append a child. |
+| `.child_boxed(Box<dyn Component>)` | Append an **already-boxed** subtree — one whose concrete widget type isn't known at the call site. `Box<dyn Component>` is not itself `Component`, so it cannot go through `.child()`. This is what the host's `realize()` (a [`ViewNode`](#declarative-ui-model-viewnode) tree) and a chrome provider's render seam both return. |
+
+> A widget with **several** places to put children names them instead —
+> [`DockFrame::header_boxed`](#dockframe), [`Dialog::body_boxed`](#dialog) — and those
+> inherent methods win over the trait one. `.child_boxed` is the plain "append it to my
+> children" case.
 
 ### `Style` & layout enums
 

@@ -20,8 +20,13 @@
 
 mod workspaces;
 
-use crate::chrome::{ChromeEvent, ChromeSubscription, Contribution, RegionId, RegionSet};
+use crate::chrome::{
+    ChromeEvent, ChromeIntentEmitter, ChromeSubscription, Contribution, RegionId, RegionSet,
+};
 use crate::host::{App, StateView};
+use crate::sidebar::SidebarTree;
+use heca_config::programs::ProgramsConfig;
+use heca_grid_ui::theme::Theme as GuiTheme;
 
 pub use workspaces::WorkspacesContainerProvider;
 
@@ -55,13 +60,13 @@ pub trait Provider {
     }
 
     /// Build the contribution model. Called on mount and on each invalidation —
-    /// the **render seam**, not exercised in plugin-02.
-    fn build_contribution(&self, ctx: &ChromeCtx) -> Contribution;
+    /// the **render seam**.
+    fn build_contribution(&self, ctx: &ChromeCtx<'_>) -> Contribution;
 
     /// Subscribe to events / register actions on activation. The returned
     /// [`ProviderHandles`] are held by the host while the provider is mounted and
     /// dropped (unsubscribing) on unmount. Default: no subscriptions.
-    fn on_activate(&mut self, _ctx: &ChromeCtx) -> ProviderHandles {
+    fn on_activate(&mut self, _ctx: &ChromeCtx<'_>) -> ProviderHandles {
         ProviderHandles::default()
     }
 }
@@ -83,21 +88,63 @@ impl ProviderHandles {
     }
 }
 
+/// The read-only host inputs a container body is projected from. Present only on a
+/// context built for a render pass ([`ChromeCtx::for_build`]); a context built to
+/// merely observe ([`ChromeCtx::new`], e.g. at [`Provider::on_activate`]) has none,
+/// because there is no frame in flight to read a theme or a tree from.
+struct RenderInputs<'a> {
+    tree: &'a SidebarTree,
+    programs: &'a ProgramsConfig,
+    theme: &'a GuiTheme,
+    emit: &'a ChromeIntentEmitter,
+}
+
 /// The provider/plugin-facing facade (contract §3.4.1). It *extends* the shipped
 /// read/observe [`App`] host API (`heca/src/host.rs`) with the write/contribute
-/// halves deferred to §3.5 rows 3–10. plugin-02 wires only the read/observe half;
-/// `actions` / `overlay` / `regions` arrive in plugin-04/05.
-pub struct ChromeCtx {
+/// halves deferred to §3.5 rows 3–10. plugin-02 wired the read/observe half;
+/// plugin-03 adds the render-pass selectors below; `actions` / `overlay` / `regions`
+/// arrive in plugin-04/05.
+///
+/// Everything reachable here is **read-only**: a provider projects app state into
+/// widgets and reports user actions as
+/// [`InteractionIntent`](crate::app::interaction::InteractionIntent)s through
+/// [`emit_intent`](ChromeCtx::emit_intent) — it never mutates app state (§2.3). The
+/// registries a build *does* mutate are the separate, explicit
+/// [`BuildCx`](crate::chrome::BuildCx).
+pub struct ChromeCtx<'a> {
     app: App,
+    /// `Some` during a render pass; `None` for an observe-only context.
+    render: Option<RenderInputs<'a>>,
     // actions: ActionDispatch,   // plugin-04/05
     // overlay: OverlayHandle,    // plugin-05 / Phase 8 (§2.7.1)
     // regions: RegionHandle,     // plugin-05
 }
 
-impl ChromeCtx {
-    /// Build a context over the app's host facade.
+impl<'a> ChromeCtx<'a> {
+    /// An **observe-only** context over the app's host facade: state selectors and
+    /// event subscriptions, no render inputs. Used outside a frame (activation).
     pub fn new(app: App) -> Self {
-        Self { app }
+        Self { app, render: None }
+    }
+
+    /// A context for a **render pass**, carrying the frame's read-only inputs so a
+    /// container's `build` closure can project them. Built by the chrome render path.
+    pub fn for_build(
+        app: App,
+        tree: &'a SidebarTree,
+        programs: &'a ProgramsConfig,
+        theme: &'a GuiTheme,
+        emit: &'a ChromeIntentEmitter,
+    ) -> Self {
+        Self {
+            app,
+            render: Some(RenderInputs {
+                tree,
+                programs,
+                theme,
+                emit,
+            }),
+        }
     }
 
     /// The underlying host facade.
@@ -117,5 +164,31 @@ impl ChromeCtx {
     /// Read-only state selectors (`app.state.*`).
     pub fn state(&self) -> StateView<'_> {
         self.app.state()
+    }
+
+    /// The workspace/column/pane projection this frame renders, or `None` outside a
+    /// render pass.
+    pub fn tree(&self) -> Option<&SidebarTree> {
+        self.render.as_ref().map(|r| r.tree)
+    }
+
+    /// The program catalog (icons + display names for running processes), or `None`
+    /// outside a render pass.
+    pub fn programs(&self) -> Option<&ProgramsConfig> {
+        self.render.as_ref().map(|r| r.programs)
+    }
+
+    /// The resolved grid-ui [`Theme`](heca_grid_ui::theme::Theme) for this frame, or
+    /// `None` outside a render pass. Every color/size a container paints comes from
+    /// here — never a literal.
+    pub fn theme(&self) -> Option<&GuiTheme> {
+        self.render.as_ref().map(|r| r.theme)
+    }
+
+    /// The sink a container's widgets report user actions to, or `None` outside a
+    /// render pass. Behaviour crosses this boundary as an intent, never as a state
+    /// mutation.
+    pub fn emit_intent(&self) -> Option<&ChromeIntentEmitter> {
+        self.render.as_ref().map(|r| r.emit)
     }
 }

@@ -20,7 +20,7 @@
 //! remaining host-API namespaces from §3.5 (`app.actions`, `app.overlay`,
 //! `app.regions`) are later phases and intentionally not implemented here.
 
-use crate::chrome::{ChromeEvent, ChromeSubscription, SharedChromeState};
+use crate::chrome::{ChromeEvent, ChromeSubscription, SharedChromeState, WorkspacesContainerState};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
 
@@ -122,6 +122,28 @@ impl StateView<'_> {
     /// Is workspace `ws_idx` collapsed in the sidebar?
     pub fn is_workspace_collapsed(&self, ws_idx: usize) -> bool {
         self.state.workspaces.is_ws_collapsed(ws_idx)
+    }
+
+    /// The sidebar-nav **selection** — the row under the nav cursor, or `None` when the
+    /// user is not navigating the sidebar.
+    ///
+    /// This is the cursor, **not** the focus: it moves with `j`/`k` without changing
+    /// [`active_pane`](StateView::active_pane), and the sidebar renders the two
+    /// distinctly. Observe changes via `ChromeEvent::SidebarSelectionChanged`.
+    pub fn sidebar_selection(&self) -> Option<crate::chrome::SidebarSelection> {
+        self.state.workspaces.nav_selection()
+    }
+
+    /// The **workspaces container's** namespaced state (§2.4) — active pane, per-pane
+    /// runtime mirror, collapsed workspaces, pending pick. The selectors above read
+    /// individual values out of it; a container that projects the *whole* tree in one
+    /// build (the `workspaces` provider) borrows it directly instead of re-reading a
+    /// selector per row.
+    ///
+    /// Still read-only: every mutation goes through the store's write path, which is
+    /// what emits the [`ChromeEvent`]s providers observe.
+    pub fn workspaces(&self) -> &WorkspacesContainerState {
+        &self.state.workspaces
     }
 
     /// Is the left sidebar region visible (not hidden)?

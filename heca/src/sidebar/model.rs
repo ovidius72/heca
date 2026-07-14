@@ -1,4 +1,5 @@
 use crate::app_state::SidebarItemState;
+use crate::chrome::SidebarSelection;
 use crate::input::WmAction;
 use heca_core::layout::{PaneId, session::Session};
 
@@ -21,6 +22,25 @@ pub enum SidebarItem {
 }
 
 impl SidebarItem {
+    /// This row as the stable [`SidebarSelection`] the chrome store holds.
+    ///
+    /// The two types say the same thing at different altitudes: `SidebarItem` is a row in
+    /// a rebuilt-every-frame projection, `SidebarSelection` is `Copy` state that outlives
+    /// the rebuild and crosses the host boundary (event payload, store value, and — later
+    /// — RPC/plugin reads).
+    pub fn selection(&self) -> SidebarSelection {
+        match *self {
+            SidebarItem::Workspace { ws_idx } => SidebarSelection::Workspace { ws_idx },
+            SidebarItem::Column { ws_idx, col_idx } => {
+                SidebarSelection::Column { ws_idx, col_idx }
+            }
+            SidebarItem::Pane { pane_id } => SidebarSelection::Pane { pane_id },
+            SidebarItem::FloatingPane { pane_id, ws_idx } => {
+                SidebarSelection::FloatingPane { pane_id, ws_idx }
+            }
+        }
+    }
+
     /// Returns the kind of this sidebar item.
     pub fn kind(&self) -> SidebarItemKind {
         match self {
@@ -275,6 +295,48 @@ impl SidebarTree {
             self.cursor = 0;
         } else if self.cursor >= self.flat_items.len() {
             self.cursor = self.flat_items.len() - 1;
+        }
+    }
+
+    /// The row under the nav cursor, as the **stable, `Copy`
+    /// [`SidebarSelection`]** the chrome store holds — `None` when the tree is empty.
+    ///
+    /// This is the projection *out* of the tree: `cursor` is a positional index into
+    /// `flat_items`, which is rebuilt from the session on every layout change, so it is
+    /// not something another consumer (the host, RPC, a plugin) could hold onto. The
+    /// selection names the thing itself.
+    pub fn selection(&self) -> Option<SidebarSelection> {
+        self.current_item().map(SidebarItem::selection)
+    }
+
+    /// Project the **canonical** selection from the chrome store back onto the cursor —
+    /// the selection counterpart of [`apply_ws_collapsed`](Self::apply_ws_collapsed),
+    /// and for the same reason: `sync_from_session` rebuilds `flat_items` from scratch,
+    /// so the positional cursor has to be re-derived from the state that outlives the
+    /// rebuild.
+    ///
+    /// Because the store is the source of truth, this is also what makes the selection
+    /// **drivable from outside**: an RPC or a plugin that writes
+    /// [`set_nav_selection`](crate::chrome::WorkspacesContainerState::set_nav_selection)
+    /// moves the cursor here.
+    ///
+    /// `None` leaves the cursor alone (nothing selected is not a request to move), and a
+    /// selection whose row no longer exists — its pane closed, its workspace deleted —
+    /// leaves the cursor where it was, clamped into range, rather than silently jumping
+    /// somewhere arbitrary.
+    pub fn apply_nav_selection(&mut self, selection: Option<SidebarSelection>) {
+        let Some(selection) = selection else {
+            return;
+        };
+        if let Some(idx) = self
+            .flat_items
+            .iter()
+            .position(|item| item.selection() == selection)
+        {
+            self.cursor = idx;
+            self.scroll_to_cursor();
+        } else {
+            self.clamp_cursor();
         }
     }
 

@@ -52,8 +52,8 @@ pub use state::{SharedChromeState, WorkspacesContainerState};
 // `Display` today and the mouse/DnD path names it in plugin-03.
 #[allow(unused_imports)]
 pub use contribution::{
-    ContainerContribution, ContainerId, OverlaySpec, PanelContribution, StatusSegment,
-    ToolbarGroup, WidgetModel,
+    BuildBody, BuildCx, ContainerContribution, ContainerId, OverlaySpec, PanelContribution,
+    StatusSegment, ToolbarGroup, WidgetModel,
 };
 #[allow(unused_imports)]
 pub use host::{MountedContribution, MoveError, RegionHost};
@@ -145,72 +145,71 @@ impl ChromeConfig {
 
 // ── Grid-UI chrome scene builder ──────────────────────────────────────────────
 
-use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
+use crate::sidebar::{SidebarPaneEntry, SidebarTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{HintExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, BadgeButton, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
-    KeyHint, Label, MarkerGroup, Pane, Row, ScrollBar, StatusDot, Surface, Tag, Tooltip,
-    TooltipSide, Visibility,
+    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Surface, Tag, Tooltip,
+    TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct PaneInfoView {
-    icon: Glyph,
+pub(crate) struct PaneInfoView {
+    pub(crate) icon: Glyph,
     /// Custom name if set, else the program name — the sidebar card's label.
-    title: String,
+    pub(crate) title: String,
     /// The program/application name (always the process, never the rename) — the info-bar
     /// `AppName` segment shows this, so renaming a pane doesn't hide what's running in it.
-    app_name: String,
+    pub(crate) app_name: String,
     /// The process/program name shown as a small dimmed label *next to* a custom name (e.g.
     /// `(nvim)`). `Some` only when the pane has a custom name and `pane_renamed_add_process_name`
     /// is on — a pane that merely tracks its process has the process name *as* its title already.
-    process_hint: Option<String>,
-    status: ProcessStatus,
-    git_branch: Option<String>,
-    git_added: Option<String>,
-    git_modified: Option<String>,
-    git_deleted: Option<String>,
+    pub(crate) process_hint: Option<String>,
+    pub(crate) status: ProcessStatus,
+    pub(crate) git_branch: Option<String>,
+    pub(crate) git_added: Option<String>,
+    pub(crate) git_modified: Option<String>,
+    pub(crate) git_deleted: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PaneInfoSignals {
-    icon: Signal<Glyph>,
-    title_active: Signal<String>,
-    title_inactive: Signal<String>,
-    title_active_visible: Signal<bool>,
-    title_inactive_visible: Signal<bool>,
+    pub(crate) icon: Signal<Glyph>,
+    pub(crate) title_active: Signal<String>,
+    pub(crate) title_inactive: Signal<String>,
+    pub(crate) title_active_visible: Signal<bool>,
+    pub(crate) title_inactive_visible: Signal<bool>,
     /// The dimmed `(process)` suffix text beside a renamed pane's name (e.g. `(nvim)`),
     /// or empty when hidden. Signal-driven so a rename toggles it live without a tree
     /// rebuild (renames update signals, they don't rebuild the sidebar card).
-    process_hint: Signal<String>,
-    process_hint_visible: Signal<bool>,
+    pub(crate) process_hint: Signal<String>,
+    pub(crate) process_hint_visible: Signal<bool>,
     /// The pane's working-directory row text (home-relative path), and its visibility
     /// (`[settings] pane_show_cwd` and the pane has a cwd). Signal-driven so a `cd` in the
     /// pane updates the path live, mirroring the git-branch row.
-    cwd: Signal<String>,
-    cwd_visible: Signal<bool>,
-    status_idle_visible: Signal<bool>,
-    status_running_visible: Signal<bool>,
-    status_success_visible: Signal<bool>,
-    status_error_visible: Signal<bool>,
-    git_visible: Signal<bool>,
-    git_branch: Signal<String>,
-    git_branch_display: Signal<String>,
-    git_added_visible: Signal<bool>,
-    git_added: Signal<String>,
-    git_modified_visible: Signal<bool>,
-    git_modified: Signal<String>,
-    git_deleted_visible: Signal<bool>,
-    git_deleted: Signal<String>,
+    pub(crate) cwd: Signal<String>,
+    pub(crate) cwd_visible: Signal<bool>,
+    pub(crate) status_idle_visible: Signal<bool>,
+    pub(crate) status_running_visible: Signal<bool>,
+    pub(crate) status_success_visible: Signal<bool>,
+    pub(crate) status_error_visible: Signal<bool>,
+    pub(crate) git_visible: Signal<bool>,
+    pub(crate) git_branch: Signal<String>,
+    pub(crate) git_branch_display: Signal<String>,
+    pub(crate) git_added_visible: Signal<bool>,
+    pub(crate) git_added: Signal<String>,
+    pub(crate) git_modified_visible: Signal<bool>,
+    pub(crate) git_modified: Signal<String>,
+    pub(crate) git_deleted_visible: Signal<bool>,
+    pub(crate) git_deleted: Signal<String>,
 }
 
 fn program_glyph(icon: ProgramIcon) -> Glyph {
@@ -225,7 +224,7 @@ fn program_glyph(icon: ProgramIcon) -> Glyph {
     }
 }
 
-fn pane_info_view(
+pub(crate) fn pane_info_view(
     programs: &ProgramsConfig,
     fallback_name: &str,
     custom_name: Option<&str>,
@@ -287,7 +286,7 @@ fn truncate_path_left(text: &str, max_chars: usize) -> String {
 }
 
 /// A path shown home-relative (`/Users/x/proj` → `~/proj`).
-fn home_relative_path(path: &std::path::Path) -> String {
+pub(crate) fn home_relative_path(path: &std::path::Path) -> String {
     if let Some(home) = std::env::var_os("HOME") {
         let home = std::path::Path::new(&home);
         if let Ok(rest) = path.strip_prefix(home) {
@@ -413,7 +412,7 @@ const HEADER_BUTTON_GAP: f32 = 1.0;
 
 /// Font multiplier for a sidebar card's **secondary metadata** — the dimmed `(process)`
 /// suffix and the cwd row — smaller than the name so it reads as supporting detail.
-const CARD_META_FONT_SCALE: f32 = 0.8;
+pub(crate) const CARD_META_FONT_SCALE: f32 = 0.8;
 
 /// Per-pane context the header buttons need to build their (parameterized) actions
 /// and emit them through the app event loop.
@@ -1292,7 +1291,7 @@ fn rect_contains(r: Rectangle, p: Point) -> bool {
     p.x >= r.loc.x && p.x <= r.loc.x + r.size.w && p.y >= r.loc.y && p.y <= r.loc.y + r.size.h
 }
 
-fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
+pub(crate) fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
     state.pane_runtime(pane_id)
 }
 
@@ -1302,23 +1301,27 @@ const SIDEBAR_GIT_BRANCH_MAX_CHARS: usize = 22;
 
 /// Truncate a branch for the sidebar, keeping the **tail** (the meaningful end,
 /// e.g. `…security-upgrade`) rather than the boilerplate `feature/` prefix.
-fn truncate_sidebar_git_branch(branch: &str) -> String {
+pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
     truncate_path_left(branch, SIDEBAR_GIT_BRANCH_MAX_CHARS)
 }
 
-type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
+/// How a chrome widget reports a user action back to the app: it emits an
+/// [`InteractionIntent`](crate::app::interaction::InteractionIntent), never a direct
+/// state mutation. Handed to container providers through
+/// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
+pub(crate) type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
 
 /// Transparent wrapper that marks only its own bounds dirty when the host bumps
 /// `request`. This lets retained chrome updates damage the specific card/marker/label
 /// instead of the entire chrome root.
-struct RepaintWatch {
+pub(crate) struct RepaintWatch {
     base: heca_grid_ui::Base,
     request: Signal<u64>,
     seen: u64,
 }
 
 impl RepaintWatch {
-    fn new(child: impl Component + 'static) -> (Self, Signal<u64>) {
+    pub(crate) fn new(child: impl Component + 'static) -> (Self, Signal<u64>) {
         let mut base = heca_grid_ui::Base::new();
         base.style.width = Length::Auto;
         base.style.height = Length::Auto;
@@ -1371,477 +1374,43 @@ impl Component for RepaintWatch {
     }
 }
 
-/// A single pane **card**, styled like the showcase PANES rows: a state-tinted
-/// background + radius, an active accent bar, a leading program icon, the display
-/// name, an optional exceptional-state indicator, and git metadata when present.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "pane-card projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
-)]
-fn pane_card(
-    pane: &SidebarPaneEntry,
-    programs: &ProgramsConfig,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    active_pane: Option<PaneId>,
-    ws_state: &WorkspacesContainerState,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
-) -> RepaintWatch {
-    let active = active_pane == Some(pane.pane_id);
-    let pane_id = pane.pane_id;
-    let runtime = runtime_snapshot(ws_state, pane_id);
-    let info = pane_info_view(
-        programs,
-        &pane.name,
-        pane.custom_name.as_deref(),
-        runtime.as_ref(),
-        // A renamed pane shows a dimmed `(process)` suffix here when the setting is on,
-        // so the sidebar keeps surfacing what's actually running under a custom name.
-        ws_state.pane_renamed_add_process_name(),
-    );
-    // A constant theme-driven card; the *selected* look (accent pill + border + bar)
-    // is drawn by `Row` from its `active` signal, not baked into the background. This
-    // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
-    // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
-    // The card is both a drag source and a drop target (F4.5); its opaque DragItemId
-    // is assigned by the registry (which records that it's this pane) so the kind
-    // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
-    let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
-    // Hint target: the universal picker (`prefix+/`) focuses this pane by its letter.
-    let hint_id = hints.register(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
-    let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
-    let icon_signal = icon_widget.glyph_signal();
-    let active_title_label = Label::new(info.title.clone())
-        .color(theme.colors.accent)
-        .bold(true);
-    let active_title_signal = active_title_label.text_signal();
-    let active_title = Visibility::new(active_title_label, active);
-    let active_title_visible = active_title.visible_signal();
-    let inactive_title_label = Label::new(info.title.clone())
-        .color(theme.colors.foreground)
-        .bold(true);
-    let inactive_title_signal = inactive_title_label.text_signal();
-    let inactive_title = Visibility::new(inactive_title_label, !active);
-    let inactive_title_visible = inactive_title.visible_signal();
-    let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);
-    let idle_dot_visible = idle_dot.visible_signal();
-    let running_dot = Visibility::new(StatusDot::online(), info.status == ProcessStatus::Running);
-    let running_dot_visible = running_dot.visible_signal();
-    let success_dot = Visibility::new(StatusDot::online(), info.status == ProcessStatus::Success);
-    let success_dot_visible = success_dot.visible_signal();
-    let error_dot = Visibility::new(StatusDot::error(), info.status == ProcessStatus::Error);
-    let error_dot_visible = error_dot.visible_signal();
-    let branch_label_widget = Label::new(truncate_sidebar_git_branch(
-        info.git_branch.as_deref().unwrap_or_default(),
-    ))
-    .color(theme.colors.foreground)
-    .font_scale(0.8);
-    let branch_display_signal = branch_label_widget.text_signal();
-    let branch_signal = signal(info.git_branch.clone().unwrap_or_default());
-    let add_label_widget = Label::new(info.git_added.clone().unwrap_or_default())
-        .color(theme.colors.success)
-        .font_scale(0.8);
-    let add_label = add_label_widget.text_signal();
-    let add_segment = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(4.0)
-            .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
-            .child(add_label_widget),
-        info.git_added.is_some(),
-    );
-    let add_text_visible_signal = add_segment.visible_signal();
-    let modified_label_widget = Label::new(info.git_modified.clone().unwrap_or_default())
-        .color(theme.colors.warning)
-        .font_scale(0.8);
-    let modified_label = modified_label_widget.text_signal();
-    let modified_segment = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(4.0)
-            .child(Icon::new(Glyph::Warning).size(12.0).color(theme.colors.warning))
-            .child(modified_label_widget),
-        info.git_modified.is_some(),
-    );
-    let modified_text_visible_signal = modified_segment.visible_signal();
-    let deleted_label_widget = Label::new(info.git_deleted.clone().unwrap_or_default())
-        .color(theme.colors.danger)
-        .font_scale(0.8);
-    let deleted_label = deleted_label_widget.text_signal();
-    let deleted_segment = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(4.0)
-            .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
-            .child(deleted_label_widget),
-        info.git_deleted.is_some(),
-    );
-    let deleted_text_visible_signal = deleted_segment.visible_signal();
-    let git_row = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(6.0)
-            .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.colors.warning))
-            .child(
-                Tooltip::new_signal(branch_label_widget, branch_signal)
-                    .side(TooltipSide::Bottom)
-                    .delay(0.25),
-            )
-            .child(add_segment)
-            .child(modified_segment)
-            .child(deleted_segment),
-        info.git_branch.is_some(),
-    );
-    let git_visible_signal = git_row.visible_signal();
-    // A renamed pane surfaces its running program as a dimmed `(process)` suffix after
-    // the name (config-gated). Appended to the shared title area so it renders the same
-    // in both the git and no-git card layouts. Like the title, it is **signal-driven**
-    // (text + visibility updated in `sync_chrome_signals`) so renaming toggles it live —
-    // a rename updates signals, it does not rebuild the sidebar card tree.
-    let process_hint_text = info
-        .process_hint
-        .as_ref()
-        .map(|program| format!("({program})"))
-        .unwrap_or_default();
-    // `foreground` (not `muted`) so it's readable on every theme; it still reads as
-    // secondary next to the accent + bold name (regular weight, smaller scale).
-    let process_hint_label = Label::new(process_hint_text)
-        .color(theme.colors.foreground)
-        .font_scale(CARD_META_FONT_SCALE);
-    let process_hint_signal = process_hint_label.text_signal();
-    let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
-    let process_hint_visible = process_hint.visible_signal();
-    let title_area = Flex::row()
-        .align(Align::Center)
-        .gap(4.0)
-        .child(Flex::column().child(active_title).child(inactive_title))
-        .child(process_hint);
-    // Optional cwd row (folder icon + home-relative path), stacked between the name and
-    // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
-    // row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd.
-    let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-    let show_cwd = ws_state.pane_show_cwd() && cwd_path.is_some();
-    let cwd_text = cwd_path
-        .as_deref()
-        .map(home_relative_path)
-        .unwrap_or_default();
-    // Readable, matching the sibling git-branch row (which colors its label
-    // `foreground`); `muted` was too dim for a primary info row.
-    let cwd_label = Label::new(cwd_text)
-        .color(theme.colors.foreground)
-        .font_scale(CARD_META_FONT_SCALE);
-    let cwd_signal = cwd_label.text_signal();
-    let cwd_row = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(6.0)
-            .child(Icon::new(Glyph::Folder).size(12.0).color(theme.colors.foreground))
-            .child(cwd_label),
-        show_cwd,
-    );
-    let cwd_visible_signal = cwd_row.visible_signal();
-    // The pane's identity row (status dots + program icon + name) — shared by every card
-    // layout so the cwd and git rows just stack beneath it in one column.
-    let name_row = Flex::row()
-        .align(Align::Center)
-        .gap(8.0)
-        .child(
-            Flex::row()
-                .align(Align::Center)
-                .width(Length::Px(12.0))
-                .child(idle_dot)
-                .child(running_dot)
-                .child(success_dot)
-                .child(error_dot),
+/// Build the body of a chrome **region** from whatever the [`ChromeHost`] has seated in
+/// it — the render half of the pluggable-chrome contract.
+///
+/// For each mounted container, in the host's order: ask its provider for a
+/// [`Contribution`] and call the container's `build` seam. The other contribution kinds
+/// belong to other hosts (bars take `ToolbarGroup`/`StatusSegment`, overlays go to the
+/// overlay host, §3.1.1), so a region ignores them rather than guessing.
+///
+/// `None` — not an empty widget — when nothing is mounted, so the shell can tell "no
+/// provider here" from "a provider that built an empty body".
+fn build_region_content(
+    host: &ChromeHost,
+    region: RegionId,
+    ctx: &crate::providers::ChromeCtx<'_>,
+    bx: &mut BuildCx<'_>,
+) -> Option<WidgetModel> {
+    let mut bodies = host
+        .contributions(region)
+        .iter()
+        .filter_map(
+            |mounted| match mounted.provider().build_contribution(ctx) {
+                Contribution::Container(c) => Some((c.build)(ctx, bx)),
+                _ => None,
+            },
         )
-        .child(Flex::row().align(Align::Center).child(icon_widget))
-        .child(title_area);
-    let emit = emit_intent.clone();
-    // One column: the name row, then the optional cwd and git rows (each 2px-indented and
-    // added only when shown, mirroring the git row). A card with only the name row lays
-    // out exactly like the former single-row layout — a one-child column adds no gap.
-    let mut content = Flex::column().gap(4.0).grow(1.0).child(name_row);
-    if show_cwd {
-        content = content.child(
-            Flex::row()
-                .child(Flex::row().width(Length::Px(2.0)))
-                .child(cwd_row),
-        );
+        .collect::<Vec<_>>();
+    match bodies.len() {
+        0 => None,
+        // The common case today: one container owns the region.
+        1 => bodies.pop(),
+        // Several containers share a region: stack them in the host's order (the order
+        // `reorder`/`move_container` maintain), each keeping its own body.
+        _ => Some(Box::new(bodies.into_iter().fold(
+            Flex::column().gap(8.0).grow(1.0),
+            |col, body| col.child_boxed(body),
+        ))),
     }
-    if info.git_branch.is_some() {
-        content = content.child(
-            Flex::row()
-                .child(Flex::row().width(Length::Px(2.0)))
-                .child(git_row),
-        );
-    }
-    let card = Row::new()
-        .background(
-            theme
-                .colors
-                .foreground
-                .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
-        )
-        .highlight(theme.colors.accent)
-        .radius(theme.colors.control_radius())
-        .padding(6.0)
-        .marker(ActiveMarker::Bar)
-        .active(active)
-        .nav_selected(false)
-        .draggable(drag_id)
-        .drop_target(drag_id)
-        .hint_target(hint_id)
-        // On click/Enter the card records its pane id in the host sink; the app reads
-        // it after dispatch and focuses that pane (read-via-signal / write-via-action).
-        .on_activate(move || {
-            emit(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
-        })
-        .child(content);
-    // Bind the card's active signal so focus changes update it without a rebuild.
-    signals.pane_active.push((pane_id, card.state()));
-    signals.pane_nav.push((pane_id, card.nav_state()));
-    // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
-    // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
-    // events/focus/drag straight through — so the card stays a drag source + target
-    // and clickable. The hint signal is driven each frame in `sync_chrome_signals`
-    // from the active `InputMode` candidates (keyboard logic stays the source of truth).
-    let hint = signal(None);
-    signals.pane_hint.push((pane_id, hint));
-    signals.pane_info.push((
-        pane_id,
-        PaneInfoSignals {
-            icon: icon_signal,
-            title_active: active_title_signal,
-            title_inactive: inactive_title_signal,
-            title_active_visible: active_title_visible,
-            title_inactive_visible: inactive_title_visible,
-            process_hint: process_hint_signal,
-            process_hint_visible,
-            cwd: cwd_signal,
-            cwd_visible: cwd_visible_signal,
-            status_idle_visible: idle_dot_visible,
-            status_running_visible: running_dot_visible,
-            status_success_visible: success_dot_visible,
-            status_error_visible: error_dot_visible,
-            git_visible: git_visible_signal,
-            git_branch: branch_signal,
-            git_branch_display: branch_display_signal,
-            git_added_visible: add_text_visible_signal,
-            git_added: add_label,
-            git_modified_visible: modified_text_visible_signal,
-            git_modified: modified_label,
-            git_deleted_visible: deleted_text_visible_signal,
-            git_deleted: deleted_label,
-        },
-    ));
-    let (watch, _repaint) = RepaintWatch::new(
-        KeyHint::new(card)
-            .hint(hint)
-            .placement(HintPlacement::CenterRight),
-    );
-    watch
-}
-
-/// One **column**: a generic [`MarkerGroup`] (left marker bar + grip gutter) holding
-/// the column's stacked pane cards — no per-column header row (columns are spatial
-/// groupings whose only user-facing job is to be a move/swap target + drag handle).
-/// The `MarkerGroup` bar brightens to the accent when the column holds the active
-/// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
-/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`DragExt`, not
-/// baked into the widget.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "column projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
-)]
-fn column_view(
-    c: &SidebarColEntry,
-    ws_idx: usize,
-    programs: &ProgramsConfig,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    active_pane: Option<PaneId>,
-    ws_state: &WorkspacesContainerState,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
-) -> RepaintWatch {
-    let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
-    // The MarkerGroup is a column drag source + drop target (F4.5 step 2). Its grip
-    // gutter is the only surface not covered by a child pane card, so innermost-first
-    // hit-testing routes a grip press → column and a card press → pane, for free.
-    let drag_id = drag.register(ChromeDragItem::Column {
-        ws: ws_idx,
-        col: c.col_idx,
-    });
-    let mut col = MarkerGroup::new()
-        .active(active)
-        .gap(3.0)
-        .draggable(drag_id)
-        .drop_target(drag_id);
-    for pane in &c.panes {
-        col = col.child(pane_card(
-            pane,
-            programs,
-            theme,
-            emit_intent,
-            active_pane,
-            ws_state,
-            signals,
-            drag,
-            hints,
-        ));
-    }
-    // Bind the column bar's active signal (lit iff it holds the active pane).
-    let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
-    signals.col_active.push((pane_ids, col.state()));
-    // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can
-    // stamp this column's letter over it (tinted `success`, distinct from pane/workspace
-    // picks). Driven each frame in `sync_chrome_signals`.
-    let col_hint = signal::<Option<String>>(None);
-    signals.col_hint.push((ws_idx, c.col_idx, col_hint));
-    let hinted = KeyHint::new(col)
-        .hint(col_hint)
-        .color(theme.colors.success)
-        .placement(HintPlacement::CenterRight);
-    let (watch, _repaint) = RepaintWatch::new(hinted);
-    watch
-}
-
-/// Build the **WorkspacesContainer** content — the workspace tree mounted inside the
-/// sidebar shell (see `heca-sidebar-design-spec`). Each workspace is a `.frameless()`
-/// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
-/// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
-/// the sidebar for no user value). Pure projection of the [`SidebarTree`].
-#[expect(
-    clippy::too_many_arguments,
-    reason = "workspace-container projection threads host/runtime context + the drag and hint registries explicitly; phase-local before a larger ChromeCx refactor"
-)]
-fn build_workspaces_container(
-    tree: &SidebarTree,
-    programs: &ProgramsConfig,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    ws_state: &WorkspacesContainerState,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
-) -> Flex {
-    // Selection is sourced from the container's shared state (the Phase-2 boundary),
-    // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
-    // active pane.
-    let active_pane = ws_state.active_pane();
-    let mut col = Flex::column().gap(6.0).grow(1.0);
-    for ws in &tree.workspaces {
-        let pane_count =
-            ws.columns.iter().map(|c| c.panes.len()).sum::<usize>() + ws.floating_panes.len();
-        let active_ws = active_pane.is_some_and(|pid| {
-            ws.columns
-                .iter()
-                .flat_map(|c| &c.panes)
-                .chain(&ws.floating_panes)
-                .any(|p| p.pane_id == pid)
-        });
-        let badge = if active_ws {
-            Badge::accent(pane_count.to_string())
-        } else {
-            Badge::neutral(pane_count.to_string())
-        };
-        // The header toggle records the workspace in the toggle sink; the app flips
-        // its collapsed state (canonical, in `chrome_state.workspaces`) and the tree
-        // rebuilds (F4.3). Collapse is read back from that same shared state.
-        let ws_idx = ws.ws_idx;
-        let emit = emit_intent.clone();
-        let mut dock = DockFrame::new(ws.name.clone())
-            .frameless()
-            .gap(4.0) // tighten the workspace header → body spacing
-            .expanded(!ws_state.is_ws_collapsed(ws_idx))
-            .on_toggle(move |_| {
-                emit(
-                    crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
-                );
-            })
-            .header(
-                Flex::row()
-                    .align(Align::Center)
-                    .child(badge)
-                    .child(Flex::row().width(Length::Px(6.0))),
-            );
-        // Light accent wash over the whole active workspace area (+ the accent
-        // count badge) makes the active workspace clearly prominent. Signal-driven
-        // (like the pane/column highlights) so it flips in place via
-        // `sync_chrome_signals` instead of forcing a tree rebuild; the alpha is the
-        // theme's `active_wash_alpha` token, not a baked-in literal.
-        dock = dock.active(active_ws);
-        dock = dock.nav_selected(false);
-        let ws_pane_ids = ws
-            .columns
-            .iter()
-            .flat_map(|c| &c.panes)
-            .chain(&ws.floating_panes)
-            .map(|p| p.pane_id)
-            .collect::<Vec<_>>();
-        signals.ws_active.push((ws_pane_ids, dock.active_state()));
-        signals.ws_nav.push((ws_idx, dock.nav_state()));
-        // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
-        // column anywhere on it that isn't a deeper column/pane target moves the column
-        // into this workspace. Innermost-first hit-testing lets columns/panes override.
-        dock = dock.drop_target(drag.register(ChromeDragItem::Workspace { ws: ws_idx }));
-        // Hint target: the universal picker (`prefix+/`) can focus this workspace by
-        // its letter. The keycap is stamped over the dock's bounds by `paint_hint_targets`.
-        dock = dock.hint_target(hints.register(
-            crate::app::interaction::InteractionIntent::FocusWorkspace { ws_idx },
-        ));
-        // Columns stacked with a clear gap between them (the gap + bar mark each
-        // column); panes inside a column are tight. Floating panes have no column.
-        let mut cols = Flex::column().gap(8.0);
-        for c in &ws.columns {
-            cols = cols.child(column_view(
-                c,
-                ws_idx,
-                programs,
-                theme,
-                emit_intent,
-                active_pane,
-                ws_state,
-                signals,
-                drag,
-                hints,
-            ));
-        }
-        for float in &ws.floating_panes {
-            cols = cols.child(pane_card(
-                float,
-                programs,
-                theme,
-                emit_intent,
-                active_pane,
-                ws_state,
-                signals,
-                drag,
-                hints,
-            ));
-        }
-        dock = dock.child(cols);
-        // Wrap the whole workspace dock in the universal `KeyHint` so a
-        // "move column/pane → workspace" pick can stamp this workspace's letter over
-        // it. The keycap is tinted `warning` (not accent) so a workspace target reads
-        // distinctly from a pane target. The hint signal is driven each frame in
-        // `sync_chrome_signals` from the active pick candidates.
-        let ws_hint = signal::<Option<String>>(None);
-        signals.ws_hint.push((ws_idx, ws_hint));
-        col = col.child(
-            KeyHint::new(dock)
-                .hint(ws_hint)
-                .color(theme.colors.warning)
-                // Top-right (like the pane cards' right-aligned keycap), nudged down
-                // onto the workspace title row so it lines up with the name.
-                .placement(HintPlacement::TopRight)
-                .offset_y((theme.font_size * 0.45) as f64),
-        );
-    }
-    col
 }
 
 /// Build a sidebar **SHELL** — a full-height, bracket-framed, frosted panel filling a
@@ -1849,8 +1418,14 @@ fn build_workspaces_container(
 /// sidebars are the same shell differing only by width/position and the `content`
 /// mounted inside. Per the chrome plan (`pluggable-chrome-plugin-plan.md` §2.1 / §2.8,
 /// `docs/sidebar-provider-modes.md`) the sidebar is a *shell* that hosts a Provider's
-/// content; the left passes its `WorkspacesContainer`, the right passes `None` (empty
-/// placeholder) until it gains a Provider.
+/// content — and that is now literally true: `content` is whatever
+/// [`ChromeHost::contributions`] seats in the region (see [`build_region_content`]), so
+/// the shell knows nothing about workspaces. A region with no provider mounted passes
+/// `None` and renders as an empty frame.
+///
+/// The body is a [`Box<dyn Component>`](heca_grid_ui::Component) — a provider's render
+/// seam returns a built subtree, not a concrete widget type — which is why it is mounted
+/// with [`Pane::child_boxed`] rather than `Parent::child`.
 #[allow(clippy::too_many_arguments)]
 fn build_sidebar_shell(
     region_w: f32,
@@ -1860,7 +1435,7 @@ fn build_sidebar_shell(
     border_style: heca_config::appearance::BorderStyle,
     border_width: f32,
     border_radius: f32,
-    content: Option<Flex>,
+    content: Option<WidgetModel>,
 ) -> Flex {
     let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1875,7 +1450,7 @@ fn build_sidebar_shell(
         .gap(8.0)
         .background(shell_bg);
     if let Some(content) = content {
-        body = body.child(content);
+        body = body.child_boxed(content);
     }
     Flex::column()
         .width(Length::Px(region_w))
@@ -2573,7 +2148,7 @@ fn chrome_scene(
 
 /// Convert a `0.0..=1.0` theme alpha token into an 8-bit channel value for
 /// [`Color::with_alpha`]. Clamped so out-of-range config values can't wrap.
-fn alpha_u8(a: f32) -> u8 {
+pub(crate) fn alpha_u8(a: f32) -> u8 {
     (a.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
@@ -2779,7 +2354,7 @@ pub(crate) struct DragItemRegistry {
 
 impl DragItemRegistry {
     /// Register a draggable/droppable item and return its freshly-assigned id.
-    fn register(&mut self, item: ChromeDragItem) -> DragItemId {
+    pub(crate) fn register(&mut self, item: ChromeDragItem) -> DragItemId {
         let id = DragItemId::new(self.items.len());
         self.items.push(item);
         id
@@ -2979,26 +2554,6 @@ fn sync_pane_runtime_state(
     changed
 }
 
-/// Project a borrowed sidebar-tree `SidebarItem` into the `Copy`
-/// [`SidebarSelection`] mirrored in the chrome store (`None` stays `None`).
-fn sidebar_selection_from_item(
-    item: Option<&crate::sidebar::SidebarItem>,
-) -> Option<SidebarSelection> {
-    use crate::sidebar::SidebarItem;
-    item.map(|it| match it {
-        SidebarItem::Workspace { ws_idx } => SidebarSelection::Workspace { ws_idx: *ws_idx },
-        SidebarItem::Column { ws_idx, col_idx } => SidebarSelection::Column {
-            ws_idx: *ws_idx,
-            col_idx: *col_idx,
-        },
-        SidebarItem::Pane { pane_id } => SidebarSelection::Pane { pane_id: *pane_id },
-        SidebarItem::FloatingPane { pane_id, ws_idx } => SidebarSelection::FloatingPane {
-            pane_id: *pane_id,
-            ws_idx: *ws_idx,
-        },
-    })
-}
-
 /// Mirror canonical app/runtime state into the shared chrome store before the
 /// retained tree reads it. `InputMode` remains the source of truth for keyboard
 /// pick flows; the store is the reactive UI mirror.
@@ -3015,22 +2570,25 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_show_cwd(state.pane_show_cwd);
-    // Project the sidebar-nav cursor selection into the store — while actually
-    // navigating (`SidebarNav`) *or* while a context menu opened from the sidebar is up
-    // (`sidebar_nav_active`), so the nav-cursor highlight shows during navigation, stays
-    // on the target row while its menu is open, and clears on exit. Selection-driven:
-    // this does NOT move the real focus (`active_pane`); the expanded sidebar renders
-    // both, distinctly. The setter is a change-guarded chokepoint, so calling it every
-    // frame is cheap.
-    let nav_selection = if state.sidebar_nav_active() {
-        sidebar_selection_from_item(state.sidebar_tree.current_item())
+    // Sidebar-nav selection: the **store owns it**. The nav handlers
+    // publish into it (`publish_sidebar_selection`), and here it is projected back onto
+    // the tree's positional `cursor` — which `sync_from_session` rebuilds from scratch, so
+    // it cannot be the truth. That direction is also what lets an RPC or a plugin *drive*
+    // the selection: whatever they write into the store moves the cursor on the next
+    // frame.
+    //
+    // The selection lives while actually navigating (`SidebarNav`) *or* while a context
+    // menu opened from the sidebar is up (`sidebar_nav_active`), so the highlight shows
+    // during navigation, stays on the target row while its menu is open, and clears on
+    // exit. Selection-driven: it does NOT move the real focus (`active_pane`); the
+    // expanded sidebar renders both, distinctly. The setter is a change-guarded
+    // chokepoint, so calling it every frame is cheap.
+    if state.sidebar_nav_active() {
+        let selection = state.chrome_state.workspaces.nav_selection();
+        state.sidebar_tree.apply_nav_selection(selection);
     } else {
-        None
-    };
-    state
-        .chrome_state
-        .workspaces
-        .set_nav_selection(nav_selection);
+        state.chrome_state.workspaces.set_nav_selection(None);
+    }
     let next_candidates = state
         .input_mode
         .candidates()
@@ -3340,17 +2898,25 @@ pub(crate) fn build_chrome_root(
     let border_radius = state.appearance.effective_sidebar_border_radius(&state.theme);
     let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
 
+    // The region body is whatever the `ChromeHost` has seated in that region — the app
+    // no longer knows that the left sidebar happens to hold the workspace tree. Moving
+    // the `workspaces` container to the right region (`ChromeHost::move_container`) moves
+    // its UI with it, with no change here.
+    let ctx = crate::providers::ChromeCtx::for_build(
+        crate::host::App::new(&state.chrome_state),
+        &state.sidebar_tree,
+        &state.programs,
+        &theme,
+        &emit_intent,
+    );
+
     let left_w = chrome.left_sidebar_width;
     let left_sidebar = (left_w > 0.0).then(|| {
-        let content = build_workspaces_container(
-            &state.sidebar_tree,
-            &state.programs,
-            &theme,
-            &emit_intent,
-            &state.chrome_state.workspaces,
-            &mut signals,
-            &mut drag_items,
-            hint_targets,
+        let content = build_region_content(
+            &state.chrome_host,
+            RegionId::LeftSidebar,
+            &ctx,
+            &mut BuildCx::new(&mut signals, &mut drag_items, hint_targets),
         );
         build_sidebar_shell(
             left_w,
@@ -3360,11 +2926,17 @@ pub(crate) fn build_chrome_root(
             border_style,
             border_width,
             border_radius,
-            Some(content),
+            content,
         )
     });
     let right_w = chrome.right_sidebar_width;
     let right_sidebar = (right_w > 0.0).then(|| {
+        let content = build_region_content(
+            &state.chrome_host,
+            RegionId::RightSidebar,
+            &ctx,
+            &mut BuildCx::new(&mut signals, &mut drag_items, hint_targets),
+        );
         build_sidebar_shell(
             right_w,
             sidebar_h,
@@ -3373,7 +2945,7 @@ pub(crate) fn build_chrome_root(
             border_style,
             border_width,
             border_radius,
-            None,
+            content,
         )
     });
 
@@ -3847,11 +3419,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn sidebar_shell_hosts_container() {
+    /// A one-workspace / one-column / one-pane tree — the smallest projection that still
+    /// has every level.
+    fn one_pane_tree(pane_id: u64) -> crate::sidebar::SidebarTree {
         use crate::app_state::SidebarItemState;
         use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
-        use heca_grid_ui::Component;
 
         let mut tree = SidebarTree::new();
         tree.workspaces.push(SidebarWsEntry {
@@ -3863,7 +3435,7 @@ mod tests {
                 col_idx: 0,
                 collapsed: false,
                 panes: vec![SidebarPaneEntry {
-                    pane_id: heca_core::layout::PaneId(1),
+                    pane_id: heca_core::layout::PaneId(pane_id),
                     name: "pane1".into(),
                     custom_name: None,
                     state: SidebarItemState::Active,
@@ -3871,25 +3443,64 @@ mod tests {
             }],
             floating_panes: Vec::new(),
         });
+        tree
+    }
 
+    /// Build a region's body the way the app does since the provider cutover: through the
+    /// `ChromeHost`, by asking the mounted provider for its contribution and calling its
+    /// `build` seam. These tests deliberately do **not** reach into the container's own
+    /// builder — that would test a path the app no longer takes.
+    fn region_body(
+        tree: &crate::sidebar::SidebarTree,
+        theme: &GuiTheme,
+        chrome: &SharedChromeState,
+        signals: &mut super::ChromeSignals,
+        drag: &mut super::DragItemRegistry,
+        hints: &mut super::HintTargetRegistry,
+    ) -> Option<super::WidgetModel> {
+        let mut host = super::ChromeHost::new(chrome.events());
+        host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
+        let emit: super::ChromeIntentEmitter = Rc::new(|_| {});
+        let programs = heca_config::programs::ProgramsConfig::default();
+        let ctx = crate::providers::ChromeCtx::for_build(
+            crate::host::App::new(chrome),
+            tree,
+            &programs,
+            theme,
+            &emit,
+        );
+        super::build_region_content(
+            &host,
+            super::RegionId::LeftSidebar,
+            &ctx,
+            &mut super::BuildCx::new(signals, drag, hints),
+        )
+    }
+
+    #[test]
+    fn sidebar_shell_hosts_the_provider_mounted_container() {
+        use heca_grid_ui::Component;
+
+        let tree = one_pane_tree(1);
         let theme = GuiTheme::default();
-        let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         chrome
             .workspaces
             .set_active_pane(Some(heca_core::layout::PaneId(1)));
-        // The shell wraps a bracketed Pane that holds just the WorkspacesContainer (the
-        // collapse toggle moved to the top bar, sidebar-fu-14); the container hosts a
-        // dock per workspace (so the tree's text is visible).
-        let content = super::build_workspaces_container(
+        // The shell wraps a bracketed Pane that holds just the container the region's
+        // provider built (the collapse toggle moved to the top bar, sidebar-fu-14); the
+        // container hosts a dock per workspace (so the tree's text is visible).
+        let content = region_body(
             &tree,
-            &heca_config::programs::ProgramsConfig::default(),
             &theme,
-            &emit_intent,
-            &chrome.workspaces,
+            &chrome,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
             &mut super::HintTargetRegistry::default(),
+        );
+        assert!(
+            content.is_some(),
+            "the workspaces provider is mounted in the left region, so it must contribute a body",
         );
         let shell = super::build_sidebar_shell(
             280.0,
@@ -3899,7 +3510,7 @@ mod tests {
             heca_config::appearance::BorderStyle::Bracketed,
             1.0,
             12.0,
-            Some(content),
+            content,
         );
         assert_eq!(
             shell.base().children.len(),
@@ -3916,13 +3527,13 @@ mod tests {
         assert_eq!(
             pane.base().children.len(),
             1,
-            "the shell Pane holds just the WorkspacesContainer body (the collapse toggle \
+            "the shell Pane holds just the mounted container's body (the collapse toggle \
              moved to the top bar, sidebar-fu-14)",
         );
         let container = &pane.base().children[0];
         assert!(
             !container.base().children.is_empty(),
-            "WorkspacesContainer must host a dock per workspace",
+            "the WorkspacesContainer must host a dock per workspace",
         );
     }
 
@@ -3932,42 +3543,20 @@ mod tests {
         // a visible frame in the (global) border color at the configured
         // `sidebar_border_width`. Previously the bordered sidebar drew nothing /
         // ignored the color because its width was theme-locked.
-        use crate::app_state::SidebarItemState;
-        use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
         use heca_grid_ui::DrawCommand;
 
-        let mut tree = SidebarTree::new();
-        tree.workspaces.push(SidebarWsEntry {
-            ws_idx: 0,
-            name: "ws1".into(),
-            collapsed: false,
-            state: SidebarItemState::Active,
-            columns: vec![SidebarColEntry {
-                col_idx: 0,
-                collapsed: false,
-                panes: vec![SidebarPaneEntry {
-                    pane_id: heca_core::layout::PaneId(1),
-                    name: "pane1".into(),
-                    custom_name: None,
-                    state: SidebarItemState::Active,
-                }],
-            }],
-            floating_panes: Vec::new(),
-        });
+        let tree = one_pane_tree(1);
 
         // A distinct border color so we can prove it reached the painted frame.
         let mut theme = GuiTheme::default();
         theme.colors.border = Color::new(0x40, 0xe0, 0xff, 0xff);
         let border_w = 4.0_f32;
 
-        let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
-        let content = super::build_workspaces_container(
+        let content = region_body(
             &tree,
-            &heca_config::programs::ProgramsConfig::default(),
             &theme,
-            &emit_intent,
-            &chrome.workspaces,
+            &chrome,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
             &mut super::HintTargetRegistry::default(),
@@ -3980,7 +3569,7 @@ mod tests {
             heca_config::appearance::BorderStyle::Bordered,
             border_w,
             12.0,
-            Some(content),
+            content,
         );
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);
@@ -3998,40 +3587,16 @@ mod tests {
 
     #[test]
     fn drag_registry_captures_pane_column_and_workspace() {
-        use crate::app_state::SidebarItemState;
-        use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
-
-        let mut tree = SidebarTree::new();
-        tree.workspaces.push(SidebarWsEntry {
-            ws_idx: 0,
-            name: "ws1".into(),
-            collapsed: false,
-            state: SidebarItemState::Active,
-            columns: vec![SidebarColEntry {
-                col_idx: 0,
-                collapsed: false,
-                panes: vec![SidebarPaneEntry {
-                    pane_id: heca_core::layout::PaneId(7),
-                    name: "pane1".into(),
-                    custom_name: None,
-                    state: SidebarItemState::Active,
-                }],
-            }],
-            floating_panes: Vec::new(),
-        });
-
+        let tree = one_pane_tree(7);
         let theme = GuiTheme::default();
-        let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         let mut drag = super::DragItemRegistry::default();
-        // Drag items are registered by the WorkspacesContainer content (mounted into the
-        // shell), so build that directly with the drag registry.
-        let _ = super::build_workspaces_container(
+        // Drag items are registered while the region's mounted container builds its body,
+        // so go through the host path and inspect what landed in the registry.
+        let _ = region_body(
             &tree,
-            &heca_config::programs::ProgramsConfig::default(),
             &theme,
-            &emit_intent,
-            &chrome.workspaces,
+            &chrome,
             &mut super::ChromeSignals::default(),
             &mut drag,
             &mut super::HintTargetRegistry::default(),

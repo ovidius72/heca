@@ -18,7 +18,7 @@
 
 use heca_core::layout::Rectangle;
 
-use super::RegionId;
+use super::{ChromeSignals, DragItemRegistry, HintTargetRegistry, RegionId};
 use crate::providers::ChromeCtx;
 
 /// Stable string identity of a mounted container (equals its provider's `id()`).
@@ -26,8 +26,52 @@ pub type ContainerId = String;
 
 /// A built container body — a host-understood `heca-grid-ui` widget subtree. The
 /// host owns render/focus/clip/overlays (§2.6); the provider only *builds* this
-/// model on (re)mount. Not exercised in plugin-02 (no render path yet).
+/// model on (re)mount.
 pub type WidgetModel = Box<dyn heca_grid_ui::Component>;
+
+/// The render seam itself: a container's body builder. Reads the frame's inputs from
+/// [`ChromeCtx`](crate::providers::ChromeCtx) and registers its host ids in
+/// [`BuildCx`]. See [`ContainerContribution::build`].
+pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel>;
+
+/// The **mutable half** of the render seam: the host's per-build registries, handed
+/// to [`ContainerContribution::build`] alongside the read-only
+/// [`ChromeCtx`](crate::providers::ChromeCtx).
+///
+/// A container body is not just widgets — building it *allocates host ids*: a drag
+/// item id per draggable/droppable row, a hint target id per pickable row, and a
+/// signal per value that changes without a structural rebuild. Those registries are
+/// owned by the host (the hint registry is shared across every retained tree, per
+/// `HintTargetRegistry`), so the build has to borrow them mutably.
+///
+/// They are passed as an explicit `&mut` parameter rather than hidden behind interior
+/// mutability in `ChromeCtx`: it keeps the plugin-facing context a pure read/observe
+/// facade, turns a double-borrow into a compile error instead of a runtime panic, and
+/// matches how [`realize`](crate::chrome::realize) already threads the same registries.
+pub struct BuildCx<'a> {
+    /// Value signals the host pushes each frame without rebuilding the tree
+    /// (selection, status, per-pane info).
+    pub(crate) signals: &'a mut ChromeSignals,
+    /// Drag sources / drop targets registered by this build.
+    pub(crate) drag: &'a mut DragItemRegistry,
+    /// KeyHint pick targets registered by this build (shared across all trees).
+    pub(crate) hints: &'a mut HintTargetRegistry,
+}
+
+impl<'a> BuildCx<'a> {
+    /// Borrow the host's per-build registries for one container build.
+    pub(crate) fn new(
+        signals: &'a mut ChromeSignals,
+        drag: &'a mut DragItemRegistry,
+        hints: &'a mut HintTargetRegistry,
+    ) -> Self {
+        Self {
+            signals,
+            drag,
+            hints,
+        }
+    }
+}
 
 /// A `Copy` set of [`RegionId`]s (bitmask over the four regions) — a container's
 /// `supported_regions`.
@@ -111,9 +155,14 @@ pub struct ContainerContribution {
     pub movable: bool,
     /// Collapsible within its region shell?
     pub collapsible: bool,
-    /// Builds the container body. Called by the region host on (re)mount /
-    /// invalidation — **not** in plugin-02 (no render path yet).
-    pub build: Box<dyn Fn(&ChromeCtx) -> WidgetModel>,
+    /// Builds the container body — **the render seam**. Called by the region host on
+    /// (re)mount / invalidation, which for the retained chrome tree means once per
+    /// structural change (`chrome_signature`), not once per frame.
+    ///
+    /// It reads its inputs from [`ChromeCtx`](crate::providers::ChromeCtx) (state
+    /// selectors, the workspace projection, theme, intent emitter) and registers its
+    /// drag/hint/signal ids in [`BuildCx`].
+    pub build: BuildBody,
 }
 
 /// Placeholder: a clustered action-button group for a bar region. Fleshed out

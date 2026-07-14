@@ -342,7 +342,10 @@ keys = "Shift+d"
 action = "sidebar_expand_toggle"
 keys = "Tab"
 [[keys.mode.bindings]]
-action = "sidebar_right_nav"
+# Focus the selected pane/workspace but STAY in sidebar mode, so the tree can be
+# walked with j/k while each row is previewed in the main view. `l`/`Right` focus
+# and *leave*; this is the one that keeps you here.
+action = "sidebar_peek"
 keys = "Space"
 [[keys.mode.bindings]]
 action = "sidebar_left"
