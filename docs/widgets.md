@@ -25,6 +25,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
   - Overlays: [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+- [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -2501,6 +2502,149 @@ ViewNode::new(WidgetKind::Column)
   (`Column::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
 - **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
   `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
+
+### The other half of an `Intent` — the action it names
+
+Every `.on_press(Intent::new("rename"))` above is half a contract. The other half is the **action**
+that id resolves to. An `Intent` is `{ action: String, args: PropMap }` — a name and some data, nothing
+more — which is exactly why the same button works from native code, from a serialized plugin tree, and
+from RPC. Two kinds of id resolve, and both go through **one** dispatch door
+(`dispatch_view_intent`, `heca/src/app/interaction.rs`):
+
+| Id | Resolves to | Examples |
+|----|-------------|----------|
+| A **built-in** name | a `WmAction` variant, run by its native handler | `close`, `split_vertical`, `zoom_column`, `chrome.container.move_to_region` |
+| A **name-keyed** id | an action registered at **runtime** by a provider or plugin | `plugin.docker.restart` |
+
+Built-in names are snake_case (`close`, `focus_left`); the chrome container-placement actions are the
+one dotted-namespace group, because dotted is the scheme plugin ids use. **Args ride both paths**: a
+parameterized built-in is constructed from them through the very same `build_action` a `config.toml`
+binding uses — so these three produce an identical `WmAction`.
+
+```rust
+// From a widget:
+ViewNode::new(WidgetKind::Button)
+    .text("Send to right sidebar")
+    .on_press(
+        Intent::new("chrome.container.move_to_region")
+            .arg("container_id", PropValue::Text("workspaces".into()))
+            .arg("region", PropValue::Text("right-sidebar".into())),
+    );
+```
+```toml
+# From config (a mode binding — flat bindings take no args):
+[[keys.mode.bindings]]
+action = "chrome.container.move_to_region"
+keys = "l"
+args = { container_id = "workspaces", region = "right-sidebar" }
+```
+```
+# From RPC:
+move-container-to-region workspaces right-sidebar
+```
+
+**An unknown id is never a crash.** A menu item or a binding may legitimately name an action whose
+provider isn't mounted (config is even read *before* providers register). It logs a debug warning and
+does nothing.
+
+### Registering a custom (name-keyed) action
+
+`WmAction` is a **closed enum** — a provider or plugin cannot add a variant to it. An action of your
+own is therefore keyed by a **stable string id** and registered at runtime, after which every surface
+treats it like a built-in: it has a label and an icon, it shows up in menus and introspection, it can
+be bound in `config.toml`, and it is judged by the same interaction policy.
+
+Metadata and handler live in two places for a borrow reason, not a design one: an action handler is
+`fn(&mut AppState, …)` and gets no registry, so **metadata** must be reachable from `AppState` (the
+`ActionCatalog`) while the **handler** table must be borrowable alongside `&mut AppState` (the
+`ActionRegistry`). One call registers both.
+
+```rust
+use crate::actions::{register_dynamic, unregister_dynamic, ActionCategory, ActionMeta};
+use crate::app::interaction::ActionPolicy;
+use crate::chrome::PropValue;
+use heca_grid_ui::Glyph;
+use std::rc::Rc;
+
+// At mount — metadata joins the ONE catalog, the handler joins the registry.
+let handle = register_dynamic(
+    registry,   // &mut ActionRegistry
+    catalog,    // &mut ActionCatalog (lives on AppState)
+    ActionMeta {
+        name: "plugin.docker.restart".into(),  // the id an Intent / a binding / RPC names
+        label: "Restart Container".into(),     // menus, tooltips, the command palette
+        description: "Restart the selected Docker container.".into(),
+        category: ActionCategory::System,
+        default_binding: String::new(),        // no default key; the user may bind it by name
+        icon: Some(Glyph::Play),
+        policy: ActionPolicy::Global,          // REQUIRED — see below
+    },
+    // The handler receives the Intent, so args arrive as DATA (never a closure across a plugin
+    // boundary). `&mut AppState` is the sanctioned write path: a provider may not mutate state
+    // from its build/observe path, but running an action is exactly how it is meant to.
+    Some(Rc::new(|state, intent| {
+        let Some(PropValue::Text(container)) = intent.args.get("container") else {
+            return;
+        };
+        restart_container(state, container);
+        state.needs_redraw = true;
+    })),
+);
+
+// At unmount — retires BOTH halves (handler and metadata), so the id stops resolving.
+unregister_dynamic(registry, catalog, &handle.0);
+```
+
+Now any widget can fire it, and the call site looks no different from a built-in:
+
+```rust
+ViewNode::new(WidgetKind::Button)
+    .text("Restart")
+    .prop("variant", PropValue::Variant(ViewVariant::Destructive))
+    .on_press(
+        Intent::new("plugin.docker.restart")
+            .arg("container", PropValue::Text("web".into())),
+    );
+```
+
+…and a user can bind it, even though it does not exist when their config is read:
+
+```toml
+[keys]
+"prefix+d" = "plugin.docker.restart"
+```
+
+#### `policy` is required, and there is no permissive default
+
+It answers one question: **should this run while a floating pane owns the focus domain?** For a
+built-in, an exhaustive `match` makes forgetting to answer a *compile error*; a name-keyed action has
+no variant, so the field forces the question instead. A default would mean "the author forgot"
+silently resolves to the most permissive setting in the system.
+
+| Policy | Use it when |
+|--------|-------------|
+| `Global` | App-level with **no layout impact** — must keep working while a floating pane is up (`reload_config` is the model). |
+| `FocusedPaneLocal` | Acts on the focused pane in either domain (close, rename, copy). |
+| `TiledOnly` | Only meaningful in the tiled column layout (focus, split, resize, move, swap). |
+| `WorkspaceLevel` | Switches or mutates workspaces. |
+| `SourceDependent` | Allowed only for some interaction sources / targets. |
+| `AlwaysAllowed` | ⚠️ **A misnomer** — the router *blocks* it when floating. App-level but layout-affecting (command palette, spawn). **`Global` is the only truly-always-allowed policy.** |
+
+`ActionPolicy` is crate-visible, so an **in-tree** provider names the Rust enum directly (as above). A
+WASM plugin, living outside the crate, will declare the same choice as serialized data — the host
+honours what the plugin declares. Today's providers are first-party and compiled in, so they are
+already fully trusted; the real trust boundary appears at the WASM edge and is designed there.
+
+#### No handler ⇒ a `Declarative` action
+
+Pass `None` instead of a closure and the action is **declared** — it has an id, metadata and a policy,
+and it appears in menus and introspection — but the host cannot run it. It is forwarded to its owner
+across the plugin boundary. This is how a WASM plugin's actions will be modelled; dispatching one
+today is a no-op with a debug warning.
+
+For the **in-tree** path (adding a real `WmAction` variant with a native handler, a default binding and
+RPC parity), and for making an action ask for **confirmation** before it runs, see
+**[README → Actions System](../README.md#actions-system)**.
 
 ---
 

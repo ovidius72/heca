@@ -4,7 +4,7 @@
   "number": 10,
   "slug": "action-interaction-declarative-action-interaction-confirm-response-buttons",
   "title": "action-interaction: Declarative action interaction (confirm + response buttons)",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -23,7 +23,8 @@
   "taskIds": [
     "e30a28fb-b37e-4a97-973b-15f066bc8688",
     "4518fde8-8678-4e2c-b215-eaeb1ea27135",
-    "026efb65-2784-4391-b602-51cf41d73573"
+    "026efb65-2784-4391-b602-51cf41d73573",
+    "d82433c4-2603-4a71-9b18-a2cc0b33b970"
   ],
   "tasks": [
     {
@@ -85,8 +86,28 @@
       "completedAt": "2026-07-08T11:47:40.593Z",
       "createdAt": "2026-07-08T11:47:40.593Z",
       "updatedAt": "2026-07-08T11:47:40.593Z"
+    },
+    {
+      "id": "d82433c4-2603-4a71-9b18-a2cc0b33b970",
+      "phaseId": "3e04a8f5-3c51-4f2d-8fab-d51b392e80bc",
+      "number": 4,
+      "shortName": "action-docs-authoring-custom-a",
+      "title": "action-docs — Authoring custom actions (README + widgets.md)",
+      "status": "in-progress",
+      "description": "Richiesta dell'utente (2026-07-14, dopo la verifica manuale della showcase): documentare COME SI CREA UN'AZIONE, con esempi di codice, in `docs/widgets.md` e `README.md`. Scorporato da `action-task-C` (che resta owner di `register(ActionSpec)` + introspezione RPC + doc del Callback): qui si documenta SOLO ciò che ESISTE già dopo plugin-04.\n\n## STATO ATTUALE (verificato 2026-07-14)\n- `README.md` §\"Creating Custom Actions\" (~riga 937) è **STALE e sbagliata**: 6 step che (a) mandano il default binding in `heca-config/src/theme.rs` — FALSO, i default stanno in `keybindings.default.toml` (regola cardinale AGENTS.md); (b) NON menzionano la classificazione OBBLIGATORIA in `action_policy()` (dimenticarla = errore di compilazione); (c) non menzionano l'`ActionDescriptor` nel catalogo (label/icon/category), la parità RPC (regola P2), né il `[confirm]`; (d) precedono plugin-04, quindi ignorano completamente le azioni name-keyed.\n- `docs/widgets.md` §\"Declarative UI model (ViewNode)\" (riga 2337) e §\"Declaring a tree\" (2478) mostrano `.on_press(Intent::new(\"rename\"))` ma **non spiegano MAI da dove venga quell'id**: manca del tutto l'altra metà del contratto (quale azione risolve, e come crearne una propria).\n- Ciò che ESISTE dopo plugin-04 (commit b61b485 / 484a22e / f44981a): `ActionMeta` owned con `policy` obbligatoria; `ActionCatalog` runtime (una sola casa dei metadata, su `AppState`); `ActionRegistry` (handler: `handlers` per discriminante + `dyn_handlers` per nome); `Dispatch { Native | NativeDyn | Declarative }`; `register_dynamic(registry, catalog, meta, handler) -> ActionHandle` / `unregister_dynamic`; una sola porta `dispatch_view_intent` con gli args cablati via `build_action`; `ActionRef { Builtin | Dynamic }` nel keymap (binding di config verso id dinamici, risolti al PRESS); i 5 id dotted `chrome.container.*`.\n- `Intent` (heca/src/chrome/view.rs:241) ha `new(action)` + `.arg(key, PropValue)`.\n\n## LAVORO\n1. **`docs/widgets.md`** — nuova sezione dopo \"Declaring a tree\": *l'altra metà di un Intent, l'azione che nomina*. Tabella id built-in (snake_case) vs name-keyed (dotted); gli args viaggiano su ENTRAMBI i path (stesso `build_action`) ⇒ mostrare lo STESSO risultato da widget / config / RPC; un id sconosciuto non è un crash. Poi **come registrare un'azione propria**: esempio completo `register_dynamic` con `ActionMeta` (policy!), handler `Rc<dyn Fn(&mut AppState, &Intent)>` che legge gli args, `unregister_dynamic` all'unmount; il Button `ViewNode` che la spara. Tabella delle 6 `ActionPolicy` con la TRAPPOLA `AlwaysAllowed` (bloccata quando floating; `Global` è l'unica davvero sempre permessa). `handler: None` ⇒ `Declarative` (dichiarata, la esegue il proprietario oltre il confine WASM). Link al README per la checklist in-tree.\n2. **`README.md`** — riscrivere §\"Creating Custom Actions\" in DUE percorsi: (A) azione BUILT-IN in-tree (variante `WmAction` → `action_from_name`/`build_action` → **`action_policy()` obbligatorio** → handler → `build_registry` → `ActionDescriptor` in `ALL` → default in `keybindings.default.toml` → comando RPC per la parità P2 → `[confirm]` opzionale); (B) azione NAME-KEYED a runtime (`register_dynamic`, policy dichiarata, bindabile da config per nome, dispatch da menu/ViewNode/RPC, `Declarative` per WASM). Correggere il riferimento a `heca-config/src/theme.rs`.\n3. Coerenza fra i due file (cross-link), nessuna API inventata: `ProviderHandles` (heca/src/providers/mod.rs:79) tiene per ora SOLO le `subscriptions` — l'`ActionHandle` NON è ancora agganciato lì (G5 resta da fare, plugin-05): documentare `unregister_dynamic` esplicito, non un `handles.keep(handle)` che non esiste.\n\n## GATE\nSolo documentazione: nessun codice, nessun gate di build. Verificare che ogni snippet corrisponda alle firme reali (`ActionMeta`, `register_dynamic`, `Intent::arg`, `ActionCategory`, `Glyph`).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-14T21:41:38.427Z",
+      "completedAt": "",
+      "createdAt": "2026-07-14T21:41:16.001Z",
+      "updatedAt": "2026-07-14T21:41:38.427Z"
     }
   ],
   "createdAt": "2026-07-08T11:47:16.065Z",
-  "updatedAt": "2026-07-14T19:10:27.601Z"
+  "updatedAt": "2026-07-14T21:41:38.427Z"
 }

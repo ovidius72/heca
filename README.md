@@ -920,25 +920,53 @@ Every WM command in heca is an **action**. Actions are the core abstraction — 
 - `Resize { target, axis, amount }` — Resize column or pane
 - `SpawnCommand { command, kind, float, close_policy }` — Run an external command in a new pane
 
+**Name-keyed actions** — contributed at **runtime** by a provider or plugin, identified by a stable
+string id (`plugin.docker.restart`). They have no `WmAction` variant — the enum is closed — but they
+are otherwise ordinary actions: same catalog, same metadata, same policy, same dispatch.
+
 ### Registry Dispatch
 
-All actions go through a central registry:
+Every action goes through one dispatch door, whatever surface triggered it:
 
 ```
-Keyboard input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry → Handler
+Keyboard  → KeyCombo → KeymapRegistry → ActionRef ─┐
+Mouse/UI  → Intent {action, args} ─────────────────┤
+RPC       → command ───────────────────────────────┤
+                                                   ▼
+                                          [interaction policy]
+                                                   │
+                        built-in ──► WmAction ──► native handler
+                        name-keyed ─────────────► registered handler
 ```
+
+A binding resolves to an `ActionRef`: a **built-in** is resolved when config loads (same cost and same
+arg-parsing errors as before), while a **name-keyed** id is resolved at **press** time — because heca
+reads your config before any provider has registered its actions.
 
 This design means:
-- Every action is traceable and hookable
-- Future scripting/IPC/RPC can trigger any action by name
-- Actions can be composed and chained
+- Every action is traceable and hookable, and is judged by the same interaction policy
+- Any action can be triggered **by name** — from a keybinding, a menu, a plugin, or RPC
+- Arguments take one path: a menu item, an RPC call and a config binding construct the identical action
 - Important capabilities should not be trapped behind one surface: when meaningful, the same action should be reachable from mouse/UI, keybindings, and RPC
 
 ### Creating Custom Actions
 
-To add a new action to heca:
+There are **two** ways to add an action, and which one you want depends on where the code lives.
 
-1. **Add to `WmAction` enum** in `heca/src/input.rs`:
+- **A built-in action** — you're editing heca itself. It gets a `WmAction` variant and a native
+  handler. This is the path for a new WM capability.
+- **A name-keyed action** — a provider or (later) a WASM plugin contributes an action at **runtime**.
+  `WmAction` is a closed enum, so it *cannot* get a variant; it is identified by a stable **string
+  id** instead. This is the path for anything that isn't core heca.
+
+Both end up equal citizens: same catalog, same metadata, same interaction policy, same single dispatch
+door — so a menu item, a keybinding and an RPC call all reach either one identically.
+
+#### A. A built-in action (in-tree)
+
+Say you want `my_custom_action`.
+
+**1. Add the variant** — `heca/src/input.rs`:
 ```rust
 pub enum WmAction {
     // ... existing variants
@@ -946,33 +974,144 @@ pub enum WmAction {
 }
 ```
 
-2. **Add name mapping** in `action_from_name()`:
+**2. Give it a name.** A unit action goes in `action_from_name()`; one that takes arguments goes in
+`build_action()` instead (that's what parses a binding's `args`, an `Intent`'s args, and RPC args —
+one constructor for all three):
 ```rust
+// unit:
 "my_custom_action" => Some(WmAction::MyCustomAction),
+
+// or parameterized, in build_action():
+"my_custom_action" => Some(WmAction::MyCustomAction { amount: get_usize(args, "amount")? }),
 ```
 
-3. **Add priority** in `action_priority()`:
+**3. Classify it — `action_policy()` in `heca/src/app/interaction.rs`.** This match is **exhaustive**:
+if you skip this step, **it will not compile.** That is deliberate — it forces you to answer "should
+this run while a floating pane owns the focus domain?"
 ```rust
-WmAction::MyCustomAction => 1,  // Lower = higher priority
+WmAction::MyCustomAction => ActionPolicy::TiledOnly,
 ```
+> ⚠️ `AlwaysAllowed` is a **misnomer** — the router *blocks* it when a floating pane is active.
+> `Global` is the only policy that is truly always allowed. See
+> [Interaction Policy](#interaction-policy) below.
 
-4. **Create handler** in `heca/src/handlers.rs`:
+**4. Write the handler** — `heca/src/handlers.rs`:
 ```rust
 pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
-    // Your logic here
+    // Your logic here.
     state.needs_redraw = true;
 }
 ```
 
-5. **Register** in `build_registry()` in `heca/src/app/registry.rs`:
+**5. Register the handler** in `build_registry()` — `heca/src/app/registry.rs`:
 ```rust
 registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 ```
 
-6. **Add default binding** in `heca-config/src/theme.rs`:
+**6. Describe it** in `ActionRegistry::ALL` — `heca/src/actions.rs`. This is what gives the action its
+label, icon and category everywhere it is shown (context menu, tooltip, command palette):
 ```rust
-bindings.insert("my_custom_action".to_string(), Single("prefix+y".to_string()));
+ActionDescriptor {
+    name: "my_custom_action",
+    label: "My Custom Action",
+    description: "What it does, in one line.",
+    category: ActionCategory::Pane,
+    default_binding: "y",
+    icon: Some(Glyph::Gear),   // any Glyph; None if it has no icon yet
+},
 ```
+
+**7. Bind it by default** in **`keybindings.default.toml`** — *not* in Rust. The embedded default
+files are the single source of truth for defaults; a default that lives only in code is invisible to
+users:
+```toml
+[keys]
+my_custom_action = "prefix+y"
+```
+
+**8. Give it RPC parity** — `heca/src/rpc.rs`. A capability must not be trapped behind one surface: it
+should be reachable from **mouse/UI, keyboard, and RPC** whenever each is meaningful.
+```rust
+"my-custom-action" => Ok(WmAction::MyCustomAction),
+```
+
+**9. Optional — make it confirm first.** Destructive actions declare a `ConfirmSpec`, and *every*
+surface that triggers them confirms identically, because the guard lives on the **action**, not the
+call site. Users toggle it in the [`[confirm]`](#confirmation-prompts) table.
+
+#### B. A name-keyed action (provider / plugin)
+
+Registered at runtime, identified by a **stable string id**. Because `WmAction` is closed, this is the
+only way for code outside core heca to contribute an action.
+
+Metadata and handler are registered together but stored apart, for a borrow reason rather than a
+design one: a handler is `fn(&mut AppState, …)` and never receives the registry, so **metadata** must
+be reachable from `AppState` (the `ActionCatalog`) while the **handler** table must be borrowable
+alongside `&mut AppState` (the `ActionRegistry`).
+
+```rust
+use crate::actions::{register_dynamic, unregister_dynamic, ActionCategory, ActionMeta};
+use crate::app::interaction::ActionPolicy;
+use crate::chrome::PropValue;
+use heca_grid_ui::Glyph;
+use std::rc::Rc;
+
+// At mount:
+let handle = register_dynamic(
+    registry,   // &mut ActionRegistry
+    catalog,    // &mut ActionCatalog
+    ActionMeta {
+        name: "plugin.docker.restart".into(),   // the id bindings / menus / RPC name
+        label: "Restart Container".into(),
+        description: "Restart the selected Docker container.".into(),
+        category: ActionCategory::System,
+        default_binding: String::new(),
+        icon: Some(Glyph::Play),
+        policy: ActionPolicy::Global,           // REQUIRED — no permissive default exists
+    },
+    // Receives the Intent, so its args arrive as plain data — no closure ever crosses a plugin
+    // boundary. `&mut AppState` is the sanctioned write path for an action.
+    Some(Rc::new(|state, intent| {
+        let Some(PropValue::Text(container)) = intent.args.get("container") else {
+            return;
+        };
+        restart_container(state, container);
+        state.needs_redraw = true;
+    })),
+);
+
+// At unmount — retires the handler AND the metadata:
+unregister_dynamic(registry, catalog, &handle.0);
+```
+
+`policy` is a **required field with no default**. A built-in is forced to classify itself by an
+exhaustive match; a name-keyed action has no variant, so nothing else would force the question — and a
+default would mean "the author forgot" silently resolves to the most permissive setting in the system.
+
+Once registered, the id behaves like any other action. Bind it:
+
+```toml
+[keys]
+"prefix+d" = "plugin.docker.restart"
+
+# With arguments — use a mode binding (flat bindings take no args):
+[[keys.mode.bindings]]
+action = "plugin.docker.restart"
+keys = "w"
+args = { container = "web" }
+```
+
+**A binding to an action that doesn't exist yet is not an error.** heca reads your config *before* any
+provider or plugin has registered, so a dynamic id simply cannot resolve at load; it resolves when the
+key is actually pressed. The flip side is that a **typo** in an action name is not an error either —
+it just never fires. If a binding seems dead, check the name.
+
+**Passing `None` instead of a handler** registers a *declarative* action: it has an id, metadata and a
+policy, and it appears in menus and introspection, but the host cannot run it — it is forwarded to its
+owner across the plugin boundary (this is how WASM plugin actions will work).
+
+For how a widget or a plugin's UI fires one of these, see
+**[docs/widgets.md → The other half of an `Intent`](docs/widgets.md#the-other-half-of-an-intent--the-action-it-names)**.
 
 ### Interaction Policy
 

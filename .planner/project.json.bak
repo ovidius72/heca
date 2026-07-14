@@ -32,10 +32,6 @@
   "tools": [],
   "contentLanguage": "Italian",
   "chatLanguage": "Italian",
-  "plannerAutoEnable": false,
-  "plannerNeverAsk": false,
-  "plannerAutoStartWeb": false,
-  "plannerNeverStartWeb": false,
   "workflowRules": {
     "beforePhaseStart": [],
     "beforeTaskStart": [],
