@@ -25,7 +25,8 @@ use super::view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
-use crate::app::interaction::{dispatch_action, InteractionIntent, InteractionSource};
+use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
+use crate::chrome::view::Intent;
 use crate::app_state::AppState;
 use crate::input::WmAction;
 
@@ -211,21 +212,41 @@ pub(crate) fn collect_form(state: &AppState, overlay: OverlayId) -> PropMap {
 /// that *does* work replaces it).
 #[derive(Clone)]
 pub struct DropdownItem {
-    /// Stable id returned in [`ModalResult::Action`]; also the **action name** the icon resolves
-    /// from — the canonical identity (e.g. `"close"`).
+    /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
+    /// resolve from — the entry's visual identity (e.g. `"close"`).
+    ///
+    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Delete pane"
+    /// entry has id `close` (so it shows the close icon) but dispatches `close_pane_by_id` with the
+    /// row's pane. Identity and behaviour are separate fields.
     pub id: String,
     pub label: String,
-    /// The action dispatched **through the central gate** when chosen (may be a button-only
-    /// parameterized variant, e.g. `ClosePaneById`, whose name is still `id`).
-    pub action: WmAction,
+    /// What the entry dispatches when chosen: an [`Intent`] — an action **name + args** — routed
+    /// through the one dispatch door, so the interaction policy and the confirm gate apply exactly
+    /// as they would for a keypress.
+    ///
+    /// An `Intent` rather than a `WmAction` because `WmAction` is a **closed enum**: a plugin cannot
+    /// add a variant, so a menu entry carrying one could only ever run actions heca already has —
+    /// which is precisely what blocked plugin-contributed menus (context-menu-5). A name resolves to
+    /// a built-in *or* to a plugin's own registered action, indifferently.
+    pub intent: Intent,
     pub danger: bool,
     pub enabled: bool,
 }
 
 impl DropdownItem {
-    /// An enabled, non-destructive entry.
-    pub fn new(id: impl Into<String>, label: impl Into<String>, action: WmAction) -> Self {
-        Self { id: id.into(), label: label.into(), action, danger: false, enabled: true }
+    /// An enabled, non-destructive entry whose id is also the action it runs (the common case: the
+    /// entry's catalog identity and its behaviour coincide, e.g. `zoom_column`).
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        let id = id.into();
+        let intent = Intent::new(id.clone());
+        Self { id, label: label.into(), intent, danger: false, enabled: true }
+    }
+
+    /// An entry whose behaviour differs from its visual identity — the id keeps the icon/label
+    /// (`close`), while the intent carries the action actually run, with its args
+    /// (`close_pane_by_id` + `pane_id`).
+    pub fn with_intent(id: impl Into<String>, label: impl Into<String>, intent: Intent) -> Self {
+        Self { id: id.into(), label: label.into(), intent, danger: false, enabled: true }
     }
     /// Tint destructive (red) — the confirm gate still applies on dispatch.
     pub fn danger(mut self, on: bool) -> Self {
@@ -312,7 +333,16 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
             if let ModalResult::Action { id: chosen, .. } = result
                 && let Some(item) = items.iter().find(|i| i.id == chosen)
             {
-                dispatch_action(state, registry, source, &item.action);
+                // The entry's Intent goes through the ONE dispatch door, so a built-in and a
+                // plugin's own action are dispatched identically — and the interaction policy and
+                // the confirm gate still apply (a "Delete workspace" entry prompts exactly as the
+                // keybinding does).
+                dispatch_intent(
+                    state,
+                    registry,
+                    source,
+                    InteractionIntent::View(item.intent.clone()),
+                );
             }
         }),
     );
@@ -415,13 +445,30 @@ mod tests {
 
     #[test]
     fn dropdown_item_builders() {
-        let close = DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true);
+        // The plain constructor: the entry's id IS the action it runs.
+        let close = DropdownItem::new("close", "Close pane").danger(true);
         assert_eq!(close.id, "close");
         assert_eq!(close.label, "Close pane");
+        assert_eq!(close.intent.action, "close", "id doubles as the action");
         assert!(close.danger && close.enabled, "danger set, enabled by default");
 
-        let disabled = DropdownItem::new("dup", "Duplicate", WmAction::ClosePane).enabled(false);
+        let disabled = DropdownItem::new("dup", "Duplicate").enabled(false);
         assert!(!disabled.enabled && !disabled.danger);
+    }
+
+    /// An entry may run something other than its id — the id keeps the icon/label identity while
+    /// the intent carries the real action + args. This is what lets a plugin entry dispatch a
+    /// plugin action, which has no `WmAction` variant at all.
+    #[test]
+    fn dropdown_item_can_run_an_action_other_than_its_id() {
+        let item = DropdownItem::with_intent(
+            "close",
+            "Delete pane",
+            Intent::new("close_pane_by_id").arg("pane_id", PropValue::Int(7)),
+        );
+        assert_eq!(item.id, "close", "identity (icon) stays `close`");
+        assert_eq!(item.intent.action, "close_pane_by_id", "behaviour differs");
+        assert_eq!(item.intent.args.get("pane_id"), Some(&PropValue::Int(7)));
     }
 
     #[test]

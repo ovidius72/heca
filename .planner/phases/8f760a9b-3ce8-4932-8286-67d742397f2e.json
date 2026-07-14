@@ -4,7 +4,7 @@
   "number": 12,
   "slug": "context-menu-contextual-menu-overlayhost-plugin-declarable",
   "title": "context-menu: Contextual menu → OverlayHost + plugin-declarable",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -187,7 +187,7 @@
       "number": 5,
       "shortName": "context-menu-5",
       "title": "context-menu-5: plugin Contribution::ContextMenu (full design now)",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Plugin context-menu contribution. Builds on the ContextMenuRegistry + open_context_menu_for from context-menu-6: the plugin does NOT pass mode/origin (host-internal); it declares context_path + weight + build(target), and the host includes its items when the context is active (keyboard resolve_active_context) or clicked (mouse hit-test). Merge by weight (Dewey Vec<i64>, C2).\n\n⛔ BLOCCATO DA plugin-04 (Dynamic action registry) — decisione utente 2026-07-14.\nMOTIVO (scoperto iniziando l'implementazione): `DropdownItem.action` è un `WmAction` (heca/src/chrome/overlay.rs:220) e `WmAction` è un enum CHIUSO. Un plugin NON può creare una variante. Quindi:\n- un menu-item di plugin potrebbe oggi dispatchare solo azioni GIÀ esistenti in heca → il task non raggiungerebbe il suo scopo (menu \"plugin-declarable\" con azioni DEL plugIN);\n- il contratto che scriveremmo ora (`Contribution::ContextMenu` → `Vec<DropdownItem>` con `WmAction`) andrebbe RISCRITTO da plugin-04 in forma `Intent` (action id stringa + args). Sarebbe lavoro \"for now\" (vietato da AGENTS.md §3).\n\nFORMA TARGET (dopo plugin-04):\n    Contribution::ContextMenu {\n        context_path: \"sidebar.workspace\".into(),\n        weight: vec![1, 1, 1],                 // si incastra tra i built-in\n        build: |ctx, target| vec![\n            MenuEntrySpec::new(\"docker.restart\", \"Restart\")\n                .intent(Intent::new(\"docker.restart\").arg(\"id\", target.id())),  // azione DEL PLUGIN\n        ],\n    }\n\nFONDAMENTA GIÀ PRONTE (context-menu-6/7, heca/src/chrome/context_menu.rs):\n- `ContextMenuRegistry` con 4 provider built-in (pane, sidebar.pane, sidebar.column, sidebar.workspace), `register(path, weight, build)`, `items_for` (merge per weight, sort stabile), `ordered_providers` (unit-testabile senza AppState).\n- `ContextMenuProvider { weight: Vec<i64>, build: fn(&AppState, &ContextTarget) -> Vec<DropdownItem> }` — NB: il `build` built-in è un fn pointer che riceve `&AppState`; il build di un PLUGIN non può ricevere AppState (§2.3: i provider leggono via selector del facade). Servirà quindi un enum di build (Native fn-ptr host-side / Plugin closure su `&ChromeCtx`), oppure unificare su ChromeCtx.\n- `open_context_menu_for` (path, target, anchor, source, origin) — apertura unificata mouse+tastiera.\n- `Contribution` (chrome/contribution.rs:130) NON ha ancora la variante `ContextMenu`: va aggiunta qui.\n\nLAVORO QUANDO SI SBLOCCA:\n1. `Contribution::ContextMenu { context_path, weight, build }` in chrome/contribution.rs.\n2. Build del plugin su `&ChromeCtx` (mai `&AppState`) → enum `MenuBuild::{Native(fn), Plugin(Rc<dyn Fn>)}` in ContextMenuProvider, oppure unificazione.\n3. Item in forma `Intent` (da plugin-04), non `WmAction`.\n4. Installazione: all'attivazione del provider, l'host legge la sua `Contribution::ContextMenu` e la registra nel `ContextMenuRegistry` (path + weight + build).\n5. Test: merge per weight tra built-in e plugin (il caso `[1,1,1]` tra `[1,1]` e `[1,2]` — c'è già `ordered_providers_sorts_by_weight` da estendere), e un item di plugin che dispatcha un'azione del plugin.\n\nLocked design (C1/C2/C3, 2026-07-09):\n- C1 context granularity: dotted context path. La ContextMenuRegistry keya i provider per ContextPath; la Contribution::ContextMenu del plugin porta il suo context_path.\n- C2 weight: Vec<i64> Dewey/fractional-index + separatori + tie-break. Built-in con weight stabile; un plugin inserisce [1,1,1] tra [1,1] e [1,2].\n- C3 native + WASM: design completo ora (closure nativa; marshalling WASM rimandato a plugin-08).",
       "notes": "",
       "statusLog": [
@@ -208,7 +208,7 @@
       "startedAt": "2026-07-14T16:14:56.306Z",
       "completedAt": "",
       "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-14T16:18:46.677Z"
+      "updatedAt": "2026-07-14T22:16:39.438Z"
     },
     {
       "id": "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
@@ -272,5 +272,5 @@
     }
   ],
   "createdAt": "2026-07-09T09:24:46.628Z",
-  "updatedAt": "2026-07-14T16:18:46.677Z"
+  "updatedAt": "2026-07-14T22:16:39.438Z"
 }

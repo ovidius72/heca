@@ -34,14 +34,15 @@ pub(crate) use overlay::{
     top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
 };
 // Context-menu resolution: ContextPath + ContextTarget + ContextMenuRegistry + the unified
-// `open_context_menu_for`. Built-in providers seeded at startup; plugins attach via
-// `Contribution::ContextMenu` (context-menu-5).
+// `open_context_menu_for`. Built-in providers seeded at startup; a provider attaches its own
+// entries via `Provider::context_menus` (context-menu-5).
 #[allow(unused_imports)]
 pub(crate) use context_menu::{
     open_context_menu_for, resolve_active_context, ContextMenuProvider, ContextMenuRegistry,
     ContextPath, ContextTarget, PendingContext,
 };
-pub use contribution::{Contribution, RegionSet};
+pub use context_menu::MenuBuild;
+pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 pub use host::ChromeHost;
 pub use state::{SharedChromeState, WorkspacesContainerState};

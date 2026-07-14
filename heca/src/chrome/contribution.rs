@@ -140,6 +140,35 @@ pub enum Contribution {
     OverlayRequest(OverlaySpec),
 }
 
+/// Entries a provider adds to a **context menu** (context-menu-5).
+///
+/// The provider declares *where* (`context_path`) and *what* (`build`); it never decides *when* —
+/// the host opens the menu on right-click or `prefix+>`, resolves the context, and merges every
+/// provider registered for that path in `weight` order, so a plugin's entries slot **between** the
+/// built-ins rather than after them.
+///
+/// **Why this is not a [`Contribution`] variant.** `Provider::build_contribution` returns exactly
+/// **one** `Contribution` — the provider's mounted body, which the render path projects each frame.
+/// A context menu is not a mounted body, and a provider wants *both* (a Docker container in the
+/// sidebar **and** a "Restart" entry on its rows). Making it a `Contribution` variant would force a
+/// provider to choose one or the other. So it is its own hook,
+/// [`Provider::context_menus`](crate::providers::Provider::context_menus), which returns as many as
+/// the provider likes — across as many paths as it likes.
+pub struct ContextMenuContribution {
+    /// Where these entries appear — a dotted [`ContextPath`](crate::chrome::ContextPath):
+    /// `"pane"`, `"sidebar.workspace"`, or a path the provider itself defines.
+    pub context_path: String,
+    /// Merge order among the providers of that path (Dewey / fractional index): `[1,1,1]` lands
+    /// between built-ins weighted `[1,1]` and `[1,2]`. Sorted ascending; ties keep registration
+    /// order.
+    pub weight: Vec<i64>,
+    /// Builds the entries for one opening of the menu. Reads the app through the
+    /// [`ChromeCtx`](crate::providers::ChromeCtx) facade and *what was clicked* from the
+    /// [`ContextTarget`](crate::chrome::ContextTarget) — never `AppState`. Each entry carries an
+    /// `Intent`, so a provider dispatches **its own** registered actions, not just heca's.
+    pub build: crate::chrome::MenuBuild,
+}
+
 /// A mounted container contribution: all host-level placement metadata plus the
 /// build hook that produces its body.
 pub struct ContainerContribution {

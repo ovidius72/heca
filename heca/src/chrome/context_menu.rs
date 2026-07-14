@@ -15,8 +15,9 @@
 
 use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec};
-use crate::input::WmAction;
+use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec, Intent, PropValue};
+use crate::host::App;
+use crate::providers::ChromeCtx;
 use heca_core::layout::{PaneId, Point};
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -39,33 +40,40 @@ impl ContextPath {
     pub const SIDEBAR_WORKSPACE: &'static str = "sidebar.workspace";
 }
 
-/// Opaque target data a provider's `build` receives. The host fills it from the hit-test
-/// (mouse) or the active context (keyboard); providers match the arm they handle and return
-/// `vec![]` for any other.
+/// Opaque target data a provider's `build` receives — **the facts about the thing the menu was
+/// opened on**. The host fills it from the hit-test (mouse) or the active context (keyboard);
+/// providers match the arm they handle and return `vec![]` for any other.
+///
+/// The target carries what only the host can resolve (a sidebar pane's column, a workspace's custom
+/// name), precisely so a **plugin** builder does not need the session to write a useful menu: it
+/// reads the target for *what was clicked* and `ChromeCtx` for *the app's state*. A builder never
+/// sees `AppState`.
 #[derive(Clone, Debug)]
 pub enum ContextTarget {
     /// A content pane. `hyperlink` is `Some(url)` only for the mouse path (the clicked cell);
     /// a keyboard-opened menu has `None` (no target cell) so no "Open link" entry is added.
-    /// `pane_id` is carried for the target contract — the built-in pane provider acts on the
-    /// focused pane (via `ClosePane`), but a plugin provider for `pane` may want the explicit id.
-    #[allow(dead_code)] // seam contract: carried for plugin pane providers, not read by built-in
     Pane {
         pane_id: PaneId,
         hyperlink: Option<String>,
     },
-    /// A pane row in the sidebar tree (the pane id; the provider resolves ws/col from the
-    /// session so the menu actions target the right column).
+    /// A pane row in the sidebar tree. `ws_idx`/`col_idx` are the pane's location, resolved by the
+    /// host — so the menu's "New pane" lands in *this* pane's column without the builder touching
+    /// the session.
     SidebarPane {
         pane_id: PaneId,
+        ws_idx: usize,
+        col_idx: usize,
     },
     /// A column row in the sidebar tree.
     SidebarColumn {
         ws_idx: usize,
         col_idx: usize,
     },
-    /// A workspace row in the sidebar tree.
+    /// A workspace row in the sidebar tree. `custom_name` is the user-set name, if any — the menu
+    /// offers "Use default name" only when there is one to clear.
     SidebarWorkspace {
         ws_idx: usize,
+        custom_name: Option<String>,
     },
 }
 
@@ -75,9 +83,8 @@ impl ContextTarget {
     /// menu / sidebar cursor is on.
     pub(crate) fn pane_id(&self) -> Option<PaneId> {
         match self {
-            ContextTarget::Pane { pane_id, .. } | ContextTarget::SidebarPane { pane_id } => {
-                Some(*pane_id)
-            }
+            ContextTarget::Pane { pane_id, .. }
+            | ContextTarget::SidebarPane { pane_id, .. } => Some(*pane_id),
             _ => None,
         }
     }
@@ -87,9 +94,10 @@ impl ContextTarget {
     /// retarget workspace actions (rename) to the item the sidebar cursor is on.
     pub(crate) fn ws_idx(&self, state: &AppState) -> Option<usize> {
         match self {
-            ContextTarget::SidebarWorkspace { ws_idx }
-            | ContextTarget::SidebarColumn { ws_idx, .. } => Some(*ws_idx),
-            ContextTarget::Pane { pane_id, .. } | ContextTarget::SidebarPane { pane_id } => {
+            ContextTarget::SidebarWorkspace { ws_idx, .. }
+            | ContextTarget::SidebarColumn { ws_idx, .. }
+            | ContextTarget::SidebarPane { ws_idx, .. } => Some(*ws_idx),
+            ContextTarget::Pane { pane_id, .. } => {
                 crate::find_pane_location(&state.session, *pane_id).map(|(ws, _, _)| ws)
             }
         }
@@ -100,16 +108,28 @@ impl ContextTarget {
 //  Registry
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// How a provider builds its entries: read the app through the **`ChromeCtx` facade**, read *what
+/// was clicked* from the [`ContextTarget`], return entries.
+///
+/// **One signature for built-ins and plugins alike.** A provider — first-party or plugin — never
+/// receives `&AppState`; it reads state through `ctx.app().state()` selectors and event
+/// subscriptions, the same facade a plugin has. That is the point of unifying: a gap in the facade
+/// is hit by the built-in menus first, in the open, instead of staying invisible until the first
+/// real plugin trips over it.
+///
+/// An `Rc<dyn Fn>` rather than a bare `fn` pointer because a plugin's builder **captures** (its own
+/// state, its container id); a built-in is a plain fn coerced into it, capturing nothing.
+pub type MenuBuild = std::rc::Rc<dyn Fn(&ChromeCtx, &ContextTarget) -> Vec<DropdownItem>>;
+
 /// A registered context-menu provider: a weight (Dewey/fractional index, C2) for merge ordering
-/// and a build function. Built-in providers use static function pointers (no captures); plugin
-/// providers (context-menu-5) will wrap a marshalled closure.
+/// and a build function.
 #[derive(Clone)]
 pub struct ContextMenuProvider {
     /// Merge order within a context path. Built-ins use a stable weight; a plugin inserts
     /// between two built-ins with a fractional `Vec<i64>` (e.g. `[1,1,1]` between `[1,1]` and
     /// `[1,2]`). Sorted ascending; ties keep insertion order (stable sort).
     pub weight: Vec<i64>,
-    pub build: fn(&AppState, &ContextTarget) -> Vec<DropdownItem>,
+    pub build: MenuBuild,
 }
 
 /// Runtime registry of context-menu providers keyed by [`ContextPath`]. Seeded with the
@@ -126,38 +146,60 @@ impl ContextMenuRegistry {
     pub fn with_builtins() -> Self {
         let mut r = Self::default();
         // Built-ins: weight 0 (pane) / 1 (sidebar.*). Plugins insert fractional weights between.
-        r.register(ContextPath::PANE, vec![0], build_pane_menu);
-        r.register(ContextPath::SIDEBAR_PANE, vec![1], build_sidebar_pane_menu);
-        r.register(ContextPath::SIDEBAR_COLUMN, vec![1], build_sidebar_column_menu);
-        r.register(ContextPath::SIDEBAR_WORKSPACE, vec![1], build_sidebar_workspace_menu);
+        r.register(ContextPath::PANE, vec![0], std::rc::Rc::new(build_pane_menu));
+        r.register(
+            ContextPath::SIDEBAR_PANE,
+            vec![1],
+            std::rc::Rc::new(build_sidebar_pane_menu),
+        );
+        r.register(
+            ContextPath::SIDEBAR_COLUMN,
+            vec![1],
+            std::rc::Rc::new(build_sidebar_column_menu),
+        );
+        r.register(
+            ContextPath::SIDEBAR_WORKSPACE,
+            vec![1],
+            std::rc::Rc::new(build_sidebar_workspace_menu),
+        );
         r
     }
 
-    /// Register a provider for a context path (used by the built-in seed and, later, plugins).
-    pub fn register(
-        &mut self,
-        path: &str,
-        weight: Vec<i64>,
-        build: fn(&AppState, &ContextTarget) -> Vec<DropdownItem>,
-    ) {
+    /// Register a provider for a context path — the built-in seed and a plugin's
+    /// `Contribution::ContextMenu` go through this same call.
+    pub fn register(&mut self, path: &str, weight: Vec<i64>, build: MenuBuild) {
         self.providers
             .entry(path.to_string())
             .or_default()
             .push(ContextMenuProvider { weight, build });
     }
 
-    /// Collect + merge items for a context path: every matching provider, sorted by weight
-    /// (stable), concatenated. `vec![]` when no provider matches (an empty menu — the caller
-    /// may choose not to open it).
+    /// Collect + merge items for a context path: every matching provider — **built-in and
+    /// plugin-contributed alike** — sorted by weight (stable), concatenated. `vec![]` when nothing
+    /// matches (an empty menu — the caller may choose not to open it).
+    ///
+    /// `plugin` are the [`ContextMenuContribution`](crate::chrome::ContextMenuContribution)s the
+    /// mounted providers declared for this path. They are merged **by weight**, not appended, so a
+    /// plugin's entries land *between* the built-ins (`[1,1,1]` between `[1,1]` and `[1,2]`) rather
+    /// than always at the end.
+    ///
+    /// Every provider reads the app through `ctx` — never `AppState` — so a plugin's builder and a
+    /// built-in's are called through exactly the same contract.
     pub fn items_for(
         &self,
-        state: &AppState,
+        ctx: &ChromeCtx,
         path: &str,
         target: &ContextTarget,
+        plugin: Vec<ContextMenuProvider>,
     ) -> Vec<DropdownItem> {
+        let mut providers = self.ordered_providers(path);
+        providers.extend(plugin);
+        // Re-sort: the plugin entries must interleave with the built-ins by weight.
+        providers.sort_by(|a, b| a.weight.cmp(&b.weight));
+
         let mut items = Vec::new();
-        for p in self.ordered_providers(path) {
-            items.extend((p.build)(state, target));
+        for p in providers {
+            items.extend((p.build)(ctx, target));
         }
         items
     }
@@ -198,7 +240,17 @@ pub(crate) fn open_context_menu_for(
     if state.overlay_origin_mode.is_none() {
         state.overlay_origin_mode = origin.or_else(|| restorable_mode(state.input_mode.clone()));
     }
-    let items = state.context_menu_registry.items_for(state, path, &target);
+    // Providers — built-in and plugin alike — build against the host facade, never `AppState`. An
+    // observe-only context is right here: building a menu reads state, it never renders.
+    let ctx = ChromeCtx::new(App::new(&state.chrome_state));
+
+    // Plugin entries are collected from the MOUNTED providers at open time, rather than
+    // pre-registered at activation: a menu is then always built from what is mounted *now*, so an
+    // unmounted provider's entries cannot linger and there is no registration to keep in sync.
+    let plugin = plugin_providers_for(&state.chrome_host, &ctx, path);
+    let items = state
+        .context_menu_registry
+        .items_for(&ctx, path, &target, plugin);
     // A keyboard/RPC-opened menu is centered on its anchor (window center); a mouse-opened menu
     // is placed down-right of the click point.
     let centered = matches!(source, InteractionSource::Keyboard);
@@ -211,6 +263,26 @@ pub(crate) fn open_context_menu_for(
             centered,
         },
     );
+}
+
+/// Every context-menu contribution the **mounted** providers declare for `path`, as providers ready
+/// to be merged with the built-ins by weight.
+///
+/// A provider declares *where* and *what*; the host decides *when*. This is the "when": one pass
+/// over what is mounted, at the moment the menu opens.
+fn plugin_providers_for(
+    host: &crate::chrome::ChromeHost,
+    ctx: &ChromeCtx,
+    path: &str,
+) -> Vec<ContextMenuProvider> {
+    host.mounted_providers()
+        .flat_map(|p| p.context_menus(ctx))
+        .filter(|c| c.context_path == path)
+        .map(|c| ContextMenuProvider {
+            weight: c.weight,
+            build: c.build,
+        })
+        .collect()
 }
 
 /// Only `SidebarNav` is restorable today: opening a context menu from the sidebar returns to the
@@ -238,6 +310,16 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
         &state.input_mode,
         state.sidebar_tree.current_item(),
         crate::app::interaction::focused_pane_id(state),
+        &|pane_id| {
+            crate::find_pane_location(&state.session, pane_id).map(|(ws, col, _)| (ws, col))
+        },
+        &|ws_idx| {
+            state
+                .session
+                .workspaces
+                .get(ws_idx)
+                .and_then(|ws| ws.name.clone())
+        },
     )
 }
 
@@ -247,17 +329,26 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
 /// the context (pane→`sidebar.pane`, column→`sidebar.column`, workspace→`sidebar.workspace`,
 /// floating-pane→`pane`); in any other mode the focused content pane does. Returns `None`
 /// when there is nothing to target (no sidebar cursor / no focused pane).
+/// `locate` resolves a pane to its `(ws_idx, col_idx)` and `ws_name` a workspace to its custom
+/// name — the two facts a builder cannot get from the facade, so the **host** puts them on the
+/// target. Passed as closures (rather than `&AppState`) so this mapping stays unit-testable.
 fn resolve_context_for(
     input_mode: &InputMode,
     sidebar_item: Option<&crate::sidebar::SidebarItem>,
     focused_pane: Option<PaneId>,
+    locate: &dyn Fn(PaneId) -> Option<(usize, usize)>,
+    ws_name: &dyn Fn(usize) -> Option<String>,
 ) -> Option<(ContextPath, ContextTarget)> {
     match input_mode {
         InputMode::SidebarNav => Some(match sidebar_item? {
-            crate::sidebar::SidebarItem::Pane { pane_id } => (
-                ContextPath(ContextPath::SIDEBAR_PANE.to_string()),
-                ContextTarget::SidebarPane { pane_id: *pane_id },
-            ),
+            crate::sidebar::SidebarItem::Pane { pane_id } => {
+                // A sidebar pane row whose column can't be resolved is not a valid target.
+                let (ws_idx, col_idx) = locate(*pane_id)?;
+                (
+                    ContextPath(ContextPath::SIDEBAR_PANE.to_string()),
+                    ContextTarget::SidebarPane { pane_id: *pane_id, ws_idx, col_idx },
+                )
+            }
             crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => (
                 ContextPath(ContextPath::PANE.to_string()),
                 ContextTarget::Pane { pane_id: *pane_id, hyperlink: None },
@@ -268,7 +359,10 @@ fn resolve_context_for(
             ),
             crate::sidebar::SidebarItem::Workspace { ws_idx } => (
                 ContextPath(ContextPath::SIDEBAR_WORKSPACE.to_string()),
-                ContextTarget::SidebarWorkspace { ws_idx: *ws_idx },
+                ContextTarget::SidebarWorkspace {
+                    ws_idx: *ws_idx,
+                    custom_name: ws_name(*ws_idx),
+                },
             ),
         }),
         _ => Some((
@@ -297,179 +391,205 @@ pub(crate) struct PendingContext {
 //  Built-in providers
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// The common pane actions every content-pane context menu offers. The item id doubles as the
-/// action name its icon resolves from (`ActionCatalog::icon`). Shared by the mouse-open and
-/// keyboard-open paths so the two never drift.
-/// Whether pane `pane_id` has a user-set custom name (so "Use process name" is meaningful).
-/// Reads the session — the source of truth for `custom_name`.
-fn pane_has_custom_name(state: &AppState, pane_id: PaneId) -> bool {
-    state
-        .session
-        .workspaces
-        .iter()
-        .find_map(|ws| ws.find_pane(pane_id))
-        .is_some_and(|pane| pane.custom_name.is_some())
+/// An entry whose id, label and action name coincide (`zoom_column`, `float`, …).
+fn item(id: &str, label: &str) -> DropdownItem {
+    DropdownItem::new(id, label)
 }
 
-/// Whether workspace `ws_idx` has a user-set custom name (so "Use default name" is meaningful).
-fn workspace_has_custom_name(state: &AppState, ws_idx: usize) -> bool {
-    state
-        .session
-        .workspaces
-        .get(ws_idx)
-        .is_some_and(|ws| ws.name.is_some())
-}
-
-/// Pane context-menu items. `pane_has_custom_name` gates the "Use process name" reset entry —
-/// it only appears when there is a custom name to clear. This is a **pane** menu, so it carries
-/// no workspace-reset action.
-fn pane_action_items(pane_has_custom_name: bool) -> Vec<DropdownItem> {
-    let mut items = vec![
-        DropdownItem::new("split_horizontal", "New column", WmAction::SplitHorizontal),
-        // "Add a pane" reads consistently everywhere: same label + FolderSimplePlus icon
-        // (via the `add_pane_to_column` id) as the sidebar "New pane" and the pane-header
-        // "+" button. Still emits SplitVertical (adds a pane to the active column; `v`).
-        DropdownItem::new("add_pane_to_column", "New pane", WmAction::SplitVertical),
-        DropdownItem::new("zoom_column", "Zoom / unzoom", WmAction::ZoomColumn),
-        DropdownItem::new("float", "Float / unfloat", WmAction::Float),
-        DropdownItem::new("rename_pane", "Rename", WmAction::RenamePane),
-    ];
-    if pane_has_custom_name {
-        items.push(DropdownItem::new(
-            "reset_pane_name",
-            "Use process name",
-            WmAction::ResetPaneName,
-        ));
+/// An entry whose visual identity (`id` → icon/label) differs from what it runs. The `action` is
+/// the name [`build_action`](crate::input::build_action) resolves, and `args` are its arguments —
+/// the same pair a `config.toml` binding or an RPC command would supply.
+fn item_running(id: &str, label: &str, action: &str, args: &[(&str, PropValue)]) -> DropdownItem {
+    let mut intent = Intent::new(action);
+    for (k, v) in args {
+        intent = intent.arg(*k, v.clone());
     }
-    items.push(DropdownItem::new(
-        "rename_workspace",
-        "Rename workspace",
-        WmAction::RenameWorkspace,
-    ));
-    items.push(DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true));
+    DropdownItem::with_intent(id, label, intent)
+}
+
+fn usize_arg(v: usize) -> PropValue {
+    PropValue::Int(v as i64)
+}
+
+/// Pane context-menu items. `has_custom_name` gates the "Use process name" reset entry — it only
+/// appears when there is a custom name to clear. This is a **pane** menu, so it carries no
+/// workspace-reset action.
+fn pane_action_items(has_custom_name: bool) -> Vec<DropdownItem> {
+    let mut items = vec![
+        item("split_horizontal", "New column"),
+        // "Add a pane" reads consistently everywhere: same label + FolderSimplePlus icon (via the
+        // `add_pane_to_column` id) as the sidebar "New pane" and the pane-header "+" button. It
+        // still RUNS `split_vertical` (add a pane to the active column) — identity vs behaviour.
+        item_running("add_pane_to_column", "New pane", "split_vertical", &[]),
+        item("zoom_column", "Zoom / unzoom"),
+        item("float", "Float / unfloat"),
+        item_running("rename_pane", "Rename", "rename_pane", &[]),
+    ];
+    if has_custom_name {
+        items.push(item("reset_pane_name", "Use process name"));
+    }
+    items.push(item("rename_workspace", "Rename workspace"));
+    items.push(item_running("close", "Close pane", "close", &[]).danger(true));
     items
 }
 
 /// Provider for [`ContextPath::PANE`] — a content pane. "Open link" first only when the mouse
 /// click carried a hyperlink (keyboard-opened menus have `None` → no link entry).
-fn build_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
+fn build_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
     let ContextTarget::Pane { hyperlink, pane_id } = target else {
         return Vec::new();
     };
-    let mut items = pane_action_items(pane_has_custom_name(state, *pane_id));
+    // Read through the facade — the same selector a plugin would use.
+    let has_custom_name = ctx.state().pane_custom_name(*pane_id).is_some();
+    let mut items = pane_action_items(has_custom_name);
     if let Some(url) = hyperlink {
-        items.insert(0, DropdownItem::new("open_link", "Open link", WmAction::OpenLink { url: url.clone() }));
+        items.insert(
+            0,
+            item_running(
+                "open_link",
+                "Open link",
+                "open_link",
+                &[("url", PropValue::Text(url.clone()))],
+            ),
+        );
     }
     items
 }
 
-/// Provider for [`ContextPath::SIDEBAR_PANE`] — a pane row in the sidebar tree. "New pane" (in
-/// the pane's column) + "Delete pane" (by id, danger).
-fn build_sidebar_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarPane { pane_id } = target else {
+/// Provider for [`ContextPath::SIDEBAR_PANE`] — a pane row in the sidebar tree. Its actions target
+/// **that row's** pane (by id) and column, both carried on the target.
+fn build_sidebar_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
+    let ContextTarget::SidebarPane {
+        pane_id,
+        ws_idx,
+        col_idx,
+    } = target
+    else {
         return Vec::new();
     };
-    let mut items = Vec::new();
-    if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, *pane_id) {
-        items.push(DropdownItem::new(
+    // Read through the facade — the same selector a plugin would use.
+    let has_custom_name = ctx.state().pane_custom_name(*pane_id).is_some();
+    sidebar_pane_items(*pane_id, *ws_idx, *col_idx, has_custom_name)
+}
+
+/// Menu items for a sidebar **pane** row (target-only, so unit-testable without a ctx). Every entry
+/// acts on *that* row: the pane by id, "New pane" in the pane's own column.
+fn sidebar_pane_items(
+    pane_id: PaneId,
+    ws_idx: usize,
+    col_idx: usize,
+    has_custom_name: bool,
+) -> Vec<DropdownItem> {
+    let pane = PropValue::Int(pane_id.0 as i64);
+    let mut items = vec![
+        item_running(
             "add_pane_to_column",
             "New pane",
-            WmAction::AddPaneToColumn { ws_idx, col_idx },
-        ));
-    }
-    items.push(DropdownItem::new(
-        "rename_pane",
-        "Rename pane",
-        WmAction::RenamePaneById { pane_id: *pane_id },
-    ));
-    if pane_has_custom_name(state, *pane_id) {
-        items.push(DropdownItem::new(
+            "add_pane_to_column",
+            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+        ),
+        item_running(
+            "rename_pane",
+            "Rename pane",
+            "rename_pane_by_id",
+            &[("pane_id", pane.clone())],
+        ),
+    ];
+    if has_custom_name {
+        items.push(item_running(
             "reset_pane_name",
             "Use process name",
-            WmAction::ResetPaneNameById { pane_id: *pane_id },
+            "reset_pane_name_by_id",
+            &[("pane_id", pane.clone())],
         ));
     }
     items.push(
-        DropdownItem::new("close", "Delete pane", WmAction::ClosePaneById { pane_id: *pane_id })
-            .danger(true),
+        item_running("close", "Delete pane", "close_pane_by_id", &[("pane_id", pane)]).danger(true),
     );
     items
 }
 
 /// Provider for [`ContextPath::SIDEBAR_COLUMN`] — a column row. "New pane" (in the column) +
 /// "New column" + "Delete column" (danger).
-fn build_sidebar_column_menu(_state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
+fn build_sidebar_column_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
     let ContextTarget::SidebarColumn { ws_idx, col_idx } = target else {
         return Vec::new();
     };
     sidebar_column_items(*ws_idx, *col_idx)
 }
 
-/// Menu items for a sidebar **column** row (state-free, so unit-testable): new pane in the
-/// column, new column, delete column (danger).
+/// Menu items for a sidebar **column** row (target-only, so unit-testable without a ctx).
 fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
     vec![
-        DropdownItem::new(
+        item_running(
             "add_pane_to_column",
             "New pane",
-            WmAction::AddPaneToColumn { ws_idx, col_idx },
+            "add_pane_to_column",
+            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
         ),
-        DropdownItem::new(
+        item_running(
             "split_horizontal",
             "New column",
-            WmAction::AddColumnToWorkspace { ws_idx },
+            "add_column_to_workspace",
+            &[("ws_idx", usize_arg(ws_idx))],
         ),
-        // NB: no "Rename column" entry — a column's name is not displayed anywhere yet
-        // (columns render as a MarkerGroup with no header/label), so renaming would have
-        // no visible effect. The RenameColumn / RenameColumnByIdx action stays wired (RPC +
-        // handler) for when columns surface a name; re-add the entry then. See `col_idx`
-        // still threaded below for the delete action.
-        DropdownItem::new(
+        // NB: no "Rename column" entry — a column's name is not displayed anywhere yet (columns
+        // render as a MarkerGroup with no header/label), so renaming would have no visible effect.
+        // The rename action stays wired (RPC + handler) for when columns surface a name.
+        item_running(
             "delete_column",
             "Delete column",
-            WmAction::DeleteColumn { ws_idx, col_idx },
+            "delete_column",
+            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
         )
         .danger(true),
     ]
 }
 
-/// Provider for [`ContextPath::SIDEBAR_WORKSPACE`] — a workspace row. "New column" + "New
-/// workspace" + "Delete workspace" (danger).
-fn build_sidebar_workspace_menu(state: &AppState, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarWorkspace { ws_idx } = target else {
+/// Provider for [`ContextPath::SIDEBAR_WORKSPACE`] — a workspace row.
+fn build_sidebar_workspace_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
+    let ContextTarget::SidebarWorkspace {
+        ws_idx,
+        custom_name,
+    } = target
+    else {
         return Vec::new();
     };
-    sidebar_workspace_items(*ws_idx, workspace_has_custom_name(state, *ws_idx))
+    sidebar_workspace_items(*ws_idx, custom_name.is_some())
 }
 
 /// Menu items for a sidebar **workspace** row. `has_custom_name` gates the "Use default name"
 /// reset entry — it only appears when there is a custom name to clear.
 fn sidebar_workspace_items(ws_idx: usize, has_custom_name: bool) -> Vec<DropdownItem> {
     let mut items = vec![
-        DropdownItem::new(
+        item_running(
             "split_horizontal",
             "New column",
-            WmAction::AddColumnToWorkspace { ws_idx },
+            "add_column_to_workspace",
+            &[("ws_idx", usize_arg(ws_idx))],
         ),
-        DropdownItem::new("create_workspace", "New workspace", WmAction::CreateWorkspace),
-        DropdownItem::new(
+        item("create_workspace", "New workspace"),
+        item_running(
             "rename_workspace",
             "Rename workspace",
-            WmAction::RenameWorkspaceByIdx { ws_idx },
+            "rename_workspace_by_idx",
+            &[("ws_idx", usize_arg(ws_idx))],
         ),
     ];
     if has_custom_name {
-        items.push(DropdownItem::new(
+        items.push(item_running(
             "reset_workspace_name",
             "Use default name",
-            WmAction::ResetWorkspaceNameByIdx { ws_idx },
+            "reset_workspace_name_by_idx",
+            &[("ws_idx", usize_arg(ws_idx))],
         ));
     }
     items.push(
-        DropdownItem::new(
+        item_running(
             "delete_workspace",
             "Delete workspace",
-            WmAction::DeleteWorkspace { ws_idx },
+            "delete_workspace",
+            &[("ws_idx", usize_arg(ws_idx))],
         )
         .danger(true),
     );
@@ -483,6 +603,40 @@ fn sidebar_workspace_items(ws_idx: usize, has_custom_name: bool) -> Vec<Dropdown
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An observe-only facade over an empty chrome store — what a provider's `build` receives.
+    fn test_ctx() -> ChromeCtx<'static> {
+        // Leaked deliberately: a test-only store that must outlive the borrow in `App`.
+        let store: &'static crate::chrome::SharedChromeState =
+            Box::leak(Box::new(crate::chrome::SharedChromeState::new(
+                300.0, true, 300.0, false,
+            )));
+        ChromeCtx::new(App::new(store))
+    }
+
+    /// `resolve_context_for` with stub lookups: pane 7 lives at ws 1 / col 2; workspace 3 is named.
+    fn resolve(
+        mode: &InputMode,
+        item: Option<&crate::sidebar::SidebarItem>,
+        focused: Option<PaneId>,
+    ) -> Option<(ContextPath, ContextTarget)> {
+        resolve_context_for(
+            mode,
+            item,
+            focused,
+            &|_pane| Some((1, 2)),
+            &|ws| (ws == 3).then(|| "My WS".to_string()),
+        )
+    }
+
+    fn build_sidebar_pane_menu_items(
+        pane_id: PaneId,
+        ws_idx: usize,
+        col_idx: usize,
+        has_custom_name: bool,
+    ) -> Vec<DropdownItem> {
+        sidebar_pane_items(pane_id, ws_idx, col_idx, has_custom_name)
+    }
 
     #[test]
     fn registry_seeds_four_built_in_providers() {
@@ -543,13 +697,141 @@ mod tests {
         // A plugin inserts between two built-ins via fractional weights.
         let mut r = ContextMenuRegistry::with_builtins();
         // Register a second provider for PANE with a higher weight — it sorts after the built-in.
-        r.register(ContextPath::PANE, vec![2], |_state, _target| {
-            vec![DropdownItem::new("plugin_extra", "Plugin", WmAction::SplitHorizontal)]
-        });
+        r.register(
+            ContextPath::PANE,
+            vec![2],
+            std::rc::Rc::new(|_ctx: &ChromeCtx, _target: &ContextTarget| {
+                vec![DropdownItem::new("plugin_extra", "Plugin")]
+            }),
+        );
         let ordered = r.ordered_providers(ContextPath::PANE);
         assert_eq!(ordered.len(), 2);
         assert_eq!(ordered[0].weight, vec![0], "built-in (weight 0) first");
         assert_eq!(ordered[1].weight, vec![2], "plugin (weight 2) second");
+    }
+
+    // ── context-menu-5: a plugin's entries ──
+
+    /// A menu entry's **identity** (`id` → icon/label) and its **behaviour** (`intent` → what runs)
+    /// are separate. The sidebar "Delete pane" entry shows the `close` icon but runs
+    /// `close_pane_by_id` against *that row's* pane — the whole reason a plugin entry can exist at
+    /// all, since the intent is a NAME, not a closed-enum variant.
+    #[test]
+    fn an_entry_identity_and_the_action_it_runs_are_separate() {
+        let items = build_sidebar_pane_menu_items(PaneId(7), 2, 3, false);
+        let delete = items.iter().find(|i| i.id == "close").unwrap();
+        assert_eq!(delete.label, "Delete pane");
+        assert!(delete.danger);
+        // Identity is `close` (the icon), behaviour is the by-id action with the row's pane.
+        assert_eq!(delete.intent.action, "close_pane_by_id");
+        assert_eq!(delete.intent.args.get("pane_id"), Some(&PropValue::Int(7)));
+
+        // "New pane" targets THIS pane's column — the location the host put on the target.
+        let new_pane = items.iter().find(|i| i.id == "add_pane_to_column").unwrap();
+        assert_eq!(new_pane.intent.action, "add_pane_to_column");
+        assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(2)));
+        assert_eq!(new_pane.intent.args.get("col_idx"), Some(&PropValue::Int(3)));
+    }
+
+    /// Every built-in entry's intent must actually RESOLVE — a name + args that `build_action` (or
+    /// `action_from_name`) can turn into a real `WmAction`. Without this, converting the menus from
+    /// `WmAction` to `Intent` could silently produce entries that do nothing when clicked.
+    #[test]
+    fn every_builtin_menu_entry_resolves_to_a_real_action() {
+        let mut all = pane_action_items(true);
+        all.extend(build_sidebar_pane_menu_items(PaneId(1), 0, 0, true));
+        all.extend(sidebar_column_items(0, 0));
+        all.extend(sidebar_workspace_items(0, true));
+        all.push(item_running(
+            "open_link",
+            "Open link",
+            "open_link",
+            &[("url", PropValue::Text("https://x".into()))],
+        ));
+
+        for i in &all {
+            let args: std::collections::HashMap<String, String> = i
+                .intent
+                .args
+                .iter()
+                .map(|(k, v)| {
+                    let s = match v {
+                        PropValue::Int(n) => n.to_string(),
+                        PropValue::Text(t) => t.clone(),
+                        other => format!("{other:?}"),
+                    };
+                    (k.clone(), s)
+                })
+                .collect();
+            let resolved = crate::input::build_action(&i.intent.action, &args).is_some()
+                || crate::input::action_from_name(&i.intent.action).is_some();
+            assert!(
+                resolved,
+                "menu entry {:?} dispatches {:?}, which resolves to no action",
+                i.id, i.intent.action
+            );
+        }
+    }
+
+    /// THE POINT OF THE TASK: a provider's entries merge **between** the built-ins by weight (C2),
+    /// not appended after them — and the entry carries the provider's **own** action id, which no
+    /// `WmAction` variant exists for.
+    #[test]
+    fn a_plugin_entry_merges_between_the_builtins_and_runs_its_own_action() {
+        let mut r = ContextMenuRegistry::default();
+        // Two "built-ins" at [1,1] and [1,2] …
+        r.register(
+            "sidebar.workspace",
+            vec![1, 1],
+            std::rc::Rc::new(|_c: &ChromeCtx, _t: &ContextTarget| {
+                vec![DropdownItem::new("first", "First")]
+            }),
+        );
+        r.register(
+            "sidebar.workspace",
+            vec![1, 2],
+            std::rc::Rc::new(|_c: &ChromeCtx, _t: &ContextTarget| {
+                vec![DropdownItem::new("last", "Last")]
+            }),
+        );
+        // … and the plugin slots in at [1,1,1].
+        let plugin = vec![ContextMenuProvider {
+            weight: vec![1, 1, 1],
+            build: std::rc::Rc::new(|_c: &ChromeCtx, t: &ContextTarget| {
+                let ContextTarget::SidebarWorkspace { ws_idx, .. } = t else {
+                    return Vec::new();
+                };
+                vec![DropdownItem::with_intent(
+                    "docker.restart",
+                    "Restart",
+                    // A name-keyed action of the PLUGIN's — there is no WmAction for this.
+                    Intent::new("plugin.docker.restart")
+                        .arg("ws_idx", PropValue::Int(*ws_idx as i64)),
+                )]
+            }),
+        }];
+
+        let mut ordered = r.ordered_providers("sidebar.workspace");
+        ordered.extend(plugin);
+        ordered.sort_by(|a, b| a.weight.cmp(&b.weight));
+        let order: Vec<Vec<i64>> = ordered.iter().map(|p| p.weight.clone()).collect();
+        assert_eq!(
+            order,
+            vec![vec![1, 1], vec![1, 1, 1], vec![1, 2]],
+            "the plugin sits BETWEEN the built-ins, not after them"
+        );
+
+        // And its entry dispatches the plugin's own action, with the target's data.
+        let target = ContextTarget::SidebarWorkspace { ws_idx: 4, custom_name: None };
+        let entry = (ordered[1].build)(&test_ctx(), &target).remove(0);
+        assert_eq!(entry.id, "docker.restart");
+        assert_eq!(entry.intent.action, "plugin.docker.restart");
+        assert_eq!(entry.intent.args.get("ws_idx"), Some(&PropValue::Int(4)));
+        assert!(
+            crate::input::action_from_name(&entry.intent.action).is_none(),
+            "the plugin's action has no WmAction variant — which is exactly why an \
+             Intent (a name) is what a menu entry carries"
+        );
     }
 
     #[test]
@@ -573,26 +855,26 @@ mod tests {
         // content differs by where it was opened.
         let pane = SidebarItem::Pane { pane_id: PaneId(7) };
         let (path, target) =
-            resolve_context_for(&InputMode::SidebarNav, Some(&pane), None).unwrap();
+            resolve(&InputMode::SidebarNav, Some(&pane), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_PANE);
-        assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7) }));
+        assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7), ws_idx: 1, col_idx: 2 }));
 
         let col = SidebarItem::Column { ws_idx: 1, col_idx: 2 };
         let (path, target) =
-            resolve_context_for(&InputMode::SidebarNav, Some(&col), None).unwrap();
+            resolve(&InputMode::SidebarNav, Some(&col), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_COLUMN);
         assert!(matches!(target, ContextTarget::SidebarColumn { ws_idx: 1, col_idx: 2 }));
 
         let ws = SidebarItem::Workspace { ws_idx: 3 };
         let (path, target) =
-            resolve_context_for(&InputMode::SidebarNav, Some(&ws), None).unwrap();
+            resolve(&InputMode::SidebarNav, Some(&ws), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_WORKSPACE);
-        assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3 }));
+        assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3, .. }));
 
         // A floating pane in the sidebar resolves to the generic pane menu.
         let float = SidebarItem::FloatingPane { pane_id: PaneId(9), ws_idx: 0 };
         let (path, target) =
-            resolve_context_for(&InputMode::SidebarNav, Some(&float), None).unwrap();
+            resolve(&InputMode::SidebarNav, Some(&float), None).unwrap();
         assert_eq!(path.0, ContextPath::PANE);
         assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(9), hyperlink: None }));
     }
@@ -601,7 +883,7 @@ mod tests {
     fn resolve_context_non_sidebar_uses_focused_pane() {
         // Any non-sidebar mode → the focused content pane.
         let (path, target) =
-            resolve_context_for(&InputMode::Normal, None, Some(PaneId(4))).unwrap();
+            resolve(&InputMode::Normal, None, Some(PaneId(4))).unwrap();
         assert_eq!(path.0, ContextPath::PANE);
         assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(4), hyperlink: None }));
     }
@@ -609,8 +891,8 @@ mod tests {
     #[test]
     fn resolve_context_none_when_no_target() {
         // SidebarNav with no cursor item, and Normal with no focused pane, both resolve to None.
-        assert!(resolve_context_for(&InputMode::SidebarNav, None, Some(PaneId(1))).is_none());
-        assert!(resolve_context_for(&InputMode::Normal, None, None).is_none());
+        assert!(resolve(&InputMode::SidebarNav, None, Some(PaneId(1))).is_none());
+        assert!(resolve(&InputMode::Normal, None, None).is_none());
     }
 
     #[test]

@@ -264,6 +264,17 @@ impl ChromeHost {
         self.reorder(id, before.as_deref())
     }
 
+    /// Every mounted provider, across every region, in placement order.
+    ///
+    /// The host's "who is here right now" — used to collect what mounted providers contribute
+    /// outside the render path (their context-menu entries, context-menu-5).
+    pub fn mounted_providers(&self) -> impl Iterator<Item = &dyn Provider> + '_ {
+        self.regions
+            .iter()
+            .flat_map(|r| r.contributions.iter())
+            .map(|m| m.provider())
+    }
+
     /// Set a region's host-level visibility.
     ///
     /// **plugin-02 caveat:** this flag has no visual effect yet. Region *shell*

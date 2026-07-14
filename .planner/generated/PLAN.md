@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-14T21:45:21.502Z
+**Last updated:** 2026-07-14T22:16:39.751Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -80,11 +80,11 @@ Status: ✅ `done`
 
 **Work remaining:** Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.
 
-### 📋 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
+### 🚧 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
 
 Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Phases:**
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
@@ -98,7 +98,7 @@ Status: 📋 `planned`
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (3/4 tasks)
 - 📋 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (4/9 tasks)
-- 📋 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (7/8 tasks)
+- 🚧 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (7/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
@@ -794,11 +794,11 @@ Status: 📋 `planned`
 
 **Tasks:** 4/9
 
-### 📋 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
+### 🚧 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
 
 Context menus as a host-owned, context-resolved overlay. Foundation: ContextPath (dotted) + ContextMenuRegistry (built-in providers + plugin Contribution::ContextMenu) + resolve_active_context (keyboard implicit) + unified open_context_menu_for + overlay_origin_mode (mode-restore after close). Keyboard prefix+> works everywhere via prefix arm in SidebarNav; after close the user returns to the origin mode (e.g. stays in sidebar). Mouse right-click refactored to the same unified path (parity preserved, Open-link via target hyperlink). Plugin menus attach by context_path and appear when that context is active/clicked.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Accepted decisions:**
 - **ContextPath dotted + target opaco**

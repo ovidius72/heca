@@ -151,14 +151,31 @@ fn open_sidebar_context_menu(
     // the sidebar provider for each path builds the add/delete entries acting on that target.
     let (path, target) = match item {
         crate::chrome::ChromeDragItem::Pane(pane_id) => {
-            (ContextPath::SIDEBAR_PANE, ContextTarget::SidebarPane { pane_id })
+            // The host resolves the row's column here, so the menu builder (a plugin's included)
+            // never needs the session to target "this pane's column".
+            let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, pane_id)
+            else {
+                return;
+            };
+            (
+                ContextPath::SIDEBAR_PANE,
+                ContextTarget::SidebarPane { pane_id, ws_idx, col_idx },
+            )
         }
         crate::chrome::ChromeDragItem::Column { ws, col } => {
             (ContextPath::SIDEBAR_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
         }
-        crate::chrome::ChromeDragItem::Workspace { ws } => {
-            (ContextPath::SIDEBAR_WORKSPACE, ContextTarget::SidebarWorkspace { ws_idx: ws })
-        }
+        crate::chrome::ChromeDragItem::Workspace { ws } => (
+            ContextPath::SIDEBAR_WORKSPACE,
+            ContextTarget::SidebarWorkspace {
+                ws_idx: ws,
+                custom_name: state
+                    .session
+                    .workspaces
+                    .get(ws)
+                    .and_then(|w| w.name.clone()),
+            },
+        ),
     };
     crate::chrome::open_context_menu_for(
         state,
