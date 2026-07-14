@@ -168,9 +168,15 @@ impl Intent {
     }
 }
 
-/// A node's event → intent bindings. Canonical event names (per plan §2.6.2): `"press"`
-/// (activate — buttons/rows), `"change"` (value changed — input/toggle/select). Keyed so a
-/// node can bind several.
+/// A node's event → intent bindings. The canonical event names (per plan §2.6.2):
+///
+/// - **`"press"`** — activated (buttons / rows / a standalone `Choice`).
+/// - **`"change"`** — the value changed (`Input` / `Toggle` / `Checkbox`; on a `Select`/`Tabs` the
+///   intent carries the chosen option's `value`).
+/// - **`"toggle"`** — a collapsible group folded or unfolded (`ItemGroup`); the intent carries the
+///   new state in `args["expanded"]`.
+///
+/// Keyed, so a node can bind several.
 pub type Events = BTreeMap<String, Intent>;
 
 /// A declarative widget node — one element of the serializable UI tree that both native code and
@@ -230,6 +236,8 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Item` | `text` (label) | `press` |
 /// | `Choice` | `value` (Text/Int), `text` (childless sugar) + children | `press` (standalone only) |
 /// | `Select` / `Tabs` | `selected` (Int) + `Choice` children | `change` (carries the chosen **value**) |
+/// | `ItemGroup` | `text` (header), `expanded` (Bool) + children (the rows) | `toggle` (carries the new `expanded`) |
+/// | `MarkerGroup` | `active` (Bool), `nav_selected` (Bool) + children | — (an indicator) |
 ///
 /// A **`"name"` prop** on a value widget (`Input`/`Toggle`/`Checkbox`) opts it into a submitted
 /// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`).
@@ -256,9 +264,9 @@ pub type Events = BTreeMap<String, Intent>;
 /// ignored (realize is total for untrusted input). A childless `Choice` desugars `text` to a `Label`
 /// child — children win, the same precedence as `Button`.
 ///
-/// The structured kinds `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `Toast` are **not
-/// realized yet** (they need track/slot props — `choice-5`..`choice-7`); `ScrollBar` is **host-only**
-/// by design (its state is live host signals, which static data cannot drive — use `Scroll`).
+/// The structured kinds `Grid` / `DockFrame` / `Toast` are **not realized yet** (they need track /
+/// named-slot props — `choice-6`, `choice-7`); `ScrollBar` is **host-only** by design (its state is
+/// live host signals, which static data cannot drive — use `Scroll`).
 ///
 /// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
 /// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.

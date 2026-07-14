@@ -26,9 +26,9 @@
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
-    Component, Flex, Gauge, Glyph, HintExt, HintTargetId, Icon, IconButton, Input, Item, Label,
-    LayoutExt, RailCell, ScrollRegion, Select, SignalData, StatusDot, Surface, Tabs, Tag, Toggle,
-    WidgetSize,
+    Component, Flex, Gauge, Glyph, HintExt, HintTargetId, Icon, IconButton, Input, Item, ItemGroup,
+    Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData, StatusDot, Surface,
+    Tabs, Tag, Toggle, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -241,14 +241,34 @@ pub(crate) fn realize(
             Box::new(tabs)
         }
 
+        // ── Groups ──
+        WidgetKind::ItemGroup => {
+            let mut group =
+                ItemGroup::new(text_of(node)).expanded(bool_prop(node, "expanded").unwrap_or(true));
+            if let Some(on_toggle) = toggle_change(node, emit) {
+                group = group.on_toggle(on_toggle);
+            }
+            // The group's own header is `children[0]`; the realized rows follow it.
+            attach_children(Box::new(group), node, emit, hints, forms)
+        }
+        WidgetKind::MarkerGroup => {
+            let mut markers = MarkerGroup::new();
+            if let Some(active) = bool_prop(node, "active") {
+                markers = markers.active(active);
+            }
+            if let Some(nav) = bool_prop(node, "nav_selected") {
+                markers = markers.nav_selected(nav);
+            }
+            // An indicator: no events of its own — the rows inside carry their own intents.
+            attach_children(Box::new(markers), node, emit, hints, forms)
+        }
+
         // Structured / host-driven kinds still need model support the scalar description
-        // can't express yet — track config (Grid), named slots (DockFrame), markers (MarkerGroup),
-        // or host wiring (ScrollBar, Toast). Tracked as `choice-5`..`choice-8`. Until then these
-        // realize to an empty container (total for untrusted input) rather than a wrong guess.
+        // can't express yet — track config (`Grid`, `choice-6`) or named child slots
+        // (`DockFrame`, `Toast`, `choice-7`). Until then these realize to an empty container
+        // (total for untrusted input) rather than a wrong guess.
         WidgetKind::Grid
-        | WidgetKind::ItemGroup
         | WidgetKind::DockFrame
-        | WidgetKind::MarkerGroup
         | WidgetKind::ScrollBar
         | WidgetKind::Toast => {
             #[cfg(debug_assertions)]
@@ -463,6 +483,27 @@ fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(
             Some(value) => intent.args.insert("value".into(), value),
             None => intent.args.insert("index".into(), PropValue::Int(i as i64)),
         };
+        emit(InteractionIntent::View(intent));
+    })
+}
+
+/// The handler for a **`"toggle"`** binding (a collapsible group) — the third canonical event name,
+/// alongside `press` and `change`.
+///
+/// A toggle is only meaningful with its **new state**, so the bound intent is dispatched with
+/// `args["expanded"]` set: an author binds one action and learns which way it went, instead of
+/// having to track the group's state on their side.
+fn toggle_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(Action) + 'static> {
+    let intent = node.intent("toggle")?.clone();
+    let emit = emit.clone();
+    Some(move |action: Action| {
+        let SignalData::Bool(expanded) = action.data else {
+            return;
+        };
+        let mut intent = intent.clone();
+        intent
+            .args
+            .insert("expanded".into(), PropValue::Bool(expanded));
         emit(InteractionIntent::View(intent));
     })
 }
@@ -918,6 +959,94 @@ mod tests {
             2,
             "only the two Choice children became options",
         );
+    }
+
+    // ── Groups (ItemGroup / MarkerGroup) ──
+
+    /// An `ItemGroup` node realizes its header from `text` and its rows from its children — the
+    /// widget's own header is `children[0]`, so the rows follow it.
+    #[test]
+    fn item_group_node_realizes_its_header_and_rows() {
+        use heca_grid_ui::LayoutEngine;
+        use heca_core::layout::Size;
+
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::ItemGroup)
+            .text("EXPLORER")
+            .prop("expanded", PropValue::Bool(false))
+            .child(ViewNode::new(WidgetKind::Item).text("src"))
+            .child(ViewNode::new(WidgetKind::Item).text("tests"));
+
+        let mut group = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        // The group applies its expanded state during layout (`remeasure`), like the native widget.
+        LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
+        assert_eq!(
+            group.base().children.len(),
+            3,
+            "the group's own header, then the two realized rows",
+        );
+        // Collapsed: the rows leave layout (`display: none`), the header stays.
+        assert!(!group.base().children[0].base().style.hidden, "the header stays");
+        assert!(
+            group.base().children[1..]
+                .iter()
+                .all(|row| row.base().style.hidden),
+            "`expanded: false` folds the rows away",
+        );
+    }
+
+    /// **`toggle`** — the third canonical event name, alongside `press` and `change`. A toggle is
+    /// only meaningful with its new state, so the intent carries `args["expanded"]`: an author binds
+    /// one action and learns which way it went.
+    #[test]
+    fn the_toggle_intent_carries_the_new_expanded_state() {
+        use heca_grid_ui::{Event, LayoutEngine};
+        use heca_core::layout::{Point, Size};
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+
+        let node = ViewNode::new(WidgetKind::ItemGroup)
+            .text("EXPLORER")
+            .on("toggle", Intent::new("fold_group"))
+            .child(ViewNode::new(WidgetKind::Item).text("src"));
+        let mut group = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
+
+        // Click the header (it starts expanded) → it collapses.
+        let header = group.base().children[0].base().bounds;
+        group.event(&Event::PointerPressed {
+            pos: Point::new(header.loc.x + 5.0, header.loc.y + header.size.h / 2.0),
+        });
+
+        let fired = fired.borrow();
+        let [InteractionIntent::View(intent)] = fired.as_slice() else {
+            panic!("expected exactly one View intent, got {fired:?}");
+        };
+        assert_eq!(intent.action, "fold_group");
+        assert_eq!(
+            intent.args.get("expanded"),
+            Some(&PropValue::Bool(false)),
+            "the toggle reports the state it moved to",
+        );
+    }
+
+    /// A `MarkerGroup` is an indicator: bools + children, no events of its own (the rows inside carry
+    /// their own intents).
+    #[test]
+    fn marker_group_node_realizes_its_rows_and_flags() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::MarkerGroup)
+            .prop("active", PropValue::Bool(true))
+            .prop("nav_selected", PropValue::Bool(true))
+            .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
+            .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
+
+        let markers = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(markers.base().children.len(), 2, "the two realized rows");
+        assert_eq!(hints.checkpoint(), 0, "an indicator registers no hint target");
     }
 
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.

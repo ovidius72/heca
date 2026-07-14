@@ -1512,11 +1512,28 @@ rows out of layout (`display: none`); a hidden subtree is never painted or Tab-f
   Bool)`).
 - **Accessors**: `.state() -> Signal<bool>` (expanded).
 
+**Native:**
+
 ```rust
 ItemGroup::new("src")
     .child(Item::new("main.rs"))
     .child(Item::new("lib.rs"));
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::ItemGroup)
+    .text("src")                                    // the header label
+    .prop("expanded", PropValue::Bool(true))
+    .on("toggle", Intent::new("fold_group"))        // fires with args {"expanded": false}
+    .child(ViewNode::new(WidgetKind::Item).text("main.rs"))
+    .child(ViewNode::new(WidgetKind::Item).text("lib.rs"));
+```
+
+Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the
+group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
+moved to in `args["expanded"]`, so one binding tells you which way it went.
 
 ### MarkerGroup
 
@@ -1534,12 +1551,27 @@ draggable; the bar stays a pure indicator). All bar styling is read from the `Th
   cursor) — bind either; the host writes it when the group's selection changes and the bar
   repaints without a rebuild.
 
+**Native:**
+
 ```rust
 MarkerGroup::new()
     .active(holds_focus)
     .child(Row::new().child(Label::new("pane 1")))
     .child(Row::new().child(Label::new("pane 2")));
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::MarkerGroup)
+    .prop("active", PropValue::Bool(true))
+    .prop("nav_selected", PropValue::Bool(false))
+    .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
+    .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
+```
+
+Props `realize` reads: `active` (Bool), `nav_selected` (Bool). Children: the rows. **No events** — the
+marker bar is an indicator; the rows inside carry their own intents.
 
 ### DockFrame
 
@@ -2038,13 +2070,21 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | `Item` | `text` (label) | `press` |
 | **`Choice`** | `value` (Text/Int), **+ children** (the content); `text` = the **childless sugar** | `press` (standalone only) |
 | **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
+| **`ItemGroup`** | `text` (header), `expanded` (Bool), **+ children** (the rows) | `toggle` — carries the new `expanded` |
+| **`MarkerGroup`** | `active` (Bool), `nav_selected` (Bool), **+ children** | — (an indicator) |
+
+**The event vocabulary** is three names: **`press`** (activated), **`change`** (the value changed),
+and **`toggle`** (a collapsible group folded/unfolded). Each carries what the author actually needs
+to act on: a `change` on a picker carries the chosen option's `value`, a `toggle` carries the new
+`expanded` state in its args — so an author binds one action and learns which way it went, instead of
+tracking the widget's state on their side.
 
 `PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
 · `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name). A **`"name"` prop** on a value
 widget opts it into a submitted modal's returned `data` (see [Dialog](#dialog) → *Declaring a modal
-from data*). Not realized yet (need track/slot props — `choice-5`..`choice-7`): `Grid`, `ItemGroup`,
-`DockFrame`, `MarkerGroup`, `Toast`. `ScrollBar` is **host-only** by design — its state is live host
-signals, which static serializable data cannot drive; a plugin uses `Scroll`.
+from data*). Not realized yet (need track / named-slot props — `choice-6`, `choice-7`): `Grid`,
+`DockFrame`, `Toast`. `ScrollBar` is **host-only** by design — its state is live host signals, which
+static serializable data cannot drive; a plugin uses `Scroll`.
 
 ### Options are children (`Select` / `Tabs` / `Choice`)
 

@@ -4,7 +4,7 @@
   "number": 16,
   "slug": "viewnode-choice-choice-primitive-compose-the-remaining-widgets-full-viewnode-coverage",
   "title": "viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage)",
-  "status": "in-progress",
+  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -115,19 +115,28 @@
       "number": 4,
       "shortName": "choice-4-realize-arms-choice-s",
       "title": "choice-4: realize arms — `Choice`, `Select`, `Tabs` (+ value→intent args)",
-      "status": "in-progress",
+      "status": "done",
       "description": "Add the `realize` arms so the option-shaped widgets are authorable declaratively, and make the **chosen value** flow back to the author.\n\n## STATUS: code complete on `feat/viewnode-choice-select` (uncommitted). No UI surface to test by hand — `realize` is the host bridge, covered by unit tests. Awaiting the user's go-ahead to commit.\n\n## Done (`heca/src/chrome/{view.rs, realize.rs}`)\n1. **`WidgetKind::Choice`** — new variant. Props: `value` (`Text`/`Int` — what the option *means*), `text` as the **childless sugar** (→ one `Label` child). Precedence: **children win** (identical rule to `Button`). With no `value`, the text stands in for it, so `Choice { text: \"HIGH\" }` matches the native `Choice::labeled`.\n2. **`realize` arms** — `Choice`, `Select`, `Tabs`:\n   - `realize_choice(node) -> Choice` — **typed**, not `Box<dyn Component>`, because `Select::option` / `Tabs::tab` are typed (they keep the option's state signals to drive selection in place; a boxed component would have erased them). This is why choice-2/3 deliberately did **not** implement `Parent` on those widgets.\n   - `realize_options()` — the `Choice` children in order; a child of any other kind is **ignored** with a debug log (realize stays total for untrusted input).\n   - `Select`/`Tabs` read `selected` (Int, via a new `usize_prop` that rejects negatives) and wire `change`.\n   - A **standalone** `Choice` gets its `press` intent wired (`on_activate` + hint target). Inside a `Select`/`Tabs` the container owns the click, so a `press` there is ignored rather than half-wired.\n3. **Value → intent args** (`option_change`) — the point of the whole model. The widgets emit an index (`SignalData::Usize`); `realize` captures the options' `value` props at realize time and maps the index back through them, dispatching the bound `Intent` with **`args[\"value\"]`** set → a plugin receives `{\"value\": \"high\"}`, never an opaque `1` that breaks the moment the options are reordered. No `value` on the option → falls back to `args[\"index\"]`.\n4. No closures cross the boundary; the `press`/`change` vocabulary is unchanged (AGENTS ⛔ SETTLED).\n\n## Tests (+5 → heca 340)\n`select_node_realizes_its_choice_children_as_options` (children become options; each composes its own icon+label; named by `text_summary`) · **`the_change_intent_carries_the_chosen_options_value_not_its_index`** (realize → layout → open the dropdown → click the second row *at its real bounds* → the emitted `InteractionIntent::View` carries `args[\"value\"] = \"high\"`) · `tabs_node_realizes_choice_children_and_reports_the_chosen_value` (same mapping via `ItemNext`) · `childless_choice_node_desugars_its_text_to_a_label_child` · `a_non_choice_child_of_a_select_is_ignored`. Also fixed `deferred_kind_is_empty_not_panic`, which used `Tabs` as its \"deferred kind\" — now realized, so it tests `Grid`.\n\n## Docs\n`view.rs` rustdoc: props/events table gains `Choice`/`Select`/`Tabs`, plus an \"Options are children\" section (the value→intent rule, the two totality rules). `docs/widgets.md`: the model table + a new **\"Options are children (`Select` / `Tabs` / `Choice`)\"** section; the `Choice` entry gains its declarative examples; the \"not realized yet\" list is down to `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `Toast`, with `ScrollBar` documented as **host-only** by design.\n**AGENTS.md ⭐ block updated**: the \"Genuinely OPEN\" list no longer claims `Select`/`Tabs`/`Button` realize coverage is open; a **SETTLED since** paragraph now records composition, options-as-children + value→intent, content-color inheritance, and host-only `ScrollBar`.\n\n## Gates (2026-07-14)\nclippy `--workspace --all-targets --all-features` 0 warnings · heca **340** · heca-grid-ui 138 + 71 + 1 · showcase builds. No `cargo fmt`.\n\n## NEXT\n**choice-5** (`fdbcabf3`) — realize arms for `ItemGroup` + `MarkerGroup` (no model change needed; `ItemGroup` introduces the `toggle` event name).",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "bfc43fce-a202-414c-a3f6-0d87a50547e8-check-001-in-progress-done",
+          "date": "2026-07-14T08:54:13.941Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-14T08:03:28.470Z",
-      "completedAt": "",
+      "completedAt": "2026-07-14T08:54:13.941Z",
       "createdAt": "2026-07-13T20:46:14.315Z",
-      "updatedAt": "2026-07-14T08:08:06.476Z"
+      "updatedAt": "2026-07-14T08:54:13.941Z"
     },
     {
       "id": "fdbcabf3-eaa5-4983-9d36-75f393cb0b44",
@@ -135,19 +144,28 @@
       "number": 5,
       "shortName": "choice-5-realize-arms-itemgrou",
       "title": "choice-5: realize arms — `ItemGroup` + `MarkerGroup` (no model change needed)",
-      "status": "planned",
-      "description": "The two easy kinds: both are already expressible with the model as it stands (text + bools + children + one event). Pure `realize` work, no widget refactor, no new `PropValue`.\n\n## `ItemGroup` (`heca-grid-ui/src/widgets/item_group.rs:35`)\n`ItemGroup::new(label)` + `.child(..)` + `.expanded(bool)` + `.on_toggle(impl Fn(Action))` (emits `Action::value(\"group-toggle\", Bool)`), `.state() -> Signal<bool>`.\n- Props: `text` (the header label), `expanded` (Bool).\n- Children: the rows (realized + attached).\n- Event: **`toggle`** — a NEW canonical event name alongside `press`/`change`. Document it in `view.rs` (the `Events` doc lists the vocabulary) and in `docs/widgets.md`. The intent fires with the new expanded state in `args[\"expanded\"]`.\n\n## `MarkerGroup` (`widgets/marker_group.rs:72`)\n`MarkerGroup::new()` + children + `.active(bool)` + `.nav_selected(bool)`; `.state()` / `.nav_state()` signals.\n- Props: `active` (Bool), `nav_selected` (Bool). Children: the rows.\n- No events (it is an indicator; the rows inside carry their own intents).\n\n## Notes\n- Both already hold children, so this is `attach_children` + a couple of prop reads — the arms are short. Do them together, in one commit.\n- Keep `realize` **total**: missing/mistyped props are ignored (the widget keeps its default).\n\n## Deliverables\nArms in `heca/src/chrome/realize.rs`; `toggle` added to the event vocabulary in `view.rs`; tests (a group realizes its rows; `expanded` prop honoured; the `toggle` intent carries the new state); `docs/widgets.md` — both kinds move out of the \"not realized yet\" list, each with a declarative example.\n\n## Gates\nclippy 0; `cargo test -p heca`; no `cargo fmt`.",
+      "status": "done",
+      "description": "The two easy kinds: both already expressible with the model as it stands (text + bools + children + one event). Pure `realize` work, no widget refactor, no new `PropValue`.\n\n## DONE 2026-07-14 — heca 343, clippy clean. Host-bridge work with no UI surface; verified by tests.\n\n## Shipped (`heca/src/chrome/{view.rs, realize.rs}`)\n- **`ItemGroup` arm** — props `text` (header) + `expanded` (Bool, default `true`); children = the rows, appended **after** the widget's own header (`children[0]`). The group applies its expanded state in `remeasure`, so builder order doesn't matter and a collapsed group folds its rows out of layout on the first pass.\n- **`MarkerGroup` arm** — props `active` / `nav_selected` (Bool); children = the rows. **No events**: it is an indicator, and the rows inside carry their own intents (asserted in a test — it registers zero hint targets).\n- **`toggle`** — the third canonical event name, alongside `press`/`change`. `toggle_change()` dispatches the bound intent with **`args[\"expanded\"]`** set to the state the group moved to, so an author binds one action and learns which way it went instead of tracking the state on their side. This mirrors the value→intent rule from choice-4: an event carries what the author needs to act on, never a bare ping.\n\n## Tests (+3 → heca 343)\n`item_group_node_realizes_its_header_and_rows` (header + 2 rows; `expanded: false` folds the rows via `display: none` after a layout pass) · `the_toggle_intent_carries_the_new_expanded_state` (realize → layout → click the header → the emitted `InteractionIntent::View` carries `args[\"expanded\"] = false`) · `marker_group_node_realizes_its_rows_and_flags`.\n\n## Note worth keeping\n`Component::text_summary()`'s default is **first descendant text wins** — on an `ItemGroup` that is the header's *chevron glyph*, not the label. Correct behaviour (the chevron is a real `Label`), but it means the default accessible name is only meaningful for content-only subtrees (a `Choice`, a `Button`). Do not lean on it for widgets whose chrome includes text.\n\n## Docs\n`view.rs`: the `Events` rustdoc now lists the whole vocabulary (`press` / `change` / `toggle`) with what each intent carries; props table gains `ItemGroup`/`MarkerGroup`. `docs/widgets.md`: model table + an event-vocabulary paragraph; both entries gain **Native + Declarative** examples; the \"not realized yet\" list is down to `Grid` / `DockFrame` / `Toast` (+ host-only `ScrollBar`).\n\n## Gates\nclippy `--workspace --all-targets --all-features` 0 warnings · heca **343** · heca-grid-ui 138 + 71 + 1 · showcase builds. No `cargo fmt`.\n\n## NEXT\n**choice-6** (`2178830d`) — `PropValue::List` + the `Grid` realize arm (tracks as CSS-like strings, areas, per-child placement). The only kind left that genuinely needs a new model primitive.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "fdbcabf3-eaa5-4983-9d36-75f393cb0b44-check-001-in-progress-done",
+          "date": "2026-07-14T08:57:36.478Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-14T08:54:14.721Z",
+      "completedAt": "2026-07-14T08:57:36.478Z",
       "createdAt": "2026-07-13T20:46:27.142Z",
-      "updatedAt": "2026-07-13T20:46:27.142Z"
+      "updatedAt": "2026-07-14T08:57:36.478Z"
     },
     {
       "id": "2178830d-f5d6-46a1-9cba-6352afba8187",
@@ -211,5 +229,5 @@
     }
   ],
   "createdAt": "2026-07-13T20:45:04.639Z",
-  "updatedAt": "2026-07-14T08:08:06.476Z"
+  "updatedAt": "2026-07-14T08:57:36.478Z"
 }
