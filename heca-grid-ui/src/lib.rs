@@ -59,7 +59,7 @@ pub use hint::{HintTargetId, collect_hint_targets};
 pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
-pub use scene::{DrawCommand, FontRole, Scene};
+pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
 pub use style::{Align, Direction, GridCell, Justify, Length, Spacing, Style, Track, WidgetSize};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
@@ -81,7 +81,7 @@ pub mod prelude {
     pub use crate::hint::{HintTargetId, collect_hint_targets};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-    pub use crate::scene::TextAlign;
+    pub use crate::scene::{TextAlign, TextStyle};
     pub use crate::style::{Align, Direction, GridCell, Justify, Length, Spacing, Track, WidgetSize};
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{

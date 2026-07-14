@@ -6,7 +6,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::TextAlign;
+use crate::scene::{TextAlign, TextStyle};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -149,7 +149,7 @@ impl Component for Alert {
             color,
             title_fs,
             TextAlign::Start,
-            true,
+            TextStyle::BOLD,
         );
         if let Some(body) = &self.body {
             let body_h = body_fs as f64 * MONO_LINE_RATIO as f64;
@@ -162,7 +162,7 @@ impl Component for Alert {
                 foreground.lerp(muted, 0.2),
                 body_fs,
                 TextAlign::Start,
-                false,
+                TextStyle::REGULAR,
             );
         }
     }

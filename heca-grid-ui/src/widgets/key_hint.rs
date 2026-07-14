@@ -20,7 +20,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::{Glow, TextAlign};
+use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -139,7 +139,7 @@ pub fn paint_keycap(
             );
             // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
             cx.rect(cap, keycap_c.with_alpha(keycap_alpha), None, radius, None);
-            cx.text(cap, text, background, font, TextAlign::Center, true);
+            cx.text(cap, text, background, font, TextAlign::Center, TextStyle::BOLD);
         }
         KeycapVariant::Bordered => {
             // Outline-only chip: **no fill** (empty interior) + a full-strength **accent** border
@@ -148,7 +148,7 @@ pub fn paint_keycap(
             // keycaps on an already-dark owned surface (a menu panel).
             let border = cx.border(keycap_c);
             cx.rect(cap, Color::TRANSPARENT, border, radius, None);
-            cx.text(cap, text, keycap_c, font, TextAlign::Center, true);
+            cx.text(cap, text, keycap_c, font, TextAlign::Center, TextStyle::BOLD);
         }
     }
 }

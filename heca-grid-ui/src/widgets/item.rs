@@ -163,6 +163,22 @@ impl Item {
         self
     }
 
+    /// [`leading`](Item::leading) for an **already-boxed** component — what a host mapper has after
+    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
+    /// go through the `impl Component` setters; same seam as
+    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    pub fn leading_boxed(mut self, c: Box<dyn Component>) -> Self {
+        self.base.children[LEADING] = c;
+        self
+    }
+
+    /// [`trailing`](Item::trailing) for an already-boxed component — see
+    /// [`leading_boxed`](Item::leading_boxed).
+    pub fn trailing_boxed(mut self, c: Box<dyn Component>) -> Self {
+        self.base.children[TRAILING] = c;
+        self
+    }
+
     /// Set the active state — the clicked-and-stays current item (tinted bg +
     /// accent label + optional indicator).
     pub fn active(self, active: bool) -> Self {

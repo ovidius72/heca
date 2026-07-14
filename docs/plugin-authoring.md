@@ -235,6 +235,30 @@ first-class `Table`) is **host-side** work: the widget in `heca-grid-ui`, its
 showcase demo + `docs/widgets.md`, and a mapper arm. This is the guardrail that
 keeps the host the single owner of rendering.
 
+**Coverage: every `WidgetKind` is authorable** — containers, options (`Select` /
+`Tabs` / `Choice`), groups, `Grid`, the slotted widgets (`DockFrame`, `Item`,
+`Toast`) and every leaf. A test walks the whole vocabulary and fails if a kind
+maps to nothing, so this statement cannot quietly stop being true.
+
+### The one exception: a widget whose state is a live host signal is HOST-ONLY
+
+**`ScrollBar`** is not authorable, and it is worth understanding why, because the
+rule generalizes. It is driven by *live signals* the host writes every frame
+(content extent, viewport extent, offset) and it reports new offsets back. A
+`ViewNode` is **static, serializable data**: it cannot carry a signal, let alone
+update one. A declarative `ScrollBar` would therefore render a **dead control** —
+a thumb that never moves. The host refuses it (with a debug log) rather than
+handing you something that looks right and does nothing.
+
+**Need scrolling? Use `Scroll`** (a `ScrollRegion`): it owns its own offset, wheel
+and keyboard handling, so it works with no host wiring at all.
+
+The same reasoning applies to individual **builders**, not just whole widgets:
+`DockFrame::rail(..)` binds a host-owned region-mode signal, so a declarative dock
+is simply never rail-aware. If a future widget's state lives in a host signal,
+expect it to be host-only too — the fix is a self-owning widget (like `Scroll`),
+never a way to fake a signal in data.
+
 ## What's shipped vs planned
 
 - **Shipped:** the `heca-grid-ui` widgets (`Modal`, `Select`, `Button`, `Row`,

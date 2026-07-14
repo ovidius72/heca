@@ -20,7 +20,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Glow, TextAlign};
+use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::widgets::{Glyph, Input};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
@@ -409,7 +409,7 @@ impl Component for CommandPalette {
                     muted,
                     font,
                     TextAlign::Start,
-                    false,
+                    TextStyle::REGULAR,
                 );
             }
 
@@ -468,7 +468,7 @@ impl Component for CommandPalette {
                     },
                     font,
                     TextAlign::Start,
-                    false,
+                    TextStyle::REGULAR,
                 );
                 for &hi in &m.hits {
                     if let Some(ch) = cmd.label.chars().nth(hi) {
@@ -477,7 +477,7 @@ impl Component for CommandPalette {
                             Point::new(hx, row.loc.y),
                             Size::new(adv + 2.0, row.size.h),
                         );
-                        cx.text(hrect, &ch.to_string(), accent, font, TextAlign::Start, true);
+                        cx.text(hrect, &ch.to_string(), accent, font, TextAlign::Start, TextStyle::BOLD);
                     }
                 }
                 // Keybinding hint (optional), right-aligned.
@@ -486,7 +486,7 @@ impl Component for CommandPalette {
                         Point::new(row.loc.x, row.loc.y),
                         Size::new(row.size.w - ROW_PAD_X, row.size.h),
                     );
-                    cx.text(krect, k, muted, font, TextAlign::End, false);
+                    cx.text(krect, k, muted, font, TextAlign::End, TextStyle::REGULAR);
                 }
             }
         });

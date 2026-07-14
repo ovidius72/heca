@@ -10,7 +10,7 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Glow, TextAlign};
+use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::Length;
 use crate::widgets::badge::BadgeVariant;
 use heca_core::layout::Point;
@@ -116,6 +116,12 @@ impl Component for BadgeButton {
         &mut self.base
     }
 
+    /// The badge button renders its own text (it composes no `Label`), so it supplies its
+    /// [accessible name](Component::text_summary) itself.
+    fn text_summary(&self) -> Option<String> {
+        Some(self.label.get_untracked())
+    }
+
     fn remeasure(&mut self) {
         let label = self.label.get_untracked();
         self.seen_label = label.clone();
@@ -198,7 +204,7 @@ impl Component for BadgeButton {
             text_c.lerp(white, pulse * 0.10),
             self.base.font,
             TextAlign::Center,
-            true,
+            TextStyle::BOLD,
         );
         if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
             let ring = cx.theme().colors.effective_focus_ring();

@@ -37,7 +37,7 @@ use heca_core::layout::Point;
 /// Reference inner padding (logical px) at [`WidgetSize::Large`](crate::style::WidgetSize); smaller
 /// size variants scale it down via `pad_scale`, so an option in a compact `Select` is tighter than
 /// one in a roomy tab strip without either caller computing pixels.
-const BASE_PAD: f32 = 8.0;
+pub(crate) const BASE_PAD: f32 = 8.0;
 /// Gap between composed content items (icon ↔ label …), as a fraction of the resolved font — the
 /// same half-character rhythm [`Button`](super::Button) uses, so an icon+label option and an
 /// icon+label button read identically.

@@ -767,12 +767,28 @@ Button::destructive("Delete")
     .on_click(move || emit(intent))
 ```
 
-**Genuinely OPEN (the live design space):** `realize` coverage still misses `Select` / `Tabs` /
-`Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `ScrollBar` / `Toast` (need structured props,
-`plugin-task-ui-9`); composing the leaf widgets (**`Button` first** — it hand-draws its label);
-how a child inherits its parent's **per-state content color** (an unstyled child `Label`/`Icon`
-must tint with the parent's hover/disabled state — the `Theme` is only reachable in `paint`); and
-a typed builder SDK over `ViewNode`.
+**Genuinely OPEN (the live design space):** a typed builder SDK over `ViewNode`; and `Label`
+truncation/ellipsis + wrapping (a long label overflows its box today).
+
+**SETTLED since (do not re-open):**
+- **`realize` coverage is COMPLETE.** Every `WidgetKind` maps to a live widget, and a test
+  (`every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones`) walks `WidgetKind::ALL`
+  and fails if one doesn't — so a new kind cannot silently render an empty container. Do **not**
+  re-derive "which kinds are missing"; the answer is none.
+- **`Button`, `Item`, `Select`, `Tabs` compose their content** (a hand-drawn leaf is a refactor
+  target, not a style).
+- **An option is a node with a value and arbitrary content, and options are CHILDREN** — the
+  `Choice` widget — never a `props["options"]` list of strings. `realize` maps the widget's index
+  back through the options' `value` props, so a `change` intent carries `{"value": "high"}`, never
+  an opaque index.
+- **A widget with several places for children takes a `slot` prop on the CHILD** (`header`,
+  `leading`, `trailing`). `ViewNode.children` stays one flat vector — no slots map, no second child
+  vector.
+- A child inherits its parent's per-state **content color** via `PaintCx::with_content_color` (the
+  control publishes one value per frame; unstyled `Label`/`Icon` children pull it).
+- **A widget whose state is a live host signal is HOST-ONLY** — static serializable data cannot
+  drive a signal, so a declarative one would be a dead control. `ScrollBar` is the case (plugins use
+  `Scroll`); it also applies to individual builders, e.g. `DockFrame::rail(..)`.
 
 Background reading (the rules above are self-contained — you do **not** need these to avoid the
 mistakes): `docs/widget-architecture.md` (same content, with rationale); `pluggable-chrome-plugin-plan.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`.

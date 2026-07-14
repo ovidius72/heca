@@ -1,7 +1,9 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme};
+use heca_grid_ui::{
+    DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, TextStyle, Theme,
+};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -73,6 +75,102 @@ fn label_signal_drives_text() {
     assert_eq!(sig.get_untracked(), "ONLINE");
     sig.set("OFFLINE".to_string());
     assert_eq!(sig.get_untracked(), "OFFLINE");
+}
+
+#[test]
+fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
+    let theme = Theme::default();
+    let paint = |label: Label| {
+        let mut label = label;
+        LayoutEngine::new().compute(&mut label, Size::new(200.0, 40.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            label.paint(&mut cx);
+        }
+        let runs: Vec<TextStyle> = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.style),
+                _ => None,
+            })
+            .collect();
+        // The label paints no background of its own, so every rect it emits is a decoration.
+        let rules: Vec<Rectangle> = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        (runs, rules, label.base().bounds, label.base().font)
+    };
+
+    // Weight + slant reach the shaper as font attributes on the run…
+    let (runs, rules, ..) = paint(Label::new("STATUS").bold(true).italic(true));
+    assert_eq!(runs, vec![TextStyle::REGULAR.bold(true).italic(true)]);
+    assert!(rules.is_empty(), "no decoration ⇒ no rects");
+
+    // …while the decorations never touch it: they are rects the widget draws.
+    let (runs, rules, bounds, font) = paint(Label::new("STATUS").underline(true));
+    assert_eq!(runs, vec![TextStyle::REGULAR], "a rule is not a font attribute");
+    assert_eq!(rules.len(), 1, "the underline");
+    let rule = rules[0];
+    let mid = bounds.loc.y + bounds.size.h / 2.0;
+    assert!(rule.loc.y > mid, "the underline sits below the text centre");
+    assert!(
+        (rule.size.w - bounds.size.w).abs() < 0.5,
+        "it spans the text run, which for a Start-aligned label is its whole box",
+    );
+    assert!(rule.size.h >= 1.0, "never thinner than a pixel: {}", rule.size.h);
+
+    // Strikethrough goes through the text; both together draw two rules.
+    let (_, rules, bounds, _) = paint(Label::new("STATUS").strikethrough(true));
+    let mid = bounds.loc.y + bounds.size.h / 2.0;
+    assert!(rules[0].loc.y < mid, "the strike sits at/above the centre");
+    let (_, rules, ..) = paint(Label::new("STATUS").underline(true).strikethrough(true));
+    assert_eq!(rules.len(), 2, "both rules");
+
+    // An empty label has a zero-width run, so it draws no rule at all.
+    let (_, rules, ..) = paint(Label::new("").underline(true));
+    assert!(rules.is_empty(), "nothing to underline");
+    let _ = font;
+}
+
+#[test]
+fn label_decorations_follow_the_text_run_not_the_box() {
+    let theme = Theme::default();
+    // A label normally hugs its text (`remeasure` sizes the box to the run), but a *container* can
+    // widen a child's bounds — a `Select` does exactly that to its option rows, so its pill spans
+    // the panel. In that box, `align` decides where the run sits, and the rule must follow the run:
+    // an underline spanning the whole box, most of it empty, would be plainly wrong.
+    let mut label = Label::new("HI").align(TextAlign::End).underline(true);
+    LayoutEngine::new().compute(&mut label, Size::new(300.0, 40.0));
+    let run_w = label.base().bounds.size.w;
+    label.base_mut().bounds.size.w = 300.0;
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        label.paint(&mut cx);
+    }
+    let rule = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r) => Some(r.rect),
+            _ => None,
+        })
+        .expect("the underline is painted");
+    let bounds = label.base().bounds;
+    assert!(
+        (rule.size.w - run_w).abs() < 0.5,
+        "the rule is as wide as the two-character run ({run_w}), not the 300px box: {}",
+        rule.size.w,
+    );
+    assert!(
+        (rule.loc.x + rule.size.w - (bounds.loc.x + bounds.size.w)).abs() < 0.5,
+        "End-aligned: the run — and its rule — sit at the right edge of the box",
+    );
 }
 
 #[test]
@@ -369,11 +467,11 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
 
     // With the dropdown open, a press on a row (outside the trigger's layout bounds)
     // is grabbed by the overlay first — it commits the selection and closes — rather
-    // than being treated as a fresh focus/click on the tree behind it.
-    // Row layout: trigger bottom + panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid(15).
-    let row2_y = sb.loc.y + sb.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    // than being treated as a fresh focus/click on the tree behind it. The row is
+    // found by its **bounds**: the options are real children, placed in the panel.
+    let row2 = ui.base().children[1].base().children[2].base().bounds;
     let handled = focus.dispatch(&mut ui, &Event::PointerPressed {
-        pos: Point::new(sb.loc.x + 10.0, row2_y),
+        pos: Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
     });
     assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
     assert!(
@@ -1349,17 +1447,225 @@ fn select_click_row_commits_and_closes() {
         pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
     }); // open
 
-    // Click the third row (HIGH). Rows start below the trigger + gap + panel pad.
-    // panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid-row(15).
-    let row2_y = b.loc.y + b.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    // Click the third row (HIGH) **where it actually is**: the options are child components, and
+    // opening the list placed them in the panel, so their bounds are the rows on screen. No row
+    // arithmetic — what is drawn is what is clicked.
+    let row2 = sel.base().children[2].base().bounds;
+    assert!(
+        row2.loc.y > b.loc.y + b.size.h,
+        "the rows are placed in the panel, below the trigger"
+    );
     sel.event(&Event::PointerPressed {
-        pos: Point::new(b.loc.x + 10.0, row2_y),
+        pos: Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
     });
     assert_eq!(sel.index(), 2, "clicking a row selects it");
     assert!(!sel.overlay_active(), "selection closes the dropdown");
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("select-change", SignalData::Usize(2))),
+    );
+}
+
+#[test]
+fn select_sugar_builds_choice_children_and_composed_options_carry_their_content() {
+    let theme = Theme::default();
+
+    // The string constructor is sugar: every option is a `Choice` child whose value is the text.
+    let sugar = Select::new(["LOW", "HIGH"]);
+    assert_eq!(sugar.base().children.len(), 2, "one child per option");
+    assert_eq!(
+        sugar.base().children[1].text_summary().as_deref(),
+        Some("HIGH"),
+        "the option's content is a Label the widget can name",
+    );
+
+    // A composed option: any content, plus a value that is not the text.
+    let mut sel = Select::empty()
+        .option(Choice::new("low").child(Flex::row().child(Label::new("LOW"))))
+        .option(
+            Choice::new("high").child(
+                Flex::row()
+                    .child(Icon::new(Glyph::Warning))
+                    .child(Label::new("HIGH")),
+            ),
+        )
+        .selected(1);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
+
+    // The closed trigger shows the chosen option **itself** — it stands the child inside the
+    // trigger box, so the icon comes with it. (Its text alone is still available as the option's
+    // accessible name, which is what `selected_label` reports.)
+    assert_eq!(sel.selected_label(), "HIGH");
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        sel.paint(&mut cx);
+    }
+    let closed: Vec<String> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        closed.contains(&"HIGH".to_string()),
+        "the closed trigger shows the chosen option's label",
+    );
+    assert!(
+        closed.len() > 1,
+        "…and its Icon child, painted with it: {closed:?}",
+    );
+    let trigger = sel.base().bounds;
+    let chosen = sel.base().children[1].base().bounds;
+    let slack = 0.5; // the trigger hugs the tallest option, so they agree to within rounding
+    assert!(
+        chosen.loc.y >= trigger.loc.y - slack
+            && chosen.loc.y + chosen.size.h <= trigger.loc.y + trigger.size.h + slack,
+        "the chosen option is placed inside the trigger while closed",
+    );
+    assert_eq!(
+        sel.base().children[0].base().bounds.size,
+        Size::new(0.0, 0.0),
+        "the options not chosen are collapsed",
+    );
+
+    // Opening draws the options' own content — including the icon, which no `Vec<String>` of
+    // options could ever have carried.
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(sel.base().bounds.loc.x + 5.0, sel.base().bounds.loc.y + 5.0),
+    });
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        sel.paint(&mut cx);
+    }
+    let runs: Vec<(String, Color)> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.color)),
+            _ => None,
+        })
+        .collect();
+    let texts: Vec<&str> = runs.iter().map(|(t, _)| t.as_str()).collect();
+    assert!(
+        texts.contains(&"LOW") && texts.contains(&"HIGH"),
+        "the open list paints each option's Label child",
+    );
+    assert!(
+        runs.len() > 3,
+        "beyond the trigger + the two labels, the option's Icon child draws its glyph too",
+    );
+    // The chosen row tints its whole content: the `Choice` publishes the accent as the inherited
+    // content color, and its unstyled Label picks it up — with no wiring from the Select.
+    let high_row = runs
+        .iter()
+        .rposition(|(t, _)| t == "HIGH")
+        .expect("the HIGH row is painted");
+    assert_eq!(
+        runs[high_row].1,
+        theme.colors.accent,
+        "the selected option's content is accent-tinted",
+    );
+
+    // …and the trigger keeps showing the chosen option — icon *and* label — while the list is open.
+    // The option itself is in the list now, so the trigger draws a second image of its content,
+    // translated back into the trigger. Two runs land inside the trigger: the glyph and the word.
+    let trigger = sel.base().bounds;
+    let in_trigger: Vec<String> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.rect, t.text.clone())),
+            _ => None,
+        })
+        .filter(|(r, _)| {
+            trigger.contains(Point::new(
+                r.loc.x + r.size.w / 2.0,
+                r.loc.y + r.size.h / 2.0,
+            ))
+        })
+        .map(|(_, t)| t)
+        .collect();
+    assert!(
+        in_trigger.contains(&"HIGH".to_string()),
+        "the open trigger still names the chosen option: {in_trigger:?}",
+    );
+    assert!(
+        in_trigger.len() > 1,
+        "…and still shows its icon, not just the word: {in_trigger:?}",
+    );
+}
+
+#[test]
+fn select_rows_outside_the_visible_window_are_not_clickable() {
+    let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
+    let mut sel = Select::new(opts);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
+
+    let b = sel.base().bounds;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
+    }); // open — 6 rows visible of 20
+
+    // A row past the window is collapsed: it is not drawn, so it cannot be hit either. (Were its
+    // stale bounds left behind, they would sit under the trigger and swallow clicks.)
+    for i in 6..20 {
+        assert_eq!(
+            sel.base().children[i].base().bounds.size,
+            Size::new(0.0, 0.0),
+            "row {i} is outside the visible window",
+        );
+    }
+    // Closing collapses every row **except the chosen one**, which goes back to standing in the
+    // trigger (that is how the trigger shows the option's own content).
+    sel.event(&Event::Widget(heca_grid_ui::WidgetIntent::Dismiss));
+    let chosen = sel.index();
+    for i in 0..20 {
+        if i == chosen {
+            continue;
+        }
+        assert_eq!(
+            sel.base().children[i].base().bounds.size,
+            Size::new(0.0, 0.0),
+            "row {i} is collapsed while the list is closed",
+        );
+    }
+    let trigger = sel.base().bounds;
+    assert!(
+        trigger.contains(Point::new(
+            trigger.loc.x + 5.0,
+            sel.base().children[chosen].base().bounds.loc.y + 2.0,
+        )),
+        "the chosen option stands in the trigger",
+    );
+}
+
+#[test]
+fn select_flips_above_the_trigger_when_there_is_no_room_below() {
+    let theme = Theme::default();
+    // The Select sits at the bottom of the viewport: the panel cannot open downward.
+    let mut ui = Flex::column()
+        .height(Length::Px(300.0))
+        .justify(Justify::End)
+        .child(Select::new(["A", "B", "C"]));
+    LayoutEngine::new().compute(&mut ui, Size::new(300.0, 300.0));
+
+    // Paint once so the widget learns the viewport height (that is what it flips against).
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(300.0, 300.0));
+        ui.paint(&mut cx);
+    }
+
+    let trigger = ui.base().children[0].base().bounds;
+    ui.base_mut().children[0].event(&Event::PointerPressed {
+        pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
+    });
+
+    let first_row = ui.base().children[0].base().children[0].base().bounds;
+    assert!(
+        first_row.loc.y + first_row.size.h <= trigger.loc.y,
+        "no room below → the rows are placed above the trigger",
     );
 }
 
@@ -1475,32 +1781,104 @@ fn tabs_menu_nav_and_click_change_selection() {
 }
 
 #[test]
-fn tabs_underline_slides_toward_selection() {
+fn tabs_underline_slides_toward_the_selected_tabs_bounds() {
     let theme = Theme::default();
-    let underline_x = |t: &Tabs| {
+    // The tabs paint their own pills, so pick the underline out by its thickness — it is the only
+    // 2px-tall rect in the strip.
+    let underline = |t: &Tabs| {
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
             t.paint(&mut cx);
         }
-        // Labels are Text; the underline is the only Rect.
         scene
             .iter()
             .find_map(|c| match c {
-                DrawCommand::Rect(r) => Some(r.rect.loc.x),
+                DrawCommand::Rect(r) if (r.rect.size.h - 2.0).abs() < 0.01 => Some(r.rect),
                 _ => None,
             })
-            .unwrap()
+            .expect("the underline is painted")
     };
     let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
-    let x0 = underline_x(&tabs);
+
+    // It starts on the selected tab — snapped to that child's real bounds, not slid in from the
+    // origin — and it is exactly as wide as the tab.
+    let first = tabs.base().children[0].base().bounds;
+    let u0 = underline(&tabs);
+    assert!((u0.loc.x - first.loc.x).abs() < 0.01, "starts on tab 0");
+    assert!((u0.size.w - first.size.w).abs() < 0.01, "as wide as tab 0");
+
     tabs.event(&Event::Widget(heca_grid_ui::WidgetIntent::ItemNext));
+    let mid = underline(&tabs);
+    assert!(
+        mid.loc.x == u0.loc.x,
+        "it does not jump: the slide happens in tick",
+    );
     for _ in 0..40 {
         tabs.tick(0.016);
     }
-    let x1 = underline_x(&tabs);
-    assert!(x1 > x0, "underline slides right toward the next tab");
+
+    // …and it lands on the *bounds* of the newly selected tab, whatever that tab contains.
+    let second = tabs.base().children[1].base().bounds;
+    let u1 = underline(&tabs);
+    assert!(u1.loc.x > u0.loc.x, "it slid right");
+    assert!(
+        (u1.loc.x - second.loc.x).abs() < 0.01 && (u1.size.w - second.size.w).abs() < 0.01,
+        "it tracks the selected tab's real bounds",
+    );
+}
+
+#[test]
+fn tabs_sugar_builds_choice_children_and_composed_tabs_carry_their_content() {
+    let theme = Theme::default();
+
+    // The string constructor is sugar: every tab is a `Choice` child whose value is the text.
+    let sugar = Tabs::new(["ALPHA", "BETA"]);
+    assert_eq!(sugar.base().children.len(), 2, "one child per tab");
+    assert_eq!(
+        sugar.base().children[1].text_summary().as_deref(),
+        Some("BETA"),
+    );
+
+    // A composed tab: an icon, a label and a count Badge — none of which a char-count could have
+    // measured, and all of which the underline must now span.
+    let mut tabs = Tabs::empty()
+        .tab(Choice::labeled("files", "FILES"))
+        .tab(
+            Choice::new("issues")
+                .child(Icon::new(Glyph::Warning))
+                .child(Label::new("ISSUES"))
+                .child(Badge::new("3")),
+        )
+        .selected(1);
+    LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
+
+    assert_eq!(tabs.selected_label(), "ISSUES");
+    let issues = tabs.base().children[1].base().bounds;
+    let files = tabs.base().children[0].base().bounds;
+    assert!(
+        issues.size.w > files.size.w,
+        "the composed tab measures wider than the plain one (it holds more)",
+    );
+
+    // The selected tab tints its whole content through the `Choice` — with no wiring from Tabs.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        tabs.paint(&mut cx);
+    }
+    let issues_color = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) if t.text == "ISSUES" => Some(t.color),
+            _ => None,
+        })
+        .expect("the composed tab paints its label");
+    assert_eq!(
+        issues_color, theme.colors.accent,
+        "the selected tab's content is accent-tinted",
+    );
 }
 
 #[test]
@@ -1841,6 +2219,128 @@ fn grid_places_children_in_named_areas_and_cells() {
     // sub: col 2, bottom row (y≈20).
     assert!((sub.loc.x - 40.0).abs() < 1.0, "sub in column 2");
     assert!((sub.loc.y - 20.0).abs() < 1.0, "sub in bottom row");
+}
+
+#[test]
+fn grid_areas_template_defines_the_rows_not_the_row_tracks() {
+    use heca_grid_ui::{Grid, Track};
+
+    // The template is what defines the structure; `rows(..)` only *sizes* the tracks it implies.
+    // A template with more lines than there are row tracks therefore creates **implicit** rows —
+    // and an item spanning them is centred over a taller area than its neighbours, so it silently
+    // stops sharing their centre line. This is the mistake that reads as "the text is off-centre".
+    let centres = |areas: &[&str]| {
+        let mut grid = Grid::new()
+            .columns([Track::Px(30.0), Track::Fr(1.0)])
+            .rows([Track::Auto]) // one row track, whatever the template says
+            .areas(areas.iter().copied())
+            .align(Align::Center)
+            .area(
+                Surface::new()
+                    .width(Length::Px(26.0))
+                    .height(Length::Px(26.0)),
+                "icon",
+            )
+            .area(
+                Surface::new()
+                    .width(Length::Px(40.0))
+                    .height(Length::Px(10.0)),
+                "title",
+            );
+        LayoutEngine::new().compute(&mut grid, Size::new(200.0, 60.0));
+        let mid = |i: usize| {
+            let b = grid.base().children[i].base().bounds;
+            b.loc.y + b.size.h / 2.0
+        };
+        (mid(0), mid(1))
+    };
+
+    // One line in, one row out: the icon and the title share a centre line.
+    let (icon, title) = centres(&["icon title"]);
+    assert!(
+        (icon - title).abs() < 0.5,
+        "a one-line template centres both in the same row: icon {icon}, title {title}",
+    );
+
+    // Two lines in — even with a single row *track* — gives the icon an implicit second row to span,
+    // and the two centres part company.
+    let (icon, title) = centres(&["icon title", "icon ."]);
+    assert!(
+        (icon - title).abs() > 0.5,
+        "the template's second line adds an implicit row the icon spans: icon {icon}, title {title}",
+    );
+}
+
+#[test]
+fn grid_items_align_in_their_cell_on_both_axes() {
+    use heca_grid_ui::{Grid, Track};
+
+    // One 100×40 cell holding a 20×10 item, so the alignment is unambiguous.
+    let item = || Surface::new().width(Length::Px(20.0)).height(Length::Px(10.0));
+    let cell = |grid: Grid| {
+        let mut grid = grid;
+        LayoutEngine::new().compute(&mut grid, Size::new(100.0, 40.0));
+        grid.base().children[0].base().bounds
+    };
+
+    // Default (Stretch on both axes): the item is pinned to the top-left of its cell — an explicit
+    // size means there is nothing to stretch. This is why an Icon (h = font) and a Label
+    // (h = font × 1.4) in the same row do NOT share a centre line by default.
+    let default = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .child(item()));
+    assert!(default.loc.y < 0.01, "default: pinned to the top of the cell");
+    assert!(default.loc.x < 0.01, "default: pinned to the left of the cell");
+
+    // `.align(..)` is the VERTICAL knob: it centres the items in their cells.
+    let centered = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .align(Align::Center)
+        .child(item()));
+    assert!(
+        (centered.loc.y - 15.0).abs() < 0.5,
+        "align(Center) centres vertically: (40 - 10) / 2 = 15, got {}",
+        centered.loc.y,
+    );
+
+    // `.justify_items(..)` is the HORIZONTAL one.
+    let justified = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .justify_items(Align::Center)
+        .child(item()));
+    assert!(
+        (justified.loc.x - 40.0).abs() < 0.5,
+        "justify_items(Center) centres horizontally: (100 - 20) / 2 = 40, got {}",
+        justified.loc.x,
+    );
+
+    // The per-item overrides win over the grid's defaults, one axis each.
+    let overridden = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .align(Align::Center)
+        .justify_items(Align::Center)
+        .child(item().align_self(Align::End).justify_self(Align::End)));
+    assert!(
+        (overridden.loc.y - 30.0).abs() < 0.5 && (overridden.loc.x - 80.0).abs() < 0.5,
+        "align_self / justify_self override the grid, got {overridden:?}",
+    );
+
+    // The trap this exists to avoid: on a grid, `justify` is `justify-content` — it distributes the
+    // whole TRACK SET inside the container and does not move the item within its cell. With one
+    // 100px track filling a 100px container there is nothing to distribute, so the item stays put.
+    let justify_content = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .justify(Justify::Center)
+        .child(item()));
+    assert!(
+        justify_content.loc.x < 0.01,
+        "`justify` does not align items in their cells — use `justify_items`",
+    );
 }
 
 #[test]
@@ -3118,7 +3618,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         cx.rect(off, theme.colors.surface, None, 0.0, None);
-        cx.text(off, "hidden", theme.colors.foreground, 15.0, TextAlign::Start, false);
+        cx.text(off, "hidden", theme.colors.foreground, 15.0, TextAlign::Start, TextStyle::REGULAR);
     }
     assert!(scene.is_empty(), "content far below the viewport is culled");
 

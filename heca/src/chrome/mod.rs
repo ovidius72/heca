@@ -2553,7 +2553,7 @@ fn paint_search_bar(
         theme.colors.foreground,
         font,
         heca_grid_ui::scene::TextAlign::Start,
-        false,
+        heca_grid_ui::TextStyle::REGULAR,
     );
 }
 

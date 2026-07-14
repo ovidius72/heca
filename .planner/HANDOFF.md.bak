@@ -1,51 +1,57 @@
 # Handoff
 
-Created at: 2026-07-13T21:00:00.000Z
-Updated at: 2026-07-13T21:18:00.000Z
-Reason: End of session. `choice-1` is **done, committed and pushed**. `choice-2` is the biggest task in the phase and should start in a fresh session with full context.
+Created at: 2026-07-14T11:23:46.091Z
+Updated at: 2026-07-14T11:31:30.041Z
+Reason: session shutdown (quit)
+
+## Progress snapshot
+- Features: 2/10 done, 1 active
+- Phases: 23/76 done, 1 active/discovery
+- Tasks: 96/289 done, 1 active
 
 ## Current focus
-- **Feature:** `ebb9ceb0-ea12-4374-af6e-12aa4256bcc3` — 🧩 Pluggable Chrome Architecture
-- **Phase:** `1df9c36c-5c29-4288-9fe1-7a6e9c72179b` — **viewnode-choice** (8 tasks, choice-1..8), created this session with the user
-- **Done:** `d19bdbe7` choice-1 (`Choice` widget) — commit `e7af2c9`
-- **NEXT TASK:** `6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf` — **choice-2**: refactor `Select` onto `Choice` children
+- Feature: `ebb9ceb0-ea12-4374-af6e-12aa4256bcc3` — 🧩 Pluggable Chrome Architecture (in-progress)
+- Phase: `1df9c36c-5c29-4288-9fe1-7a6e9c72179b` — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (in-progress)
+- Task: `db61a57c-fccf-4a50-b2bf-fe23a5b7ae7f` — label decorations italic underline strikethrough (in-progress)
 
-**Branch:** `feat/viewnode-button-composition` — **PR #237 → main is OPEN**, carrying `07d4c1a` (Button/Item composition), `cbada04` (docs), `e7af2c9` (Choice). Working tree clean.
+## What was being done
+No additional execution notes were captured.
 
-## What was done this session
-**1. Button + Item now COMPOSE their content** (was: hand-drawn in `paint`) — PR #237. Three foundations came with it, and everything later depends on them:
-- **Content color is INHERITED, not assigned** — `PaintCx::with_content_color(c, |cx| …)`; unstyled `Label`/`Icon` fall back to it. A control cannot set its children's colors (they are `impl Component`; `Theme` only exists in `paint`), so it publishes one state-derived color per frame and children pull it → composed content animates with hover / fades when disabled with **zero** per-child wiring.
-- **The size variant CASCADES down the tree** (like the base font) — `Style::size_explicit` / `Style::set_size()`, `layout.rs::build(c, inherited_size)`. `IconButton`'s manual copy-into-child hack was deleted.
-- **A control is ONE Tab stop** — `Base.focus_barrier`, honoured by `focus.rs::for_each_focusable`.
-Also: `realize_button` now attaches `node.children` (it silently DROPPED them before); `Label.bold` is a `Signal`; AGENTS.md requires widget docs to be exhaustive with examples for **both** audiences.
-
-**2. `Choice` (choice-1)** — the option primitive: a selectable container carrying a **value** and composing **arbitrary content**. Chrome only (same interaction tokens as `Item`), publishes its state color, one Tab stop, hugs its content. Plus **`choice_at(&children, point)`**, which resolves a pick from the children's **real bounds** — it exists so choice-2/3 cannot fall back to row arithmetic.
+## Current Task Statuses (phase 1df9c36c-5c29-4288-9fe1-7a6e9c72179b)
+- ✅ `d19bdbe7-a355-4c64-923e-d3f48af6db19` — choice-1: `Choice` widget — value-carrying, content-composable option primitive (done)
+- ✅ `6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf` — choice-2: Refactor `Select` to compose `Choice` children (the hard one — overlay + scroll) (done)
+- ✅ `7ef645d5-dc18-4552-87ce-ba819452cb11` — choice-3: Refactor `Tabs` to compose `Choice` children (done)
+- ✅ `bfc43fce-a202-414c-a3f6-0d87a50547e8` — choice-4: realize arms — `Choice`, `Select`, `Tabs` (+ value→intent args) (done)
+- ✅ `fdbcabf3-eaa5-4983-9d36-75f393cb0b44` — choice-5: realize arms — `ItemGroup` + `MarkerGroup` (no model change needed) (done)
+- ✅ `2178830d-f5d6-46a1-9cba-6352afba8187` — choice-6: `PropValue::List` + `Grid` realize (tracks, areas, placement) (done)
+- 📋 `b4ef758e-bf59-46ba-a77e-ebd9b20d6638` — choice-7: Named child slots (`slot` prop) → `DockFrame` + `Item` leading/trailing + `Toast` (planned)
+- 📋 `af69ae20-58d6-4014-a4b7-9294e0c7ebe1` — choice-8 vocabulary coverage plus Choice vs Item guidance (planned)
+- 🚧 `db61a57c-fccf-4a50-b2bf-fe23a5b7ae7f` — label decorations italic underline strikethrough (in-progress)
 
 ## How to resume
-1. **Read AGENTS.md** — the ⭐ WIDGET ARCHITECTURE block and its **⛔ SETTLED** table. Do **not** re-propose `Button::new(ViewNode)` or moving `ViewNode` into `heca-grid-ui`; both are impossible and have been re-litigated too many times.
-2. `planner-task-start 6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf` **before editing** (the guard blocks edits otherwise), then delete this handoff.
-3. Work choice-2 from its task description (full brief there).
+1. Open task db61a57c-fccf-4a50-b2bf-fe23a5b7ae7f (label decorations italic underline strikethrough).
+2. Read `.planner/HANDOFF.md` and compare it with the latest planner data.
+3. Confirm whether the current task is already in-progress before doing implementation work.
+4. Continue with the next activity: Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
 
-## Files touched (all committed)
-`heca-grid-ui/src/widgets/{button,item,label,icon,icon_button,choice}.rs` · `heca-grid-ui/src/{component,focus,layout,style,builders,lib}.rs` · `heca-grid-ui/src/widgets/mod.rs` · `heca-grid-ui/tests/phase_a.rs` (+12 tests) · `heca/src/chrome/realize.rs` (+2 tests) · `heca-renderer/examples/showcase.rs` · `docs/widgets.md` · `AGENTS.md`.
+## Files to inspect first
+- .planner/project.json
+- .planner/features.json
+- .planner/phases/1df9c36c-5c29-4288-9fe1-7a6e9c72179b.json
+- .planner/resume.json
+- .planner/HANDOFF.md
+- .planner/generated/PLAN.md
 
 ## Blockers
-None. All gates green: heca-grid-ui 134 + 71 + 1, heca 335, clippy clean.
+- None recorded
 
 ## Next steps
-**choice-2 — the hard one.** `Select` (`heca-grid-ui/src/widgets/select.rs:77`) stores `options: Vec<String>`, paints its dropdown rows itself and **hit-tests them by arithmetic**. The rows must become `Choice` children whose **bounds are real** — but the panel is an **overlay** (`cx.with_overlay`), and hit-testing, the KeyHint picker and `FocusManager` all read bounds. Documented fallback: lay the children out in the trigger's flow and **bake the panel offset into their bounds**, exactly as `ScrollRegion` bakes `-scroll_offset`. The invariant is **bounds === what is drawn === what is clickable**.
-Preserve: `overlay_active()`, flip/cap against the viewport, internal scroll + scrollbar, wheel, the `MenuUp`/`MenuDown`/`Activate`/`Dismiss` intents, the `select-change` payload. `Select::new([..])` stays as **sugar** building `Choice::labeled` children so every existing call site compiles (the `Button::new(label)` pattern).
-Then: choice-3 (`Tabs`), choice-4 (realize `Choice`/`Select`/`Tabs` + **value→intent args**), choice-5 (`ItemGroup`/`MarkerGroup`), choice-6 (`PropValue::List` + `Grid`), choice-7 (named `slot` prop → `DockFrame`/`Item`/`Toast`), choice-8 (close the vocabulary).
+- Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
 
-## Recent decisions
-- **The option model (user):** an option is **a node with a value and arbitrary content**, and options are **children** — NOT a `props["options"]` string list. Named `Choice` because a widget named `Option` would shadow `std::Option` at every call site.
-- **`Choice` and `Item` COEXIST** (user): `Item` = a *row* (leading/label/trailing, fixed height, `ActiveMarker`); `Choice` = *any content + a value*. Comparison table + rule of thumb already in `docs/widgets.md`.
-- **`Choice`'s value is a plain `String`** — `heca-grid-ui` never depends on `heca`, so it cannot store `PropValue`; `realize` converts at the boundary (choice-4). A `ChoiceValue{Text,Int}` enum was rejected.
-- **`ScrollBar` is HOST-ONLY**: its state is live host signals, which static serializable data cannot drive. General principle: *a widget whose state is a live host signal is host-only.* Plugins use `Scroll`.
-- **Grid tracks are CSS-like strings** (`"1fr"`, `"22px"`, `"auto"`); unknown tokens degrade to `Auto`. **Named slots via a `slot` prop** on the child node — no change to the `ViewNode` shape.
-- **`viewnode-task-1` was CANCELED as superseded** by this phase (it assumed structured props would be enough; `Select`/`Tabs` actually need a widget refactor).
+## Recent activity
+- Latest feature update: 🧩 Pluggable Chrome Architecture (in-progress) at 2026-07-13T15:29:44.427Z
+- Latest phase update: viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (in-progress) at 2026-07-14T10:48:48.608Z
+- Latest task update: label decorations italic underline strikethrough (in-progress) at 2026-07-14T10:48:48.608Z
 
 ## Reminder
-- Gates every task: `cargo clippy --workspace --all-targets --all-features` (0 warnings; the transitive `block v0.1.6` note is pre-existing), `cargo test -p heca-grid-ui -p heca`, showcase builds. **Do NOT run `cargo fmt`.** Load `~/.agents/skills/rust/SKILL.md` and review before committing. No commit until the user has tested.
-- `heca-core::terminal_backend_nvim_tui_produces_non_default_background_cells` flakes under workspace-parallel load; passes in isolation, unrelated.
-- **Planner discipline (user, explicit):** open the task before editing, keep its status current, delete this handoff when work resumes.
+- When work is fully resumed and this handoff is no longer needed, delete `.planner/HANDOFF.md`.

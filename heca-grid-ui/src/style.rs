@@ -213,6 +213,25 @@ pub struct Style {
     pub direction: Direction,
     pub justify: Justify,
     pub align: Align,
+    /// Cross-axis alignment of **this** node inside its parent, overriding the parent's
+    /// [`align`](Self::align) for it alone (CSS `align-self`). `None` ⇒ follow the parent.
+    ///
+    /// The reason it exists: the default [`Align::Stretch`] makes an `Auto`-sized node fill its
+    /// parent across the cross axis, so a content-hugging control (a [`Select`](crate::widgets::Select),
+    /// which sizes itself to its widest option) would silently go full-width inside a column. A
+    /// widget that must hug sets `Some(Align::Start)` and keeps its intrinsic size in either
+    /// direction of parent.
+    pub align_self: Option<Align>,
+    /// **Grid only** — how this container's items are placed **horizontally inside their cell**
+    /// (CSS `justify-items`). `None` ⇒ taffy's default (`Stretch`: an item fills its cell).
+    ///
+    /// Do **not** reach for [`justify`](Self::justify) here: on a grid that is `justify-content`,
+    /// which distributes the whole *track set* inside the container — it does not move the items
+    /// within their cells. Same word, different axis of meaning; that is exactly why this exists.
+    pub justify_items: Option<Align>,
+    /// **Grid only** — horizontal placement of **this** item inside its own cell, overriding the
+    /// parent's [`justify_items`](Self::justify_items) for it alone (CSS `justify-self`).
+    pub justify_self: Option<Align>,
     pub gap: f32,
     /// Uniform outer margin (all sides), unless overridden per side by
     /// [`margin_left`](Self::margin_left) / [`margin_right`](Self::margin_right)
@@ -302,6 +321,9 @@ impl Default for Style {
             direction: Direction::Row,
             justify: Justify::Start,
             align: Align::Stretch,
+            align_self: None,
+            justify_items: None,
+            justify_self: None,
             gap: 0.0,
             margin: 0.0,
             margin_left: None,
@@ -353,6 +375,10 @@ impl Style {
             },
             justify_content: Some(self.justify.to_taffy()),
             align_items: Some(self.align.to_taffy()),
+            align_self: self.align_self.map(|a| a.to_taffy()),
+            // Grid-only (taffy ignores them on a flex container).
+            justify_items: self.justify_items.map(|a| a.to_taffy()),
+            justify_self: self.justify_self.map(|a| a.to_taffy()),
             gap: Size {
                 width: length(self.gap),
                 height: length(self.gap),

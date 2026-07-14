@@ -182,6 +182,22 @@ impl DockFrame {
         self
     }
 
+    /// [`header`](DockFrame::header) for an **already-boxed** child — what a host mapper has after
+    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
+    /// go through the `impl Component` setters; same seam as
+    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    pub fn header_boxed(mut self, c: Box<dyn Component>) -> Self {
+        self.base.children[HEADER].base_mut().children[CONTROLS] = c;
+        self
+    }
+
+    /// [`child`](DockFrame::child) for an already-boxed component — see
+    /// [`header_boxed`](DockFrame::header_boxed).
+    pub fn child_boxed(mut self, c: Box<dyn Component>) -> Self {
+        self.base.children[BODY].base_mut().children.push(c);
+        self
+    }
+
     /// The expanded-state signal — bind UI to it reactively.
     pub fn state(&self) -> Signal<bool> {
         self.expanded

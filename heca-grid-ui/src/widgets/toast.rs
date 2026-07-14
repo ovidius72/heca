@@ -20,7 +20,7 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::SignalGet;
-use crate::scene::{Border, Glow, TextAlign};
+use crate::scene::{Border, Glow, TextAlign, TextStyle};
 use crate::style::Length;
 use crate::widgets::Glyph;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -332,9 +332,9 @@ impl Component for Toast {
         }
 
         // Title (strong, severity-toned) then optional body (muted).
-        cx.text(r.title, &self.title, tone, title_fs, TextAlign::Start, true);
+        cx.text(r.title, &self.title, tone, title_fs, TextAlign::Start, TextStyle::BOLD);
         if let (Some(br), Some(body)) = (r.body, &self.body) {
-            cx.text(br, body, foreground.lerp(muted, 0.2), body_fs, TextAlign::Start, false);
+            cx.text(br, body, foreground.lerp(muted, 0.2), body_fs, TextAlign::Start, TextStyle::REGULAR);
         }
 
         // Action button (toned ghost; brighter on hover).
@@ -347,7 +347,7 @@ impl Component for Toast {
                 radius,
                 hov.then_some(Glow { color: tone, radius: 7.0, intensity: 0.2 }),
             );
-            cx.text(ar, label, tone, title_fs, TextAlign::Center, false);
+            cx.text(ar, label, tone, title_fs, TextAlign::Center, TextStyle::REGULAR);
         }
 
         // × dismiss affordance (muted; foreground on hover).

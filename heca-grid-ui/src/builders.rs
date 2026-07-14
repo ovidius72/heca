@@ -80,9 +80,33 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.justify = j;
         self
     }
-    /// Cross-axis alignment.
+    /// Cross-axis alignment of this component's **children**.
     fn align(mut self, a: Align) -> Self {
         self.base_mut().style.align = a;
+        self
+    }
+    /// Cross-axis alignment of **this** component inside its parent (CSS `align-self`),
+    /// overriding the parent's [`align`](Self::align) for it alone. Use
+    /// [`Align::Start`] to keep an `Auto`-sized widget hugging its content instead of
+    /// stretching to fill the parent.
+    fn align_self(mut self, a: Align) -> Self {
+        self.base_mut().style.align_self = Some(a);
+        self
+    }
+    /// **Grid only** — how this grid's items sit **horizontally inside their cells**
+    /// (CSS `justify-items`). Default: `Stretch` (an item fills its cell).
+    ///
+    /// Not to be confused with [`justify`](Self::justify): on a grid that is `justify-content`,
+    /// which distributes the whole *track set* inside the container and leaves the items where
+    /// they are. The vertical counterpart is [`align`](Self::align).
+    fn justify_items(mut self, a: Align) -> Self {
+        self.base_mut().style.justify_items = Some(a);
+        self
+    }
+    /// **Grid only** — horizontal placement of **this** item inside its own cell (CSS
+    /// `justify-self`), overriding the grid's [`justify_items`](Self::justify_items) for it alone.
+    fn justify_self(mut self, a: Align) -> Self {
+        self.base_mut().style.justify_self = Some(a);
         self
     }
     /// Inner padding on all sides.

@@ -44,6 +44,9 @@ pub enum WidgetKind {
     MarkerGroup,
     /// A tab strip + panel.
     Tabs,
+    /// One selectable **option**: a `value` plus arbitrary composed content. The children of a
+    /// [`Select`](WidgetKind::Select) / [`Tabs`](WidgetKind::Tabs) — and usable on its own.
+    Choice,
 
     // ── Leaves ──
     Label,
@@ -65,6 +68,89 @@ pub enum WidgetKind {
     RailCell,
     /// A single selectable list row.
     Item,
+}
+
+impl WidgetKind {
+    /// Every variant — the closed vocabulary, enumerable.
+    ///
+    /// This exists so the host can check **coverage**: `realize` has a test that walks this list and
+    /// asserts each kind maps to a real widget, which is what stops a newly-added kind from silently
+    /// rendering an empty container. Keep it in sync with the enum — [`ordinal`](Self::ordinal)
+    /// makes that mechanical rather than a matter of discipline (see its docs).
+    pub const ALL: &'static [WidgetKind] = &[
+        WidgetKind::Column,
+        WidgetKind::Row,
+        WidgetKind::Grid,
+        WidgetKind::Card,
+        WidgetKind::Scroll,
+        WidgetKind::Panel,
+        WidgetKind::Surface,
+        WidgetKind::ItemGroup,
+        WidgetKind::DockFrame,
+        WidgetKind::MarkerGroup,
+        WidgetKind::Tabs,
+        WidgetKind::Choice,
+        WidgetKind::Label,
+        WidgetKind::Button,
+        WidgetKind::IconButton,
+        WidgetKind::Badge,
+        WidgetKind::BadgeButton,
+        WidgetKind::Tag,
+        WidgetKind::Icon,
+        WidgetKind::Input,
+        WidgetKind::Select,
+        WidgetKind::Toggle,
+        WidgetKind::Checkbox,
+        WidgetKind::StatusDot,
+        WidgetKind::Gauge,
+        WidgetKind::ScrollBar,
+        WidgetKind::Alert,
+        WidgetKind::Toast,
+        WidgetKind::RailCell,
+        WidgetKind::Item,
+    ];
+
+    /// This kind's position in [`ALL`](Self::ALL).
+    ///
+    /// The match is **exhaustive**, so adding a variant to the enum without adding it here is a
+    /// *compile error*; the `all_lists_every_widget_kind` test then compares the two, so adding it
+    /// here without adding it to [`ALL`](Self::ALL) is a *test failure*. Between them, the list
+    /// cannot silently fall behind the vocabulary — which is the whole point, since the coverage
+    /// guard is only as good as the list it walks.
+    fn ordinal(self) -> usize {
+        match self {
+            WidgetKind::Column => 0,
+            WidgetKind::Row => 1,
+            WidgetKind::Grid => 2,
+            WidgetKind::Card => 3,
+            WidgetKind::Scroll => 4,
+            WidgetKind::Panel => 5,
+            WidgetKind::Surface => 6,
+            WidgetKind::ItemGroup => 7,
+            WidgetKind::DockFrame => 8,
+            WidgetKind::MarkerGroup => 9,
+            WidgetKind::Tabs => 10,
+            WidgetKind::Choice => 11,
+            WidgetKind::Label => 12,
+            WidgetKind::Button => 13,
+            WidgetKind::IconButton => 14,
+            WidgetKind::Badge => 15,
+            WidgetKind::BadgeButton => 16,
+            WidgetKind::Tag => 17,
+            WidgetKind::Icon => 18,
+            WidgetKind::Input => 19,
+            WidgetKind::Select => 20,
+            WidgetKind::Toggle => 21,
+            WidgetKind::Checkbox => 22,
+            WidgetKind::StatusDot => 23,
+            WidgetKind::Gauge => 24,
+            WidgetKind::ScrollBar => 25,
+            WidgetKind::Alert => 26,
+            WidgetKind::Toast => 27,
+            WidgetKind::RailCell => 28,
+            WidgetKind::Item => 29,
+        }
+    }
 }
 
 /// Semantic size variant — mirrors grid-ui `WidgetSize`; `realize` maps it across.
@@ -116,6 +202,15 @@ pub enum PropValue {
     Color(String),
     /// A Phosphor glyph name.
     Glyph(String),
+    /// An ordered list of values.
+    ///
+    /// Deliberately rare. The option-shaped widgets (`Select` / `Tabs`) do **not** use it — their
+    /// options are **children**, because an option is a node with a value and content, not a string
+    /// (see the "Options are children" section). What is genuinely list-shaped is a
+    /// [`Grid`](WidgetKind::Grid)'s **track templates**: `columns` / `rows` (CSS-like strings —
+    /// `"1fr"`, `"22px"`, `"auto"`) and `areas` (one string per grid row). That is what this exists
+    /// for.
+    List(Vec<PropValue>),
 }
 
 impl PropValue {
@@ -165,9 +260,15 @@ impl Intent {
     }
 }
 
-/// A node's event → intent bindings. Canonical event names (per plan §2.6.2): `"press"`
-/// (activate — buttons/rows), `"change"` (value changed — input/toggle/select). Keyed so a
-/// node can bind several.
+/// A node's event → intent bindings. The canonical event names (per plan §2.6.2):
+///
+/// - **`"press"`** — activated (buttons / rows / a standalone `Choice`).
+/// - **`"change"`** — the value changed (`Input` / `Toggle` / `Checkbox`; on a `Select`/`Tabs` the
+///   intent carries the chosen option's `value`).
+/// - **`"toggle"`** — a collapsible group folded or unfolded (`ItemGroup`); the intent carries the
+///   new state in `args["expanded"]`.
+///
+/// Keyed, so a node can bind several.
 pub type Events = BTreeMap<String, Intent>;
 
 /// A declarative widget node — one element of the serializable UI tree that both native code and
@@ -216,7 +317,8 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
 /// | `Card` | `text` (title) + children | — |
 /// | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
-/// | `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+/// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
+/// | `Badge` / `Tag` / `Alert` | `text` | — |
 /// | `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
 /// | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
 /// | `Input` | `text` (value), `name` | `change` |
@@ -224,12 +326,51 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |
 /// | `StatusDot` | — | — |
-/// | `Item` | `text` (label) | `press` |
+/// | `Item` | `text` (label); **slots**: `leading` / `trailing` (no default slot) | `press` |
+/// | `DockFrame` | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slot**: `header`, else body (default) | `toggle` |
+/// | `Toast` | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |
+/// | `Choice` | `value` (Text/Int), `text` (childless sugar) + children | `press` (standalone only) |
+/// | `Select` / `Tabs` | `selected` (Int) + `Choice` children | `change` (carries the chosen **value**) |
+/// | `ItemGroup` | `text` (header), `expanded` (Bool) + children (the rows) | `toggle` (carries the new `expanded`) |
+/// | `MarkerGroup` | `active` (Bool), `nav_selected` (Bool) + children | — (an indicator) |
+/// | `Grid` | `columns` / `rows` / `areas` (List of CSS-like strings); per-**child**: `area`, or `col`/`row`/`col_span`/`row_span` | — |
 ///
 /// A **`"name"` prop** on a value widget (`Input`/`Toggle`/`Checkbox`) opts it into a submitted
-/// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`). The
-/// structured kinds `Select` / `Tabs` / `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` /
-/// `ScrollBar` / `Toast` are **not realized yet** (they need list/structured props — `plugin-task-ui-9`).
+/// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`).
+///
+/// # Options are children (`Select` / `Tabs` / `Choice`)
+/// An option is **a node with a value and arbitrary content**, and the options of a picker are its
+/// **children** — never a `props["options"]` list of strings. That is what lets a declarative option
+/// compose an icon + a label exactly like a native one:
+///
+/// ```ignore
+/// ViewNode::new(WidgetKind::Select)
+///     .prop("selected", PropValue::Int(1))
+///     .on("change", Intent::new("set_level"))
+///     .child(ViewNode::new(WidgetKind::Choice)
+///         .prop("value", PropValue::Text("high".into()))
+///         .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+///         .child(ViewNode::new(WidgetKind::Label).text("HIGH")));
+/// ```
+///
+/// The widgets track a selected **index**, but an index is meaningless to a plugin and breaks when
+/// the options are reordered — so `realize` maps it back through the options' `value` props and
+/// fires the bound intent with **`args["value"]`** set (`{"value": "high"}`). An option with no
+/// `value` falls back to `args["index"]`. A child of a `Select`/`Tabs` that is not a `Choice` is
+/// ignored (realize is total for untrusted input). A childless `Choice` desugars `text` to a `Label`
+/// child — children win, the same precedence as `Button`.
+///
+/// # Named child slots
+/// A widget with **several places for children** (a `DockFrame`'s header vs body, an `Item`'s
+/// leading vs trailing) needs no change to this shape: `children` stays one flat `Vec`, and the
+/// **child** says where it goes with a **`slot` prop**. A widget may declare a *default* slot
+/// (`DockFrame`'s body) — an unslotted child lands there; `Item` has none, so an unslotted child is
+/// ignored. An unknown slot name is debug-logged and falls back to the default (or is ignored),
+/// never a panic.
+///
+/// **Coverage**: every kind realizes to its widget except `ScrollBar`, which is **host-only** by
+/// design (its state is live host signals, which static data cannot drive — use `Scroll`). The same
+/// applies to individual builders that bind a host signal, e.g. `DockFrame::rail(..)`.
 ///
 /// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
 /// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.
@@ -340,6 +481,31 @@ mod tests {
             )
     }
 
+    /// `ALL` must list the whole vocabulary — the realize **coverage guard** walks it, and a guard is
+    /// only as good as the list it walks. `ordinal`'s match is exhaustive (a new variant fails to
+    /// compile there); this ties the two together, so a variant that reaches `ordinal` but not `ALL`
+    /// fails here.
+    #[test]
+    fn all_lists_every_widget_kind() {
+        for (i, kind) in WidgetKind::ALL.iter().enumerate() {
+            assert_eq!(
+                kind.ordinal(),
+                i,
+                "{kind:?} is out of order in ALL (or missing from it)",
+            );
+        }
+        let highest = WidgetKind::ALL
+            .iter()
+            .map(|k| k.ordinal())
+            .max()
+            .expect("the vocabulary is not empty");
+        assert_eq!(
+            WidgetKind::ALL.len(),
+            highest + 1,
+            "a variant exists that ALL does not list",
+        );
+    }
+
     #[test]
     fn actionable_reflects_click_binding() {
         let btn = ViewNode::new(WidgetKind::Button)
@@ -360,6 +526,40 @@ mod tests {
         assert_eq!(back.kind, WidgetKind::Column);
         assert_eq!(back.children.len(), 2);
         assert!(back.children[1].children[1].is_actionable());
+    }
+
+    /// The whole `PropValue` vocabulary — including the nested [`PropValue::List`] a `Grid`'s track
+    /// templates ride on — must survive the WASM boundary intact.
+    #[test]
+    fn every_prop_value_round_trips_including_lists() {
+        let node = ViewNode::new(WidgetKind::Grid)
+            .prop(
+                "columns",
+                PropValue::List(vec![
+                    PropValue::Text("auto".into()),
+                    PropValue::Text("1fr".into()),
+                ]),
+            )
+            .prop(
+                "areas",
+                PropValue::List(vec![PropValue::Text("icon title".into())]),
+            )
+            .prop("flag", PropValue::Bool(true))
+            .prop("count", PropValue::Int(3))
+            .prop("ratio", PropValue::Float(0.5))
+            .prop("tint", PropValue::Color("#ff00ff".into()))
+            .prop("icon", PropValue::Glyph("terminal".into()))
+            .prop("size", PropValue::Size(ViewSize::Small))
+            .prop("align", PropValue::Align(ViewAlign::Center))
+            .prop("variant", PropValue::Variant(ViewVariant::Ghost));
+
+        let json = serde_json::to_string(&node).expect("serialize");
+        let back: ViewNode = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(node, back, "every PropValue must round-trip through JSON");
+        assert!(
+            matches!(back.props.get("columns"), Some(PropValue::List(items)) if items.len() == 2),
+            "the list survives as a list: {json}",
+        );
     }
 
     #[test]

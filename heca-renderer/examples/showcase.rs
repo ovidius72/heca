@@ -54,7 +54,13 @@ impl Component for IndicatorSwatch {
     fn paint(&self, cx: &mut PaintCx) {
         let b = self.base.bounds;
         // A faint tile so the indicator reads against a surface, like a sidebar item.
-        cx.rect(b, cx.theme().colors.surface, None, cx.theme().colors.border_radius, None);
+        cx.rect(
+            b,
+            cx.theme().colors.surface,
+            None,
+            cx.theme().colors.border_radius,
+            None,
+        );
         if self.swap {
             cx.swap_indicator(b);
         } else {
@@ -188,6 +194,15 @@ fn apply_size(c: &mut dyn Component, size: WidgetSize) {
     }
 }
 
+/// An option whose content is an icon **and** a label — the thing a `Vec<String>` of options could
+/// never express. `Choice` lays them out in a row with a theme-derived gap, and tints both together
+/// when the option is chosen.
+fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
+    Choice::new(value)
+        .child(Icon::new(glyph))
+        .child(Label::new(label))
+}
+
 /// Handles the host keeps after building the UI, to drive chrome interactions
 /// from the keymap (the same signals an RPC layer would write).
 struct BuiltUi {
@@ -269,11 +284,35 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // The keycap is the shared `paint_keycap` primitive in its `Bordered` variant —
     // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
     let menu = ContextMenu::new()
-        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::NotePencil).key('r').shortcut(display_shortcut("prefix+$")))
-        .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
-        .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
-        .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::FolderSimpleMinus).key('x').danger(true).shortcut(display_shortcut("prefix+x")))
+        .entry(
+            MenuEntry::new("Rename", || println!("[showcase] rename"))
+                .icon(Glyph::NotePencil)
+                .key('r')
+                .shortcut(display_shortcut("prefix+$")),
+        )
+        .entry(
+            MenuEntry::new("Move to workspace", || println!("[showcase] → workspace"))
+                .icon(Glyph::ArrowRight)
+                .key('w'),
+        )
+        .entry(
+            MenuEntry::new("Move to column", || println!("[showcase] → column"))
+                .icon(Glyph::SquareSplitVertical)
+                .key('c'),
+        )
+        .entry(
+            MenuEntry::new("Duplicate", || println!("[showcase] duplicate"))
+                .icon(Glyph::Cards)
+                .key('d')
+                .enabled(false),
+        )
+        .entry(
+            MenuEntry::new("Close", || println!("[showcase] close"))
+                .icon(Glyph::FolderSimpleMinus)
+                .key('x')
+                .danger(true)
+                .shortcut(display_shortcut("prefix+x")),
+        )
         // Fired only on Esc / outside-click (a dismissal, not a selection) — the host wires this
         // to its overlay-close path (in `heca`, emit `CloseOverlay`).
         .on_dismiss(|| println!("[showcase] menu dismissed"));
@@ -313,7 +352,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             .background(theme.colors.surface)
             .border(theme.colors.border, theme.colors.border_width)
             .glow(theme.colors.glow)
-            .child(Label::new(value).color(theme.colors.foreground).font_scale(2.0))
+            .child(
+                Label::new(value)
+                    .color(theme.colors.foreground)
+                    .font_scale(2.0),
+            )
     };
     let click = |label: &str| {
         let name = label.to_string();
@@ -373,7 +416,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Label::new("MODE").color(theme.colors.muted).font_scale(0.85))
                 .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
                 .child(Label::new("WORKSPACE").color(theme.colors.muted).font_scale(0.85))
-                .child(Select::new(workspaces).selected(3).on_change(report)),
+                .child(Select::new(workspaces).selected(3).on_change(report))
+                // Composed options: an option is a value plus any content — here an icon and a
+                // label, which tint together as the row is chosen.
+                .child(Label::new("LEVEL").color(theme.colors.muted).font_scale(0.85))
+                .child(
+                    Select::empty()
+                        .option(level_option("low", Glyph::Circle, "LOW"))
+                        .option(level_option("medium", Glyph::Warning, "MEDIUM"))
+                        .option(level_option("high", Glyph::Lightning, "HIGH"))
+                        .selected(1)
+                        .on_change(report),
+                ),
         )
         // One button per GridCN variant.
         .child(caption("Button"))
@@ -529,6 +583,28 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .on_change(report),
                 ),
         )
+        // Label: the four text attributes. `bold`/`italic` are FONT attributes (the shaper picks the
+        // glyphs — italic is a synthesized oblique, since the embedded family has no italic face);
+        // `underline`/`strikethrough` are DECORATIONS the label draws itself, in its own resolved
+        // color. They compose freely.
+        .child(caption("Label"))
+        .child(
+            Flex::row()
+                .gap(20.0)
+                .align(Align::Center)
+                .child(Label::new("REGULAR"))
+                .child(Label::new("BOLD").bold(true))
+                .child(Label::new("ITALIC").italic(true))
+                .child(Label::new("UNDERLINE").underline(true))
+                .child(Label::new("STRIKETHROUGH").strikethrough(true))
+                .child(
+                    Label::new("ALL FOUR")
+                        .bold(true)
+                        .italic(true)
+                        .underline(true)
+                        .strikethrough(true),
+                ),
+        )
         // Text inputs: empty-with-placeholder, pre-filled, and disabled.
         .child(caption("Input"))
         .child(
@@ -542,6 +618,76 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // Tabs: segmented selector with a sliding underline.
         .child(caption("Tabs"))
         .child(Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).on_change(report))
+        // Composed tabs: a tab is a value plus any content — the underline spans whatever it is.
+        .child(
+            Tabs::empty()
+                .tab(
+                    Choice::new("files")
+                        .child(Icon::new(Glyph::FolderOpen))
+                        .child(Label::new("FILES")),
+                )
+                .tab(
+                    Choice::new("issues")
+                        .child(Label::new("ISSUES"))
+                        .child(Badge::danger("3")),
+                )
+                .tab(Choice::labeled("log", "LOG"))
+                .selected(1)
+                .on_change(report),
+        )
+        // Grid: a layout-only CSS-Grid container — tracks + named areas, any child placed into one.
+        // The classic rich row: [icon | title | status] over [· | subtext | ·].
+        .child(caption("Grid"))
+        .child(
+            Grid::new()
+                .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
+                .rows([Track::Auto, Track::Auto])
+                .areas(["icon title   status", "icon subtext ."])
+                // Items sit at the TOP-LEFT of their cell by default (an explicit size has nothing
+                // to stretch), so an Icon (h = font) and a Label (h = font × 1.4) would not share a
+                // centre line. `align` is the vertical knob — the icon then centres across the two
+                // rows it spans, and the status dot centres against the title.
+                .align(Align::Center)
+                // A leading icon spans both text rows, so it is sized to them (a body-size glyph
+                // centred over two lines just floats in the gutter between them).
+                .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
+                .area(Label::new("zsh").bold(true), "title")
+                // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
+                // of its cell instead of letting it stretch across the column.
+                .area(
+                    StatusDot::online().justify_self(Align::End),
+                    "status",
+                )
+                .area(
+                    Label::new("~/projects/heca").color(theme.colors.muted),
+                    "subtext",
+                )
+                .gap(8.0)
+                .width(Length::Px(320.0)),
+        )
+        .child(
+            Grid::new()
+                .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
+                .rows([Track::Auto])
+                .areas(["icon title status"])
+                // Items sit at the TOP-LEFT of their cell by default (an explicit size has nothing
+                // to stretch), so an Icon (h = font) and a Label (h = font × 1.4) would not share a
+                // centre line. `align` is the vertical knob — the icon then centres across the two
+                // rows it spans, and the status dot centres against the title.
+                .align(Align::Center)
+                // A leading icon spans both text rows, so it is sized to them (a body-size glyph
+                // centred over two lines just floats in the gutter between them).
+                .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
+                .area(Label::new("zsh").italic(true).bold(true), "title")
+                // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
+                // of its cell instead of letting it stretch across the column.
+                .area(
+                    StatusDot::online().justify_self(Align::End),
+                    "status",
+                )
+                .gap(3.0)
+                .width(Length::Px(320.0)),
+        )
         .child(caption("Separator"))
         .child(Separator::horizontal().length(440.0))
         // Display widgets: status dot + badges across variants.
@@ -986,7 +1132,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                         )
                                         .child(
                                             Label::new("zsh")
-                                                .color(theme.colors.foreground)
+                                                .italic(true)
+                                                .color(theme.colors.drag_ghost_fg)
                                                 .font_scale(0.8),
                                         ),
                                 ),
@@ -1653,7 +1800,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                 theme.colors.accent,
                 11.0,
                 TextAlign::Start,
-                true,
+                TextStyle::BOLD,
             );
             let inner = Rectangle::new(
                 Point::new(panel.loc.x + 12.0, panel.loc.y + 30.0),
@@ -1670,7 +1817,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                         theme.colors.foreground,
                         12.0,
                         TextAlign::Start,
-                        false,
+                        TextStyle::REGULAR,
                     );
                 }
             });
@@ -2199,8 +2346,9 @@ impl GpuState {
         // append to the persistent buffers (no per-frame staging allocation).
         self.grid.begin_frame();
         self.text.begin_frame();
-        let glow_alpha_scale =
-            heca_renderer::scene::glow_alpha_scale_for_background(self.theme.colors.background.to_f32x4());
+        let glow_alpha_scale = heca_renderer::scene::glow_alpha_scale_for_background(
+            self.theme.colors.background.to_f32x4(),
+        );
         enqueue_scene(
             &mut self.grid,
             &mut self.text,

@@ -744,6 +744,7 @@ impl TextRenderer {
         font_size: f32,
         color: [f32; 4],
         bold: bool,
+        italic: bool,
         align: TextAlign,
         icon: bool,
     ) {
@@ -756,8 +757,13 @@ impl TextRenderer {
             font_size,
             color,
             bold,
+            // Italic is the **synthesized oblique**, not `Style::Italic`. The embedded UI family
+            // (Geist Mono) ships no italic face: asking cosmic-text for one would either render
+            // upright or substitute a *proportional* fallback, and a proportional fallback breaks
+            // the monospace advances every grid-ui measure assumes. The shear keeps the same face —
+            // same glyphs, same widths, just slanted.
             italic: false,
-            faux_italic: false,
+            faux_italic: italic,
             align,
             centered: true,
             line_box: false,

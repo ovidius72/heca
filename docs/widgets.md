@@ -174,9 +174,11 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `base_mut(&mut self) -> &mut Base` | — | Required. |
 | `focusable(&self) -> bool` | `base.focusable && !disabled` | Set `base.focusable = true` on an interactive widget instead of overriding this; override only for dynamic focusability (focusable only while open). |
 | `overlay_active(&self) -> bool` | `false` | `true` while the widget owns an open overlay (e.g. a `Select` dropdown), so the host routes input to it first. |
+| `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
+| `on_layout(&mut self)` | no-op | Called post-order once this node's (and its descendants') bounds are freshly computed. Override to **place** children the engine could not put where they are drawn — a [`ScrollRegion`](#scrollregion) re-bakes its scroll offset, a [`Select`](#select) re-places its option rows into the overlay panel. Bounds are natural again on entry, so the widget re-derives its shift from scratch instead of compounding it. |
 | `on_focus(&mut self, visible: bool)` | set `focused`/`focus_visible` | Gained focus. |
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
@@ -193,7 +195,10 @@ return `Self` for chaining.
 | `.direction(Direction)` | Main axis (`Row`/`Column`). |
 | `.gap(f32)` | Space between children. |
 | `.justify(Justify)` | Main-axis distribution (`Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`). |
-| `.align(Align)` | Cross-axis alignment (`Start`/`Center`/`End`/`Stretch`). |
+| `.align(Align)` | Cross-axis alignment of the **children** (`Start`/`Center`/`End`/`Stretch`). In a `Row` that is vertical; in a `Column`, horizontal; in a [`Grid`](#grid), it is how items sit **vertically inside their cells**. |
+| `.align_self(Align)` | Cross-axis alignment of **this** widget in its parent (CSS `align-self`), overriding the parent's `.align()` for it alone. `Align::Start` keeps an `Auto`-sized widget **hugging its content** instead of stretching to fill the parent — which is what the default `Stretch` would otherwise do (see [`Select`](#select), sized to its widest option). |
+| `.justify_items(Align)` | **Grid only** — how the items sit **horizontally inside their cells** (CSS `justify-items`). Not the same as `.justify()`, which on a grid distributes the whole *track set*. |
+| `.justify_self(Align)` | **Grid only** — horizontal placement of **this** item in its own cell, overriding the grid's `.justify_items()`. |
 | `.padding(f32)` | Inner padding (all sides). |
 | `.width(Length)` / `.height(Length)` | `Length::Auto` or `Length::Px(f32)`. |
 | `.grow(f32)` | Flex-grow factor. |
@@ -218,7 +223,8 @@ return `Self` for chaining.
 
 ### `Style` & layout enums
 
-`Style` fields: `direction`, `justify`, `align` (default `Stretch`), `gap`, `padding`,
+`Style` fields: `direction`, `justify`, `align` (default `Stretch`), `align_self` (`Option<Align>`,
+default `None` ⇒ follow the parent), `gap`, `margin` (+ per-side overrides), `padding`,
 `width`/`height` (`Length`), `flex_grow`, `fill`, `border`, `glow`, `accent`, `fg`,
 `radius`, `font_size`, `font_scale`. Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
 `Align{Start,Center,End,Stretch}`, `Length{Auto,Px(f32)}`.
@@ -365,13 +371,14 @@ stay DRY):
 | `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Dialog` to lift off the scrim. |
 | `.focus_ring(rect, color, radius)` | **The** keyboard focus outline for every widget — a thin accent-toned ring drawn *just outside* `rect` (CSS-`outline` style, offset gap), corner radius widened to stay concentric. Visible whether or not the widget has its own border (works on borderless Ghost/Link buttons). Width = `focus_border_width`; halo tracks `glow_size`. Pair with the theme's `focus_ring`/`effective_focus_ring()`/`focus_ring_tone()` for the color. |
 | `.bracket_frame(rect)` | Decorative L-shaped corner-bracket reticle (Pane/DockFrame/Dialog chrome) — **decoration, not focus** (focus uses `.focus_ring`). |
-| `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
+| `.text(rect, &str, color, size, TextAlign, TextStyle)` | Text centered in `rect` (per `align` horizontally, vertically centered). `TextStyle { bold, italic }` is the **font** style — what the shaper does to the glyphs (`TextStyle::REGULAR` / `BOLD` / `ITALIC`, or `TextStyle::REGULAR.bold(is_active)`). Decorations (underline, strikethrough) are **not** here: a line is a rect, and the widget draws it — see [`Label`](#label). Italic is a *synthesized oblique*, since the embedded family has no italic face. |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
+| `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
 
 `DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `Gradient`, `PushClip`/`PopClip`
 (clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
@@ -499,10 +506,17 @@ per-child placement. Pure layout (no styling) — the building block for rich co
 
 - **Construct**: `Grid::new()`.
 - **Builders**: `.columns([Track])`, `.rows([Track])` (`Track::{Px(f32), Fr(f32), Auto,
-  MinContent, MaxContent}`); `.areas(["a b", "a c"])` named template areas; `.area(child,
-  "name")` places a child in an area; `.cell(child, col, row, col_span, row_span)` explicit
-  placement.
+  MinContent, MaxContent}`); `.areas(["a b", "a c"])` named template areas (`.` or `_` = an empty
+  cell); `.area(child, "name")` places a child in an area; `.cell(child, col, row, col_span,
+  row_span)` explicit 1-based placement. A child placed by neither gets taffy's auto-placement; an
+  unknown area name falls back to it too.
+- **Boxed setters**: `.area_boxed(Box<dyn Component>, "name")` / `.cell_boxed(box, col, row,
+  col_span, row_span)` — for a host mapper that has an *already-realized* subtree. (`Box<dyn
+  Component>` is not itself `Component`, so it can't go through the `impl Component` setters; same
+  seam as [`Dialog::body_boxed`](#dialog).)
 - **Traits**: `LayoutExt`, `Parent`.
+
+**Native:**
 
 ```rust
 // icon · title · tag on the top row; subtitle under the title
@@ -515,6 +529,153 @@ Grid::new()
     .area(Label::new("nvim"), "title")
     .area(Badge::success("RUN"), "tag");
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Grid)
+    .prop("columns", PropValue::List(vec![           // CSS-like track strings
+        PropValue::Text("22px".into()),
+        PropValue::Text("1fr".into()),
+        PropValue::Text("auto".into()),
+    ]))
+    .prop("rows", PropValue::List(vec![PropValue::Text("auto".into())]))
+    .prop("areas", PropValue::List(vec![PropValue::Text("dot title tag".into())]))
+    // Placement is a prop on the CHILD: an area name…
+    .child(ViewNode::new(WidgetKind::Icon)
+        .prop("icon", PropValue::Glyph("terminal".into()))
+        .prop("area", PropValue::Text("dot".into())))
+    // …or an explicit 1-based cell (+ optional col_span / row_span; both default to 1).
+    .child(ViewNode::new(WidgetKind::Label)
+        .text("nvim")
+        .prop("col", PropValue::Int(2))
+        .prop("row", PropValue::Int(1)));
+```
+
+**Track vocabulary** (parsed by `realize`, case-insensitive, trimmed): `"22px"` (or a bare `22` /
+`PropValue::Int`) → `Px` · `"1fr"` → `Fr` · `"auto"` → `Auto` · `"min"` / `"min-content"` →
+`MinContent` · `"max"` / `"max-content"` → `MaxContent`. **Anything unrecognised degrades to
+`Auto`** — never a panic, never an error: the model is untrusted input, so a typo costs its author a
+differently-sized track, not a broken host. (No new schema is invented here; CSS grid already has
+this vocabulary and plugin authors know it.)
+
+#### The `areas` template defines the structure — `rows` / `columns` only *size* it
+
+`.areas([...])` is the source of truth for the grid's shape: one string per row, one token per
+column. `.rows(...)` / `.columns(...)` merely give sizes to the tracks the template implies. So if
+the template has **more rows than there are row tracks**, the extra rows still exist — taffy creates
+them **implicitly** (`Auto`-sized). Nothing errors; the grid just has more rows than you declared.
+
+That is the source of the classic "my text isn't vertically centred" bug:
+
+```rust
+// WRONG — one row track, but a TWO-row template. `icon` spans both rows (the second is implicit),
+// so it is centred over a taller area than `title` and the two stop sharing a centre line.
+Grid::new()
+    .rows([Track::Auto])
+    .areas(["icon title status",
+            "icon subtext ."])           // ← this line still creates a row
+    .align(Align::Center)
+
+// RIGHT — one row: one line in the template.
+Grid::new()
+    .rows([Track::Auto])
+    .areas(["icon title status"])
+    .align(Align::Center)
+```
+
+Rule of thumb: **count the lines in `areas` — that is how many rows you have**, regardless of what
+`rows(...)` says.
+
+#### Aligning items inside their cells (read this — the default surprises people)
+
+**By default a grid item is pinned to the TOP-LEFT of its cell.** The default is `Stretch` on both
+axes, and an item with an explicit size (which every leaf widget has — a `Label` measures to
+`font × 1.4`, an `Icon` to `font`) has nothing to stretch, so it lands at the start of the cell in
+both directions. Put an `Icon` and a `Label` in the same row and they will *not* share a centre
+line — the icon sits a few pixels high. That is a real thing to fix, not a rendering artifact.
+
+Four knobs, two axes — the grid sets the default, the item overrides it:
+
+| | Vertical (block axis) | Horizontal (inline axis) |
+|---|---|---|
+| **on the Grid** (all items) | `.align(Align)` | `.justify_items(Align)` |
+| **on one child** (overrides) | `.align_self(Align)` | `.justify_self(Align)` |
+
+Values are `Align::{Start, Center, End, Stretch}` — `Stretch` (the default) makes an `Auto`-sized
+item fill the cell, and pins a fixed-size one to the start.
+
+> **The trap:** `.justify(...)` is **not** the horizontal item knob. On a grid it maps to CSS
+> `justify-content`, which distributes the whole *track set* inside the container and leaves every
+> item exactly where it was. Reach for `.justify_items(...)` / `.justify_self(...)`. (Vertically the
+> word is unambiguous: `.align(...)` is what you want.)
+
+**Native — a rich row whose items share a centre line:**
+
+```rust
+Grid::new()
+    .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
+    .rows([Track::Auto, Track::Auto])
+    .areas(["icon title   status",
+            "icon subtext ."])
+    .gap(8.0)
+    // Vertical: centre every item in its cell. The icon spans both rows, so it centres across the
+    // pair; the status dot centres against the title. Without this they all sit at the cell top.
+    .align(Align::Center)
+    .area(Icon::new(Glyph::Terminal), "icon")
+    .area(Label::new("zsh").bold(true), "title")
+    // Horizontal, for this item only: pin the dot to the right edge of its cell instead of
+    // stretching it across the column.
+    .area(StatusDot::online().justify_self(Align::End), "status")
+    .area(Label::new("~/projects/heca").color(theme.colors.muted), "subtext");
+```
+
+**The same, per axis, in isolation:**
+
+```rust
+Grid::new().align(Align::Center)          // all items: centred vertically in their cell
+Grid::new().justify_items(Align::Center)  // all items: centred horizontally in their cell
+Grid::new().align(Align::Center).justify_items(Align::Center)   // dead centre
+
+// One item departing from the grid's default (each axis is independent):
+.area(Badge::success("RUN").align_self(Align::Start), "tag")     // top of its cell
+.area(Badge::success("RUN").justify_self(Align::End), "tag")     // right of its cell
+.area(Icon::new(Glyph::Terminal).align_self(Align::Stretch), "icon")  // fill the cell vertically
+```
+
+**Declarative — the same four knobs are props:**
+
+```rust
+ViewNode::new(WidgetKind::Grid)
+    .prop("columns", PropValue::List(vec![
+        PropValue::Text("auto".into()),
+        PropValue::Text("1fr".into()),
+        PropValue::Text("auto".into()),
+    ]))
+    .prop("areas", PropValue::List(vec![PropValue::Text("icon title status".into())]))
+    // On the grid: the default placement of every item in its cell.
+    .prop("align", PropValue::Align(ViewAlign::Center))            // vertical
+    .prop("justify_items", PropValue::Align(ViewAlign::Center))    // horizontal
+    .child(ViewNode::new(WidgetKind::Icon)
+        .prop("icon", PropValue::Glyph("terminal".into()))
+        .prop("area", PropValue::Text("icon".into())))
+    .child(ViewNode::new(WidgetKind::Label)
+        .text("zsh")
+        .prop("area", PropValue::Text("title".into())))
+    // On a child: override the grid, one axis each.
+    .child(ViewNode::new(WidgetKind::StatusDot)
+        .prop("area", PropValue::Text("status".into()))
+        .prop("justify_self", PropValue::Align(ViewAlign::End)));   // hard right in its cell
+```
+
+`align_self` / `justify_self` are read for **every** kind, not just grid items — they describe a node
+inside its parent, so they work on a flex child too (there, `align_self` is the cross axis and
+`justify_self` is inert).
+
+`Grid` is the one kind whose configuration is genuinely **list-shaped**, and the only reason
+[`PropValue::List`](#the-model--a-node-is-four-things-all-its-own) exists. Placement lives on the
+child rather than in a table on the parent, which keeps `ViewNode`'s shape flat — no second child
+vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
@@ -614,18 +775,55 @@ A single text run bound to a `Signal<String>`.
 
 - **Construct**: `Label::new(text)`.
 - **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
-  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy),
-  `.bold(bool)`.
-- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively),
-  `.bold_signal() -> Signal<bool>` (re-weight **in place**, no rebuild — an enclosing widget drives
-  it for a state-dependent weight; this is how [`Item`](#item) bolds its label while active, since
-  the inherited paint context carries a color but not a weight).
+  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and the
+  four text attributes: `.bold(bool)`, `.italic(bool)`, `.underline(bool)`, `.strikethrough(bool)`.
+- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively), plus a signal per
+  attribute — `.bold_signal()`, `.italic_signal()`, `.underline_signal()`, `.strikethrough_signal()`
+  (all `Signal<bool>`). Flip one to restyle the label **in place**, with no rebuild: an enclosing
+  widget drives it for a state-dependent look — this is how [`Item`](#item) bolds its label while
+  active (the inherited paint context carries a color, but not a weight), and how a link underlines
+  on hover.
+
+#### The four text attributes — two are font, two are not
+
+The split matters, because it is why underline exists at all without touching the renderer:
+
+| | | Who renders it |
+|---|---|---|
+| `bold` | **font attribute** | The shaper picks the glyphs — the embedded family ships a real bold face. |
+| `italic` | **font attribute** | A **synthesized oblique**: the glyphs are *sheared*. The embedded family (Geist Mono) has **no italic face**, and asking the shaper for a real one would substitute a *proportional* fallback — which would break the monospace advances every measure in this library assumes. The shear keeps the same face, same widths, just slanted. |
+| `underline` | **decoration** | The **label** draws it — a line is not a glyph, it is a rect. |
+| `strikethrough` | **decoration** | Likewise. |
+
+The decorations are painted in the label's **resolved color** (own → inherited content color → theme
+foreground), so an underlined label inside a `Button` tints with the button's hover/disabled state
+like everything else — no wiring, same mechanism as the glyphs.
+
+**Geometry** (all font-relative, so a rule under 10px text is hairline and one under a 28px header is
+proportionate — there are no pixel constants to go stale):
+
+| | Value |
+|---|---|
+| thickness | `font × 0.07`, floored at **1px** so it never vanishes |
+| underline | `0.42 × font` **below** the run's centre line — clear of the descenders |
+| strikethrough | `0.06 × font` **above** the centre line — a line through the exact middle reads low, because lowercase mass sits above the box centre |
+
+And the part that is easy to get wrong: **a decoration follows the text run, not the label's box.** A
+`Label` normally hugs its text, but a *container* can widen a child's bounds — a [`Select`](#select)
+does exactly that to its option rows, so the selection pill spans the panel — and `align` then
+decides where the run sits inside that wider box. A rule spanning the box would be mostly empty line.
+An empty label has a zero-width run and draws no rule at all.
 
 **Color is inherited when unset.** With no explicit `.color(..)` the label paints in the
 [content color](#scene--drawcommand--paintcx-for-building-widgets) published by an enclosing control
-(`Button`, `Item`), falling back to `theme.foreground` when there is none. That is what makes a label
-composed inside a button track that button's hover/disabled state with no wiring between the two.
-Calling `.color(..)` opts out of the inheritance.
+(`Button`, `Item`, `Choice`), falling back to `theme.foreground` when there is none. That is what
+makes a label composed inside a button track that button's hover/disabled state with no wiring
+between the two. Calling `.color(..)` opts out of the inheritance.
+
+**It names the subtree it sits in.** `Label` is the leaf that supplies
+[`Component::text_summary`](#component-trait) — the accessible name a control reads when it needs the
+*text* of content whose type it cannot see (a [`Select`](#select) reporting its current value).
+Nothing to wire: composing a `Label` into an option is what gives that option a name.
 
 **Native:**
 
@@ -633,13 +831,40 @@ Calling `.color(..)` opts out of the inheritance.
 let status = Label::new("ONLINE").color(theme.foreground).font_size(14.0);
 let sig = status.text_signal();
 // later: sig.set("OFFLINE".into());
+
+// The four text attributes, alone and combined — they compose freely.
+Label::new("BOLD").bold(true);
+Label::new("ITALIC").italic(true);                      // synthesized oblique (see above)
+Label::new("LINK").underline(true);
+Label::new("DONE").strikethrough(true);
+Label::new("ALL FOUR").bold(true).italic(true).underline(true).strikethrough(true);
+
+// State-driven, in place — no rebuild. A link that underlines while hovered:
+let link = Label::new("docs/widgets.md");
+let underline = link.underline_signal();
+// in the enclosing widget's event/tick:  underline.set(hovered);
+
+// A completed to-do: the parent strikes its own label through when the row is done.
+let row = Label::new("Ship the release");
+let done = row.strikethrough_signal();
+// done.set(true);
 ```
 
-**Declarative** (`WidgetKind::Label`, prop `text`):
+**Declarative** (`WidgetKind::Label`):
 
 ```rust
-ViewNode::new(WidgetKind::Label).text("ONLINE")
+ViewNode::new(WidgetKind::Label)
+    .text("DONE")
+    .prop("bold", PropValue::Bool(true))
+    .prop("italic", PropValue::Bool(true))
+    .prop("underline", PropValue::Bool(false))
+    .prop("strikethrough", PropValue::Bool(true));
 ```
+
+Props `realize` reads: `text`, `bold`, `italic`, `underline`, `strikethrough` (all `Bool`, all
+default `false`). The signals are **not** exposed declaratively — a `ViewNode` is static data and
+cannot carry a live signal (same rule as [`ScrollBar`](#scrollbar) being host-only); a plugin author
+re-emits the node with the new value instead.
 
 ### Button
 
@@ -935,53 +1160,183 @@ ViewNode::new(WidgetKind::Input)
 
 ### Tabs
 
-Horizontal segmented selector with an animated sliding underline; lays its own segments
-from monospace metrics (no child components). Focusable; click selects.
+Horizontal segmented selector with an animated sliding underline. Focusable, and **one Tab stop**
+([`Base.focus_barrier`](#base)) — the individual tabs are not separate stops. Click selects.
 
-- **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`.
-- **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits;
-  strip re-measures), `.on_change(impl Fn(Action))`.
-- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`.
-- **Emits**: `"tab-change"` / `SignalData::Usize`.
+**Its segments are [`Choice`](#choice) children** — the same option primitive [`Select`](#select)
+mounts as its dropdown rows. So a tab can be anything: a word, an icon + a label, a label with a
+count `Badge`. `Tabs` owns only the strip's chrome (the underline, the focus ring); each tab draws
+itself and tints its own content when selected.
+
+**The underline slides between the selected child's real bounds.** It follows whatever the tab
+actually *is* — no monospace metrics, no segment arithmetic — so it is correct for a tab holding an
+icon or a badge, which a char-count could never have measured. The strip **hugs its tabs** in both
+axes; the underline's band is reserved as a bottom margin on the tabs, so the strip measures to "the
+tallest tab + the band" without anyone computing a height.
+
+- **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`,
+  **sugar** that builds a `Choice::labeled(text, text)` per tab (the value *is* the text) ·
+  `Tabs::empty()` — no tabs, compose them.
+- **Content**: `.tab(Choice)` — appends a composed tab. Typed to `Choice` for the same reason
+  `Select::option` is: the strip keeps the tab's `state()` / `hovered()` signals so it can drive them
+  in place.
+- **Builders**: `.selected(index)` (initial, clamped — call it **after** the tabs), `.font_size(f32)`
+  (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` (the
+  selected tab's [text summary](#component-trait)).
+- **Emits**: `"tab-change"` / `SignalData::Usize` (the index — unchanged).
 - **Keys** (`widget-keys-config`): navigation is host-configured, not hardcoded. As a **horizontal**
   selector the widget moves selection on the semantic `Event::Widget(WidgetIntent::{ItemPrevious,
   ItemNext})` (left/right). The host resolves the configurable `item_previous` / `item_next`
   `[keys.widgets]` bindings into it (defaults ←/`Ctrl+h` → previous, →/`Ctrl+l` → next) via
   `Keymap::dispatch` — delivering to the focused widget.
 
+**Native:**
+
 ```rust
+// Sugar — plain text tabs.
 Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
+    .on_change(|a| if let SignalData::Usize(i) = a.data { show_tab(i); });
+
+// Composed — a tab is a value plus any content; the underline spans whatever it is.
+Tabs::empty()
+    .tab(Choice::new("files").child(Icon::new(Glyph::FolderOpen)).child(Label::new("FILES")))
+    .tab(Choice::new("issues").child(Label::new("ISSUES")).child(Badge::danger("3")))
+    .selected(1)
     .on_change(|a| if let SignalData::Usize(i) = a.data { show_tab(i); });
 ```
 
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Tabs)
+    .prop("selected", PropValue::Int(1))
+    .on("change", Intent::new("show_tab"))
+    .child(ViewNode::new(WidgetKind::Choice).prop("value", PropValue::Text("files".into()))
+        .child(ViewNode::new(WidgetKind::Label).text("FILES")))
+    .child(ViewNode::new(WidgetKind::Choice).prop("value", PropValue::Text("issues".into()))
+        .child(ViewNode::new(WidgetKind::Label).text("ISSUES"))
+        .child(ViewNode::new(WidgetKind::Badge).text("3")));
+// The `change` intent fires with args {"value": "issues"} — the tab's value, not an opaque index.
+```
+
+Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is
+ignored). The `change` intent carries the chosen option's **value**, not its index — see
+[Options are children](#options-are-children-select--tabs--choice).
+
 ### Select
 
-Single-select dropdown — the first **overlay** widget. The trigger shows the current value;
-the open option list paints in the scene's overlay layer (on top of everything) and the
-widget reports `overlay_active()` so the host routes input to it first (see
-[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Focusable; self-contained
-(no child components). The trigger **width adapts** to the widest option at the current font;
-both trigger and rows scale with the font. The open panel **flips above** the trigger when
-there's no room below, **caps** its visible rows to what fits in the `PaintCx` viewport, and
-**scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
+Single-select dropdown — the first **overlay** widget. The trigger shows the current value; the open
+option list paints in the scene's overlay layer (on top of everything) and the widget reports
+`overlay_active()` so the host routes input to it first (see
+[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Focusable, and **one Tab stop**
+([`Base.focus_barrier`](#base)) — the options are not separate stops.
 
-- **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`.
-- **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits),
-  `.on_change(impl Fn(Action))`.
-- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> &str`.
-- **Emits**: `"select-change"` / `SignalData::Usize`.
+**Its options are [`Choice`](#choice) children.** So an option is not a string: it is a value plus
+whatever content you compose — an icon and a label, a two-line row, a `Badge`. `Select` owns only the
+*chrome* (trigger, chevron, panel, keyboard cursor, scrollbar); each row draws itself, and tints its
+own content when chosen.
+
+**The trigger shows the chosen option itself — icon and all, open or closed.** Closed, the option
+*is* the trigger's content: it is a real component, stood inside the trigger box, painting there.
+Open, that same component has moved into the list — a component is laid out in exactly one place — so
+the trigger draws a second **image** of its content with
+[`PaintCx::with_translate`](#scene--drawcommand--paintcx-for-building-widgets), translated from the
+panel back into the trigger. Only the content is echoed, never the row's chrome: the trigger's own
+box is its chrome, and a selection pill inside it would be a box in a box.
+
+The open panel is **opaque**: it consumes pointer moves over itself, so widgets behind it don't light
+up as hovered.
+
+The trigger **width hugs the widest option** (the engine measures the real rows — icons included —
+instead of counting characters), and everything scales with the font and the size variant. The open
+panel **flips above** the trigger when there's no room below, **caps** its visible rows to what fits
+in the `PaintCx` viewport, and **scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
+
+- **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`,
+  **sugar** that builds a `Choice::labeled(text, text)` per option (the value *is* the text) ·
+  `Select::empty()` — no options, compose them.
+- **Content**: `.option(Choice)` — appends a composed option. Typed to `Choice` on purpose: the
+  control keeps the row's `state()` signal so it can flip the selection **in place** (a
+  `Box<dyn Component>` would have erased it), and the rows of a select genuinely *are* options.
+- **Builders**: `.selected(index)` (initial, clamped — call it **after** the options),
+  `.font_size(f32)` (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` —
+  the chosen option's [text summary](#component-trait), i.e. its content's accessible name (`"HIGH"`
+  for an `Icon` + `Label("HIGH")` option). Use it to read the current value as text.
+- **Emits**: `"select-change"` / `SignalData::Usize` (the index — unchanged; `realize` maps it back
+  to the chosen `Choice`'s **value** for declarative authors).
 - **Keys** (`widget-keys-config`): a **closed** trigger opens on a raw `Enter` / `Space` / `↓`
   (activation, like a button). The **open** list is a **vertical** overlay driven by the semantic
   `Event::Widget` intents — shared with [`ContextMenu`](#contextmenu) / [`CommandPalette`](#commandpalette):
-  `MenuUp`/`MenuDown` move the highlight (scroll into view), `Activate` commits, `Dismiss` closes. The
+  `MenuUp`/`MenuDown` move the cursor (scroll into view), `Activate` commits, `Dismiss` closes. The
   host resolves the configurable `menu_up`/`menu_down`/`activate`/`dismiss` `[keys.widgets]` keys into
   it (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter, Esc). Click a row to choose, click outside to close;
   wheel scrolls the open list.
 
 ```rust
+// Sugar — plain text options.
 Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
     .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
+
+// Composed — a value plus any content. The Icon + Label tint together when the row is chosen.
+Select::empty()
+    .option(Choice::new("low").child(Icon::new(Glyph::Circle)).child(Label::new("LOW")))
+    .option(Choice::new("high").child(Icon::new(Glyph::Lightning)).child(Label::new("HIGH")))
+    .selected(0)
+    .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
 ```
+
+**Declarative** — the same control, authored as data (a plugin / RPC / a modal body). The options are
+**children**, never a `props["options"]` list of strings, which is the whole point: a declarative
+option can compose content exactly like a native one.
+
+```rust
+ViewNode::new(WidgetKind::Select)
+    .prop("selected", PropValue::Int(1))
+    .on("change", Intent::new("set_level"))
+    .child(
+        ViewNode::new(WidgetKind::Choice)
+            .prop("value", PropValue::Text("low".into()))
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("circle".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("LOW")),
+    )
+    .child(
+        ViewNode::new(WidgetKind::Choice)
+            .prop("value", PropValue::Text("high".into()))
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("HIGH")),
+    );
+// The `change` intent fires with args {"value": "high"} — the option's value, not an opaque index.
+```
+
+Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is ignored).
+A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button` does; when it
+has children, **children win**. See
+[Options are children](#options-are-children-select--tabs--choice).
+
+#### How the rows can be children *and* live in an overlay
+
+Worth understanding before you touch this widget (it is the one genuinely subtle thing in the
+library). The panel is drawn **outside** the control's layout box and may flip above it — the layout
+engine cannot put a taffy node there, because a node sits where its parent's flow puts it.
+
+So the rows are laid out in the trigger's flow, which is where the engine **measures** them (each
+`Choice` hugs its content), and `Select` then **places** them: it bakes the offset from that flow
+into each visible row's bounds — the same trick [`ScrollRegion`](#scrollregion) uses to bake
+`-scroll_offset` into its children (`component::shift_subtree`). The rows carry the control's
+horizontal insets as **margins**, which is what widens the control around them while keeping their
+content clear of the chevron and the scrollbar lane.
+
+The invariant this buys, and the reason it is done this way:
+
+> **bounds === what is drawn === what is clickable.**
+
+Hit-testing goes through [`choice_at`](#choice), which reads the rows' real bounds — never row
+arithmetic — so a click can only ever land on the row the user sees there, whatever the rows contain
+and however tall they are. Rows outside the visible window (and every row while the list is closed)
+are **collapsed to zero size**, so no stale rect is left behind to swallow a click. Placement is
+re-derived after every layout pass (`Component::on_layout`) and is idempotent.
 
 > **Host wiring**: while `overlay_active()`, route pointer + wheel to
 > `FocusManager::deliver_to_overlay`, and key input through `Keymap::dispatch` (raw key first, then
@@ -1045,8 +1400,27 @@ Choice::new("high")
     .on_activate(|| set_level("high"));
 ```
 
-> **Declarative form**: `WidgetKind::Choice` (prop `value`, `text` as the childless sugar, children =
-> content) lands with the `Select`/`Tabs` realize arms — phase `viewnode-choice`, task `choice-4`.
+**Declarative:**
+
+```rust
+// As an option of a Select/Tabs (the usual case — see "Options are children").
+ViewNode::new(WidgetKind::Choice)
+    .prop("value", PropValue::Text("high".into()))
+    .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+    .child(ViewNode::new(WidgetKind::Label).text("HIGH"));
+
+// Standalone — then it is activatable in its own right, and hintable like any actionable node.
+ViewNode::new(WidgetKind::Choice)
+    .prop("value", PropValue::Text("high".into()))
+    .text("HIGH")                                   // childless sugar → one Label child
+    .on_press(Intent::new("set_level"));
+```
+
+Props `realize` reads: `value` (`Text`/`Int` — what the option *means*), `text` (the **childless**
+sugar → a `Label` child; with children, **children win**, the same precedence as `Button`). With no
+`value`, the text stands in for it. Events: `press` — wired **only** when the `Choice` is standalone;
+inside a `Select`/`Tabs` the container owns the click, so a `press` there is ignored rather than
+half-wired. See [Options are children](#options-are-children-select--tabs--choice).
 
 ### Item
 
@@ -1083,15 +1457,30 @@ let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 > fires `on_activate`, so a single source of truth can own which row is active (set the
 > clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
-**Declarative** (`WidgetKind::Item`): prop `text` (the label), event `press`.
+> **`Item` or [`Choice`](#choice)?** Both are selectable, both compose their content, both are one
+> Tab stop — but they answer different questions. An `Item` is a **row** (leading · label · trailing,
+> fixed height, `ActiveMarker`): use it when you are building a list that looks like rows. A `Choice`
+> is **any content plus a value**: use it when the user is **picking one of several alternatives**.
+> Full comparison + rule of thumb: [`Choice` vs `Item`](#choice-vs-item--when-to-use-which).
+
+**Declarative** (`WidgetKind::Item`):
 
 ```rust
-ViewNode::new(WidgetKind::Item).text("main.rs").on_press(Intent::new("open_file"))
+ViewNode::new(WidgetKind::Item)
+    .text("main.rs")                                        // the label (the row's middle)
+    .on_press(Intent::new("open_file"))
+    .child(ViewNode::new(WidgetKind::StatusDot)
+        .prop("slot", PropValue::Text("leading".into())))   // ← leading slot
+    .child(ViewNode::new(WidgetKind::Badge)
+        .text("M")
+        .prop("slot", PropValue::Text("trailing".into()))); // ← trailing slot
 ```
 
-Its **slots are not modelled in `ViewNode` yet** — a declarative `Item` gets a label and an intent,
-but no leading/trailing content. That needs *named* children in the model (structured props), which
-is `viewnode-task-1`. Native code composes the slots freely today.
+- **Props**: `text` (the label). **Event**: `press`.
+- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `leading`, `trailing` — each
+  takes an arbitrary subtree. There is **no default slot**: the row's middle *is* the label, which
+  comes from `text`, so a child with no `slot` (or an unknown one) is **ignored** rather than dropped
+  somewhere it doesn't belong. It is debug-logged, never a panic.
 
 ### Row
 
@@ -1145,6 +1534,22 @@ bar.content_extent_signal().set(240.0);   // total rows / px / items
 bar.viewport_extent_signal().set(48.0);  // visible rows / px / items
 bar.offset_signal().set(96.0);           // offset from TOP
 ```
+
+> #### ScrollBar is HOST-ONLY — it is not declarable, on purpose
+>
+> Look at the example above: the widget is **driven by live signals** the host writes every frame.
+> A [`ViewNode`](#declarative-ui-model-viewnode) is static, serializable data — it cannot carry a
+> signal, let alone update one — so a declarative `ScrollBar` would render a **dead control**: a
+> thumb that never moves and never reports. `realize` therefore refuses it (and says so in a debug
+> log) rather than producing something that looks right and does nothing.
+>
+> **A plugin that needs scrolling uses [`Scroll`](#scrollregion)** (a `ScrollRegion`), which owns its
+> own offset, wheel and keyboard handling — no host wiring required.
+>
+> This is a **general rule, not a special case**: *a widget whose state is a live host signal is
+> host-only.* It applies to individual **builders** too — [`DockFrame::rail(..)`](#dockframe) binds a
+> host-owned `RegionMode` signal, so a declarative dock is simply never rail-aware. Apply the same
+> reasoning to any future widget of that shape, instead of inventing a way to fake a signal in data.
 
 ### Badge
 
@@ -1232,12 +1637,41 @@ sidebar. Severity maps to theme tokens, never literals.
   `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
   Enter/Space activates).
 
+**Native:**
+
 ```rust
 Toast::danger("Connection lost")
     .body("Reconnecting to the grid…")
     .action("Retry", || retry())
     .on_dismiss(|| dismiss(id));
 ```
+
+**Declarative** (`WidgetKind::Toast`):
+
+```rust
+ViewNode::new(WidgetKind::Toast)
+    .text("Build failed")                                         // the title
+    .prop("severity", PropValue::Text("danger".into()))           // info | success | warning | danger
+    .prop("icon", PropValue::Glyph("warning".into()))             // optional; severity picks a default
+    .prop("body", PropValue::Text("3 errors in heca-grid-ui".into()))
+    .prop("action_text", PropValue::Text("RETRY".into()))         // the inline action's label
+    .prop("dismissible", PropValue::Bool(true))
+    .on("action", Intent::new("rebuild"))                         // fires when RETRY is clicked
+    .on("dismiss", Intent::new("close_toast"))                    // fires on the ×
+    .on_press(Intent::new("open_build_log"));                     // whole card
+```
+
+- **Props**: `text` (title), `severity` (`Text` — an unknown name degrades to `info`), `icon`
+  (Glyph name), `body`, `action_text`, `dismissible` (Bool).
+- **Events**: `press` (the whole card), `dismiss` (the ×), `action` (the inline button — only wired
+  when `action_text` is set).
+- **No slots.** The inline action is a *labelled button*, not arbitrary content, so it is a prop plus
+  an intent. A slot would have promised a composition the widget does not offer.
+
+> **A declarative `Toast` is for INLINE use** — a notification row inside a panel. It is **not** how
+> you fire an app notification: the host owns the queue and lifecycle through
+> [`ToastStack`](#toaststack) + `ToastSpec` (which is plain data it can push, time out and dedup).
+> Realizing a `Toast` node just renders a card wherever you put it.
 
 ### ProgressBar
 
@@ -1353,11 +1787,28 @@ rows out of layout (`display: none`); a hidden subtree is never painted or Tab-f
   Bool)`).
 - **Accessors**: `.state() -> Signal<bool>` (expanded).
 
+**Native:**
+
 ```rust
 ItemGroup::new("src")
     .child(Item::new("main.rs"))
     .child(Item::new("lib.rs"));
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::ItemGroup)
+    .text("src")                                    // the header label
+    .prop("expanded", PropValue::Bool(true))
+    .on("toggle", Intent::new("fold_group"))        // fires with args {"expanded": false}
+    .child(ViewNode::new(WidgetKind::Item).text("main.rs"))
+    .child(ViewNode::new(WidgetKind::Item).text("lib.rs"));
+```
+
+Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the
+group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
+moved to in `args["expanded"]`, so one binding tells you which way it went.
 
 ### MarkerGroup
 
@@ -1375,12 +1826,27 @@ draggable; the bar stays a pure indicator). All bar styling is read from the `Th
   cursor) — bind either; the host writes it when the group's selection changes and the bar
   repaints without a rebuild.
 
+**Native:**
+
 ```rust
 MarkerGroup::new()
     .active(holds_focus)
     .child(Row::new().child(Label::new("pane 1")))
     .child(Row::new().child(Label::new("pane 2")));
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::MarkerGroup)
+    .prop("active", PropValue::Bool(true))
+    .prop("nav_selected", PropValue::Bool(false))
+    .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
+    .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
+```
+
+Props `realize` reads: `active` (Bool), `nav_selected` (Bool). Children: the rows. **No events** — the
+marker bar is an indicator; the rows inside carry their own intents.
 
 ### DockFrame
 
@@ -1401,6 +1867,8 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
   the look in place without rebuilding the tree.
 
+**Native:**
+
 ```rust
 let sidebar = ChromeRegion::vertical();
 let mode = sidebar.mode_signal();
@@ -1409,6 +1877,32 @@ let files = DockFrame::new("EXPLORER")
     .header(Badge::accent("3"))
     .child(ItemGroup::new("src").child(Item::new("main.rs")));
 ```
+
+**Declarative** (`WidgetKind::DockFrame`):
+
+```rust
+ViewNode::new(WidgetKind::DockFrame)
+    .text("EXPLORER")                                          // the title
+    .prop("expanded", PropValue::Bool(true))
+    .prop("frameless", PropValue::Bool(false))
+    .prop("active", PropValue::Bool(false))                    // the accent wash
+    .prop("nav_selected", PropValue::Bool(false))              // the nav-cursor outline
+    .on("toggle", Intent::new("fold_dock"))                    // fires with args {"expanded": …}
+    .child(ViewNode::new(WidgetKind::Badge)
+        .text("3")
+        .prop("slot", PropValue::Text("header".into())))       // ← the controls slot
+    .child(ViewNode::new(WidgetKind::Item).text("main.rs"));   // ← no slot ⇒ body (the default)
+```
+
+- **Props**: `text` (title), `expanded` (Bool, default `true`), `frameless`, `active`,
+  `nav_selected` (Bool).
+- **Event**: `toggle` — carries the new state in `args["expanded"]`.
+- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `header` (the controls slot).
+  The **body is the default slot**, so an unslotted child is body content; an unknown slot name falls
+  back to the body and is debug-logged.
+- **`.rail(..)` is host-only** — it binds a host-owned `Signal<RegionMode>`, and static serializable
+  data cannot drive a live signal (the same rule that makes [`ScrollBar`](#scrollbar) host-only). A
+  declarative dock is never rail-aware; the host wires that.
 
 ### ChromeRegion
 
@@ -1860,15 +2354,17 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 > as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
 > its scalar sugar — `text` → a bold `Label`, `icon` → a leading `Icon` — which builds the very same
 > children. See [Button → the two ways to build one](#the-two-ways-to-build-a-button--same-widget-same-retained-tree).
-> Widgets whose *content* is still scalar-only (`Item`'s slots, for instance) need **named** children
-> in the model; that's `viewnode-task-1`.
+> A widget with **several places** for children (an `Item`'s leading/trailing, a `DockFrame`'s
+> header) takes a `slot` prop on the child — see
+> [Named child slots](#named-child-slots-the-slot-prop).
 
 | Kind | Props it reads | Events |
 |------|----------------|--------|
 | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
 | `Card` | `text` (title) + children | — |
 | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
-| `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+| `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
+| `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
 | `BadgeButton` | `text`, `variant`, `size` | `press` |
 | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
@@ -1876,13 +2372,98 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | `Toggle` | `on` (Bool), `name` | `change` |
 | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 | `Gauge` | `value` (Float) | — |
-| `Item` | `text` (label) | `press` |
+| **`Choice`** | `value` (Text/Int), **+ children** (the content); `text` = the **childless sugar** | `press` (standalone only) |
+| **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
+| **`ItemGroup`** | `text` (header), `expanded` (Bool), **+ children** (the rows) | `toggle` — carries the new `expanded` |
+| **`MarkerGroup`** | `active` (Bool), `nav_selected` (Bool), **+ children** | — (an indicator) |
+| **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings), `align` + `justify_items`; per-**child**: `area` or `col`/`row`/`col_span`/`row_span`, `align_self` / `justify_self` | — |
+| **`DockFrame`** | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slots**: `header`, else body | `toggle` |
+| **`Item`** | `text` (label); **slots**: `leading`, `trailing` (no default) | `press` |
+| **`Toast`** | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |
+
+**The event vocabulary** is three names: **`press`** (activated), **`change`** (the value changed),
+and **`toggle`** (a collapsible group folded/unfolded). Each carries what the author actually needs
+to act on: a `change` on a picker carries the chosen option's `value`, a `toggle` carries the new
+`expanded` state in its args — so an author binds one action and learns which way it went, instead of
+tracking the widget's state on their side.
 
 `PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
-· `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name). A **`"name"` prop** on a value
-widget opts it into a submitted modal's returned `data` (see [Dialog](#dialog) → *Declaring a modal
-from data*). Not realized yet (need structured/list props — `plugin-task-ui-9`): `Select`, `Tabs`,
-`Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast`.
+· `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name) · `List`(`Vec<PropValue>`). A
+**`"name"` prop** on a value widget opts it into a submitted modal's returned `data` (see
+[Dialog](#dialog) → *Declaring a modal from data*). **`align_self` / `justify_self` are read on every
+kind** — they describe a node inside its parent (see [Grid → aligning items](#grid)).
+
+**`List` is deliberately rare.** The option-shaped widgets do *not* use it — their options are
+**children**, because an option is a node with a value and content, not a string. What is genuinely
+list-shaped is a [`Grid`](#grid)'s track templates (`columns` / `rows` / `areas`), and that is what
+it exists for.
+
+**Coverage**: every `WidgetKind` realizes to its widget. The one exception is `ScrollBar`, which is
+**host-only by design** — its state is live host signals (`content_extent` / `viewport_extent` /
+`offset`), and static serializable data fundamentally cannot drive a signal, so a declarative one
+would render a dead control. A plugin uses [`Scroll`](#scrollregion) (a `ScrollRegion`), which owns
+its own offset. Same rule applies to any *individual builder* that binds a host signal — e.g.
+`DockFrame::rail(..)`.
+
+### Named child slots (the `slot` prop)
+
+Some widgets have **more than one place to put a child**: a [`DockFrame`](#dockframe) has a header
+and a body, an [`Item`](#item) has a leading and a trailing slot. `ViewNode.children` is one flat
+`Vec`, so the **child says where it goes**, with a `slot` prop:
+
+```rust
+ViewNode::new(WidgetKind::DockFrame)
+    .text("EXPLORER")
+    .child(ViewNode::new(WidgetKind::Badge)
+        .text("3")
+        .prop("slot", PropValue::Text("header".into())))   // ← the controls slot
+    .child(ViewNode::new(WidgetKind::Item).text("src"))    // ← no slot ⇒ the body (default)
+    .child(ViewNode::new(WidgetKind::Item).text("tests"));
+```
+
+This needs **zero** model surgery — no `slots: Map<..>` on the node, no second child vector, and the
+JSON stays flat — and it generalizes to every future slotted widget for free.
+
+Two rules, both of which keep `realize` total for untrusted input:
+
+- **A widget may have a default slot.** `DockFrame`'s is the body, so an unslotted child lands there.
+  `Item` has **none** — its middle is the label, which comes from `text` — so a child with no slot is
+  **ignored** rather than dropped somewhere it doesn't belong.
+- **An unknown slot name is not an error.** It is debug-logged, and the child falls back to the
+  widget's default slot (or is ignored, where there is none). A plugin's typo costs it a misplaced
+  child, never a panic.
+
+The slot names are part of a widget's declarative contract, exactly like its props — each entry below
+lists its own.
+
+### Options are children (`Select` / `Tabs` / `Choice`)
+
+An option is **a node with a value and arbitrary content**, and a picker's options are its
+**children** — never a `props["options"]` list of strings. That is what lets a declarative option
+compose an icon and a label exactly like a native one:
+
+```rust
+ViewNode::new(WidgetKind::Select)
+    .prop("selected", PropValue::Int(1))
+    .on("change", Intent::new("set_level"))
+    .child(ViewNode::new(WidgetKind::Choice)
+        .prop("value", PropValue::Text("low".into()))
+        .child(ViewNode::new(WidgetKind::Label).text("LOW")))
+    .child(ViewNode::new(WidgetKind::Choice)
+        .prop("value", PropValue::Text("high".into()))
+        .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+        .child(ViewNode::new(WidgetKind::Label).text("HIGH")));
+```
+
+**The chosen value comes back, not an index.** The widgets track a selected index — they are
+indexable lists, that is their business — but an index means nothing to a plugin and breaks silently
+the moment the options are reordered. So `realize` captures the options' `value` props and maps the
+index back through them: the bound `change` intent fires with **`args["value"]`** set —
+`{"value": "high"}`. An option carrying no `value` falls back to `args["index"]`.
+
+Two rules keep `realize` total for untrusted input: a childless `Choice` desugars its `text` to a
+`Label` child (**children win**, the same precedence as `Button`), and a child of a `Select`/`Tabs`
+that is **not** a `Choice` is ignored rather than realized into a broken option.
 
 ### Declaring a tree — internal code and plugins (same model)
 

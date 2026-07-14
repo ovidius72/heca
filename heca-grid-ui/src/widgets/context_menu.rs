@@ -22,7 +22,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Glow, TextAlign};
+use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
 use crate::widgets::Glyph;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -433,7 +433,7 @@ impl Component for ContextMenu {
                 }
                 let lbl_rect =
                     Rectangle::new(Point::new(text_x, row.loc.y), Size::new(row.size.w, row.size.h));
-                cx.text(lbl_rect, &e.label, text_color, font, TextAlign::Start, false);
+                cx.text(lbl_rect, &e.label, text_color, font, TextAlign::Start, TextStyle::REGULAR);
 
                 // Quick-pick keycap (rightmost) — the shared bordered keycap primitive
                 // (never hand-drawn); pressing the key activates the entry.
@@ -454,7 +454,7 @@ impl Component for ContextMenu {
                         Point::new(row.loc.x, row.loc.y),
                         Size::new((right_edge - row.loc.x).max(0.0), row.size.h),
                     );
-                    cx.text(srect, s, muted.with_alpha(cx.theme().colors.interaction.menu_shortcut), font, TextAlign::End, false);
+                    cx.text(srect, s, muted.with_alpha(cx.theme().colors.interaction.menu_shortcut), font, TextAlign::End, TextStyle::REGULAR);
                 }
             }
         });
