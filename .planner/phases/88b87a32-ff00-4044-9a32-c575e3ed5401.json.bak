@@ -4,7 +4,7 @@
   "number": 3,
   "slug": "plugin-04-dynamic-action-registry",
   "title": "plugin-04: Dynamic action registry",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -33,7 +33,7 @@
       "shortName": "chrome-placement-string",
       "title": "Chrome placement actions as string IDs",
       "status": "planned",
-      "description": "Usare string IDs per move/reorder dei container chrome.",
+      "description": "TERZO task della fase (dipende da T3 `dynamic-action-registry`; utile anche T2 per bindarle da config).\n⚠️ LEGGERE PRIMA la descrizione della FASE plugin-04 (fonti + decisioni D1-D3, G1-G5).\n\n## OBIETTIVO (BACKLOG plugin-task-13)\nEsporre le azioni di PLACEMENT dei container chrome con **string ID stabili**, così che anche un plugin possa dispatcharle (e un utente bindarle da config per nome).\n\nID (da `pluggable-chrome-plugin-plan.md` §Phase 6):\n- `chrome.container.move_to_region`\n- `chrome.container.move_left_sidebar`\n- `chrome.container.move_right_sidebar`\n- `chrome.container.reorder_before`\n- `chrome.container.reorder_after`\n\n## PUNTO CHIAVE (verificato 2026-07-14)\nQueste azioni **ESISTONO GIÀ come varianti `WmAction`** (landate con plugin-task-08 / plugin-02): `ChromeHost::move_container` / `reorder` sono cablati e testati (heca/src/chrome/host.rs), e l'RPC ha già `move-container-to-region` (heca/src/rpc.rs:394).\n⇒ NON servono nuovi handler e NON serve `NativeDyn`: restano `Dispatch::Native` (keyed per discriminante). Il lavoro è **dare loro un NOME nel registry** e assicurarsi che il dispatch-per-nome (la porta unica di T3) le raggiunga.\n\n## LAVORO\n1. Registrare le placement action in `register_builtins()` (T3) con i loro `ActionMeta`: `name` = l'id dotted sopra, `label`/`description`/`category = Chrome`/`icon`, e **`policy`** (G1 — scegliere consapevolmente: spostare un container è chrome-level, valutare `Global` vs `AlwaysAllowed`; ricordare la trappola AGENTS: `AlwaysAllowed` viene BLOCCATA quando una floating possiede il dominio, `Global` no).\n2. Verificare la parità delle superfici (regola P2): la stessa azione deve partire da **mouse** (DnD dei container, chrome host), **tastiera/config** (bindabile per nome, T2) e **RPC** (già presente — allinearne i nomi se divergono dagli id dotted).\n3. `action_from_name` deve mappare gli id dotted (oggi i nomi built-in sono snake_case: decidere se le placement action prendono SOLO l'id dotted o anche un alias snake_case, e documentarlo).\n4. Doc: `README.md` (se user-facing) + `keybindings.default.toml` se si aggiunge un binding di default.\n\n## ATTENZIONE (nomi)\nI nomi di config odierni sono snake_case (`focus_left`, `sidebar_peek`); i doc propongono id dotted namespaced (`chrome.container.move_to_region`, `workspace.focus_next`, `pane.close`). **Non è stata presa nessuna decisione di rinominare i built-in esistenti** → non farlo di soppiatto qui: introdurre gli id dotted per le NUOVE azioni chrome e, se si vuole un piano di migrazione dei nomi esistenti, aprire un task dedicato.\n\n## TEST\n- ogni placement action è dispatchabile PER NOME e produce la stessa mutazione del dispatch per enum;\n- un container mosso per nome finisce nella region giusta (riusare i test di `ChromeHost::move_container`);\n- la policy dichiarata è rispettata dal router;\n- parità RPC (il comando esistente continua a funzionare).\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -44,7 +44,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-01T18:12:25.304Z"
+      "updatedAt": "2026-07-14T18:08:11.044Z"
     },
     {
       "id": "531289a4-c4d9-46af-95a1-e091fcf04f37",
@@ -53,7 +53,7 @@
       "shortName": "keybindings-string-ids",
       "title": "Config keybindings target string IDs",
       "status": "planned",
-      "description": "Permettere binding config-driven verso action ID dinamici.",
+      "description": "SECONDO task della fase (dipende da T3 `dynamic-action-registry`: serve il registry name-keyed).\n⚠️ LEGGERE PRIMA la descrizione della FASE plugin-04 (fonti + decisioni D1-D3, G1-G5).\n\n## OBIETTIVO\nUn binding in `config.toml` / `keybindings.toml` deve poter puntare a un ACTION ID dinamico (`plugin.docker.restart`, `chrome.container.move_to_region`), non solo a un nome di `WmAction`.\n\n## IL VINCOLO CHE DECIDE TUTTO (G3)\n**La config viene caricata PRIMA che i provider/plugin registrino le loro azioni.** Quindi un binding verso un id dinamico NON è risolvibile al load: l'azione non esiste ancora. Un nome sconosciuto al load **NON deve essere un errore di config** (oggi lo sarebbe).\n\n## DESIGN (deciso 2026-07-14)\n```\nenum ActionRef {\n    Builtin(WmAction),   // risolto al LOAD via action_from_name + build_action (comportamento ODIERNO:\n                         // stessi errori di parsing args, costo zero al press)\n    Dynamic(Intent),     // { id, args } — risolto al PRESS time (l'azione può non esistere ancora)\n}\nKeymapRegistry: HashMap<mode, HashMap<KeyCombo, ActionRef>>   // era: -> WmAction\n```\n- Load: `action_from_name(name)` risolve → `Builtin`; non risolve → **NON è un errore** → `Dynamic(Intent{ id: name, args })`.\n- Press: `Builtin` → registry enum (invariato); `Dynamic` → dispatch per nome (la porta unica di T3). Id ancora sconosciuto al press → il warning debug già esistente, **niente crash**.\n\n## STATO ATTUALE (verificato 2026-07-14)\n- `heca/src/keymap.rs` — `KeymapRegistry { keymaps: HashMap<String, HashMap<KeyCombo, WmAction>> }`; `bind`/`resolve`/`unbind`.\n- `heca/src/input.rs:531` — `action_from_name`; `build_action` (costruisce le varianti parametrizzate dagli args di config).\n- `heca-config/src/keys.rs` — parsing di `[keys]`, `[[keys.bind]]`, `[[keys.mode.bindings]]` (con `args`), `[keys.unbind]`.\n- `heca/src/app/registry.rs` — `build_keymap` / `build_modes` (dove i nomi diventano azioni).\n- AGENTS.md \"Planned parameterized binding contract\" — la forma `[[keys.bind]] { keys, action, args }` è già specificata: riusarla, gli `args` diventano il `PropMap` dell'Intent per il path dinamico.\n\n## LAVORO\n1. `ActionRef` (dove vive `KeymapRegistry`) + `KeymapRegistry` passa a `KeyCombo -> ActionRef`.\n2. `build_keymap`/`build_modes`: nome che NON risolve ⇒ `Dynamic(Intent)` invece di scartare/errore. Gli `args` di config → `PropMap` dell'Intent.\n3. Il call-site del press (`heca/src/app/input.rs`, dove oggi si prende la `WmAction` dal keymap) instrada le due varianti verso la porta unica di dispatch (T3).\n4. `keys.unbind` deve funzionare anche per gli id dinamici.\n5. `config.default.toml` / `keybindings.default.toml`: documentare che un binding può puntare a un action id (con esempio). Regola cardinale: ogni binding di default sta nel file di default.\n\n## TEST\n- un binding verso un id SCONOSCIUTO al load non è un errore e diventa `Dynamic`;\n- premuto DOPO che l'azione è stata registrata → l'handler parte con gli args giusti;\n- premuto MENTRE l'id è ancora sconosciuto → no-op + warning debug, nessun panic;\n- i binding built-in esistenti sono invariati (stesse `WmAction`, stessi errori di parsing args al load) — test di non-regressione sull'intero keymap di default;\n- `unbind` di un id dinamico.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -64,7 +64,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-01T18:12:25.304Z"
+      "updatedAt": "2026-07-14T18:07:45.469Z"
     },
     {
       "id": "cd9db84b-fed5-4076-893d-083a5a8eb8ae",
@@ -72,8 +72,8 @@
       "number": 3,
       "shortName": "dynamic-action-registry",
       "title": "Evolve ActionRegistry for dynamic registration",
-      "status": "planned",
-      "description": "Supporto a string action IDs e registrazione runtime.",
+      "status": "in-progress",
+      "description": "FONDAZIONE DELLA FASE — fare PER PRIMO (T2 e T1 dipendono da questo).\n⚠️ LEGGERE PRIMA la descrizione della FASE plugin-04: contiene le fonti (4 doc) e le decisioni D1-D3 (già locked) + G1-G5 (grill 2026-07-14). Qui sotto solo il lavoro concreto.\n\n## OBIETTIVO\nUnificare l'attuale registry SPLIT in UN SOLO registry runtime che regge sia i built-in (enum `WmAction`) sia le azioni name-keyed (provider/plugin), con UNA sola porta d'ingresso di dispatch.\n\n## STATO ATTUALE (verificato 2026-07-14)\n- `heca/src/actions.rs:100` — `ActionRegistry { handlers: HashMap<Discriminant<WmAction>, ActionHandler> }`.\n- `heca/src/actions.rs:15` — `ActionHandler = fn(&mut AppState, &WmAction)` (fn pointer, niente capture).\n- `heca/src/actions.rs:65` — `ActionDescriptor` con campi `&'static str`, dentro un `const ALL` (+ vari `#[expect(dead_code)]` sui metadata: diventano VIVI con questa fase).\n- `heca/src/chrome/view.rs:241` — `Intent { action: String, args: PropMap }` ESISTE GIÀ (la valuta serializzabile).\n- `heca/src/app/interaction.rs:774` — `dispatch_view_intent` fa GIÀ metà del lavoro (nome → `action_from_name` → `WmAction` → `dispatch_action` policy-routed); **gli args sono IGNORATI** (commento a :772).\n- `heca/src/app/registry.rs` — `build_registry()` registra ~tutti gli handler.\n\n## LAVORO\n1. **Tipi** (in `heca/src/actions.rs`; valutare se estrarre in un layer basso `heca-actions`/`heca-config` come suggerisce action-interaction-plan.md §4 — decidere qui):\n```\nActionMeta {\n    name: String,                 // \"close\", \"chrome.container.move_to_region\", \"plugin.docker.restart\"\n    label: String,\n    description: String,\n    category: ActionCategory,\n    default_binding: String,\n    icon: Option<Glyph>,\n    policy: ActionPolicy,         // ← OBBLIGATORIO (G1): niente Option, niente default\n    confirm: Option<ConfirmSpec>, // ← D3 (coordinare con la fase action-interaction!)\n}\nActionEntry { meta: ActionMeta, dispatch: Dispatch }\nDispatch =\n    Native(ActionHandler)                            // fn(&mut AppState, &WmAction) — built-in, chiave = discriminante\n  | NativeDyn(Rc<dyn Fn(&mut AppState, &Intent)>)    // per NOME, nessuna variante WmAction (G4)\n  | Declarative                                      // nessun handler host: inoltrata al proprietario (WASM, plugin-08)\n```\n2. **Registry**: `entries: HashMap<Discriminant<WmAction>, ActionEntry>` + indice `by_name: HashMap<String, ...>`. I built-in restano keyed per discriminante (le varianti parametrizzate CONDIVIDONO il discriminante — non rompere questo); le azioni name-keyed per nome.\n3. **`register_builtins()`**: i dati del `const ALL` diventano registrazioni runtime (STESSI valori: name/label/description/category/default_binding/icon). Il `const ALL` viene RITIRATO. ⇒ `ActionMeta.name` è `String` owned: NON serve `Cow<'static,str>` (idea valutata e scartata).\n4. **API dinamica** (BACKLOG plugin-task-11): `register(id, meta, handler) -> ActionHandle` (RAII, G5), `dispatch(id, args)`, `unregister(id)`. L'handle si aggancia a `ProviderHandles` (heca/src/providers/mod.rs — il commento lì cita GIÀ plugin-04).\n5. **Una sola porta d'ingresso** (D1): `dispatch_view_intent` (interaction.rs:774) diventa il punto unico: nome → built-in (`action_from_name` + **args, oggi ignorati: CABLARLI**) oppure entry name-keyed. NESSUN percorso parallelo.\n6. **Policy unificata** (G1): una sola funzione la fornisce al router —\n```\nfn policy_of(reg, action_ref) -> ActionPolicy {\n    match action_ref { Builtin(a) => action_policy(a),          // match esaustivo, invariato\n                       Dynamic(id) => reg.meta(id).policy }     // dichiarata\n}\n```\n7. **Back-compat**: `ActionRegistry::icon/label/find/by_category/count` continuano a funzionare leggendo la mappa runtime. `registry.execute(&WmAction, state)` NON cambia semantica (è il path che il confirm-gate usa per NON rientrare nel gate).\n\n## ⚠️ SOVRAPPOSIZIONE DA COORDINARE\nIl registry runtime è LO STESSO lavoro previsto da `action-interaction-plan.md` §5.1 (fase `action-interaction`, 1 task ancora planned). NON costruire due registry: chi arriva primo fa `ActionEntry`/`ActionMeta`, l'altro ci si innesta. Il campo `confirm` sopra è il punto d'aggancio.\n\n## TEST\n- un built-in dispatchato PER NOME esegue lo stesso handler del dispatch per enum (parità);\n- un'azione `NativeDyn` registrata a runtime esegue il suo handler e riceve gli args dell'Intent;\n- `unregister` (drop dell'handle) rende l'id non più dispatchabile;\n- la policy di un'azione name-keyed è quella DICHIARATA (e un'azione dichiarata `TiledOnly` è bloccata quando una floating possiede il dominio — test di routing, non solo spot-check);\n- i metadata dei built-in dopo `register_builtins()` sono identici a quelli del vecchio `const ALL` (test di non-regressione sul catalogo);\n- args: un built-in parametrizzato (es. `Resize`) dispatchato per nome+args produce la stessa `WmAction` di `build_action`.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`; nessuna azione raggiungibile da una sola superficie (P2: tastiera + mouse/UI + RPC).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -81,12 +81,12 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-14T18:08:24.580Z",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-01T18:12:25.304Z"
+      "updatedAt": "2026-07-14T18:08:24.580Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-14T18:02:06.191Z"
+  "updatedAt": "2026-07-14T18:08:24.580Z"
 }

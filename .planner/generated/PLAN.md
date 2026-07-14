@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-14T18:02:06.289Z
+**Last updated:** 2026-07-14T18:13:43.246Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -80,16 +80,16 @@ Status: ✅ `done`
 
 **Work remaining:** Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.
 
-### 📋 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
+### 🚧 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
 
 Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Phases:**
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
 - 📋 **099e2eb5-30be-4f3c-ab57-a4f111cdc44c** P002 — plugin-06: Placeholder token system (0/3 tasks)
-- 📋 **88b87a32-ff00-4044-9a32-c575e3ed5401** P003 — plugin-04: Dynamic action registry (0/3 tasks)
+- 🚧 **88b87a32-ff00-4044-9a32-c575e3ed5401** P003 — plugin-04: Dynamic action registry (0/3 tasks)
 - ✅ **73c320aa-b8b7-4fb3-9421-5c741b1771ff** P004 — plugin-03: Built-in provider + WorkspacesContainer migration (6/6 tasks)
 - ✅ **9ec31d60-7dfa-4dcc-9797-b265a4d30562** P005 — plugin-01: Formal architecture contracts (4/4 tasks)
 - ✅ **7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c** P006 — plugin-02: ChromeHost and region hosts (4/4 tasks)
@@ -151,6 +151,7 @@ Status: 📋 `planned`
 - 📋 **a6831878-0168-4261-935e-818cc9b9a909** P009 — app-03: App-wide zoom and font-size controls (0/3 tasks)
 - 📋 **884c75d3-e99a-4537-b09c-aa9efab3270c** P010 — app-08: Fix NSWindow vibrancy warning (0/1 tasks)
 - ✅ **3bdc254b-4b5c-4f74-a783-8de4ae1628fa** P011 — app-12: Keyboard move-to-target picks + rename override + plugin-observable state (3/3 tasks)
+- 📋 **9cefac90-9fea-427c-9106-9a41e71e8acd** P012 — app-13: Mouse/input leftovers (0/2 tasks)
 
 ### 📋 0c704076-6072-4c57-8ee1-9fc11f6eaa3a — F007 — 🖋️ Neovim GUI Pane
 
@@ -472,6 +473,14 @@ Status: ✅ `done`
 
 **Tasks:** 3/3
 
+### 📋 9cefac90-9fea-427c-9106-9a41e71e8acd — P012 — app-13: Mouse/input leftovers
+
+I due punti ANCORA APERTI della vecchia lista mouse (da redo-mouse.md, file cancellato 2026-07-14): il config focus_follows_mouse_delay_ms (mai implementato) e la delega di handle_swap_param agli helper condivisi (swap cross-workspace).
+
+Status: 📋 `planned`
+
+**Tasks:** 0/2
+
 ### ✅ 3fdd622b-1757-40f6-8af0-1767760fa792 — P001 — theming-04: Migrate main app (heca) to heca-theme
 
 Migrare l'app principale al nuovo sistema di temi e rimuovere hardcode residui.
@@ -713,11 +722,11 @@ Status: 📋 `planned`
 
 **Tasks:** 0/3
 
-### 📋 88b87a32-ff00-4044-9a32-c575e3ed5401 — P003 — plugin-04: Dynamic action registry
+### 🚧 88b87a32-ff00-4044-9a32-c575e3ed5401 — P003 — plugin-04: Dynamic action registry
 
 Dynamic action registry: string action IDs + runtime registration, ACCANTO all'enum WmAction (compatibilità piena). Una sola porta d'ingresso (dispatch per nome), un solo registry runtime (il const ALL viene ritirato), policy DICHIARATA per le azioni name-keyed, keybinding config verso ID dinamici. Sblocca context-menu-5, plugin-05 (app.actions.dispatch) e plugin-08 (WASM).
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Tasks:** 0/3
 
