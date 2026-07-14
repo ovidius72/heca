@@ -242,12 +242,16 @@ When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree side
 | `Up` / `Down` | Move cursor up / down |
 | `h` / `l` | Collapse / expand tree node |
 | `Left` / `Right` | Collapse / expand tree node |
-| `Space` | Same as `l` / `Right` (leaf focus or expand) |
+| `Space` | **Peek** — focus the selected pane/workspace but **stay in sidebar mode**, so you can keep walking the tree with `j`/`k` and preview each row (`sidebar_peek`) |
 | `Tab` | Toggle collapse of the selected row |
 | `w` / `c` / `v` / `z` / `d` | Sidebar-only mutation keys (create workspace/column, split pane, zoom, delete) |
 | `b` | Toggle the left sidebar |
-| `Enter` | Activate selected item (focus pane/workspace) |
+| `Enter` | Activate selected item (focus pane/workspace) **and leave** sidebar mode |
 | `Escape` | Exit sidebar mode |
+
+`l` / `Right` / `Enter` focus **and leave**; `Space` focuses **and stays**. Both are
+ordinary actions (`sidebar_right_nav` / `sidebar_peek`), so either can be rebound in
+`keybindings.toml`.
 
 ### Terminal Scrollback & Selection
 

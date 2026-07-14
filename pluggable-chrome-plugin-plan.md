@@ -734,9 +734,30 @@ pub struct ContainerContribution {
     /// Builds the container body as a host-understood grid-ui subtree. Called by
     /// the region host on (re)mount / invalidation. Returns a *model*; the host
     /// owns render/focus/clip/overlays (§2.6).
-    pub build: Box<dyn Fn(&ChromeCtx) -> Box<dyn heca_grid_ui::Component>>,
+    pub build: Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> Box<dyn heca_grid_ui::Component>>,
 }
 ```
+
+**The two halves of the seam (settled, plugin-03 `t005`).** Building a body is not a
+pure read: it *allocates host ids* — a drag id per draggable/droppable row, a hint
+target id per pickable row, a signal per value that updates without a structural
+rebuild. So the seam takes two contexts, and the split is the point:
+
+- **`ChromeCtx<'a>` — read-only.** The plugin-facing facade: state selectors
+  (`app.state.*`), event subscriptions, plus the frame's render inputs — `tree()`,
+  `programs()`, `theme()`, `emit_intent()`. These are `Option`: a context built to
+  *observe* (`ChromeCtx::new`, e.g. at `on_activate`) has no frame in flight, so there
+  is no theme or tree to read; a context built for a render pass
+  (`ChromeCtx::for_build`) has them all.
+- **`BuildCx<'a>` — the mutable half.** The host's per-build registries (`signals`,
+  `drag`, `hints`), borrowed `&mut` for the duration of one build.
+
+They are two explicit parameters rather than one context with interior mutability:
+that keeps `ChromeCtx` a pure read/observe facade (what the WASM bridge will marshal),
+turns a double borrow into a **compile** error instead of a runtime panic, and matches
+how `realize()` already threads the same registries. A WASM provider never sees
+`BuildCx` — it returns a `ViewNode`, and the host's adapter realizes it, registering the
+ids on its behalf.
 
 **ChromeHost responsibilities** (app-side, `heca/src/chrome/host.rs`, `plugin-02`;
 bridges to the shipped `App` facade in `heca/src/host.rs` for state + events):
@@ -913,11 +934,11 @@ pub trait Provider {
     /// Collapsible within its region shell?
     fn collapsible(&self) -> bool { true }
     /// Build the contribution model. Called on mount and on each invalidation.
-    fn build_contribution(&self, ctx: &ChromeCtx) -> Contribution;
+    fn build_contribution(&self, ctx: &ChromeCtx<'_>) -> Contribution;
     /// Subscribe to events / register actions on activation. The returned RAII
     /// handles are held by the host while the provider is mounted, and dropped
     /// (unsubscribing) on unmount.
-    fn on_activate(&mut self, _ctx: &ChromeCtx) -> ProviderHandles {
+    fn on_activate(&mut self, _ctx: &ChromeCtx<'_>) -> ProviderHandles {
         ProviderHandles::default()
     }
 }

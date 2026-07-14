@@ -514,3 +514,120 @@ fn test_collapse_persists_across_rebuild() {
     );
 }
 
+
+// ── Nav selection: the chrome store owns it ───────────────────────────────────
+//
+// `cursor` is a positional index into `flat_items`, which `sync_from_session` rebuilds
+// from scratch. The *selection* names its row, lives in the chrome store, and is what the
+// cursor is re-derived from — which is what makes it survive a rebuild and lets an
+// outside writer (RPC, plugin) drive it.
+
+#[test]
+fn selection_projects_the_row_under_the_cursor() {
+    let (session, _ids) = make_test_session();
+    let mut tree = SidebarTree::new();
+    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+
+    // The cursor starts on the first row; the projection names that same row.
+    let item = tree.current_item().cloned().expect("a row under the cursor");
+    assert_eq!(tree.selection(), Some(item.selection()));
+
+    tree.cursor_down();
+    let moved = tree.current_item().cloned().expect("a row under the cursor");
+    assert_eq!(
+        tree.selection(),
+        Some(moved.selection()),
+        "selection follows the cursor",
+    );
+}
+
+#[test]
+fn selection_survives_a_tree_rebuild() {
+    // The regression this bridge exists to prevent: a rebuild renumbers `flat_items`, so a
+    // cursor kept as a raw index would point at whatever now sits at that index. Re-derived
+    // from the store's selection, it stays on the row the user actually picked.
+    // `make_test_session` puts every pane in workspace 0, so give workspace 1 a pane of its
+    // own: the selected row has to survive the collapse for this to test index-shift rather
+    // than row-removal.
+    let (mut session, _ids) = make_test_session();
+    session.switch_to_workspace(1);
+    session.add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
+    let chrome = test_chrome();
+    let mut tree = SidebarTree::new();
+    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+
+    // Park the cursor on the pane in the SECOND workspace and publish it the way the nav
+    // handlers do.
+    let picked = crate::chrome::SidebarSelection::Pane { pane_id: PaneId(9) };
+    tree.apply_nav_selection(Some(picked));
+    assert_eq!(tree.selection(), Some(picked), "cursor parked on pane 9");
+    let index_before = tree.cursor;
+
+    // Collapse the FIRST workspace: pane 9's row survives, but every row above it
+    // disappears, so its index shifts — the exact case a raw cursor index gets wrong.
+    set_ws_collapsed(&mut tree, &chrome, 0, true);
+    // Rebuild the way `after_layout_change` does: re-project collapse, then the selection.
+    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+    let set = chrome.workspaces.with_collapsed_ws(|s| s.clone());
+    tree.apply_ws_collapsed(&set, None);
+    tree.apply_nav_selection(chrome.workspaces.nav_selection());
+
+    assert_eq!(
+        tree.selection(),
+        Some(picked),
+        "the cursor lands back on the selected row, not on whatever took its index",
+    );
+    assert_ne!(
+        tree.cursor, index_before,
+        "and it did so by moving to the row's NEW index — the point of naming the row \
+         instead of remembering a position",
+    );
+}
+
+#[test]
+fn store_selection_drives_the_cursor() {
+    // The "drive from outside" half: an RPC or plugin writing the store moves the cursor,
+    // because the cursor is projected FROM the store, never the reverse.
+    let (session, ids) = make_test_session();
+    let chrome = test_chrome();
+    let mut tree = SidebarTree::new();
+    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+
+    let target = crate::chrome::SidebarSelection::Pane {
+        pane_id: PaneId(*ids.last().expect("the session has panes")),
+    };
+    chrome.workspaces.set_nav_selection(Some(target));
+    tree.apply_nav_selection(chrome.workspaces.nav_selection());
+
+    assert_eq!(tree.selection(), Some(target), "the store moved the cursor");
+}
+
+#[test]
+fn a_selection_whose_row_is_gone_leaves_the_cursor_in_range() {
+    // A pane that no longer exists (closed while its menu was open, say) must not move the
+    // cursor somewhere arbitrary — and must not panic.
+    let (session, _ids) = make_test_session();
+    let mut tree = SidebarTree::new();
+    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+
+    tree.cursor_down();
+    let before = tree.cursor;
+    tree.apply_nav_selection(Some(crate::chrome::SidebarSelection::Pane {
+        pane_id: PaneId(9999),
+    }));
+
+    assert_eq!(tree.cursor, before, "an unknown row leaves the cursor put");
+    assert!(tree.cursor < tree.flat_items.len(), "cursor stays in range");
+}
+
+#[test]
+fn no_selection_is_not_a_request_to_move() {
+    let (session, _ids) = make_test_session();
+    let mut tree = SidebarTree::new();
+    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+
+    tree.cursor_down();
+    let before = tree.cursor;
+    tree.apply_nav_selection(None);
+    assert_eq!(tree.cursor, before);
+}

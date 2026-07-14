@@ -306,9 +306,11 @@ mod tests {
         fn title(&self) -> &str {
             &self.id
         }
-        fn build_contribution(&self, _ctx: &ChromeCtx) -> Contribution {
-            // Never called in plugin-02 (no render path).
-            unimplemented!("build_contribution is the render seam (plugin-03)")
+        fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
+            // These tests exercise placement/ordering/moves, which read provider
+            // *metadata* only — the host never calls the render seam here. (The real
+            // seam is implemented and tested on `WorkspacesContainerProvider`.)
+            unimplemented!("TestProvider contributes no body; see WorkspacesContainerProvider")
         }
     }
 

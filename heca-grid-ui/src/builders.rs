@@ -261,4 +261,25 @@ pub trait Parent: Component + Sized {
         self.base_mut().children.push(Box::new(c));
         self
     }
+
+    /// Append an **already-boxed** subtree.
+    ///
+    /// [`child`](Parent::child) takes `impl Component`, and a `Box<dyn Component>` is not
+    /// itself `Component` — so a subtree built *dynamically*, where the concrete widget
+    /// type is not known at the call site, cannot go through it. That is what the host's
+    /// `realize()` (a `ViewNode` tree) and a chrome provider's render seam both return.
+    ///
+    /// A widget with **several** places to put children names them instead
+    /// ([`DockFrame::header_boxed`](crate::widgets::DockFrame::header_boxed),
+    /// [`Dialog::body_boxed`](crate::widgets::Dialog::body_boxed)); those inherent methods
+    /// take precedence over this one. This is the plain "append it to my children" case.
+    ///
+    /// ```ignore
+    /// let body: Box<dyn Component> = realize(&node, &emit, &mut hints, &mut forms);
+    /// let panel = Pane::new().padding(10.0).child_boxed(body);
+    /// ```
+    fn child_boxed(mut self, c: Box<dyn Component>) -> Self {
+        self.base_mut().children.push(c);
+        self
+    }
 }

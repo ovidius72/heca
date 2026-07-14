@@ -325,11 +325,11 @@ pub(crate) async fn init_state(
         true,
     );
     let mut chrome_host = crate::chrome::ChromeHost::new(chrome_state.events());
-    // plugin-03 t004: register the first built-in provider. Wiring-only — the
-    // render path still builds the sidebar bespoke (`build_sidebar_shell`) until
-    // the cutover in t006; this just seats the container in `LeftSidebar` so the
-    // host runtime exercises a real first-party provider (replacing the
-    // `TestProvider` stand-in) with no visible behavior change.
+    // Register the first built-in provider, seating the `workspaces` container in
+    // `LeftSidebar`. This is not bookkeeping: the render path builds each region's body
+    // from whatever the host has seated in it (`chrome::build_region_content`), so this
+    // registration is *why* there is a workspace tree in the sidebar at all. Move the
+    // container to the right region and its UI goes with it.
     chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
 
     Box::new(AppState {

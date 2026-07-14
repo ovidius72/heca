@@ -47,6 +47,12 @@ ViewNode {
   id + serializable args. The host routes it (dispatch a registered action, or
   deliver it back to you as an event). No plugin code runs during paint.
 
+You describe *what* the container is; the host allocates everything a live widget
+needs behind it — drag ids, KeyHint pick targets, per-frame signals — into its own
+registries (`BuildCx`, see `pluggable-chrome-plugin-plan.md` §3.2). A **built-in**
+provider builds grid-ui widgets directly and is handed that `BuildCx`; a **plugin**
+returns a `ViewNode` and never sees it.
+
 ---
 
 ## Example 1 — a simple panel
@@ -63,7 +69,7 @@ impl Provider for HelloProvider {
     fn supported_regions(&self) -> RegionSet { RegionSet::sidebars() }
     fn default_region(&self) -> RegionId { RegionId::RightSidebar }
 
-    fn build_contribution(&self, ctx: &ChromeCtx) -> Contribution {
+    fn build_contribution(&self, ctx: &ChromeCtx<'_>) -> Contribution {
         let name = ctx.state().active_pane_title().unwrap_or_default();
 
         Contribution::container("example.hello", "Hello",
@@ -78,7 +84,7 @@ impl Provider for HelloProvider {
     }
 
     // React to app events; the returned handles are kept alive while mounted.
-    fn on_activate(&mut self, ctx: &ChromeCtx) -> ProviderHandles {
+    fn on_activate(&mut self, ctx: &ChromeCtx<'_>) -> ProviderHandles {
         let mut h = ProviderHandles::default();
         h.keep(ctx.on("pane.active.changed", |_e| { /* mark dirty → host re-builds */ }));
         h
@@ -131,7 +137,7 @@ any composition. The result carries the chosen action id **plus data the body
 collected** (selected row, form fields).
 
 ```rust
-async fn restart_dialog(ctx: &ChromeCtx, rows: &[ContainerRow]) {
+async fn restart_dialog(ctx: &ChromeCtx<'_>, rows: &[ContainerRow]) {
     let result = ctx.overlay.open_modal(ModalSpec {
         title: "Restart a container".into(),
         body: Column::new().gap(10)

@@ -1522,13 +1522,33 @@ pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
             .set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
     }
     state.input_mode = InputMode::SidebarNav;
+    // Seed the store with the row the cursor is already on, so entering nav mode publishes
+    // a selection (and emits `SidebarSelectionChanged`) instead of waiting for the first
+    // j/k.
+    publish_sidebar_selection(state);
     update_session_viewport(state);
     after_layout_change(state);
+}
+
+/// Publish the cursor's row into the chrome store, which **owns** the sidebar selection.
+///
+/// The store is the source of truth: it is what the retained tree highlights from, what
+/// `ChromeEvent::SidebarSelectionChanged` carries to subscribers, and what an RPC or a
+/// plugin will read and write. `SidebarTree.cursor` is a positional index into a list
+/// rebuilt on every layout change, so it is the *derived* half — after a rebuild the
+/// cursor is re-projected from the store (`apply_nav_selection`), not the other way round.
+///
+/// Every sidebar-nav mutation ends here. The setter is change-guarded, so republishing an
+/// unchanged selection is free and emits nothing.
+fn publish_sidebar_selection(state: &mut AppState) {
+    let selection = state.sidebar_tree.selection();
+    state.chrome_state.workspaces.set_nav_selection(selection);
 }
 
 pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
         state.sidebar_tree.cursor_up();
+        publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
 }
@@ -1536,6 +1556,7 @@ pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
 pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
         state.sidebar_tree.cursor_down();
+        publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
 }
@@ -1543,6 +1564,7 @@ pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
 pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
         state.sidebar_tree.collapse(&state.chrome_state.workspaces);
+        publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
 }
@@ -1551,20 +1573,75 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
         let item = state.sidebar_tree.current_item().cloned();
         match &item {
-            Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                focus_pane_by_id(state, *pane_id);
-                state.input_mode = InputMode::Normal;
-            }
-            Some(sidebar::SidebarItem::FloatingPane { pane_id, .. }) => {
-                focus_pane_by_id(state, *pane_id);
+            // Focus goes through the focus *action*, not a hand-rolled call — the sidebar
+            // decides *which* row to activate, never what focusing means.
+            Some(
+                sidebar::SidebarItem::Pane { pane_id }
+                | sidebar::SidebarItem::FloatingPane { pane_id, .. },
+            ) => {
+                handle_focus_pane(
+                    state,
+                    &WmAction::FocusPane {
+                        pane_id: *pane_id,
+                    },
+                );
                 state.input_mode = InputMode::Normal;
             }
             _ => {
                 state.sidebar_tree.expand(&state.chrome_state.workspaces);
             }
         }
+        // Activating a leaf leaves nav mode; `sync_chrome_state` clears the selection on
+        // the way out. Expanding stays in nav mode, so the (possibly moved) cursor is
+        // republished here.
+        publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
+}
+
+/// Focus the row under the sidebar cursor **without changing the input mode** — the "peek"
+/// action.
+///
+/// The difference from [`handle_sidebar_right_nav`] is the one line that *isn't* here: it
+/// never sets `input_mode = Normal`. In sidebar mode that means the user can walk the tree
+/// with `j`/`k` and preview each row in the main view without dropping out of navigation.
+///
+/// It is deliberately **not** gated on `InputMode::SidebarNav`. The action is a capability,
+/// not a key handler: it must work identically from the keyboard, from RPC (`sidebar-peek`),
+/// and from any future UI surface. Gating it on the mode would make every non-keyboard
+/// caller a silent no-op. "Peek" means *focus what the sidebar cursor points at, and leave
+/// the mode alone* — which is well-defined whatever mode we are in.
+///
+/// The cursor stops only on panes and workspace headers, so both are handled: a pane row
+/// focuses the pane, a workspace row switches to that workspace. A column row is
+/// unreachable, and an empty tree is a no-op.
+///
+/// Focusing rebuilds the sidebar tree, which renumbers its rows — the nav selection is
+/// canonical in the chrome store and re-projected onto the cursor, so the cursor stays on
+/// the row the user is pointing at rather than following the focus.
+pub fn handle_sidebar_peek(state: &mut AppState, _action: &WmAction) {
+    let Some(item) = state.sidebar_tree.current_item().cloned() else {
+        return;
+    };
+    // Both arms go through the action's own handler rather than re-deriving the focus:
+    // each owns its bounds check, visit tracking, and `after_focus_change`. Peek adds no
+    // focus semantics of its own — it is exactly "the existing focus action, minus the
+    // mode change".
+    match item {
+        sidebar::SidebarItem::Pane { pane_id }
+        | sidebar::SidebarItem::FloatingPane { pane_id, .. } => {
+            handle_focus_pane(state, &WmAction::FocusPane { pane_id });
+        }
+        sidebar::SidebarItem::Workspace { ws_idx } => {
+            handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx });
+        }
+        // The cursor never lands on a column (see `SidebarTree::is_navigable`).
+        sidebar::SidebarItem::Column { .. } => {}
+    }
+    // The focus moved, the selection did not: republish so the store keeps naming the row
+    // the cursor is on.
+    publish_sidebar_selection(state);
+    state.needs_redraw = true;
 }
 
 pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
@@ -1579,6 +1656,7 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
                     .toggle_expand(&state.chrome_state.workspaces);
             }
         }
+        publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
 }
@@ -1688,7 +1766,8 @@ pub fn handle_sidebar_create_column(state: &mut AppState, _action: &WmAction) {
     }
     if let Some(target_ws) = sidebar_selected_workspace_idx(state) {
         if target_ws != state.session.active_workspace_idx {
-            switch_workspace_tracked(state, target_ws);
+            // Switching workspace IS an action — dispatch it, don't re-derive it.
+            handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx: target_ws });
         }
         handle_split_horizontal(state, &WmAction::SplitHorizontal);
         state.input_mode = InputMode::SidebarNav;
@@ -1711,8 +1790,12 @@ pub fn handle_sidebar_zoom_selected_column(state: &mut AppState, _action: &WmAct
     }
     if let Some((ws_idx, col_idx)) = sidebar_selected_column_target(state) {
         if ws_idx != state.session.active_workspace_idx {
-            switch_workspace_tracked(state, ws_idx);
+            // Switching workspace IS an action — dispatch it, don't re-derive it.
+            handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx });
         }
+        // Making a column active has no action of its own (nothing else needs it), so this
+        // stays part of *this* action's implementation: "zoom the SELECTED column" has to
+        // make that column the active one before zooming it.
         if let Some(ws) = state.session.active_workspace_mut()
             && col_idx < ws.scrolling.columns.len()
         {

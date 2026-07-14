@@ -143,4 +143,10 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .workspaces
         .with_collapsed_ws(|s| s.clone());
     state.sidebar_tree.apply_ws_collapsed(&collapsed, None);
+    // Same for the canonical nav selection: the rebuild renumbers `flat_items`, so the
+    // positional cursor is re-derived from the selection (which names its row and so
+    // survives the rebuild) rather than being left pointing at whatever now sits at that
+    // index. Collapse changes `flat_items` too, so this runs after `apply_ws_collapsed`.
+    let selection = state.chrome_state.workspaces.nav_selection();
+    state.sidebar_tree.apply_nav_selection(selection);
 }

@@ -1117,6 +1117,15 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 > **panes + workspaces only** (skips columns); `handle_sidebar_focus` no longer expands
 > a contracted sidebar. `Row`/`MarkerGroup`/`DockFrame` gained `nav_selected`. 297 tests,
 > clippy clean. Full detail: `handoff-sidebar-nav-task10a.md`.
+>
+> **Selection bridge — DONE 2026-07-14.** `nav_selection` was a one-way *mirror* of
+> `SidebarTree.cursor`, re-pushed every frame. The chrome store now **owns** it: the nav
+> handlers publish into it, and the tree's positional `cursor` is re-derived from it
+> (`SidebarTree::apply_nav_selection`, the selection counterpart of `apply_ws_collapsed`).
+> `cursor` indexes `flat_items`, which is rebuilt on every layout change, so it could never
+> be the truth — the selection *names* its row and survives the rebuild. Writing the store
+> now moves the cursor, which is the seam RPC/plugins drive selection through; reads go via
+> `StateView::sidebar_selection` + `SidebarSelectionChanged`.
 
 **Sidebar follow-ups (arising from task-10a live testing — 2026-07-03):**
 - [x] **sidebar-fu-1** — DONE (branch `feat/sidebar-followups`). Collapsed rail initial now
