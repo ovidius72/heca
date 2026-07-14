@@ -173,19 +173,28 @@
       "number": 6,
       "shortName": "choice-6-propvalue-list-grid-r",
       "title": "choice-6: `PropValue::List` + `Grid` realize (tracks, areas, placement)",
-      "status": "planned",
-      "description": "`Grid` is the **only** kind left that genuinely needs a structured prop. Add the one model primitive it needs and realize it.\n\n## Model change (`heca/src/chrome/view.rs`)\nAdd **`PropValue::List(Vec<PropValue>)`** — one new variant, serde-serializable, and the *last* one this phase needs (the option-shaped widgets got children instead, choice-1..4). Update the `PropValue` rustdoc + the `docs/widgets.md` model table + the JSON round-trip test.\n\n## `Grid` (`heca-grid-ui/src/widgets/grid.rs:39`)\nNative API: `.columns([Track])` / `.rows([Track])` where `Track::{Px(f32), Fr(f32), Auto, MinContent, MaxContent}`; `.areas([\"a b\", \"a c\"])` (named template areas); `.area(child, \"name\")`; `.cell(child, col, row, col_span, row_span)`.\n\n## Declarative mapping (LOCKED)\n- `columns` / `rows`: `PropValue::List` of **CSS-like strings** parsed by `realize` — `\"22px\"` → `Track::Px(22.0)`, `\"1fr\"` → `Track::Fr(1.0)`, `\"auto\"` → `Track::Auto`, `\"min\"` → `MinContent`, `\"max\"` → `MaxContent`. **Unknown tokens degrade to `Auto`** (realize is total for untrusted input; never panic, never error). No new schema is invented — CSS grid already has this vocabulary and plugin authors know it.\n- `areas`: `PropValue::List` of strings (`[\"dot title tag\", \". sub .\"]`).\n- **Per-child placement**: props on the *child* node — `area` (Text, the area name) or `col`/`row`/`col_span`/`row_span` (Int). `realize` reads them off each child and calls `.area(..)` / `.cell(..)`. A child with neither gets taffy's grid auto-placement.\n\n## Deliverables\n`PropValue::List` + a `parse_track()` helper in `realize.rs` (unit-tested on every token + garbage); the `Grid` arm; tests (tracks parse; unknown token → `Auto`; areas; a child placed by `area` name; a child placed by `col`/`row`/spans; a child with neither auto-places); `docs/widgets.md` — `Grid` moves out of \"not realized yet\", with both audiences and the full track vocabulary documented; showcase gains a declarative `Grid` demo.\n\n## Gates\nclippy 0; `cargo test -p heca -p heca-grid-ui`; showcase green; no `cargo fmt`.",
+      "status": "done",
+      "description": "`Grid` is the **only** kind left that genuinely needs a structured prop. Add the one model primitive it needs and realize it.\n\n## DONE 2026-07-14 — heca 347, clippy clean, showcase green.\n\n## Shipped\n- **`PropValue::List(Vec<PropValue>)`** (`view.rs`) — one new variant, and the **last** the phase needs. Its rustdoc says why it is rare: the option-shaped widgets do NOT use it (their options are **children** — an option is a node with a value and content, not a string). What is genuinely list-shaped is a `Grid`'s track templates. Covered by a new JSON round-trip test over the **whole** `PropValue` vocabulary, nested list included (the WASM boundary).\n- **`Grid` realize arm** (`realize_grid`) — `columns` / `rows` / `areas` as lists; **placement is a prop on the CHILD** (`area` by name, or `col`/`row` + optional `col_span`/`row_span`, both defaulting to 1). A child with neither auto-places; an unknown area name auto-places too. This keeps `ViewNode`'s shape flat — no second child vector, no placement table to keep in sync with the children.\n- **`parse_track()`** — CSS-like strings, case-insensitive + trimmed: `\"22px\"` (or a bare number / `PropValue::Int`) → `Px` · `\"1fr\"` → `Fr` · `\"auto\"` · `\"min\"`/`\"min-content\"` · `\"max\"`/`\"max-content\"`. **Anything unrecognised degrades to `Auto`** — never a panic, never an error (the model is untrusted input; a typo costs its author a differently-sized track, not a broken host). No new schema invented: CSS grid already has this vocabulary.\n- **`Grid::area_boxed` / `Grid::cell_boxed`** (`heca-grid-ui`) — the boxed-setter seam (`Dialog::body_boxed` precedent). `realize` holds `Box<dyn Component>`, which is not itself `Component`, so it cannot go through the `impl Component` setters. The area→cell resolution stays inside `Grid`, where the template parsing lives.\n\n## Tests (+4 → heca 347)\n`grid_tracks_parse_and_garbage_degrades_to_auto` (every token, aliases, case/whitespace, plus garbage of every shape: `\"minmax(1fr, 2fr)\"`, `\"banana\"`, `\"\"`, a `Bool`) · `grid_node_realizes_tracks_areas_and_per_child_placement` (an area name spanning two template rows; an explicit cell with an omitted span defaulting to 1; a child with neither → `grid_cell: None`) · `grid_child_in_an_unknown_area_auto_places` · `every_prop_value_round_trips_including_lists`.\n\n## Showcase\n`Grid` had **no** demo at all (an AGENTS requirement). Added the native one — the classic rich row: `[icon | title | status]` over `[· | subtext | ·]`, via tracks + named areas. The *declarative* path cannot be shown there: `realize` is app-side (`heca`), and `heca-renderer` does not depend on `heca`.\n\n## Docs\n`docs/widgets.md` `Grid` entry: **Native + Declarative** examples, the boxed setters, and the **full track vocabulary** with the degrade-to-`Auto` rule; the model table gains `Grid`; `PropValue` gains `List` with the \"deliberately rare\" note. `view.rs` rustdoc kept in sync.\n\n## Gates\nclippy `--workspace --all-targets --all-features` 0 warnings · heca **347** · heca-grid-ui 138 + 71 + 1 · showcase builds. No `cargo fmt`.\n\n## NEXT\n**choice-7** (`b4ef758e`) — named child slots (a `slot` prop on the child node) → `DockFrame` (header vs body), `Item` (leading/trailing), `Toast`. The last structural gap.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2178830d-f5d6-46a1-9cba-6352afba8187-check-001-in-progress-done",
+          "date": "2026-07-14T10:04:57.232Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-14T10:00:38.314Z",
+      "completedAt": "2026-07-14T10:04:57.232Z",
       "createdAt": "2026-07-13T20:46:38.525Z",
-      "updatedAt": "2026-07-13T20:46:38.525Z"
+      "updatedAt": "2026-07-14T10:04:57.232Z"
     },
     {
       "id": "b4ef758e-bf59-46ba-a77e-ebd9b20d6638",
@@ -229,5 +238,5 @@
     }
   ],
   "createdAt": "2026-07-13T20:45:04.639Z",
-  "updatedAt": "2026-07-14T08:57:36.478Z"
+  "updatedAt": "2026-07-14T10:04:57.232Z"
 }

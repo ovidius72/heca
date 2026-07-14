@@ -504,10 +504,17 @@ per-child placement. Pure layout (no styling) — the building block for rich co
 
 - **Construct**: `Grid::new()`.
 - **Builders**: `.columns([Track])`, `.rows([Track])` (`Track::{Px(f32), Fr(f32), Auto,
-  MinContent, MaxContent}`); `.areas(["a b", "a c"])` named template areas; `.area(child,
-  "name")` places a child in an area; `.cell(child, col, row, col_span, row_span)` explicit
-  placement.
+  MinContent, MaxContent}`); `.areas(["a b", "a c"])` named template areas (`.` or `_` = an empty
+  cell); `.area(child, "name")` places a child in an area; `.cell(child, col, row, col_span,
+  row_span)` explicit 1-based placement. A child placed by neither gets taffy's auto-placement; an
+  unknown area name falls back to it too.
+- **Boxed setters**: `.area_boxed(Box<dyn Component>, "name")` / `.cell_boxed(box, col, row,
+  col_span, row_span)` — for a host mapper that has an *already-realized* subtree. (`Box<dyn
+  Component>` is not itself `Component`, so it can't go through the `impl Component` setters; same
+  seam as [`Dialog::body_boxed`](#dialog).)
 - **Traits**: `LayoutExt`, `Parent`.
+
+**Native:**
 
 ```rust
 // icon · title · tag on the top row; subtitle under the title
@@ -520,6 +527,40 @@ Grid::new()
     .area(Label::new("nvim"), "title")
     .area(Badge::success("RUN"), "tag");
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Grid)
+    .prop("columns", PropValue::List(vec![           // CSS-like track strings
+        PropValue::Text("22px".into()),
+        PropValue::Text("1fr".into()),
+        PropValue::Text("auto".into()),
+    ]))
+    .prop("rows", PropValue::List(vec![PropValue::Text("auto".into())]))
+    .prop("areas", PropValue::List(vec![PropValue::Text("dot title tag".into())]))
+    // Placement is a prop on the CHILD: an area name…
+    .child(ViewNode::new(WidgetKind::Icon)
+        .prop("icon", PropValue::Glyph("terminal".into()))
+        .prop("area", PropValue::Text("dot".into())))
+    // …or an explicit 1-based cell (+ optional col_span / row_span; both default to 1).
+    .child(ViewNode::new(WidgetKind::Label)
+        .text("nvim")
+        .prop("col", PropValue::Int(2))
+        .prop("row", PropValue::Int(1)));
+```
+
+**Track vocabulary** (parsed by `realize`, case-insensitive, trimmed): `"22px"` (or a bare `22` /
+`PropValue::Int`) → `Px` · `"1fr"` → `Fr` · `"auto"` → `Auto` · `"min"` / `"min-content"` →
+`MinContent` · `"max"` / `"max-content"` → `MaxContent`. **Anything unrecognised degrades to
+`Auto`** — never a panic, never an error: the model is untrusted input, so a typo costs its author a
+differently-sized track, not a broken host. (No new schema is invented here; CSS grid already has
+this vocabulary and plugin authors know it.)
+
+`Grid` is the one kind whose configuration is genuinely **list-shaped**, and the only reason
+[`PropValue::List`](#the-model--a-node-is-four-things-all-its-own) exists. Placement lives on the
+child rather than in a table on the parent, which keeps `ViewNode`'s shape flat — no second child
+vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
@@ -2072,6 +2113,7 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
 | **`ItemGroup`** | `text` (header), `expanded` (Bool), **+ children** (the rows) | `toggle` — carries the new `expanded` |
 | **`MarkerGroup`** | `active` (Bool), `nav_selected` (Bool), **+ children** | — (an indicator) |
+| **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings); per-**child**: `area` or `col`/`row`/`col_span`/`row_span` | — |
 
 **The event vocabulary** is three names: **`press`** (activated), **`change`** (the value changed),
 and **`toggle`** (a collapsible group folded/unfolded). Each carries what the author actually needs
@@ -2080,11 +2122,18 @@ to act on: a `change` on a picker carries the chosen option's `value`, a `toggle
 tracking the widget's state on their side.
 
 `PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
-· `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name). A **`"name"` prop** on a value
-widget opts it into a submitted modal's returned `data` (see [Dialog](#dialog) → *Declaring a modal
-from data*). Not realized yet (need track / named-slot props — `choice-6`, `choice-7`): `Grid`,
-`DockFrame`, `Toast`. `ScrollBar` is **host-only** by design — its state is live host signals, which
-static serializable data cannot drive; a plugin uses `Scroll`.
+· `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name) · `List`(`Vec<PropValue>`). A
+**`"name"` prop** on a value widget opts it into a submitted modal's returned `data` (see
+[Dialog](#dialog) → *Declaring a modal from data*).
+
+**`List` is deliberately rare.** The option-shaped widgets do *not* use it — their options are
+**children**, because an option is a node with a value and content, not a string. What is genuinely
+list-shaped is a [`Grid`](#grid)'s track templates (`columns` / `rows` / `areas`), and that is what
+it exists for.
+
+Not realized yet (need named-slot props — `choice-7`): `DockFrame`, `Toast`. `ScrollBar` is
+**host-only** by design — its state is live host signals, which static serializable data cannot
+drive; a plugin uses `Scroll`.
 
 ### Options are children (`Select` / `Tabs` / `Choice`)
 

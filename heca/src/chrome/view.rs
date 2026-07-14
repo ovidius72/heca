@@ -119,6 +119,15 @@ pub enum PropValue {
     Color(String),
     /// A Phosphor glyph name.
     Glyph(String),
+    /// An ordered list of values.
+    ///
+    /// Deliberately rare. The option-shaped widgets (`Select` / `Tabs`) do **not** use it — their
+    /// options are **children**, because an option is a node with a value and content, not a string
+    /// (see the "Options are children" section). What is genuinely list-shaped is a
+    /// [`Grid`](WidgetKind::Grid)'s **track templates**: `columns` / `rows` (CSS-like strings —
+    /// `"1fr"`, `"22px"`, `"auto"`) and `areas` (one string per grid row). That is what this exists
+    /// for.
+    List(Vec<PropValue>),
 }
 
 impl PropValue {
@@ -238,6 +247,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Select` / `Tabs` | `selected` (Int) + `Choice` children | `change` (carries the chosen **value**) |
 /// | `ItemGroup` | `text` (header), `expanded` (Bool) + children (the rows) | `toggle` (carries the new `expanded`) |
 /// | `MarkerGroup` | `active` (Bool), `nav_selected` (Bool) + children | — (an indicator) |
+/// | `Grid` | `columns` / `rows` / `areas` (List of CSS-like strings); per-**child**: `area`, or `col`/`row`/`col_span`/`row_span` | — |
 ///
 /// A **`"name"` prop** on a value widget (`Input`/`Toggle`/`Checkbox`) opts it into a submitted
 /// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`).
@@ -264,9 +274,9 @@ pub type Events = BTreeMap<String, Intent>;
 /// ignored (realize is total for untrusted input). A childless `Choice` desugars `text` to a `Label`
 /// child — children win, the same precedence as `Button`.
 ///
-/// The structured kinds `Grid` / `DockFrame` / `Toast` are **not realized yet** (they need track /
-/// named-slot props — `choice-6`, `choice-7`); `ScrollBar` is **host-only** by design (its state is
-/// live host signals, which static data cannot drive — use `Scroll`).
+/// `DockFrame` / `Toast` are **not realized yet** (they need named child slots — `choice-7`);
+/// `ScrollBar` is **host-only** by design (its state is live host signals, which static data cannot
+/// drive — use `Scroll`).
 ///
 /// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
 /// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.
@@ -397,6 +407,40 @@ mod tests {
         assert_eq!(back.kind, WidgetKind::Column);
         assert_eq!(back.children.len(), 2);
         assert!(back.children[1].children[1].is_actionable());
+    }
+
+    /// The whole `PropValue` vocabulary — including the nested [`PropValue::List`] a `Grid`'s track
+    /// templates ride on — must survive the WASM boundary intact.
+    #[test]
+    fn every_prop_value_round_trips_including_lists() {
+        let node = ViewNode::new(WidgetKind::Grid)
+            .prop(
+                "columns",
+                PropValue::List(vec![
+                    PropValue::Text("auto".into()),
+                    PropValue::Text("1fr".into()),
+                ]),
+            )
+            .prop(
+                "areas",
+                PropValue::List(vec![PropValue::Text("icon title".into())]),
+            )
+            .prop("flag", PropValue::Bool(true))
+            .prop("count", PropValue::Int(3))
+            .prop("ratio", PropValue::Float(0.5))
+            .prop("tint", PropValue::Color("#ff00ff".into()))
+            .prop("icon", PropValue::Glyph("terminal".into()))
+            .prop("size", PropValue::Size(ViewSize::Small))
+            .prop("align", PropValue::Align(ViewAlign::Center))
+            .prop("variant", PropValue::Variant(ViewVariant::Ghost));
+
+        let json = serde_json::to_string(&node).expect("serialize");
+        let back: ViewNode = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(node, back, "every PropValue must round-trip through JSON");
+        assert!(
+            matches!(back.props.get("columns"), Some(PropValue::List(items)) if items.len() == 2),
+            "the list survives as a list: {json}",
+        );
     }
 
     #[test]

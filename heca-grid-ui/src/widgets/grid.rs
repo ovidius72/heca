@@ -123,6 +123,38 @@ impl Grid {
         self.base.children.push(Box::new(child));
         self
     }
+
+    /// [`area`](Grid::area) for an **already-boxed** child — what a host mapper has after
+    /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it
+    /// cannot go through the `impl Component` setters; this is the same boxed-setter seam as
+    /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    ///
+    /// Call it **after** [`areas`](Grid::areas) — an unknown (or not-yet-defined) name falls back to
+    /// grid auto-placement rather than erroring.
+    pub fn area_boxed(mut self, mut child: Box<dyn Component>, name: &str) -> Self {
+        child.base_mut().style.grid_cell = self.areas.get(name).copied();
+        self.base.children.push(child);
+        self
+    }
+
+    /// [`cell`](Grid::cell) for an already-boxed child — see [`area_boxed`](Grid::area_boxed).
+    pub fn cell_boxed(
+        mut self,
+        mut child: Box<dyn Component>,
+        col: u16,
+        row: u16,
+        col_span: u16,
+        row_span: u16,
+    ) -> Self {
+        child.base_mut().style.grid_cell = Some(GridCell {
+            col,
+            row,
+            col_span,
+            row_span,
+        });
+        self.base.children.push(child);
+        self
+    }
 }
 
 impl Default for Grid {

@@ -577,6 +577,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .selected(1)
                 .on_change(report),
         )
+        // Grid: a layout-only CSS-Grid container — tracks + named areas, any child placed into one.
+        // The classic rich row: [icon | title | status] over [· | subtext | ·].
+        .child(caption("Grid"))
+        .child(
+            Grid::new()
+                .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
+                .rows([Track::Auto, Track::Auto])
+                .areas(["icon title   status", "icon subtext ."])
+                .area(Icon::new(Glyph::Terminal), "icon")
+                .area(Label::new("zsh").bold(true), "title")
+                .area(StatusDot::online(), "status")
+                .area(
+                    Label::new("~/projects/heca").color(theme.colors.muted),
+                    "subtext",
+                )
+                .gap(8.0)
+                .width(Length::Px(320.0)),
+        )
         .child(caption("Separator"))
         .child(Separator::horizontal().length(440.0))
         // Display widgets: status dot + badges across variants.

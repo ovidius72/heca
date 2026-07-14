@@ -26,9 +26,9 @@
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
-    Component, Flex, Gauge, Glyph, HintExt, HintTargetId, Icon, IconButton, Input, Item, ItemGroup,
-    Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData, StatusDot, Surface,
-    Tabs, Tag, Toggle, WidgetSize,
+    Component, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input, Item,
+    ItemGroup, Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData, StatusDot,
+    Surface, Tabs, Tag, Toggle, Track, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -263,14 +263,13 @@ pub(crate) fn realize(
             attach_children(Box::new(markers), node, emit, hints, forms)
         }
 
+        // ── Layout ──
+        WidgetKind::Grid => realize_grid(node, emit, hints, forms),
+
         // Structured / host-driven kinds still need model support the scalar description
-        // can't express yet — track config (`Grid`, `choice-6`) or named child slots
-        // (`DockFrame`, `Toast`, `choice-7`). Until then these realize to an empty container
-        // (total for untrusted input) rather than a wrong guess.
-        WidgetKind::Grid
-        | WidgetKind::DockFrame
-        | WidgetKind::ScrollBar
-        | WidgetKind::Toast => {
+        // can't express yet — named child slots (`DockFrame`, `Toast`, `choice-7`). Until then
+        // these realize to an empty container (total for untrusted input) rather than a wrong guess.
+        WidgetKind::DockFrame | WidgetKind::ScrollBar | WidgetKind::Toast => {
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] realize: WidgetKind {:?} needs structured model support (ui-7) — empty",
@@ -485,6 +484,110 @@ fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(
         };
         emit(InteractionIntent::View(intent));
     })
+}
+
+/// Realize a [`Grid`] — the one kind whose configuration is genuinely **list-shaped**: its track
+/// templates.
+///
+/// Tracks are **CSS-like strings** (`"1fr"`, `"22px"`, `"auto"`), because CSS grid already has this
+/// vocabulary and plugin authors know it — no new schema is invented. Areas are one string per grid
+/// row, exactly as `grid-template-areas` writes them.
+///
+/// **Placement is a prop on the child**, not a structure in the parent: a child carries `area` (a
+/// name from the template) *or* `col`/`row` (+ optional `col_span`/`row_span`); a child with neither
+/// gets taffy's auto-placement. This keeps `ViewNode`'s shape flat — no second child vector, no
+/// placement table to keep in sync with the children.
+fn realize_grid(
+    node: &ViewNode,
+    emit: &ChromeIntentEmitter,
+    hints: &mut HintTargetRegistry,
+    forms: &mut FormBindings,
+) -> Box<dyn Component> {
+    let mut grid = Grid::new();
+    if let Some(columns) = track_list(node, "columns") {
+        grid = grid.columns(columns);
+    }
+    if let Some(rows) = track_list(node, "rows") {
+        grid = grid.rows(rows);
+    }
+    // Areas must be defined before a child can be placed into one by name.
+    if let Some(areas) = string_list(node, "areas") {
+        grid = grid.areas(areas.iter().map(String::as_str));
+    }
+    for child in &node.children {
+        let realized = realize(child, emit, hints, forms);
+        match child.props.get("area").and_then(PropValue::as_text) {
+            Some(area) => grid = grid.area_boxed(realized, area),
+            None => match (usize_prop(child, "col"), usize_prop(child, "row")) {
+                (Some(col), Some(row)) => {
+                    grid = grid.cell_boxed(
+                        realized,
+                        col as u16,
+                        row as u16,
+                        usize_prop(child, "col_span").unwrap_or(1) as u16,
+                        usize_prop(child, "row_span").unwrap_or(1) as u16,
+                    )
+                }
+                // Neither an area nor a cell: let the grid auto-place it.
+                _ => grid.base_mut().children.push(realized),
+            },
+        }
+    }
+    Box::new(grid)
+}
+
+/// A [`PropValue::List`] of track strings, parsed to [`Track`]s (`"columns"` / `"rows"`).
+fn track_list(node: &ViewNode, key: &str) -> Option<Vec<Track>> {
+    let PropValue::List(items) = node.props.get(key)? else {
+        return None;
+    };
+    Some(items.iter().map(parse_track).collect())
+}
+
+/// A [`PropValue::List`] of strings (`"areas"`). Non-text items are skipped.
+fn string_list(node: &ViewNode, key: &str) -> Option<Vec<String>> {
+    let PropValue::List(items) = node.props.get(key)? else {
+        return None;
+    };
+    Some(
+        items
+            .iter()
+            .filter_map(PropValue::as_text)
+            .map(str::to_string)
+            .collect(),
+    )
+}
+
+/// Parse one CSS-like grid track: `"22px"` (or a bare `Int`/`Float` — pixels) · `"1fr"` · `"auto"` ·
+/// `"min"`/`"min-content"` · `"max"`/`"max-content"`.
+///
+/// **Anything unrecognised degrades to [`Track::Auto`]** — never a panic, never an error. The model
+/// is untrusted input (a plugin, an RPC caller), so a typo costs that author a differently-sized
+/// track, not a broken host.
+fn parse_track(value: &PropValue) -> Track {
+    let text = match value {
+        PropValue::Text(s) => s.trim().to_ascii_lowercase(),
+        // A bare number is pixels, the same forgiving reading the size parser gives config.
+        PropValue::Int(i) => return Track::Px(*i as f32),
+        PropValue::Float(f) => return Track::Px(*f as f32),
+        _ => return Track::Auto,
+    };
+    match text.as_str() {
+        "auto" => Track::Auto,
+        "min" | "min-content" => Track::MinContent,
+        "max" | "max-content" => Track::MaxContent,
+        _ => {
+            if let Some(px) = text.strip_suffix("px").and_then(|n| n.trim().parse().ok()) {
+                Track::Px(px)
+            } else if let Some(fr) = text.strip_suffix("fr").and_then(|n| n.trim().parse().ok()) {
+                Track::Fr(fr)
+            } else if let Ok(px) = text.parse() {
+                Track::Px(px)
+            } else {
+                Track::Auto
+            }
+        }
+    }
 }
 
 /// The handler for a **`"toggle"`** binding (a collapsible group) — the third canonical event name,
@@ -1047,6 +1150,104 @@ mod tests {
         let markers = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(markers.base().children.len(), 2, "the two realized rows");
         assert_eq!(hints.checkpoint(), 0, "an indicator registers no hint target");
+    }
+
+    // ── Grid (tracks / areas / placement) ──
+
+    /// Tracks are CSS-like strings — the vocabulary plugin authors already know. Anything
+    /// unrecognised **degrades to `Auto`**: a typo costs that author a differently-sized track, not
+    /// a broken host.
+    #[test]
+    fn grid_tracks_parse_and_garbage_degrades_to_auto() {
+        let text = |s: &str| parse_track(&PropValue::Text(s.into()));
+        assert_eq!(text("22px"), Track::Px(22.0));
+        assert_eq!(text("1fr"), Track::Fr(1.0));
+        assert_eq!(text("2.5fr"), Track::Fr(2.5));
+        assert_eq!(text("auto"), Track::Auto);
+        assert_eq!(text("min"), Track::MinContent);
+        assert_eq!(text("min-content"), Track::MinContent);
+        assert_eq!(text("max"), Track::MaxContent);
+        assert_eq!(text("max-content"), Track::MaxContent);
+        assert_eq!(text("  1FR  "), Track::Fr(1.0), "trimmed + case-insensitive");
+        assert_eq!(text("22"), Track::Px(22.0), "a bare number is pixels");
+        // Garbage of every shape.
+        assert_eq!(text("minmax(1fr, 2fr)"), Track::Auto);
+        assert_eq!(text("banana"), Track::Auto);
+        assert_eq!(text(""), Track::Auto);
+        assert_eq!(parse_track(&PropValue::Bool(true)), Track::Auto);
+        assert_eq!(parse_track(&PropValue::Int(22)), Track::Px(22.0));
+    }
+
+    /// A `Grid` node: list-shaped tracks + areas on the grid, and **placement as a prop on the
+    /// child** — `area` by name, or `col`/`row` (+ spans). A child with neither auto-places.
+    #[test]
+    fn grid_node_realizes_tracks_areas_and_per_child_placement() {
+        let mut hints = HintTargetRegistry::default();
+        let tracks = |t: [&str; 3]| {
+            PropValue::List(t.iter().map(|s| PropValue::Text((*s).into())).collect())
+        };
+        let node = ViewNode::new(WidgetKind::Grid)
+            .prop("columns", tracks(["auto", "1fr", "auto"]))
+            .prop("rows", PropValue::List(vec![PropValue::Text("auto".into())]))
+            .prop(
+                "areas",
+                PropValue::List(vec![
+                    PropValue::Text("icon title status".into()),
+                    PropValue::Text("icon subtext .".into()),
+                ]),
+            )
+            // Placed by area name.
+            .child(
+                ViewNode::new(WidgetKind::Icon)
+                    .prop("icon", PropValue::Glyph("terminal".into()))
+                    .prop("area", PropValue::Text("icon".into())),
+            )
+            // Placed by explicit cell + span.
+            .child(
+                ViewNode::new(WidgetKind::Label)
+                    .text("zsh")
+                    .prop("col", PropValue::Int(2))
+                    .prop("row", PropValue::Int(1))
+                    .prop("col_span", PropValue::Int(2)),
+            )
+            // Neither → auto-placed.
+            .child(ViewNode::new(WidgetKind::Label).text("~/proj"));
+
+        let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let children = &grid.base().children;
+        assert_eq!(children.len(), 3);
+
+        // The `icon` area spans both rows of column 1 (it appears twice in the template).
+        assert_eq!(
+            children[0].base().style.grid_cell,
+            Some(heca_grid_ui::GridCell { col: 1, row: 1, col_span: 1, row_span: 2 }),
+            "placed into the named area, spanning what the template gives it",
+        );
+        assert_eq!(
+            children[1].base().style.grid_cell,
+            Some(heca_grid_ui::GridCell { col: 2, row: 1, col_span: 2, row_span: 1 }),
+            "placed by explicit cell; an omitted span defaults to 1",
+        );
+        assert_eq!(
+            children[2].base().style.grid_cell,
+            None,
+            "no placement props → taffy auto-placement",
+        );
+    }
+
+    /// An unknown area name is not an error — the child simply auto-places (realize stays total).
+    #[test]
+    fn grid_child_in_an_unknown_area_auto_places() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Grid)
+            .prop("areas", PropValue::List(vec![PropValue::Text("a b".into())]))
+            .child(
+                ViewNode::new(WidgetKind::Label)
+                    .text("x")
+                    .prop("area", PropValue::Text("nope".into())),
+            );
+        let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(grid.base().children[0].base().style.grid_cell, None);
     }
 
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.
