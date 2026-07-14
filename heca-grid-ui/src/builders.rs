@@ -93,6 +93,22 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.align_self = Some(a);
         self
     }
+    /// **Grid only** — how this grid's items sit **horizontally inside their cells**
+    /// (CSS `justify-items`). Default: `Stretch` (an item fills its cell).
+    ///
+    /// Not to be confused with [`justify`](Self::justify): on a grid that is `justify-content`,
+    /// which distributes the whole *track set* inside the container and leaves the items where
+    /// they are. The vertical counterpart is [`align`](Self::align).
+    fn justify_items(mut self, a: Align) -> Self {
+        self.base_mut().style.justify_items = Some(a);
+        self
+    }
+    /// **Grid only** — horizontal placement of **this** item inside its own cell (CSS
+    /// `justify-self`), overriding the grid's [`justify_items`](Self::justify_items) for it alone.
+    fn justify_self(mut self, a: Align) -> Self {
+        self.base_mut().style.justify_self = Some(a);
+        self
+    }
     /// Inner padding on all sides.
     fn padding(mut self, p: f32) -> Self {
         self.base_mut().style.padding = p;

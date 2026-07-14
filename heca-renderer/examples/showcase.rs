@@ -54,7 +54,13 @@ impl Component for IndicatorSwatch {
     fn paint(&self, cx: &mut PaintCx) {
         let b = self.base.bounds;
         // A faint tile so the indicator reads against a surface, like a sidebar item.
-        cx.rect(b, cx.theme().colors.surface, None, cx.theme().colors.border_radius, None);
+        cx.rect(
+            b,
+            cx.theme().colors.surface,
+            None,
+            cx.theme().colors.border_radius,
+            None,
+        );
         if self.swap {
             cx.swap_indicator(b);
         } else {
@@ -192,7 +198,9 @@ fn apply_size(c: &mut dyn Component, size: WidgetSize) {
 /// never express. `Choice` lays them out in a row with a theme-derived gap, and tints both together
 /// when the option is chosen.
 fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
-    Choice::new(value).child(Icon::new(glyph)).child(Label::new(label))
+    Choice::new(value)
+        .child(Icon::new(glyph))
+        .child(Label::new(label))
 }
 
 /// Handles the host keeps after building the UI, to drive chrome interactions
@@ -276,11 +284,35 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // The keycap is the shared `paint_keycap` primitive in its `Bordered` variant —
     // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
     let menu = ContextMenu::new()
-        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::NotePencil).key('r').shortcut(display_shortcut("prefix+$")))
-        .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
-        .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
-        .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::FolderSimpleMinus).key('x').danger(true).shortcut(display_shortcut("prefix+x")))
+        .entry(
+            MenuEntry::new("Rename", || println!("[showcase] rename"))
+                .icon(Glyph::NotePencil)
+                .key('r')
+                .shortcut(display_shortcut("prefix+$")),
+        )
+        .entry(
+            MenuEntry::new("Move to workspace", || println!("[showcase] → workspace"))
+                .icon(Glyph::ArrowRight)
+                .key('w'),
+        )
+        .entry(
+            MenuEntry::new("Move to column", || println!("[showcase] → column"))
+                .icon(Glyph::SquareSplitVertical)
+                .key('c'),
+        )
+        .entry(
+            MenuEntry::new("Duplicate", || println!("[showcase] duplicate"))
+                .icon(Glyph::Cards)
+                .key('d')
+                .enabled(false),
+        )
+        .entry(
+            MenuEntry::new("Close", || println!("[showcase] close"))
+                .icon(Glyph::FolderSimpleMinus)
+                .key('x')
+                .danger(true)
+                .shortcut(display_shortcut("prefix+x")),
+        )
         // Fired only on Esc / outside-click (a dismissal, not a selection) — the host wires this
         // to its overlay-close path (in `heca`, emit `CloseOverlay`).
         .on_dismiss(|| println!("[showcase] menu dismissed"));
@@ -320,7 +352,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             .background(theme.colors.surface)
             .border(theme.colors.border, theme.colors.border_width)
             .glow(theme.colors.glow)
-            .child(Label::new(value).color(theme.colors.foreground).font_scale(2.0))
+            .child(
+                Label::new(value)
+                    .color(theme.colors.foreground)
+                    .font_scale(2.0),
+            )
     };
     let click = |label: &str| {
         let name = label.to_string();
@@ -585,14 +621,49 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
                 .rows([Track::Auto, Track::Auto])
                 .areas(["icon title   status", "icon subtext ."])
-                .area(Icon::new(Glyph::Terminal), "icon")
+                // Items sit at the TOP-LEFT of their cell by default (an explicit size has nothing
+                // to stretch), so an Icon (h = font) and a Label (h = font × 1.4) would not share a
+                // centre line. `align` is the vertical knob — the icon then centres across the two
+                // rows it spans, and the status dot centres against the title.
+                .align(Align::Center)
+                // A leading icon spans both text rows, so it is sized to them (a body-size glyph
+                // centred over two lines just floats in the gutter between them).
+                .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
                 .area(Label::new("zsh").bold(true), "title")
-                .area(StatusDot::online(), "status")
+                // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
+                // of its cell instead of letting it stretch across the column.
+                .area(
+                    StatusDot::online().justify_self(Align::End),
+                    "status",
+                )
                 .area(
                     Label::new("~/projects/heca").color(theme.colors.muted),
                     "subtext",
                 )
                 .gap(8.0)
+                .width(Length::Px(320.0)),
+        )
+        .child(
+            Grid::new()
+                .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
+                .rows([Track::Auto])
+                .areas(["icon title status"])
+                // Items sit at the TOP-LEFT of their cell by default (an explicit size has nothing
+                // to stretch), so an Icon (h = font) and a Label (h = font × 1.4) would not share a
+                // centre line. `align` is the vertical knob — the icon then centres across the two
+                // rows it spans, and the status dot centres against the title.
+                .align(Align::Center)
+                // A leading icon spans both text rows, so it is sized to them (a body-size glyph
+                // centred over two lines just floats in the gutter between them).
+                .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
+                .area(Label::new("zsh").bold(true), "title")
+                // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
+                // of its cell instead of letting it stretch across the column.
+                .area(
+                    StatusDot::online().justify_self(Align::End),
+                    "status",
+                )
+                .gap(3.0)
                 .width(Length::Px(320.0)),
         )
         .child(caption("Separator"))
@@ -2252,8 +2323,9 @@ impl GpuState {
         // append to the persistent buffers (no per-frame staging allocation).
         self.grid.begin_frame();
         self.text.begin_frame();
-        let glow_alpha_scale =
-            heca_renderer::scene::glow_alpha_scale_for_background(self.theme.colors.background.to_f32x4());
+        let glow_alpha_scale = heca_renderer::scene::glow_alpha_scale_for_background(
+            self.theme.colors.background.to_f32x4(),
+        );
         enqueue_scene(
             &mut self.grid,
             &mut self.text,

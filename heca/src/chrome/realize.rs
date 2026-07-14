@@ -89,6 +89,25 @@ pub(crate) fn realize(
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
+    let mut realized = realize_kind(node, emit, hints, forms);
+    // Self-alignment is a property of the node *inside its parent*, so it applies to every kind —
+    // read it once here rather than in each arm.
+    if let Some(align) = align_prop(node, "align_self") {
+        realized.base_mut().style.align_self = Some(align);
+    }
+    if let Some(justify) = align_prop(node, "justify_self") {
+        realized.base_mut().style.justify_self = Some(justify);
+    }
+    realized
+}
+
+/// The per-kind mapping — see [`realize`], which wraps it with the props every node can carry.
+fn realize_kind(
+    node: &ViewNode,
+    emit: &ChromeIntentEmitter,
+    hints: &mut HintTargetRegistry,
+    forms: &mut FormBindings,
+) -> Box<dyn Component> {
     match node.kind {
         // ── Containers (attach realized children) ──
         WidgetKind::Column => realize_flex(node, Flex::column(), emit, hints, forms),
@@ -325,7 +344,7 @@ fn realize_flex(
     if let Some(gap) = f32_prop(node, "gap") {
         flex = flex.gap(gap);
     }
-    if let Some(align) = align_prop(node) {
+    if let Some(align) = align_prop(node, "align") {
         flex = flex.align(align);
     }
     for child in &node.children {
@@ -513,6 +532,15 @@ fn realize_grid(
     // Areas must be defined before a child can be placed into one by name.
     if let Some(areas) = string_list(node, "areas") {
         grid = grid.areas(areas.iter().map(String::as_str));
+    }
+    // How the items sit inside their cells: `align` vertically, `justify_items` horizontally. Both
+    // default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell — so a
+    // row of mixed-height content needs `align: center` to share a centre line.
+    if let Some(align) = align_prop(node, "align") {
+        grid = grid.align(align);
+    }
+    if let Some(justify) = align_prop(node, "justify_items") {
+        grid = grid.justify_items(justify);
     }
     for child in &node.children {
         let realized = realize(child, emit, hints, forms);
@@ -736,9 +764,11 @@ fn glyph_from_name(name: &str) -> Option<Glyph> {
     Some(g)
 }
 
-/// The `"align"` prop mapped to the grid-ui [`Align`].
-fn align_prop(node: &ViewNode) -> Option<Align> {
-    match node.props.get("align")? {
+/// An alignment prop mapped to the grid-ui [`Align`] — `"align"` (a container's cross-axis
+/// alignment of its children), `"align_self"` / `"justify_self"` (this node inside its parent), or
+/// `"justify_items"` (a grid's horizontal placement of its items).
+fn align_prop(node: &ViewNode, key: &str) -> Option<Align> {
+    match node.props.get(key)? {
         PropValue::Align(a) => Some(map_align(*a)),
         _ => None,
     }
@@ -1233,6 +1263,37 @@ mod tests {
             None,
             "no placement props → taffy auto-placement",
         );
+    }
+
+    /// Alignment is authorable too, on both axes: `align` / `justify_items` on the grid, and
+    /// `align_self` / `justify_self` on any child (they are properties of a node *inside its
+    /// parent*, so `realize` reads them for every kind, not just grid items).
+    #[test]
+    fn grid_alignment_is_authorable_on_both_axes() {
+        use heca_grid_ui::Align;
+
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Grid)
+            .prop("align", PropValue::Align(ViewAlign::Center))
+            .prop("justify_items", PropValue::Align(ViewAlign::Center))
+            .child(
+                ViewNode::new(WidgetKind::Label)
+                    .text("pinned")
+                    .prop("align_self", PropValue::Align(ViewAlign::End))
+                    .prop("justify_self", PropValue::Align(ViewAlign::End)),
+            );
+
+        let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let style = grid.base().style;
+        assert_eq!(style.align, Align::Center, "vertical: the items in their cells");
+        assert_eq!(
+            style.justify_items,
+            Some(Align::Center),
+            "horizontal: `justify_items`, not `justify` (which moves the track set)",
+        );
+        let child = grid.base().children[0].base().style;
+        assert_eq!(child.align_self, Some(Align::End));
+        assert_eq!(child.justify_self, Some(Align::End));
     }
 
     /// An unknown area name is not an error — the child simply auto-places (realize stays total).

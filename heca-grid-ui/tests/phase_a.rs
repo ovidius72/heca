@@ -2124,6 +2124,128 @@ fn grid_places_children_in_named_areas_and_cells() {
 }
 
 #[test]
+fn grid_areas_template_defines_the_rows_not_the_row_tracks() {
+    use heca_grid_ui::{Grid, Track};
+
+    // The template is what defines the structure; `rows(..)` only *sizes* the tracks it implies.
+    // A template with more lines than there are row tracks therefore creates **implicit** rows —
+    // and an item spanning them is centred over a taller area than its neighbours, so it silently
+    // stops sharing their centre line. This is the mistake that reads as "the text is off-centre".
+    let centres = |areas: &[&str]| {
+        let mut grid = Grid::new()
+            .columns([Track::Px(30.0), Track::Fr(1.0)])
+            .rows([Track::Auto]) // one row track, whatever the template says
+            .areas(areas.iter().copied())
+            .align(Align::Center)
+            .area(
+                Surface::new()
+                    .width(Length::Px(26.0))
+                    .height(Length::Px(26.0)),
+                "icon",
+            )
+            .area(
+                Surface::new()
+                    .width(Length::Px(40.0))
+                    .height(Length::Px(10.0)),
+                "title",
+            );
+        LayoutEngine::new().compute(&mut grid, Size::new(200.0, 60.0));
+        let mid = |i: usize| {
+            let b = grid.base().children[i].base().bounds;
+            b.loc.y + b.size.h / 2.0
+        };
+        (mid(0), mid(1))
+    };
+
+    // One line in, one row out: the icon and the title share a centre line.
+    let (icon, title) = centres(&["icon title"]);
+    assert!(
+        (icon - title).abs() < 0.5,
+        "a one-line template centres both in the same row: icon {icon}, title {title}",
+    );
+
+    // Two lines in — even with a single row *track* — gives the icon an implicit second row to span,
+    // and the two centres part company.
+    let (icon, title) = centres(&["icon title", "icon ."]);
+    assert!(
+        (icon - title).abs() > 0.5,
+        "the template's second line adds an implicit row the icon spans: icon {icon}, title {title}",
+    );
+}
+
+#[test]
+fn grid_items_align_in_their_cell_on_both_axes() {
+    use heca_grid_ui::{Grid, Track};
+
+    // One 100×40 cell holding a 20×10 item, so the alignment is unambiguous.
+    let item = || Surface::new().width(Length::Px(20.0)).height(Length::Px(10.0));
+    let cell = |grid: Grid| {
+        let mut grid = grid;
+        LayoutEngine::new().compute(&mut grid, Size::new(100.0, 40.0));
+        grid.base().children[0].base().bounds
+    };
+
+    // Default (Stretch on both axes): the item is pinned to the top-left of its cell — an explicit
+    // size means there is nothing to stretch. This is why an Icon (h = font) and a Label
+    // (h = font × 1.4) in the same row do NOT share a centre line by default.
+    let default = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .child(item()));
+    assert!(default.loc.y < 0.01, "default: pinned to the top of the cell");
+    assert!(default.loc.x < 0.01, "default: pinned to the left of the cell");
+
+    // `.align(..)` is the VERTICAL knob: it centres the items in their cells.
+    let centered = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .align(Align::Center)
+        .child(item()));
+    assert!(
+        (centered.loc.y - 15.0).abs() < 0.5,
+        "align(Center) centres vertically: (40 - 10) / 2 = 15, got {}",
+        centered.loc.y,
+    );
+
+    // `.justify_items(..)` is the HORIZONTAL one.
+    let justified = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .justify_items(Align::Center)
+        .child(item()));
+    assert!(
+        (justified.loc.x - 40.0).abs() < 0.5,
+        "justify_items(Center) centres horizontally: (100 - 20) / 2 = 40, got {}",
+        justified.loc.x,
+    );
+
+    // The per-item overrides win over the grid's defaults, one axis each.
+    let overridden = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .align(Align::Center)
+        .justify_items(Align::Center)
+        .child(item().align_self(Align::End).justify_self(Align::End)));
+    assert!(
+        (overridden.loc.y - 30.0).abs() < 0.5 && (overridden.loc.x - 80.0).abs() < 0.5,
+        "align_self / justify_self override the grid, got {overridden:?}",
+    );
+
+    // The trap this exists to avoid: on a grid, `justify` is `justify-content` — it distributes the
+    // whole TRACK SET inside the container and does not move the item within its cell. With one
+    // 100px track filling a 100px container there is nothing to distribute, so the item stays put.
+    let justify_content = cell(Grid::new()
+        .columns([Track::Px(100.0)])
+        .rows([Track::Px(40.0)])
+        .justify(Justify::Center)
+        .child(item()));
+    assert!(
+        justify_content.loc.x < 0.01,
+        "`justify` does not align items in their cells — use `justify_items`",
+    );
+}
+
+#[test]
 fn dock_frame_body_has_height_when_expanded() {
     use heca_grid_ui::DockFrame;
     let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));

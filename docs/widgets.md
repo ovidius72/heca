@@ -195,8 +195,10 @@ return `Self` for chaining.
 | `.direction(Direction)` | Main axis (`Row`/`Column`). |
 | `.gap(f32)` | Space between children. |
 | `.justify(Justify)` | Main-axis distribution (`Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`). |
-| `.align(Align)` | Cross-axis alignment of the **children** (`Start`/`Center`/`End`/`Stretch`). |
+| `.align(Align)` | Cross-axis alignment of the **children** (`Start`/`Center`/`End`/`Stretch`). In a `Row` that is vertical; in a `Column`, horizontal; in a [`Grid`](#grid), it is how items sit **vertically inside their cells**. |
 | `.align_self(Align)` | Cross-axis alignment of **this** widget in its parent (CSS `align-self`), overriding the parent's `.align()` for it alone. `Align::Start` keeps an `Auto`-sized widget **hugging its content** instead of stretching to fill the parent — which is what the default `Stretch` would otherwise do (see [`Select`](#select), sized to its widest option). |
+| `.justify_items(Align)` | **Grid only** — how the items sit **horizontally inside their cells** (CSS `justify-items`). Not the same as `.justify()`, which on a grid distributes the whole *track set*. |
+| `.justify_self(Align)` | **Grid only** — horizontal placement of **this** item in its own cell, overriding the grid's `.justify_items()`. |
 | `.padding(f32)` | Inner padding (all sides). |
 | `.width(Length)` / `.height(Length)` | `Length::Auto` or `Length::Px(f32)`. |
 | `.grow(f32)` | Flex-grow factor. |
@@ -556,6 +558,119 @@ ViewNode::new(WidgetKind::Grid)
 `Auto`** — never a panic, never an error: the model is untrusted input, so a typo costs its author a
 differently-sized track, not a broken host. (No new schema is invented here; CSS grid already has
 this vocabulary and plugin authors know it.)
+
+#### The `areas` template defines the structure — `rows` / `columns` only *size* it
+
+`.areas([...])` is the source of truth for the grid's shape: one string per row, one token per
+column. `.rows(...)` / `.columns(...)` merely give sizes to the tracks the template implies. So if
+the template has **more rows than there are row tracks**, the extra rows still exist — taffy creates
+them **implicitly** (`Auto`-sized). Nothing errors; the grid just has more rows than you declared.
+
+That is the source of the classic "my text isn't vertically centred" bug:
+
+```rust
+// WRONG — one row track, but a TWO-row template. `icon` spans both rows (the second is implicit),
+// so it is centred over a taller area than `title` and the two stop sharing a centre line.
+Grid::new()
+    .rows([Track::Auto])
+    .areas(["icon title status",
+            "icon subtext ."])           // ← this line still creates a row
+    .align(Align::Center)
+
+// RIGHT — one row: one line in the template.
+Grid::new()
+    .rows([Track::Auto])
+    .areas(["icon title status"])
+    .align(Align::Center)
+```
+
+Rule of thumb: **count the lines in `areas` — that is how many rows you have**, regardless of what
+`rows(...)` says.
+
+#### Aligning items inside their cells (read this — the default surprises people)
+
+**By default a grid item is pinned to the TOP-LEFT of its cell.** The default is `Stretch` on both
+axes, and an item with an explicit size (which every leaf widget has — a `Label` measures to
+`font × 1.4`, an `Icon` to `font`) has nothing to stretch, so it lands at the start of the cell in
+both directions. Put an `Icon` and a `Label` in the same row and they will *not* share a centre
+line — the icon sits a few pixels high. That is a real thing to fix, not a rendering artifact.
+
+Four knobs, two axes — the grid sets the default, the item overrides it:
+
+| | Vertical (block axis) | Horizontal (inline axis) |
+|---|---|---|
+| **on the Grid** (all items) | `.align(Align)` | `.justify_items(Align)` |
+| **on one child** (overrides) | `.align_self(Align)` | `.justify_self(Align)` |
+
+Values are `Align::{Start, Center, End, Stretch}` — `Stretch` (the default) makes an `Auto`-sized
+item fill the cell, and pins a fixed-size one to the start.
+
+> **The trap:** `.justify(...)` is **not** the horizontal item knob. On a grid it maps to CSS
+> `justify-content`, which distributes the whole *track set* inside the container and leaves every
+> item exactly where it was. Reach for `.justify_items(...)` / `.justify_self(...)`. (Vertically the
+> word is unambiguous: `.align(...)` is what you want.)
+
+**Native — a rich row whose items share a centre line:**
+
+```rust
+Grid::new()
+    .columns([Track::Auto, Track::Fr(1.0), Track::Auto])
+    .rows([Track::Auto, Track::Auto])
+    .areas(["icon title   status",
+            "icon subtext ."])
+    .gap(8.0)
+    // Vertical: centre every item in its cell. The icon spans both rows, so it centres across the
+    // pair; the status dot centres against the title. Without this they all sit at the cell top.
+    .align(Align::Center)
+    .area(Icon::new(Glyph::Terminal), "icon")
+    .area(Label::new("zsh").bold(true), "title")
+    // Horizontal, for this item only: pin the dot to the right edge of its cell instead of
+    // stretching it across the column.
+    .area(StatusDot::online().justify_self(Align::End), "status")
+    .area(Label::new("~/projects/heca").color(theme.colors.muted), "subtext");
+```
+
+**The same, per axis, in isolation:**
+
+```rust
+Grid::new().align(Align::Center)          // all items: centred vertically in their cell
+Grid::new().justify_items(Align::Center)  // all items: centred horizontally in their cell
+Grid::new().align(Align::Center).justify_items(Align::Center)   // dead centre
+
+// One item departing from the grid's default (each axis is independent):
+.area(Badge::success("RUN").align_self(Align::Start), "tag")     // top of its cell
+.area(Badge::success("RUN").justify_self(Align::End), "tag")     // right of its cell
+.area(Icon::new(Glyph::Terminal).align_self(Align::Stretch), "icon")  // fill the cell vertically
+```
+
+**Declarative — the same four knobs are props:**
+
+```rust
+ViewNode::new(WidgetKind::Grid)
+    .prop("columns", PropValue::List(vec![
+        PropValue::Text("auto".into()),
+        PropValue::Text("1fr".into()),
+        PropValue::Text("auto".into()),
+    ]))
+    .prop("areas", PropValue::List(vec![PropValue::Text("icon title status".into())]))
+    // On the grid: the default placement of every item in its cell.
+    .prop("align", PropValue::Align(ViewAlign::Center))            // vertical
+    .prop("justify_items", PropValue::Align(ViewAlign::Center))    // horizontal
+    .child(ViewNode::new(WidgetKind::Icon)
+        .prop("icon", PropValue::Glyph("terminal".into()))
+        .prop("area", PropValue::Text("icon".into())))
+    .child(ViewNode::new(WidgetKind::Label)
+        .text("zsh")
+        .prop("area", PropValue::Text("title".into())))
+    // On a child: override the grid, one axis each.
+    .child(ViewNode::new(WidgetKind::StatusDot)
+        .prop("area", PropValue::Text("status".into()))
+        .prop("justify_self", PropValue::Align(ViewAlign::End)));   // hard right in its cell
+```
+
+`align_self` / `justify_self` are read for **every** kind, not just grid items — they describe a node
+inside its parent, so they work on a flex child too (there, `align_self` is the cross axis and
+`justify_self` is inert).
 
 `Grid` is the one kind whose configuration is genuinely **list-shaped**, and the only reason
 [`PropValue::List`](#the-model--a-node-is-four-things-all-its-own) exists. Placement lives on the
@@ -2113,7 +2228,7 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
 | **`ItemGroup`** | `text` (header), `expanded` (Bool), **+ children** (the rows) | `toggle` — carries the new `expanded` |
 | **`MarkerGroup`** | `active` (Bool), `nav_selected` (Bool), **+ children** | — (an indicator) |
-| **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings); per-**child**: `area` or `col`/`row`/`col_span`/`row_span` | — |
+| **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings), `align` + `justify_items`; per-**child**: `area` or `col`/`row`/`col_span`/`row_span`, `align_self` / `justify_self` | — |
 
 **The event vocabulary** is three names: **`press`** (activated), **`change`** (the value changed),
 and **`toggle`** (a collapsible group folded/unfolded). Each carries what the author actually needs
@@ -2124,7 +2239,8 @@ tracking the widget's state on their side.
 `PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
 · `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name) · `List`(`Vec<PropValue>`). A
 **`"name"` prop** on a value widget opts it into a submitted modal's returned `data` (see
-[Dialog](#dialog) → *Declaring a modal from data*).
+[Dialog](#dialog) → *Declaring a modal from data*). **`align_self` / `justify_self` are read on every
+kind** — they describe a node inside its parent (see [Grid → aligning items](#grid)).
 
 **`List` is deliberately rare.** The option-shaped widgets do *not* use it — their options are
 **children**, because an option is a node with a value and content, not a string. What is genuinely
