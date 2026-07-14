@@ -156,7 +156,7 @@ pub(crate) enum RouteDecision {
 /// `dispatch_action()` or `route_interaction()` and never check policy
 /// directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ActionPolicy {
+pub(crate) enum ActionPolicy {
     /// True global app action — always allowed in EVERY focus domain, including
     /// Floating. Reserved for actions with no tiled/floating layout impact
     /// (e.g. `ReloadConfig`). Distinct from [`AlwaysAllowed`](Self::AlwaysAllowed),
@@ -177,7 +177,7 @@ enum ActionPolicy {
 }
 
 /// Classify a WM action into its policy category.
-fn action_policy(action: &WmAction) -> ActionPolicy {
+pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
     match action {
         // ── Tiled-only: blocked when Floating ──
         WmAction::FocusLeft
@@ -493,71 +493,66 @@ fn route_action(
     source: InteractionSource,
     action: &WmAction,
 ) -> RouteDecision {
+    if policy_allows(session, source, action_policy(action), Some(action)) {
+        RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+    } else {
+        RouteDecision::Block
+    }
+}
+
+/// Does `policy` permit an action in the current focus domain, from this source?
+///
+/// The **single** place the six policies are interpreted, so a built-in and a plugin action are
+/// judged by identical rules. The difference is only where the policy came from: a built-in's is
+/// produced by [`action_policy`]'s exhaustive `match` (forgetting a variant is a compile error); a
+/// name-keyed action's is **declared** on its `DynActionMeta` (a required field, so forgetting is
+/// impossible there too).
+///
+/// `action` is `Some` only for built-ins — it exists solely for [`ActionPolicy::SourceDependent`],
+/// which inspects `FocusPane`'s target. A dynamic action cannot be `FocusPane`, so it takes the
+/// conservative branch (blocked while floating), which is the right default for an action the host
+/// cannot introspect.
+fn policy_allows(
+    session: &heca_core::layout::Session,
+    source: InteractionSource,
+    policy: ActionPolicy,
+    action: Option<&WmAction>,
+) -> bool {
     let floating = is_floating_domain(session);
-    let policy = action_policy(action);
 
     match policy {
-        ActionPolicy::Global => {
-            // True global app actions (ReloadConfig) — allowed in every focus
-            // domain, including Floating. They have no tiled/floating layout
-            // impact, so blocking them when floating only breaks hot-reload.
-            RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-        }
-        ActionPolicy::AlwaysAllowed => {
-            // AlwaysAllowed actions (CommandPalette, SpawnCommand, EnterMode)
-            // are blocked when floating from current sources (Keyboard, MouseContent, MouseLeftSidebar).
-            // Future chrome sources (MouseTopMenu, MouseStatusBar) may allow these even while floating.
-            if floating {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-            }
-        }
-        ActionPolicy::FocusedPaneLocal => {
-            RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-        }
-        ActionPolicy::TiledOnly => {
-            if floating {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-            }
-        }
-        ActionPolicy::WorkspaceLevel => {
-            if floating {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-            }
-        }
+        // True global app actions (ReloadConfig) — allowed in every focus domain, including
+        // Floating. They have no tiled/floating layout impact, so blocking them when floating only
+        // breaks hot-reload.
+        ActionPolicy::Global => true,
+        // AlwaysAllowed (CommandPalette, SpawnCommand, EnterMode) is a misnomer: it is blocked when
+        // floating from the current sources. Future chrome sources (MouseTopMenu, MouseStatusBar)
+        // may allow these even while floating.
+        ActionPolicy::AlwaysAllowed => !floating,
+        ActionPolicy::FocusedPaneLocal => true,
+        ActionPolicy::TiledOnly => !floating,
+        ActionPolicy::WorkspaceLevel => !floating,
         ActionPolicy::SourceDependent => {
-            // FocusPane: allowed if targeting the active floating pane, otherwise blocked.
-            if let WmAction::FocusPane { pane_id } = action {
-                if floating {
-                    // Only allow focus if it targets the active floating pane.
-                    let active_floating = session
-                        .active_workspace()
-                        .and_then(|ws| ws.floating_panes.iter().find(|f| f.is_active))
-                        .map(|f| f.pane.id);
-                    if active_floating == Some(*pane_id) {
-                        RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-                    } else {
-                        RouteDecision::Block
-                    }
-                } else {
-                    RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+            // FocusPane: allowed if it targets the active floating pane, otherwise blocked.
+            if let Some(WmAction::FocusPane { pane_id }) = action {
+                if !floating {
+                    return true;
+                }
+                let active_floating = session
+                    .active_workspace()
+                    .and_then(|ws| ws.floating_panes.iter().find(|f| f.is_active))
+                    .map(|f| f.pane.id);
+                return active_floating == Some(*pane_id);
+            }
+            // Other source-dependent actions: defer to source when floating.
+            if floating {
+                match source {
+                    InteractionSource::Keyboard => false,
+                    InteractionSource::MouseContent => false,
+                    InteractionSource::MouseLeftSidebar => false,
                 }
             } else {
-                // Other source-dependent actions: defer to source when floating.
-                if floating {
-                    match source {
-                        InteractionSource::Keyboard => RouteDecision::Block,
-                        InteractionSource::MouseContent => RouteDecision::Block,
-                        InteractionSource::MouseLeftSidebar => RouteDecision::Block,
-                    }
-                } else {
-                    RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
-                }
+                true
             }
         }
     }
@@ -765,28 +760,94 @@ pub(crate) fn dispatch_action(
 /// Resolve and dispatch a declarative [`ViewNode`](crate::chrome::ViewNode) intent.
 ///
 /// A `view::Intent` carries an action *name* (the same identifier config keys and RPC use)
-/// plus optional args. We map the name to its [`WmAction`] via
-/// [`action_from_name`](crate::input::action_from_name) and re-dispatch through
-/// [`dispatch_action`] so the resolved action is policy-routed exactly like any other
-/// interaction — this is the single convergence point for click / KeyHint / RPC / plugin
-/// (plan §2.7.2). `args` are ignored for now; only unit `WmAction`s are reachable from a
-/// name, and parameterized/overlay-control actions arrive in a later step.
+/// plus optional args.
+///
+/// **This is the one front door** (`pluggable-chrome-plugin-plan.md` §2.7.2: "No parallel dispatch
+/// path"). A name resolves down one of two back ends, and both are policy-routed:
+///
+/// 1. **Built-in** — [`action_from_name`](crate::input::action_from_name) maps it to a [`WmAction`],
+///    which goes through [`dispatch_action`] exactly like a keypress. Policy comes from
+///    [`action_policy`]'s exhaustive match.
+/// 2. **Name-keyed** (plugin-04) — an action registered at runtime by a provider/plugin, which has
+///    no `WmAction` variant because the enum is closed. Policy comes from its **declared**
+///    `DynActionMeta.policy`, and both paths converge on the same [`policy_allows`], so a plugin
+///    action is judged by identical rules.
+///
+/// An unknown name is not a crash: a binding or a menu item may legitimately name an action whose
+/// provider is not mounted.
+///
+/// **Args are carried on both paths.** A name-keyed handler reads them off the `Intent` itself. A
+/// built-in **parameterized** variant is constructed from them via
+/// [`build_action`](crate::input::build_action) — so `{"action":"resize","args":{…}}` produces the
+/// very same `WmAction` a config binding would. Unit built-ins ignore args, as they always did.
 fn dispatch_view_intent(
     state: &mut AppState,
     registry: &ActionRegistry,
     source: InteractionSource,
     intent: &ViewIntent,
 ) {
-    match crate::input::action_from_name(&intent.action) {
-        Some(action) => dispatch_action(state, registry, source, &action),
-        None => {
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "[heca] interaction: view intent '{}' did not resolve to a known action",
-                intent.action
-            );
-        }
+    // 1. Built-in. Parameterized variants are built from the intent's args (`build_action`, the same
+    //    constructor a config binding uses); unit variants come straight from the name.
+    let args = intent_args_as_strings(intent);
+    let builtin = crate::input::build_action(&intent.action, &args)
+        .or_else(|| crate::input::action_from_name(&intent.action));
+    if let Some(action) = builtin {
+        dispatch_action(state, registry, source, &action);
+        return;
     }
+
+    // 2. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
+    //    built-in path reaches through `route_action`, so a plugin action is judged by identical
+    //    rules.
+    let Some(policy) = state.action_catalog.policy(&intent.action) else {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[heca] interaction: view intent '{}' did not resolve to a known action",
+            intent.action
+        );
+        return;
+    };
+
+    if crate::chrome::top_modal(state).is_some()
+        || !policy_allows(&state.session, source, policy, None)
+    {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[heca] interaction: blocked dynamic action '{}' from {source:?}",
+            intent.action
+        );
+        return;
+    }
+    if !registry.execute_dynamic(&intent.action, state, intent) {
+        // Declared but host-unrunnable (`Dispatch::Declarative`): its owner lives across the plugin
+        // boundary and forwarding lands with the WASM bridge (plugin-08). Never a crash.
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[heca] interaction: action '{}' is declared but has no host handler",
+            intent.action
+        );
+    }
+}
+
+/// Flatten an [`Intent`](crate::chrome::Intent)'s typed args into the `name -> string` map
+/// [`build_action`](crate::input::build_action) parses, so a declarative intent and a `config.toml`
+/// binding construct a parameterized built-in through **one** code path.
+fn intent_args_as_strings(intent: &ViewIntent) -> std::collections::HashMap<String, String> {
+    use crate::chrome::PropValue;
+    intent
+        .args
+        .iter()
+        .map(|(k, v)| {
+            let s = match v {
+                PropValue::Bool(b) => b.to_string(),
+                PropValue::Int(i) => i.to_string(),
+                PropValue::Float(f) => f.to_string(),
+                PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => t.clone(),
+                other => format!("{other:?}"),
+            };
+            (k.clone(), s)
+        })
+        .collect()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1257,6 +1318,105 @@ mod tests {
     fn is_floating_domain_default_is_tiled() {
         let session = test_session();
         assert!(!is_floating_domain(&session));
+    }
+
+    // ── plugin-04 / T3: a name-keyed action is judged by IDENTICAL rules ──
+
+    /// A name-keyed (plugin) action's DECLARED policy runs through the very same `policy_allows`
+    /// the built-in path reaches — so declaring `TiledOnly` blocks it when a floating pane owns the
+    /// domain, exactly as if it were a `WmAction` classified `TiledOnly` in the exhaustive match.
+    #[test]
+    fn a_declared_tiled_only_action_is_blocked_when_floating() {
+        let mut session = test_session();
+        // Tiled: allowed.
+        assert!(policy_allows(
+            &session,
+            InteractionSource::Keyboard,
+            ActionPolicy::TiledOnly,
+            None
+        ));
+        // Floating: blocked.
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+        assert!(!policy_allows(
+            &session,
+            InteractionSource::Keyboard,
+            ActionPolicy::TiledOnly,
+            None
+        ));
+    }
+
+    /// `Global` is the only policy that is truly always allowed (the `AlwaysAllowed` name is a trap
+    /// — the router blocks THAT one when floating). A plugin action declaring `Global` keeps working
+    /// while a floating pane owns the domain.
+    #[test]
+    fn a_declared_global_action_survives_the_floating_domain() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+        assert!(policy_allows(
+            &session,
+            InteractionSource::Keyboard,
+            ActionPolicy::Global,
+            None
+        ));
+        assert!(
+            !policy_allows(
+                &session,
+                InteractionSource::Keyboard,
+                ActionPolicy::AlwaysAllowed,
+                None
+            ),
+            "AlwaysAllowed is a misnomer: the router blocks it when floating"
+        );
+    }
+
+    /// `SourceDependent` with no introspectable action (the name-keyed case) takes the conservative
+    /// branch and is blocked when floating — the host cannot prove it targets the active pane.
+    #[test]
+    fn source_dependent_without_an_action_is_conservatively_blocked_when_floating() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+        assert!(!policy_allows(
+            &session,
+            InteractionSource::Keyboard,
+            ActionPolicy::SourceDependent,
+            None
+        ));
+    }
+
+    /// The args of a declarative `Intent` construct a parameterized built-in through the SAME
+    /// `build_action` a `config.toml` binding uses — so a menu item, an RPC call and a keybinding
+    /// all produce one identical `WmAction`. Before this, `dispatch_view_intent` dropped the args.
+    #[test]
+    fn intent_args_build_the_same_parameterized_action_as_a_config_binding() {
+        use crate::chrome::{Intent, PropValue};
+
+        let mut intent = Intent::new("scroll_to_offset");
+        intent.args.insert("rows".to_string(), PropValue::Int(12));
+
+        let from_intent =
+            crate::input::build_action("scroll_to_offset", &intent_args_as_strings(&intent));
+
+        let mut config_args = std::collections::HashMap::new();
+        config_args.insert("rows".to_string(), "12".to_string());
+        let from_config = crate::input::build_action("scroll_to_offset", &config_args);
+
+        assert_eq!(from_intent, from_config);
+        assert_eq!(from_intent, Some(WmAction::ScrollToOffset { rows: 12 }));
+    }
+
+    /// A unit built-in with no args still resolves by name (the `action_from_name` fallback), so the
+    /// existing name-dispatch behaviour is unchanged.
+    #[test]
+    fn a_unit_builtin_still_resolves_by_name_with_no_args() {
+        use crate::chrome::Intent;
+        let intent = Intent::new("reload_config");
+        let args = intent_args_as_strings(&intent);
+        assert!(args.is_empty());
+        assert!(crate::input::build_action("reload_config", &args).is_none());
+        assert_eq!(
+            crate::input::action_from_name("reload_config"),
+            Some(WmAction::ReloadConfig)
+        );
     }
 
     /// Setting focus_domain to Floating is detected by helpers.

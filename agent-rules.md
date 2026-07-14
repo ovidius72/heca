@@ -7,3 +7,8 @@ When the user asks a question, **answer the question first**. Do NOT start writi
 ## STRICT: Ask Before Major Changes
 
 Before starting any implementation, especially architectural changes or new features, confirm the approach with the user first. Present the plan, get approval, then execute.
+
+## planning
+
+Use the planner extension/MCP (.planner) and keep it updated.
+

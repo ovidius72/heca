@@ -412,7 +412,7 @@ impl WorkspacesContainerState {
         if self.pending_pick.get_untracked() == pick {
             return;
         }
-        self.pending_pick.set(pick);
+        self.pending_pick.set(pick.clone());
         self.events.emit(ChromeEvent::PendingPickChanged { pick });
     }
     pub(crate) fn set_pane_runtime(

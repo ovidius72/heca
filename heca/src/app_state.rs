@@ -231,30 +231,33 @@ impl InputMode {
             }
             _ => return None,
         };
-        let desc = catalog.find(action_name)?;
+        let meta = catalog.find(action_name)?;
         Some(PendingPick {
             kind,
             action_name,
-            label: desc.label,
-            prompt: desc.description,
+            label: meta.label.clone(),
+            prompt: meta.description.clone(),
         })
     }
 }
 
 /// A keyboard pick (target-selection) currently in progress. Exposed reactively so
-/// components/plugins can render their own UI for the pending action. `Copy` — all
-/// fields are static strings sourced from the action's [`ActionDescriptor`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// components/plugins can render their own UI for the pending action.
+///
+/// The text is **owned**, not `&'static str`: it is sourced from the action's
+/// [`ActionMeta`](crate::actions::ActionMeta) in the runtime catalog, which holds owned metadata so
+/// that a plugin-registered action can live there too. `Clone`, not `Copy`, for the same reason.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingPick {
     /// Stable machine-readable kind (match on this in plugins).
     pub kind: PickKind,
     /// The enter-mode action's **config name** string (e.g. `"move_pane_to_column_pick"`) —
     /// not a `WmAction` value.
     pub action_name: &'static str,
-    /// The action's command-palette label (from its `ActionDescriptor`).
-    pub label: &'static str,
-    /// The action's description, used as the pick prompt (from its `ActionDescriptor`).
-    pub prompt: &'static str,
+    /// The action's command-palette label (from its `ActionMeta`).
+    pub label: String,
+    /// The action's description, used as the pick prompt (from its `ActionMeta`).
+    pub prompt: String,
 }
 
 /// The kind of in-progress keyboard pick.
