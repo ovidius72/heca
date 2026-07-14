@@ -124,7 +124,16 @@ fn realize_kind(
         }
 
         // ── Leaves ──
-        WidgetKind::Label => Box::new(Label::new(text_of(node))),
+        WidgetKind::Label => {
+            // Weight + slant are font attributes (the shaper picks the glyphs); underline +
+            // strikethrough are decorations the widget draws. Both are plain bools here.
+            let label = Label::new(text_of(node))
+                .bold(bool_prop(node, "bold").unwrap_or(false))
+                .italic(bool_prop(node, "italic").unwrap_or(false))
+                .underline(bool_prop(node, "underline").unwrap_or(false))
+                .strikethrough(bool_prop(node, "strikethrough").unwrap_or(false));
+            Box::new(label)
+        }
         WidgetKind::Button => realize_button(node, emit, hints, forms),
         WidgetKind::Badge => Box::new(Badge::new(text_of(node))),
         WidgetKind::Tag => Box::new(Tag::new(text_of(node))),
@@ -1309,6 +1318,45 @@ mod tests {
             );
         let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(grid.base().children[0].base().style.grid_cell, None);
+    }
+
+    /// A `Label`'s text attributes are authorable: weight + slant (font attributes) and underline +
+    /// strikethrough (decorations the widget draws). Absent props keep the widget's default.
+    #[test]
+    fn label_text_attributes_are_authorable() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Label)
+            .text("DONE")
+            .prop("bold", PropValue::Bool(true))
+            .prop("italic", PropValue::Bool(true))
+            .prop("strikethrough", PropValue::Bool(true));
+
+        let label = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        // Realize hands back a `Box<dyn Component>`, so read the state through the scene: paint it
+        // and check the run carries the font attributes and the strike is drawn as a rect.
+        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, TextStyle, Theme};
+        use heca_core::layout::Size;
+        let mut label = label;
+        LayoutEngine::new().compute(label.as_mut(), Size::new(200.0, 40.0));
+        let theme = Theme::default();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            label.paint(&mut cx);
+        }
+        let style = scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.style),
+                _ => None,
+            })
+            .expect("the label paints its run");
+        assert_eq!(style, TextStyle::REGULAR.bold(true).italic(true));
+        let rules = scene
+            .iter()
+            .filter(|c| matches!(c, DrawCommand::Rect(_)))
+            .count();
+        assert_eq!(rules, 1, "the strikethrough, drawn as a rect (not shaped)");
     }
 
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.

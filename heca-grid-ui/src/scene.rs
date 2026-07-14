@@ -253,6 +253,55 @@ pub enum FontRole {
     Icon,
 }
 
+/// The **font style** of a text run: what the shaper does to the glyphs.
+///
+/// Decorations (underline, strikethrough) are deliberately **not** here — a line is not a glyph
+/// attribute, it is a rect. The widget draws them itself, from the theme, like any other chrome (see
+/// [`Label`](crate::widgets::Label)). Keeping the two apart is what lets the renderer stay a pure
+/// text shaper.
+///
+/// It is a value rather than a pile of `bool` parameters so that the *next* attribute doesn't break
+/// [`PaintCx::text`](crate::component::PaintCx::text)'s signature a second time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TextStyle {
+    /// The bold weight (a real face — the embedded family ships one).
+    pub bold: bool,
+    /// Slanted. Rendered as a **synthesized oblique** (a glyph shear), because the embedded family
+    /// has no italic face — see the bridge in `heca-renderer`.
+    pub italic: bool,
+}
+
+impl TextStyle {
+    /// Upright, regular weight — the default.
+    pub const REGULAR: Self = Self {
+        bold: false,
+        italic: false,
+    };
+    /// Bold, upright.
+    pub const BOLD: Self = Self {
+        bold: true,
+        italic: false,
+    };
+    /// Regular weight, slanted.
+    pub const ITALIC: Self = Self {
+        bold: false,
+        italic: true,
+    };
+
+    /// Set the weight (chainable, so a state-derived flag reads straight through:
+    /// `TextStyle::REGULAR.bold(is_active)`).
+    pub const fn bold(mut self, bold: bool) -> Self {
+        self.bold = bold;
+        self
+    }
+
+    /// Set the slant.
+    pub const fn italic(mut self, italic: bool) -> Self {
+        self.italic = italic;
+        self
+    }
+}
+
 /// A run of text positioned within a rectangle.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextCmd {
@@ -261,8 +310,8 @@ pub struct TextCmd {
     pub color: Color,
     pub size: f32,
     pub align: TextAlign,
-    /// Render with the bold weight.
-    pub bold: bool,
+    /// Weight + slant (decorations are drawn by the widget, not shaped — see [`TextStyle`]).
+    pub style: TextStyle,
     /// Which font family shapes this run (text vs. icon glyph font).
     pub font: FontRole,
 }

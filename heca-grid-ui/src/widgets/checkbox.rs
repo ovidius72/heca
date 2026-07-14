@@ -16,7 +16,7 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, Glow, TextAlign};
+use crate::scene::{Border, Glow, TextAlign, TextStyle};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -254,7 +254,7 @@ impl Component for Checkbox {
                 foreground,
                 self.label_fs(),
                 TextAlign::Start,
-                false,
+                TextStyle::REGULAR,
             );
         }
 

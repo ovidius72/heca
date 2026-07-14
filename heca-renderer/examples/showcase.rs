@@ -583,6 +583,28 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .on_change(report),
                 ),
         )
+        // Label: the four text attributes. `bold`/`italic` are FONT attributes (the shaper picks the
+        // glyphs — italic is a synthesized oblique, since the embedded family has no italic face);
+        // `underline`/`strikethrough` are DECORATIONS the label draws itself, in its own resolved
+        // color. They compose freely.
+        .child(caption("Label"))
+        .child(
+            Flex::row()
+                .gap(20.0)
+                .align(Align::Center)
+                .child(Label::new("REGULAR"))
+                .child(Label::new("BOLD").bold(true))
+                .child(Label::new("ITALIC").italic(true))
+                .child(Label::new("UNDERLINE").underline(true))
+                .child(Label::new("STRIKETHROUGH").strikethrough(true))
+                .child(
+                    Label::new("ALL FOUR")
+                        .bold(true)
+                        .italic(true)
+                        .underline(true)
+                        .strikethrough(true),
+                ),
+        )
         // Text inputs: empty-with-placeholder, pre-filled, and disabled.
         .child(caption("Input"))
         .child(
@@ -656,7 +678,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 // A leading icon spans both text rows, so it is sized to them (a body-size glyph
                 // centred over two lines just floats in the gutter between them).
                 .area(Icon::new(Glyph::Terminal).size(26.0), "icon")
-                .area(Label::new("zsh").bold(true), "title")
+                .area(Label::new("zsh").italic(true).bold(true), "title")
                 // …and `justify_self` is the horizontal one, per item: pin the dot to the right edge
                 // of its cell instead of letting it stretch across the column.
                 .area(
@@ -1110,7 +1132,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                         )
                                         .child(
                                             Label::new("zsh")
-                                                .color(theme.colors.foreground)
+                                                .italic(true)
+                                                .color(theme.colors.drag_ghost_fg)
                                                 .font_scale(0.8),
                                         ),
                                 ),
@@ -1777,7 +1800,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                 theme.colors.accent,
                 11.0,
                 TextAlign::Start,
-                true,
+                TextStyle::BOLD,
             );
             let inner = Rectangle::new(
                 Point::new(panel.loc.x + 12.0, panel.loc.y + 30.0),
@@ -1794,7 +1817,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                         theme.colors.foreground,
                         12.0,
                         TextAlign::Start,
-                        false,
+                        TextStyle::REGULAR,
                     );
                 }
             });

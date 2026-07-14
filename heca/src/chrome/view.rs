@@ -234,7 +234,8 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
 /// | `Card` | `text` (title) + children | — |
 /// | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
-/// | `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+/// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
+/// | `Badge` / `Tag` / `Alert` | `text` | — |
 /// | `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
 /// | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
 /// | `Input` | `text` (value), `name` | `change` |

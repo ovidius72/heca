@@ -1,7 +1,9 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme};
+use heca_grid_ui::{
+    DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, TextStyle, Theme,
+};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -73,6 +75,102 @@ fn label_signal_drives_text() {
     assert_eq!(sig.get_untracked(), "ONLINE");
     sig.set("OFFLINE".to_string());
     assert_eq!(sig.get_untracked(), "OFFLINE");
+}
+
+#[test]
+fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
+    let theme = Theme::default();
+    let paint = |label: Label| {
+        let mut label = label;
+        LayoutEngine::new().compute(&mut label, Size::new(200.0, 40.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            label.paint(&mut cx);
+        }
+        let runs: Vec<TextStyle> = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.style),
+                _ => None,
+            })
+            .collect();
+        // The label paints no background of its own, so every rect it emits is a decoration.
+        let rules: Vec<Rectangle> = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        (runs, rules, label.base().bounds, label.base().font)
+    };
+
+    // Weight + slant reach the shaper as font attributes on the run…
+    let (runs, rules, ..) = paint(Label::new("STATUS").bold(true).italic(true));
+    assert_eq!(runs, vec![TextStyle::REGULAR.bold(true).italic(true)]);
+    assert!(rules.is_empty(), "no decoration ⇒ no rects");
+
+    // …while the decorations never touch it: they are rects the widget draws.
+    let (runs, rules, bounds, font) = paint(Label::new("STATUS").underline(true));
+    assert_eq!(runs, vec![TextStyle::REGULAR], "a rule is not a font attribute");
+    assert_eq!(rules.len(), 1, "the underline");
+    let rule = rules[0];
+    let mid = bounds.loc.y + bounds.size.h / 2.0;
+    assert!(rule.loc.y > mid, "the underline sits below the text centre");
+    assert!(
+        (rule.size.w - bounds.size.w).abs() < 0.5,
+        "it spans the text run, which for a Start-aligned label is its whole box",
+    );
+    assert!(rule.size.h >= 1.0, "never thinner than a pixel: {}", rule.size.h);
+
+    // Strikethrough goes through the text; both together draw two rules.
+    let (_, rules, bounds, _) = paint(Label::new("STATUS").strikethrough(true));
+    let mid = bounds.loc.y + bounds.size.h / 2.0;
+    assert!(rules[0].loc.y < mid, "the strike sits at/above the centre");
+    let (_, rules, ..) = paint(Label::new("STATUS").underline(true).strikethrough(true));
+    assert_eq!(rules.len(), 2, "both rules");
+
+    // An empty label has a zero-width run, so it draws no rule at all.
+    let (_, rules, ..) = paint(Label::new("").underline(true));
+    assert!(rules.is_empty(), "nothing to underline");
+    let _ = font;
+}
+
+#[test]
+fn label_decorations_follow_the_text_run_not_the_box() {
+    let theme = Theme::default();
+    // A label normally hugs its text (`remeasure` sizes the box to the run), but a *container* can
+    // widen a child's bounds — a `Select` does exactly that to its option rows, so its pill spans
+    // the panel. In that box, `align` decides where the run sits, and the rule must follow the run:
+    // an underline spanning the whole box, most of it empty, would be plainly wrong.
+    let mut label = Label::new("HI").align(TextAlign::End).underline(true);
+    LayoutEngine::new().compute(&mut label, Size::new(300.0, 40.0));
+    let run_w = label.base().bounds.size.w;
+    label.base_mut().bounds.size.w = 300.0;
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        label.paint(&mut cx);
+    }
+    let rule = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r) => Some(r.rect),
+            _ => None,
+        })
+        .expect("the underline is painted");
+    let bounds = label.base().bounds;
+    assert!(
+        (rule.size.w - run_w).abs() < 0.5,
+        "the rule is as wide as the two-character run ({run_w}), not the 300px box: {}",
+        rule.size.w,
+    );
+    assert!(
+        (rule.loc.x + rule.size.w - (bounds.loc.x + bounds.size.w)).abs() < 0.5,
+        "End-aligned: the run — and its rule — sit at the right edge of the box",
+    );
 }
 
 #[test]
@@ -3520,7 +3618,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         cx.rect(off, theme.colors.surface, None, 0.0, None);
-        cx.text(off, "hidden", theme.colors.foreground, 15.0, TextAlign::Start, false);
+        cx.text(off, "hidden", theme.colors.foreground, 15.0, TextAlign::Start, TextStyle::REGULAR);
     }
     assert!(scene.is_empty(), "content far below the viewport is culled");
 

@@ -149,7 +149,8 @@ pub fn enqueue_scene(
                     h,
                     t.size,
                     t.color.to_f32x4(),
-                    t.bold,
+                    t.style.bold,
+                    t.style.italic,
                     t.align,
                     t.font == FontRole::Icon,
                 );

@@ -9,7 +9,9 @@
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
+use crate::scene::{
+    Border, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd, TextStyle,
+};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -817,7 +819,10 @@ impl<'a> PaintCx<'a> {
     /// Queue a text run within `rect` at an explicit logical `size`. The renderer
     /// centers the text within `rect` (per `align` horizontally, always centered
     /// vertically) using real glyph metrics.
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// `style` is the **font** style ([`TextStyle`]: weight + slant). Decorations — underline,
+    /// strikethrough — are not shaped: a line is a rect, and the widget draws it itself from the
+    /// theme (see [`Label`](crate::widgets::Label)).
     pub fn text(
         &mut self,
         rect: Rectangle,
@@ -825,7 +830,7 @@ impl<'a> PaintCx<'a> {
         color: Color,
         size: f32,
         align: TextAlign,
-        bold: bool,
+        style: TextStyle,
     ) {
         if self.culled(rect) {
             return;
@@ -836,7 +841,7 @@ impl<'a> PaintCx<'a> {
             color,
             size,
             align,
-            bold,
+            style,
             font: FontRole::Text,
         }));
     }
@@ -854,7 +859,7 @@ impl<'a> PaintCx<'a> {
             color,
             size,
             align: TextAlign::Center,
-            bold: false,
+            style: TextStyle::REGULAR,
             font: FontRole::Icon,
         }));
     }
@@ -899,7 +904,7 @@ impl<'a> PaintCx<'a> {
                     None,
                 );
             }
-            cx.text(rect, text, bg, font, TextAlign::Center, false);
+            cx.text(rect, text, bg, font, TextAlign::Center, TextStyle::REGULAR);
         });
     }
 

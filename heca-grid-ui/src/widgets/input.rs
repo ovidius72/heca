@@ -23,7 +23,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, TextAlign};
+use crate::scene::{Border, TextAlign, TextStyle};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 use std::time::Instant;
@@ -505,10 +505,10 @@ impl Component for Input {
                 muted,
                 fs,
                 TextAlign::Start,
-                false,
+                TextStyle::REGULAR,
             );
         } else if !s.is_empty() {
-            cx.text(text_rect, &s, foreground, fs, TextAlign::Start, false);
+            cx.text(text_rect, &s, foreground, fs, TextAlign::Start, TextStyle::REGULAR);
         }
 
         // Caret: a thin accent bar at the cursor (hidden while text is selected).

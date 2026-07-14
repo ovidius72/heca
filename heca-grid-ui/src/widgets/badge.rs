@@ -8,7 +8,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::{Glow, TextAlign};
+use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::Length;
 
 /// Horizontal padding inside the pill.
@@ -155,7 +155,7 @@ impl Component for Badge {
             text_c,
             self.base.font,
             TextAlign::Center,
-            true,
+            TextStyle::BOLD,
         );
     }
 

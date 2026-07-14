@@ -371,7 +371,7 @@ stay DRY):
 | `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Dialog` to lift off the scrim. |
 | `.focus_ring(rect, color, radius)` | **The** keyboard focus outline for every widget — a thin accent-toned ring drawn *just outside* `rect` (CSS-`outline` style, offset gap), corner radius widened to stay concentric. Visible whether or not the widget has its own border (works on borderless Ghost/Link buttons). Width = `focus_border_width`; halo tracks `glow_size`. Pair with the theme's `focus_ring`/`effective_focus_ring()`/`focus_ring_tone()` for the color. |
 | `.bracket_frame(rect)` | Decorative L-shaped corner-bracket reticle (Pane/DockFrame/Dialog chrome) — **decoration, not focus** (focus uses `.focus_ring`). |
-| `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
+| `.text(rect, &str, color, size, TextAlign, TextStyle)` | Text centered in `rect` (per `align` horizontally, vertically centered). `TextStyle { bold, italic }` is the **font** style — what the shaper does to the glyphs (`TextStyle::REGULAR` / `BOLD` / `ITALIC`, or `TextStyle::REGULAR.bold(is_active)`). Decorations (underline, strikethrough) are **not** here: a line is a rect, and the widget draws it — see [`Label`](#label). Italic is a *synthesized oblique*, since the embedded family has no italic face. |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
@@ -775,12 +775,44 @@ A single text run bound to a `Signal<String>`.
 
 - **Construct**: `Label::new(text)`.
 - **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
-  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy),
-  `.bold(bool)`.
-- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively),
-  `.bold_signal() -> Signal<bool>` (re-weight **in place**, no rebuild — an enclosing widget drives
-  it for a state-dependent weight; this is how [`Item`](#item) bolds its label while active, since
-  the inherited paint context carries a color but not a weight).
+  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy), and the
+  four text attributes: `.bold(bool)`, `.italic(bool)`, `.underline(bool)`, `.strikethrough(bool)`.
+- **Accessors**: `.text_signal() -> Signal<String>` (set it to update reactively), plus a signal per
+  attribute — `.bold_signal()`, `.italic_signal()`, `.underline_signal()`, `.strikethrough_signal()`
+  (all `Signal<bool>`). Flip one to restyle the label **in place**, with no rebuild: an enclosing
+  widget drives it for a state-dependent look — this is how [`Item`](#item) bolds its label while
+  active (the inherited paint context carries a color, but not a weight), and how a link underlines
+  on hover.
+
+#### The four text attributes — two are font, two are not
+
+The split matters, because it is why underline exists at all without touching the renderer:
+
+| | | Who renders it |
+|---|---|---|
+| `bold` | **font attribute** | The shaper picks the glyphs — the embedded family ships a real bold face. |
+| `italic` | **font attribute** | A **synthesized oblique**: the glyphs are *sheared*. The embedded family (Geist Mono) has **no italic face**, and asking the shaper for a real one would substitute a *proportional* fallback — which would break the monospace advances every measure in this library assumes. The shear keeps the same face, same widths, just slanted. |
+| `underline` | **decoration** | The **label** draws it — a line is not a glyph, it is a rect. |
+| `strikethrough` | **decoration** | Likewise. |
+
+The decorations are painted in the label's **resolved color** (own → inherited content color → theme
+foreground), so an underlined label inside a `Button` tints with the button's hover/disabled state
+like everything else — no wiring, same mechanism as the glyphs.
+
+**Geometry** (all font-relative, so a rule under 10px text is hairline and one under a 28px header is
+proportionate — there are no pixel constants to go stale):
+
+| | Value |
+|---|---|
+| thickness | `font × 0.07`, floored at **1px** so it never vanishes |
+| underline | `0.42 × font` **below** the run's centre line — clear of the descenders |
+| strikethrough | `0.06 × font` **above** the centre line — a line through the exact middle reads low, because lowercase mass sits above the box centre |
+
+And the part that is easy to get wrong: **a decoration follows the text run, not the label's box.** A
+`Label` normally hugs its text, but a *container* can widen a child's bounds — a [`Select`](#select)
+does exactly that to its option rows, so the selection pill spans the panel — and `align` then
+decides where the run sits inside that wider box. A rule spanning the box would be mostly empty line.
+An empty label has a zero-width run and draws no rule at all.
 
 **Color is inherited when unset.** With no explicit `.color(..)` the label paints in the
 [content color](#scene--drawcommand--paintcx-for-building-widgets) published by an enclosing control
@@ -799,13 +831,40 @@ Nothing to wire: composing a `Label` into an option is what gives that option a 
 let status = Label::new("ONLINE").color(theme.foreground).font_size(14.0);
 let sig = status.text_signal();
 // later: sig.set("OFFLINE".into());
+
+// The four text attributes, alone and combined — they compose freely.
+Label::new("BOLD").bold(true);
+Label::new("ITALIC").italic(true);                      // synthesized oblique (see above)
+Label::new("LINK").underline(true);
+Label::new("DONE").strikethrough(true);
+Label::new("ALL FOUR").bold(true).italic(true).underline(true).strikethrough(true);
+
+// State-driven, in place — no rebuild. A link that underlines while hovered:
+let link = Label::new("docs/widgets.md");
+let underline = link.underline_signal();
+// in the enclosing widget's event/tick:  underline.set(hovered);
+
+// A completed to-do: the parent strikes its own label through when the row is done.
+let row = Label::new("Ship the release");
+let done = row.strikethrough_signal();
+// done.set(true);
 ```
 
-**Declarative** (`WidgetKind::Label`, prop `text`):
+**Declarative** (`WidgetKind::Label`):
 
 ```rust
-ViewNode::new(WidgetKind::Label).text("ONLINE")
+ViewNode::new(WidgetKind::Label)
+    .text("DONE")
+    .prop("bold", PropValue::Bool(true))
+    .prop("italic", PropValue::Bool(true))
+    .prop("underline", PropValue::Bool(false))
+    .prop("strikethrough", PropValue::Bool(true));
 ```
+
+Props `realize` reads: `text`, `bold`, `italic`, `underline`, `strikethrough` (all `Bool`, all
+default `false`). The signals are **not** exposed declaratively — a `ViewNode` is static data and
+cannot carry a live signal (same rule as [`ScrollBar`](#scrollbar) being host-only); a plugin author
+re-emits the node with the new value instead.
 
 ### Button
 
@@ -2215,7 +2274,8 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
 | `Card` | `text` (title) + children | — |
 | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
-| `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+| `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
+| `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
 | `BadgeButton` | `text`, `variant`, `size` | `press` |
 | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
