@@ -773,8 +773,10 @@ mod tests {
         assert_eq!(km.resolve(GridKey::ArrowRight, none), &[WidgetIntent::ItemNext]);
         assert_eq!(km.resolve(GridKey::Char('l'), ctrl), &[WidgetIntent::ItemNext]);
         assert_eq!(km.resolve(GridKey::ArrowLeft, none), &[WidgetIntent::ItemPrevious]);
-        // Vertical menu_* (↑/↓, Ctrl+k/j).
+        // Vertical menu_* (↑/↓, Ctrl+k/j) — what an open context menu / palette / Select
+        // navigates by (see `ContextMenu::event`, which acts on these intents).
         assert_eq!(km.resolve(GridKey::ArrowDown, none), &[WidgetIntent::MenuDown]);
+        assert_eq!(km.resolve(GridKey::ArrowUp, none), &[WidgetIntent::MenuUp]);
         assert_eq!(km.resolve(GridKey::Char('j'), ctrl), &[WidgetIntent::MenuDown]);
         assert_eq!(km.resolve(GridKey::Char('k'), ctrl), &[WidgetIntent::MenuUp]);
         // Shared + edits.

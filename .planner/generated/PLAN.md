@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-14T15:45:01.862Z
+**Last updated:** 2026-07-14T18:02:06.289Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -98,7 +98,7 @@ Status: 📋 `planned`
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (2/3 tasks)
 - 📋 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (4/9 tasks)
-- 📋 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (6/8 tasks)
+- 📋 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (7/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
@@ -133,18 +133,18 @@ Status: 📋 `planned`
 
 **Work remaining:** La pipeline base è merged. Il tentativo di visual tuning (compositor-05) è stato rifiutato; la review finale/compositor-06 è differita e non è lavoro attivo in questo momento.
 
-### 🚧 2809a7a4-6d53-4a58-b776-bac164bb5d03 — F006 — 🛠️ App / Chrome Features
+### 📋 2809a7a4-6d53-4a58-b776-bac164bb5d03 — F006 — 🛠️ App / Chrome Features
 
 Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.
 
-Status: 🚧 `in-progress`
+Status: 📋 `planned`
 
 **Phases:**
 - 📋 **f6476b06-0938-4fa1-88ab-23e0283036fa** P001 — app-02: Split render.rs into render folder (0/6 tasks)
 - 📋 **621e6f47-a0e2-4d0d-9012-e6feadb70097** P002 — app-06: Sidebar wiring + collapsed rail (0/3 tasks)
 - 📋 **f6a5aa17-dbbf-4463-8ae1-744ab1ba886f** P003 — app-01: Niri layout parity audit (0/3 tasks)
 - 📋 **9e5ec754-ebf3-47f9-9850-378dd75b8e1c** P004 — app-07: Damage-region render optimization (0/5 tasks)
-- 🚧 **c192c5ca-f6ac-493a-bd8d-d95117c430aa** P005 — app-10: Sidebar/chrome leftovers (2/6 tasks)
+- 📋 **c192c5ca-f6ac-493a-bd8d-d95117c430aa** P005 — app-10: Sidebar/chrome leftovers (3/6 tasks)
 - 📋 **5cab2dbb-ce1b-4a33-b6bc-ede8437fca09** P006 — app-11: Right-click context menu (2/3 tasks)
 - 📋 **00afc6e8-101c-47e3-8739-5a8b216c81c4** P007 — app-04: Pane numbering (0/3 tasks)
 - 📋 **50c22c08-b639-4a1a-a3cb-2a9f7084c0f9** P008 — app-05: Workspace drag-to-reorder (0/4 tasks)
@@ -416,13 +416,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/5
 
-### 🚧 c192c5ca-f6ac-493a-bd8d-d95117c430aa — P005 — app-10: Sidebar/chrome leftovers
+### 📋 c192c5ca-f6ac-493a-bd8d-d95117c430aa — P005 — app-10: Sidebar/chrome leftovers
 
 Leftovers sidebar/chrome in corso: app-task-29 e app-task-31 sono done; resta app-task-30 column-level pick keycaps.
 
-Status: 🚧 `in-progress`
+Status: 📋 `planned`
 
-**Tasks:** 2/6
+**Tasks:** 3/6
 
 ### 📋 5cab2dbb-ce1b-4a33-b6bc-ede8437fca09 — P006 — app-11: Right-click context menu
 
@@ -715,7 +715,7 @@ Status: 📋 `planned`
 
 ### 📋 88b87a32-ff00-4044-9a32-c575e3ed5401 — P003 — plugin-04: Dynamic action registry
 
-Dynamic action registry con string action IDs e binding configurabili.
+Dynamic action registry: string action IDs + runtime registration, ACCANTO all'enum WmAction (compatibilità piena). Una sola porta d'ingresso (dispatch per nome), un solo registry runtime (il const ALL viene ritirato), policy DICHIARATA per le azioni name-keyed, keybinding config verso ID dinamici. Sblocca context-menu-5, plugin-05 (app.actions.dispatch) e plugin-08 (WASM).
 
 Status: 📋 `planned`
 
@@ -823,7 +823,7 @@ Status: 📋 `planned`
   - Implementation: Contribution::ContextMenu { context_path, weight: Vec<i64>, build } (C1/C2/C3 già locked in context-menu-5).
   - Accepted at: 2026-07-09T16:00:00Z
 
-**Tasks:** 6/8
+**Tasks:** 7/8
 
 ### 📋 05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9 — P013 — menu-nav: Shared list/menu navigation keybindings
 
