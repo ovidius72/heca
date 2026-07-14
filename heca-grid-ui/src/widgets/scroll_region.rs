@@ -33,7 +33,7 @@
 
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{
-    paint_child, route_event, Base, Component, Event, GridKey, Handled, PaintCx,
+    paint_child, route_event, shift_subtree, Base, Component, Event, GridKey, Handled, PaintCx,
 };
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::Direction;
@@ -452,19 +452,6 @@ impl Component for ScrollRegion {
         }
     }
 }
-
-/// Shift a component's subtree's bounds by `(dx, dy)` — the whole-page scroll
-/// pattern (`offset_tree`), applied here to a scroll region's children.
-fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
-    c.base_mut().bounds.loc.x += dx;
-    c.base_mut().bounds.loc.y += dy;
-    let n = c.base().children.len();
-    for i in 0..n {
-        let child = &mut c.base_mut().children[i];
-        shift_subtree(child.as_mut(), dx, dy);
-    }
-}
-
 
 impl LayoutExt for ScrollRegion {}
 impl Parent for ScrollRegion {}

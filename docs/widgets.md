@@ -174,9 +174,11 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `base_mut(&mut self) -> &mut Base` | — | Required. |
 | `focusable(&self) -> bool` | `base.focusable && !disabled` | Set `base.focusable = true` on an interactive widget instead of overriding this; override only for dynamic focusability (focusable only while open). |
 | `overlay_active(&self) -> bool` | `false` | `true` while the widget owns an open overlay (e.g. a `Select` dropdown), so the host routes input to it first. |
+| `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
+| `on_layout(&mut self)` | no-op | Called post-order once this node's (and its descendants') bounds are freshly computed. Override to **place** children the engine could not put where they are drawn — a [`ScrollRegion`](#scrollregion) re-bakes its scroll offset, a [`Select`](#select) re-places its option rows into the overlay panel. Bounds are natural again on entry, so the widget re-derives its shift from scratch instead of compounding it. |
 | `on_focus(&mut self, visible: bool)` | set `focused`/`focus_visible` | Gained focus. |
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
@@ -193,7 +195,8 @@ return `Self` for chaining.
 | `.direction(Direction)` | Main axis (`Row`/`Column`). |
 | `.gap(f32)` | Space between children. |
 | `.justify(Justify)` | Main-axis distribution (`Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`). |
-| `.align(Align)` | Cross-axis alignment (`Start`/`Center`/`End`/`Stretch`). |
+| `.align(Align)` | Cross-axis alignment of the **children** (`Start`/`Center`/`End`/`Stretch`). |
+| `.align_self(Align)` | Cross-axis alignment of **this** widget in its parent (CSS `align-self`), overriding the parent's `.align()` for it alone. `Align::Start` keeps an `Auto`-sized widget **hugging its content** instead of stretching to fill the parent — which is what the default `Stretch` would otherwise do (see [`Select`](#select), sized to its widest option). |
 | `.padding(f32)` | Inner padding (all sides). |
 | `.width(Length)` / `.height(Length)` | `Length::Auto` or `Length::Px(f32)`. |
 | `.grow(f32)` | Flex-grow factor. |
@@ -218,7 +221,8 @@ return `Self` for chaining.
 
 ### `Style` & layout enums
 
-`Style` fields: `direction`, `justify`, `align` (default `Stretch`), `gap`, `padding`,
+`Style` fields: `direction`, `justify`, `align` (default `Stretch`), `align_self` (`Option<Align>`,
+default `None` ⇒ follow the parent), `gap`, `margin` (+ per-side overrides), `padding`,
 `width`/`height` (`Length`), `flex_grow`, `fill`, `border`, `glow`, `accent`, `fg`,
 `radius`, `font_size`, `font_scale`. Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
 `Align{Start,Center,End,Stretch}`, `Length{Auto,Px(f32)}`.
@@ -372,6 +376,7 @@ stay DRY):
 | `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
+| `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
 
 `DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `Gradient`, `PushClip`/`PopClip`
 (clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
@@ -623,9 +628,14 @@ A single text run bound to a `Signal<String>`.
 
 **Color is inherited when unset.** With no explicit `.color(..)` the label paints in the
 [content color](#scene--drawcommand--paintcx-for-building-widgets) published by an enclosing control
-(`Button`, `Item`), falling back to `theme.foreground` when there is none. That is what makes a label
-composed inside a button track that button's hover/disabled state with no wiring between the two.
-Calling `.color(..)` opts out of the inheritance.
+(`Button`, `Item`, `Choice`), falling back to `theme.foreground` when there is none. That is what
+makes a label composed inside a button track that button's hover/disabled state with no wiring
+between the two. Calling `.color(..)` opts out of the inheritance.
+
+**It names the subtree it sits in.** `Label` is the leaf that supplies
+[`Component::text_summary`](#component-trait) — the accessible name a control reads when it needs the
+*text* of content whose type it cannot see (a [`Select`](#select) reporting its current value).
+Nothing to wire: composing a `Label` into an option is what gives that option a name.
 
 **Native:**
 
@@ -956,32 +966,118 @@ Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
 
 ### Select
 
-Single-select dropdown — the first **overlay** widget. The trigger shows the current value;
-the open option list paints in the scene's overlay layer (on top of everything) and the
-widget reports `overlay_active()` so the host routes input to it first (see
-[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Focusable; self-contained
-(no child components). The trigger **width adapts** to the widest option at the current font;
-both trigger and rows scale with the font. The open panel **flips above** the trigger when
-there's no room below, **caps** its visible rows to what fits in the `PaintCx` viewport, and
-**scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
+Single-select dropdown — the first **overlay** widget. The trigger shows the current value; the open
+option list paints in the scene's overlay layer (on top of everything) and the widget reports
+`overlay_active()` so the host routes input to it first (see
+[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Focusable, and **one Tab stop**
+([`Base.focus_barrier`](#base)) — the options are not separate stops.
 
-- **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`.
-- **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits),
-  `.on_change(impl Fn(Action))`.
-- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> &str`.
-- **Emits**: `"select-change"` / `SignalData::Usize`.
+**Its options are [`Choice`](#choice) children.** So an option is not a string: it is a value plus
+whatever content you compose — an icon and a label, a two-line row, a `Badge`. `Select` owns only the
+*chrome* (trigger, chevron, panel, keyboard cursor, scrollbar); each row draws itself, and tints its
+own content when chosen.
+
+**The trigger shows the chosen option itself — icon and all, open or closed.** Closed, the option
+*is* the trigger's content: it is a real component, stood inside the trigger box, painting there.
+Open, that same component has moved into the list — a component is laid out in exactly one place — so
+the trigger draws a second **image** of its content with
+[`PaintCx::with_translate`](#scene--drawcommand--paintcx-for-building-widgets), translated from the
+panel back into the trigger. Only the content is echoed, never the row's chrome: the trigger's own
+box is its chrome, and a selection pill inside it would be a box in a box.
+
+The open panel is **opaque**: it consumes pointer moves over itself, so widgets behind it don't light
+up as hovered.
+
+The trigger **width hugs the widest option** (the engine measures the real rows — icons included —
+instead of counting characters), and everything scales with the font and the size variant. The open
+panel **flips above** the trigger when there's no room below, **caps** its visible rows to what fits
+in the `PaintCx` viewport, and **scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
+
+- **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`,
+  **sugar** that builds a `Choice::labeled(text, text)` per option (the value *is* the text) ·
+  `Select::empty()` — no options, compose them.
+- **Content**: `.option(Choice)` — appends a composed option. Typed to `Choice` on purpose: the
+  control keeps the row's `state()` signal so it can flip the selection **in place** (a
+  `Box<dyn Component>` would have erased it), and the rows of a select genuinely *are* options.
+- **Builders**: `.selected(index)` (initial, clamped — call it **after** the options),
+  `.font_size(f32)` (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` —
+  the chosen option's [text summary](#component-trait), i.e. its content's accessible name (`"HIGH"`
+  for an `Icon` + `Label("HIGH")` option). Use it to read the current value as text.
+- **Emits**: `"select-change"` / `SignalData::Usize` (the index — unchanged; `realize` maps it back
+  to the chosen `Choice`'s **value** for declarative authors).
 - **Keys** (`widget-keys-config`): a **closed** trigger opens on a raw `Enter` / `Space` / `↓`
   (activation, like a button). The **open** list is a **vertical** overlay driven by the semantic
   `Event::Widget` intents — shared with [`ContextMenu`](#contextmenu) / [`CommandPalette`](#commandpalette):
-  `MenuUp`/`MenuDown` move the highlight (scroll into view), `Activate` commits, `Dismiss` closes. The
+  `MenuUp`/`MenuDown` move the cursor (scroll into view), `Activate` commits, `Dismiss` closes. The
   host resolves the configurable `menu_up`/`menu_down`/`activate`/`dismiss` `[keys.widgets]` keys into
   it (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter, Esc). Click a row to choose, click outside to close;
   wheel scrolls the open list.
 
 ```rust
+// Sugar — plain text options.
 Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
     .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
+
+// Composed — a value plus any content. The Icon + Label tint together when the row is chosen.
+Select::empty()
+    .option(Choice::new("low").child(Icon::new(Glyph::Circle)).child(Label::new("LOW")))
+    .option(Choice::new("high").child(Icon::new(Glyph::Lightning)).child(Label::new("HIGH")))
+    .selected(0)
+    .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
 ```
+
+**Declarative** — the same control, authored as data (a plugin / RPC / a modal body). The options are
+**children**, never a `props["options"]` list of strings, which is the whole point: a declarative
+option can compose content exactly like a native one.
+
+```rust
+ViewNode::new(WidgetKind::Select)
+    .prop("selected", PropValue::Int(1))
+    .on("change", Intent::new("set_level"))
+    .child(
+        ViewNode::new(WidgetKind::Choice)
+            .prop("value", PropValue::Text("low".into()))
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("circle".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("LOW")),
+    )
+    .child(
+        ViewNode::new(WidgetKind::Choice)
+            .prop("value", PropValue::Text("high".into()))
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("HIGH")),
+    );
+// The `change` intent fires with args {"value": "high"} — the option's value, not an opaque index.
+```
+
+Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is ignored).
+A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button` does; when it
+has children, **children win**. The `realize` arm for `Select` / `Choice` — and the index → value
+mapping described above — lands in `choice-4`; see
+[Declarative UI model](#declarative-ui-model-viewnode).
+
+#### How the rows can be children *and* live in an overlay
+
+Worth understanding before you touch this widget (it is the one genuinely subtle thing in the
+library). The panel is drawn **outside** the control's layout box and may flip above it — the layout
+engine cannot put a taffy node there, because a node sits where its parent's flow puts it.
+
+So the rows are laid out in the trigger's flow, which is where the engine **measures** them (each
+`Choice` hugs its content), and `Select` then **places** them: it bakes the offset from that flow
+into each visible row's bounds — the same trick [`ScrollRegion`](#scrollregion) uses to bake
+`-scroll_offset` into its children (`component::shift_subtree`). The rows carry the control's
+horizontal insets as **margins**, which is what widens the control around them while keeping their
+content clear of the chevron and the scrollbar lane.
+
+The invariant this buys, and the reason it is done this way:
+
+> **bounds === what is drawn === what is clickable.**
+
+Hit-testing goes through [`choice_at`](#choice), which reads the rows' real bounds — never row
+arithmetic — so a click can only ever land on the row the user sees there, whatever the rows contain
+and however tall they are. Rows outside the visible window (and every row while the list is closed)
+are **collapsed to zero size**, so no stale rect is left behind to swallow a click. Placement is
+re-derived after every layout pass (`Component::on_layout`) and is idempotent.
 
 > **Host wiring**: while `overlay_active()`, route pointer + wheel to
 > `FocusManager::deliver_to_overlay`, and key input through `Keymap::dispatch` (raw key first, then

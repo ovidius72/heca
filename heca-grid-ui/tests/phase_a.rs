@@ -369,11 +369,11 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
 
     // With the dropdown open, a press on a row (outside the trigger's layout bounds)
     // is grabbed by the overlay first — it commits the selection and closes — rather
-    // than being treated as a fresh focus/click on the tree behind it.
-    // Row layout: trigger bottom + panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid(15).
-    let row2_y = sb.loc.y + sb.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    // than being treated as a fresh focus/click on the tree behind it. The row is
+    // found by its **bounds**: the options are real children, placed in the panel.
+    let row2 = ui.base().children[1].base().children[2].base().bounds;
     let handled = focus.dispatch(&mut ui, &Event::PointerPressed {
-        pos: Point::new(sb.loc.x + 10.0, row2_y),
+        pos: Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
     });
     assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
     assert!(
@@ -1349,17 +1349,225 @@ fn select_click_row_commits_and_closes() {
         pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
     }); // open
 
-    // Click the third row (HIGH). Rows start below the trigger + gap + panel pad.
-    // panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid-row(15).
-    let row2_y = b.loc.y + b.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    // Click the third row (HIGH) **where it actually is**: the options are child components, and
+    // opening the list placed them in the panel, so their bounds are the rows on screen. No row
+    // arithmetic — what is drawn is what is clicked.
+    let row2 = sel.base().children[2].base().bounds;
+    assert!(
+        row2.loc.y > b.loc.y + b.size.h,
+        "the rows are placed in the panel, below the trigger"
+    );
     sel.event(&Event::PointerPressed {
-        pos: Point::new(b.loc.x + 10.0, row2_y),
+        pos: Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
     });
     assert_eq!(sel.index(), 2, "clicking a row selects it");
     assert!(!sel.overlay_active(), "selection closes the dropdown");
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("select-change", SignalData::Usize(2))),
+    );
+}
+
+#[test]
+fn select_sugar_builds_choice_children_and_composed_options_carry_their_content() {
+    let theme = Theme::default();
+
+    // The string constructor is sugar: every option is a `Choice` child whose value is the text.
+    let sugar = Select::new(["LOW", "HIGH"]);
+    assert_eq!(sugar.base().children.len(), 2, "one child per option");
+    assert_eq!(
+        sugar.base().children[1].text_summary().as_deref(),
+        Some("HIGH"),
+        "the option's content is a Label the widget can name",
+    );
+
+    // A composed option: any content, plus a value that is not the text.
+    let mut sel = Select::empty()
+        .option(Choice::new("low").child(Flex::row().child(Label::new("LOW"))))
+        .option(
+            Choice::new("high").child(
+                Flex::row()
+                    .child(Icon::new(Glyph::Warning))
+                    .child(Label::new("HIGH")),
+            ),
+        )
+        .selected(1);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
+
+    // The closed trigger shows the chosen option **itself** — it stands the child inside the
+    // trigger box, so the icon comes with it. (Its text alone is still available as the option's
+    // accessible name, which is what `selected_label` reports.)
+    assert_eq!(sel.selected_label(), "HIGH");
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        sel.paint(&mut cx);
+    }
+    let closed: Vec<String> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        closed.contains(&"HIGH".to_string()),
+        "the closed trigger shows the chosen option's label",
+    );
+    assert!(
+        closed.len() > 1,
+        "…and its Icon child, painted with it: {closed:?}",
+    );
+    let trigger = sel.base().bounds;
+    let chosen = sel.base().children[1].base().bounds;
+    let slack = 0.5; // the trigger hugs the tallest option, so they agree to within rounding
+    assert!(
+        chosen.loc.y >= trigger.loc.y - slack
+            && chosen.loc.y + chosen.size.h <= trigger.loc.y + trigger.size.h + slack,
+        "the chosen option is placed inside the trigger while closed",
+    );
+    assert_eq!(
+        sel.base().children[0].base().bounds.size,
+        Size::new(0.0, 0.0),
+        "the options not chosen are collapsed",
+    );
+
+    // Opening draws the options' own content — including the icon, which no `Vec<String>` of
+    // options could ever have carried.
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(sel.base().bounds.loc.x + 5.0, sel.base().bounds.loc.y + 5.0),
+    });
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        sel.paint(&mut cx);
+    }
+    let runs: Vec<(String, Color)> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.color)),
+            _ => None,
+        })
+        .collect();
+    let texts: Vec<&str> = runs.iter().map(|(t, _)| t.as_str()).collect();
+    assert!(
+        texts.contains(&"LOW") && texts.contains(&"HIGH"),
+        "the open list paints each option's Label child",
+    );
+    assert!(
+        runs.len() > 3,
+        "beyond the trigger + the two labels, the option's Icon child draws its glyph too",
+    );
+    // The chosen row tints its whole content: the `Choice` publishes the accent as the inherited
+    // content color, and its unstyled Label picks it up — with no wiring from the Select.
+    let high_row = runs
+        .iter()
+        .rposition(|(t, _)| t == "HIGH")
+        .expect("the HIGH row is painted");
+    assert_eq!(
+        runs[high_row].1,
+        theme.colors.accent,
+        "the selected option's content is accent-tinted",
+    );
+
+    // …and the trigger keeps showing the chosen option — icon *and* label — while the list is open.
+    // The option itself is in the list now, so the trigger draws a second image of its content,
+    // translated back into the trigger. Two runs land inside the trigger: the glyph and the word.
+    let trigger = sel.base().bounds;
+    let in_trigger: Vec<String> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.rect, t.text.clone())),
+            _ => None,
+        })
+        .filter(|(r, _)| {
+            trigger.contains(Point::new(
+                r.loc.x + r.size.w / 2.0,
+                r.loc.y + r.size.h / 2.0,
+            ))
+        })
+        .map(|(_, t)| t)
+        .collect();
+    assert!(
+        in_trigger.contains(&"HIGH".to_string()),
+        "the open trigger still names the chosen option: {in_trigger:?}",
+    );
+    assert!(
+        in_trigger.len() > 1,
+        "…and still shows its icon, not just the word: {in_trigger:?}",
+    );
+}
+
+#[test]
+fn select_rows_outside_the_visible_window_are_not_clickable() {
+    let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
+    let mut sel = Select::new(opts);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
+
+    let b = sel.base().bounds;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
+    }); // open — 6 rows visible of 20
+
+    // A row past the window is collapsed: it is not drawn, so it cannot be hit either. (Were its
+    // stale bounds left behind, they would sit under the trigger and swallow clicks.)
+    for i in 6..20 {
+        assert_eq!(
+            sel.base().children[i].base().bounds.size,
+            Size::new(0.0, 0.0),
+            "row {i} is outside the visible window",
+        );
+    }
+    // Closing collapses every row **except the chosen one**, which goes back to standing in the
+    // trigger (that is how the trigger shows the option's own content).
+    sel.event(&Event::Widget(heca_grid_ui::WidgetIntent::Dismiss));
+    let chosen = sel.index();
+    for i in 0..20 {
+        if i == chosen {
+            continue;
+        }
+        assert_eq!(
+            sel.base().children[i].base().bounds.size,
+            Size::new(0.0, 0.0),
+            "row {i} is collapsed while the list is closed",
+        );
+    }
+    let trigger = sel.base().bounds;
+    assert!(
+        trigger.contains(Point::new(
+            trigger.loc.x + 5.0,
+            sel.base().children[chosen].base().bounds.loc.y + 2.0,
+        )),
+        "the chosen option stands in the trigger",
+    );
+}
+
+#[test]
+fn select_flips_above_the_trigger_when_there_is_no_room_below() {
+    let theme = Theme::default();
+    // The Select sits at the bottom of the viewport: the panel cannot open downward.
+    let mut ui = Flex::column()
+        .height(Length::Px(300.0))
+        .justify(Justify::End)
+        .child(Select::new(["A", "B", "C"]));
+    LayoutEngine::new().compute(&mut ui, Size::new(300.0, 300.0));
+
+    // Paint once so the widget learns the viewport height (that is what it flips against).
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(300.0, 300.0));
+        ui.paint(&mut cx);
+    }
+
+    let trigger = ui.base().children[0].base().bounds;
+    ui.base_mut().children[0].event(&Event::PointerPressed {
+        pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
+    });
+
+    let first_row = ui.base().children[0].base().children[0].base().bounds;
+    assert!(
+        first_row.loc.y + first_row.size.h <= trigger.loc.y,
+        "no room below → the rows are placed above the trigger",
     );
 }
 

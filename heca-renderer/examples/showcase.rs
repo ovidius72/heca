@@ -188,6 +188,13 @@ fn apply_size(c: &mut dyn Component, size: WidgetSize) {
     }
 }
 
+/// An option whose content is an icon **and** a label — the thing a `Vec<String>` of options could
+/// never express. `Choice` lays them out in a row with a theme-derived gap, and tints both together
+/// when the option is chosen.
+fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
+    Choice::new(value).child(Icon::new(glyph)).child(Label::new(label))
+}
+
 /// Handles the host keeps after building the UI, to drive chrome interactions
 /// from the keymap (the same signals an RPC layer would write).
 struct BuiltUi {
@@ -373,7 +380,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Label::new("MODE").color(theme.colors.muted).font_scale(0.85))
                 .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
                 .child(Label::new("WORKSPACE").color(theme.colors.muted).font_scale(0.85))
-                .child(Select::new(workspaces).selected(3).on_change(report)),
+                .child(Select::new(workspaces).selected(3).on_change(report))
+                // Composed options: an option is a value plus any content — here an icon and a
+                // label, which tint together as the row is chosen.
+                .child(Label::new("LEVEL").color(theme.colors.muted).font_scale(0.85))
+                .child(
+                    Select::empty()
+                        .option(level_option("low", Glyph::Circle, "LOW"))
+                        .option(level_option("medium", Glyph::Warning, "MEDIUM"))
+                        .option(level_option("high", Glyph::Lightning, "HIGH"))
+                        .selected(1)
+                        .on_change(report),
+                ),
         )
         // One button per GridCN variant.
         .child(caption("Button"))

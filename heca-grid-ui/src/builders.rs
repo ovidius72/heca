@@ -80,9 +80,17 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.justify = j;
         self
     }
-    /// Cross-axis alignment.
+    /// Cross-axis alignment of this component's **children**.
     fn align(mut self, a: Align) -> Self {
         self.base_mut().style.align = a;
+        self
+    }
+    /// Cross-axis alignment of **this** component inside its parent (CSS `align-self`),
+    /// overriding the parent's [`align`](Self::align) for it alone. Use
+    /// [`Align::Start`] to keep an `Auto`-sized widget hugging its content instead of
+    /// stretching to fill the parent.
+    fn align_self(mut self, a: Align) -> Self {
+        self.base_mut().style.align_self = Some(a);
         self
     }
     /// Inner padding on all sides.

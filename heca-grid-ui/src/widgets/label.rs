@@ -102,6 +102,13 @@ impl Component for Label {
         &mut self.base
     }
 
+    /// The label's text — a `Label` is the leaf that gives a composed subtree its
+    /// [accessible name](Component::text_summary), so a control can render the text of content it
+    /// does not own (a [`Select`](super::Select) trigger showing the chosen option).
+    fn text_summary(&self) -> Option<String> {
+        Some(self.text.get_untracked())
+    }
+
     /// Naive monospace measure from the resolved font ([`Base::font`]).
     fn remeasure(&mut self) {
         let text = self.text.get_untracked();

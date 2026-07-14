@@ -357,6 +357,24 @@ pub trait Component {
         false
     }
 
+    /// The **plain-text form of this component's content** — its accessible name.
+    ///
+    /// A control whose content is *composed* cannot read that content's text: children are
+    /// `impl Component`, so their types are erased. But a container sometimes needs that text — to
+    /// **report** its value as a string, the way
+    /// [`Select::selected_label`](crate::widgets::Select::selected_label) reports the chosen option.
+    /// This is the one value it can pull out of an otherwise opaque subtree.
+    ///
+    /// The default computes the name **from the contents**, like the web's accessible-name
+    /// algorithm: the first child that has one wins. So a
+    /// [`Choice`](crate::widgets::Choice) composed of an `Icon` + `Label("HIGH")` summarizes to
+    /// `"HIGH"` with no wiring — the `Icon` has no text, the `Label` does.
+    /// [`Label`](crate::widgets::Label) is the leaf that supplies it; widgets that render text
+    /// they own (not via a child) should override this too.
+    fn text_summary(&self) -> Option<String> {
+        self.base().children.iter().find_map(|c| c.text_summary())
+    }
+
     /// Emit draw commands. Default: paint the base chrome, then children.
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base().visible.get_untracked() {
@@ -512,6 +530,28 @@ pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     c.paint(cx);
 }
 
+/// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.
+///
+/// The primitive behind every widget that **places** children the layout engine could not: layout
+/// computes each node's natural rect, and the widget then bakes an offset into it so that
+/// **bounds === what is drawn === what is clickable**. A
+/// [`ScrollRegion`](crate::widgets::ScrollRegion) bakes `-scroll_offset` this way; a
+/// [`Select`](crate::widgets::Select) bakes the offset from the trigger's flow to its overlay
+/// panel. Because bounds stay truthful, pointer routing, hit-testing and drag resolution — which
+/// all read bounds — keep working with no special cases.
+///
+/// Shifting is destructive, so the widget must re-derive it after every layout pass (the engine
+/// calls [`Component::on_layout`] post-order once bounds are natural again).
+pub(crate) fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
+    c.base_mut().bounds.loc.x += dx;
+    c.base_mut().bounds.loc.y += dy;
+    let n = c.base().children.len();
+    for i in 0..n {
+        let child = &mut c.base_mut().children[i];
+        shift_subtree(child.as_mut(), dx, dy);
+    }
+}
+
 /// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].
 const DISABLED_SCRIM: f32 = 0.55;
 
@@ -544,6 +584,9 @@ pub struct PaintCx<'a> {
     /// The **inherited content color** for the subtree currently being painted — see
     /// [`with_content_color`](Self::with_content_color). `None` at the root.
     content_color: Option<Color>,
+    /// Translation applied to every draw emitted through this context — see
+    /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
+    offset: (f64, f64),
 }
 
 impl<'a> PaintCx<'a> {
@@ -554,7 +597,39 @@ impl<'a> PaintCx<'a> {
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
             content_color: None,
+            offset: (0.0, 0.0),
         }
+    }
+
+    /// Paint `f`'s subtree **translated** by `(dx, dy)` — the same components, drawn somewhere else.
+    ///
+    /// This is deliberately narrow. A component is laid out in exactly one place, and its bounds are
+    /// the contract for hit-testing and drawing alike (`bounds === what is drawn === what is
+    /// clickable`). But a control occasionally has to render content it *owns but does not hold* —
+    /// a [`Select`](crate::widgets::Select) shows the chosen option in its trigger while that option
+    /// is away in the open list. Nothing can be in two places, so the trigger draws a **second
+    /// image** of it here.
+    ///
+    /// What is drawn this way is **not interactive**: it has no bounds of its own, so it is not
+    /// hit-tested, focusable or hoverable — the control's own bounds are the click target. Use it
+    /// only for such an echo, never to move a widget: shifting where a component *lives* is
+    /// [`shift_subtree`] + [`Component::on_layout`], which keeps its bounds honest.
+    pub fn with_translate(&mut self, dx: f64, dy: f64, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.offset;
+        self.offset = (previous.0 + dx, previous.1 + dy);
+        f(self);
+        self.offset = previous;
+    }
+
+    /// Apply the active [translation](Self::with_translate) to a rect on its way to the scene.
+    fn placed(&self, r: Rectangle) -> Rectangle {
+        if self.offset == (0.0, 0.0) {
+            return r;
+        }
+        Rectangle::new(
+            Point::new(r.loc.x + self.offset.0, r.loc.y + self.offset.1),
+            r.size,
+        )
     }
 
     /// Set the visible viewport size (the host passes the window size).
@@ -576,6 +651,7 @@ impl<'a> PaintCx<'a> {
     /// on-screen, so they're never culled either.
     fn culled(&self, r: Rectangle) -> bool {
         let vp = self.viewport;
+        let r = self.placed(r);
         r.loc.y + r.size.h < -CULL_MARGIN
             || r.loc.y > vp.h + CULL_MARGIN
             || r.loc.x + r.size.w < -CULL_MARGIN
@@ -595,7 +671,7 @@ impl<'a> PaintCx<'a> {
     /// viewport uses so partial rows/glyphs are cut at the panel edge instead of
     /// spilling out. Nested clips intersect with their parent.
     pub fn with_clip(&mut self, rect: Rectangle, f: impl FnOnce(&mut PaintCx<'a>)) {
-        self.scene.push(DrawCommand::PushClip(rect));
+        self.scene.push(DrawCommand::PushClip(self.placed(rect)));
         f(self);
         self.scene.push(DrawCommand::PopClip);
     }
@@ -658,7 +734,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         self.scene.push(DrawCommand::Rect(RectCmd {
-            rect,
+            rect: self.placed(rect),
             fill,
             border,
             radius,
@@ -679,7 +755,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         self.scene.push(DrawCommand::Rect(RectCmd {
-            rect,
+            rect: self.placed(rect),
             fill: Color::TRANSPARENT,
             border: None,
             radius,
@@ -755,7 +831,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         self.scene.push(DrawCommand::Text(TextCmd {
-            rect,
+            rect: self.placed(rect),
             text: text.to_string(),
             color,
             size,
@@ -773,7 +849,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         self.scene.push(DrawCommand::Text(TextCmd {
-            rect,
+            rect: self.placed(rect),
             text: glyph.to_string(),
             color,
             size,
