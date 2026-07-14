@@ -905,6 +905,53 @@ impl ActionRegistry {
             default_binding: "",
             icon: None,
         },
+        // ── Chrome container placement (plugin-04/T1) ──
+        // The ONLY built-ins with dotted, namespaced names. Deliberate: this is the id scheme
+        // plugins use, and container placement is the first host capability a plugin drives by
+        // name. The other ~115 built-ins keep their snake_case config names — renaming them is a
+        // migration nobody has decided on, so there are no snake_case aliases for these either
+        // (one action, one name). All are parameterized, so they are built through `build_action`
+        // and carry no default binding.
+        ActionDescriptor {
+            name: "chrome.container.move_to_region",
+            label: "Move Container to Region",
+            description: "Move a chrome container to another region (left/right sidebar, top/bottom bar).",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: Some(Glyph::ArrowLineRight),
+        },
+        ActionDescriptor {
+            name: "chrome.container.move_left_sidebar",
+            label: "Move Container to Left Sidebar",
+            description: "Move a chrome container into the left sidebar.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: Some(Glyph::ArrowLineLeft),
+        },
+        ActionDescriptor {
+            name: "chrome.container.move_right_sidebar",
+            label: "Move Container to Right Sidebar",
+            description: "Move a chrome container into the right sidebar.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: Some(Glyph::ArrowLineRight),
+        },
+        ActionDescriptor {
+            name: "chrome.container.reorder_before",
+            label: "Reorder Container Before",
+            description: "Move a chrome container before another in its region (omit the target to move it to the end).",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "chrome.container.reorder_after",
+            label: "Reorder Container After",
+            description: "Move a chrome container after another in its region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
         ActionDescriptor {
             name: "sidebar_create_workspace",
             label: "Sidebar Create Workspace",
@@ -1417,9 +1464,25 @@ impl ActionCatalog {
 /// them purely to read the policy off the same match. Never classify an action here: classify it in
 /// `action_policy` and it lands here automatically.
 fn builtin_policy(name: &str) -> crate::app::interaction::ActionPolicy {
+    use crate::chrome::RegionId;
+    use crate::input::WmAction;
     let action = crate::input::action_from_name(name).unwrap_or_else(|| match name {
-        "open_link" => crate::input::WmAction::OpenLink { url: String::new() },
-        "scroll_to_offset" => crate::input::WmAction::ScrollToOffset { rows: 0 },
+        "open_link" => WmAction::OpenLink { url: String::new() },
+        "scroll_to_offset" => WmAction::ScrollToOffset { rows: 0 },
+        "chrome.container.move_to_region"
+        | "chrome.container.move_left_sidebar"
+        | "chrome.container.move_right_sidebar" => WmAction::MoveContainerToRegion {
+            container_id: String::new(),
+            region: RegionId::LeftSidebar,
+        },
+        "chrome.container.reorder_before" => WmAction::ReorderContainerBefore {
+            container_id: String::new(),
+            before_id: None,
+        },
+        "chrome.container.reorder_after" => WmAction::ReorderContainerAfter {
+            container_id: String::new(),
+            after_id: String::new(),
+        },
         other => unreachable!(
             "built-in action {other:?} has no WmAction: add it to action_from_name, or map a \
              representative variant here"
@@ -1858,6 +1921,14 @@ mod tests {
         // global keybinding, so their `default_binding` is intentionally empty.
         const UNBOUND: &[&str] = &[
             "open_link",
+            // Chrome container placement (plugin-04/T1): parameterized (they name a container),
+            // so they are dispatched by name+args from a menu / drag / RPC / a config binding
+            // that supplies the args — never from a bare default keybinding.
+            "chrome.container.move_to_region",
+            "chrome.container.move_left_sidebar",
+            "chrome.container.move_right_sidebar",
+            "chrome.container.reorder_before",
+            "chrome.container.reorder_after",
             // Chrome region show/hide (sidebar-fu-6): intentionally unbound — the
             // user binds the wanted ones in config.
             "show_left_sidebar",

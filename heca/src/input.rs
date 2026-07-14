@@ -453,6 +453,15 @@ pub enum WmAction {
         container_id: String,
         before_id: Option<String>,
     },
+    /// Reorder a container to sit immediately **after** another in the same region.
+    ///
+    /// Not redundant with [`ReorderContainerBefore`](WmAction::ReorderContainerBefore): "after Y"
+    /// resolves to "before whatever follows Y", which only the host can compute — a plugin, or a
+    /// drag landing on an item's trailing edge, cannot.
+    ReorderContainerAfter {
+        container_id: String,
+        after_id: String,
+    },
     SetRegionVisible {
         region: crate::chrome::RegionId,
         visible: bool,
@@ -856,6 +865,36 @@ pub fn build_action(
             step: get_enum(args, "step")?,
         }),
 
+        // ── Chrome container placement (plugin-04/T1) ──
+        // These carry DOTTED, namespaced ids — unlike every other built-in, whose config name is
+        // snake_case. That asymmetry is deliberate: the dotted namespace is the id scheme plugins
+        // use (`plugin.docker.restart`), and chrome placement is the first host capability a plugin
+        // is meant to drive by name. Renaming the ~115 existing snake_case built-ins to a dotted
+        // scheme is a MIGRATION nobody has decided on — do not start it here by adding aliases.
+        "chrome.container.move_to_region" => Some(WmAction::MoveContainerToRegion {
+            container_id: get_string(args, "container_id")?,
+            region: get_enum(args, "region")?,
+        }),
+        // Conveniences over move_to_region with the region fixed: what a menu item or a keybinding
+        // ("send this container to the right sidebar") actually wants to say.
+        "chrome.container.move_left_sidebar" => Some(WmAction::MoveContainerToRegion {
+            container_id: get_string(args, "container_id")?,
+            region: crate::chrome::RegionId::LeftSidebar,
+        }),
+        "chrome.container.move_right_sidebar" => Some(WmAction::MoveContainerToRegion {
+            container_id: get_string(args, "container_id")?,
+            region: crate::chrome::RegionId::RightSidebar,
+        }),
+        // `before_id` is OPTIONAL: omitting it moves the container to the END of its region.
+        "chrome.container.reorder_before" => Some(WmAction::ReorderContainerBefore {
+            container_id: get_string(args, "container_id")?,
+            before_id: get_string(args, "before_id"),
+        }),
+        "chrome.container.reorder_after" => Some(WmAction::ReorderContainerAfter {
+            container_id: get_string(args, "container_id")?,
+            after_id: get_string(args, "after_id")?,
+        }),
+
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
             kind: get_enum(args, "kind").unwrap_or(SpawnKind::Terminal),
@@ -1033,6 +1072,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::PaneTake
         | WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
+        | WmAction::ReorderContainerAfter { .. }
         | WmAction::SetRegionVisible { .. }
         | WmAction::ShowLeftSidebar
         | WmAction::HideLeftSidebar

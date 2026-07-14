@@ -214,6 +214,33 @@ scroll_line_down   = "Shift+Down"
 # keys = "w"
 # args = { container = "web" }
 
+# ── Chrome container placement (built-in, dotted ids) ──
+# heca's own container-placement actions use the same dotted id scheme, so you can
+# move a chrome container (the workspaces tree, and later plugin-provided ones)
+# between regions from a key, a menu, or RPC. They take args, so bind them in a
+# custom mode:
+#   chrome.container.move_to_region      args: container_id, region
+#   chrome.container.move_left_sidebar   args: container_id
+#   chrome.container.move_right_sidebar  args: container_id
+#   chrome.container.reorder_before      args: container_id, before_id (optional —
+#                                              omit to move it to the end)
+#   chrome.container.reorder_after       args: container_id, after_id
+# region ∈ left-sidebar | right-sidebar | top-bar | bottom-bar
+#          (short forms left | right | top | bottom also work)
+#
+# [[keys.mode]]
+# name = "chrome"
+# trigger = "prefix+Shift+m"
+# sticky = false
+# [[keys.mode.bindings]]
+# action = "chrome.container.move_right_sidebar"
+# keys = "l"
+# args = { container_id = "workspaces" }
+# [[keys.mode.bindings]]
+# action = "chrome.container.move_left_sidebar"
+# keys = "h"
+# args = { container_id = "workspaces" }
+
 # Launch a program on a key. `kind = "terminal"` runs it inside a pane;
 # `float = true` opens it floating; `close_pane = true` closes the pane on exit;
 # `keep_on_error` / `keep_on_success` keep the pane open after the program ends.

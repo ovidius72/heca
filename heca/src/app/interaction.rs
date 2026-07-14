@@ -346,6 +346,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // pane tiled/floating domain, so it stays reachable in any focus domain.
         WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
+        | WmAction::ReorderContainerAfter { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
         // Overlay control (§2.7.2): classified Global for match completeness, but never
         // actually consulted — `dispatch_intent` intercepts these before routing (they carry

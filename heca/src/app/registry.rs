@@ -529,6 +529,13 @@ pub fn build_registry() -> ActionRegistry {
         handle_reorder_container_before,
     );
     registry.register(
+        &WmAction::ReorderContainerAfter {
+            container_id: String::new(),
+            after_id: String::new(),
+        },
+        handle_reorder_container_after,
+    );
+    registry.register(
         &WmAction::SetRegionVisible {
             region: crate::chrome::RegionId::LeftSidebar,
             visible: false,
@@ -780,7 +787,10 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::{action_ref_from_config, build_keymap, build_modes, build_widget_keymap, format_combo};
+    use super::{
+        action_ref_from_config, build_keymap, build_modes, build_registry, build_widget_keymap,
+        format_combo,
+    };
     use crate::input::WmAction;
     use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
@@ -938,6 +948,167 @@ mod tests {
         assert!(keymap.resolve("normal", &combo).is_none());
     }
 
+    // ── plugin-04 / T1: chrome placement actions carry stable dotted string ids ──
+
+    /// Each placement id builds the `WmAction` it names, from its args — the same construction a
+    /// plugin's Intent, an RPC call and a config binding all go through (`build_action`).
+    #[test]
+    fn every_chrome_placement_id_builds_its_action_from_args() {
+        use crate::chrome::RegionId;
+        let args = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+
+        assert_eq!(
+            action_ref_from_config(
+                "chrome.container.move_to_region",
+                &args(&[("container_id", "workspaces"), ("region", "right-sidebar")]),
+            ),
+            ActionRef::Builtin(WmAction::MoveContainerToRegion {
+                container_id: "workspaces".to_string(),
+                region: RegionId::RightSidebar,
+            })
+        );
+        // The fixed-region conveniences.
+        assert_eq!(
+            action_ref_from_config(
+                "chrome.container.move_left_sidebar",
+                &args(&[("container_id", "workspaces")]),
+            ),
+            ActionRef::Builtin(WmAction::MoveContainerToRegion {
+                container_id: "workspaces".to_string(),
+                region: RegionId::LeftSidebar,
+            })
+        );
+        assert_eq!(
+            action_ref_from_config(
+                "chrome.container.move_right_sidebar",
+                &args(&[("container_id", "workspaces")]),
+            ),
+            ActionRef::Builtin(WmAction::MoveContainerToRegion {
+                container_id: "workspaces".to_string(),
+                region: RegionId::RightSidebar,
+            })
+        );
+        // `before_id` is optional — omitted ⇒ move to the end of the region.
+        assert_eq!(
+            action_ref_from_config(
+                "chrome.container.reorder_before",
+                &args(&[("container_id", "workspaces")]),
+            ),
+            ActionRef::Builtin(WmAction::ReorderContainerBefore {
+                container_id: "workspaces".to_string(),
+                before_id: None,
+            })
+        );
+        assert_eq!(
+            action_ref_from_config(
+                "chrome.container.reorder_after",
+                &args(&[("container_id", "workspaces"), ("after_id", "agents")]),
+            ),
+            ActionRef::Builtin(WmAction::ReorderContainerAfter {
+                container_id: "workspaces".to_string(),
+                after_id: "agents".to_string(),
+            })
+        );
+    }
+
+    /// A placement id is a BUILT-IN (it has a `WmAction` and a native handler), not a name-keyed
+    /// dynamic action — it must not fall through to `Dynamic` when its args are supplied.
+    #[test]
+    fn a_placement_id_is_a_builtin_not_a_dynamic_action() {
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let registry = build_registry();
+        for name in [
+            "chrome.container.move_to_region",
+            "chrome.container.move_left_sidebar",
+            "chrome.container.move_right_sidebar",
+            "chrome.container.reorder_before",
+            "chrome.container.reorder_after",
+        ] {
+            let meta = catalog
+                .find(name)
+                .unwrap_or_else(|| panic!("{name} is not in the catalog"));
+            assert_eq!(meta.category, crate::actions::ActionCategory::Chrome);
+            // Chrome placement acts on regions, not on the tiled/floating pane domain, so it stays
+            // reachable in EITHER domain. `Global` is the only policy that survives a floating pane
+            // owning the domain (`AlwaysAllowed` does NOT — it is a misnomer).
+            assert_eq!(
+                meta.policy,
+                crate::app::interaction::ActionPolicy::Global,
+                "{name} must stay reachable while a floating pane owns the domain",
+            );
+            assert_eq!(
+                registry.dispatch_of(&catalog, name),
+                Some(crate::actions::Dispatch::Native),
+                "{name} has a WmAction + native handler",
+            );
+        }
+    }
+
+    /// Surface parity (rule P2): the same capability is reachable from a config binding / plugin
+    /// intent (by dotted name) AND from RPC (by kebab command), and both land on the same action.
+    #[test]
+    fn placement_actions_have_rpc_parity_with_their_dotted_ids() {
+        use crate::chrome::RegionId;
+        let mut args = HashMap::new();
+        args.insert("container_id".to_string(), "workspaces".to_string());
+        args.insert("region".to_string(), "right-sidebar".to_string());
+
+        let from_name = action_ref_from_config("chrome.container.move_to_region", &args);
+        let from_rpc =
+            crate::rpc::parse_rpc_command("move-container-to-region workspaces right-sidebar")
+                .unwrap();
+        assert_eq!(from_name, ActionRef::Builtin(from_rpc));
+
+        let mut after = HashMap::new();
+        after.insert("container_id".to_string(), "workspaces".to_string());
+        after.insert("after_id".to_string(), "agents".to_string());
+        assert_eq!(
+            action_ref_from_config("chrome.container.reorder_after", &after),
+            ActionRef::Builtin(
+                crate::rpc::parse_rpc_command("reorder-container-after workspaces agents").unwrap()
+            )
+        );
+        // The region spellings come from ONE parser (RegionId's FromStr), so config and RPC can
+        // never drift apart: the short alias works on both surfaces.
+        assert_eq!("right".parse::<RegionId>(), Ok(RegionId::RightSidebar));
+        assert_eq!(
+            "right-sidebar".parse::<RegionId>(),
+            Ok(RegionId::RightSidebar)
+        );
+        assert!("nowhere".parse::<RegionId>().is_err());
+    }
+
+    /// The dotted ids are the ONLY built-ins with a dotted name — no snake_case alias was quietly
+    /// added for them, and no existing snake_case built-in was quietly renamed to a dotted id.
+    /// (Renaming the existing ~115 is a migration nobody has decided on.)
+    #[test]
+    fn only_the_chrome_placement_builtins_carry_dotted_names() {
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let dotted: Vec<&str> = crate::actions::ActionRegistry::ALL
+            .iter()
+            .map(|d| d.name)
+            .filter(|n| n.contains('.'))
+            .collect();
+        assert_eq!(
+            dotted,
+            [
+                "chrome.container.move_to_region",
+                "chrome.container.move_left_sidebar",
+                "chrome.container.move_right_sidebar",
+                "chrome.container.reorder_before",
+                "chrome.container.reorder_after",
+            ]
+        );
+        // No snake_case alias for the same capability.
+        assert!(catalog.find("move_container_to_region").is_none());
+        assert!(catalog.find("reorder_container_before").is_none());
+    }
+
     #[test]
     fn chrome_container_placement_actions_have_handlers() {
         // Every WmAction variant must have a registered handler (execute() panics
@@ -950,6 +1121,10 @@ mod tests {
         assert!(registry.has_handler(&WmAction::ReorderContainerBefore {
             container_id: String::new(),
             before_id: None,
+        }));
+        assert!(registry.has_handler(&WmAction::ReorderContainerAfter {
+            container_id: String::new(),
+            after_id: String::new(),
         }));
         assert!(registry.has_handler(&WmAction::SetRegionVisible {
             region: crate::chrome::RegionId::LeftSidebar,

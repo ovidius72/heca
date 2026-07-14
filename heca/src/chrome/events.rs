@@ -37,6 +37,34 @@ impl RegionId {
             RegionId::BottomBar => 3,
         }
     }
+
+    /// The canonical spelling of a region, as written in config args and RPC commands.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RegionId::LeftSidebar => "left-sidebar",
+            RegionId::RightSidebar => "right-sidebar",
+            RegionId::TopBar => "top-bar",
+            RegionId::BottomBar => "bottom-bar",
+        }
+    }
+}
+
+/// One parser for region names, shared by **every** surface that names a region: RPC commands
+/// (`move-container-to-region workspaces right-sidebar`), config binding args
+/// (`args = { region = "right-sidebar" }`), and plugin intents. A short alias (`right`) is accepted
+/// everywhere the long form is, so the two surfaces can never drift apart into different spellings.
+impl std::str::FromStr for RegionId {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "left-sidebar" | "left" => Ok(RegionId::LeftSidebar),
+            "right-sidebar" | "right" => Ok(RegionId::RightSidebar),
+            "top-bar" | "top" => Ok(RegionId::TopBar),
+            "bottom-bar" | "bottom" => Ok(RegionId::BottomBar),
+            _ => Err(()),
+        }
+    }
 }
 
 /// A `Copy` projection of the sidebar-nav cursor selection — a mirror of
