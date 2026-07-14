@@ -130,6 +130,12 @@ impl Component for Tag {
         &mut self.base
     }
 
+    /// The tag renders its own text (it composes no `Label`), so it supplies its
+    /// [accessible name](Component::text_summary) itself.
+    fn text_summary(&self) -> Option<String> {
+        Some(self.label.get_untracked())
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;

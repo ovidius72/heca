@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-14T11:52:30.006Z
+**Last updated:** 2026-07-14T13:36:56.157Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -102,7 +102,7 @@ Status: 📋 `planned`
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
-- 📋 **1df9c36c-5c29-4288-9fe1-7a6e9c72179b** P016 — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (7/9 tasks)
+- 📋 **1df9c36c-5c29-4288-9fe1-7a6e9c72179b** P016 — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (8/9 tasks)
 
 ### ⏸️ cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -855,7 +855,7 @@ One value-carrying, content-composable Choice primitive; refactor Select/Tabs on
 
 Status: 📋 `planned`
 
-**Tasks:** 7/9
+**Tasks:** 8/9
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P001 — agents-01: Agent status tracking and sounds
 

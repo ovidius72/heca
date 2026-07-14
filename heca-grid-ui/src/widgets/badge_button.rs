@@ -116,6 +116,12 @@ impl Component for BadgeButton {
         &mut self.base
     }
 
+    /// The badge button renders its own text (it composes no `Label`), so it supplies its
+    /// [accessible name](Component::text_summary) itself.
+    fn text_summary(&self) -> Option<String> {
+        Some(self.label.get_untracked())
+    }
+
     fn remeasure(&mut self) {
         let label = self.label.get_untracked();
         self.seen_label = label.clone();

@@ -1457,15 +1457,24 @@ let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 > fires `on_activate`, so a single source of truth can own which row is active (set the
 > clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
-**Declarative** (`WidgetKind::Item`): prop `text` (the label), event `press`.
+**Declarative** (`WidgetKind::Item`):
 
 ```rust
-ViewNode::new(WidgetKind::Item).text("main.rs").on_press(Intent::new("open_file"))
+ViewNode::new(WidgetKind::Item)
+    .text("main.rs")                                        // the label (the row's middle)
+    .on_press(Intent::new("open_file"))
+    .child(ViewNode::new(WidgetKind::StatusDot)
+        .prop("slot", PropValue::Text("leading".into())))   // ← leading slot
+    .child(ViewNode::new(WidgetKind::Badge)
+        .text("M")
+        .prop("slot", PropValue::Text("trailing".into()))); // ← trailing slot
 ```
 
-Its **slots are not modelled in `ViewNode` yet** — a declarative `Item` gets a label and an intent,
-but no leading/trailing content. That needs *named* children in the model (structured props), which
-is `viewnode-task-1`. Native code composes the slots freely today.
+- **Props**: `text` (the label). **Event**: `press`.
+- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `leading`, `trailing` — each
+  takes an arbitrary subtree. There is **no default slot**: the row's middle *is* the label, which
+  comes from `text`, so a child with no `slot` (or an unknown one) is **ignored** rather than dropped
+  somewhere it doesn't belong. It is debug-logged, never a panic.
 
 ### Row
 
@@ -1606,12 +1615,41 @@ sidebar. Severity maps to theme tokens, never literals.
   `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
   Enter/Space activates).
 
+**Native:**
+
 ```rust
 Toast::danger("Connection lost")
     .body("Reconnecting to the grid…")
     .action("Retry", || retry())
     .on_dismiss(|| dismiss(id));
 ```
+
+**Declarative** (`WidgetKind::Toast`):
+
+```rust
+ViewNode::new(WidgetKind::Toast)
+    .text("Build failed")                                         // the title
+    .prop("severity", PropValue::Text("danger".into()))           // info | success | warning | danger
+    .prop("icon", PropValue::Glyph("warning".into()))             // optional; severity picks a default
+    .prop("body", PropValue::Text("3 errors in heca-grid-ui".into()))
+    .prop("action_text", PropValue::Text("RETRY".into()))         // the inline action's label
+    .prop("dismissible", PropValue::Bool(true))
+    .on("action", Intent::new("rebuild"))                         // fires when RETRY is clicked
+    .on("dismiss", Intent::new("close_toast"))                    // fires on the ×
+    .on_press(Intent::new("open_build_log"));                     // whole card
+```
+
+- **Props**: `text` (title), `severity` (`Text` — an unknown name degrades to `info`), `icon`
+  (Glyph name), `body`, `action_text`, `dismissible` (Bool).
+- **Events**: `press` (the whole card), `dismiss` (the ×), `action` (the inline button — only wired
+  when `action_text` is set).
+- **No slots.** The inline action is a *labelled button*, not arbitrary content, so it is a prop plus
+  an intent. A slot would have promised a composition the widget does not offer.
+
+> **A declarative `Toast` is for INLINE use** — a notification row inside a panel. It is **not** how
+> you fire an app notification: the host owns the queue and lifecycle through
+> [`ToastStack`](#toaststack) + `ToastSpec` (which is plain data it can push, time out and dedup).
+> Realizing a `Toast` node just renders a card wherever you put it.
 
 ### ProgressBar
 
@@ -1807,6 +1845,8 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
   the look in place without rebuilding the tree.
 
+**Native:**
+
 ```rust
 let sidebar = ChromeRegion::vertical();
 let mode = sidebar.mode_signal();
@@ -1815,6 +1855,32 @@ let files = DockFrame::new("EXPLORER")
     .header(Badge::accent("3"))
     .child(ItemGroup::new("src").child(Item::new("main.rs")));
 ```
+
+**Declarative** (`WidgetKind::DockFrame`):
+
+```rust
+ViewNode::new(WidgetKind::DockFrame)
+    .text("EXPLORER")                                          // the title
+    .prop("expanded", PropValue::Bool(true))
+    .prop("frameless", PropValue::Bool(false))
+    .prop("active", PropValue::Bool(false))                    // the accent wash
+    .prop("nav_selected", PropValue::Bool(false))              // the nav-cursor outline
+    .on("toggle", Intent::new("fold_dock"))                    // fires with args {"expanded": …}
+    .child(ViewNode::new(WidgetKind::Badge)
+        .text("3")
+        .prop("slot", PropValue::Text("header".into())))       // ← the controls slot
+    .child(ViewNode::new(WidgetKind::Item).text("main.rs"));   // ← no slot ⇒ body (the default)
+```
+
+- **Props**: `text` (title), `expanded` (Bool, default `true`), `frameless`, `active`,
+  `nav_selected` (Bool).
+- **Event**: `toggle` — carries the new state in `args["expanded"]`.
+- **Slots** (see [Named child slots](#named-child-slots-the-slot-prop)): `header` (the controls slot).
+  The **body is the default slot**, so an unslotted child is body content; an unknown slot name falls
+  back to the body and is debug-logged.
+- **`.rail(..)` is host-only** — it binds a host-owned `Signal<RegionMode>`, and static serializable
+  data cannot drive a live signal (the same rule that makes [`ScrollBar`](#scrollbar) host-only). A
+  declarative dock is never rail-aware; the host wires that.
 
 ### ChromeRegion
 
@@ -2283,12 +2349,14 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | `Toggle` | `on` (Bool), `name` | `change` |
 | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 | `Gauge` | `value` (Float) | — |
-| `Item` | `text` (label) | `press` |
 | **`Choice`** | `value` (Text/Int), **+ children** (the content); `text` = the **childless sugar** | `press` (standalone only) |
 | **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
 | **`ItemGroup`** | `text` (header), `expanded` (Bool), **+ children** (the rows) | `toggle` — carries the new `expanded` |
 | **`MarkerGroup`** | `active` (Bool), `nav_selected` (Bool), **+ children** | — (an indicator) |
 | **`Grid`** | `columns` / `rows` / `areas` (List of CSS-like strings), `align` + `justify_items`; per-**child**: `area` or `col`/`row`/`col_span`/`row_span`, `align_self` / `justify_self` | — |
+| **`DockFrame`** | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slots**: `header`, else body | `toggle` |
+| **`Item`** | `text` (label); **slots**: `leading`, `trailing` (no default) | `press` |
+| **`Toast`** | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |
 
 **The event vocabulary** is three names: **`press`** (activated), **`change`** (the value changed),
 and **`toggle`** (a collapsible group folded/unfolded). Each carries what the author actually needs
@@ -2307,9 +2375,43 @@ kind** — they describe a node inside its parent (see [Grid → aligning items]
 list-shaped is a [`Grid`](#grid)'s track templates (`columns` / `rows` / `areas`), and that is what
 it exists for.
 
-Not realized yet (need named-slot props — `choice-7`): `DockFrame`, `Toast`. `ScrollBar` is
-**host-only** by design — its state is live host signals, which static serializable data cannot
-drive; a plugin uses `Scroll`.
+**Coverage**: every `WidgetKind` realizes to its widget. The one exception is `ScrollBar`, which is
+**host-only by design** — its state is live host signals (`content_extent` / `viewport_extent` /
+`offset`), and static serializable data fundamentally cannot drive a signal, so a declarative one
+would render a dead control. A plugin uses [`Scroll`](#scrollregion) (a `ScrollRegion`), which owns
+its own offset. Same rule applies to any *individual builder* that binds a host signal — e.g.
+`DockFrame::rail(..)`.
+
+### Named child slots (the `slot` prop)
+
+Some widgets have **more than one place to put a child**: a [`DockFrame`](#dockframe) has a header
+and a body, an [`Item`](#item) has a leading and a trailing slot. `ViewNode.children` is one flat
+`Vec`, so the **child says where it goes**, with a `slot` prop:
+
+```rust
+ViewNode::new(WidgetKind::DockFrame)
+    .text("EXPLORER")
+    .child(ViewNode::new(WidgetKind::Badge)
+        .text("3")
+        .prop("slot", PropValue::Text("header".into())))   // ← the controls slot
+    .child(ViewNode::new(WidgetKind::Item).text("src"))    // ← no slot ⇒ the body (default)
+    .child(ViewNode::new(WidgetKind::Item).text("tests"));
+```
+
+This needs **zero** model surgery — no `slots: Map<..>` on the node, no second child vector, and the
+JSON stays flat — and it generalizes to every future slotted widget for free.
+
+Two rules, both of which keep `realize` total for untrusted input:
+
+- **A widget may have a default slot.** `DockFrame`'s is the body, so an unslotted child lands there.
+  `Item` has **none** — its middle is the label, which comes from `text` — so a child with no slot is
+  **ignored** rather than dropped somewhere it doesn't belong.
+- **An unknown slot name is not an error.** It is debug-logged, and the child falls back to the
+  widget's default slot (or is ignored, where there is none). A plugin's typo costs it a misplaced
+  child, never a panic.
+
+The slot names are part of a widget's declarative contract, exactly like its props — each entry below
+lists its own.
 
 ### Options are children (`Select` / `Tabs` / `Choice`)
 

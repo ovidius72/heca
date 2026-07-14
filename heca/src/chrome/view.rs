@@ -243,7 +243,9 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |
 /// | `StatusDot` | — | — |
-/// | `Item` | `text` (label) | `press` |
+/// | `Item` | `text` (label); **slots**: `leading` / `trailing` (no default slot) | `press` |
+/// | `DockFrame` | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slot**: `header`, else body (default) | `toggle` |
+/// | `Toast` | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |
 /// | `Choice` | `value` (Text/Int), `text` (childless sugar) + children | `press` (standalone only) |
 /// | `Select` / `Tabs` | `selected` (Int) + `Choice` children | `change` (carries the chosen **value**) |
 /// | `ItemGroup` | `text` (header), `expanded` (Bool) + children (the rows) | `toggle` (carries the new `expanded`) |
@@ -275,9 +277,17 @@ pub type Events = BTreeMap<String, Intent>;
 /// ignored (realize is total for untrusted input). A childless `Choice` desugars `text` to a `Label`
 /// child — children win, the same precedence as `Button`.
 ///
-/// `DockFrame` / `Toast` are **not realized yet** (they need named child slots — `choice-7`);
-/// `ScrollBar` is **host-only** by design (its state is live host signals, which static data cannot
-/// drive — use `Scroll`).
+/// # Named child slots
+/// A widget with **several places for children** (a `DockFrame`'s header vs body, an `Item`'s
+/// leading vs trailing) needs no change to this shape: `children` stays one flat `Vec`, and the
+/// **child** says where it goes with a **`slot` prop**. A widget may declare a *default* slot
+/// (`DockFrame`'s body) — an unslotted child lands there; `Item` has none, so an unslotted child is
+/// ignored. An unknown slot name is debug-logged and falls back to the default (or is ignored),
+/// never a panic.
+///
+/// **Coverage**: every kind realizes to its widget except `ScrollBar`, which is **host-only** by
+/// design (its state is live host signals, which static data cannot drive — use `Scroll`). The same
+/// applies to individual builders that bind a host signal, e.g. `DockFrame::rail(..)`.
 ///
 /// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
 /// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.

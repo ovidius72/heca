@@ -104,6 +104,13 @@ impl Component for Badge {
         &mut self.base
     }
 
+    /// The badge renders its own text (it composes no `Label`), so it supplies its
+    /// [accessible name](Component::text_summary) itself — the trait's default, which reads the
+    /// first child that has one, would report nothing.
+    fn text_summary(&self) -> Option<String> {
+        Some(self.label.get_untracked())
+    }
+
     /// Pill size tracks the resolved font.
     fn remeasure(&mut self) {
         let label = self.label.get_untracked();

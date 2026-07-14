@@ -26,9 +26,9 @@
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
-    Component, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input, Item,
-    ItemGroup, Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData, StatusDot,
-    Surface, Tabs, Tag, Toggle, Track, WidgetSize,
+    Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
+    Item, ItemGroup, Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData,
+    StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -213,6 +213,17 @@ fn realize_kind(
                 let emit = emit.clone();
                 it = it.hint_target(id).on_activate(move || emit(carrier.clone()));
             }
+            // Slots: the row's leading / trailing affordances. It has **no default slot** — its
+            // middle is the label, which comes from `text` — so a child with neither slot name is
+            // ignored rather than silently dropped somewhere it doesn't belong.
+            for child in &node.children {
+                let realized = realize(child, emit, hints, forms);
+                match slot_of(child) {
+                    Some("leading") => it = it.leading_boxed(realized),
+                    Some("trailing") => it = it.trailing_boxed(realized),
+                    other => warn_unknown_slot(node, child, other, &["leading", "trailing"]),
+                }
+            }
             Box::new(it)
         }
         WidgetKind::RailCell => {
@@ -294,10 +305,70 @@ fn realize_kind(
         // ── Layout ──
         WidgetKind::Grid => realize_grid(node, emit, hints, forms),
 
-        // Structured / host-driven kinds still need model support the scalar description
-        // can't express yet — named child slots (`DockFrame`, `Toast`, `choice-7`). Until then
-        // these realize to an empty container (total for untrusted input) rather than a wrong guess.
-        WidgetKind::DockFrame | WidgetKind::ScrollBar | WidgetKind::Toast => {
+        WidgetKind::DockFrame => {
+            let mut dock = DockFrame::new(text_of(node))
+                .expanded(bool_prop(node, "expanded").unwrap_or(true))
+                .active(bool_prop(node, "active").unwrap_or(false))
+                .nav_selected(bool_prop(node, "nav_selected").unwrap_or(false));
+            if bool_prop(node, "frameless").unwrap_or(false) {
+                dock = dock.frameless();
+            }
+            if let Some(on_toggle) = toggle_change(node, emit) {
+                dock = dock.on_toggle(on_toggle);
+            }
+            // Slots: `header` is the controls slot (a search field, a count badge); everything else
+            // is body content — the body is the **default slot**, so an unslotted child lands there.
+            for child in &node.children {
+                let realized = realize(child, emit, hints, forms);
+                match slot_of(child) {
+                    Some("header") => dock = dock.header_boxed(realized),
+                    None => dock = dock.child_boxed(realized),
+                    other => {
+                        warn_unknown_slot(node, child, other, &["header"]);
+                        dock = dock.child_boxed(realized);
+                    }
+                }
+            }
+            // NB: `.rail(..)` is host-only — it binds a host-owned `Signal<RegionMode>`, which
+            // static serializable data cannot drive (same rule as `ScrollBar`).
+            Box::new(dock)
+        }
+        WidgetKind::Toast => {
+            let mut toast = Toast::new(text_of(node)).severity(severity_prop(node));
+            if let Some(glyph) = glyph_prop(node) {
+                toast = toast.icon(glyph);
+            }
+            if let Some(body) = node.props.get("body").and_then(PropValue::as_text) {
+                toast = toast.body(body);
+            }
+            if let Some(dismissible) = bool_prop(node, "dismissible") {
+                toast = toast.dismissible(dismissible);
+            }
+            // The inline action is a **labelled button**, not arbitrary content — so it is a prop
+            // (`action_text`) plus an `action` intent, not a slot. A slot would have promised
+            // composition the widget doesn't offer.
+            if let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
+                && let Some(carrier) = intent_carrier(node, "action")
+            {
+                let emit = emit.clone();
+                toast = toast.action(label, move || emit(carrier.clone()));
+            }
+            if let Some(carrier) = intent_carrier(node, "press") {
+                let emit = emit.clone();
+                toast = toast.on_click(move || emit(carrier.clone()));
+            }
+            if let Some(carrier) = intent_carrier(node, "dismiss") {
+                let emit = emit.clone();
+                toast = toast.on_dismiss(move || emit(carrier.clone()));
+            }
+            Box::new(toast)
+        }
+
+        // `ScrollBar` is **host-only** by design: its state is live host signals
+        // (`content_extent` / `viewport_extent` / `offset`), which static, serializable data
+        // fundamentally cannot drive — a declarative one would render a dead control. A plugin uses
+        // `Scroll` (a `ScrollRegion`), which owns its own offset. See `docs/widgets.md`.
+        WidgetKind::ScrollBar => {
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] realize: WidgetKind {:?} needs structured model support (ui-7) — empty",
@@ -624,6 +695,48 @@ fn parse_track(value: &PropValue) -> Track {
                 Track::Auto
             }
         }
+    }
+}
+
+/// The child's **`"slot"`** prop — which named place in its parent it belongs to (`"header"`,
+/// `"leading"`, `"trailing"`).
+///
+/// This is how a widget with **several places to put children** stays expressible without changing
+/// `ViewNode`'s shape: `children` remains one flat `Vec`, and the *child* says where it goes. No
+/// `slots: Map<..>` on the node, no second child vector, and the JSON stays flat. It generalizes to
+/// every future slotted widget for free.
+fn slot_of(node: &ViewNode) -> Option<&str> {
+    node.props.get("slot").and_then(PropValue::as_text)
+}
+
+/// A child named a slot its parent doesn't have (or none, where the parent has no default). Debug-log
+/// it and move on: `realize` is total for untrusted input, so a plugin's typo costs it a misplaced
+/// child, never a panic.
+fn warn_unknown_slot(parent: &ViewNode, child: &ViewNode, slot: Option<&str>, known: &[&str]) {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[heca] realize: {:?} child of a {:?} has slot {:?} — known slots: {:?}",
+        child.kind, parent.kind, slot, known,
+    );
+    #[cfg(not(debug_assertions))]
+    let _ = (parent, child, slot, known);
+}
+
+/// A node's intent for `event`, wrapped as the carrier a widget callback fires. (`press_intent` also
+/// registers a hint target; this is for events that aren't pick targets — `change`, `dismiss`, a
+/// toast's inline `action`.)
+fn intent_carrier(node: &ViewNode, event: &str) -> Option<InteractionIntent> {
+    node.intent(event)
+        .map(|i| InteractionIntent::View(i.clone()))
+}
+
+/// A `Toast`'s `"severity"` prop, by name. Unknown / absent → `Info` (the widget's own default).
+fn severity_prop(node: &ViewNode) -> ToastSeverity {
+    match node.props.get("severity").and_then(PropValue::as_text) {
+        Some("success") => ToastSeverity::Success,
+        Some("warning") => ToastSeverity::Warning,
+        Some("danger") => ToastSeverity::Danger,
+        _ => ToastSeverity::Info,
     }
 }
 
@@ -1357,6 +1470,114 @@ mod tests {
             .filter(|c| matches!(c, DrawCommand::Rect(_)))
             .count();
         assert_eq!(rules, 1, "the strikethrough, drawn as a rect (not shaped)");
+    }
+
+    // ── Named child slots ──
+
+    /// A child says **where it goes** with a `slot` prop, so a widget with several places for
+    /// children needs no change to `ViewNode`'s shape: `children` stays one flat vector.
+    ///
+    /// `DockFrame` has a **default** slot (the body), so an unslotted child lands there.
+    #[test]
+    fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::DockFrame)
+            .text("EXPLORER")
+            .prop("frameless", PropValue::Bool(true))
+            .child(
+                ViewNode::new(WidgetKind::Badge)
+                    .text("3")
+                    .prop("slot", PropValue::Text("header".into())),
+            )
+            .child(ViewNode::new(WidgetKind::Item).text("src"))
+            .child(ViewNode::new(WidgetKind::Item).text("tests"));
+
+        let dock = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        // The widget's own shape: children[0] = header row [toggle, CONTROLS], children[1] = body.
+        let header_controls = &dock.base().children[0].base().children[1];
+        assert_eq!(
+            header_controls.text_summary().as_deref(),
+            Some("3"),
+            "the slot=\"header\" child fills the controls slot",
+        );
+        assert_eq!(
+            dock.base().children[1].base().children.len(),
+            2,
+            "the unslotted children are body content (the body is the default slot)",
+        );
+    }
+
+    /// `Item` has **no default slot** — its middle is the label, which comes from `text` — so a child
+    /// naming no slot (or an unknown one) is ignored rather than dropped somewhere it doesn't belong.
+    /// Either way: no panic. Realize stays total for untrusted input.
+    #[test]
+    fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Item)
+            .text("main.rs")
+            .child(
+                ViewNode::new(WidgetKind::StatusDot)
+                    .prop("slot", PropValue::Text("leading".into())),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Badge)
+                    .text("M")
+                    .prop("slot", PropValue::Text("trailing".into())),
+            )
+            .child(ViewNode::new(WidgetKind::Label).text("nowhere")) // no slot → ignored
+            .child(
+                ViewNode::new(WidgetKind::Label)
+                    .text("also nowhere")
+                    .prop("slot", PropValue::Text("bogus".into())), // unknown → ignored
+            );
+
+        let item = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        // The widget's own shape: [LEADING, LABEL, TRAILING].
+        let slots = &item.base().children;
+        assert_eq!(slots.len(), 3, "the row keeps its three slots — nothing appended");
+        assert_eq!(
+            slots[2].text_summary().as_deref(),
+            Some("M"),
+            "the trailing slot holds the badge",
+        );
+        assert_eq!(
+            slots[1].text_summary().as_deref(),
+            Some("main.rs"),
+            "the label is still the middle — an unslotted child did not overwrite it",
+        );
+    }
+
+    /// `Toast` needs no slots: its inline action is a **labelled button**, not arbitrary content, so
+    /// it is a prop (`action_text`) + an `action` intent. A slot would have promised a composition
+    /// the widget does not offer.
+    #[test]
+    fn toast_node_realizes_its_props_and_three_intents() {
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+
+        let node = ViewNode::new(WidgetKind::Toast)
+            .text("Build failed")
+            .prop("severity", PropValue::Text("danger".into()))
+            .prop("body", PropValue::Text("3 errors in heca-grid-ui".into()))
+            .prop("action_text", PropValue::Text("RETRY".into()))
+            .on("action", Intent::new("rebuild"))
+            .on("dismiss", Intent::new("close_toast"));
+
+        let toast = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        assert!(
+            toast.base().children.is_empty(),
+            "the Toast draws its own card — it takes no children",
+        );
+
+        // An unknown severity degrades to the widget's default rather than erroring.
+        let bogus = ViewNode::new(WidgetKind::Toast)
+            .text("x")
+            .prop("severity", PropValue::Text("catastrophic".into()));
+        assert_eq!(severity_prop(&bogus), heca_grid_ui::ToastSeverity::Info);
+        assert_eq!(severity_prop(&node), heca_grid_ui::ToastSeverity::Danger);
     }
 
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.

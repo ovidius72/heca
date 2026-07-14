@@ -211,19 +211,28 @@
       "number": 7,
       "shortName": "choice-7-named-child-slots-slo",
       "title": "choice-7: Named child slots (`slot` prop) → `DockFrame` + `Item` leading/trailing + `Toast`",
-      "status": "planned",
-      "description": "Close the last structural gap: a node whose children belong to **different places** in the widget (a header vs a body, a leading vs a trailing slot). Today `ViewNode.children` is one flat `Vec`, so a declarative `DockFrame` cannot say \"this child is the header\", and a declarative `Item` cannot fill its slots.\n\n## The mechanism (LOCKED — no change to the `ViewNode` shape)\nA child node carries a **`slot` prop**: `.prop(\"slot\", PropValue::Text(\"header\".into()))`. The parent's `realize` arm routes children by that prop; a child with no `slot` goes to the default/body slot. This needs **zero** model surgery (no `slots: Map<..>` on `ViewNode`, no second child vector), keeps JSON flat, and generalizes to every future slotted widget.\n\nDocument the slot names per widget in `docs/widgets.md` (they are part of the widget's declarative contract, like its props).\n\n## Widgets\n1. **`DockFrame`** (`heca-grid-ui/src/widgets/dock_frame.rs:91`): `new(title)` + `.header(impl Component)` (the controls slot — a search field, a count `Badge`) + `.child(..)` (body) + `.expanded(bool)` / `.on_toggle` / `.active(bool)` / `.nav_selected(bool)` / `.frameless()`.\n   - Props: `text` (title), `expanded`, `active`, `nav_selected`, `frameless` (Bool).\n   - Slots: `slot=\"header\"` → `.header(..)`; no slot → body child.\n   - Event: `toggle` (added in choice-5).\n   - NOTE: `.rail(Signal<RegionMode>, Glyph)` is **host-only** (it binds a host-owned signal) — not exposed declaratively; document that.\n2. **`Item`** (`widgets/item.rs`): `slot=\"leading\"` / `slot=\"trailing\"` → the existing slot builders. This closes the gap `viewnode-task-3` documented (\"Item's slots are not modelled in ViewNode yet\").\n3. **`Toast`** (`widgets/toast.rs:117`): props `text` (title), `severity`, `icon`, `body`; the inline action becomes `slot=\"action\"` **or** props `action_text` + an `action` event intent (pick the simpler at implementation time and document it); events: `press` (whole card), `dismiss`, `action`.\n   - `Toast` is **presentation-only** — the host owns the queue/lifecycle via `ToastStack` + `ToastSpec` (`docs/widgets.md`). A declarative `Toast` is for **inline** use (e.g. a notification row inside a panel), NOT for firing app notifications; say so plainly in the docs.\n\n## Deliverables\n`slot` routing helper in `realize.rs` (one function, reused by all three arms); the three arms; tests (a `slot=\"header\"` child lands in the header, not the body; an unslotted child lands in the body; an unknown slot name is ignored, not a panic; `Item` leading/trailing); `docs/widgets.md` — all three move out of \"not realized yet\", each with the **slot names documented** + both audiences.\n\n## Gates\nclippy 0; `cargo test -p heca -p heca-grid-ui`; showcase green; no `cargo fmt`.",
+      "status": "done",
+      "description": "Close the last structural gap: a node whose children belong to **different places** in the widget (a header vs a body, a leading vs a trailing slot).\n\n## DONE 2026-07-14 — heca 352, heca-grid-ui 142, clippy clean. Host-bridge work with no UI surface; verified by tests.\n\n## The mechanism (as LOCKED — zero model surgery)\nA child carries a **`slot` prop** (`.prop(\"slot\", PropValue::Text(\"header\".into()))`) and the parent's arm routes on it. `ViewNode.children` stays **one flat `Vec`** — no `slots: Map<..>`, no second child vector, JSON stays flat — and it generalizes to every future slotted widget for free.\n\n**Two rules, both keeping `realize` total for untrusted input:**\n1. **A widget may declare a DEFAULT slot.** `DockFrame`'s is the body ⇒ an unslotted child lands there. **`Item` has none** — its middle *is* the label (from `text`) — so an unslotted child is **ignored** rather than dropped somewhere it doesn't belong.\n2. **An unknown slot name is never an error**: debug-logged (`warn_unknown_slot`), then falls back to the default slot (or ignored where there is none). A plugin's typo costs it a misplaced child, not a panic.\n\n## Shipped\n- `realize.rs`: `slot_of()` + `warn_unknown_slot()` (the one helper pair, reused by both slotted arms), `intent_carrier()` (an event → carrier for the non-pick events: `dismiss`, a toast's `action`), `severity_prop()` (unknown name → `Info`).\n- **`DockFrame` arm** — props `text` / `expanded` / `frameless` / `active` / `nav_selected`; slot `header` (the controls slot), body = default; event `toggle` (from choice-5, carries `args[\"expanded\"]`). **`.rail(..)` is host-only** and documented as such — it binds a host-owned `Signal<RegionMode>`, which static data cannot drive (the `ScrollBar` rule, now generalized to *individual builders* that bind a host signal).\n- **`Item` arm** — slots `leading` / `trailing`, no default.\n- **`Toast` arm** — props `text` / `severity` / `icon` / `body` / `action_text` / `dismissible`; events `press` / `dismiss` / `action`. **No slots, deliberately**: its inline action is a *labelled button*, not arbitrary content, so it is a prop + an intent. A slot would have promised a composition the widget doesn't offer.\n- **Boxed setters** (`realize` holds `Box<dyn Component>`, which is not itself `Component`): `DockFrame::header_boxed` / `child_boxed`, `Item::leading_boxed` / `trailing_boxed` — the `Dialog::body_boxed` seam.\n- **`Component::text_summary` on `Badge` / `Tag` / `BadgeButton`** — a real gap the tests exposed: these render their **own** text (they compose no `Label`), so the trait's default (first child that has one) reported `None`. The trait doc already said such widgets must override it; they now do.\n\n## Tests (+3 → heca 352)\n`dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body` · `item_routes_leading_and_trailing_slots_and_ignores_the_rest` (an unslotted **and** an unknown-slot child are both ignored; the row keeps its 3 slots and the label is not overwritten) · `toast_node_realizes_its_props_and_three_intents` (+ unknown severity → `Info`).\n\n## Docs\n`docs/widgets.md`: a new **\"Named child slots (the `slot` prop)\"** section in the model (the mechanism, the two rules, why it needs no model surgery); `Item`, `DockFrame` and `Toast` entries each gain their **Declarative** form with **their slot names listed** — slot names are part of a widget's declarative contract, like its props; the Toast entry states plainly that a declarative toast is for **inline** use, not for firing app notifications (the host owns the queue via `ToastStack` + `ToastSpec`). The model table gains all three, and the **\"not realized yet\" list is GONE**, replaced by a coverage statement. `view.rs` rustdoc in sync.\n\n## Coverage after this task\n**Every `WidgetKind` realizes to its widget**, except `ScrollBar` — host-only by design (live host signals cannot come from static data). choice-8 turns that statement into a *test* so it cannot rot.\n\n## Gates\nclippy 0 warnings · heca **352** · heca-grid-ui 142 + 71 + 1 · showcase builds. No `cargo fmt`.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b4ef758e-bf59-46ba-a77e-ebd9b20d6638-check-001-in-progress-done",
+          "date": "2026-07-14T13:36:55.851Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-14T13:31:37.029Z",
+      "completedAt": "2026-07-14T13:36:55.851Z",
       "createdAt": "2026-07-13T20:46:58.481Z",
-      "updatedAt": "2026-07-13T20:46:58.481Z"
+      "updatedAt": "2026-07-14T13:36:55.851Z"
     },
     {
       "id": "af69ae20-58d6-4014-a4b7-9294e0c7ebe1",
@@ -276,5 +285,5 @@
     }
   ],
   "createdAt": "2026-07-13T20:45:04.639Z",
-  "updatedAt": "2026-07-14T11:52:29.625Z"
+  "updatedAt": "2026-07-14T13:36:55.851Z"
 }
