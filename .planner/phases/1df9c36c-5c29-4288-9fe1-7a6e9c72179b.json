@@ -4,7 +4,7 @@
   "number": 16,
   "slug": "viewnode-choice-choice-primitive-compose-the-remaining-widgets-full-viewnode-coverage",
   "title": "viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage)",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -86,8 +86,8 @@
       "number": 3,
       "shortName": "choice-3-refactor-tabs-to-comp",
       "title": "choice-3: Refactor `Tabs` to compose `Choice` children",
-      "status": "planned",
-      "description": "Make `Tabs` (`heca-grid-ui/src/widgets/tabs.rs`) **compose its segments as `Choice` children** instead of laying them out from monospace metrics.\n\n## Current state\n`Tabs::new(labels: impl IntoIterator<Item = impl Into<String>>)` (`tabs.rs:51`) is documented as: \"lays its own segments from monospace metrics (**no child components**)\". It hand-computes each segment's width from `chars × font × MONO_ADVANCE_RATIO`, paints the labels itself, and animates a **sliding underline** between segment rects. Same class of violation as `Button` had (commit `07d4c1a`).\n\n## Work\n1. Segments become **`Choice` children** (a horizontal `Flex` row of them). `Tabs::new([\"A\",\"B\"])` stays as **sugar** building `Choice::labeled(..)` children — existing call sites unchanged.\n2. `Tabs::empty()` + `Parent` for composed tabs (icon + label, a `Badge` count, …).\n3. The **sliding underline** now animates between the *selected child's real bounds* instead of hand-computed segment rects — this is a simplification, and it makes the underline correct for non-text tabs.\n4. Preserve: `.selected(index)` (clamped), `.state() -> Signal<usize>`, `.index()`, `on_change` emitting `Action::value(\"tab-change\", SignalData::Usize(i))`, and the configurable nav intents `ItemPrevious`/`ItemNext` (`widget-keys-config`) — the widget must keep responding to `Event::Widget(WidgetIntent::…)`, NOT to hardcoded arrows.\n5. `focus_barrier` — the tab strip is one Tab stop; the individual tabs are not separate ones.\n6. Content color: the `Choice` owns its selected/hover tint; make sure `Tabs` doesn't double-tint.\n\n## Deliverables\nRefactored `tabs.rs`; showcase updated (a tab strip with an icon + a count `Badge` in one tab); tests: sugar builds `Choice` children; the underline tracks the selected child's bounds; `tab-change` payload unchanged; `ItemPrevious`/`ItemNext` still move selection. Rustdoc + `docs/widgets.md` (both audiences; the `ViewNode` arm lands in choice-4).\n\n## Gates\nclippy 0; `cargo test -p heca-grid-ui -p heca`; showcase green; no `cargo fmt`.",
+      "status": "in-progress",
+      "description": "Make `Tabs` (`heca-grid-ui/src/widgets/tabs.rs`) **compose its segments as `Choice` children** instead of laying them out from monospace metrics.\n\n## STATUS: code complete on `feat/viewnode-choice-select` (uncommitted). AWAITING USER TEST → then commit.\n\n## Done\n1. **Segments are `Choice` children.** `Tabs::new([\"A\",\"B\"])` stays as sugar building `Choice::labeled(text, text)` children (every call site compiles). New: `Tabs::empty()` + **`.tab(Choice)`** — typed to `Choice`, exactly as `Select::option` is, because the strip keeps each tab's `state()` **and** `hovered()` signals to drive them in place. (**Deviation from the task text, deliberate + same as choice-2:** `Parent` is NOT implemented — a `Box<dyn Component>` would erase those signals. choice-4's realize arm must build `Choice` typed.)\n2. **The underline tracks the selected child's REAL BOUNDS** (`underline_target()` reads `child.bounds`), animating between them in `tick`. All the segment arithmetic is gone — `segment()`, `total_width()`, `advance()`, `tab_at(rel_x)`, `MONO_ADVANCE_RATIO`, `TAB_PAD_H`, `V_PAD`. The underline is now correct for a tab holding an icon or a badge, which a char-count could never have measured. It **snaps** on the first layout (`on_layout`) instead of sliding in from the origin.\n3. **The strip hugs its tabs in both axes** (`width`/`height` = `Auto`; `align_self: Start` so it doesn't stretch in a column parent). The underline band is reserved as a **bottom margin on the tabs** — so the strip measures to \"the tallest tab + the band\" without computing a height. (A padding on the strip could not: it would inset the tabs, and the underline must sit *under* them.)\n4. **Hit-testing via `choice_at()`** — real bounds, no x-arithmetic.\n5. `focus_barrier` on. Preserved: `.selected(i)` (clamped), `.state()`, `.index()`, `on_change` → `Action::value(\"tab-change\", Usize)`, and `ItemPrevious`/`ItemNext` (still `Event::Widget`, no literal keys). Added `.selected_label()` (the tab's `text_summary()`).\n6. `tick` recurses into the tabs (a Spinner/Badge inside one animates).\n\n## VISUAL CHANGES — the user must review these\nThe tab now looks like an **option** (the `Choice` owns the look, `Tabs` adds the underline):\n- selected: accent **pill** + accent content (was: accent bold text, no pill);\n- unselected: **foreground** content (was: `muted` until hovered);\n- hover: the `Choice`'s hover tint (was: muted → foreground brightening);\n- horizontal padding is the option padding (`BASE_PAD` 8·scale, shared with `Select`'s rows) instead of `TAB_PAD_H` 14 → tabs are tighter, and the underline is correspondingly narrower (it spans the pill).\n\nThis is the consequence of \"an option looks the same everywhere\". If the user prefers the old muted/no-pill strip, the clean fix is a `Choice` builder that defers its chrome to the container (the container draws the indicator) — NOT a hand-drawn tab.\n\n## Tests (heca-grid-ui 138)\n`tabs_underline_slides_toward_the_selected_tabs_bounds` (rewritten — the old one picked the *first* Rect in the scene, which is now the selected tab's pill, so it would have passed while measuring the wrong thing; it now selects the underline by its 2px thickness, asserts it starts snapped to tab 0's bounds, does not jump on selection, and lands exactly on tab 1's bounds/width) · `tabs_sugar_builds_choice_children_and_composed_tabs_carry_their_content` (sugar → `Choice` children; a composed icon+label+`Badge` tab measures wider than a plain one; the selected tab's content is accent-tinted through the `Choice`, with no wiring from `Tabs`) · the existing nav/click test passes unchanged.\n\n## Docs\n`docs/widgets.md` `Tabs` entry rewritten — both audiences (native sugar + composed, and the declarative `ViewNode` form), the bounds-tracking underline, the margin-band measuring rule, `focus_barrier`. Rustdoc likewise.\n\n## Showcase\nA second, composed tab strip: `Icon + Label`, `Label + Badge::danger(\"3\")`, and a plain one.\n\n## Gates (2026-07-14)\nclippy `--workspace --all-targets --all-features` 0 warnings · heca-grid-ui **138** + 71 + 1 · heca 335 · showcase builds. No `cargo fmt`.\n\n## NEXT\nUser tests → commit → **choice-4** (realize arms for `Choice`/`Select`/`Tabs` + value→intent args).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -95,10 +95,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-14T07:47:13.915Z",
       "completedAt": "",
       "createdAt": "2026-07-13T20:46:02.413Z",
-      "updatedAt": "2026-07-13T20:46:02.413Z"
+      "updatedAt": "2026-07-14T07:52:14.314Z"
     },
     {
       "id": "bfc43fce-a202-414c-a3f6-0d87a50547e8",
@@ -202,5 +202,5 @@
     }
   ],
   "createdAt": "2026-07-13T20:45:04.639Z",
-  "updatedAt": "2026-07-14T07:46:27.240Z"
+  "updatedAt": "2026-07-14T07:52:14.314Z"
 }

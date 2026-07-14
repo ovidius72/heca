@@ -945,24 +945,69 @@ ViewNode::new(WidgetKind::Input)
 
 ### Tabs
 
-Horizontal segmented selector with an animated sliding underline; lays its own segments
-from monospace metrics (no child components). Focusable; click selects.
+Horizontal segmented selector with an animated sliding underline. Focusable, and **one Tab stop**
+([`Base.focus_barrier`](#base)) — the individual tabs are not separate stops. Click selects.
 
-- **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`.
-- **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits;
-  strip re-measures), `.on_change(impl Fn(Action))`.
-- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`.
-- **Emits**: `"tab-change"` / `SignalData::Usize`.
+**Its segments are [`Choice`](#choice) children** — the same option primitive [`Select`](#select)
+mounts as its dropdown rows. So a tab can be anything: a word, an icon + a label, a label with a
+count `Badge`. `Tabs` owns only the strip's chrome (the underline, the focus ring); each tab draws
+itself and tints its own content when selected.
+
+**The underline slides between the selected child's real bounds.** It follows whatever the tab
+actually *is* — no monospace metrics, no segment arithmetic — so it is correct for a tab holding an
+icon or a badge, which a char-count could never have measured. The strip **hugs its tabs** in both
+axes; the underline's band is reserved as a bottom margin on the tabs, so the strip measures to "the
+tallest tab + the band" without anyone computing a height.
+
+- **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`,
+  **sugar** that builds a `Choice::labeled(text, text)` per tab (the value *is* the text) ·
+  `Tabs::empty()` — no tabs, compose them.
+- **Content**: `.tab(Choice)` — appends a composed tab. Typed to `Choice` for the same reason
+  `Select::option` is: the strip keeps the tab's `state()` / `hovered()` signals so it can drive them
+  in place.
+- **Builders**: `.selected(index)` (initial, clamped — call it **after** the tabs), `.font_size(f32)`
+  (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` (the
+  selected tab's [text summary](#component-trait)).
+- **Emits**: `"tab-change"` / `SignalData::Usize` (the index — unchanged).
 - **Keys** (`widget-keys-config`): navigation is host-configured, not hardcoded. As a **horizontal**
   selector the widget moves selection on the semantic `Event::Widget(WidgetIntent::{ItemPrevious,
   ItemNext})` (left/right). The host resolves the configurable `item_previous` / `item_next`
   `[keys.widgets]` bindings into it (defaults ←/`Ctrl+h` → previous, →/`Ctrl+l` → next) via
   `Keymap::dispatch` — delivering to the focused widget.
 
+**Native:**
+
 ```rust
+// Sugar — plain text tabs.
 Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
     .on_change(|a| if let SignalData::Usize(i) = a.data { show_tab(i); });
+
+// Composed — a tab is a value plus any content; the underline spans whatever it is.
+Tabs::empty()
+    .tab(Choice::new("files").child(Icon::new(Glyph::FolderOpen)).child(Label::new("FILES")))
+    .tab(Choice::new("issues").child(Label::new("ISSUES")).child(Badge::danger("3")))
+    .selected(1)
+    .on_change(|a| if let SignalData::Usize(i) = a.data { show_tab(i); });
 ```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Tabs)
+    .prop("selected", PropValue::Int(1))
+    .on("change", Intent::new("show_tab"))
+    .child(ViewNode::new(WidgetKind::Choice).prop("value", PropValue::Text("files".into()))
+        .child(ViewNode::new(WidgetKind::Label).text("FILES")))
+    .child(ViewNode::new(WidgetKind::Choice).prop("value", PropValue::Text("issues".into()))
+        .child(ViewNode::new(WidgetKind::Label).text("ISSUES"))
+        .child(ViewNode::new(WidgetKind::Badge).text("3")));
+// The `change` intent fires with args {"value": "issues"} — the tab's value, not an opaque index.
+```
+
+Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is
+ignored). The `realize` arm — and the index → value mapping — lands in `choice-4`; see
+[Declarative UI model](#declarative-ui-model-viewnode).
 
 ### Select
 

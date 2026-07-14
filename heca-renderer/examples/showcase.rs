@@ -560,6 +560,23 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // Tabs: segmented selector with a sliding underline.
         .child(caption("Tabs"))
         .child(Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).on_change(report))
+        // Composed tabs: a tab is a value plus any content — the underline spans whatever it is.
+        .child(
+            Tabs::empty()
+                .tab(
+                    Choice::new("files")
+                        .child(Icon::new(Glyph::FolderOpen))
+                        .child(Label::new("FILES")),
+                )
+                .tab(
+                    Choice::new("issues")
+                        .child(Label::new("ISSUES"))
+                        .child(Badge::danger("3")),
+                )
+                .tab(Choice::labeled("log", "LOG"))
+                .selected(1)
+                .on_change(report),
+        )
         .child(caption("Separator"))
         .child(Separator::horizontal().length(440.0))
         // Display widgets: status dot + badges across variants.
