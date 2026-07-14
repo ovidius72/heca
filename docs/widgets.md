@@ -1006,8 +1006,8 @@ ViewNode::new(WidgetKind::Tabs)
 ```
 
 Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is
-ignored). The `realize` arm — and the index → value mapping — lands in `choice-4`; see
-[Declarative UI model](#declarative-ui-model-viewnode).
+ignored). The `change` intent carries the chosen option's **value**, not its index — see
+[Options are children](#options-are-children-select--tabs--choice).
 
 ### Select
 
@@ -1097,9 +1097,8 @@ ViewNode::new(WidgetKind::Select)
 
 Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is ignored).
 A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button` does; when it
-has children, **children win**. The `realize` arm for `Select` / `Choice` — and the index → value
-mapping described above — lands in `choice-4`; see
-[Declarative UI model](#declarative-ui-model-viewnode).
+has children, **children win**. See
+[Options are children](#options-are-children-select--tabs--choice).
 
 #### How the rows can be children *and* live in an overlay
 
@@ -1186,8 +1185,27 @@ Choice::new("high")
     .on_activate(|| set_level("high"));
 ```
 
-> **Declarative form**: `WidgetKind::Choice` (prop `value`, `text` as the childless sugar, children =
-> content) lands with the `Select`/`Tabs` realize arms — phase `viewnode-choice`, task `choice-4`.
+**Declarative:**
+
+```rust
+// As an option of a Select/Tabs (the usual case — see "Options are children").
+ViewNode::new(WidgetKind::Choice)
+    .prop("value", PropValue::Text("high".into()))
+    .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+    .child(ViewNode::new(WidgetKind::Label).text("HIGH"));
+
+// Standalone — then it is activatable in its own right, and hintable like any actionable node.
+ViewNode::new(WidgetKind::Choice)
+    .prop("value", PropValue::Text("high".into()))
+    .text("HIGH")                                   // childless sugar → one Label child
+    .on_press(Intent::new("set_level"));
+```
+
+Props `realize` reads: `value` (`Text`/`Int` — what the option *means*), `text` (the **childless**
+sugar → a `Label` child; with children, **children win**, the same precedence as `Button`). With no
+`value`, the text stands in for it. Events: `press` — wired **only** when the `Choice` is standalone;
+inside a `Select`/`Tabs` the container owns the click, so a `press` there is ignored rather than
+half-wired. See [Options are children](#options-are-children-select--tabs--choice).
 
 ### Item
 
@@ -2018,12 +2036,44 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 | `Gauge` | `value` (Float) | — |
 | `Item` | `text` (label) | `press` |
+| **`Choice`** | `value` (Text/Int), **+ children** (the content); `text` = the **childless sugar** | `press` (standalone only) |
+| **`Select`** / **`Tabs`** | `selected` (Int), **+ `Choice` children** (the options) | `change` — carries the chosen **value** |
 
 `PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
 · `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name). A **`"name"` prop** on a value
 widget opts it into a submitted modal's returned `data` (see [Dialog](#dialog) → *Declaring a modal
-from data*). Not realized yet (need structured/list props — `plugin-task-ui-9`): `Select`, `Tabs`,
-`Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast`.
+from data*). Not realized yet (need track/slot props — `choice-5`..`choice-7`): `Grid`, `ItemGroup`,
+`DockFrame`, `MarkerGroup`, `Toast`. `ScrollBar` is **host-only** by design — its state is live host
+signals, which static serializable data cannot drive; a plugin uses `Scroll`.
+
+### Options are children (`Select` / `Tabs` / `Choice`)
+
+An option is **a node with a value and arbitrary content**, and a picker's options are its
+**children** — never a `props["options"]` list of strings. That is what lets a declarative option
+compose an icon and a label exactly like a native one:
+
+```rust
+ViewNode::new(WidgetKind::Select)
+    .prop("selected", PropValue::Int(1))
+    .on("change", Intent::new("set_level"))
+    .child(ViewNode::new(WidgetKind::Choice)
+        .prop("value", PropValue::Text("low".into()))
+        .child(ViewNode::new(WidgetKind::Label).text("LOW")))
+    .child(ViewNode::new(WidgetKind::Choice)
+        .prop("value", PropValue::Text("high".into()))
+        .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+        .child(ViewNode::new(WidgetKind::Label).text("HIGH")));
+```
+
+**The chosen value comes back, not an index.** The widgets track a selected index — they are
+indexable lists, that is their business — but an index means nothing to a plugin and breaks silently
+the moment the options are reordered. So `realize` captures the options' `value` props and maps the
+index back through them: the bound `change` intent fires with **`args["value"]`** set —
+`{"value": "high"}`. An option carrying no `value` falls back to `args["index"]`.
+
+Two rules keep `realize` total for untrusted input: a childless `Choice` desugars its `text` to a
+`Label` child (**children win**, the same precedence as `Button`), and a child of a `Select`/`Tabs`
+that is **not** a `Choice` is ignored rather than realized into a broken option.
 
 ### Declaring a tree — internal code and plugins (same model)
 

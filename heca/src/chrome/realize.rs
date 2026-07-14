@@ -25,9 +25,10 @@
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
-    Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Component,
-    Flex, Gauge, Glyph, HintExt, HintTargetId, Icon, IconButton, Input, Item, Label, LayoutExt,
-    RailCell, ScrollRegion, StatusDot, Surface, Tag, Toggle, WidgetSize,
+    Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
+    Component, Flex, Gauge, Glyph, HintExt, HintTargetId, Icon, IconButton, Input, Item, Label,
+    LayoutExt, RailCell, ScrollRegion, Select, SignalData, StatusDot, Surface, Tabs, Tag, Toggle,
+    WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -196,17 +197,58 @@ pub(crate) fn realize(
             Box::new(cell)
         }
 
+        // ── Options ──
+        // An option is a node with a **value** and arbitrary content — and options are **children**,
+        // not a `props["options"]` list of strings. That is what lets a declarative option compose
+        // an icon + a label exactly like a native one, and what carries the chosen *value* back to
+        // the author (see `realize_options`).
+        WidgetKind::Choice => {
+            let mut choice = realize_choice(node, emit, hints, forms);
+            // A standalone `Choice` (outside a Select/Tabs) is activatable on its own. Inside a
+            // container the container owns the click, so a `press` there is ignored, not half-wired.
+            if let Some((id, carrier)) = press_intent(node, hints) {
+                let emit = emit.clone();
+                choice = choice
+                    .hint_target(id)
+                    .on_activate(move || emit(carrier.clone()));
+            }
+            Box::new(choice)
+        }
+        WidgetKind::Select => {
+            let mut select = Select::empty();
+            for option in realize_options(node, emit, hints, forms) {
+                select = select.option(option);
+            }
+            if let Some(i) = usize_prop(node, "selected") {
+                select = select.selected(i);
+            }
+            if let Some(on_change) = option_change(node, emit) {
+                select = select.on_change(on_change);
+            }
+            Box::new(select)
+        }
+        WidgetKind::Tabs => {
+            let mut tabs = Tabs::empty();
+            for option in realize_options(node, emit, hints, forms) {
+                tabs = tabs.tab(option);
+            }
+            if let Some(i) = usize_prop(node, "selected") {
+                tabs = tabs.selected(i);
+            }
+            if let Some(on_change) = option_change(node, emit) {
+                tabs = tabs.on_change(on_change);
+            }
+            Box::new(tabs)
+        }
+
         // Structured / host-driven kinds still need model support the scalar description
-        // can't express yet — list props (Select options, Tabs labels), track config (Grid),
-        // markers (MarkerGroup), or host wiring (ScrollBar, Toast). Tracked as `plugin-task-ui-9`
-        // (likely folded into the composition-first pass `ui-7`). Until then these realize to an
-        // empty container (total for untrusted input) rather than a wrong guess.
+        // can't express yet — track config (Grid), named slots (DockFrame), markers (MarkerGroup),
+        // or host wiring (ScrollBar, Toast). Tracked as `choice-5`..`choice-8`. Until then these
+        // realize to an empty container (total for untrusted input) rather than a wrong guess.
         WidgetKind::Grid
         | WidgetKind::ItemGroup
         | WidgetKind::DockFrame
         | WidgetKind::MarkerGroup
-        | WidgetKind::Tabs
-        | WidgetKind::Select
         | WidgetKind::ScrollBar
         | WidgetKind::Toast => {
             #[cfg(debug_assertions)]
@@ -331,6 +373,100 @@ fn realize_button(
     button
 }
 
+/// Realize one [`Choice`] — an option: a **value** plus composed content.
+///
+/// Typed to `Choice` (not `Box<dyn Component>`) because that is what `Select::option` / `Tabs::tab`
+/// take: those containers keep the option's state signals to drive selection in place, which a
+/// boxed component would have erased.
+///
+/// Precedence mirrors [`Button`](realize_button): **children win**; a *childless* node falls back to
+/// the `text` sugar (→ one `Label` child, exactly the child the explicit form would build). The
+/// `value` prop is what the option *means*, independently of what it shows; with no `value`, the
+/// text stands in for it, so `Choice { text: "HIGH" }` behaves like the native `Choice::labeled`.
+fn realize_choice(
+    node: &ViewNode,
+    emit: &ChromeIntentEmitter,
+    hints: &mut HintTargetRegistry,
+    forms: &mut FormBindings,
+) -> Choice {
+    let value = value_prop(node)
+        .map(|v| value_string(&v))
+        .unwrap_or_else(|| text_of(node));
+    let mut choice = if node.children.is_empty() {
+        // Sugar: the scalar prop describes the content.
+        Choice::labeled(value, text_of(node))
+    } else {
+        Choice::new(value)
+    };
+    for child in &node.children {
+        choice
+            .base_mut()
+            .children
+            .push(realize(child, emit, hints, forms));
+    }
+    choice
+}
+
+/// Realize the `Choice` children of a `Select`/`Tabs`, in order.
+///
+/// A child of another kind is **ignored** (with a debug log): `realize` is total for untrusted
+/// input, and the options of an option-picker are options.
+fn realize_options(
+    node: &ViewNode,
+    emit: &ChromeIntentEmitter,
+    hints: &mut HintTargetRegistry,
+    forms: &mut FormBindings,
+) -> Vec<Choice> {
+    node.children
+        .iter()
+        .filter(|child| {
+            let is_choice = child.kind == WidgetKind::Choice;
+            #[cfg(debug_assertions)]
+            if !is_choice {
+                eprintln!(
+                    "[heca] realize: {:?} is not a valid option of a {:?} — ignored (options are Choice nodes)",
+                    child.kind, node.kind
+                );
+            }
+            is_choice
+        })
+        .map(|child| realize_choice(child, emit, hints, forms))
+        .collect()
+}
+
+/// The change handler for an option picker (`Select`/`Tabs`) — **this is where the chosen value
+/// reaches the author**.
+///
+/// The widgets track a selected *index* (they are indexable lists; that is their business). But an
+/// index is meaningless to a plugin, and it silently breaks the moment the options are reordered. So
+/// `realize` captures the options' `value` props here, and maps the index back through them when the
+/// change fires: the bound intent is dispatched with `args["value"]` set to the chosen option's
+/// value — `{"value": "high"}`, not an opaque `1`.
+///
+/// An option with no `value` falls back to `args["index"]`, so a value-less picker still reports
+/// *something* rather than dispatching a bare intent.
+fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(Action) + 'static> {
+    let intent = node.intent("change")?.clone();
+    let values: Vec<Option<PropValue>> = node
+        .children
+        .iter()
+        .filter(|child| child.kind == WidgetKind::Choice)
+        .map(value_prop)
+        .collect();
+    let emit = emit.clone();
+    Some(move |action: Action| {
+        let SignalData::Usize(i) = action.data else {
+            return;
+        };
+        let mut intent = intent.clone();
+        match values.get(i).cloned().flatten() {
+            Some(value) => intent.args.insert("value".into(), value),
+            None => intent.args.insert("index".into(), PropValue::Int(i as i64)),
+        };
+        emit(InteractionIntent::View(intent));
+    })
+}
+
 // ── Prop readers ──────────────────────────────────────────────────────────────────────
 // Small helpers that pull a typed value out of the node's prop bag. Missing/mistyped props
 // are simply absent (the widget keeps its default), never an error — the model is untrusted
@@ -357,6 +493,36 @@ fn f32_prop(node: &ViewNode, key: &str) -> Option<f32> {
 /// A `"bool"`-typed prop (`"on"`, `"checked"`).
 fn bool_prop(node: &ViewNode, key: &str) -> Option<bool> {
     node.props.get(key).and_then(PropValue::as_bool)
+}
+
+/// An index prop (`"selected"`) as a `usize`. Negative values are ignored (the widget keeps its
+/// default) rather than wrapping — the model is untrusted input.
+fn usize_prop(node: &ViewNode, key: &str) -> Option<usize> {
+    match node.props.get(key)? {
+        PropValue::Int(i) => usize::try_from(*i).ok(),
+        _ => None,
+    }
+}
+
+/// An option's `"value"` prop — what the option *means*, as opposed to what it shows. `Text` or
+/// `Int`; any other type is ignored. Kept as a [`PropValue`] so the type survives the round trip
+/// into the change intent's args.
+fn value_prop(node: &ViewNode) -> Option<PropValue> {
+    match node.props.get("value")? {
+        v @ (PropValue::Text(_) | PropValue::Int(_)) => Some(v.clone()),
+        _ => None,
+    }
+}
+
+/// An option value as the plain string the widget stores (`heca-grid-ui` never depends on the app,
+/// so a `Choice` carries a `String`; the richer `PropValue` is re-attached at the boundary — see
+/// [`option_change`]).
+fn value_string(value: &PropValue) -> String {
+    match value {
+        PropValue::Text(s) => s.clone(),
+        PropValue::Int(i) => i.to_string(),
+        _ => String::new(),
+    }
 }
 
 /// The field `"name"` a value widget submits its value under (`ModalResult::Action`'s `data`).
@@ -605,15 +771,153 @@ mod tests {
         );
     }
 
-    /// A still-deferred structured kind (needs list/track model support) realizes to an empty
-    /// container instead of panicking — the tree stays total for untrusted plugin/RPC input.
+    /// A still-deferred structured kind (needs track/slot model support — `Grid`, `choice-6`)
+    /// realizes to an empty container instead of panicking — the tree stays total for untrusted
+    /// plugin/RPC input.
     #[test]
     fn deferred_kind_is_empty_not_panic() {
         let mut hints = HintTargetRegistry::default();
-        let node = ViewNode::new(WidgetKind::Tabs);
+        let node = ViewNode::new(WidgetKind::Grid);
         let realized = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(realized.base().children.len(), 0);
         assert_eq!(hints.checkpoint(), 0, "an empty fallback registers no hints");
+    }
+
+    // ── Options (Choice / Select / Tabs) ──
+
+    /// An option node: a `value` plus composed content.
+    fn option_node(value: &str, label: &str) -> ViewNode {
+        ViewNode::new(WidgetKind::Choice)
+            .prop("value", PropValue::Text(value.into()))
+            .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("circle".into())))
+            .child(ViewNode::new(WidgetKind::Label).text(label))
+    }
+
+    /// A `Select`'s options are its **children** — not a list of strings in a prop — so each one
+    /// composes its own content (here an icon + a label), exactly like a native `Choice`.
+    #[test]
+    fn select_node_realizes_its_choice_children_as_options() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Select)
+            .prop("selected", PropValue::Int(1))
+            .child(option_node("low", "LOW"))
+            .child(option_node("high", "HIGH"));
+
+        let select = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let options = &select.base().children;
+        assert_eq!(options.len(), 2, "one option per Choice child");
+        assert_eq!(
+            options[1].base().children.len(),
+            2,
+            "the option composes its own content: icon + label",
+        );
+        assert_eq!(
+            options[1].text_summary().as_deref(),
+            Some("HIGH"),
+            "the option is named by the content it composes",
+        );
+    }
+
+    /// **The point of the whole model.** The widget tracks an index (it is an indexable list), but an
+    /// index is meaningless to a plugin and breaks the moment the options are reordered. `realize`
+    /// maps it back through the options' `value` props, so the author's intent fires with
+    /// `{"value": "high"}`.
+    #[test]
+    fn the_change_intent_carries_the_chosen_options_value_not_its_index() {
+        use heca_grid_ui::{Event, LayoutEngine};
+        use heca_core::layout::{Point, Size};
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+
+        let node = ViewNode::new(WidgetKind::Select)
+            .on("change", Intent::new("set_level"))
+            .child(option_node("low", "LOW"))
+            .child(option_node("high", "HIGH"));
+        let mut select = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        LayoutEngine::new().compute(select.as_mut(), Size::new(400.0, 300.0));
+
+        // Open the dropdown, then click the second option where it actually is (its real bounds).
+        let trigger = select.base().bounds;
+        select.event(&Event::PointerPressed {
+            pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
+        });
+        let high = select.base().children[1].base().bounds;
+        select.event(&Event::PointerPressed {
+            pos: Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0),
+        });
+
+        let fired = fired.borrow();
+        let [InteractionIntent::View(intent)] = fired.as_slice() else {
+            panic!("expected exactly one View intent, got {fired:?}");
+        };
+        assert_eq!(intent.action, "set_level");
+        assert_eq!(
+            intent.args.get("value"),
+            Some(&PropValue::Text("high".into())),
+            "the chosen option's value, not an opaque index",
+        );
+    }
+
+    /// The same model, and the same value mapping, drives a `Tabs` node — one option primitive, two
+    /// consumers.
+    #[test]
+    fn tabs_node_realizes_choice_children_and_reports_the_chosen_value() {
+        use heca_grid_ui::{Event, LayoutEngine, WidgetIntent};
+        use heca_core::layout::Size;
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+
+        let node = ViewNode::new(WidgetKind::Tabs)
+            .on("change", Intent::new("show_tab"))
+            .child(option_node("files", "FILES"))
+            .child(option_node("issues", "ISSUES"));
+        let mut tabs = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
+        assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
+
+        tabs.event(&Event::Widget(WidgetIntent::ItemNext));
+        let fired = fired.borrow();
+        let [InteractionIntent::View(intent)] = fired.as_slice() else {
+            panic!("expected exactly one View intent, got {fired:?}");
+        };
+        assert_eq!(intent.action, "show_tab");
+        assert_eq!(intent.args.get("value"), Some(&PropValue::Text("issues".into())));
+    }
+
+    /// A **childless** `Choice` falls back to the scalar sugar — `text` → one `Label` child, the very
+    /// child the composed form would build. Same precedence rule as `Button`: children win.
+    #[test]
+    fn childless_choice_node_desugars_its_text_to_a_label_child() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Choice)
+            .prop("value", PropValue::Text("high".into()))
+            .text("HIGH");
+        let choice = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(choice.base().children.len(), 1, "text desugars to a Label child");
+        assert_eq!(choice.text_summary().as_deref(), Some("HIGH"));
+    }
+
+    /// A stray non-`Choice` child of an option picker is **ignored**, not realized into a broken
+    /// option and not a panic: `realize` is total for untrusted plugin/RPC input.
+    #[test]
+    fn a_non_choice_child_of_a_select_is_ignored() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Select)
+            .child(option_node("low", "LOW"))
+            .child(ViewNode::new(WidgetKind::Button).text("I am not an option"))
+            .child(option_node("high", "HIGH"));
+        let select = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(
+            select.base().children.len(),
+            2,
+            "only the two Choice children became options",
+        );
     }
 
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.

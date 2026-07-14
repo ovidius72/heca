@@ -767,12 +767,18 @@ Button::destructive("Delete")
     .on_click(move || emit(intent))
 ```
 
-**Genuinely OPEN (the live design space):** `realize` coverage still misses `Select` / `Tabs` /
-`Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `ScrollBar` / `Toast` (need structured props,
-`plugin-task-ui-9`); composing the leaf widgets (**`Button` first** — it hand-draws its label);
-how a child inherits its parent's **per-state content color** (an unstyled child `Label`/`Icon`
-must tint with the parent's hover/disabled state — the `Theme` is only reachable in `paint`); and
-a typed builder SDK over `ViewNode`.
+**Genuinely OPEN (the live design space):** `realize` coverage still misses `Grid` / `ItemGroup` /
+`DockFrame` / `MarkerGroup` / `Toast` (they need track/slot props — phase `viewnode-choice`, tasks
+`choice-5`..`choice-7`); and a typed builder SDK over `ViewNode`.
+
+**SETTLED since (do not re-open):** `Button`, `Item`, `Select` and `Tabs` **compose their content**
+(a hand-drawn leaf is a refactor target, not a style). An **option is a node with a value and
+arbitrary content, and options are CHILDREN** — the `Choice` widget — never a `props["options"]`
+list of strings; `realize` maps the widget's index back through the options' `value` props, so a
+`change` intent carries `{"value": "high"}`, never an opaque index. A child inherits its parent's
+per-state **content color** via `PaintCx::with_content_color` (the control publishes one value per
+frame; unstyled `Label`/`Icon` children pull it). `ScrollBar` is **host-only** — a widget whose
+state is a live host signal cannot be driven by static serializable data; plugins use `Scroll`.
 
 Background reading (the rules above are self-contained — you do **not** need these to avoid the
 mistakes): `docs/widget-architecture.md` (same content, with rationale); `pluggable-chrome-plugin-plan.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`.

@@ -44,6 +44,9 @@ pub enum WidgetKind {
     MarkerGroup,
     /// A tab strip + panel.
     Tabs,
+    /// One selectable **option**: a `value` plus arbitrary composed content. The children of a
+    /// [`Select`](WidgetKind::Select) / [`Tabs`](WidgetKind::Tabs) — and usable on its own.
+    Choice,
 
     // ── Leaves ──
     Label,
@@ -225,11 +228,37 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Gauge` | `value` (Float) | — |
 /// | `StatusDot` | — | — |
 /// | `Item` | `text` (label) | `press` |
+/// | `Choice` | `value` (Text/Int), `text` (childless sugar) + children | `press` (standalone only) |
+/// | `Select` / `Tabs` | `selected` (Int) + `Choice` children | `change` (carries the chosen **value**) |
 ///
 /// A **`"name"` prop** on a value widget (`Input`/`Toggle`/`Checkbox`) opts it into a submitted
-/// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`). The
-/// structured kinds `Select` / `Tabs` / `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` /
-/// `ScrollBar` / `Toast` are **not realized yet** (they need list/structured props — `plugin-task-ui-9`).
+/// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`).
+///
+/// # Options are children (`Select` / `Tabs` / `Choice`)
+/// An option is **a node with a value and arbitrary content**, and the options of a picker are its
+/// **children** — never a `props["options"]` list of strings. That is what lets a declarative option
+/// compose an icon + a label exactly like a native one:
+///
+/// ```ignore
+/// ViewNode::new(WidgetKind::Select)
+///     .prop("selected", PropValue::Int(1))
+///     .on("change", Intent::new("set_level"))
+///     .child(ViewNode::new(WidgetKind::Choice)
+///         .prop("value", PropValue::Text("high".into()))
+///         .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("lightning".into())))
+///         .child(ViewNode::new(WidgetKind::Label).text("HIGH")));
+/// ```
+///
+/// The widgets track a selected **index**, but an index is meaningless to a plugin and breaks when
+/// the options are reordered — so `realize` maps it back through the options' `value` props and
+/// fires the bound intent with **`args["value"]`** set (`{"value": "high"}`). An option with no
+/// `value` falls back to `args["index"]`. A child of a `Select`/`Tabs` that is not a `Choice` is
+/// ignored (realize is total for untrusted input). A childless `Choice` desugars `text` to a `Label`
+/// child — children win, the same precedence as `Button`.
+///
+/// The structured kinds `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `Toast` are **not
+/// realized yet** (they need track/slot props — `choice-5`..`choice-7`); `ScrollBar` is **host-only**
+/// by design (its state is live host signals, which static data cannot drive — use `Scroll`).
 ///
 /// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
 /// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.
