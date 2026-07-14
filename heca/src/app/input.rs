@@ -5,7 +5,7 @@
 
 use crate::actions::ActionRegistry;
 use crate::app::interaction::InteractionSource;
-use crate::app::interaction::dispatch_action;
+use crate::app::interaction::{dispatch_action, dispatch_action_ref};
 use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_backend_event, winit_key_to_terminal_input,
@@ -49,7 +49,7 @@ pub(crate) fn handle_keyboard_input(
 
             let global_action = keymap.resolve("global", ctx.event_combo).cloned();
             if let Some(act) = global_action {
-                dispatch_action(state, registry, InteractionSource::Keyboard, &act);
+                dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
                 return;
             }
 
@@ -228,7 +228,7 @@ fn handle_prefix_mode(
     if let Some(ref act) = action {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        dispatch_action(state, registry, InteractionSource::Keyboard, act);
+        dispatch_action_ref(state, registry, InteractionSource::Keyboard, act);
         // A pending sidebar context (context-menu-7) is consumed by handle_open_context_menu
         // during dispatch; clear any leftover so a later OpenContextMenu can't read a stale one.
         state.pending_context = None;
@@ -300,7 +300,7 @@ fn handle_custom_mode(
         && let Some(action) = mode_map.resolve(name, &combo).cloned()
     {
         let sticky = mode_triggers.get(name).map(|(_, s)| *s).unwrap_or(true);
-        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
+        dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
         if !sticky {
             state.input_mode = InputMode::Normal;
             state.needs_redraw = true;
@@ -615,7 +615,7 @@ fn handle_sidebar_nav_mode(
             .get("sidebar")
             .and_then(|mode_map| mode_map.resolve("sidebar", &combo).cloned());
         if let Some(act) = action {
-            dispatch_action(state, registry, InteractionSource::Keyboard, &act);
+            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
         }
     }
 }
@@ -708,7 +708,7 @@ fn handle_selection_mode(
         if let Some(mode_map) = mode_keymaps.get("selection")
             && let Some(action) = mode_map.resolve("selection", &combo).cloned()
         {
-            dispatch_action(state, registry, InteractionSource::Keyboard, &action);
+            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &action);
         }
     }
 }

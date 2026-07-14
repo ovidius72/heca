@@ -6,7 +6,7 @@
 use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
-use crate::keymap::{KeyCombo, KeymapRegistry};
+use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
@@ -15,17 +15,44 @@ use std::collections::{BTreeMap, HashMap};
 struct BindingConflict {
     mode: String,
     combo: KeyCombo,
-    previous_action: WmAction,
+    previous_action: ActionRef,
     previous_source: String,
-    new_action: WmAction,
+    new_action: ActionRef,
     new_source: String,
+}
+
+/// Resolve a config action **name** (+ its args) to what the key should be bound to.
+///
+/// Built-in ⇒ [`ActionRef::Builtin`], resolved right here at load, exactly as before: a unit variant
+/// through `action_from_name`, a parameterized one through `build_action` (so a malformed `args`
+/// still fails at load, not at press).
+///
+/// Anything else ⇒ [`ActionRef::Dynamic`] — **not an error** (plugin-04 G3). Config is loaded before
+/// any provider or plugin has registered its actions, so a binding to `plugin.docker.restart` cannot
+/// possibly resolve yet; it resolves at press time through the one dispatch door. A typo lands here
+/// too and no-ops with a debug warning when pressed, which is the price of not rejecting bindings to
+/// actions that legitimately do not exist yet.
+fn action_ref_from_config(name: &str, args: &HashMap<String, String>) -> ActionRef {
+    if let Some(built) = build_action(name, args) {
+        return ActionRef::Builtin(built);
+    }
+    if let Some(unit) = action_from_name(name) {
+        return ActionRef::Builtin(unit);
+    }
+    let mut intent = crate::chrome::Intent::new(name);
+    for (k, v) in args {
+        intent
+            .args
+            .insert(k.clone(), crate::chrome::PropValue::Text(v.clone()));
+    }
+    ActionRef::Dynamic(intent)
 }
 
 fn bind_with_conflict_tracking(
     keymap: &mut KeymapRegistry,
     mode: &str,
     combo: KeyCombo,
-    action: WmAction,
+    action: ActionRef,
     source: String,
     conflicts: &mut Vec<BindingConflict>,
 ) {
@@ -178,10 +205,11 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     for (k, v) in &config.keys.bindings {
         merged_bindings.insert(k.clone(), v.clone());
     }
+    let no_args = HashMap::new();
     for (action_name, value) in &merged_bindings {
-        let Some(action) = action_from_name(action_name) else {
-            continue;
-        };
+        // An unknown name is NOT skipped any more: it becomes a Dynamic ref resolved at press
+        // (G3 — a plugin action does not exist yet when config is read).
+        let action = action_ref_from_config(action_name, &no_args);
         for key_str in value.keys() {
             let trimmed = key_str.trim();
             if trimmed.starts_with("prefix+") {
@@ -220,7 +248,7 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     }
 
     for cmd_cfg in &config.keys.command {
-        let action = WmAction::SpawnCommand {
+        let action = ActionRef::Builtin(WmAction::SpawnCommand {
             command: cmd_cfg.command.clone(),
             kind: cmd_cfg.kind.parse().unwrap_or(SpawnKind::Terminal),
             float: cmd_cfg.float,
@@ -229,7 +257,7 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                 keep_on_error: cmd_cfg.keep_on_error,
                 keep_on_success: cmd_cfg.keep_on_success,
             },
-        };
+        });
         let trimmed = cmd_cfg.key.trim();
         if trimmed.starts_with("prefix+") {
             let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
@@ -288,13 +316,9 @@ pub fn build_modes(
     for mode_cfg in merged_modes.values() {
         let mut mode_map = KeymapRegistry::new();
         for binding in &mode_cfg.bindings {
-            let action = if let Some(unit) = action_from_name(&binding.action) {
-                unit
-            } else if let Some(built) = build_action(&binding.action, &binding.args) {
-                built
-            } else {
-                continue;
-            };
+            // Same rule as the flat bindings: an unresolvable name is a Dynamic ref, not a dropped
+            // binding. A mode binding's `args` become the Intent's args.
+            let action = action_ref_from_config(&binding.action, &binding.args);
             bind_with_conflict_tracking(
                 &mut mode_map,
                 &mode_cfg.name,
@@ -756,9 +780,9 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_keymap, build_modes, build_widget_keymap};
+    use super::{action_ref_from_config, build_keymap, build_modes, build_widget_keymap, format_combo};
     use crate::input::WmAction;
-    use crate::keymap::KeyCombo;
+    use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
 
@@ -814,6 +838,106 @@ mod tests {
         }
     }
 
+    // ── plugin-04 / T2: config bindings can target dynamic action ids ──
+
+    /// NON-REGRESSION: every binding in the DEFAULT keymap still resolves to a `Builtin` at load.
+    /// `build_keymap` no longer skips unresolvable names (they become `Dynamic`), so a typo — or a
+    /// rename — in `keybindings.default.toml` would silently degrade a real binding into a dynamic
+    /// one that no-ops at press. This test is what stops that.
+    #[test]
+    fn every_default_binding_still_resolves_to_a_builtin_at_load() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+        for mode in ["normal", "global"] {
+            let Some(bindings) = keymap.bindings_in_mode(mode) else {
+                continue;
+            };
+            for (combo, action) in bindings {
+                assert!(
+                    matches!(action, ActionRef::Builtin(_)),
+                    "default binding {mode}:{} degraded to Dynamic — the action name in \
+                     keybindings.default.toml does not resolve",
+                    format_combo(combo),
+                );
+            }
+        }
+    }
+
+    /// A binding to an action id that is UNKNOWN at load is **not** an error and is **not** dropped:
+    /// it becomes a `Dynamic` ref that resolves at press. This is G3 — config is read before any
+    /// provider or plugin has registered its actions.
+    #[test]
+    fn a_binding_to_an_unregistered_action_id_becomes_dynamic() {
+        let action = action_ref_from_config("plugin.docker.restart", &HashMap::new());
+        match action {
+            ActionRef::Dynamic(intent) => {
+                assert_eq!(intent.action, "plugin.docker.restart");
+                assert!(intent.args.is_empty());
+            }
+            other => panic!("expected Dynamic, got {other:?}"),
+        }
+    }
+
+    /// A dynamic binding carries its config `args` into the Intent, so the handler receives them at
+    /// press exactly as a parameterized built-in would.
+    #[test]
+    fn a_dynamic_binding_carries_its_config_args_into_the_intent() {
+        let mut args = HashMap::new();
+        args.insert("container".to_string(), "web".to_string());
+        match action_ref_from_config("plugin.docker.restart", &args) {
+            ActionRef::Dynamic(intent) => {
+                assert_eq!(
+                    intent.args.get("container"),
+                    Some(&crate::chrome::PropValue::Text("web".to_string()))
+                );
+            }
+            other => panic!("expected Dynamic, got {other:?}"),
+        }
+    }
+
+    /// A built-in name still resolves at LOAD, unit and parameterized alike — unchanged behaviour,
+    /// including the arg parsing (a malformed arg still fails at load, not at press).
+    #[test]
+    fn builtin_names_still_resolve_at_load() {
+        assert_eq!(
+            action_ref_from_config("reload_config", &HashMap::new()),
+            ActionRef::Builtin(WmAction::ReloadConfig)
+        );
+
+        let mut args = HashMap::new();
+        args.insert("rows".to_string(), "5".to_string());
+        assert_eq!(
+            action_ref_from_config("scroll_to_offset", &args),
+            ActionRef::Builtin(WmAction::ScrollToOffset { rows: 5 })
+        );
+
+        // A parameterized built-in with UNPARSEABLE args does not silently become a dynamic action
+        // named `scroll_to_offset` — `action_from_name` catches it as the unit fallback, and when
+        // there is no unit variant either it is a dynamic ref, which the press path warns about.
+        let mut bad = HashMap::new();
+        bad.insert("rows".to_string(), "not-a-number".to_string());
+        assert!(matches!(
+            action_ref_from_config("scroll_to_offset", &bad),
+            ActionRef::Dynamic(_)
+        ));
+    }
+
+    /// `[keys.unbind]` is keyed by the COMBO, so it retires a dynamic binding exactly as it retires
+    /// a built-in one.
+    #[test]
+    fn unbind_retires_a_dynamic_binding_too() {
+        let mut keymap = KeymapRegistry::new();
+        let combo = KeyCombo::parse("g");
+        keymap.bind(
+            "normal",
+            combo.clone(),
+            action_ref_from_config("plugin.docker.restart", &HashMap::new()),
+        );
+        assert!(keymap.resolve("normal", &combo).is_some());
+        assert!(keymap.unbind("normal", &combo).is_some());
+        assert!(keymap.resolve("normal", &combo).is_none());
+    }
+
     #[test]
     fn chrome_container_placement_actions_have_handlers() {
         // Every WmAction variant must have a registered handler (execute() panics
@@ -855,25 +979,25 @@ mod tests {
         // 0 = reset) — whole-app for app_font_size, focused pane for pane_font_size.
         let app = mode_keymaps.get("app_font_size").unwrap();
         assert_eq!(
-            app.resolve("app_font_size", &KeyCombo::parse("k")),
+            app.resolve_builtin("app_font_size", &KeyCombo::parse("k")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::In
             })
         );
         assert_eq!(
-            app.resolve("app_font_size", &KeyCombo::parse("ArrowUp")),
+            app.resolve_builtin("app_font_size", &KeyCombo::parse("ArrowUp")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::In
             })
         );
         assert_eq!(
-            app.resolve("app_font_size", &KeyCombo::parse("j")),
+            app.resolve_builtin("app_font_size", &KeyCombo::parse("j")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::Out
             })
         );
         assert_eq!(
-            app.resolve("app_font_size", &KeyCombo::parse("0")),
+            app.resolve_builtin("app_font_size", &KeyCombo::parse("0")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::Reset
             })
@@ -881,14 +1005,14 @@ mod tests {
 
         let pane = mode_keymaps.get("pane_font_size").unwrap();
         assert_eq!(
-            pane.resolve("pane_font_size", &KeyCombo::parse("k")),
+            pane.resolve_builtin("pane_font_size", &KeyCombo::parse("k")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
                 step: FontZoomStep::In
             })
         );
         assert_eq!(
-            pane.resolve("pane_font_size", &KeyCombo::parse("0")),
+            pane.resolve_builtin("pane_font_size", &KeyCombo::parse("0")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
                 step: FontZoomStep::Reset
@@ -902,19 +1026,19 @@ mod tests {
         let keymap = build_keymap(&config);
 
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+k")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+k")),
             Some(&WmAction::SwapUp)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+j")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+j")),
             Some(&WmAction::SwapDown)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+k")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+k")),
             Some(&WmAction::MoveColumnUp)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+j")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+j")),
             Some(&WmAction::MoveColumnDown)
         );
     }
@@ -927,19 +1051,19 @@ mod tests {
 
         // Global (app-wide) branch: prefix+Ctrl+= / - / 0.
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+=")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+=")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::In
             })
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+-")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+-")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::Out
             })
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+0")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+0")),
             Some(&WmAction::AppFontZoom {
                 step: FontZoomStep::Reset
             })
@@ -949,21 +1073,21 @@ mod tests {
         // dispatch). Ctrl+Shift is used instead of Alt because macOS rewrites the
         // character under the Option key, so Alt+= would never match.
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+=")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+=")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
                 step: FontZoomStep::In
             })
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+-")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+-")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
                 step: FontZoomStep::Out
             })
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+0")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+0")),
             Some(&WmAction::PaneTerminalFontZoom {
                 pane_id: None,
                 step: FontZoomStep::Reset
@@ -973,20 +1097,20 @@ mod tests {
         // No collision: the bare `=`/`-` (resize) and Shift+`=` (pane height) keys
         // keep their original actions — the Ctrl / Ctrl+Shift variants are distinct.
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("=")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("=")),
             Some(&WmAction::ResizeIncrease)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("-")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("-")),
             Some(&WmAction::ResizeDecrease)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Shift+=")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Shift+=")),
             Some(&WmAction::PaneHeightIncrease)
         );
         // The other Ctrl+Shift bindings (move column up/down) keep their actions.
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+k")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+Shift+k")),
             Some(&WmAction::MoveColumnUp)
         );
     }
@@ -997,19 +1121,19 @@ mod tests {
         let keymap = build_keymap(&config);
 
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("u")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("u")),
             Some(&WmAction::WorkspacePrev)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("d")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("d")),
             Some(&WmAction::WorkspaceNext)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+p")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+p")),
             Some(&WmAction::WorkspacePrev)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Ctrl+n")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+n")),
             Some(&WmAction::WorkspaceNext)
         );
     }
@@ -1020,11 +1144,11 @@ mod tests {
         let keymap = build_keymap(&config);
 
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("(")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("(")),
             Some(&WmAction::ToggleCurrentColumnCollapsed)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("<")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("<")),
             Some(&WmAction::ToggleCurrentWorkspaceCollapsed)
         );
     }
@@ -1035,15 +1159,15 @@ mod tests {
         let keymap = build_keymap(&config);
 
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("[")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("[")),
             Some(&WmAction::PrevPane)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("]")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("]")),
             Some(&WmAction::NextPane)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("p")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
             Some(&WmAction::CommandPalette)
         );
     }
@@ -1054,21 +1178,21 @@ mod tests {
         let keymap = build_keymap(&config);
 
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("s")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("s")),
             Some(&WmAction::EnterSelectionMode)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("Shift+s")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("Shift+s")),
             Some(&WmAction::ClearSelection)
         );
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("y")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("y")),
             Some(&WmAction::CopySelection)
         );
         // paste_clipboard is intentionally not given a default flat binding
         // to avoid colliding with established keys; users bind it in config.
         assert_eq!(
-            keymap.resolve("normal", &KeyCombo::parse("p")),
+            keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
             Some(&WmAction::CommandPalette)
         );
     }
@@ -1082,41 +1206,41 @@ mod tests {
             .expect("selection mode exists");
 
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("h")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("h")),
             Some(&WmAction::SelectionLeft)
         );
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("ArrowLeft")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("ArrowLeft")),
             Some(&WmAction::SelectionLeft)
         );
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("l")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("l")),
             Some(&WmAction::SelectionRight)
         );
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("ArrowUp")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("ArrowUp")),
             Some(&WmAction::SelectionUp)
         );
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("ArrowDown")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("ArrowDown")),
             Some(&WmAction::SelectionDown)
         );
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("y")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("y")),
             Some(&WmAction::CopySelection)
         );
         // BeginSelection: direct keys in selection mode.
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("v")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("v")),
             Some(&WmAction::BeginSelection)
         );
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("Space")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("Space")),
             Some(&WmAction::BeginSelection)
         );
         // ToggleSelectionEndpoint.
         assert_eq!(
-            keymap.resolve("selection", &KeyCombo::parse("o")),
+            keymap.resolve_builtin("selection", &KeyCombo::parse("o")),
             Some(&WmAction::ToggleSelectionEndpoint)
         );
     }
@@ -1128,25 +1252,25 @@ mod tests {
         let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("ArrowUp")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowUp")),
             Some(&WmAction::SidebarUp)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("ArrowDown")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowDown")),
             Some(&WmAction::SidebarDown)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("ArrowLeft")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowLeft")),
             Some(&WmAction::SidebarLeftNav)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("ArrowRight")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowRight")),
             Some(&WmAction::SidebarRightNav)
         );
         // Space is the "focus but stay" key (`sidebar_peek`), distinct from `l`/Right,
         // which focus and leave the mode.
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("Space")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("Space")),
             Some(&WmAction::SidebarPeek)
         );
     }
@@ -1158,23 +1282,23 @@ mod tests {
         let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("w")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("w")),
             Some(&WmAction::SidebarCreateWorkspace)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("c")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("c")),
             Some(&WmAction::SidebarCreateColumn)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("v")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("v")),
             Some(&WmAction::SidebarSplitInColumn)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("z")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("z")),
             Some(&WmAction::SidebarZoomSelectedColumn)
         );
         assert_eq!(
-            keymap.resolve("sidebar", &KeyCombo::parse("d")),
+            keymap.resolve_builtin("sidebar", &KeyCombo::parse("d")),
             Some(&WmAction::SidebarDeleteSelected)
         );
     }
@@ -1197,11 +1321,11 @@ mod tests {
         let sidebar = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
-            sidebar.resolve("sidebar", &KeyCombo::parse("j")),
+            sidebar.resolve_builtin("sidebar", &KeyCombo::parse("j")),
             Some(&WmAction::SidebarLeftNav)
         );
         assert_eq!(
-            sidebar.resolve("sidebar", &KeyCombo::parse("k")),
+            sidebar.resolve_builtin("sidebar", &KeyCombo::parse("k")),
             Some(&WmAction::SidebarUp)
         );
         assert!(!mode_triggers.contains_key("sidebar"));
@@ -1224,9 +1348,9 @@ mod tests {
         let (mode_keymaps, mode_triggers) = build_modes(&config);
         let resize = mode_keymaps.get("resize").expect("resize mode exists");
 
-        assert!(resize.resolve("resize", &KeyCombo::parse("h")).is_some());
+        assert!(resize.resolve_builtin("resize", &KeyCombo::parse("h")).is_some());
         assert_eq!(
-            resize.resolve("resize", &KeyCombo::parse("x")),
+            resize.resolve_builtin("resize", &KeyCombo::parse("x")),
             Some(&WmAction::ResizeIncrease)
         );
         assert_eq!(

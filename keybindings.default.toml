@@ -184,9 +184,35 @@ scroll_line_down   = "Shift+Down"
 # args = { rows = "200" }
 
 # Remove a default binding so its key is free (the action stays available to
-# rebind under [keys]). Example:
+# rebind under [keys]). Unbinding is keyed by the KEY, so it retires a binding
+# whatever it points at — a built-in action or a plugin action id. Example:
 # [keys.unbind]
 # "prefix+f" = true
+
+# ── Binding a PLUGIN / PROVIDER action (dynamic action ids) ──
+# An action name is not limited to heca's built-in actions: it can be the stable
+# string id of an action registered at runtime by a provider or a plugin, e.g.
+# `plugin.docker.restart` or `chrome.container.move_to_region`.
+#
+# These ids resolve at PRESS time, not at load. heca reads your config BEFORE any
+# provider or plugin has registered its actions, so a binding to an id that does
+# not exist yet is NOT an error — it simply does nothing until the action shows
+# up. (The flip side: a TYPO in an action name is not an error either; it just
+# never fires. Check the name if a binding seems dead.)
+#
+# Flat form (no args):
+# [keys]
+# "prefix+d" = "plugin.docker.restart"
+#
+# With args — use a custom mode binding, which supports `args`:
+# [[keys.mode]]
+# name = "docker"
+# trigger = "prefix+Shift+d"
+# sticky = false
+# [[keys.mode.bindings]]
+# action = "plugin.docker.restart"
+# keys = "w"
+# args = { container = "web" }
 
 # Launch a program on a key. `kind = "terminal"` runs it inside a pane;
 # `float = true` opens it floating; `close_pane = true` closes the pane on exit;

@@ -39,6 +39,7 @@ use crate::actions::ActionRegistry;
 use crate::app_state::AppState;
 use crate::chrome::Intent as ViewIntent;
 use crate::input::WmAction;
+use crate::keymap::ActionRef;
 use heca_core::layout::{FocusDomain, PaneId};
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -755,6 +756,30 @@ pub(crate) fn dispatch_action(
         source,
         InteractionIntent::ActivateAction(action.clone()),
     );
+}
+
+/// Dispatch whatever a key was bound to — the press-time half of [`ActionRef`].
+///
+/// A `Builtin` was already resolved at config load and dispatches exactly as it always has. A
+/// `Dynamic` names an action that may only have been registered *after* config was read (a provider,
+/// a plugin); it is resolved **now**, through the same one door as every other named intent, so it
+/// is policy-routed identically. Still unknown at press ⇒ a debug warning inside
+/// `dispatch_view_intent`, never a crash.
+pub(crate) fn dispatch_action_ref(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    source: InteractionSource,
+    action: &ActionRef,
+) {
+    match action {
+        ActionRef::Builtin(a) => dispatch_action(state, registry, source, a),
+        ActionRef::Dynamic(intent) => dispatch_intent(
+            state,
+            registry,
+            source,
+            InteractionIntent::View(intent.clone()),
+        ),
+    }
 }
 
 /// Resolve and dispatch a declarative [`ViewNode`](crate::chrome::ViewNode) intent.

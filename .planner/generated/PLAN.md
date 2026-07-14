@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-14T20:59:57.370Z
+**Last updated:** 2026-07-14T21:07:29.024Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -89,7 +89,7 @@ Status: 🚧 `in-progress`
 **Phases:**
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
 - 📋 **099e2eb5-30be-4f3c-ab57-a4f111cdc44c** P002 — plugin-06: Placeholder token system (0/3 tasks)
-- 🚧 **88b87a32-ff00-4044-9a32-c575e3ed5401** P003 — plugin-04: Dynamic action registry (0/3 tasks)
+- 🚧 **88b87a32-ff00-4044-9a32-c575e3ed5401** P003 — plugin-04: Dynamic action registry (1/3 tasks)
 - ✅ **73c320aa-b8b7-4fb3-9421-5c741b1771ff** P004 — plugin-03: Built-in provider + WorkspacesContainer migration (6/6 tasks)
 - ✅ **9ec31d60-7dfa-4dcc-9797-b265a4d30562** P005 — plugin-01: Formal architecture contracts (4/4 tasks)
 - ✅ **7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c** P006 — plugin-02: ChromeHost and region hosts (4/4 tasks)
@@ -728,7 +728,7 @@ Dynamic action registry: string action IDs + runtime registration, ACCANTO all'e
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 0/3
+**Tasks:** 1/3
 
 ### ✅ 73c320aa-b8b7-4fb3-9421-5c741b1771ff — P004 — plugin-03: Built-in provider + WorkspacesContainer migration
 
