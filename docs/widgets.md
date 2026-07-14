@@ -1457,6 +1457,12 @@ let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 > fires `on_activate`, so a single source of truth can own which row is active (set the
 > clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
+> **`Item` or [`Choice`](#choice)?** Both are selectable, both compose their content, both are one
+> Tab stop — but they answer different questions. An `Item` is a **row** (leading · label · trailing,
+> fixed height, `ActiveMarker`): use it when you are building a list that looks like rows. A `Choice`
+> is **any content plus a value**: use it when the user is **picking one of several alternatives**.
+> Full comparison + rule of thumb: [`Choice` vs `Item`](#choice-vs-item--when-to-use-which).
+
 **Declarative** (`WidgetKind::Item`):
 
 ```rust
@@ -1528,6 +1534,22 @@ bar.content_extent_signal().set(240.0);   // total rows / px / items
 bar.viewport_extent_signal().set(48.0);  // visible rows / px / items
 bar.offset_signal().set(96.0);           // offset from TOP
 ```
+
+> #### ScrollBar is HOST-ONLY — it is not declarable, on purpose
+>
+> Look at the example above: the widget is **driven by live signals** the host writes every frame.
+> A [`ViewNode`](#declarative-ui-model-viewnode) is static, serializable data — it cannot carry a
+> signal, let alone update one — so a declarative `ScrollBar` would render a **dead control**: a
+> thumb that never moves and never reports. `realize` therefore refuses it (and says so in a debug
+> log) rather than producing something that looks right and does nothing.
+>
+> **A plugin that needs scrolling uses [`Scroll`](#scrollregion)** (a `ScrollRegion`), which owns its
+> own offset, wheel and keyboard handling — no host wiring required.
+>
+> This is a **general rule, not a special case**: *a widget whose state is a live host signal is
+> host-only.* It applies to individual **builders** too — [`DockFrame::rail(..)`](#dockframe) binds a
+> host-owned `RegionMode` signal, so a declarative dock is simply never rail-aware. Apply the same
+> reasoning to any future widget of that shape, instead of inventing a way to fake a signal in data.
 
 ### Badge
 
@@ -2332,8 +2354,9 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 > as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
 > its scalar sugar — `text` → a bold `Label`, `icon` → a leading `Icon` — which builds the very same
 > children. See [Button → the two ways to build one](#the-two-ways-to-build-a-button--same-widget-same-retained-tree).
-> Widgets whose *content* is still scalar-only (`Item`'s slots, for instance) need **named** children
-> in the model; that's `viewnode-task-1`.
+> A widget with **several places** for children (an `Item`'s leading/trailing, a `DockFrame`'s
+> header) takes a `slot` prop on the child — see
+> [Named child slots](#named-child-slots-the-slot-prop).
 
 | Kind | Props it reads | Events |
 |------|----------------|--------|

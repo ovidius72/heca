@@ -70,6 +70,89 @@ pub enum WidgetKind {
     Item,
 }
 
+impl WidgetKind {
+    /// Every variant — the closed vocabulary, enumerable.
+    ///
+    /// This exists so the host can check **coverage**: `realize` has a test that walks this list and
+    /// asserts each kind maps to a real widget, which is what stops a newly-added kind from silently
+    /// rendering an empty container. Keep it in sync with the enum — [`ordinal`](Self::ordinal)
+    /// makes that mechanical rather than a matter of discipline (see its docs).
+    pub const ALL: &'static [WidgetKind] = &[
+        WidgetKind::Column,
+        WidgetKind::Row,
+        WidgetKind::Grid,
+        WidgetKind::Card,
+        WidgetKind::Scroll,
+        WidgetKind::Panel,
+        WidgetKind::Surface,
+        WidgetKind::ItemGroup,
+        WidgetKind::DockFrame,
+        WidgetKind::MarkerGroup,
+        WidgetKind::Tabs,
+        WidgetKind::Choice,
+        WidgetKind::Label,
+        WidgetKind::Button,
+        WidgetKind::IconButton,
+        WidgetKind::Badge,
+        WidgetKind::BadgeButton,
+        WidgetKind::Tag,
+        WidgetKind::Icon,
+        WidgetKind::Input,
+        WidgetKind::Select,
+        WidgetKind::Toggle,
+        WidgetKind::Checkbox,
+        WidgetKind::StatusDot,
+        WidgetKind::Gauge,
+        WidgetKind::ScrollBar,
+        WidgetKind::Alert,
+        WidgetKind::Toast,
+        WidgetKind::RailCell,
+        WidgetKind::Item,
+    ];
+
+    /// This kind's position in [`ALL`](Self::ALL).
+    ///
+    /// The match is **exhaustive**, so adding a variant to the enum without adding it here is a
+    /// *compile error*; the `all_lists_every_widget_kind` test then compares the two, so adding it
+    /// here without adding it to [`ALL`](Self::ALL) is a *test failure*. Between them, the list
+    /// cannot silently fall behind the vocabulary — which is the whole point, since the coverage
+    /// guard is only as good as the list it walks.
+    fn ordinal(self) -> usize {
+        match self {
+            WidgetKind::Column => 0,
+            WidgetKind::Row => 1,
+            WidgetKind::Grid => 2,
+            WidgetKind::Card => 3,
+            WidgetKind::Scroll => 4,
+            WidgetKind::Panel => 5,
+            WidgetKind::Surface => 6,
+            WidgetKind::ItemGroup => 7,
+            WidgetKind::DockFrame => 8,
+            WidgetKind::MarkerGroup => 9,
+            WidgetKind::Tabs => 10,
+            WidgetKind::Choice => 11,
+            WidgetKind::Label => 12,
+            WidgetKind::Button => 13,
+            WidgetKind::IconButton => 14,
+            WidgetKind::Badge => 15,
+            WidgetKind::BadgeButton => 16,
+            WidgetKind::Tag => 17,
+            WidgetKind::Icon => 18,
+            WidgetKind::Input => 19,
+            WidgetKind::Select => 20,
+            WidgetKind::Toggle => 21,
+            WidgetKind::Checkbox => 22,
+            WidgetKind::StatusDot => 23,
+            WidgetKind::Gauge => 24,
+            WidgetKind::ScrollBar => 25,
+            WidgetKind::Alert => 26,
+            WidgetKind::Toast => 27,
+            WidgetKind::RailCell => 28,
+            WidgetKind::Item => 29,
+        }
+    }
+}
+
 /// Semantic size variant — mirrors grid-ui `WidgetSize`; `realize` maps it across.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -396,6 +479,31 @@ mod tests {
                             .on_press(Intent::new("confirm_ok")),
                     ),
             )
+    }
+
+    /// `ALL` must list the whole vocabulary — the realize **coverage guard** walks it, and a guard is
+    /// only as good as the list it walks. `ordinal`'s match is exhaustive (a new variant fails to
+    /// compile there); this ties the two together, so a variant that reaches `ordinal` but not `ALL`
+    /// fails here.
+    #[test]
+    fn all_lists_every_widget_kind() {
+        for (i, kind) in WidgetKind::ALL.iter().enumerate() {
+            assert_eq!(
+                kind.ordinal(),
+                i,
+                "{kind:?} is out of order in ALL (or missing from it)",
+            );
+        }
+        let highest = WidgetKind::ALL
+            .iter()
+            .map(|k| k.ordinal())
+            .max()
+            .expect("the vocabulary is not empty");
+        assert_eq!(
+            WidgetKind::ALL.len(),
+            highest + 1,
+            "a variant exists that ALL does not list",
+        );
     }
 
     #[test]

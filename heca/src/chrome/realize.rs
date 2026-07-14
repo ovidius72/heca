@@ -15,9 +15,19 @@
 //!   letter, firing the *same* intent as a click. This is the "every clickable widget is
 //!   also hintable" rule, for free (plan §2.7.2, "everything is an action").
 //!
-//! Adding a widget = one [`WidgetKind`](super::WidgetKind) arm here (+ its variant in the
-//! model). Arms are filled in incrementally, starting with what the confirm dialog needs
-//! (Column / Row / Label / Button); unhandled kinds fall back to an empty container.
+//! Adding a widget = one [`WidgetKind`](super::WidgetKind) arm here (+ its variant in the model).
+//!
+//! # Coverage
+//! **Every `WidgetKind` realizes to a live widget.** The one exception is `ScrollBar`, which is
+//! **host-only by design**: its state is live host signals (`content_extent` / `viewport_extent` /
+//! `offset`), and static, serializable data fundamentally cannot drive a signal — a declarative one
+//! would render a dead control. A plugin that needs scrolling uses `Scroll` (a `ScrollRegion`),
+//! which owns its own offset. The same rule applies to an individual *builder* that binds a host
+//! signal (e.g. `DockFrame::rail`): **a widget whose state is a live host signal is host-only.**
+//!
+//! This is enforced, not merely stated: `every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones`
+//! walks [`WidgetKind::ALL`](super::WidgetKind::ALL) and fails if a kind produces neither children
+//! nor paint — so a new kind added without an arm cannot silently render an empty container.
 //!
 //! Seam module (consumed by the OverlayHost/Modal body in ui-4 and plugin panels) — carries
 //! `#![allow(dead_code)]` like the sibling chrome seam modules until those consumers land.
@@ -371,8 +381,8 @@ fn realize_kind(
         WidgetKind::ScrollBar => {
             #[cfg(debug_assertions)]
             eprintln!(
-                "[heca] realize: WidgetKind {:?} needs structured model support (ui-7) — empty",
-                node.kind
+                "[heca] realize: ScrollBar is host-only — its state is a live host signal, which \
+                 static data cannot drive. Use Scroll (a ScrollRegion), which owns its own offset."
             );
             Box::new(Flex::empty())
         }
@@ -1578,6 +1588,117 @@ mod tests {
             .prop("severity", PropValue::Text("catastrophic".into()));
         assert_eq!(severity_prop(&bogus), heca_grid_ui::ToastSeverity::Info);
         assert_eq!(severity_prop(&node), heca_grid_ui::ToastSeverity::Danger);
+    }
+
+    // ── Vocabulary coverage (the guard that keeps this from rotting) ──
+
+    /// A representative node for `kind` — enough of one that a correct arm produces a *live* widget.
+    ///
+    /// The match is **exhaustive on purpose**: adding a `WidgetKind` without adding an arm to
+    /// `realize` cannot compile past this point, so the coverage test below fires instead of the new
+    /// kind silently rendering an empty container. That failure mode is exactly what this guards —
+    /// it is invisible in review and invisible at runtime.
+    fn sample_node(kind: WidgetKind) -> ViewNode {
+        let node = ViewNode::new(kind);
+        match kind {
+            // Containers: give them a child, which a correct arm attaches.
+            WidgetKind::Column
+            | WidgetKind::Row
+            | WidgetKind::Card
+            | WidgetKind::Scroll
+            | WidgetKind::Panel
+            | WidgetKind::Surface
+            | WidgetKind::Grid
+            | WidgetKind::MarkerGroup
+            | WidgetKind::ItemGroup
+            | WidgetKind::DockFrame => node
+                .text("TITLE")
+                .child(ViewNode::new(WidgetKind::Label).text("child")),
+
+            // Option pickers: their children are `Choice` nodes.
+            WidgetKind::Select | WidgetKind::Tabs => node.child(
+                ViewNode::new(WidgetKind::Choice)
+                    .prop("value", PropValue::Text("a".into()))
+                    .text("A"),
+            ),
+            WidgetKind::Choice => node.prop("value", PropValue::Text("a".into())).text("A"),
+
+            // A slotted row: the label is a prop, the slots are children.
+            WidgetKind::Item => node.text("row").child(
+                ViewNode::new(WidgetKind::StatusDot)
+                    .prop("slot", PropValue::Text("leading".into())),
+            ),
+
+            // Leaves that carry text.
+            WidgetKind::Label
+            | WidgetKind::Button
+            | WidgetKind::Badge
+            | WidgetKind::BadgeButton
+            | WidgetKind::Tag
+            | WidgetKind::Alert
+            | WidgetKind::Toast
+            | WidgetKind::Input
+            | WidgetKind::Checkbox => node.text("TEXT"),
+
+            // Leaves that carry a glyph.
+            WidgetKind::Icon | WidgetKind::IconButton | WidgetKind::RailCell => {
+                node.prop("icon", PropValue::Glyph("terminal".into()))
+            }
+
+            // Leaves with their own state.
+            WidgetKind::Toggle => node.prop("on", PropValue::Bool(true)),
+            WidgetKind::Gauge => node.prop("value", PropValue::Float(0.5)),
+            WidgetKind::StatusDot => node,
+
+            // Host-only — see the coverage test.
+            WidgetKind::ScrollBar => node,
+        }
+    }
+
+    /// **Every `WidgetKind` realizes to a live widget** — one that either holds the children it was
+    /// given or paints something. The fallback (an empty `Flex`) does neither, so a kind with no arm
+    /// fails here loudly instead of rendering nothing and being noticed months later by a plugin
+    /// author.
+    ///
+    /// The single exception is `ScrollBar`, which is **host-only by design**: its state is live host
+    /// signals (`content_extent` / `viewport_extent` / `offset`), and static serializable data
+    /// fundamentally cannot drive a signal — a declarative one would render a dead control. The test
+    /// asserts it realizes to *nothing*, so that decision is pinned rather than merely documented.
+    #[test]
+    fn every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones() {
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
+        use heca_core::layout::Size;
+
+        let theme = Theme::default();
+        for &kind in WidgetKind::ALL {
+            let mut widget = realize(
+                &sample_node(kind),
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            );
+            LayoutEngine::new().compute(widget.as_mut(), Size::new(400.0, 200.0));
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                widget.paint(&mut cx);
+            }
+            let alive = !widget.base().children.is_empty() || !scene.is_empty();
+
+            if kind == WidgetKind::ScrollBar {
+                assert!(
+                    !alive,
+                    "ScrollBar is host-only: it must NOT realize (its state is a live host signal — \
+                     a plugin uses Scroll instead)",
+                );
+            } else {
+                assert!(
+                    alive,
+                    "{kind:?} realized to nothing — it needs a `realize` arm (or, if its state is a \
+                     live host signal, to be documented as host-only like ScrollBar)",
+                );
+            }
+        }
     }
 
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.
