@@ -106,6 +106,43 @@ fn parse_region_id(cmd: &str, value: &str) -> Result<crate::chrome::RegionId, Rp
         .map_err(|()| RpcError::UnknownCommand(format!("{cmd}: unknown region '{value}'")))
 }
 
+/// **Action introspection** (action-task-C): answer a metadata *query* against the runtime
+/// [`ActionCatalog`](crate::actions::ActionCatalog), returning JSON. `None` if `input` is not an
+/// introspection command (the caller then falls through to [`parse_rpc_command`] to *execute*).
+///
+/// This is a separate path from [`parse_rpc_command`] because a query returns **data**, not a
+/// [`WmAction`] to run. Two commands:
+///   list-actions            → JSON array of every action's metadata (built-in AND plugin)
+///   describe-action <name>  → JSON of one action, or an error if the name is unknown
+pub fn introspect(
+    catalog: &crate::actions::ActionCatalog,
+    input: &str,
+) -> Option<Result<String, RpcError>> {
+    let input = input.trim();
+    let mut parts = input.split_whitespace();
+    let cmd = parts.next()?.to_lowercase();
+    match cmd.as_str() {
+        "list-actions" => Some(to_json(&catalog.describe_all(), &cmd)),
+        "describe-action" => Some(match parts.next() {
+            Some(name) => match catalog.describe(name) {
+                Some(info) => to_json(&info, &cmd),
+                None => Err(RpcError::UnknownCommand(format!(
+                    "describe-action: unknown action '{name}'"
+                ))),
+            },
+            None => Err(RpcError::MissingArgument {
+                cmd: "describe-action".to_string(),
+                arg: "name".to_string(),
+            }),
+        }),
+        _ => None,
+    }
+}
+
+fn to_json<T: serde::Serialize>(value: &T, cmd: &str) -> Result<String, RpcError> {
+    serde_json::to_string(value).map_err(|e| RpcError::UnknownCommand(format!("{cmd}: {e}")))
+}
+
 pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
     let input = input.trim();
     if input.is_empty() {
@@ -612,6 +649,36 @@ mod tests {
     use super::*;
     use crate::input::{FontZoomStep, ResizeTarget, WmAction};
     use heca_core::layout::PaneId;
+
+    // ── action-task-C: RPC introspection ──
+
+    #[test]
+    fn introspect_lists_and_describes_actions() {
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+
+        // Not an introspection command → None (falls through to execute).
+        assert!(introspect(&catalog, "focus-left").is_none());
+
+        // list-actions → JSON array covering every catalogued action.
+        let json = introspect(&catalog, "list-actions").unwrap().unwrap();
+        let list: Vec<crate::actions::ActionInfo> = serde_json::from_str(&json).unwrap();
+        assert_eq!(list.len(), catalog.count());
+        assert!(list.iter().any(|a| a.name == "close"));
+
+        // describe-action <name> → one action, with its confirm toggle key surfaced.
+        let json = introspect(&catalog, "describe-action close").unwrap().unwrap();
+        let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info.name, "close");
+        assert_eq!(info.confirm.as_deref(), Some("delete_pane"));
+        let json = introspect(&catalog, "describe-action focus_left").unwrap().unwrap();
+        let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info.policy, "tiled_only");
+        assert!(info.confirm.is_none());
+
+        // Errors: unknown action, missing argument.
+        assert!(introspect(&catalog, "describe-action nope").unwrap().is_err());
+        assert!(introspect(&catalog, "describe-action").unwrap().is_err());
+    }
 
     #[test]
     fn test_focus_pane() {

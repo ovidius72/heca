@@ -37,14 +37,8 @@ pub enum ActionCategory {
     System,
 }
 
-// ActionCategory and its label() are used by ActionDescriptor metadata.
-// The metadata catalog is preserved for the command palette (not yet implemented).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "category labels are preserved for command-palette metadata")
-)]
 impl ActionCategory {
-    /// Human-readable category name for UI display.
+    /// Human-readable category name for UI display (and the RPC-introspection category string).
     pub const fn label(self) -> &'static str {
         match self {
             ActionCategory::Navigation => "Navigation",
@@ -1485,6 +1479,63 @@ impl ActionCatalog {
     )]
     pub fn count(&self) -> usize {
         self.order.len()
+    }
+
+    /// Every action's metadata as a serializable [`ActionInfo`], in stable order — the RPC / command
+    /// palette **introspection** surface (action-task-C). Built-in and plugin actions alike, so a
+    /// tool can discover what a running heca (with its plugins) can do, by name.
+    pub fn describe_all(&self) -> Vec<ActionInfo> {
+        self.order
+            .iter()
+            .filter_map(|n| self.by_name.get(n))
+            .map(ActionInfo::from_meta)
+            .collect()
+    }
+
+    /// One action's metadata as a serializable [`ActionInfo`], by name — `None` if unknown.
+    pub fn describe(&self, name: &str) -> Option<ActionInfo> {
+        self.find(name).map(ActionInfo::from_meta)
+    }
+}
+
+/// A serializable projection of an action's metadata — what RPC introspection returns. Enums are
+/// rendered as their stable string names so the wire form is stable and language-neutral (an
+/// [`Intent`](crate::chrome::Intent)-style contract). A native `Callback` outcome is **not**
+/// serializable, so `confirm` reports only *that* a prompt exists and its toggle key, never the
+/// outcome closures (§6).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ActionInfo {
+    pub name: String,
+    pub label: String,
+    pub description: String,
+    pub category: String,
+    pub default_binding: String,
+    pub policy: String,
+    /// The confirm toggle key (`ConfirmSpec::config_name`) when the action prompts; `None` if it
+    /// runs straight.
+    pub confirm: Option<String>,
+}
+
+impl ActionInfo {
+    fn from_meta(m: &ActionMeta) -> Self {
+        use crate::app::interaction::ActionPolicy;
+        let policy = match m.policy {
+            ActionPolicy::Global => "global",
+            ActionPolicy::AlwaysAllowed => "always_allowed",
+            ActionPolicy::TiledOnly => "tiled_only",
+            ActionPolicy::FocusedPaneLocal => "focused_pane_local",
+            ActionPolicy::WorkspaceLevel => "workspace_level",
+            ActionPolicy::SourceDependent => "source_dependent",
+        };
+        Self {
+            name: m.name.clone(),
+            label: m.label.clone(),
+            description: m.description.clone(),
+            category: m.category.label().to_string(),
+            default_binding: m.default_binding.clone(),
+            policy: policy.to_string(),
+            confirm: m.confirm.as_ref().map(|c| c.config_name.clone()),
+        }
     }
 }
 
