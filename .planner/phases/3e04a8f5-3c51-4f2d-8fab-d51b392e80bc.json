@@ -4,7 +4,7 @@
   "number": 10,
   "slug": "action-interaction-declarative-action-interaction-confirm-response-buttons",
   "title": "action-interaction: Declarative action interaction (confirm + response buttons)",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -53,7 +53,7 @@
       "number": 2,
       "shortName": "action-task-c",
       "title": "action-task-C — Plugin/dev API + docs",
-      "status": "planned",
+      "status": "in-progress",
       "description": "register(ActionSpec) for native (with Callback); the plugin/WASM declarative path + host adapter (declarative outcomes only); RPC introspection of action metadata; meticulous Callback docs (native-only, opaque across WASM/RPC). Update AGENTS.md \"Adding New Actions\", README ([confirm]), docs/. Also: context-menu → OverlayHost migration (menus dispatch the plain action and the central gate confirms — no per-menu destructive special-case).",
       "notes": "",
       "statusLog": [],
@@ -62,10 +62,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-15T06:56:15.906Z",
       "completedAt": "",
       "createdAt": "2026-07-08T11:47:40.593Z",
-      "updatedAt": "2026-07-08T11:47:40.593Z"
+      "updatedAt": "2026-07-15T06:56:15.906Z"
     },
     {
       "id": "026efb65-2784-4391-b602-51cf41d73573",
@@ -109,5 +109,5 @@
     }
   ],
   "createdAt": "2026-07-08T11:47:16.065Z",
-  "updatedAt": "2026-07-14T21:45:21.214Z"
+  "updatedAt": "2026-07-15T06:56:15.906Z"
 }
