@@ -115,7 +115,7 @@
       "shortName": "wasm-action-registry",
       "title": "Plugin action registration API",
       "status": "planned",
-      "description": "Registrazione action IDs e dispatch per plugin WASM.",
+      "description": "Registrazione action IDs e dispatch per plugin WASM.\n\n## LA SEAM È GIÀ PRONTA (costruita in plugin-04/T3 + action-task-C, 2026-07-15)\nNon serve inventare il modello di registrazione azioni: esiste già e aspetta solo l'adapter WASM. Costruire QUI sopra queste basi, NON un secondo registry.\n\n- **`ActionRegistry` + `ActionCatalog`** (`heca/src/actions.rs`): registry unico runtime. Un'azione name-keyed (senza variante `WmAction`) si registra con `register_dynamic(registry, catalog, meta, handler)`.\n- **`Dispatch::Declarative`** (già esiste): `register_dynamic(..., handler: None)` registra un'azione DICHIARATA — ha id/metadata/policy, appare in menu e introspection, ma l'host NON la esegue. È ESATTAMENTE il caso WASM: il plugin possiede l'esecuzione oltre il confine. `dispatch_view_intent` (`heca/src/app/interaction.rs`) già gestisce il no-op con warning quando un `Declarative` viene dispatchato host-side.\n- **`ActionMeta`** (`heca/src/actions.rs`) è tutto dati serializzabili TRANNE il `confirm.Callback` (closure nativa): `name/label/description/category/default_binding/icon/policy` + `confirm: Option<ConfirmSpec>`. Un plugin WASM dichiara la sua azione + confirm come DATI serializzati; gli `Outcome` sono limitati a `Proceed/Cancel/Dispatch` (NIENTE `Callback` — non attraversa il confine, per costruzione). Vedi §5.6/§6 nella descrizione della fase `action-interaction` (3e04a8f5).\n- **`policy: ActionPolicy` è OBBLIGATORIA** sull'`ActionMeta` (decisione G1): il plugin la DICHIARA come dato; l'host la onora (G2 — la fiducia diventa reale qui, al confine WASM sandboxed).\n- **Introspection già pronta**: `ActionCatalog::describe_all()/describe(name)` → `ActionInfo` (serde). Un `Callback` outcome NON viene mai serializzato (reso opaco). L'adapter WASM può riusare questo per far scoprire al plugin le azioni esistenti.\n- **RAII unregister**: `unregister_dynamic(registry, catalog, id)` ritira handler + meta. `register_dynamic` restituisce un `ActionHandle`; l'aggancio a `ProviderHandles` (drop → unregister) è la decisione G5, ANCORA DA FARE (plugin-05, vedi sotto).\n\n## LAVORO DI QUESTA TASK (l'adapter WASM)\n1. Host adapter first-party: riceve dal plugin WASM `{ action_id, metadata serializzata (ActionMeta senza Callback), confirm serializzato }` e chiama `register_dynamic(..., handler: None)` → `Dispatch::Declarative`.\n2. Marshalling del dispatch: quando un `Declarative` di quel plugin viene invocato (da keybinding/menu/RPC via la porta unica `dispatch_view_intent`), inoltrare `Intent { action_id, args }` al plugin oltre il confine WASM invece del no-op attuale.\n3. Marshalling del `ConfirmSpec` serializzato (outcomes `Proceed/Cancel/Dispatch` soltanto).\n4. Test: un'azione dichiarata da un finto plugin appare nel catalogo/introspection, e il suo dispatch raggiunge il plugin.\n\n## DIPENDENZA\n`ProviderHandles` (heca/src/providers/mod.rs) deve tenere l'`ActionHandle` e chiamare `unregister_dynamic` al drop (G5). Oggi tiene solo le `subscriptions`. Quel gancio è previsto in plugin-05; se non è ancora fatto quando si arriva qui, farlo prima (o qui).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -126,9 +126,9 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-01T18:12:56.212Z"
+      "updatedAt": "2026-07-15T16:54:08.657Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:12:56.212Z"
+  "updatedAt": "2026-07-15T16:54:08.657Z"
 }
