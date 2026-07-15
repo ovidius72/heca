@@ -37,14 +37,8 @@ pub enum ActionCategory {
     System,
 }
 
-// ActionCategory and its label() are used by ActionDescriptor metadata.
-// The metadata catalog is preserved for the command palette (not yet implemented).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "category labels are preserved for command-palette metadata")
-)]
 impl ActionCategory {
-    /// Human-readable category name for UI display.
+    /// Human-readable category name for UI display (and the RPC-introspection category string).
     pub const fn label(self) -> &'static str {
         match self {
             ActionCategory::Navigation => "Navigation",
@@ -183,6 +177,34 @@ pub fn register_dynamic(
         }
     }
     ActionHandle(id)
+}
+
+/// A **native** action declared in one place: its `WmAction` variant (dispatched by discriminant),
+/// its handler, and its metadata (including any [`confirm`](ActionMeta::confirm)) — the §5.6
+/// native-dev ergonomics. The counterpart to [`register_dynamic`] for actions that *have* a variant.
+///
+/// This is what unifies the two things a built-in needs — a handler in the registry and metadata in
+/// the catalog — into a single call, instead of a `registry.register(&action, handler)` here and a
+/// `const ALL` descriptor there that can drift apart.
+pub struct ActionSpec {
+    /// The variant whose **discriminant** keys the handler (parameterized variants share one).
+    pub action: crate::input::WmAction,
+    pub handler: ActionHandler,
+    pub meta: ActionMeta,
+}
+
+/// Register a native action from one [`ActionSpec`]: the handler joins the [`ActionRegistry`] (by
+/// discriminant) and the metadata joins the [`ActionCatalog`] — one call, both halves, no drift.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "action-task-C native registration API; built-ins seed via ALL today, exercised by tests"
+    )
+)]
+pub fn register(registry: &mut ActionRegistry, catalog: &mut ActionCatalog, spec: ActionSpec) {
+    registry.register(&spec.action, spec.handler);
+    catalog.insert(spec.meta);
 }
 
 /// Retire a name-keyed action — drops both its handler and its metadata. `true` if it was
@@ -1306,7 +1328,7 @@ impl ActionRegistry {
 /// it.
 ///
 /// [`action_policy`]: crate::app::interaction::action_policy
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ActionMeta {
     /// Stable id — the identity used by config bindings, RPC, menus, and `Intent.action`.
     pub name: String,
@@ -1322,6 +1344,36 @@ pub struct ActionMeta {
     pub icon: Option<Glyph>,
     /// Allow/Block classification for the interaction router. Required — see the type docs.
     pub policy: crate::app::interaction::ActionPolicy,
+    /// Declarative confirmation requirement (action-interaction plan §4). `Some` means the central
+    /// gate raises a confirm/response prompt before the action runs; `None` runs it straight.
+    ///
+    /// The guard lives **on the action**, so every surface that dispatches it — keyboard, a header
+    /// button, a context-menu entry, RPC — confirms identically. A plugin declares its own the same
+    /// way (through [`register_dynamic`]).
+    ///
+    /// The confirm's toggle key is [`ConfirmSpec::config_name`], which is **not always the action's
+    /// own name**: the `close` action's spec is keyed `delete_pane` (`ClosePane` + `ClosePaneById`
+    /// confirm identically, §5.1). So the meta of `close` carries a `config_name = "delete_pane"`
+    /// spec — the field lives with the action, the toggle key stays independent.
+    pub confirm: Option<ConfirmSpec>,
+}
+
+// Manual because `ConfirmSpec` is intentionally not `Debug` — it can hold a native `Callback`
+// closure (§6), which is neither `Debug` nor serializable. Rendering it as a bool keeps `ActionMeta`
+// printable without dragging that requirement onto the whole confirm model.
+impl std::fmt::Debug for ActionMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ActionMeta")
+            .field("name", &self.name)
+            .field("label", &self.label)
+            .field("description", &self.description)
+            .field("category", &self.category)
+            .field("default_binding", &self.default_binding)
+            .field("icon", &self.icon)
+            .field("policy", &self.policy)
+            .field("confirm", &self.confirm.is_some())
+            .finish()
+    }
 }
 
 /// Runtime catalog of action metadata, owned by [`AppState`](crate::app_state::AppState).
@@ -1341,16 +1393,6 @@ pub struct ActionCatalog {
     order: Vec<String>,
     /// The built-in names, so a dynamic action can never shadow or retire one.
     builtins: std::collections::HashSet<&'static str>,
-    /// Declarative confirmation requirement per **confirm config name** (see [`ConfirmSpec`]). The
-    /// central gate reads this to decide whether an action needs a confirm/response prompt — the
-    /// guard lives on the action, not the call site.
-    ///
-    /// Keyed by the confirm name, which is **not always the action's own name**: pane close
-    /// (`ClosePane` + `ClosePaneById`, descriptor name `close`) maps to the confirm key
-    /// `delete_pane`, so either dispatch confirms identically (action-interaction plan §5.1). That
-    /// is why this is a separate index rather than a field on [`ActionMeta`] — moving it onto the
-    /// meta is `action-task-C`'s graft point, together with `register(ActionSpec)`.
-    confirm: HashMap<String, ConfirmSpec>,
 }
 
 impl ActionCatalog {
@@ -1359,12 +1401,16 @@ impl ActionCatalog {
     /// Each built-in's `policy` is **computed** from [`action_policy`](crate::app::interaction::action_policy)
     /// via [`builtin_policy`] — never hand-written here — so the exhaustive `match` in
     /// `interaction.rs` remains the only authority on built-in policy and the two cannot drift.
+    ///
+    /// The three destructive confirm specs are attached to their **owner action's** meta:
+    /// `delete_pane` → `close`, `delete_column` → `delete_column`, `delete_workspace` →
+    /// `delete_workspace` (§5.1 — the spec's `config_name` is the toggle key, which may differ from
+    /// the action name, as it does for `close`).
     pub fn with_builtins() -> Self {
         let mut catalog = Self {
             by_name: HashMap::new(),
             order: Vec::new(),
             builtins: ActionRegistry::ALL.iter().map(|d| d.name).collect(),
-            confirm: builtin_confirm_specs(),
         };
         for d in ActionRegistry::ALL {
             catalog.insert(ActionMeta {
@@ -1375,7 +1421,15 @@ impl ActionCatalog {
                 default_binding: d.default_binding.to_string(),
                 icon: d.icon,
                 policy: builtin_policy(d.name),
+                confirm: None,
             });
+        }
+        for (owner_action, spec) in builtin_confirm_specs() {
+            if let Some(meta) = catalog.by_name.get_mut(owner_action) {
+                meta.confirm = Some(spec);
+            } else {
+                debug_assert!(false, "confirm spec owner {owner_action:?} has no built-in action");
+            }
         }
         catalog
     }
@@ -1405,9 +1459,10 @@ impl ActionCatalog {
         self.builtins.contains(name)
     }
 
-    /// The declarative confirmation spec for a **confirm config name**, if it needs confirmation.
-    pub fn confirm_spec(&self, name: &str) -> Option<&ConfirmSpec> {
-        self.confirm.get(name)
+    /// The declarative confirmation spec for an action, by its **action name** (the owner name —
+    /// e.g. `close`, not the toggle key `delete_pane`). `None` when the action needs no prompt.
+    pub fn confirm_spec(&self, action_name: &str) -> Option<&ConfirmSpec> {
+        self.find(action_name).and_then(|m| m.confirm.as_ref())
     }
 
     /// Look up an action's metadata by its name.
@@ -1452,6 +1507,63 @@ impl ActionCatalog {
     )]
     pub fn count(&self) -> usize {
         self.order.len()
+    }
+
+    /// Every action's metadata as a serializable [`ActionInfo`], in stable order — the RPC / command
+    /// palette **introspection** surface (action-task-C). Built-in and plugin actions alike, so a
+    /// tool can discover what a running heca (with its plugins) can do, by name.
+    pub fn describe_all(&self) -> Vec<ActionInfo> {
+        self.order
+            .iter()
+            .filter_map(|n| self.by_name.get(n))
+            .map(ActionInfo::from_meta)
+            .collect()
+    }
+
+    /// One action's metadata as a serializable [`ActionInfo`], by name — `None` if unknown.
+    pub fn describe(&self, name: &str) -> Option<ActionInfo> {
+        self.find(name).map(ActionInfo::from_meta)
+    }
+}
+
+/// A serializable projection of an action's metadata — what RPC introspection returns. Enums are
+/// rendered as their stable string names so the wire form is stable and language-neutral (an
+/// [`Intent`](crate::chrome::Intent)-style contract). A native `Callback` outcome is **not**
+/// serializable, so `confirm` reports only *that* a prompt exists and its toggle key, never the
+/// outcome closures (§6).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ActionInfo {
+    pub name: String,
+    pub label: String,
+    pub description: String,
+    pub category: String,
+    pub default_binding: String,
+    pub policy: String,
+    /// The confirm toggle key (`ConfirmSpec::config_name`) when the action prompts; `None` if it
+    /// runs straight.
+    pub confirm: Option<String>,
+}
+
+impl ActionInfo {
+    fn from_meta(m: &ActionMeta) -> Self {
+        use crate::app::interaction::ActionPolicy;
+        let policy = match m.policy {
+            ActionPolicy::Global => "global",
+            ActionPolicy::AlwaysAllowed => "always_allowed",
+            ActionPolicy::TiledOnly => "tiled_only",
+            ActionPolicy::FocusedPaneLocal => "focused_pane_local",
+            ActionPolicy::WorkspaceLevel => "workspace_level",
+            ActionPolicy::SourceDependent => "source_dependent",
+        };
+        Self {
+            name: m.name.clone(),
+            label: m.label.clone(),
+            description: m.description.clone(),
+            category: m.category.label().to_string(),
+            default_binding: m.default_binding.clone(),
+            policy: policy.to_string(),
+            confirm: m.confirm.as_ref().map(|c| c.config_name.clone()),
+        }
     }
 }
 
@@ -1617,9 +1729,14 @@ pub struct ConfirmSpec {
     pub default_enabled: bool,
 }
 
-/// The built-in confirmation specs, keyed by action config name. The three destructive actions —
-/// close pane / delete column / delete workspace — each get a `[Cancel] [<verb>]` forced prompt.
-fn builtin_confirm_specs() -> HashMap<String, ConfirmSpec> {
+/// The built-in confirmation specs, each paired with the **owner action name** it attaches to. The
+/// three destructive actions — close pane / delete column / delete workspace — each get a
+/// `[Cancel] [<verb>]` forced prompt.
+///
+/// Note the `close` row: its owner is the action `close`, but its **toggle key** (`config_name`) is
+/// `delete_pane` — `[confirm] delete_pane = false` disables it, and `ClosePane`/`ClosePaneById` both
+/// resolve to this one spec (§5.1). The owner name and the toggle key are separate on purpose.
+fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
     let mk = |config_name: &'static str, verb: &str| ConfirmSpec {
         message: "This action cannot be undone.".to_string(),
         buttons: vec![
@@ -1630,14 +1747,11 @@ fn builtin_confirm_specs() -> HashMap<String, ConfirmSpec> {
         config_name: config_name.to_string(),
         default_enabled: true,
     };
-    HashMap::from([
-        ("delete_pane".to_string(), mk("delete_pane", "Delete")),
-        ("delete_column".to_string(), mk("delete_column", "Delete")),
-        (
-            "delete_workspace".to_string(),
-            mk("delete_workspace", "Delete"),
-        ),
-    ])
+    vec![
+        ("close", mk("delete_pane", "Delete")),
+        ("delete_column", mk("delete_column", "Delete")),
+        ("delete_workspace", mk("delete_workspace", "Delete")),
+    ]
 }
 
 #[cfg(test)]
@@ -1787,6 +1901,7 @@ mod tests {
             default_binding: String::new(),
             icon: Some(Glyph::Trash),
             policy,
+            confirm: None,
         }
     }
 
@@ -1968,21 +2083,90 @@ mod tests {
     #[test]
     fn builtin_confirm_specs_are_declared_for_the_destructive_actions() {
         let catalog = ActionCatalog::with_builtins();
-        // The three destructive actions each carry a forced [Cancel] [<danger Proceed>] prompt.
-        for name in ["delete_pane", "delete_column", "delete_workspace"] {
+        // The confirm spec now lives ON the owner action's meta (action-task-C), keyed by ACTION
+        // name — not a parallel index keyed by toggle key. `close` owns the pane-delete prompt whose
+        // toggle key is `delete_pane` (the owner name and the toggle key deliberately differ, §5.1).
+        for (owner, toggle_key) in [
+            ("close", "delete_pane"),
+            ("delete_column", "delete_column"),
+            ("delete_workspace", "delete_workspace"),
+        ] {
             let spec = catalog
-                .confirm_spec(name)
-                .unwrap_or_else(|| panic!("missing confirm spec for {name}"));
-            assert!(!spec.dismissible, "{name} is a forced decision");
+                .confirm_spec(owner)
+                .unwrap_or_else(|| panic!("missing confirm spec on meta for {owner}"));
+            // Same spec is reachable directly off the meta.
+            assert!(catalog.find(owner).unwrap().confirm.is_some());
+            assert!(!spec.dismissible, "{owner} is a forced decision");
             assert!(spec.default_enabled);
-            assert_eq!(spec.config_name, name);
-            assert_eq!(spec.buttons.len(), 2, "{name}: cancel + confirm");
+            assert_eq!(spec.config_name, toggle_key, "{owner} toggle key");
+            assert_eq!(spec.buttons.len(), 2, "{owner}: cancel + confirm");
             assert_eq!(spec.buttons[0].role, ButtonRole::Cancel);
             assert_eq!(spec.buttons[1].role, ButtonRole::Danger);
             assert!(matches!(spec.buttons[1].outcome, Outcome::Proceed));
         }
+        // The toggle key is NOT an action, so it is not itself a confirm-spec lookup key anymore.
+        assert!(catalog.confirm_spec("delete_pane").is_none());
         // Non-destructive actions carry no confirm spec.
         assert!(catalog.confirm_spec("focus_left").is_none());
+        assert!(catalog.find("focus_left").unwrap().confirm.is_none());
+    }
+
+    /// `register(ActionSpec)` wires BOTH halves of a native action in one call: the handler into the
+    /// registry (dispatchable), and the meta — with its confirm — into the catalog (introspectable).
+    #[test]
+    fn register_native_wires_handler_and_meta_together() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog {
+            by_name: HashMap::new(),
+            order: Vec::new(),
+            builtins: std::collections::HashSet::new(),
+        };
+        fn noop(state: &mut crate::app_state::AppState, _a: &WmAction) {
+            state.needs_redraw = true;
+        }
+        let mut meta = dyn_meta("reload_config", ActionPolicy::Global);
+        meta.confirm = None;
+        register(
+            &mut registry,
+            &mut catalog,
+            ActionSpec {
+                action: WmAction::ReloadConfig,
+                handler: noop,
+                meta,
+            },
+        );
+        assert!(registry.has_handler(&WmAction::ReloadConfig), "handler wired");
+        assert!(catalog.find("reload_config").is_some(), "meta wired");
+        assert_eq!(
+            registry.dispatch_of(&catalog, "reload_config"),
+            Some(Dispatch::Native)
+        );
+    }
+
+    /// A plugin can declare its OWN confirm through `register_dynamic` — the spec rides on the meta,
+    /// so it is reachable exactly like a built-in's, no parallel registration.
+    #[test]
+    fn a_dynamic_action_can_declare_its_own_confirm() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        let mut meta = dyn_meta("plugin.docker.remove", ActionPolicy::Global);
+        meta.confirm = Some(ConfirmSpec {
+            message: "Remove the container?".to_string(),
+            buttons: vec![
+                ResponseButton::cancel("cancel", "Cancel"),
+                ResponseButton::proceed("confirm", "Remove", true),
+            ],
+            dismissible: false,
+            config_name: "plugin.docker.remove".to_string(),
+            default_enabled: true,
+        });
+        register_dynamic(&mut registry, &mut catalog, meta, None);
+
+        let spec = catalog.confirm_spec("plugin.docker.remove").unwrap();
+        assert_eq!(spec.config_name, "plugin.docker.remove");
+        assert!(!spec.dismissible);
     }
 
     #[test]

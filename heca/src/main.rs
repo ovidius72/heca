@@ -71,6 +71,17 @@ impl HecaApp {
         Ok(action)
     }
 
+    /// Answer an action-metadata **introspection** query (`list-actions` / `describe-action <name>`)
+    /// against the runtime catalog, returning JSON. `None` if `cmd` is not an introspection command
+    /// — the RPC server then routes it to [`execute_rpc_command`] to run as an action. A query
+    /// returns data, never a [`WmAction`], which is why it is a separate entry point.
+    // Transitional: consumed by the Phase 5 RPC server alongside `execute_rpc_command`.
+    #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
+    pub fn query_rpc_command(&self, cmd: &str) -> Option<Result<String, rpc::RpcError>> {
+        let state = self.state.as_ref()?;
+        rpc::introspect(&state.action_catalog, cmd)
+    }
+
     fn new(event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();

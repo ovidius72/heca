@@ -1887,9 +1887,11 @@ fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -
 }
 
 /// The confirm config name for a raw destructive action (`None` if it isn't confirmable).
-fn confirm_config_name(action: &WmAction) -> Option<&'static str> {
+/// The **owner action name** whose [`ActionMeta::confirm`] governs this action — not the toggle key.
+/// `ClosePane`/`ClosePaneById` are both owned by `close` (whose spec is toggle-keyed `delete_pane`).
+fn confirm_owner_name(action: &WmAction) -> Option<&'static str> {
     match action {
-        WmAction::ClosePaneById { .. } => Some("delete_pane"),
+        WmAction::ClosePane | WmAction::ClosePaneById { .. } => Some("close"),
         WmAction::DeleteColumn { .. } => Some("delete_column"),
         WmAction::DeleteWorkspace { .. } => Some("delete_workspace"),
         _ => None,
@@ -1951,7 +1953,7 @@ pub(crate) fn request_destructive(
     raw_action: WmAction,
     resume_sidebar: bool,
 ) {
-    let spec = confirm_config_name(&raw_action)
+    let spec = confirm_owner_name(&raw_action)
         .and_then(|name| state.action_catalog.confirm_spec(name).cloned());
     match spec {
         Some(spec) if confirm_enabled(state, &spec.config_name, spec.default_enabled) => {
@@ -1979,14 +1981,16 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     // `Proceed` (`ClosePane` → the focused pane's `ClosePaneById`, pinned now).
     let (name, resolved) = match action {
         WmAction::ClosePane => match focused_pane_id(state) {
-            Some(pane_id) => ("delete_pane", WmAction::ClosePaneById { pane_id }),
+            Some(pane_id) => ("close", WmAction::ClosePaneById { pane_id }),
             None => return false, // nothing focused → let the normal path no-op
         },
-        WmAction::ClosePaneById { .. } => ("delete_pane", action.clone()),
+        WmAction::ClosePaneById { .. } => ("close", action.clone()),
         WmAction::DeleteColumn { .. } => ("delete_column", action.clone()),
         WmAction::DeleteWorkspace { .. } => ("delete_workspace", action.clone()),
         _ => return false,
     };
+    // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key
+    // (`delete_pane` for `close`).
     let Some(spec) = state.action_catalog.confirm_spec(name).cloned() else {
         return false;
     };

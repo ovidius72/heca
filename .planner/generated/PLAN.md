@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-15T06:49:05.799Z
+**Last updated:** 2026-07-15T16:54:35.525Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -96,7 +96,7 @@ Status: 📋 `planned`
 - 📋 **f94d6da1-43b0-4b6a-a954-b404164126bd** P007 — plugin-09: Multi-region proof + config integration (0/3 tasks)
 - 📋 **74abdac5-8a35-4e5f-a82f-3abb9bb0b738** P008 — plugin-05: Host API actions/overlay/region (0/3 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
-- 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (3/4 tasks)
+- 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (4/5 tasks)
 - 📋 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (4/9 tasks)
 - ✅ **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (8/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
@@ -784,7 +784,7 @@ Actions declare as data whether they need a prompt (confirm/choice) and which re
 
 Status: 📋 `planned`
 
-**Tasks:** 3/4
+**Tasks:** 4/5
 
 ### 📋 99d19246-1ba9-4720-9895-e70c66acf144 — P011 — plugin-ui: Declarative widget-tree UI model (ViewNode)
 
