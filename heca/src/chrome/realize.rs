@@ -274,6 +274,19 @@ fn realize_kind(
             if let Some(on_change) = option_change(node, emit) {
                 select = select.on_change(on_change);
             }
+            // A named `Select` is a form field like `Input`/`Toggle`/`Checkbox`: its chosen
+            // option's **value** (not the index) is marshalled into the submitted `data`. The live
+            // selection is an index signal, so bind a reader that maps it through the option values.
+            if let Some(name) = name_prop(node) {
+                let values = option_values(node);
+                let idx = select.state();
+                forms.bind(
+                    name,
+                    Box::new(move || {
+                        PropValue::Text(values.get(idx.get_untracked()).cloned().unwrap_or_default())
+                    }),
+                );
+            }
             Box::new(select)
         }
         WidgetKind::Tabs => {
@@ -827,6 +840,21 @@ fn value_string(value: &PropValue) -> String {
         PropValue::Int(i) => i.to_string(),
         _ => String::new(),
     }
+}
+
+/// The option **values** of a `Select`/`Tabs` node, in child order — the strings its `Choice`
+/// children carry. A named `Select` marshals the value at the chosen index into the form `data`
+/// (mirrors [`realize_choice`]'s own value derivation: explicit `value` prop, else the label).
+fn option_values(node: &ViewNode) -> Vec<String> {
+    node.children
+        .iter()
+        .filter(|c| c.kind == WidgetKind::Choice)
+        .map(|c| {
+            value_prop(c)
+                .map(|v| value_string(&v))
+                .unwrap_or_else(|| text_of(c))
+        })
+        .collect()
 }
 
 /// The field `"name"` a value widget submits its value under (`ModalResult::Action`'s `data`).
@@ -1784,6 +1812,79 @@ mod tests {
         assert_eq!(data.len(), 2, "only the two named widgets are collected");
         assert_eq!(data.get("q").and_then(PropValue::as_text), Some("hello"));
         assert_eq!(data.get("agree").and_then(PropValue::as_bool), Some(true));
+    }
+
+    /// A named `Select` is a form field: `collect()` returns the **value** of the chosen option
+    /// (not its index), mapped through the options' `value` props at the live selection.
+    #[test]
+    fn named_select_is_collected_as_its_chosen_value() {
+        let option = |value: &str, label: &str| {
+            ViewNode::new(WidgetKind::Choice)
+                .prop("value", PropValue::Text(value.into()))
+                .text(label)
+        };
+        let mut hints = HintTargetRegistry::default();
+        let mut forms = FormBindings::default();
+        let node = ViewNode::new(WidgetKind::Select)
+            .prop("name", PropValue::Text("priority".into()))
+            .prop("selected", PropValue::Int(2))
+            .child(option("low", "Low"))
+            .child(option("medium", "Medium"))
+            .child(option("high", "High"));
+        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+
+        assert_eq!(
+            forms.collect().get("priority").and_then(PropValue::as_text),
+            Some("high"),
+            "the chosen option's value, not its index",
+        );
+    }
+
+    /// A rich modal body with one of every value-widget kind marshals each named field into
+    /// `collect()` under its own name — the end-to-end shape `ModalResult::Action.data` returns.
+    #[test]
+    fn rich_modal_body_marshals_every_named_field() {
+        let mut hints = HintTargetRegistry::default();
+        let mut forms = FormBindings::default();
+        let node = ViewNode::new(WidgetKind::Column)
+            .child(
+                ViewNode::new(WidgetKind::Input)
+                    .text("nginx")
+                    .prop("name", PropValue::Text("host".into())),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Toggle)
+                    .prop("on", PropValue::Bool(true))
+                    .prop("name", PropValue::Text("tls".into())),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Checkbox)
+                    .prop("checked", PropValue::Bool(false))
+                    .prop("name", PropValue::Text("force".into())),
+            )
+            .child(
+                ViewNode::new(WidgetKind::Select)
+                    .prop("name", PropValue::Text("region".into()))
+                    .prop("selected", PropValue::Int(1))
+                    .child(
+                        ViewNode::new(WidgetKind::Choice)
+                            .prop("value", PropValue::Text("eu".into()))
+                            .text("Europe"),
+                    )
+                    .child(
+                        ViewNode::new(WidgetKind::Choice)
+                            .prop("value", PropValue::Text("us".into()))
+                            .text("US"),
+                    ),
+            );
+        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+
+        let data = forms.collect();
+        assert_eq!(data.len(), 4, "every named field is collected");
+        assert_eq!(data.get("host").and_then(PropValue::as_text), Some("nginx"));
+        assert_eq!(data.get("tls").and_then(PropValue::as_bool), Some(true));
+        assert_eq!(data.get("force").and_then(PropValue::as_bool), Some(false));
+        assert_eq!(data.get("region").and_then(PropValue::as_text), Some("us"));
     }
 
     /// A named text `Input` exposes its **live value signal** for reactive validation (used to

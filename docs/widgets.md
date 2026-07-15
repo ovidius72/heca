@@ -1305,7 +1305,8 @@ option can compose content exactly like a native one.
 ```rust
 ViewNode::new(WidgetKind::Select)
     .prop("selected", PropValue::Int(1))
-    .on("change", Intent::new("set_level"))
+    .prop("name", PropValue::Text("level".into())) // form field: chosen VALUE → data["level"]
+    .on("change", Intent::new("set_level"))         // optional: also fire an intent live on change
     .child(
         ViewNode::new(WidgetKind::Choice)
             .prop("value", PropValue::Text("low".into()))
@@ -1319,11 +1320,15 @@ ViewNode::new(WidgetKind::Select)
             .child(ViewNode::new(WidgetKind::Label).text("HIGH")),
     );
 // The `change` intent fires with args {"value": "high"} — the option's value, not an opaque index.
+// With `name` set, submitting the enclosing modal also returns data["level"] = "high" (the value).
+// `name` is realize-only (a form-submission concept); the native `Select` builder has no equivalent.
 ```
 
-Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is ignored).
-A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button` does; when it
-has children, **children win**. See
+Props `realize` reads: `selected` (`Int`); `name` (`Text`) opts the Select into **form submission** —
+inside a modal body its chosen option's value is returned in `ModalResult::Action.data[name]`
+([`Dialog`](#dialog) → *Declaring a modal from data*). Children: `Choice` nodes (a non-`Choice` child
+is ignored). A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button`
+does; when it has children, **children win**. See
 [Options are children](#options-are-children-select--tabs--choice).
 
 #### How the rows can be children *and* live in an overlay
@@ -2164,7 +2169,9 @@ outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
 
 The **body is any `ViewNode` tree** (labels, inputs, rows, cards…), so a modal can carry a form.
 A value node opts into the returned `data` with a **`"name"` prop** — on submit the host collects
-its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`).
+its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`, `Select` → the
+**chosen option's value** as `Text`, not its index). Unnamed value nodes render but aren't
+collected. Collection is in the body's declaration order.
 
 **Validation — disable submit until a field is filled.** A `ModalAction` can be
 `.disabled_when_empty("field")`: the host binds that button's `disabled` state to the named text
@@ -2183,7 +2190,23 @@ open_modal(
             .child(
                 ViewNode::new(WidgetKind::Input)
                     .text(current_name)
-                    .prop("name", PropValue::Text("name".into())), // collected into `data`
+                    .prop("name", PropValue::Text("name".into())), // → data["name"] (Text)
+            )
+            // A named Select is a form field too: its chosen option's *value* comes back.
+            .child(
+                ViewNode::new(WidgetKind::Select)
+                    .prop("name", PropValue::Text("scope".into())) // → data["scope"] (Text)
+                    .prop("selected", PropValue::Int(0))
+                    .child(
+                        ViewNode::new(WidgetKind::Choice)
+                            .prop("value", PropValue::Text("pane".into()))
+                            .text("This pane"),
+                    )
+                    .child(
+                        ViewNode::new(WidgetKind::Choice)
+                            .prop("value", PropValue::Text("column".into()))
+                            .text("Whole column"),
+                    ),
             ),
         actions: vec![
             ModalAction::new("cancel", "Cancel"),
@@ -2195,9 +2218,9 @@ open_modal(
     |state, registry, result| {
         if let ModalResult::Action { id, data } = result {
             if id == "ok" {
-                if let Some(name) = data.get("name").and_then(PropValue::as_text) {
-                    /* dispatch the rename with `name` */
-                }
+                let name = data.get("name").and_then(PropValue::as_text);
+                let scope = data.get("scope").and_then(PropValue::as_text); // "pane" | "column"
+                /* dispatch the rename with `name` + `scope` */
             }
         }
     },

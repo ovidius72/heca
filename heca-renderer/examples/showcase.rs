@@ -1027,7 +1027,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             let open = dialog.open_signal();
             let (cancel_open, delete_open, dismiss_open) = (open, open, open);
             let dialog = dialog
-                .body(Label::new("This action cannot be undone."))
+                // A RICH body — not just a message, but a Column holding a warning Label + real
+                // form fields (Input + Checkbox), proving the body is arbitrary composed content.
+                // In `heca` any named value node in a `ViewNode` body (Input/Toggle/Checkbox/Select)
+                // marshals its value into `ModalResult::Action.data` (see docs/widgets.md §Dialog).
+                // NB: an overlay-in-overlay (a Select opened inside a Dialog) is a separate,
+                // not-yet-supported case tracked in plugin-task-ui-7, so it's kept out of the demo.
+                .body(
+                    Flex::column()
+                        .gap(8.0)
+                        .child(Label::new("This action cannot be undone."))
+                        .child(caption("Confirm name"))
+                        .child(Input::new().value("pane-1").on_change(report))
+                        .child(Checkbox::new().label("Also close its column").on_change(report)),
+                )
                 .action(
                     Button::secondary("Cancel").on_click(move || {
                         println!("[showcase] dialog cancelled");

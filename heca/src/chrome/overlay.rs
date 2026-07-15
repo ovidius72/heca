@@ -120,8 +120,9 @@ impl ModalSpec {
 /// The resolved outcome of a modal, handed to the caller's completion.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ModalResult {
-    /// A button (or RPC) chose action `id`; `data` carries anything the body collected (empty
-    /// for now — form/table marshalling is a later step).
+    /// A button (or RPC) chose action `id`; `data` carries the modal body's named value fields,
+    /// each read at submit time — `Input` → `Text`, `Toggle`/`Checkbox` → `Bool`, `Select` → the
+    /// chosen option's value (`Text`). Empty when the body has no named field (e.g. a plain confirm).
     Action { id: String, data: PropMap },
     /// Esc / scrim / `CloseOverlay` — no action chosen.
     Dismissed,
