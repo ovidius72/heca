@@ -21,7 +21,8 @@
 mod workspaces;
 
 use crate::chrome::{
-    ChromeEvent, ChromeIntentEmitter, ChromeSubscription, Contribution, RegionId, RegionSet,
+    ChromeEvent, ChromeIntentEmitter, ChromeSubscription, ContextMenuContribution, Contribution,
+    RegionId, RegionSet,
 };
 use crate::host::{App, StateView};
 use crate::sidebar::SidebarTree;
@@ -62,6 +63,19 @@ pub trait Provider {
     /// Build the contribution model. Called on mount and on each invalidation —
     /// the **render seam**.
     fn build_contribution(&self, ctx: &ChromeCtx<'_>) -> Contribution;
+
+    /// Context-menu entries this provider contributes (context-menu-5). Declares *where*
+    /// (`context_path`) and *what* (`build`) — never *when*: the host decides that, opening the menu
+    /// on right-click / `prefix+>` and merging every provider for that path by `weight`, so these
+    /// entries slot **between** the built-ins.
+    ///
+    /// Separate from [`build_contribution`](Provider::build_contribution) — which returns the one
+    /// *mounted body* — because a provider commonly wants both a container **and** menu entries on
+    /// its rows. Returns as many contributions as it likes, on as many paths as it likes.
+    /// Default: none.
+    fn context_menus(&self, _ctx: &ChromeCtx<'_>) -> Vec<ContextMenuContribution> {
+        Vec::new()
+    }
 
     /// Subscribe to events / register actions on activation. The returned
     /// [`ProviderHandles`] are held by the host while the provider is mounted and

@@ -865,6 +865,17 @@ pub fn build_action(
             step: get_enum(args, "step")?,
         }),
 
+        // ── Context-menu / sidebar targets (context-menu-5) ──
+        // Reachable by NAME so a menu entry — built-in or plugin-contributed — carries an `Intent`
+        // rather than a `WmAction` (the enum is closed to plugins). Same constructor the config
+        // binding and the RPC command use.
+        "add_column_to_workspace" => Some(WmAction::AddColumnToWorkspace {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
+        "open_link" => Some(WmAction::OpenLink {
+            url: get_string(args, "url")?,
+        }),
+
         // ── Chrome container placement (plugin-04/T1) ──
         // These carry DOTTED, namespaced ids — unlike every other built-in, whose config name is
         // snake_case. That asymmetry is deliberate: the dotted namespace is the id scheme plugins
