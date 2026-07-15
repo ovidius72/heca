@@ -179,6 +179,34 @@ pub fn register_dynamic(
     ActionHandle(id)
 }
 
+/// A **native** action declared in one place: its `WmAction` variant (dispatched by discriminant),
+/// its handler, and its metadata (including any [`confirm`](ActionMeta::confirm)) — the §5.6
+/// native-dev ergonomics. The counterpart to [`register_dynamic`] for actions that *have* a variant.
+///
+/// This is what unifies the two things a built-in needs — a handler in the registry and metadata in
+/// the catalog — into a single call, instead of a `registry.register(&action, handler)` here and a
+/// `const ALL` descriptor there that can drift apart.
+pub struct ActionSpec {
+    /// The variant whose **discriminant** keys the handler (parameterized variants share one).
+    pub action: crate::input::WmAction,
+    pub handler: ActionHandler,
+    pub meta: ActionMeta,
+}
+
+/// Register a native action from one [`ActionSpec`]: the handler joins the [`ActionRegistry`] (by
+/// discriminant) and the metadata joins the [`ActionCatalog`] — one call, both halves, no drift.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "action-task-C native registration API; built-ins seed via ALL today, exercised by tests"
+    )
+)]
+pub fn register(registry: &mut ActionRegistry, catalog: &mut ActionCatalog, spec: ActionSpec) {
+    registry.register(&spec.action, spec.handler);
+    catalog.insert(spec.meta);
+}
+
 /// Retire a name-keyed action — drops both its handler and its metadata. `true` if it was
 /// registered. Built-ins cannot be retired (their names are not removable from the catalog).
 #[cfg_attr(
@@ -2081,6 +2109,39 @@ mod tests {
         // Non-destructive actions carry no confirm spec.
         assert!(catalog.confirm_spec("focus_left").is_none());
         assert!(catalog.find("focus_left").unwrap().confirm.is_none());
+    }
+
+    /// `register(ActionSpec)` wires BOTH halves of a native action in one call: the handler into the
+    /// registry (dispatchable), and the meta — with its confirm — into the catalog (introspectable).
+    #[test]
+    fn register_native_wires_handler_and_meta_together() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog {
+            by_name: HashMap::new(),
+            order: Vec::new(),
+            builtins: std::collections::HashSet::new(),
+        };
+        fn noop(state: &mut crate::app_state::AppState, _a: &WmAction) {
+            state.needs_redraw = true;
+        }
+        let mut meta = dyn_meta("reload_config", ActionPolicy::Global);
+        meta.confirm = None;
+        register(
+            &mut registry,
+            &mut catalog,
+            ActionSpec {
+                action: WmAction::ReloadConfig,
+                handler: noop,
+                meta,
+            },
+        );
+        assert!(registry.has_handler(&WmAction::ReloadConfig), "handler wired");
+        assert!(catalog.find("reload_config").is_some(), "meta wired");
+        assert_eq!(
+            registry.dispatch_of(&catalog, "reload_config"),
+            Some(Dispatch::Native)
+        );
     }
 
     /// A plugin can declare its OWN confirm through `register_dynamic` — the spec rides on the meta,
