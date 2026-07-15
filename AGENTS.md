@@ -1046,8 +1046,12 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 7. Add default binding in `keybindings.default.toml` (the embedded default keymap)
 8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
 9. Add RPC parser support in `heca/src/rpc.rs`
-10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate.
+9b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
+9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` (may differ from the action name, as `close` → `delete_pane`); users toggle it under `[confirm]`.
+10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate. Metadata is discoverable via RPC introspection (`list-actions` / `describe-action <name>`, `ActionCatalog::describe_all/describe`).
 11. Document examples in `README.md` and `keybindings.default.toml`
+
+> A **name-keyed** action (contributed by a provider/plugin, no `WmAction` variant) skips steps 1–4/8: register it at runtime with `register_dynamic(registry, catalog, meta, handler)`; a native built-in can use `register(ActionSpec { action, handler, meta })` to wire handler + metadata in one call. Full guide with examples: `docs/widgets.md` → "Registering a custom (name-keyed) action".
 
 For planned richer actions like `zoom_column`, `float_active_at`, and `spawn_pane`, prefer domain-friendly arguments over ad hoc strings. Example target shape:
 

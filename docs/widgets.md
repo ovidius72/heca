@@ -2642,9 +2642,73 @@ and it appears in menus and introspection — but the host cannot run it. It is 
 across the plugin boundary. This is how a WASM plugin's actions will be modelled; dispatching one
 today is a no-op with a debug warning.
 
-For the **in-tree** path (adding a real `WmAction` variant with a native handler, a default binding and
-RPC parity), and for making an action ask for **confirmation** before it runs, see
-**[README → Actions System](../README.md#actions-system)**.
+#### Making an action confirm first
+
+Any action — built-in or your own — can declare that it must **confirm before it runs**, as data on
+its `ActionMeta.confirm`. The central dispatch gate reads it, so *every* surface that fires the action
+(a keybinding, a header button, a **context-menu entry**, RPC) confirms identically; you never add a
+prompt at the call site.
+
+```rust
+use crate::actions::{ConfirmSpec, ResponseButton};
+
+let mut meta = ActionMeta { /* … name: "plugin.docker.remove", policy, … */ };
+meta.confirm = Some(ConfirmSpec {
+    message: "Remove the container? This cannot be undone.".into(),
+    buttons: vec![
+        ResponseButton::cancel("cancel", "Cancel"),
+        ResponseButton::proceed("confirm", "Remove", /* danger */ true),
+    ],
+    dismissible: false,                       // forced choice — Esc / click-outside don't dismiss
+    config_name: "plugin.docker.remove".into(), // the [confirm] toggle key (may differ from the name)
+    default_enabled: true,                    // used when the user hasn't set [confirm].<key>
+});
+```
+
+The user turns it off with `[confirm] plugin.docker.remove = false`. `config_name` is the **toggle
+key**, deliberately separate from the action name — heca's own `close` action carries a spec keyed
+`delete_pane`, so `[confirm] delete_pane = false` disables the pane-close prompt.
+
+> **Native-only escape hatch — `Outcome::Callback`.** A response button's outcome is normally
+> declarative (`Proceed` / `Cancel` / `Dispatch` another named action), which serializes and works
+> across RPC and (later) WASM. A **native** button may instead run an `Rc<dyn Fn(&mut AppState,
+> &ActionRegistry)>` closure — but a closure is not serializable, so the plugin-facing builder does
+> **not** expose it, and when metadata is serialized for RPC introspection a `Callback` outcome is
+> rendered opaquely, never dropped. Prefer `Dispatch` (portable, testable); reach for `Callback`
+> only when the logic genuinely cannot be a named action.
+
+#### `register(ActionSpec)` — the native one-call form
+
+For a native action that *has* a `WmAction` variant (in-tree work, not a plugin), `register` wires the
+handler and the metadata together in one call — the counterpart to `register_dynamic`:
+
+```rust
+use crate::actions::{register, ActionSpec};
+
+register(registry, catalog, ActionSpec {
+    action: WmAction::MyThing,     // dispatched by discriminant (parameterized variants share one)
+    handler: handle_my_thing,      // fn(&mut AppState, &WmAction)
+    meta: my_meta,                 // label / icon / policy / confirm — the same ActionMeta
+});
+```
+
+#### Discovering actions at runtime — introspection
+
+The catalog is queryable, so a tool can ask a *running* heca (with whatever plugins are mounted) what
+it can do. Two RPC commands, both returning JSON:
+
+```
+list-actions              → [ {name,label,description,category,default_binding,policy,confirm}, … ]
+describe-action <name>    → one such object, or an error if the name is unknown
+```
+
+`confirm` is the toggle key when the action prompts, `null` otherwise; `policy` is the interaction
+policy as a stable string (`global`, `tiled_only`, …). A native `Callback` outcome is never
+serialized — introspection reports only *that* a prompt exists. In Rust: `ActionCatalog::describe_all()`
+/ `describe(name)` → `ActionInfo`.
+
+For the full **in-tree** built-in checklist (a `WmAction` variant, `action_policy` classification, a
+default binding, RPC parity), see **[README → Actions System](../README.md#actions-system)**.
 
 ---
 
