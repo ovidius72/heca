@@ -175,9 +175,17 @@ descendant's `panel_rect`.
    second retained tree (`overlays`: Dialog/palette/menu/toasts) laid out at viewport size,
    dispatched before and painted after the page. Confirms BUG B. (BUG A — a Select nested *inside*
    the Dialog — still needs step 4's layer routing.)
-4. Base `Overlay` widget refactor: Dialog/dropdown/tooltip compose it; blocking as a layer property.
-5. Docs (`docs/widgets.md` ScrollRegion + the new Overlay) + showcase + rustdoc, per the both-audiences
-   rule. Read all styling from theme. (ScrollRegion/Dialog entries updated with steps 2–3.)
+4. ✅ *(built 2026-07-16, pending interactive verification)* Base `Overlay` widget: scrim + panel
+   chrome + viewport centering, **blocking as a layer property**; `Dialog` composes it. BUG A fixed
+   low-level: `Scene::overlay_segments()` renders segments **depth-ordered** (a nested overlay
+   composites above everything its parent draws), and `Dialog` offers pointer moves / `Scroll` /
+   `Widget*` intents to an overlay-active descendant first (occlusion-aware press routing). The
+   showcase Dialog body now includes a nested `Select` as the verification case.
+   *Deferred within this step (recorded in the T009 planner entry): anchor-to-rect positioning in
+   `Overlay`, and converting `Select`/`Tooltip`/`ContextMenu`/`CommandPalette` panels to compose it —
+   they keep their own (correct) placement/chrome today.*
+5. ✅ Docs (`docs/widgets.md` ScrollRegion + the new Overlay entry + Dialog/Scene updates) + showcase +
+   rustdoc, per the both-audiences rule. Read all styling from theme.
 
 ## Open questions — resolved
 - **Q1 — scrollbar visibility:** each bar reserves a clipped gutter (content never sits under a

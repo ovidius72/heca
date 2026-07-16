@@ -27,21 +27,24 @@
 //! closures baked in; a button's own `on_click` carries the action, and dismissal is a callback
 //! the host points at its own overlay-close path).
 //!
-//! Centering is real layout: the root fills the viewport (`Pct(1.0)` × `Pct(1.0)`) with
-//! `Justify::Center` + `Align::Center`, so the single panel child is centered by taffy and
-//! every descendant gets true bounds (which the hint picker and pointer hit-testing need).
+//! **Presentation is composed, not owned:** the `Dialog` mounts a base
+//! [`Overlay`](super::Overlay) (blocking layer — scrim, drop shadow, panel fill, bracket
+//! reticle, viewport centering) and puts its padded `[title, body?, action-row?]` panel inside
+//! it. The `Overlay` owns the layer chrome and geometry; the `Dialog` owns the content and the
+//! behaviour (focus trap, keyboard, dismissal policy) and intercepts events before the
+//! `Overlay`'s standalone handling would run. Centering is real layout (the overlay fills the
+//! viewport and centers the panel by taffy), so every descendant gets true bounds (which the
+//! hint picker and pointer hit-testing need).
 
 use crate::builders::{LayoutExt, Parent};
 use crate::component::{
-    paint_child, Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent,
+    Base, Component, Event, GridKey, Handled, Modifiers, WidgetIntent,
 };
 use crate::focus::FocusManager;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::Shadow;
-use crate::style::{Align, Justify, Length};
-use crate::widgets::{Flex, Label};
+use crate::reactive::{Signal, SignalGet, SignalUpdate};
+use crate::style::{Justify, Length};
+use crate::widgets::{Flex, Label, Overlay};
 use heca_core::layout::{Point, Rectangle, Size};
-use std::cell::Cell;
 
 /// Panel inner padding.
 const PAD: f32 = 18.0;
@@ -49,19 +52,16 @@ const PAD: f32 = 18.0;
 const GAP: f32 = 14.0;
 /// Gap between adjacent action buttons.
 const BTN_GAP: f32 = 10.0;
-/// Multiplier on the theme `shadow.blur` token — the panel is large and wants a wider,
-/// softer halo than the small-surface base token.
-const SHADOW_BLUR_MULT: f32 = 4.0;
-/// Downward offset lifting the panel off the scrim.
-const SHADOW_DROP: f32 = 12.0;
 
 /// A centered overlay panel over a scrim, holding real child components.
 ///
-/// Structure: the `Dialog` base is a full-viewport centering container whose single child is
-/// the **panel** — a padded column of `[title, body?, action-row?]`. The action row is a
+/// Structure: the `Dialog` base is a full-viewport passthrough whose single child is a
+/// **blocking [`Overlay`](super::Overlay)** (scrim + chrome + centering), whose single child
+/// is the **panel** — a padded column of `[title, body?, action-row?]`. The action row is a
 /// right-aligned [`Flex`] row of the caller's [`Button`](super::Button)s.
 pub struct Dialog {
     base: Base,
+    /// Shared with the composed [`Overlay`] (it is the overlay's own signal).
     open: Signal<bool>,
     /// When `false`, Esc / scrim clicks are swallowed but don't dismiss — a forced-decision
     /// dialog (the user must pick a button). Default `true`.
@@ -77,8 +77,6 @@ pub struct Dialog {
     mods: Modifiers,
     /// Whether an action row exists yet (created lazily on the first [`action`](Dialog::action)).
     has_actions: bool,
-    /// Last-seen viewport, cached during paint for the scrim rect.
-    viewport: Cell<Size>,
 }
 
 impl Dialog {
@@ -91,24 +89,26 @@ impl Dialog {
             .gap(GAP)
             .child(Label::new(title));
 
-        // Root: fill the viewport and center the panel both axes (real taffy centering, so
-        // every descendant gets true bounds for hint/pointer hit-testing).
+        // The base Overlay owns the layer presentation: blocking (scrim + swallow),
+        // viewport centering, drop shadow, panel fill, bracket reticle. Its open
+        // signal IS the dialog's open signal.
+        let overlay = Overlay::new().blocking(true).panel(panel);
+        let open = overlay.open_signal();
+
+        // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::new();
         base.style.width = Length::Pct(1.0);
         base.style.height = Length::Pct(1.0);
-        base.style.justify = Justify::Center;
-        base.style.align = Align::Center;
-        base.children.push(Box::new(panel));
+        base.children.push(Box::new(overlay));
 
         Self {
             base,
-            open: signal(false),
+            open,
             dismissible: true,
             focus: FocusManager::new(),
             on_dismiss: None,
             mods: Modifiers::default(),
             has_actions: false,
-            viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
         }
     }
 
@@ -167,7 +167,7 @@ impl Dialog {
         if open {
             // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
             // appears only once the user navigates by keyboard (focus-visible).
-            let panel = self.base.children[0].as_mut();
+            let panel = self.base.children[0].base_mut().children[0].as_mut();
             self.focus.focus_first_quiet(panel);
         }
         self
@@ -188,13 +188,13 @@ impl Dialog {
 
     /// Move keyboard focus to the next focusable descendant (wraps).
     fn focus_next(&mut self) {
-        let panel = self.base.children[0].as_mut();
+        let panel = self.base.children[0].base_mut().children[0].as_mut();
         self.focus.advance(panel, true);
     }
 
     /// Move keyboard focus to the previous focusable descendant (wraps).
     fn focus_prev(&mut self) {
-        let panel = self.base.children[0].as_mut();
+        let panel = self.base.children[0].base_mut().children[0].as_mut();
         self.focus.advance(panel, false);
     }
 
@@ -206,7 +206,7 @@ impl Dialog {
         if !self.has_actions {
             return;
         }
-        let panel = self.base.children[0].base_mut();
+        let panel = self.base.children[0].base_mut().children[0].base_mut();
         // Panel layout is `[title, body?, action-row]`; the action row is the last child, and
         // its first child is the primary (leftmost) button.
         if let Some(row) = panel.children.last_mut()
@@ -230,9 +230,9 @@ impl Dialog {
         self.open.get_untracked()
     }
 
-    /// The panel container (the single child), mutably.
+    /// The panel container (the composed [`Overlay`]'s single child), mutably.
     fn panel_mut(&mut self) -> &mut Base {
-        self.base.children[0].base_mut()
+        self.base.children[0].base_mut().children[0].base_mut()
     }
 
     /// The panel's laid-out bounds (valid after layout; a zero rect before first layout).
@@ -240,6 +240,7 @@ impl Dialog {
         self.base
             .children
             .first()
+            .and_then(|overlay| overlay.base().children.first())
             .map(|c| c.base().bounds)
             .unwrap_or_else(|| Rectangle::new(Point::new(0.0, 0.0), Size::new(0.0, 0.0)))
     }
@@ -264,60 +265,15 @@ impl Component for Dialog {
 
     /// An open dialog is **modal**: its scrim covers the whole viewport, so every
     /// point is occluded — a host must not synthesize a page-level action (e.g.
-    /// open a context menu) anywhere while it is open.
+    /// open a context menu) anywhere while it is open. (The composed [`Overlay`]
+    /// reports the same; this keeps the answer on the widget the host scans first.)
     fn overlay_occludes(&self, _pos: Point) -> bool {
         self.is_open()
     }
 
-    fn paint(&self, cx: &mut PaintCx) {
-        if !self.base.visible.get_untracked() || !self.is_open() {
-            return;
-        }
-        self.viewport.set(cx.viewport());
-        let (background, surface, scrim_a, shadow, shadow_blur, radius) = {
-            let t = cx.theme();
-            (
-                t.colors.background,
-                t.colors.surface,
-                t.colors.interaction.scrim,
-                t.shadow_color(),
-                t.colors.shadow.blur,
-                t.colors.border_radius,
-            )
-        };
-        let panel = self.panel_bounds();
-
-        cx.with_overlay(|cx| {
-            // Scrim over the whole viewport.
-            let vp = self.viewport.get();
-            let scrim = if vp.w.is_finite() {
-                Rectangle::new(Point::new(0.0, 0.0), vp)
-            } else {
-                panel
-            };
-            cx.rect(scrim, background.with_alpha(scrim_a), None, 0.0, None);
-
-            // Lift the panel off the scrim, then fill it + stamp the shared bracket reticle
-            // (same visual language as Pane / DockFrame).
-            cx.drop_shadow(
-                panel,
-                radius,
-                Shadow {
-                    color: shadow,
-                    radius: shadow_blur * SHADOW_BLUR_MULT,
-                    dx: 0.0,
-                    dy: SHADOW_DROP,
-                },
-            );
-            cx.rect(panel, surface, None, radius, None);
-            cx.bracket_frame(panel);
-
-            // Real children (title, body, action buttons) on top of the panel fill.
-            for child in &self.base.children {
-                paint_child(child.as_ref(), cx);
-            }
-        });
-    }
+    // No `paint` override: the default recursion reaches the composed [`Overlay`],
+    // which owns the whole layer presentation (scrim, shadow, panel fill, bracket
+    // reticle, and the panel's children) inside `with_overlay`.
 
     fn event(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
@@ -326,12 +282,20 @@ impl Component for Dialog {
         let panel_bounds = self.panel_bounds();
         match ev {
             Event::PointerPressed { pos } => {
-                if panel_bounds.contains(*pos) {
-                    // Focus + deliver the press to the button under the cursor (its on_click
+                // A nested open overlay (a Select dropdown in the body) gets first dibs
+                // even OUTSIDE the panel — its list can extend past the panel edge.
+                // `dispatch_trapped` scans overlay-active descendants first, so route
+                // through it whenever the press is in the panel OR a nested overlay is
+                // occluding the point.
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
+                if panel_bounds.contains(*pos)
+                    || crate::component::overlay_occluded_at(panel, *pos)
+                {
+                    // Focus + deliver the press to the widget under the cursor (its on_click
                     // carries the overlay-control action). Trapped dispatch: a press on the
                     // panel *body* (no button under the cursor) keeps the focused button's
-                    // ring instead of clearing it — focus is trapped inside the modal.
-                    let panel = self.base.children[0].as_mut();
+                    // ring instead of clearing it — focus is trapped inside the modal;
+                    // overlay-active descendants (an open Select) are offered it first.
                     self.focus.dispatch_trapped(panel, ev);
                 } else if self.dismissible {
                     // Scrim / outside click dismisses only when dismissible.
@@ -341,15 +305,21 @@ impl Component for Dialog {
                 Handled::Yes
             }
             Event::PointerMoved { .. } => {
-                let panel = self.base.children[0].as_mut();
-                let _ = panel.event(ev); // button hover
+                // Nested overlay FIRST (BUG A hover fall-through): an open overlay inside
+                // the panel (a Select dropdown) captures the move — it consumes moves
+                // within its own panel rect — so a button underneath must not hover.
+                // Only an unconsumed move reaches the ordinary children.
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
+                if self.focus.offer_to_overlay(panel, ev) == Handled::No {
+                    let _ = panel.event(ev); // button hover
+                }
                 Handled::Yes
             }
             // Track modifiers (for Shift+Tab) and forward the broadcast to the panel so a focused
             // field's own modifier-aware editing (word/line motion) sees it. Not consumed.
             Event::ModifiersChanged(m) => {
                 self.mods = *m;
-                let panel = self.base.children[0].as_mut();
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
                 let _ = panel.event(ev);
                 Handled::No
             }
@@ -360,32 +330,44 @@ impl Component for Dialog {
             // widget — so a focused `Input` gets its `Ctrl+h` delete while a focused button lets
             // the nav overload through. The host delivers `Edit*` before `Item*`, so a focused
             // field consumes its edit before the dialog would navigate.
-            Event::Widget(intent) => match intent {
-                WidgetIntent::ItemNext => {
-                    self.focus_next();
-                    Handled::Yes
+            Event::Widget(intent) => {
+                // A NESTED open overlay (a Select dropdown in the body) owns the semantic
+                // intents first: `Dismiss` closes IT (not the dialog), `Activate` commits
+                // ITS row, `Menu*` move its cursor. Only unconsumed intents fall through
+                // to the dialog's own handling.
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
+                if self.focus.offer_to_overlay(panel, ev) == Handled::Yes {
+                    return Handled::Yes;
                 }
-                WidgetIntent::ItemPrevious => {
-                    self.focus_prev();
-                    Handled::Yes
+                match intent {
+                    WidgetIntent::ItemNext => {
+                        self.focus_next();
+                        Handled::Yes
+                    }
+                    WidgetIntent::ItemPrevious => {
+                        self.focus_prev();
+                        Handled::Yes
+                    }
+                    WidgetIntent::Activate => {
+                        self.activate_primary();
+                        Handled::Yes
+                    }
+                    WidgetIntent::Dismiss => {
+                        self.fire_dismiss();
+                        Handled::Yes
+                    }
+                    _ => {
+                        let panel = self.base.children[0].base_mut().children[0].as_mut();
+                        self.focus.deliver_event(panel, ev)
+                    }
                 }
-                WidgetIntent::Activate => {
-                    self.activate_primary();
-                    Handled::Yes
-                }
-                WidgetIntent::Dismiss => {
-                    self.fire_dismiss();
-                    Handled::Yes
-                }
-                _ => {
-                    let panel = self.base.children[0].as_mut();
-                    self.focus.deliver_event(panel, ev)
-                }
-            },
+            }
             // **Field-first**: hand the raw key to the focused widget so it keeps ALL its native
-            // behaviour — an `Input`'s typing, caret motion, Backspace/Delete/Home/End.
+            // behaviour — an `Input`'s typing, caret motion, Backspace/Delete/Home/End. (A nested
+            // open overlay is usually the focused widget too — clicking its trigger focused it —
+            // so its keys arrive through the same field-first delivery.)
             Event::Key { key, pressed: true } => {
-                let panel = self.base.children[0].as_mut();
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
                 if self.focus.deliver_key(panel, *key) == Handled::Yes {
                     return Handled::Yes;
                 }
@@ -403,8 +385,13 @@ impl Component for Dialog {
                 // the configurable `[keys.widgets]` bindings (→ `WidgetIntent`).
                 Handled::No
             }
-            // Swallow scroll while the dialog owns input (modal).
-            Event::Scroll { .. } => Handled::Yes,
+            // Scroll: a nested open overlay (a Select's list) scrolls first; otherwise the
+            // modal swallows the wheel — the page behind must not scroll.
+            Event::Scroll { .. } => {
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
+                let _ = self.focus.offer_to_overlay(panel, ev);
+                Handled::Yes
+            }
             _ => Handled::No,
         }
     }
@@ -416,6 +403,7 @@ impl LayoutExt for Dialog {}
 mod tests {
     use super::*;
     use crate::widgets::{Button, Label};
+    use std::cell::Cell;
     use std::rc::Rc;
 
     fn open_dialog() -> Dialog {
@@ -435,12 +423,14 @@ mod tests {
     }
 
     #[test]
-    fn structure_is_panel_with_title_body_and_action_row() {
+    fn structure_is_overlay_holding_panel_with_title_body_and_action_row() {
         let d = open_dialog();
-        // One child: the panel.
+        // One child: the composed base Overlay (the blocking layer).
         assert_eq!(d.base().children.len(), 1);
-        // Panel: [title, body, action-row].
-        let panel = &d.base().children[0];
+        let overlay = &d.base().children[0];
+        // The overlay's single child is the panel: [title, body, action-row].
+        assert_eq!(overlay.base().children.len(), 1, "overlay holds the panel");
+        let panel = &overlay.base().children[0];
         assert_eq!(panel.base().children.len(), 3, "title + body + action row");
         // Action row holds the two buttons.
         let row = &panel.base().children[2];
@@ -474,7 +464,7 @@ mod tests {
     /// Buttons in the action row that currently hold focus (drives the focus ring).
     fn focused_buttons(d: &Dialog) -> Vec<usize> {
         use crate::reactive::SignalGet;
-        let panel = &d.base().children[0];
+        let panel = &d.base().children[0].base().children[0];
         let row = &panel.base().children[2];
         row.base()
             .children

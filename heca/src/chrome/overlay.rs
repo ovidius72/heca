@@ -511,8 +511,10 @@ mod tests {
             );
         }
 
-        // Structure: the Dialog root has one panel child holding [title, body, action-row(2)].
-        let panel = &root.base().children[0];
+        // Structure: the Dialog root composes a base Overlay (the blocking layer) whose
+        // single child is the panel holding [title, body, action-row(2)].
+        let overlay = &root.base().children[0];
+        let panel = &overlay.base().children[0];
         assert_eq!(panel.base().children.len(), 3, "title + body + action row");
         assert_eq!(panel.base().children[2].base().children.len(), 2, "two buttons");
     }

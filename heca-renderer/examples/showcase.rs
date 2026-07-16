@@ -412,17 +412,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     let (cancel_open, delete_open, dismiss_open) = (dialog_open, dialog_open, dialog_open);
     let dialog = dialog
         // A RICH body — not just a message, but a Column holding a warning Label + real
-        // form fields (Input + Checkbox), proving the body is arbitrary composed content.
-        // In `heca` any named value node in a `ViewNode` body (Input/Toggle/Checkbox/Select)
-        // marshals its value into `ModalResult::Action.data` (see docs/widgets.md §Dialog).
-        // NB: an overlay-in-overlay (a Select opened inside a Dialog) is a separate,
-        // not-yet-supported case tracked in plugin-task-ui-7, so it's kept out of the demo.
+        // form fields (Input + Select + Checkbox), proving the body is arbitrary composed
+        // content. In `heca` any named value node in a `ViewNode` body
+        // (Input/Toggle/Checkbox/Select) marshals its value into `ModalResult::Action.data`
+        // (see docs/widgets.md §Dialog). The Select is an OVERLAY-IN-OVERLAY (T009 step 4):
+        // its open list must composite ABOVE the dialog's action buttons (a deeper scene
+        // segment) and capture hover/wheel/keys over them — not show through or fall through.
         .body(
             Flex::column()
                 .gap(8.0)
                 .child(Label::new("This action cannot be undone."))
                 .child(caption("Confirm name"))
                 .child(Input::new().value("pane-1").on_change(report))
+                .child(caption("Archive target"))
+                .child(
+                    Select::new(["SCRATCHPAD", "WORKSPACE 01", "TRASH"])
+                        .selected(2)
+                        .on_change(report),
+                )
                 .child(Checkbox::new().label("Also close its column").on_change(report)),
         )
         .action(Button::secondary("Cancel").on_click(move || {

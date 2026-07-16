@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
@@ -387,7 +387,7 @@ stay DRY):
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
-| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. |
+| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
 | `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
@@ -2113,11 +2113,64 @@ row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
   `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
   Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
+### Overlay
+
+The **base overlay surface** every overlay widget shares (T009 overlay rework): a
+viewport-filling, centering layer that decorates its single **panel** child with the common
+overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and the bracket
+reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
+*blocking* overlay (default) paints the scrim and swallows outside input (modal); a
+non-blocking one lets outside input fall through (light-dismiss). Positioning lives here once —
+the panel taffy-centers on the viewport, so every descendant gets true bounds (anchor-to-rect
+positioning for dropdown/popover/tooltip specializations is the planned extension; those still
+own their placement today).
+
+**Composition, not inheritance.** [`Dialog`](#dialog) *composes* an `Overlay` as its subtree:
+the `Overlay` owns presentation + geometry ([`overlay_occludes`](#component-trait)); the
+specialization owns content and behaviour (focus trap, keyboard, dismissal policy) and
+intercepts events before the `Overlay`'s standalone handling runs. Used **directly** (a host
+mounting an arbitrary — e.g. `realize`d — panel), the `Overlay` provides the standard layer
+semantics itself: nested-overlay-first routing, outside-click callback, blocking swallow.
+
+- **Construct**: `Overlay::new()` (closed, blocking), then `.panel(impl Component)` — the single
+  child; the caller owns the panel's internal layout (padding/gaps/children), the overlay owns
+  the chrome around it. `.panel_boxed(Box<dyn Component>)` takes a mapper-produced panel (e.g.
+  `heca`'s `realize(ViewNode)`).
+- **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
+  scrim, outside input falls through), `.open(bool)`,
+  `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
+  policy instead).
+- **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
+  layout).
+- **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
+  `overlay_occludes` = whole viewport when blocking, else the panel rect.
+- **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
+  (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
+  composites above everything this layer draws — see the
+  [`Scene`/`PaintCx` table](#scene--drawcommand--paintcx-for-building-widgets).
+- **Traits**: `LayoutExt`.
+
+**Native.**
+```rust
+// A host-mounted blocking layer around an arbitrary (here: realized) panel.
+let overlay = Overlay::new()
+    .panel_boxed(realized_panel)                  // Box<dyn Component> from realize(ViewNode)
+    .on_outside_click(move || emit(close_intent)) // host's overlay-close path
+    .open(true);
+let visible = overlay.open_signal();
+```
+
+**Declarative (`ViewNode`).** Host-only — there is no `WidgetKind::Overlay`. A plugin never
+mounts a layer itself; it submits a spec (e.g. `ModalSpec` with a `ViewNode` body) and the
+**host** builds the layer (`Dialog`/`Overlay`) around the realized content — overlay hosting,
+z-order, and blocking policy stay host-owned (§2.7 of the plugin plan).
+
 ### Dialog
 
-A centered overlay **panel that holds real child components**. It lays out a
-padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and each
-action is a real [`Button`](#button). Because the buttons are real children (not manually
+A centered overlay **panel that holds real child components**, composing the base
+[`Overlay`](#overlay) for its layer presentation (blocking scrim + chrome + centering). It lays
+out a padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and
+each action is a real [`Button`](#button). Because the buttons are real children (not manually
 painted), they get the
 universal hint picker (`prefix+/`), standard focus traversal, and pointer routing **for free** —
 this is what makes an overlay's buttons hintable.
@@ -2152,8 +2205,15 @@ App wiring: `build_widget_keymap` → `AppState.widget_keymap`, dispatched in th
 (`heca/src/app/events.rs`). This is what makes the host-owned rename / prompt dialogs (an `Input` +
 OK/Cancel) work.
 
-Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
-+ `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
+Centering is real taffy layout, owned by the composed [`Overlay`](#overlay) (it fills the
+viewport and centers the panel), so every descendant gets true bounds (which the hint picker +
+hit-testing need).
+
+**Nested overlays work** (T009 step 4): a [`Select`](#select) opened inside the body composites
+**above** the dialog's action buttons (its dropdown records a deeper scene segment) and captures
+hover/wheel/keys over them — the dialog offers pointer moves, `Scroll`, and the semantic
+`Widget*` intents to an overlay-active descendant first, so `Dismiss` closes the *dropdown* (not
+the dialog) and `Activate` commits its row.
 
 > **Host it as a top-level overlay layer — never in-flow inside scrolled content.** The taffy
 > centering centers the panel **within the Dialog's own box**, so the box must BE the viewport:
