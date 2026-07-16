@@ -714,9 +714,9 @@ impl Component for Select {
                     Handled::No
                 }
             }
-            Event::Scroll { delta } if self.open => {
+            Event::Scroll { delta_y, .. } if self.open => {
                 let max = self.max_scroll() as f32;
-                self.scroll = (self.scroll as f32 + delta).clamp(0.0, max).round() as usize;
+                self.scroll = (self.scroll as f32 + delta_y).clamp(0.0, max).round() as usize;
                 self.place_options();
                 Handled::Yes
             }

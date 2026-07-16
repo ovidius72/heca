@@ -279,10 +279,15 @@ pub enum Event {
     /// Modifier keys changed — broadcast to the whole tree so widgets can track
     /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
     ModifiersChanged(Modifiers),
-    /// Wheel/scroll by `delta` lines (positive = scroll down the content). The
-    /// host routes this to the open overlay, or to the widget under the cursor.
+    /// Wheel/scroll by `(delta_x, delta_y)` lines (positive `delta_y` = scroll the
+    /// content down, positive `delta_x` = scroll right). The **host** maps device
+    /// deltas and modifiers onto these (e.g. plain wheel → `delta_y`, `Shift`+wheel →
+    /// `delta_x`, a trackpad's 2-D delta → both), so widgets read the axis directly
+    /// and never track modifiers themselves. The host routes this to the open
+    /// overlay, or to the widget under the cursor.
     Scroll {
-        delta: f32,
+        delta_x: f32,
+        delta_y: f32,
     },
     /// A **semantic widget intent** — the host-owned, configurable counterpart to raw
     /// keys, shared by every interactive widget. The host resolves the `[keys.widgets]`

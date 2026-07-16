@@ -1252,6 +1252,37 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     list
                 }),
         )
+        // ScrollRegion two-axis + scrollable surface (plugin-task-ui-7 Part 1):
+        // .both() enables horizontal + vertical scrolling; .background()/.border()
+        // (StyleExt) make it a framed scrollable *surface*. Each row is explicitly
+        // wider than the 240px viewport (→ horizontal overflow + bottom scrollbar),
+        // and there are enough rows to overflow the 140px height (→ vertical
+        // scrollbar). Plain wheel scrolls vertically, Shift+wheel horizontally.
+        .child(caption("ScrollRegion — two-axis + scrollable surface"))
+        .child({
+            let mut grid = ScrollRegion::new()
+                .both()
+                .width(Length::Px(240.0))
+                .height(Length::Px(140.0))
+                .background(theme.colors.surface)
+                .border(theme.colors.accent, 1.0);
+            for r in 1..=14 {
+                grid = grid.child(
+                    Flex::row()
+                        .gap(6.0)
+                        .width(Length::Px(440.0)) // wider than the viewport → overflow
+                        .child(
+                            Icon::new(Glyph::FileCode)
+                                .color(theme.colors.accent)
+                                .size(14.0),
+                        )
+                        .child(Label::new(format!(
+                            "row {r:02} — a wide line that overflows the viewport horizontally"
+                        ))),
+                );
+            }
+            grid
+        })
         // ScrollBar + BadgeButton: the standalone scrollback affordances used by
         // terminal panes — a draggable vertical thumb plus a clickable
         // "N lines above" chip. Generic widgets; the app wires them to terminal
@@ -2490,26 +2521,37 @@ impl ApplicationHandler for App {
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                // Lines to scroll the open dropdown (positive = down the list).
-                let lines = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => -y,
-                    MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
+                // Device delta → lines (positive = down / right).
+                let (dx_raw, dy_raw) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (-x, -y),
+                    MouseScrollDelta::PixelDelta(p) => {
+                        (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0)
+                    }
                 };
                 if state.zoom_mode || state.accel() {
                     // Wheel zooms the whole UI while in zoom mode, or with the
-                    // accelerator held (scroll up = zoom in).
-                    state.nudge_zoom(-lines * ZOOM_STEP);
+                    // accelerator held (scroll up = zoom in); vertical component only.
+                    state.nudge_zoom(-dy_raw * ZOOM_STEP);
                 } else {
+                    // Shift+wheel scrolls horizontally: a plain mouse wheel only
+                    // reports the vertical axis, so remap it to X while Shift is held
+                    // (host owns the modifier→axis mapping; `Event::Scroll` carries
+                    // both axes). A trackpad's native horizontal delta already fills X.
+                    let (dx, dy) = if state.shift && dx_raw == 0.0 {
+                        (dy_raw, 0.0)
+                    } else {
+                        (dx_raw, dy_raw)
+                    };
                     // Route scroll through grid-ui: an open overlay (Select dropdown /
                     // Modal) gets it first but only swallows it if it consumes it — a
                     // non-scrolling overlay like the ToastStack lets it fall through.
                     // When nothing in the tree consumes it, scroll the whole page.
                     if state
                         .focus
-                        .dispatch(&mut state.ui, &Event::Scroll { delta: lines })
+                        .dispatch(&mut state.ui, &Event::Scroll { delta_x: dx, delta_y: dy })
                         == Handled::No
                     {
-                        state.scroll_y += lines * 40.0;
+                        state.scroll_y += dy * 40.0;
                     }
                     state.window.request_redraw();
                 }

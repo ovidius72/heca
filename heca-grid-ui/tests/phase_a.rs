@@ -420,7 +420,7 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
     let mut focus = FocusManager::new();
     // No overlay open → nothing to offer.
     assert_eq!(
-        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta: 1.0 }),
+        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }),
         Handled::No,
         "no open overlay → nothing consumes the offer"
     );
@@ -437,7 +437,7 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
 
     // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
     assert_eq!(
-        focus.dispatch(&mut ui, &Event::Scroll { delta: 1.0 }),
+        focus.dispatch(&mut ui, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }),
         Handled::No,
         "unconsumed scroll falls through to the host"
     );
@@ -1702,11 +1702,11 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
     assert_eq!(texts[1], "OPT0", "starts at the top");
 
     // Wheel-scroll moves the visible window down.
-    sel.event(&Event::Scroll { delta: 5.0 });
+    sel.event(&Event::Scroll { delta_x: 0.0, delta_y: 5.0 });
     assert_eq!(row_texts(&sel)[1], "OPT5", "scroll reveals later options");
 
     // Scrolling past the end clamps to the last full window.
-    sel.event(&Event::Scroll { delta: 999.0 });
+    sel.event(&Event::Scroll { delta_x: 0.0, delta_y: 999.0 });
     assert_eq!(row_texts(&sel)[1], "OPT14", "scroll clamps at max (20 - 6)");
 }
 

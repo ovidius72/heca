@@ -690,95 +690,104 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
-An embeddable **vertical scroll viewport**: a column of children laid out at their
-natural height (the layout engine never shrinks them, so the column overflows),
-clipped to the region's own bounds. The visible window is the `ScrollRegion`
-itself; content beyond it is clipped (`PushClip`). It is a **dumb viewport** —
-it owns no selection state; selection/cursor is the host container's concern,
-and the region just scrolls where it's told (see *Real-app integration* below).
+An embeddable **scroll viewport**: children laid out at their natural size (the
+layout engine never shrinks them, so they overflow), clipped to the region's own
+bounds. The visible window is the `ScrollRegion` itself; content beyond it is
+clipped (`PushClip`). It is a **dumb viewport** — it owns no selection state;
+selection/cursor is the host container's concern, and the region just scrolls
+where it's told (see *Real-app integration* below).
+
+**Axes.** Vertical by default (back-compat); opt into horizontal with
+`.horizontal()` or both with `.both()`. Each axis whose content overflows grows
+its own scrollbar (vertical on the right edge, horizontal on the bottom).
+
+**Scrollable surface.** `ScrollRegion` implements `StyleExt`, so a plain one is
+frameless while `.background(..).border(..).radius(..)` makes it a framed,
+scrollable panel — all values from the `Theme`, none hardcoded.
 
 **Mechanism — same as the whole-page scroll.** Rather than a separate
 translation layer, `ScrollRegion` reuses the page-scroll pattern: it bakes
-`-scroll_offset` into its children's **bounds** (so paint, hit-testing, and DnD
-all see the *visual* position — bounds === what's drawn) and clips to its own
-rect via `PushClip` (a sub-region has no framebuffer, so it needs an explicit
-clip). Because bounds always match the visual, pointer routing and the drag
-framework's `source_at`/`resolve_at` (which hit-test against bounds) just work
-while scrolled. A fresh layout pass would compound the shift, so the layout
-engine's post-order `on_layout` hook resets the baked offset (children are back
-at natural) and re-applies it from scratch — no compounding across relayouts.
+`-scroll_offset` (both axes) into its children's **bounds** (so paint,
+hit-testing, and DnD all see the *visual* position — bounds === what's drawn) and
+clips to its own rect via `PushClip`. Because bounds always match the visual,
+pointer routing and the drag framework's `source_at`/`resolve_at` just work while
+scrolled. A fresh layout pass would compound the shift, so the layout engine's
+post-order `on_layout` hook resets the baked offset (children back at natural) and
+re-applies it from scratch — no compounding across relayouts.
 
 - **Construct**: `ScrollRegion::new()`. Append children with [`Parent::child`].
   Give it a fixed `.height()` (and usually `.width()`) via `LayoutExt` so the
-  content actually overflows; otherwise it sizes to its children and never
-  scrolls.
-- **Builders**: `LayoutExt`, `Parent`.
-- **Scroll position**: `.scroll_offset() -> Signal<f32>` (read from the host);
-  `.scroll_to(f32) -> f32` (clamped to `[0, max_offset]`, **bakes the shift into
-  bounds immediately**, requests a repaint, returns the applied value). Prefer
-  `scroll_to` over raw `scroll_offset().set()` — it keeps the shifted bounds
-  (paint/hit-testing/DnD) in sync with the offset in the same call.
-- **Scroll-into-view** (for keyboard cursor following): `.ensure_visible(rect)`
-  scrolls minimally so a descendant's current `bounds` (visual space, read
-  straight off the component) is fully inside the viewport — above → align tops,
-  below → align bottoms, already visible → no-op. `.scroll_to_child(index)` is
-  the convenience for a flat list whose selectable units are direct children.
-  The widget recovers natural positions internally via its baked shift
-  (`applied_offset`), so the host never tracks the scroll offset or does offset
-  math. Minimal movement — it won't jump if the item is already on screen.
-- **Wheel** (built-in): advances the offset by ~10% of the viewport per notch
-  (viewport-proportional, so a small sidebar doesn't overshoot). **Hover-gated**:
-  `Event::Scroll` carries no position, so the region tracks the cursor via
-  `PointerMoved` and only swallows the wheel when hovered (and scrollable);
-  otherwise the event propagates so the host page (or a nested region) can
-  scroll. Single inline region only — nested scroll regions need host-side
-  hit-testing (future).
-- **Keyboard** (built-in, focus-gated): the region is `focusable()`, so click it
-  or Tab to it to focus. `Event::Key` is delivered to the **focused component
-  only** (`FocusManager`), so the gate is simply `focused` — no broadcast-key
-  ambiguity. When focused: `ArrowUp`/`ArrowDown` and `j`/`k` (with or without
-  `Ctrl`) move by one step (~10% of the viewport, matching the wheel), `Home`/
-  `End` jump to top/bottom. A `focus_ring` (theme-derived accent outline, gated
-  by `focused` + `show_focus_border`) shows which region receives the keys.
-  A focused **child** (e.g. an `Input`) receives its keys directly via its own
-  `event` and never has them stolen. PageUp/PageDown are future work (`GridKey`
-  has no page keys yet).
-- **Scrollbar thumb** (built-in): auto-shown when content overflows; **draggable**.
+  content actually overflows; otherwise it sizes to its children and never scrolls.
+- **Axes**: `.horizontal()`, `.both()`, or `.axes(ScrollAxes::…)` (default
+  `Vertical`). Only enabled axes shift/clip/scrollbar.
+- **Builders**: `LayoutExt`, `StyleExt` (surface framing), `Parent`.
+- **Scroll position**: `.scroll_offset() -> Signal<f32>` / `.scroll_to(f32)`
+  (vertical) and `.scroll_offset_x() -> Signal<f32>` / `.scroll_to_x(f32)`
+  (horizontal). Each `scroll_to*` clamps to `[0, max_offset]`, **bakes the shift
+  into bounds immediately**, repaints, and returns the applied value. Prefer them
+  over raw `.set()` — they keep the shifted bounds (paint/hit-testing/DnD) in sync.
+- **Scroll-into-view** (host cursor following): `.ensure_visible(rect)` scrolls
+  minimally so a descendant's current `bounds` (visual space) is fully inside the
+  viewport — above → align tops, below → align bottoms, already visible → no-op.
+  `.scroll_to_child(index)` is the convenience for a flat list of direct children.
+  The widget recovers natural positions via its baked shift, so the host never
+  tracks the offset or does offset math. (Vertical axis.)
+- **Wheel** (built-in, hover-gated): plain wheel scrolls **vertically**,
+  **`Shift`+wheel horizontally**, and a trackpad's 2-D delta drives both — the
+  host maps modifiers→axis (`Event::Scroll` carries `delta_x`/`delta_y`). ~10% of
+  the viewport per notch (viewport-proportional). `Event::Scroll` has no position,
+  so the region tracks the cursor via `PointerMoved` and only swallows the wheel
+  when hovered (and that axis is scrollable); otherwise it propagates so the host
+  page (or a nested region) can scroll. Single inline region only — nested regions
+  need host-side hit-testing (future).
+- **Scrollbar thumbs** (built-in): auto-shown per overflowing axis; **draggable**.
   A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
-  grip bar), sitting in a wider invisible **grab lane** (16px) so the thin 8px
-  thumb is easy to click. The thumb radius reads the `Theme::control_radius()`
-  token (no hardcoded radius); the thumb color is `theme.accent` (no hardcoded
-  color). The affordance alphas (rest/hover) are widget-internal constants,
-  consistent with `MarkerGroup`.
-- **Traits**: `LayoutExt`, `Parent`.
-- **v1 scope**: vertical-only. Horizontal scroll, a dedicated scrollbar color
-  token, PageUp/PageDown keys, and nested-region hit-testing are future work.
+  grip bar), in a wider invisible **grab lane** (16px) so the thin 8px thumb is
+  easy to click. Radius from `Theme::control_radius()`, color from `theme.accent`
+  (nothing hardcoded). Each bar reserves a **gutter**: content is clipped short of
+  the lane so no content sits under a thumb, and each bar's track stops short of
+  the other's gutter so they never overlap in the corner.
+- **Click-in-track paging**: clicking the scrollbar track above/below (or left/
+  right of) the thumb pages a screenful toward the click — the standard affordance.
+- **Keyboard — NONE, on purpose.** The region binds **no keys** and is **not
+  focusable / not a tab-stop**. heca is tmux-style: plain keys belong to the
+  underlying app (terminal/editor), so the widget must not swallow them. Keyboard
+  scrolling is a **host** concern — the app dispatches **prefix-gated, configurable
+  scroll actions** (`WmAction` → `ActionRegistry`, RPC-ready) that call
+  `scroll_to`/`scroll_by`/`ensure_visible`. (App action layer: F003/P011/T011.)
+- **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+- **Current scope**: two-axis. Future: a dedicated scrollbar color token,
+  PageUp/PageDown as app actions, and nested-region hit-testing.
 
+**Native.**
 ```rust
-let mut list = ScrollRegion::new()
+// A two-axis, framed scrollable surface driven from the host.
+let mut grid = ScrollRegion::new()
+    .both()
     .height(Length::Px(180.0))
-    .width(Length::Px(300.0));
+    .width(Length::Px(300.0))
+    .background(theme.colors.surface)     // StyleExt → scrollable panel
+    .border(theme.colors.accent, 1.0);
 for i in 1..=25 {
-    list = list.child(Item::new(format!("item {i:02}")));
+    grid = grid.child(Item::new(format!("item {i:02}")));
 }
-// Drive from the host (a “jump to top” action):
-list.scroll_to(0.0);
+grid.scroll_to(0.0);      // vertical
+grid.scroll_to_x(40.0);   // horizontal
 ```
+
+**Declarative (`ViewNode`).** `WidgetKind::Scroll` realizes to a `ScrollRegion`
+(children attached); axis/style are host-side today (the app builds the styled,
+two-axis region and mounts a realized subtree inside it).
 
 > **Real-app integration (sidebar):** selection is container-owned, not widget
 > state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
-> existing `SidebarNav` cursor handler (`j`/`k`, selection-driven) gains one line —
-> after moving the cursor, call `region.ensure_visible(selected_row.bounds)` (or
-> `scroll_to_child` for a flat list) to keep the cursor on screen. The selected
-> row's visual state (accent bar) stays container-driven via `Item::marker`/
-> `state`. See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)
-> for the wheel/thumb/keyboard demo.
->
-> **Host wiring:** route keys through `FocusManager::deliver_key` (keys go to the
-> focused component only — that's the whole gate), and pointer/wheel through
-> `FocusManager::dispatch`. Note: in the showcase `Ctrl+K` is host-bound to the
-> command palette, so use `k`/`Ctrl+J`/arrows there; the chord is configurable in
-> the app.
+> `SidebarNav` cursor handler (selection-driven) calls
+> `region.ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving
+> the cursor to keep it on screen. The row's visual state stays container-driven
+> via `Item::marker`/`state`. Keyboard *scrolling* of the region is separate: it
+> comes from the app's prefix-gated scroll actions, not from the widget. See
+> [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs) for
+> the wheel / thumb / click-track / two-axis demo.
 
 ### Label
 

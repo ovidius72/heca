@@ -80,7 +80,7 @@ pub use spinner::Spinner;
 pub use status_dot::{DotStatus, StatusDot};
 pub use surface::Surface;
 pub use scroll_bar::ScrollBar;
-pub use scroll_region::ScrollRegion;
+pub use scroll_region::{ScrollAxes, ScrollRegion};
 pub use tabs::Tabs;
 pub use tag::Tag;
 pub use toast::{Toast, ToastSeverity};
