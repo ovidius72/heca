@@ -1,0 +1,30 @@
+{
+  "id": "cd083ad1-8310-4368-981b-d14c73c20d96",
+  "number": 4,
+  "shortId": "",
+  "priority": 0,
+  "name": "📐 Grid-UI Widget Library",
+  "description": "Espansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pane shell header/tabs, icon widget Nerd Font, showcase coverage con visual regression, bloom/custom draw effects, widget aggiuntivi e cleanup del crate.",
+  "status": "deferred",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "ef538743-f412-443d-811b-9e02b66106c1",
+    "cb8f1203-9ae5-431d-8e7d-07dad2804396",
+    "981bc6b0-9529-4a1c-96a3-7c8e34217bc4",
+    "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
+    "35d74cc9-a3df-49c9-a5bb-59e12a88b49c",
+    "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+    "36628b50-a0b5-4974-852e-96d68c09f11f",
+    "402d22d4-a658-47d7-8481-fb074ce43a00"
+  ],
+  "dependsOn": [],
+  "createdAt": "2026-07-01T18:08:37.398Z",
+  "updatedAt": "2026-07-13T15:29:44.427Z"
+}

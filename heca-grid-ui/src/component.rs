@@ -91,6 +91,25 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
     acc
 }
 
+/// Walk the tree and report whether any widget's **overlay surface occludes**
+/// `pos` (see [`Component::overlay_occludes`]). The host's gate for synthesizing
+/// a page-level action from raw input (e.g. right-click → context menu): if an
+/// overlay above the page owns that point — an open modal's scrim, a palette, a
+/// toast card — the action must not fire underneath it. Hidden subtrees are
+/// skipped (their bounds are stale).
+pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
+    let b = root.base();
+    if !b.visible.get_untracked() || b.style.hidden {
+        return false;
+    }
+    if root.overlay_occludes(pos) {
+        return true;
+    }
+    b.children
+        .iter()
+        .any(|c| overlay_occluded_at(c.as_ref(), pos))
+}
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.
@@ -279,10 +298,15 @@ pub enum Event {
     /// Modifier keys changed — broadcast to the whole tree so widgets can track
     /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
     ModifiersChanged(Modifiers),
-    /// Wheel/scroll by `delta` lines (positive = scroll down the content). The
-    /// host routes this to the open overlay, or to the widget under the cursor.
+    /// Wheel/scroll by `(delta_x, delta_y)` lines (positive `delta_y` = scroll the
+    /// content down, positive `delta_x` = scroll right). The **host** maps device
+    /// deltas and modifiers onto these (e.g. plain wheel → `delta_y`, `Shift`+wheel →
+    /// `delta_x`, a trackpad's 2-D delta → both), so widgets read the axis directly
+    /// and never track modifiers themselves. The host routes this to the open
+    /// overlay, or to the widget under the cursor.
     Scroll {
-        delta: f32,
+        delta_x: f32,
+        delta_y: f32,
     },
     /// A **semantic widget intent** — the host-owned, configurable counterpart to raw
     /// keys, shared by every interactive widget. The host resolves the `[keys.widgets]`
@@ -356,6 +380,22 @@ pub trait Component {
     /// first, so it can capture clicks/keys outside its layout bounds. Default
     /// `false`; see [`FocusManager`](crate::focus::FocusManager).
     fn overlay_active(&self) -> bool {
+        false
+    }
+
+    /// Whether this component's **overlay surface geometrically occludes** `pos`
+    /// (logical px). A host asks this before synthesizing a page-level action from
+    /// a raw input — e.g. right-click → "open the context menu": if the point is
+    /// covered by an overlay drawn above the page, the action must not fire
+    /// underneath it. Distinct from [`overlay_active`](Self::overlay_active)
+    /// (input **grab**): a non-grabbing overlay like a toast card still occludes
+    /// the points it covers, while a **modal** overlay (an open `Dialog` scrim)
+    /// occludes the whole viewport. A widget whose open overlay deliberately
+    /// yields to a fresh trigger (a `ContextMenu`, where a second right-click
+    /// re-anchors) keeps the default. Scan a tree with
+    /// [`overlay_occluded_at`]. Default `false` (plain widgets never occlude).
+    fn overlay_occludes(&self, pos: Point) -> bool {
+        let _ = pos;
         false
     }
 

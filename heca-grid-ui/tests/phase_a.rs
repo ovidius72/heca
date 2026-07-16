@@ -420,7 +420,7 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
     let mut focus = FocusManager::new();
     // No overlay open → nothing to offer.
     assert_eq!(
-        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta: 1.0 }),
+        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }),
         Handled::No,
         "no open overlay → nothing consumes the offer"
     );
@@ -437,7 +437,7 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
 
     // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
     assert_eq!(
-        focus.dispatch(&mut ui, &Event::Scroll { delta: 1.0 }),
+        focus.dispatch(&mut ui, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }),
         Handled::No,
         "unconsumed scroll falls through to the host"
     );
@@ -1702,11 +1702,11 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
     assert_eq!(texts[1], "OPT0", "starts at the top");
 
     // Wheel-scroll moves the visible window down.
-    sel.event(&Event::Scroll { delta: 5.0 });
+    sel.event(&Event::Scroll { delta_x: 0.0, delta_y: 5.0 });
     assert_eq!(row_texts(&sel)[1], "OPT5", "scroll reveals later options");
 
     // Scrolling past the end clamps to the last full window.
-    sel.event(&Event::Scroll { delta: 999.0 });
+    sel.event(&Event::Scroll { delta_x: 0.0, delta_y: 999.0 });
     assert_eq!(row_texts(&sel)[1], "OPT14", "scroll clamps at max (20 - 6)");
 }
 
@@ -3943,4 +3943,36 @@ fn choice_at_resolves_a_pick_from_real_bounds() {
 
     let miss = Point::new(second.loc.x - 50.0, second.loc.y - 500.0);
     assert_eq!(heca_grid_ui::widgets::choice_at(&list.base().children, miss), None, "a miss picks nothing");
+}
+
+/// Whole-page scroll premise (T009): a root `ScrollRegion` sized to the viewport,
+/// holding a natural-width page column (`align(Start)`, width `Auto`), must report
+/// horizontal overflow measured from that DIRECT child when a grandchild row is
+/// wider than the viewport — with `flex_shrink: 0` the column adopts its widest
+/// child instead of being clamped to the available width.
+#[test]
+fn root_scroll_region_sees_horizontal_overflow_through_a_natural_width_page() {
+    let page = Flex::column()
+        .align(Align::Center)
+        .child(fixed_box(300.0, 20.0)) // wider than the 100px viewport
+        .child(fixed_box(50.0, 20.0));
+    let mut root = ScrollRegion::new()
+        .both()
+        .align(Align::Start) // don't stretch the page to the viewport width
+        .width(Length::Px(100.0))
+        .height(Length::Px(100.0))
+        .child(page);
+
+    LayoutEngine::new().compute(&mut root, Size::new(100.0, 100.0));
+
+    let page_w = root.base().children[0].base().bounds.size.w;
+    assert!(
+        page_w >= 300.0,
+        "page column adopts its widest child (got {page_w}), not the viewport width"
+    );
+    // The region measures overflow from its direct child → horizontal scrolling works.
+    assert!(
+        root.scroll_to_x(10_000.0) > 0.0,
+        "root region reports a positive max horizontal offset"
+    );
 }

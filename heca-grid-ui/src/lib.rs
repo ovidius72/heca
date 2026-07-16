@@ -51,6 +51,7 @@ pub use builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
+    overlay_occluded_at,
     install_frame_request, request_frame,
 };
 pub use keymap::{KeyChord, Keymap};
@@ -66,7 +67,7 @@ pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, MarkerGroup, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
+    LabelSide, MarkerGroup, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollRegion, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeycapVariant, keycap_size, paint_keycap,
 };
 
@@ -88,7 +89,7 @@ pub mod prelude {
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, MarkerGroup, MenuEntry, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
+        LabelSide, MarkerGroup, MenuEntry, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollRegion, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     };
 }

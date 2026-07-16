@@ -483,6 +483,14 @@ impl Component for Select {
         self.open && !self.base.disabled.get_untracked()
     }
 
+    /// An open dropdown occludes its **panel rect** (the option list drawn above
+    /// the page) — a host must not synthesize a page-level action (e.g. open a
+    /// context menu) on a point the panel covers. Points outside the panel are
+    /// not occluded (an outside click is the light-dismiss).
+    fn overlay_occludes(&self, pos: Point) -> bool {
+        self.overlay_active() && self.panel_rect().contains(pos)
+    }
+
     /// The trigger's height tracks the resolved font. Its **width is the widest option** — the
     /// engine measures the rows (they hug their content) and sizes this node to them, so the
     /// control is snug around real content, icons included, instead of a char-count estimate.
@@ -714,9 +722,9 @@ impl Component for Select {
                     Handled::No
                 }
             }
-            Event::Scroll { delta } if self.open => {
+            Event::Scroll { delta_y, .. } if self.open => {
                 let max = self.max_scroll() as f32;
-                self.scroll = (self.scroll as f32 + delta).clamp(0.0, max).round() as usize;
+                self.scroll = (self.scroll as f32 + delta_y).clamp(0.0, max).round() as usize;
                 self.place_options();
                 Handled::Yes
             }

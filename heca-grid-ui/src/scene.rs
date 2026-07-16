@@ -25,12 +25,15 @@ use heca_core::layout::Rectangle;
 pub struct Scene {
     commands: Vec<DrawCommand>,
     overlay: Vec<DrawCommand>,
-    /// `(start, end)` ranges into `overlay`, one per [`begin_overlay`](Scene::begin_overlay)/
+    /// `(start, end, depth)` ranges into `overlay`, one per [`begin_overlay`](Scene::begin_overlay)/
     /// [`end_overlay`](Scene::end_overlay) pair that produced commands. Each is a
-    /// distinct overlay (a dropdown, a toast stack, …); [`overlay_segments`](Scene::overlay_segments)
-    /// hands them back so a host can flush each as its own rects→text pass and have
-    /// later overlays occlude earlier ones (no overlapping-overlay text bleed).
-    overlay_segs: Vec<(usize, usize)>,
+    /// distinct overlay (a dropdown, a toast stack, …) tagged with its **nesting
+    /// depth** (1 = top-level `with_overlay`, 2 = an overlay painted inside another
+    /// overlay's paint, …); [`overlay_segments`](Scene::overlay_segments) hands them
+    /// back depth-ordered so a host can flush each as its own rects→text pass with
+    /// nested overlays occluding their parents (and later overlays occluding
+    /// earlier ones at the same depth — no overlapping-overlay text bleed).
+    overlay_segs: Vec<(usize, usize, usize)>,
     /// When set, [`push`](Scene::push) targets the overlay layer.
     to_overlay: bool,
     /// Start index in `overlay` of the currently open segment.
@@ -67,9 +70,11 @@ impl Scene {
     /// open segment, then opens a nested one — so the deeper overlay draws on top as its own
     /// segment and the parent's earlier draws are preserved.
     pub fn begin_overlay(&mut self) {
-        // Descending into a nested overlay: bank the parent's segment so far.
+        // Descending into a nested overlay: bank the parent's segment so far (it
+        // carries the PARENT's depth — the current one, before the increment).
         if self.to_overlay && self.overlay.len() > self.seg_start {
-            self.overlay_segs.push((self.seg_start, self.overlay.len()));
+            self.overlay_segs
+                .push((self.seg_start, self.overlay.len(), self.overlay_depth));
         }
         self.to_overlay = true;
         self.seg_start = self.overlay.len();
@@ -82,7 +87,8 @@ impl Scene {
     /// overlay mode ends only when the outermost pair closes.
     pub fn end_overlay(&mut self) {
         if self.overlay.len() > self.seg_start {
-            self.overlay_segs.push((self.seg_start, self.overlay.len()));
+            self.overlay_segs
+                .push((self.seg_start, self.overlay.len(), self.overlay_depth));
         }
         self.overlay_depth = self.overlay_depth.saturating_sub(1);
         // A new segment begins here for whatever the parent overlay draws next.
@@ -145,12 +151,19 @@ impl Scene {
 
     /// One sub-scene per overlay, in paint (z) order, each holding that overlay's
     /// commands in the base slot so a host renders it as a single rects→text pass.
-    /// Flushing them in order makes each overlay occlude the ones below it — a later
-    /// overlay's panel paints over an earlier overlay's text — which fixes the
-    /// overlapping-overlay text bleed a single flattened [`overlay_layer`](Scene::overlay_layer)
-    /// pass produces.
+    /// Segments are yielded **depth-first ascending** (stable within a depth):
+    /// top-level overlays in record order, then nested ones — so an overlay opened
+    /// *inside* another overlay's paint (a `Select` dropdown inside a `Dialog`)
+    /// composites **above** everything its parent draws after it (the parent's
+    /// later action buttons), not just above what came before. Within one depth,
+    /// flushing in record order makes each overlay occlude the ones below it — a
+    /// later overlay's panel paints over an earlier overlay's text — which fixes
+    /// the overlapping-overlay text bleed a single flattened
+    /// [`overlay_layer`](Scene::overlay_layer) pass produces.
     pub fn overlay_segments(&self) -> impl Iterator<Item = Scene> + '_ {
-        self.overlay_segs.iter().map(|&(start, end)| Scene {
+        let mut order: Vec<&(usize, usize, usize)> = self.overlay_segs.iter().collect();
+        order.sort_by_key(|&&(_, _, depth)| depth); // stable: record order within a depth
+        order.into_iter().map(|&(start, end, _)| Scene {
             commands: self.overlay[start..end].to_vec(),
             ..Default::default()
         })
@@ -394,18 +407,21 @@ mod tests {
     }
 
     #[test]
-    fn nested_overlay_keeps_parent_segment() {
-        // A `Dialog` paints its panel inside `with_overlay`; a child `Tooltip` paints inside its
-        // own `with_overlay` — nested. The bug: the inner `end_overlay` dropped the parent's
-        // segment, so the modal's scrim/panel vanished when the tooltip showed. Nesting must
-        // yield three ordered segments: parent-before, the nested child, parent-after.
+    fn nested_overlay_keeps_parent_segment_and_composites_on_top() {
+        // A `Dialog` paints its panel inside `with_overlay`; a child overlay (a `Select`
+        // dropdown, a `Tooltip`) paints inside its own `with_overlay` — nested. Two past bugs:
+        // (1) the inner `end_overlay` dropped the parent's segment (scrim/panel vanished);
+        // (2) segments rendered in RECORD order, so the parent's draws AFTER the nest (its
+        // action buttons) painted over the nested panel (the Select-in-Dialog show-through,
+        // T009 BUG A). Nesting must yield three segments with the nested one LAST (on top):
+        // parent-before, parent-after, then the deeper child.
         let mut s = Scene::new();
         s.begin_overlay(); // outer (Dialog panel)
         s.push(clip(1.0)); // panel, before the nested overlay
-        s.begin_overlay(); // inner (Tooltip)
-        s.push(clip(2.0)); // tooltip
+        s.begin_overlay(); // inner (Select dropdown)
+        s.push(clip(2.0)); // dropdown list
         s.end_overlay(); // close inner — must NOT drop the outer
-        s.push(clip(3.0)); // outer continues (a sibling drawn after the tooltip)
+        s.push(clip(3.0)); // outer continues (action buttons, drawn after the nest)
         s.end_overlay(); // close outer
 
         let segs: Vec<Scene> = s.overlay_segments().collect();
@@ -417,13 +433,34 @@ mod tests {
         );
         assert_eq!(
             segs[1].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(2.0)],
-            "segment 1 = the nested (tooltip) overlay, on top"
+            vec![clip(3.0)],
+            "segment 1 = parent content after the nest (same depth as segment 0)"
         );
         assert_eq!(
             segs[2].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(3.0)],
-            "segment 2 = parent content after the nest"
+            vec![clip(2.0)],
+            "segment 2 = the nested overlay, rendered LAST so it occludes the whole parent"
+        );
+    }
+
+    #[test]
+    fn sibling_overlays_keep_record_order_within_a_depth() {
+        // Depth ordering must be STABLE: two top-level overlays (a dropdown, then the toast
+        // stack painted after it) keep record order — the later one still occludes the earlier.
+        let mut s = Scene::new();
+        s.begin_overlay();
+        s.push(clip(1.0));
+        s.end_overlay();
+        s.begin_overlay();
+        s.push(clip(2.0));
+        s.end_overlay();
+        let segs: Vec<Scene> = s.overlay_segments().collect();
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0].iter().cloned().collect::<Vec<_>>(), vec![clip(1.0)]);
+        assert_eq!(
+            segs[1].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(2.0)],
+            "same-depth overlays render in record order (later on top)"
         );
     }
 

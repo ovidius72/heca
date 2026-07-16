@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
@@ -175,6 +175,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `base_mut(&mut self) -> &mut Base` | — | Required. |
 | `focusable(&self) -> bool` | `base.focusable && !disabled` | Set `base.focusable = true` on an interactive widget instead of overriding this; override only for dynamic focusability (focusable only while open). |
 | `overlay_active(&self) -> bool` | `false` | `true` while the widget owns an open overlay (e.g. a `Select` dropdown), so the host routes input to it first. |
+| `overlay_occludes(&self, pos: Point) -> bool` | `false` | Whether the widget's **overlay surface geometrically covers** `pos`. Distinct from `overlay_active` (input grab): a non-grabbing toast card still occludes the points it covers; a **modal** ([`Dialog`](#dialog) scrim, open [`CommandPalette`](#commandpalette)) occludes the whole viewport; an open [`Select`](#select) occludes its panel rect. A host checks it (via the free fn `heca_grid_ui::overlay_occluded_at(root, pos)`, which scans a tree) before synthesizing a page-level action from raw input — e.g. right-click → context menu must not fire under an overlay. `ContextMenu` deliberately keeps the default so a second right-click re-anchors it. |
 | `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
@@ -386,7 +387,7 @@ stay DRY):
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
-| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. |
+| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. Re-entrant: an overlay painted **inside** another overlay's paint (a `Select` in a `Dialog` body) records a **deeper segment**, and `Scene::overlay_segments()` yields segments depth-ordered — the nested panel composites above everything its parent draws, including what the parent paints *after* it. |
 | `.with_content_color(color, \|cx\| …)` | Paint the closure's subtree with `color` as the **inherited content color** — `color` inheritance in the CSS sense. A control that *composes* its content (`Button`, `Item`) cannot set its children's colors (they are `impl Component`, so it doesn't know their types, and the `Theme` is only reachable in `paint`), so it publishes one state-derived value per frame and the children pull it. Because the control repaints while its hover eases, **the content animates with no per-child wiring**. |
 | `.content_color() -> Option<Color>` | The inherited content color, if a parent published one. Widgets that render bare text/glyphs resolve: **own explicit color → this → a theme token** (usually `foreground`). A widget with an intrinsic semantic color (`Badge::danger`) ignores it. |
 | `.with_translate(dx, dy, \|cx\| …)` | Paint the closure's subtree **translated** — the same components, drawn somewhere else. Deliberately narrow: a component is laid out in exactly one place, and its bounds are the contract for drawing *and* hit-testing alike. But a control occasionally has to render content it owns but does not hold — a [`Select`](#select) shows the chosen option in its trigger while that option is away in the open list. Nothing can be in two places, so the trigger draws a second **image** of it. What is drawn this way is **not interactive** (no bounds of its own ⇒ not hit-tested, focusable or hoverable); the control's own bounds are the click target. Never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest. |
@@ -690,95 +691,118 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
-An embeddable **vertical scroll viewport**: a column of children laid out at their
-natural height (the layout engine never shrinks them, so the column overflows),
-clipped to the region's own bounds. The visible window is the `ScrollRegion`
-itself; content beyond it is clipped (`PushClip`). It is a **dumb viewport** —
-it owns no selection state; selection/cursor is the host container's concern,
-and the region just scrolls where it's told (see *Real-app integration* below).
+An embeddable **scroll viewport**: children laid out at their natural size (the
+layout engine never shrinks them, so they overflow), clipped to the region's own
+bounds. The visible window is the `ScrollRegion` itself; content beyond it is
+clipped (`PushClip`). It is a **dumb viewport** — it owns no selection state;
+selection/cursor is the host container's concern, and the region just scrolls
+where it's told (see *Real-app integration* below).
+
+**Axes.** Vertical by default (back-compat); opt into horizontal with
+`.horizontal()` or both with `.both()`. Each axis whose content overflows grows
+its own scrollbar (vertical on the right edge, horizontal on the bottom).
+
+**Scrollable surface.** `ScrollRegion` implements `StyleExt`, so a plain one is
+frameless while `.background(..).border(..).radius(..)` makes it a framed,
+scrollable panel — all values from the `Theme`, none hardcoded.
 
 **Mechanism — same as the whole-page scroll.** Rather than a separate
 translation layer, `ScrollRegion` reuses the page-scroll pattern: it bakes
-`-scroll_offset` into its children's **bounds** (so paint, hit-testing, and DnD
-all see the *visual* position — bounds === what's drawn) and clips to its own
-rect via `PushClip` (a sub-region has no framebuffer, so it needs an explicit
-clip). Because bounds always match the visual, pointer routing and the drag
-framework's `source_at`/`resolve_at` (which hit-test against bounds) just work
-while scrolled. A fresh layout pass would compound the shift, so the layout
-engine's post-order `on_layout` hook resets the baked offset (children are back
-at natural) and re-applies it from scratch — no compounding across relayouts.
+`-scroll_offset` (both axes) into its children's **bounds** (so paint,
+hit-testing, and DnD all see the *visual* position — bounds === what's drawn) and
+clips to its own rect via `PushClip`. Because bounds always match the visual,
+pointer routing and the drag framework's `source_at`/`resolve_at` just work while
+scrolled. A fresh layout pass would compound the shift, so the layout engine's
+post-order `on_layout` hook resets the baked offset (children back at natural) and
+re-applies it from scratch — no compounding across relayouts. `on_layout` also
+**re-clamps both axes**: a relayout that grew the viewport (window resize,
+zoom-out) would otherwise re-apply a stale offset beyond the new max, leaving
+content shifted past the edge with no scrollbar to bring it back.
 
 - **Construct**: `ScrollRegion::new()`. Append children with [`Parent::child`].
   Give it a fixed `.height()` (and usually `.width()`) via `LayoutExt` so the
-  content actually overflows; otherwise it sizes to its children and never
-  scrolls.
-- **Builders**: `LayoutExt`, `Parent`.
-- **Scroll position**: `.scroll_offset() -> Signal<f32>` (read from the host);
-  `.scroll_to(f32) -> f32` (clamped to `[0, max_offset]`, **bakes the shift into
-  bounds immediately**, requests a repaint, returns the applied value). Prefer
-  `scroll_to` over raw `scroll_offset().set()` — it keeps the shifted bounds
-  (paint/hit-testing/DnD) in sync with the offset in the same call.
-- **Scroll-into-view** (for keyboard cursor following): `.ensure_visible(rect)`
-  scrolls minimally so a descendant's current `bounds` (visual space, read
-  straight off the component) is fully inside the viewport — above → align tops,
-  below → align bottoms, already visible → no-op. `.scroll_to_child(index)` is
-  the convenience for a flat list whose selectable units are direct children.
-  The widget recovers natural positions internally via its baked shift
-  (`applied_offset`), so the host never tracks the scroll offset or does offset
-  math. Minimal movement — it won't jump if the item is already on screen.
-- **Wheel** (built-in): advances the offset by ~10% of the viewport per notch
-  (viewport-proportional, so a small sidebar doesn't overshoot). **Hover-gated**:
-  `Event::Scroll` carries no position, so the region tracks the cursor via
-  `PointerMoved` and only swallows the wheel when hovered (and scrollable);
-  otherwise the event propagates so the host page (or a nested region) can
-  scroll. Single inline region only — nested scroll regions need host-side
-  hit-testing (future).
-- **Keyboard** (built-in, focus-gated): the region is `focusable()`, so click it
-  or Tab to it to focus. `Event::Key` is delivered to the **focused component
-  only** (`FocusManager`), so the gate is simply `focused` — no broadcast-key
-  ambiguity. When focused: `ArrowUp`/`ArrowDown` and `j`/`k` (with or without
-  `Ctrl`) move by one step (~10% of the viewport, matching the wheel), `Home`/
-  `End` jump to top/bottom. A `focus_ring` (theme-derived accent outline, gated
-  by `focused` + `show_focus_border`) shows which region receives the keys.
-  A focused **child** (e.g. an `Input`) receives its keys directly via its own
-  `event` and never has them stolen. PageUp/PageDown are future work (`GridKey`
-  has no page keys yet).
-- **Scrollbar thumb** (built-in): auto-shown when content overflows; **draggable**.
+  content actually overflows; otherwise it sizes to its children and never scrolls.
+- **Axes**: `.horizontal()`, `.both()`, or `.axes(ScrollAxes::…)` (default
+  `Vertical`). Only enabled axes shift/clip/scrollbar.
+- **Builders**: `LayoutExt`, `StyleExt` (surface framing), `Parent`.
+- **Scroll position**: `.scroll_offset() -> Signal<f32>` / `.scroll_to(f32)`
+  (vertical) and `.scroll_offset_x() -> Signal<f32>` / `.scroll_to_x(f32)`
+  (horizontal). Each `scroll_to*` clamps to `[0, max_offset]`, **bakes the shift
+  into bounds immediately**, repaints, and returns the applied value. Prefer them
+  over raw `.set()` — they keep the shifted bounds (paint/hit-testing/DnD) in sync.
+- **Scroll-into-view** (host cursor following): `.ensure_visible(rect)` scrolls
+  minimally so a descendant's current `bounds` (visual space) is fully inside the
+  viewport — above → align tops, below → align bottoms, already visible → no-op.
+  `.scroll_to_child(index)` is the convenience for a flat list of direct children.
+  The widget recovers natural positions via its baked shift, so the host never
+  tracks the offset or does offset math. (Vertical axis.)
+- **Wheel** (built-in, hover-gated): plain wheel scrolls **vertically**,
+  **`Shift`+wheel horizontally**, and a trackpad's 2-D delta drives both — the
+  host maps modifiers→axis (`Event::Scroll` carries `delta_x`/`delta_y`). ~10% of
+  the viewport per notch (viewport-proportional). `Event::Scroll` has no position,
+  so the region tracks the cursor via `PointerMoved` and only swallows the wheel
+  when hovered (and that axis is scrollable); otherwise it propagates to the host.
+  **Nested regions compose**: the wheel is offered to **children first**, so the
+  *innermost* hovered scrollable consumes it (each region gates on its own hover)
+  and an outer whole-page region only scrolls when no descendant did.
+- **Scrollbar thumbs** (built-in): auto-shown per overflowing axis; **draggable**.
   A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
-  grip bar), sitting in a wider invisible **grab lane** (16px) so the thin 8px
-  thumb is easy to click. The thumb radius reads the `Theme::control_radius()`
-  token (no hardcoded radius); the thumb color is `theme.accent` (no hardcoded
-  color). The affordance alphas (rest/hover) are widget-internal constants,
-  consistent with `MarkerGroup`.
-- **Traits**: `LayoutExt`, `Parent`.
-- **v1 scope**: vertical-only. Horizontal scroll, a dedicated scrollbar color
-  token, PageUp/PageDown keys, and nested-region hit-testing are future work.
+  grip bar), in a wider invisible **grab lane** (16px) so the thin 8px thumb is
+  easy to click. Radius from `Theme::control_radius()`, color from `theme.accent`
+  (nothing hardcoded). Each bar reserves a **gutter**: content is clipped short of
+  the lane so no content sits under a thumb, and each bar's track stops short of
+  the other's gutter so they never overlap in the corner.
+- **Click-in-track paging**: clicking the scrollbar track above/below (or left/
+  right of) the thumb pages a screenful toward the click — the standard affordance.
+  **Press-and-hold repeats**: after a short initial delay (0.35s) the held press
+  keeps paging toward the cursor at a fixed rate (every 0.1s, via `tick`), pausing
+  when the thumb reaches the pointer and stopping on release.
+- **Keyboard — NONE, on purpose.** The region binds **no keys** and is **not
+  focusable / not a tab-stop**. heca is tmux-style: plain keys belong to the
+  underlying app (terminal/editor), so the widget must not swallow them. Keyboard
+  scrolling is a **host** concern — the app dispatches **prefix-gated, configurable
+  scroll actions** (`WmAction` → `ActionRegistry`, RPC-ready) that call
+  `scroll_to`/`scroll_by`/`ensure_visible`. (App action layer: F003/P011/T012.)
+- **Whole-page scroll**: size a `.both()` region to the window and put the page
+  inside it — that IS the page scroll (the showcase does exactly this; no manual
+  bounds-shifting). Lay the page child at its **natural width** (don't stretch it:
+  `align(Align::Start)` on the region) so the region sees horizontal overflow from
+  its direct child; overlay widgets (Dialog / palette / menus / toasts) must be
+  hosted in a **layer above the region**, never inside the scrolled content (see
+  §Dialog).
+- **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+- **Current scope**: two-axis, nested-region wheel composition. Future: a
+  dedicated scrollbar color token and PageUp/PageDown as app actions.
 
+**Native.**
 ```rust
-let mut list = ScrollRegion::new()
+// A two-axis, framed scrollable surface driven from the host.
+let mut grid = ScrollRegion::new()
+    .both()
     .height(Length::Px(180.0))
-    .width(Length::Px(300.0));
+    .width(Length::Px(300.0))
+    .background(theme.colors.surface)     // StyleExt → scrollable panel
+    .border(theme.colors.accent, 1.0);
 for i in 1..=25 {
-    list = list.child(Item::new(format!("item {i:02}")));
+    grid = grid.child(Item::new(format!("item {i:02}")));
 }
-// Drive from the host (a “jump to top” action):
-list.scroll_to(0.0);
+grid.scroll_to(0.0);      // vertical
+grid.scroll_to_x(40.0);   // horizontal
 ```
+
+**Declarative (`ViewNode`).** `WidgetKind::Scroll` realizes to a `ScrollRegion`
+(children attached); axis/style are host-side today (the app builds the styled,
+two-axis region and mounts a realized subtree inside it).
 
 > **Real-app integration (sidebar):** selection is container-owned, not widget
 > state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
-> existing `SidebarNav` cursor handler (`j`/`k`, selection-driven) gains one line —
-> after moving the cursor, call `region.ensure_visible(selected_row.bounds)` (or
-> `scroll_to_child` for a flat list) to keep the cursor on screen. The selected
-> row's visual state (accent bar) stays container-driven via `Item::marker`/
-> `state`. See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)
-> for the wheel/thumb/keyboard demo.
->
-> **Host wiring:** route keys through `FocusManager::deliver_key` (keys go to the
-> focused component only — that's the whole gate), and pointer/wheel through
-> `FocusManager::dispatch`. Note: in the showcase `Ctrl+K` is host-bound to the
-> command palette, so use `k`/`Ctrl+J`/arrows there; the chord is configurable in
-> the app.
+> `SidebarNav` cursor handler (selection-driven) calls
+> `region.ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving
+> the cursor to keep it on screen. The row's visual state stays container-driven
+> via `Item::marker`/`state`. Keyboard *scrolling* of the region is separate: it
+> comes from the app's prefix-gated scroll actions, not from the widget. See
+> [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs) for
+> the wheel / thumb / click-track / two-axis demo.
 
 ### Label
 
@@ -1240,8 +1264,10 @@ ignored). The `change` intent carries the chosen option's **value**, not its ind
 Single-select dropdown — the first **overlay** widget. The trigger shows the current value; the open
 option list paints in the scene's overlay layer (on top of everything) and the widget reports
 `overlay_active()` so the host routes input to it first (see
-[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Focusable, and **one Tab stop**
-([`Base.focus_barrier`](#base)) — the options are not separate stops.
+[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)); while open,
+`overlay_occludes(pos)` reports the **panel rect**, so a host's page-level gates (e.g. right-click →
+context menu) skip points the list covers (see [`Component` trait](#component-trait)). Focusable,
+and **one Tab stop** ([`Base.focus_barrier`](#base)) — the options are not separate stops.
 
 **Its options are [`Choice`](#choice) children.** So an option is not a string: it is a value plus
 whatever content you compose — an icon and a label, a two-line row, a `Badge`. `Select` owns only the
@@ -1305,7 +1331,8 @@ option can compose content exactly like a native one.
 ```rust
 ViewNode::new(WidgetKind::Select)
     .prop("selected", PropValue::Int(1))
-    .on("change", Intent::new("set_level"))
+    .prop("name", PropValue::Text("level".into())) // form field: chosen VALUE → data["level"]
+    .on("change", Intent::new("set_level"))         // optional: also fire an intent live on change
     .child(
         ViewNode::new(WidgetKind::Choice)
             .prop("value", PropValue::Text("low".into()))
@@ -1319,11 +1346,15 @@ ViewNode::new(WidgetKind::Select)
             .child(ViewNode::new(WidgetKind::Label).text("HIGH")),
     );
 // The `change` intent fires with args {"value": "high"} — the option's value, not an opaque index.
+// With `name` set, submitting the enclosing modal also returns data["level"] = "high" (the value).
+// `name` is realize-only (a form-submission concept); the native `Select` builder has no equivalent.
 ```
 
-Props `realize` reads: `selected` (`Int`). Children: `Choice` nodes (a non-`Choice` child is ignored).
-A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button` does; when it
-has children, **children win**. See
+Props `realize` reads: `selected` (`Int`); `name` (`Text`) opts the Select into **form submission** —
+inside a modal body its chosen option's value is returned in `ModalResult::Action.data[name]`
+([`Dialog`](#dialog) → *Declaring a modal from data*). Children: `Choice` nodes (a non-`Choice` child
+is ignored). A childless `Choice` with a `text` prop desugars to a `Label` child, exactly as `Button`
+does; when it has children, **children win**. See
 [Options are children](#options-are-children-select--tabs--choice).
 
 #### How the rows can be children *and* live in an overlay
@@ -2082,11 +2113,64 @@ row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
   `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
   Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
+### Overlay
+
+The **base overlay surface** every overlay widget shares (T009 overlay rework): a
+viewport-filling, centering layer that decorates its single **panel** child with the common
+overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and the bracket
+reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
+*blocking* overlay (default) paints the scrim and swallows outside input (modal); a
+non-blocking one lets outside input fall through (light-dismiss). Positioning lives here once —
+the panel taffy-centers on the viewport, so every descendant gets true bounds (anchor-to-rect
+positioning for dropdown/popover/tooltip specializations is the planned extension; those still
+own their placement today).
+
+**Composition, not inheritance.** [`Dialog`](#dialog) *composes* an `Overlay` as its subtree:
+the `Overlay` owns presentation + geometry ([`overlay_occludes`](#component-trait)); the
+specialization owns content and behaviour (focus trap, keyboard, dismissal policy) and
+intercepts events before the `Overlay`'s standalone handling runs. Used **directly** (a host
+mounting an arbitrary — e.g. `realize`d — panel), the `Overlay` provides the standard layer
+semantics itself: nested-overlay-first routing, outside-click callback, blocking swallow.
+
+- **Construct**: `Overlay::new()` (closed, blocking), then `.panel(impl Component)` — the single
+  child; the caller owns the panel's internal layout (padding/gaps/children), the overlay owns
+  the chrome around it. `.panel_boxed(Box<dyn Component>)` takes a mapper-produced panel (e.g.
+  `heca`'s `realize(ViewNode)`).
+- **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
+  scrim, outside input falls through), `.open(bool)`,
+  `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
+  policy instead).
+- **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
+  layout).
+- **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
+  `overlay_occludes` = whole viewport when blocking, else the panel rect.
+- **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
+  (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
+  composites above everything this layer draws — see the
+  [`Scene`/`PaintCx` table](#scene--drawcommand--paintcx-for-building-widgets).
+- **Traits**: `LayoutExt`.
+
+**Native.**
+```rust
+// A host-mounted blocking layer around an arbitrary (here: realized) panel.
+let overlay = Overlay::new()
+    .panel_boxed(realized_panel)                  // Box<dyn Component> from realize(ViewNode)
+    .on_outside_click(move || emit(close_intent)) // host's overlay-close path
+    .open(true);
+let visible = overlay.open_signal();
+```
+
+**Declarative (`ViewNode`).** Host-only — there is no `WidgetKind::Overlay`. A plugin never
+mounts a layer itself; it submits a spec (e.g. `ModalSpec` with a `ViewNode` body) and the
+**host** builds the layer (`Dialog`/`Overlay`) around the realized content — overlay hosting,
+z-order, and blocking policy stay host-owned (§2.7 of the plugin plan).
+
 ### Dialog
 
-A centered overlay **panel that holds real child components**. It lays out a
-padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and each
-action is a real [`Button`](#button). Because the buttons are real children (not manually
+A centered overlay **panel that holds real child components**, composing the base
+[`Overlay`](#overlay) for its layer presentation (blocking scrim + chrome + centering). It lays
+out a padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and
+each action is a real [`Button`](#button). Because the buttons are real children (not manually
 painted), they get the
 universal hint picker (`prefix+/`), standard focus traversal, and pointer routing **for free** —
 this is what makes an overlay's buttons hintable.
@@ -2121,8 +2205,24 @@ App wiring: `build_widget_keymap` → `AppState.widget_keymap`, dispatched in th
 (`heca/src/app/events.rs`). This is what makes the host-owned rename / prompt dialogs (an `Input` +
 OK/Cancel) work.
 
-Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
-+ `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
+Centering is real taffy layout, owned by the composed [`Overlay`](#overlay) (it fills the
+viewport and centers the panel), so every descendant gets true bounds (which the hint picker +
+hit-testing need).
+
+**Nested overlays work** (T009 step 4): a [`Select`](#select) opened inside the body composites
+**above** the dialog's action buttons (its dropdown records a deeper scene segment) and captures
+hover/wheel/keys over them — the dialog offers pointer moves, `Scroll`, and the semantic
+`Widget*` intents to an overlay-active descendant first, so `Dismiss` closes the *dropdown* (not
+the dialog) and `Activate` commits its row.
+
+> **Host it as a top-level overlay layer — never in-flow inside scrolled content.** The taffy
+> centering centers the panel **within the Dialog's own box**, so the box must BE the viewport:
+> in `heca` the Dialog is a layer root (`LayerRegistry` / the `Modal` band); the showcase mounts
+> it in its overlay tree above the page's root [`ScrollRegion`](#scrollregion). Mounted as an
+> in-flow `.child(...)` of a scrolled column instead, its box is that slot and the panel centers
+> off-screen once the page scrolls (and a self-recentering `on_layout` cannot fix it — inside a
+> scrolled subtree bounds are in scrolled-tree coordinates, not screen coordinates; this was
+> tried and reverted, see F003/P011/T009 BUG B).
 
 - **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
@@ -2164,7 +2264,9 @@ outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
 
 The **body is any `ViewNode` tree** (labels, inputs, rows, cards…), so a modal can carry a form.
 A value node opts into the returned `data` with a **`"name"` prop** — on submit the host collects
-its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`).
+its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`, `Select` → the
+**chosen option's value** as `Text`, not its index). Unnamed value nodes render but aren't
+collected. Collection is in the body's declaration order.
 
 **Validation — disable submit until a field is filled.** A `ModalAction` can be
 `.disabled_when_empty("field")`: the host binds that button's `disabled` state to the named text
@@ -2183,7 +2285,23 @@ open_modal(
             .child(
                 ViewNode::new(WidgetKind::Input)
                     .text(current_name)
-                    .prop("name", PropValue::Text("name".into())), // collected into `data`
+                    .prop("name", PropValue::Text("name".into())), // → data["name"] (Text)
+            )
+            // A named Select is a form field too: its chosen option's *value* comes back.
+            .child(
+                ViewNode::new(WidgetKind::Select)
+                    .prop("name", PropValue::Text("scope".into())) // → data["scope"] (Text)
+                    .prop("selected", PropValue::Int(0))
+                    .child(
+                        ViewNode::new(WidgetKind::Choice)
+                            .prop("value", PropValue::Text("pane".into()))
+                            .text("This pane"),
+                    )
+                    .child(
+                        ViewNode::new(WidgetKind::Choice)
+                            .prop("value", PropValue::Text("column".into()))
+                            .text("Whole column"),
+                    ),
             ),
         actions: vec![
             ModalAction::new("cancel", "Cancel"),
@@ -2195,9 +2313,9 @@ open_modal(
     |state, registry, result| {
         if let ModalResult::Action { id, data } = result {
             if id == "ok" {
-                if let Some(name) = data.get("name").and_then(PropValue::as_text) {
-                    /* dispatch the rename with `name` */
-                }
+                let name = data.get("name").and_then(PropValue::as_text);
+                let scope = data.get("scope").and_then(PropValue::as_text); // "pane" | "column"
+                /* dispatch the rename with `name` + `scope` */
             }
         }
     },
@@ -2224,6 +2342,9 @@ Selecting a command fires its callback and closes.
 - **Construct**: `CommandPalette::new()`; add commands with `.command(Command::new(label, on_run)
   .icon(Glyph)?.key("⌘K")?)`; `.placeholder(text)`, `.open(bool)`.
 - **Accessor**: `.open_signal() -> Signal<bool>` — bind a chord (e.g. Ctrl+K) to open it.
+- **Occlusion**: while open, `overlay_occludes(pos)` is `true` for **every** point (it grabs the
+  viewport: typing, nav, outside-click dismiss), so a host must not synthesize page-level actions
+  (e.g. right-click → context menu) anywhere under it (see [`Component` trait](#component-trait)).
 - **Nav (host-driven, configurable)**: the palette carries **no hardcoded nav keys**. As a vertical
   list it responds to the semantic `Event::Widget(WidgetIntent::{MenuUp,MenuDown,Activate,Dismiss})`;
   the **host** resolves the configurable `menu_up` / `menu_down` / `activate` / `dismiss`
@@ -2259,6 +2380,28 @@ cursor and flips `open`. The panel sizes to its content and flips/clamps to stay
 - **Dismiss callback**: `.on_dismiss(impl Fn())` — fired on **Esc / outside-click** (a *dismissal*,
   not a selection; selecting an entry runs its `on_select` instead). The host points this at its
   overlay-close path (in `heca`, emit `CloseOverlay`), mirroring [`Dialog::on_dismiss`](#dialog).
+- **Occlusion**: deliberately keeps the default `overlay_occludes` = `false` even while open — a
+  second right-click **re-anchors** the menu at the new point (the standard menu affordance), so its
+  panel must not block the host's right-click gate (see [`Component` trait](#component-trait)).
+
+**Host right-click gate (native).** Right-click detection is app-level, and the host must not open
+the menu on a point an overlay above the page owns — an open `Dialog`/`CommandPalette`, a toast
+card, an open `Select` panel. Gate it with `overlay_occluded_at` (scans a tree for
+`Component::overlay_occludes` hits); page content (buttons, inputs, panes) never occludes, so
+right-click there opens the menu as usual:
+
+```rust
+// On the host's right-click event (winit/etc.):
+let occluded = heca_grid_ui::overlay_occluded_at(&overlay_layer_tree, cursor)
+    || heca_grid_ui::overlay_occluded_at(&page_tree, cursor); // open Select panels live here
+if !occluded {
+    menu_anchor.set(cursor); // ContextMenu re-anchors even while already open
+    menu_open.set(true);
+}
+```
+
+(Host-side only — occlusion is a `Component` method, not a `ViewNode` prop; a declarative tree gets
+this behavior from the host that realizes and mounts it.)
 - **Nav (host-driven, configurable)**: **no hardcoded nav keys** — as a vertical list the menu
   responds to `Event::Widget(WidgetIntent::{MenuUp,MenuDown,Activate,Dismiss})`, which the host
   resolves from the configurable `menu_up` / `menu_down` / `activate` / `dismiss` `[keys.widgets]`
@@ -2316,6 +2459,9 @@ widgets by **id** (each keeps its hover/flash state), corner-anchors them on the
 slides new ones in, routes events to the toast under the cursor, and reports
 `on_dismiss(id)`/`on_action(id)` back — the host then removes the id (which reflows the rest). It is
 overlay-active only while it has toasts, and **passes through** clicks that miss every toast.
+Its `overlay_occludes(pos)` reports the **cards'** rects (not the whole corner), so a host gate
+like "right-click opens the page menu" skips points a toast covers while staying live elsewhere
+(see [`Component` trait](#component-trait)).
 
 - **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
   `.gap(px)`, `.margin(px)`.
