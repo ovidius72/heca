@@ -2,6 +2,8 @@
   "id": "949d48a4-6001-42b2-a12c-25ba69a95c24",
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 9,
+  "shortId": "",
+  "priority": 0,
   "slug": "notification-08-keyboard-hint",
   "title": "notification-08: Toast Keyboard Hint Integration",
   "status": "planned",
@@ -31,6 +33,8 @@
       "id": "ba7b9582-f445-4e8c-a585-709b8471ea47",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "toast-hint-fields",
       "title": "Extend ToastSpec with hint fields",
       "status": "planned",
@@ -51,6 +55,8 @@
       "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "toast-keycap-paint",
       "title": "Paint keycaps over toast affordances",
       "status": "planned",
@@ -71,6 +77,8 @@
       "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "keyboard-first-contract",
       "title": "Preserve keyboard-first toast action contract",
       "status": "planned",
@@ -91,6 +99,8 @@
       "id": "80f9eec0-65cf-4929-a81c-d29491985168",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
       "number": 4,
+      "shortId": "",
+      "priority": 0,
       "shortName": "toast-hint-activation",
       "title": "Connect hint activation to notification events",
       "status": "planned",
@@ -109,5 +119,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-03T22:53:21.681Z"
+  "updatedAt": "2026-07-03T22:53:21.681Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

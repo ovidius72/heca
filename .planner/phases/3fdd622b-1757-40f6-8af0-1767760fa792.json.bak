@@ -2,6 +2,8 @@
   "id": "3fdd622b-1757-40f6-8af0-1767760fa792",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
   "number": 1,
+  "shortId": "",
+  "priority": 0,
   "slug": "theming-04-migrate-main-app-heca-to-heca-theme",
   "title": "theming-04: Migrate main app (heca) to heca-theme",
   "status": "done",
@@ -30,6 +32,8 @@
       "id": "899b7835-23eb-470b-86c5-969bbc092977",
       "phaseId": "3fdd622b-1757-40f6-8af0-1767760fa792",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "fix-render-hardcoded",
       "title": "Fix app/render.rs hardcoded colors",
       "status": "done",
@@ -50,6 +54,8 @@
       "id": "1c5a88dd-017b-4851-8363-d1091d4a6fed",
       "phaseId": "3fdd622b-1757-40f6-8af0-1767760fa792",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "wire-settings-theme",
       "title": "Wire settings.theme config value",
       "status": "done",
@@ -70,6 +76,8 @@
       "id": "7b072674-9539-419f-97c3-21e617a49710",
       "phaseId": "3fdd622b-1757-40f6-8af0-1767760fa792",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "fix-chrome-hardcoded",
       "title": "Fix chrome/mod.rs hardcoded colors",
       "status": "done",
@@ -88,5 +96,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.245Z",
-  "updatedAt": "2026-07-01T18:10:58.813Z"
+  "updatedAt": "2026-07-01T18:10:58.813Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

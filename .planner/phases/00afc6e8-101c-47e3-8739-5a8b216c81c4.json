@@ -2,6 +2,8 @@
   "id": "00afc6e8-101c-47e3-8739-5a8b216c81c4",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 7,
+  "shortId": "",
+  "priority": 0,
   "slug": "app-04-pane-numbering",
   "title": "app-04: Pane numbering",
   "status": "planned",
@@ -30,6 +32,8 @@
       "id": "ea18b000-2176-4a9c-a8c5-b1afbb558043",
       "phaseId": "00afc6e8-101c-47e3-8739-5a8b216c81c4",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "pane-number-compute",
       "title": "Pane number computation per workspace",
       "status": "planned",
@@ -50,6 +54,8 @@
       "id": "b2606b81-2852-4155-bc32-4fd825883c0e",
       "phaseId": "00afc6e8-101c-47e3-8739-5a8b216c81c4",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "pane-number-display",
       "title": "Pane number display on sidebar cards",
       "status": "planned",
@@ -70,6 +76,8 @@
       "id": "23665a24-7fc0-45d5-ba1b-990002d2a19d",
       "phaseId": "00afc6e8-101c-47e3-8739-5a8b216c81c4",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "focus-pane-number",
       "title": "FocusPaneByNumber action and chord binding",
       "status": "planned",
@@ -88,5 +96,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:14:28.688Z"
+  "updatedAt": "2026-07-01T18:14:28.688Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

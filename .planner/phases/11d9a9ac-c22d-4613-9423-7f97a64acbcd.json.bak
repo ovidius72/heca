@@ -2,6 +2,8 @@
   "id": "11d9a9ac-c22d-4613-9423-7f97a64acbcd",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
   "number": 6,
+  "shortId": "",
+  "priority": 0,
   "slug": "nvim-02-editor-pane-integration",
   "title": "nvim-02: Editor-pane integration",
   "status": "planned",
@@ -30,6 +32,8 @@
       "id": "57b9f278-21dd-4eec-a289-29b3cca0264d",
       "phaseId": "11d9a9ac-c22d-4613-9423-7f97a64acbcd",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "nvim-pane-lifecycle",
       "title": "Nvim pane lifecycle",
       "status": "planned",
@@ -50,6 +54,8 @@
       "id": "d0fe4db5-99aa-418e-89b1-5e99badee321",
       "phaseId": "11d9a9ac-c22d-4613-9423-7f97a64acbcd",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "nvim-multi-instance",
       "title": "Multi-instance support",
       "status": "planned",
@@ -70,6 +76,8 @@
       "id": "8f660c0c-85d7-45b5-a4c7-0598d6cb548a",
       "phaseId": "11d9a9ac-c22d-4613-9423-7f97a64acbcd",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "nvim-input-forward",
       "title": "Input forwarding to nvim",
       "status": "planned",
@@ -88,5 +96,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:14:56.477Z"
+  "updatedAt": "2026-07-01T18:14:56.477Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

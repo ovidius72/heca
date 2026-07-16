@@ -2,6 +2,8 @@
   "id": "227d7422-e493-41ff-b786-8e659bf2f88c",
   "featureId": "...",
   "number": 1,
+  "shortId": "",
+  "priority": 0,
   "slug": "notification-03",
   "title": "notification-03",
   "status": "draft",
@@ -23,5 +25,7 @@
   "taskIds": [],
   "tasks": [],
   "createdAt": "2026-07-04T07:05:14.792Z",
-  "updatedAt": "2026-07-04T07:05:14.792Z"
+  "updatedAt": "2026-07-04T07:05:14.792Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

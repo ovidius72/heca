@@ -2,6 +2,8 @@
   "id": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
   "number": 5,
+  "shortId": "",
+  "priority": 0,
   "slug": "theming-01-showcase-visual-verification",
   "title": "theming-01: Showcase visual verification",
   "status": "done",
@@ -29,6 +31,8 @@
       "id": "76f2e3f6-2bde-433f-8c90-c88b63f431ab",
       "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "verify-widget-theme",
       "title": "Verify every widget reacts to theme change",
       "status": "done",
@@ -49,6 +53,8 @@
       "id": "2ed60a90-1467-436c-b286-7f0225737e7c",
       "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "verify-latte-render",
       "title": "Verify latte light theme rendering",
       "status": "done",
@@ -67,5 +73,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:10:58.813Z"
+  "updatedAt": "2026-07-01T18:10:58.813Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

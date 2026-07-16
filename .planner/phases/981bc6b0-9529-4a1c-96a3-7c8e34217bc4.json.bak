@@ -2,6 +2,8 @@
   "id": "981bc6b0-9529-4a1c-96a3-7c8e34217bc4",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
   "number": 3,
+  "shortId": "",
+  "priority": 0,
   "slug": "gridui-02-pane-shell-header-and-tabs",
   "title": "gridui-02: Pane shell header and tabs",
   "status": "planned",
@@ -31,6 +33,8 @@
       "id": "5a29016c-c045-4f97-839b-452806a612d8",
       "phaseId": "981bc6b0-9529-4a1c-96a3-7c8e34217bc4",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "pane-tabbar-slot",
       "title": "Add optional tab bar slot to Pane widget",
       "status": "planned",
@@ -51,6 +55,8 @@
       "id": "eba900d3-bb5e-4421-a2a6-87892c647993",
       "phaseId": "981bc6b0-9529-4a1c-96a3-7c8e34217bc4",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "statusbar-widget",
       "title": "Build StatusBar widget",
       "status": "planned",
@@ -71,6 +77,8 @@
       "id": "2123c25d-128f-4c8c-8ec5-89332432d9df",
       "phaseId": "981bc6b0-9529-4a1c-96a3-7c8e34217bc4",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "cornerbrackets-widget",
       "title": "Build CornerBrackets widget",
       "status": "planned",
@@ -91,6 +99,8 @@
       "id": "01f20c00-7714-4db5-9adc-f6ed6b6328fa",
       "phaseId": "981bc6b0-9529-4a1c-96a3-7c8e34217bc4",
       "number": 4,
+      "shortId": "",
+      "priority": 0,
       "shortName": "pane-header-slot",
       "title": "Add optional header slot to Pane widget",
       "status": "planned",
@@ -109,5 +119,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:13:27.647Z"
+  "updatedAt": "2026-07-01T18:13:27.647Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

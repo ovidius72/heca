@@ -2,6 +2,8 @@
   "id": "99d19246-1ba9-4720-9895-e70c66acf144",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 11,
+  "shortId": "",
+  "priority": 0,
   "slug": "plugin-ui-declarative-widget-tree-ui-model-viewnode",
   "title": "plugin-ui: Declarative widget-tree UI model (ViewNode)",
   "status": "in-progress",
@@ -30,13 +32,17 @@
     "cf390afd-99f3-4a5a-b79c-71edad09b29e",
     "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
     "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
-    "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2"
+    "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
+    "1f73600c-1e9c-4c93-90dc-44291b137240",
+    "586953dc-a2af-45cc-8eff-f6d5441f6ece"
   ],
   "tasks": [
     {
       "id": "972dbde6-37b9-438b-acc4-4ec9be7fd3cd",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-1",
       "title": "plugin-task-ui-1 — ViewNode model + PropValue + Intent",
       "status": "done",
@@ -57,6 +63,8 @@
       "id": "d3555dc1-fd37-415e-98e4-bd1307ed75ad",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-core",
       "title": "plugin-ui core execution — InteractionIntent::View + OverlayHost + confirm migration",
       "status": "done",
@@ -77,6 +85,8 @@
       "id": "8b510741-5108-41c1-af0c-c8ad5b04ebe5",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-surface",
       "title": "Surface compositor + LayerRegistry (step 1)",
       "status": "done",
@@ -97,6 +107,8 @@
       "id": "2cd2ee16-abca-4362-80cc-31a0a08f5ede",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 4,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-3",
       "title": "plugin-task-ui-3 — realize() mapper",
       "status": "done",
@@ -117,6 +129,8 @@
       "id": "fc199765-dfbe-4c2a-99b4-e3a64cf49686",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 5,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-4",
       "title": "plugin-task-ui-4 — Dialog widget + rich modal bodies",
       "status": "done",
@@ -137,6 +151,8 @@
       "id": "6c81c18b-1b80-4128-ba2a-276791879edb",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 6,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-2",
       "title": "plugin-task-ui-2 — Typed SwiftUI-style builder SDK",
       "status": "planned",
@@ -157,6 +173,8 @@
       "id": "cf390afd-99f3-4a5a-b79c-71edad09b29e",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 7,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-5",
       "title": "plugin-task-ui-5 — Table widget (on demand)",
       "status": "planned",
@@ -177,6 +195,8 @@
       "id": "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 8,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-6",
       "title": "plugin-task-ui-6 — Author docs",
       "status": "planned",
@@ -197,6 +217,8 @@
       "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 9,
+      "shortId": "",
+      "priority": 0,
       "shortName": "plugin-task-ui-7",
       "title": "plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)",
       "status": "in-progress",
@@ -226,6 +248,8 @@
       "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
       "number": 10,
+      "shortId": "",
+      "priority": 0,
       "shortName": "scrollregion-two-axis-scrollab",
       "title": "ScrollRegion two-axis + scrollable surface (overlay/scroll rework Part 1)",
       "status": "in-progress",
@@ -292,8 +316,116 @@
       "completedAt": "",
       "createdAt": "2026-07-16T06:32:29.772Z",
       "updatedAt": "2026-07-16T06:32:40.603Z"
+    },
+    {
+      "id": "1f73600c-1e9c-4c93-90dc-44291b137240",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 11,
+      "shortId": "",
+      "priority": 0,
+      "shortName": "app-scroll-actions-prefix-gate",
+      "title": "App scroll actions (prefix-gated, configurable, RPC) for the active ScrollRegion",
+      "status": "planned",
+      "description": "App-integration follow-up to F003/P011/T010 (ScrollRegion widget). Decided with user 2026-07-16.\n\nDECISION (tmux model): plain keys (j/k/PageUp/PageDown/Home/End) CANNOT be default bindings — heca forwards plain keys to the underlying app (terminal/vim/lazygit), so binding them would steal them. Scroll defaults MUST be prefix-gated: `prefix+Home/End/PgUp/PgDn/arrows` (exact set TBD), and MUST be configurable so the end user can rebind to plain keys (e.g. plain Home/End) if they accept the terminal tradeoff. The ScrollRegion WIDGET therefore binds NO keys and is NOT focusable (done in T010): keyboard scrolling is a HOST concern.\n\nBUILD (follow the standard heca action pattern — see AGENTS.md \"Adding New Actions\"):\n- WmAction variants for scrolling the ACTIVE scroll region, e.g. ScrollLineUp/Down, ScrollPageUp/Down, ScrollHome/End (or one parameterized ScrollActive { axis, amount } — pick per the enum style). Parameterized/axis-aware for horizontal too.\n- action_from_name + build_action (if parameterized) + action_priority + handler in handlers.rs + build_registry + ActionRegistry::ALL descriptor + action_policy classification (interaction.rs) + RPC parser (rpc.rs).\n- keybindings.default.toml: prefix-gated defaults (prefix+PgDn/PgUp/Home/End/…). Configurable via config.\n- The handler resolves the ACTIVE ScrollRegion (app-side: whichever chrome region / mounted container is active) and calls its scroll API: `scroll_to`/`scroll_to_x`/`scroll_by`/`ensure_visible` / the `scroll_offset()`/`scroll_offset_x()` signals (all public on ScrollRegion). NB: ScrollRegion isn't mounted in the app yet — this task is gated on the sidebar/panels being wrapped in a ScrollRegion (the WorkspacesContainer/chrome migration). Until then there is no active region to scroll.\n- OPTIONAL: a semantic WidgetIntent::Scroll* delivered field-first (so a focused editable child consumes its raw keys first) if we want the widget to handle host-delivered scroll intents directly; otherwise the action handler calls the region API directly.\n\nVERIFY: prefix+scroll keys scroll the active region; reachable from keyboard + RPC; a focused terminal/editor still receives plain keys (not hijacked). Docs: README + keybindings.default.toml + AGENTS \"Adding New Actions\" example.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-001-wmaction-scroll-variants-line-page-home-end-axis-aware-action-from-name-build-action-priority",
+          "title": "WmAction scroll variants (line/page/home-end, axis-aware) + action_from_name/build_action/priority",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-002-handler-build-registry-actionregistry-all-descriptor-action-policy-classification",
+          "title": "handler + build_registry + ActionRegistry::ALL descriptor + action_policy classification",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-003-rpc-parser-support-rpc-rs",
+          "title": "RPC parser support (rpc.rs)",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-004-keybindings-default-toml-prefix-gated-defaults-configurable",
+          "title": "keybindings.default.toml prefix-gated defaults (configurable)",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-005-handler-resolves-the-active-scrollregion-and-calls-its-scroll-api",
+          "title": "handler resolves the ACTIVE ScrollRegion and calls its scroll API",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-006-gated-on-scrollregion-mounted-in-the-app-sidebar-panels-migration",
+          "title": "Gated on: ScrollRegion mounted in the app (sidebar/panels migration)",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-007-verify-keyboard-rpc-focused-terminal-editor-keeps-plain-keys",
+          "title": "Verify keyboard + RPC; focused terminal/editor keeps plain keys",
+          "checked": false
+        },
+        {
+          "id": "1f73600c-1e9c-4c93-90dc-44291b137240-check-008-docs-readme-keybindings-default-toml-agents-adding-new-actions",
+          "title": "Docs: README + keybindings.default.toml + AGENTS Adding New Actions",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-16T08:40:10.429Z",
+      "updatedAt": "2026-07-16T08:40:10.429Z"
+    },
+    {
+      "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 12,
+      "shortId": "",
+      "priority": 0,
+      "shortName": "regression-widget-glow-only-on",
+      "title": "REGRESSION: widget glow only on focused elements (lost rest-state glow)",
+      "status": "planned",
+      "description": "Reported by user 2026-07-16 while working on F003/P011/T010. Suspected pre-existing regression in the plugin/composition-first widget refactor (NOT introduced by the ScrollRegion work). NEEDS INTERACTIVE (GPU) DIAGNOSIS — can't be seen headless.\n\nSYMPTOM: in the showcase, changing the glow-size Select ([appearance] glow_size / GlowLevel) no longer visibly affects the new/refactored widgets; user observes glow now appears ONLY on FOCUSED widgets/elements, not at rest. It used to glow at rest.\n\nDIAGNOSIS LEADS (verified in code):\n- Glow path is global: `PaintCx::scaled_glow` (heca-grid-ui/src/component.rs:~1093) scales any Glow by `theme.colors.glow_size` (radius_scale + strength_scale); `PaintCx::rect` runs every glow through it (component.rs:748). So glow_size DOES reach every widget that PASSES a glow to `rect` (or sets `style.glow` → drawn by `paint_base`).\n- Some widgets read glow_size DIRECTLY: context_menu, marker_group, key_hint, rail_cell, icon_button.\n- Showcase wiring is fine: `self.theme.colors.glow_size = self.ctl.glow.get_untracked()` each frame (showcase.rs:2286); the glow Select sets `ctl.glow` (showcase.rs:804-809). Old widgets respond, so the select→theme→scaled_glow chain works.\n- So the regression is likely: the refactored widgets stopped PASSING a rest-state glow to their surface/border draw (only pass a glow in the focused state), OR their rest glow base intensity became 0. Focus still glows (focus ring / focused-state glow), matching the user's observation.\n\nWHERE TO LOOK: the composition-first refactored widgets (Button, Item, Select, Tabs) + Badge/Tag/DockFrame — compare their paint() glow usage now vs before the refactor (git history). Check whether the surface/border draw passes `Some(Glow{..})` at REST or only when focused. The fix: restore the rest-state theme-driven glow (read from theme, per the no-hardcode rule), so glow_size scales it at rest.\n\nVERIFY: user changes the glow Select in the showcase and sees ALL widgets' glow scale at rest (not only focused ones).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-001-reproduce-in-showcase-which-widgets-lost-rest-glow-user-input",
+          "title": "Reproduce in showcase: which widgets lost rest-glow (user input)",
+          "checked": false
+        },
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-002-git-diff-the-refactored-widgets-paint-glow-usage-rest-vs-focused-vs-pre-refactor",
+          "title": "git-diff the refactored widgets' paint() glow usage (rest vs focused) vs pre-refactor",
+          "checked": false
+        },
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-003-restore-theme-driven-rest-state-glow-read-from-theme-no-hardcode-so-glow-size-scales-it",
+          "title": "Restore theme-driven rest-state glow (read from theme, no hardcode) so glow_size scales it",
+          "checked": false
+        },
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-004-verify-in-showcase-glow-select-scales-all-widgets-at-rest-not-only-focused",
+          "title": "Verify in showcase: glow Select scales all widgets at rest, not only focused",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-16T08:40:57.189Z",
+      "updatedAt": "2026-07-16T08:40:57.189Z"
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-16T06:32:40.603Z"
+  "updatedAt": "2026-07-16T08:40:57.189Z",
+  "handoff": "# Handoff\n\nCreated at: 2026-07-16T08:46:32.976Z\nUpdated at: 2026-07-16T08:46:32.976Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 2/10 done, 1 active\n- Phases: 27/77 done, 1 active/discovery\n- Tasks: 111/299 done, 2 active\n\n## Current focus\n- Feature: `ebb9ceb0-ea12-4374-af6e-12aa4256bcc3` — 🧩 Pluggable Chrome Architecture (in-progress)\n- Phase: `99d19246-1ba9-4720-9895-e70c66acf144` — plugin-ui: Declarative widget-tree UI model (ViewNode) (in-progress)\n- Task: `2a269cea-f5a9-421b-9da7-eb1893dc9c00` — plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode) (in-progress)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 99d19246-1ba9-4720-9895-e70c66acf144)\n- ✅ `972dbde6-37b9-438b-acc4-4ec9be7fd3cd` — plugin-task-ui-1 — ViewNode model + PropValue + Intent (done)\n- ✅ `d3555dc1-fd37-415e-98e4-bd1307ed75ad` — plugin-ui core execution — InteractionIntent::View + OverlayHost + confirm migration (done)\n- ✅ `8b510741-5108-41c1-af0c-c8ad5b04ebe5` — Surface compositor + LayerRegistry (step 1) (done)\n- ✅ `2cd2ee16-abca-4362-80cc-31a0a08f5ede` — plugin-task-ui-3 — realize() mapper (done)\n- ✅ `fc199765-dfbe-4c2a-99b4-e3a64cf49686` — plugin-task-ui-4 — Dialog widget + rich modal bodies (done)\n- 📋 `6c81c18b-1b80-4128-ba2a-276791879edb` — plugin-task-ui-2 — Typed SwiftUI-style builder SDK (planned)\n- 📋 `cf390afd-99f3-4a5a-b79c-71edad09b29e` — plugin-task-ui-5 — Table widget (on demand) (planned)\n- 📋 `4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3` — plugin-task-ui-6 — Author docs (planned)\n- 🚧 `2a269cea-f5a9-421b-9da7-eb1893dc9c00` — plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode) (in-progress)\n- 🚧 `c0e2d0de-3e8c-49da-bdd8-529d530a1cf2` — ScrollRegion two-axis + scrollable surface (overlay/scroll rework Part 1) (in-progress)\n- 📋 `1f73600c-1e9c-4c93-90dc-44291b137240` — App scroll actions (prefix-gated, configurable, RPC) for the active ScrollRegion (planned)\n- 📋 `586953dc-a2af-45cc-8eff-f6d5441f6ece` — REGRESSION: widget glow only on focused elements (lost rest-state glow) (planned)\n\n## How to resume\n1. Open task 2a269cea-f5a9-421b-9da7-eb1893dc9c00 (plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: Continue with plugin-03: Built-in provider system and WorkspacesContainer migration\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/99d19246-1ba9-4720-9895-e70c66acf144.json\n- .planner/resume.json\n- .planner/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Continue with plugin-03: Built-in provider system and WorkspacesContainer migration\n\n## Recent activity\n- Latest feature update: 📐 Grid-UI Widget Library (deferred) at 2026-07-13T15:29:44.427Z\n- Latest phase update: plugin-ui: Declarative widget-tree UI model (ViewNode) (in-progress) at 2026-07-16T08:40:57.189Z\n- Latest task update: REGRESSION: widget glow only on focused elements (lost rest-state glow) (planned) at 2026-07-16T08:40:57.189Z\n\n## Reminder\n- When work is fully resumed and this handoff is no longer needed, clear the phase handoff with handoff clear <ref> (or /planner handoff clear).",
+  "handoffUpdatedAt": "2026-07-16T08:46:32.976Z"
 }
