@@ -178,10 +178,17 @@ background_transparency = 0
 # vibrancy = "under_window_background"
 
 # Effect tokens — override the theme; unset → inherit the theme value.
-# glow_size : owns glow presence + halo radius + strength. none|thin|medium|large
-# intensity : owns the scanline/CRT overlay opacity only. off|low|medium|heavy
+# glow_size         : owns glow presence + halo radius + strength — including the
+#                     faint REST glow every control surface carries.
+#                     none|thin|medium|large
+# intensity         : owns the scanline/CRT overlay opacity only. off|low|medium|heavy
+# show_focus_border : keyboard focus-ring visibility. false removes the focus
+#                     outline on every widget; true (default via the theme) shows
+#                     it on KEYBOARD focus only (Tab/arrows) — never on a mouse
+#                     click. true|false
 # glow_size = "medium"
 # intensity = "medium"
+# show_focus_border = true
 
 # ── GLOBAL border defaults (every surface inherits these when its own field is
 #    unset; each then falls back to the theme) ──

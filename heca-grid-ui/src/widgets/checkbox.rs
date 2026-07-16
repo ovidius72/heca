@@ -219,14 +219,17 @@ impl Component for Checkbox {
         let bx = self.box_rect();
 
         // Box: dark fill, border firms muted → accent. Radius + border width from
-        // the theme so the global settings scale this proportionally.
+        // the theme so the global settings scale this proportionally. A faint theme
+        // rest glow (`interaction.control_rest_glow`) on the BOX (not the label)
+        // gives it the shared neon identity at rest; `glow_size` scales it (T011).
         let rest_border = ia.control_rest_border as f32;
         let border_a = rest_border + (255.0 - rest_border) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
         };
-        cx.rect(bx, surface, Some(border), radius, None);
+        let box_glow = if disabled { None } else { cx.rest_glow(GLOW_RADIUS) };
+        cx.rect(bx, surface, Some(border), radius, box_glow);
 
         // Checked indicator: an accent square that pops in from the box center.
         if p > 0.0 {
@@ -268,10 +271,12 @@ impl Component for Checkbox {
             cx.dim(self.base.bounds, 0.0);
         }
 
-        // Focus ring around the whole control — shown whenever focused (theme-aware color).
-        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        // Focus ring around the BOX only (theme-aware color) — the standard control
+        // ring (web input outline / macOS): the label is clickable but not ringed,
+        // so keyboard focus doesn't draw a heavy frame around the whole row.
+        if !disabled && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
             let ring = cx.theme().colors.effective_focus_ring();
-            cx.focus_ring(self.base.bounds, ring, radius);
+            cx.focus_ring(bx, ring, radius);
         }
     }
 

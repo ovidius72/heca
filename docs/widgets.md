@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
+- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -162,7 +162,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `focused` | `Signal<bool>` | Holds keyboard focus. |
 | `focusable` | `bool` | Whether the widget **opts into** keyboard focus (default `false`). Interactive widgets set it `true` — in the constructor (always-focusable controls) or when a callback is wired (e.g. a `Row`'s `.on_activate`). The `Component::focusable()` default is `focusable && !disabled`, so widgets no longer re-implement that check; only genuinely dynamic ones (an overlay focusable only while open) override the method. |
 | `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
-| `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`). Widgets now draw their `focus_ring` whenever `focused`, so the ring shows for both; this flag is retained for widgets that still want a keyboard-only distinction. |
+| `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`: `advance` → `true`, click-focus → `false`). **Every widget gates its focus ring on `Base::shows_focus_ring()`** (= `focused && focus_visible` — CSS `:focus-visible` semantics), so a mouse click focuses a widget (Enter/Space work, the caret shows) **without** drawing the ring; only keyboard navigation rings. The ring is also removable app-wide via `[appearance] show_focus_border = false` (theme token `show_focus_border`). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
 | `children` | `Vec<Box<dyn Component>>` | Child components. |
 | `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
@@ -307,8 +307,10 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 | `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
 | `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus indicator (`focus_ring`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
 | `focus_ring` | `Option<Color>` | Color of the keyboard **focus outline** drawn by `PaintCx::focus_ring` (every widget). Unset ⇒ derived per-tone by `effective_focus_ring()` / `focus_ring_tone()`: the tone (accent, or `danger` for a destructive button) shifted toward `foreground`, which brightens the ring on dark themes and darkens it on light themes so it stays distinct from the widget's own border. Set it to pin the default/accent focus color; the `danger` ring always derives. |
-| `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
+| `show_focus_border` | `bool` | Focus-ring **kill switch** (default `true`); every ring draw is gated on it. Overridable per-config via `[appearance] show_focus_border`. Rings additionally show only on **keyboard** focus (`Base::shows_focus_ring()`), never on click. |
+| `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius **and strength**. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
+| `interaction.control_rest_glow` | `u8` | **Rest-state glow intensity** of control surfaces (×255; `30` ≈ 0.12; `0` = flat rest look). Button (Primary/Destructive/Outline), Input, Toggle track, Checkbox box, and the Select trigger halo faintly **at rest** with it — so a control shows the neon identity before hover/focus and `glow_size` visibly scales it at rest. Scaled by `glow_size` like every glow; disabled controls never halo. |
 | `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
 | `active_wash_alpha` | `f32` (0..1) | Opacity of the accent **wash** `DockFrame::active(true)` paints over an active frame (e.g. the active workspace). |
 | `card_background_alpha` | `f32` (0..1) | Opacity of a sidebar/list card's resting background tint (e.g. each pane card). |
@@ -319,10 +321,48 @@ Helper: **`theme.control_radius()`** → `radius × 0.5` (corners for small cont
 > theme so a global change scales every widget proportionally.
 
 - **`GlowLevel{None, Thin, Medium, Large}`** — glow halo size. `.radius_scale()` (0 / 0.5 /
-  1.0 / 2.0), `.parse(&str)` (for config.toml), `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
+  1.0 / 2.0), `.strength_scale()` (0 / 0.5 / 1.0 / 1.6), `.parse(&str)` (for config.toml),
+  `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
 - **`Intensity{Off, Low, Medium, Heavy}`** — CRT scanline strength. `.scanline_opacity()`
   (Off=0 → Heavy=0.20), `.next()` (cycles). *Glow and intensity are independent* — glow is
   owned by `glow_size`, so changing intensity affects only the scanline overlay.
+
+### The glow model — who owns what
+
+One sentence: **the theme owns the glow COLOR, the `glow_size` setting owns how much glow there
+is, and one token gives every surface a faint halo at rest.**
+
+| Layer | Owner | What it controls |
+|---|---|---|
+| **Color** | theme `glow` token (per-widget **tone** overrides: a Destructive button halos in `danger`, a Toast/Alert/Tag in its severity/own color) | the halo hue |
+| **Amount** | `glow_size` setting (`[appearance] glow_size` override → theme; `none\|thin\|medium\|large`) | presence + halo radius (`radius_scale`) + strength (`strength_scale`) of **every** glow, applied at the single `PaintCx` chokepoint (`scaled_glow`, inside `.rect(..)`) — nothing bypasses it |
+| **Rest presence** | `interaction.control_rest_glow` token (×255 intensity; `0` = flat rest look) via **`PaintCx::rest_glow(radius)`** — the one shared definition; each widget passes only its halo radius | whether surfaces halo **before** any hover/focus/active state |
+| **State glows** | each widget (hover sweep, toggle-on, checked pop, active pill/bar, attention pulse…) | drawn **on top** of the rest glow, same chokepoint |
+
+**Carries the rest glow:** Button (Primary/Destructive/Outline — tight `REST_GLOW_RADIUS`, far
+smaller than the hover halo), Input, Toggle track, Checkbox **box**, Select trigger, Pane (all
+frame variants), DockFrame fill, **filled** `Row` (list/pane cards), styled `ScrollRegion`
+(scrollable panel), Tag, Alert, Toast card — plus the widgets that always glowed (Badge,
+StatusDot, active Tab, lit Gauge, MarkerGroup, and any surface given an explicit StyleExt
+`.glow(..)`, which always **wins over** the rest fallback).
+
+**Deliberately flat at rest:** Secondary buttons (quiet by design), Ghost/Link buttons, unfilled
+`Row`/`Item` list rows, `RailCell` (rest = bare icon), frameless `ScrollRegion`, layout shells
+(`Flex`/`ChromeRegion`) — they have no surface, so there is nothing to halo. Disabled controls
+never halo. `Button::glow(false)` opts a single button out of rest + hover glow.
+
+**Icons/glyphs cannot glow yet**: an `Icon` is a text run (`TextCmd`) and glow is a feature of
+the SDF **rect** renderer — a glyph halo needs a renderer capability (tracked; do not fake it
+with rects).
+
+### The focus model — ring visibility
+
+| Question | Answer |
+|---|---|
+| When does the ring draw? | Only on **keyboard** focus: every widget gates its ring on `Base::shows_focus_ring()` (= `focused && focus_visible`, CSS `:focus-visible`). A mouse click focuses the widget (Enter/Space work, the caret shows) but never rings; Tab/arrows (`FocusManager::advance`) ring. |
+| Can I turn it off? | Yes — `[appearance] show_focus_border = false` (config override → theme `show_focus_border` token, default `true`); live-reloads with `prefix+Shift+r`. |
+| How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
+| What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
 
 ### `Color`
 
@@ -904,7 +944,11 @@ re-emits the node with the new value instead.
 ### Button
 
 Interactive surface; look driven by variant × size, with animated per-variant hover and a
-press flash. Focusable; Space/Enter activate like a click.
+press flash. Focusable; Space/Enter activate like a click. The bordered variants
+(Primary/Destructive/Outline) carry a faint theme **rest glow**
+(`interaction.control_rest_glow`, tone follows the variant) so `glow_size` visibly scales them
+before hover/focus; Secondary (deliberately quiet) and the surface-less Ghost/Link stay flat at
+rest; `.glow(false)` disables both the rest and hover glow.
 
 **Its content is composed from child components** — the button paints only its own chrome (fill,
 border, hover sweep, press flash, focus ring, all from the `Theme`) and lets the layout engine place
@@ -1086,7 +1130,8 @@ IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
 
 ### Toggle
 
-Sliding on/off switch (translucent accent fill + light knob + glow when on). Focusable;
+Sliding on/off switch (translucent accent fill + light knob + glow when on; the track carries
+the faint theme rest glow — `interaction.control_rest_glow` — while off). Focusable;
 Space/Enter or click flips it.
 
 - **Construct**: `Toggle::new()` (off).
@@ -1103,7 +1148,10 @@ Toggle::new().on(true).on_change(|a| {
 ### Checkbox
 
 Bordered box with a pop-in accent indicator, plus an optional **clickable label** on
-either side. Focusable; Space/Enter or a click anywhere on box/label toggles it.
+either side. Focusable; Space/Enter or a click anywhere on box/label toggles it. The
+**box** (not the label) carries the faint theme rest glow (`interaction.control_rest_glow`),
+and the keyboard focus ring wraps the **box only** — the standard control ring; the label
+stays clickable but un-ringed.
 
 - **Construct**: `Checkbox::new()`.
 - **Builders**: `.checked(bool)`, `.label(text)`, `.label_side(LabelSide)` (`Right` default,
@@ -1120,7 +1168,8 @@ Checkbox::new().label("LEFT LABEL").label_side(LabelSide::Left);
 ### Input
 
 Single-line editable text field with a blinking caret, placeholder, and a full
-mouse/keyboard selection + editing model. Focusable.
+mouse/keyboard selection + editing model. Focusable. The field carries the faint theme
+rest glow (`interaction.control_rest_glow`).
 
 - **Construct**: `Input::new()`.
 - **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
@@ -1267,7 +1316,8 @@ option list paints in the scene's overlay layer (on top of everything) and the w
 [Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)); while open,
 `overlay_occludes(pos)` reports the **panel rect**, so a host's page-level gates (e.g. right-click →
 context menu) skip points the list covers (see [`Component` trait](#component-trait)). Focusable,
-and **one Tab stop** ([`Base.focus_barrier`](#base)) — the options are not separate stops.
+and **one Tab stop** ([`Base.focus_barrier`](#base)) — the options are not separate stops. The
+trigger carries the faint theme rest glow (`interaction.control_rest_glow`).
 
 **Its options are [`Choice`](#choice) children.** So an option is not a string: it is a value plus
 whatever content you compose — an icon and a label, a two-line row, a `Badge`. `Select` owns only the

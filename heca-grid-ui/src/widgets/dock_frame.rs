@@ -38,6 +38,8 @@ const CHEVRON_CLOSED: &str = "▸";
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: f32 = 8.0;
+/// Rest-glow spread radius (px) — the frame's share of the theme rest halo.
+const GLOW_RADIUS: f32 = 12.0;
 /// Inset of the header + body from the bracket frame, so content (title, the
 /// header-controls slot, body rows) never collides with the corner brackets.
 const CONTENT_PAD: f32 = 10.0;
@@ -307,9 +309,12 @@ impl Component for DockFrame {
         let b = self.base.bounds;
         let fill = self.base.style.fill;
 
-        // Background fill — rounded by theme radius.
+        // Background fill — rounded by theme radius. An explicit `.glow(..)`
+        // (StyleExt) wins; otherwise the theme rest glow gives the frame the
+        // shared neon identity at rest, scaled by `glow_size` (T011).
         if let Some(f) = fill {
-            cx.rect(b, f, None, radius, self.base.style.glow);
+            let glow = self.base.style.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+            cx.rect(b, f, None, radius, glow);
         }
 
         // Active-region wash — a faint accent overlay over the whole frame when

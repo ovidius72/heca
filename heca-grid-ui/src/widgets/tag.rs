@@ -13,7 +13,7 @@ use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet};
-use crate::scene::Border;
+use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify};
 use crate::widgets::{Flex, Label};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -24,6 +24,8 @@ const PAD_X: f32 = 12.0;
 const PAD_Y: f32 = 4.0;
 /// Gap between segments (holds the divider).
 const SEG_GAP: f32 = 12.0;
+/// Rest-glow spread radius (px) — the pill's share of the theme rest halo.
+const GLOW_RADIUS: f32 = 8.0;
 /// Gap between a leading slot and its label, within a segment.
 const SLOT_GAP: f32 = 6.0;
 /// Chip text size relative to the base font.
@@ -148,6 +150,9 @@ impl Component for Tag {
         let pill = self.base.bounds;
         // Radius from the theme (rounder than a box), clamped to a capsule.
         let radius = (radius_tok * RADIUS_MUL).min((pill.size.h / 2.0) as f32);
+        // Theme rest glow (`PaintCx::rest_glow`), toned to the tag color, so the
+        // pill honors the `glow_size` setting at rest like every surface (T011).
+        let glow = cx.rest_glow(GLOW_RADIUS).map(|g| Glow { color: c, ..g });
         cx.rect(
             pill,
             c.with_alpha(ia.tag_fill),
@@ -156,7 +161,7 @@ impl Component for Tag {
                 width: border_w,
             }),
             radius,
-            None,
+            glow,
         );
 
         // Thin dividers in the gap between consecutive segments.

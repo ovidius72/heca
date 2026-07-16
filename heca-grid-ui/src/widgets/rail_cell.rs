@@ -157,7 +157,7 @@ impl Component for RailCell {
         }
         if self.interactive()
             && !disabled
-            && self.base.focused.get_untracked()
+            && self.base.shows_focus_ring()
             && cx.theme().colors.show_focus_border
         {
             let ring = cx.theme().colors.effective_focus_ring();

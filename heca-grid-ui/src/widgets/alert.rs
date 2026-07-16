@@ -6,7 +6,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::{TextAlign, TextStyle};
+use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -20,6 +20,8 @@ const BODY_SCALE: f32 = 0.9;
 const GAP: f64 = 6.0;
 /// Default alert width.
 const DEFAULT_WIDTH: f32 = 360.0;
+/// Rest-glow spread radius (px) — the alert's share of the theme rest halo.
+const GLOW_RADIUS: f32 = 10.0;
 
 /// Visual variant of an [`Alert`], mapped to theme tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -124,9 +126,11 @@ impl Component for Alert {
         let b = self.base.bounds;
 
         // Surface: dark fill tinted by the variant, bordered (theme-width; gone
-        // when borders are off).
+        // when borders are off). Theme rest glow toned to the variant, so the
+        // alert honors the `glow_size` setting at rest like every surface (T011).
         let border = cx.border(color);
-        cx.rect(b, color.with_alpha(tag_fill), border, radius, None);
+        let glow = cx.rest_glow(GLOW_RADIUS).map(|g| Glow { color, ..g });
+        cx.rect(b, color.with_alpha(tag_fill), border, radius, glow);
         // Colored left accent bar.
         cx.rect(
             Rectangle::new(b.loc, Size::new(BAR_W, b.size.h)),

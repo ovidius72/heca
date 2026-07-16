@@ -29,6 +29,8 @@ const SEL_INSET: f64 = 3.0;
 const ATTENTION_PULSES: u32 = 4;
 /// Peak glow radius (logical px) of the attention pulse border.
 const ATTENTION_GLOW_RADIUS: f32 = 12.0;
+/// Rest-glow spread radius (px) — a filled row's share of the theme rest halo.
+const REST_GLOW_RADIUS: f32 = 10.0;
 /// Width of the left accent bar shown when active.
 const BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
@@ -175,7 +177,15 @@ impl Component for Row {
         let b = self.base.bounds;
 
         // Persistent background (e.g. a state tint) under the interactive overlay.
-        cx.paint_base(&self.base);
+        // A FILLED row (a list/pane card) without an explicit `.glow(..)` falls
+        // back to the theme rest glow (`PaintCx::rest_glow`), so cards honor the
+        // `glow_size` setting at rest; an unfilled row stays surface-less and flat.
+        let s = &self.base.style;
+        if let (Some(fill), None) = (s.fill, s.glow) {
+            cx.rect(b, fill, s.border, s.radius, cx.rest_glow(REST_GLOW_RADIUS));
+        } else {
+            cx.paint_base(&self.base);
+        }
 
         // Selection pill: tinted when active, faint on hover. Inset so its rounded
         // corners never contend with a rounded container's corners.
@@ -283,7 +293,7 @@ impl Component for Row {
         }
         if self.interactive()
             && !disabled
-            && self.base.focused.get_untracked()
+            && self.base.shows_focus_ring()
             && cx.theme().colors.show_focus_border
         {
             let ring = cx.theme().colors.effective_focus_ring();

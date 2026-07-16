@@ -2253,6 +2253,12 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // above by `app_theme_to_gui_theme` wins.
     theme.colors.glow_size = state.appearance.effective_glow_size(&state.theme);
     theme.colors.intensity = state.appearance.effective_intensity(&state.theme);
+    // Focus-outline visibility (config `show_focus_border`, theme fallback) — the
+    // app-wide focus-ring kill switch; rings additionally show only on keyboard
+    // focus (focus-visible), never on click.
+    theme.colors.show_focus_border = state
+        .appearance
+        .effective_show_focus_border(&state.theme);
     // Global decorative border width (config `border_width`, theme fallback) — the
     // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
     // chrome + sidebar frame width.

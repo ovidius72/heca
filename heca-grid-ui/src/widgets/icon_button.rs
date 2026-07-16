@@ -190,7 +190,7 @@ impl Component for IconButton {
         if disabled {
             cx.dim(b, radius);
         }
-        if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        if self.focusable() && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
             let ring = cx.theme().colors.effective_focus_ring();
             cx.focus_ring(b, ring, radius);
         }

@@ -344,6 +344,13 @@ pub struct InteractionAlphas {
     pub control_active_border: u8,
     /// Resting border of a control — unifies button/input/toggle/checkbox/select (was `150` in each).
     pub control_rest_border: u8,
+    /// Resting **glow intensity** of a control's surface (×255 — a `Glow.intensity`
+    /// of `30` ≈ 0.12), so buttons/inputs/toggles/selects carry a faint neon halo at
+    /// rest and the `glow_size` setting visibly scales them without hover/focus.
+    /// `0` = flat rest look (glow only on hover/active), matching the pre-token
+    /// behaviour. Scaled — like every glow — by `glow_size` at the
+    /// `PaintCx::scaled_glow` chokepoint.
+    pub control_rest_glow: u8,
 
     // ── List rows / sidebar cells ──
     /// Hover fill of a list row / sidebar cell — unifies row/item/rail (16/16/18 → 16).
@@ -421,6 +428,7 @@ impl Default for InteractionAlphas {
             control_active_fill: 64,
             control_active_border: 215,
             control_rest_border: 150,
+            control_rest_glow: 30,
             row_hover_fill: 16,
             row_active_fill: 30,
             row_active_border: 185,

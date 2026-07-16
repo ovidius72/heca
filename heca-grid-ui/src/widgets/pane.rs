@@ -26,6 +26,10 @@ use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::Direction;
 
+/// Rest-glow spread radius (px) — the pane's share of the theme rest halo
+/// (`PaintCx::rest_glow` carries color + intensity).
+const GLOW_RADIUS: f32 = 12.0;
+
 /// Frame decoration mode for a [`Pane`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneFrame {
@@ -134,12 +138,16 @@ impl Component for Pane {
         } else {
             cx.theme().colors.border_radius
         };
+        // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the
+        // theme rest glow (`PaintCx::rest_glow`) gives the pane the shared neon
+        // identity at rest, scaled by the `glow_size` setting (T011).
+        let glow = self.base.style.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
 
         match self.frame {
             PaneFrame::None => {
                 // Fill only — no border, no brackets.
                 if let Some(f) = fill {
-                    cx.rect(b, f, None, radius, self.base.style.glow);
+                    cx.rect(b, f, None, radius, glow);
                 }
             }
             PaneFrame::Bordered => {
@@ -162,9 +170,9 @@ impl Component for Pane {
                 let border =
                     (width > 0.0).then_some(crate::scene::Border { color, width });
                 if let Some(f) = fill {
-                    cx.rect(b, f, border, radius, self.base.style.glow);
+                    cx.rect(b, f, border, radius, glow);
                 } else if border.is_some() {
-                    cx.rect(b, Color::TRANSPARENT, border, radius, None);
+                    cx.rect(b, Color::TRANSPARENT, border, radius, glow);
                 }
             }
             PaneFrame::Bracketed => {
@@ -177,7 +185,7 @@ impl Component for Pane {
                 // the theme drives it), so a self-themed surface (e.g. the sidebar)
                 // controls its bracket thickness + corner rounding too.
                 if let Some(f) = fill {
-                    cx.rect(b, f, None, radius, self.base.style.glow);
+                    cx.rect(b, f, None, radius, glow);
                 }
                 let width = self.border_width.unwrap_or(cx.theme().colors.border_width);
                 cx.bracket_frame_with(b, width, radius);

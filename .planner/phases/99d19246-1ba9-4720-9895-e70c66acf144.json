@@ -32,7 +32,8 @@
     "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
     "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
     "586953dc-a2af-45cc-8eff-f6d5441f6ece",
-    "126d0855-658d-471f-86a6-27eb144fc591"
+    "126d0855-658d-471f-86a6-27eb144fc591",
+    "d5962a9a-2776-4bd9-a629-5d44f1e33a81"
   ],
   "tasks": [
     {
@@ -202,7 +203,7 @@
       "shortName": "plugin-task-ui-7",
       "title": "plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)",
       "status": "in-progress",
-      "description": "EVERY widget must be able to receive a ViewNode (arbitrary child subtree) as its content — the real SwiftUI/Flutter model.\n\n## Scope (original, locked with user 2026-07-08)\n1. Make grid-ui widgets composition-first: accept an arbitrary child Component/subtree as content, not only scalar props. [SETTLED done per AGENTS.md]\n2. Complete realize() coverage so every WidgetKind maps to its widget. [SETTLED done]\n3. Result: any ViewNode renders, any widget can host any widget.\nOverlay direction: rename the overlay panel to a base Overlay widget with Modal/Dialog as specializations (composition, not inheritance); BLOCKING STAYS A LAYER PROPERTY; fold in overlay sizing (.panel_size) + scrollable body (ScrollRegion) gaps. Update showcase + docs/widgets.md; read all styling from theme; keep vocabulary host-owned.\n\n## DONE 2026-07-16 — Part 2 steps 2+3, USER-VERIFIED, commit 431e0d1 (branch feat/action-task-c, PR to main in progress)\nDesign: docs/overlay-design.md §\"T009 rework\". Two GPU verification rounds by the user, all points confirmed:\n- Showcase page root = ScrollRegion::new().both().align(Start); manual offset_tree/scroll_y DELETED. Whole-page vertical + horizontal scroll (BUG C FIXED). Two-pass layout (natural width → stretch to window when wider) keeps sections centered.\n- Overlays (Dialog/CommandPalette/ContextMenu/ToastStack) in a second retained tree at viewport size, dispatched before + painted after the page (own FocusManager). Dialog centers on the real window while scrolled (BUG B FIXED).\n- ScrollRegion: children-first wheel routing (innermost hovered wins); on_layout re-clamps both axes (fixed \"horizontal bar disappears after deep zoom\" — stale offset on viewport growth); press-and-hold track paging repeat (0.35s delay, 0.1s interval, pauses under thumb, stops on release).\n- NEW library hook: Component::overlay_occludes(pos) + heca_grid_ui::overlay_occluded_at(root, pos) — geometric occlusion (≠ overlay_active input grab). Impl: ToastStack (card rects), Dialog (open→viewport), CommandPalette (open→viewport), Select (open→panel_rect); ContextMenu deliberately default (second right-click re-anchors). Host right-click gate uses it; user confirmed right-click over page widgets (buttons/inputs/panes) opening the menu is the WANTED baseline (contextual menu contents are an app concern).\n- Docs (both audiences + code examples): widgets.md Component-trait table, ScrollRegion, Dialog, Select, CommandPalette, ContextMenu (incl. host right-click gate example), ToastStack; overlay-design.md phasing/Q&A resolved. Tests: nested wheel routing, natural-width premise, on_layout re-clamp, track repeat. Workspace green, clippy clean.\n\n## REMAINING (steps 4–5 of the rework)\n- Step 4: base Overlay widget refactor (Dialog/dropdown/tooltip compose it; blocking = layer property) → fixes BUG A (below). The overlay_occludes hook is a building block here.\n- Step 5: docs for the new Overlay widget.\n- Known perf note (user-accepted, low prio): window resize relayout is \"a bit laggy\" (full taffy pass, sometimes ×2 for the natural-width pass) — candidate for debounce/caching later.\n\n## BUG A — nested overlay: a Select opened INSIDE a Dialog (found 2026-07-15, F003/P011/T005 showcase) — OPEN, owned by step 4\nTwo symptoms, ONE root cause: a descendant overlay's panel is not composited/routed above the Dialog's own LATER siblings.\n- SHOW-THROUGH (paint/z-order): Dialog paints panel children in order [title, body(Select), action-row]; the Select queues its open list via `cx.with_overlay`, but the action buttons paint AFTER it in the same pass → buttons land on top of the panel (looks translucent; it is z-order — the `surface` token is opaque). See heca-grid-ui/src/widgets/dialog.rs paint child-loop + select.rs open-list paint (~line 622).\n- HOVER FALL-THROUGH (input/occlusion): dialog.rs `event()` PointerMoved (~line 336) forwards to the WHOLE panel subtree with no overlay-first routing, so the button under the open panel still highlights. Select's own occlusion (select.rs:696) works only at the TOP level via the host's focus.rs overlay scan (~line 138); the Dialog does not replicate that for a nested open overlay.\nFIX (base-Overlay rework, \"blocking stays a layer property\"): (1) route a nested descendant overlay through the app LayerRegistry / surface-compositor as its OWN layer; (2) overlay containers deliver pointer/key to an `overlay_active` descendant FIRST and stop propagation to occluded siblings (Component::overlay_occludes is usable here).\n\n## BUG B — Dialog off-screen in scrolled content — FIXED (overlay-layer hosting), user-verified 2026-07-16, commit 431e0d1. Failed-fix post-mortem preserved in docs/widgets.md §Dialog + overlay-design.md.\n## BUG C — no horizontal page scroll — FIXED (root ScrollRegion.both()), user-verified 2026-07-16, commit 431e0d1.",
+      "description": "EVERY widget must be able to receive a ViewNode (arbitrary child subtree) as its content — the real SwiftUI/Flutter model.\n\n## Scope (original, locked with user 2026-07-08)\n1. Composition-first widgets [SETTLED done per AGENTS.md]. 2. realize() coverage complete [SETTLED done]. 3. Any ViewNode renders, any widget hosts any widget.\nOverlay direction: base Overlay widget with Modal/Dialog as specializations (composition, not inheritance); BLOCKING STAYS A LAYER PROPERTY; overlay sizing + scrollable body gaps. Update showcase + docs/widgets.md; styling from theme; vocabulary host-owned.\n\n## DONE 2026-07-16 — Part 2 steps 2+3, USER-VERIFIED, commit 431e0d1 (PR #244 to main)\nShowcase page root = ScrollRegion.both() (BUG C fixed); overlays hosted above the scroll in a second tree (BUG B fixed); ScrollRegion children-first wheel + on_layout re-clamp + press-and-hold track paging; Component::overlay_occludes + overlay_occluded_at hook (right-click gate; ToastStack cards / Dialog / CommandPalette / Select impls; ContextMenu deliberately default). Docs + tests complete. User confirmed right-click over page widgets opening the menu is the wanted baseline.\n\n## STEP 4 BUILT 2026-07-16 — base Overlay widget + BUG A fix (uncommitted, AWAITING USER GPU VERIFICATION)\n- NEW heca-grid-ui/src/widgets/overlay.rs: base `Overlay` widget — viewport-filling centering layer, single `panel` child (`.panel()`/`.panel_boxed()` for realized content), BLOCKING AS A LAYER PROPERTY (`.blocking(bool)`: true = scrim + swallow outside input; false = light-dismiss fall-through), `.on_outside_click`, open_signal; focusable/overlay_active while open; overlay_occludes = viewport when blocking else panel rect; standalone event semantics (nested-overlay-first, outside-click hook, blocking swallow). Chrome (scrim/drop-shadow/surface fill/bracket reticle) moved here from Dialog. Anchor-to-rect positioning NOT built yet (no consumer this round) — planned extension.\n- Dialog REFACTORED to compose Overlay: Dialog = full-size passthrough → Overlay (blocking) → panel [title, body?, action-row]. Dialog keeps behaviour (focus trap, field-first keyboard, dismissible policy); paint override deleted (Overlay paints the layer); open signal IS the overlay's.\n- BUG A FIXED at low level, two halves:\n  (a) PAINT: scene.rs overlay segments now carry NESTING DEPTH; Scene::overlay_segments() yields depth-ordered (stable within depth) — a nested overlay (Select list in a Dialog body) composites ABOVE everything its parent draws, including the action buttons painted after it. Tests: nested_overlay_keeps_parent_segment_and_composites_on_top, sibling_overlays_keep_record_order_within_a_depth.\n  (b) INPUT: Dialog offers PointerMoved / Scroll / Widget* intents to an overlay-active descendant FIRST (focus.offer_to_overlay), and presses route through dispatch_trapped when the point is in the panel OR occluded by a nested overlay (overlay_occluded_at) — so an open Select captures hover/wheel/keys over the buttons; Dismiss closes the DROPDOWN (not the dialog), Activate commits its row.\n- Showcase: Dialog body now INCLUDES a nested Select (\"Archive target\") — the deliberately-omitted BUG A case is now the verification demo.\n- heca/src/chrome/overlay.rs test updated to the composed structure (root → Overlay → panel).\n- Docs: widgets.md new §Overlay entry (native + declarative/host-only note), §Dialog rewritten (composes Overlay + nested-overlays-work note), Scene/PaintCx with_overlay table row (depth ordering); AGENTS.md catalogs; overlay-design.md phasing (steps 4–5 built). Full rustdoc.\n- Workspace tests green, clippy clean, showcase builds.\n\nVERIFY (user, GPU showcase): open the Dialog (DELETE PANE button) →\n(a) open the \"Archive target\" Select INSIDE it: its list paints ABOVE the Cancel/Delete buttons (no show-through), buttons under the open list do NOT hover, wheel over the list scrolls the list (not the page), Esc closes the LIST first (second Esc dismisses the dialog), clicking a row commits and closes the list only;\n(b) dialog still centers, scrim still dims, buttons/Input/Checkbox still work, Tab traps, outside click dismisses;\n(c) no regression in the top-level Selects / palette / menu / toasts / page scroll.\n\n## REMAINING after step-4 verification (explicit deferrals, recorded — not silent debt)\n- Overlay anchor-to-rect positioning (clamp + flip) — build when the first specialization converts.\n- Convert Select / Tooltip / ContextMenu / CommandPalette panels to compose Overlay (they keep their own correct placement/chrome today).\n- Fold in overlay sizing (.panel_size) + scrollable body (ScrollRegion in a modal body) gaps from the original scope.\n\n## BUG A — nested Select-in-Dialog (found 2026-07-15) — FIX BUILT (above), awaiting GPU verification. Original diagnosis preserved in docs/overlay-design.md + git history of this task.\n## BUG B — Dialog off-screen in scrolled content — FIXED + verified (431e0d1).\n## BUG C — no horizontal page scroll — FIXED + verified (431e0d1).",
       "notes": "",
       "statusLog": [
         {
@@ -222,7 +223,7 @@
       "startedAt": "2026-07-15T17:45:26.715Z",
       "completedAt": "",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-16T13:31:50.246Z"
+      "updatedAt": "2026-07-16T13:54:31.454Z"
     },
     {
       "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
@@ -301,10 +302,19 @@
       "number": 11,
       "shortName": "regression-widget-glow-only-on",
       "title": "REGRESSION: widget glow only on focused elements (lost rest-state glow)",
-      "status": "planned",
-      "description": "Reported by user 2026-07-16 while working on F003/P011/T010. Suspected pre-existing regression in the plugin/composition-first widget refactor (NOT introduced by the ScrollRegion work). NEEDS INTERACTIVE (GPU) DIAGNOSIS — can't be seen headless.\n\nSYMPTOM: in the showcase, changing the glow-size Select ([appearance] glow_size / GlowLevel) no longer visibly affects the new/refactored widgets; user observes glow now appears ONLY on FOCUSED widgets/elements, not at rest. It used to glow at rest.\n\nDIAGNOSIS LEADS (verified in code):\n- Glow path is global: `PaintCx::scaled_glow` (heca-grid-ui/src/component.rs:~1093) scales any Glow by `theme.colors.glow_size` (radius_scale + strength_scale); `PaintCx::rect` runs every glow through it (component.rs:748). So glow_size DOES reach every widget that PASSES a glow to `rect` (or sets `style.glow` → drawn by `paint_base`).\n- Some widgets read glow_size DIRECTLY: context_menu, marker_group, key_hint, rail_cell, icon_button.\n- Showcase wiring is fine: `self.theme.colors.glow_size = self.ctl.glow.get_untracked()` each frame (showcase.rs:2286); the glow Select sets `ctl.glow` (showcase.rs:804-809). Old widgets respond, so the select→theme→scaled_glow chain works.\n- So the regression is likely: the refactored widgets stopped PASSING a rest-state glow to their surface/border draw (only pass a glow in the focused state), OR their rest glow base intensity became 0. Focus still glows (focus ring / focused-state glow), matching the user's observation.\n\nWHERE TO LOOK: the composition-first refactored widgets (Button, Item, Select, Tabs) + Badge/Tag/DockFrame — compare their paint() glow usage now vs before the refactor (git history). Check whether the surface/border draw passes `Some(Glow{..})` at REST or only when focused. The fix: restore the rest-state theme-driven glow (read from theme, per the no-hardcode rule), so glow_size scales it at rest.\n\nVERIFY: user changes the glow Select in the showcase and sees ALL widgets' glow scale at rest (not only focused ones).",
+      "status": "in-progress",
+      "description": "Reported by user 2026-07-16. SYMPTOM: changing the glow-size Select no longer visibly affects widgets at rest; glow appears only on focused/hovered elements.\n\n## DIAGNOSIS (code archaeology — original hypothesis FALSIFIED)\nNo regression event exists: widget glow conditions AND values byte-identical since pre-refactor baseline 833c214; scaled_glow chokepoint, showcase wiring, renderer path all correct. TRUTH: most control surfaces never passed a REST glow — glow was a hover/on/checked affordance — so glow_size had almost nothing to scale at rest.\n\n## FIX (user direction: theme owns the glow COLOR, the config glow_size setting owns the amount, honored by ALL widgets at widget-base level)\n- Theme token `interaction.control_rest_glow: u8` (default 30 ≈ 0.12; 0 = flat; serde-default) + BASE-LEVEL `PaintCx::rest_glow(radius)` (component.rs, beside scaled_glow): color from theme.colors.glow, intensity from the token; runs through scaled_glow so glow_size (none/thin/medium/large) scales presence+radius+strength uniformly.\n- Wired at rest: Button Primary/Destructive/Outline, Input, Toggle track, Checkbox BOX, Select trigger, Pane (all variants), DockFrame fill, Tag (toned), Alert (toned).\n\n## ROUND 3 (2026-07-17, from user's first GPU pass) — uncommitted, awaiting final verification\nUser findings + fixes:\n1. \"Button glow too much vs other widgets\" → new REST_GLOW_RADIUS = 12 for the resting base rect (the hover halo keeps GLOW_RADIUS 30); Outline lerps radius rest→hover with p.\n2. \"Toasts have no glow\" → Toast card surface now carries the rest glow, toned to its severity.\n3. \"Icons no glow\" → NOT POSSIBLE at the widget level: an Icon is a glyph text run (TextCmd) and glow is an SDF RECT renderer feature — a glyph halo needs a renderer capability (SDF text/glyph glow). RECORDED as a follow-up (renderer feature), documented in widgets.md; not faked with rects. RailCell's bare-icon rest state is flat for the same reason (by design).\n4. \"ScrollRegion no glow (probably correct?)\" → frameless region: CORRECT (no surface). A STYLED region (.background/.border scrollable panel) now falls back to the rest glow when no explicit .glow set.\n5. \"Not all chrome elements have glow\" → FILLED Row (the list/pane cards, e.g. showcase PANES) now falls back to the rest glow; unfilled Row/Item rows, ChromeRegion (layout shell) and RailCell rest stay deliberately flat (no surface). DockFrame fill was already wired in round 2.\nFocus batch (T014) verified \"Perfect\" by user; regression glance \"looks good\".\n- Docs: widgets.md consolidated \"The glow model — who owns what\" + \"The focus model — ring visibility\" sections (TOC updated) on top of the per-widget notes; config.default.toml glow_size/show_focus_border comments.\n- Workspace green, clippy clean. Single commit with the focus work per user request.\n\nVERIFY (user, GPU showcase): button rest halo now matches other controls; toasts (t) halo in their severity tone; pane cards in the chrome demo halo; the styled two-axis ScrollRegion demo halos; GLOW select none→large scales all of it; icons still flat (renderer follow-up).\n\n## FOLLOW-UP (recorded, out of scope here): SDF glyph/text glow renderer capability so Icon (and RailCell's bare-icon rest) can halo.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-001-planned-in-progress",
+          "date": "2026-07-16T18:03:56.794Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -331,10 +341,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-16T18:03:56.794Z",
       "completedAt": "",
       "createdAt": "2026-07-16T08:40:57.189Z",
-      "updatedAt": "2026-07-16T08:40:57.189Z"
+      "updatedAt": "2026-07-16T22:30:51.808Z"
     },
     {
       "id": "126d0855-658d-471f-86a6-27eb144fc591",
@@ -386,8 +396,71 @@
       "completedAt": "",
       "createdAt": "2026-07-16T09:37:52.181Z",
       "updatedAt": "2026-07-16T09:37:52.181Z"
+    },
+    {
+      "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 13,
+      "shortName": "focus-ring-polish-honor-focus",
+      "title": "Focus-ring polish: honor focus-visible (keyboard-only ring), [appearance] toggle, control-only ring for labeled controls",
+      "status": "done",
+      "description": "USER REQUESTS (2026-07-16; all four proposals APPROVED by user): (1) focus ring only on keyboard navigation, not mouse click; (2) a setting to enable/disable the focus outline; (3) less intrusive focus overall; (4) Checkbox ring should wrap only the box, not the label.\n\n## BUILT 2026-07-16 (uncommitted, AWAITING USER GPU VERIFICATION)\n1. FOCUS-VISIBLE HONORED: new `Base::shows_focus_ring()` (component.rs, = focused && focus_visible — CSS :focus-visible semantics, single definition). ALL 13 ring sites now gate on it (button, badge_button, checkbox, icon_button, input, select, toast, tabs, toggle single-line; choice, item, rail_cell, row multiline). Mouse click still focuses (Enter/Space work, caret shows) but draws NO ring; Tab/arrow navigation (FocusManager::advance → focus_visible=true) rings. Regression test: focus_ring_shows_on_keyboard_focus_not_on_mouse_click (phase_a.rs).\n2. [appearance] show_focus_border SETTING: new Option<bool> field in AppearanceConfig (appearance.rs) + effective_show_focus_border(theme) resolver (config override → theme.show_focus_border), applied at the chrome_gui_theme() choke point (heca/src/chrome/mod.rs) so prefix+Shift+r live-reloads it; documented in config.default.toml [appearance] effect-token block (glow_size/intensity/show_focus_border).\n3. LESS INTRUSIVE = (1)+(2) combined; focus_border_width was already configurable for thinning.\n4. CHECKBOX ring now wraps box_rect() only (checkbox.rs) — the standard control ring; label stays clickable but un-ringed. Toggle reviewed: it rings its own track (no label) — already correct.\nDocs: widgets.md Base table focus_visible row rewritten, Theme table show_focus_border row added, Checkbox entry note. Workspace green, clippy clean.\n\nVERIFY (user, GPU showcase + app): click any widget → NO ring (but it activates/types); Tab / arrows → ring appears on the focused widget; checkbox ring hugs the box only; in the APP: set [appearance] show_focus_border = false + prefix+Shift+r → all rings gone (the showcase has no config file — the setting is app-side).",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-001-planned-in-progress",
+          "date": "2026-07-16T18:33:50.514Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-002-in-progress-done",
+          "date": "2026-07-16T22:30:21.690Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "User verified in the GPU showcase 2026-07-17 (\"Perfect\"): click focuses without a ring, keyboard navigation rings, Checkbox rings the box only. Implementation: Base::shows_focus_ring() gating all 13 ring sites (focus-visible semantics), [appearance] show_focus_border override wired through chrome_gui_theme with config.default.toml docs, Checkbox ring → box_rect(), regression test focus_ring_shows_on_keyboard_focus_not_on_mouse_click, docs/widgets.md \"The focus model\" section. Committed together with the T011 glow work (single commit per user request).",
+          "description": "User verified in the GPU showcase 2026-07-17 (\"Perfect\"): click focuses without a ring, keyboard navigation rings, Checkbox rings the box only. Implementation: Base::shows_focus_ring() gating all 13 ring sites (focus-visible semantics), [appearance] show_focus_border override wired through chrome_gui_theme with config.default.toml docs, Checkbox ring → box_rect(), regression test focus_ring_shows_on_keyboard_focus_not_on_mouse_click, docs/widgets.md \"The focus model\" section. Committed together with the T011 glow work (single commit per user request)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-001-gate-every-widget-ring-on-focused-focus-visible-11-sites-listed-in-description",
+          "title": "Gate every widget ring on focused && focus_visible (11 sites listed in description)",
+          "checked": false
+        },
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-002-checkbox-ring-box-rect-only-review-toggle",
+          "title": "Checkbox ring → box_rect() only; review Toggle",
+          "checked": false
+        },
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-003-appearance-show-focus-border-override-config-default-toml-doc-chrome-gui-theme-application",
+          "title": "[appearance] show_focus_border override + config.default.toml doc + chrome_gui_theme application",
+          "checked": false
+        },
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-004-docs-widgets-md-focus-section-checkbox-component-notes-rustdoc",
+          "title": "docs/widgets.md (focus section + Checkbox/Component notes) + rustdoc",
+          "checked": false
+        },
+        {
+          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-005-user-verifies-in-gpu-showcase-click-vs-keyboard-toggle-off-reload",
+          "title": "USER verifies in GPU showcase (click vs keyboard, toggle off, reload)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-16T18:33:50.514Z",
+      "completedAt": "2026-07-16T22:30:21.690Z",
+      "createdAt": "2026-07-16T17:23:03.026Z",
+      "updatedAt": "2026-07-16T22:30:21.690Z"
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-16T13:31:50.246Z"
+  "updatedAt": "2026-07-16T22:30:51.808Z"
 }

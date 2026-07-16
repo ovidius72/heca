@@ -69,6 +69,9 @@ const SCROLLBAR_GUTTER: f64 = SCROLLBAR_W + 2.0 * SCROLLBAR_PAD;
 /// previous build multiplied by a fixed line count × font, which made each notch
 /// jump ~75% of a small viewport and overshoot.)
 const WHEEL_STEP_FRAC: f64 = 0.1;
+/// Rest-glow spread radius (px) for a STYLED region (a scrollable panel) — its
+/// share of the theme rest halo; a frameless region has no surface and no glow.
+const SURFACE_GLOW_RADIUS: f32 = 12.0;
 /// Delay (seconds) before a held track-press starts repeating its paging.
 const TRACK_REPEAT_DELAY: f32 = 0.35;
 /// Interval (seconds) between repeated pages while the track press stays held.
@@ -547,8 +550,21 @@ impl Component for ScrollRegion {
         let vp = self.base.bounds;
         // Styled-surface decoration (background/border/glow/radius from the theme
         // via `StyleExt`) painted in viewport space, before the clipped content — a
-        // plain region sets none of these and stays frameless.
-        cx.paint_base(&self.base);
+        // plain region sets none of these and stays frameless (and, having no
+        // surface, carries no glow). A STYLED region (a scrollable panel) without an
+        // explicit `.glow(..)` falls back to the theme rest glow, like every surface.
+        let s = &self.base.style;
+        if (s.fill.is_some() || s.border.is_some()) && s.glow.is_none() {
+            cx.rect(
+                vp,
+                s.fill.unwrap_or(crate::color::Color::TRANSPARENT),
+                s.border,
+                s.radius,
+                cx.rest_glow(SURFACE_GLOW_RADIUS),
+            );
+        } else {
+            cx.paint_base(&self.base);
+        }
         // Reserve a gutter for each visible scrollbar so content is never drawn
         // *under* the thumb: clip the content short of the lane on the right (when
         // the vertical bar shows) and/or the bottom (horizontal bar). The thumbs are

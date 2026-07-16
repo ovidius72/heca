@@ -480,6 +480,13 @@ pub struct AppearanceConfig {
     /// scanline-overlay opacity only; does **not** affect glow.
     #[serde(default)]
     pub intensity: Option<Intensity>,
+    /// Keyboard focus-outline visibility override. `None` → inherits
+    /// `theme.show_focus_border` (themes default `true`). `false` removes the
+    /// focus ring on every widget; when `true`/unset the ring still shows only
+    /// on **keyboard** focus (Tab/arrows), never on a mouse click
+    /// (focus-visible semantics).
+    #[serde(default)]
+    pub show_focus_border: Option<bool>,
 
     // ── Global border defaults (every surface inherits these when its own field
     //    is unset; each in turn falls back to the theme). ──
@@ -623,6 +630,12 @@ impl AppearanceConfig {
     /// `theme.intensity`. Drives scanline-overlay opacity only (not glow).
     pub fn effective_intensity(&self, theme: &Theme) -> Intensity {
         self.intensity.unwrap_or(theme.intensity)
+    }
+
+    /// Effective keyboard focus-outline visibility: config override →
+    /// `theme.show_focus_border`. `false` removes the focus ring everywhere.
+    pub fn effective_show_focus_border(&self, theme: &Theme) -> bool {
+        self.show_focus_border.unwrap_or(theme.show_focus_border)
     }
 
     // ── Pane chrome resolvers ──
@@ -802,6 +815,7 @@ impl Default for AppearanceConfig {
             background_transparency: default_background_transparency(),
             glow_size: None,
             intensity: None,
+            show_focus_border: None,
             border_width: None,
             border_color: None,
             border_radius: None,

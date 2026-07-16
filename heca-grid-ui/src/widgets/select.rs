@@ -562,7 +562,9 @@ impl Component for Select {
         let b = self.base.bounds;
 
         // Trigger box: border firms muted → accent when focused/open. Radius +
-        // border width come from the theme so global settings scale them.
+        // border width come from the theme so global settings scale them. A faint
+        // theme rest glow (`interaction.control_rest_glow`) gives the trigger the
+        // shared neon identity at rest; `glow_size` scales it (T011).
         let p = if active { 1.0 } else { 0.0 };
         let rest_border = ia.control_rest_border as f32;
         let border_a = rest_border + (255.0 - rest_border) * p;
@@ -570,7 +572,8 @@ impl Component for Select {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
         };
-        cx.rect(b, surface, Some(border), radius, None);
+        let glow = if disabled { None } else { cx.rest_glow(GLOW_RADIUS) };
+        cx.rect(b, surface, Some(border), radius, glow);
 
         // What the trigger shows: the **chosen option**, content and all — its icon, its badge,
         // whatever it composes — never just words about it.
@@ -622,7 +625,7 @@ impl Component for Select {
         if disabled {
             cx.dim(b, radius);
         }
-        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        if !disabled && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
             let ring = cx.theme().colors.effective_focus_ring();
             cx.focus_ring(b, ring, radius);
         }
