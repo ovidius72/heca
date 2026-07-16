@@ -2,8 +2,6 @@
   "id": "884c75d3-e99a-4537-b09c-aa9efab3270c",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 10,
-  "shortId": "",
-  "priority": 0,
   "slug": "app-08-fix-nswindow-vibrancy-warning",
   "title": "app-08: Fix NSWindow vibrancy warning",
   "status": "planned",
@@ -30,8 +28,6 @@
       "id": "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc",
       "phaseId": "884c75d3-e99a-4537-b09c-aa9efab3270c",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "fix-vibrancy-warning",
       "title": "Fix NSWindow vibrancy console warning",
       "status": "planned",
@@ -50,7 +46,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:14:56.477Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:14:56.477Z"
 }

@@ -2,8 +2,6 @@
   "id": "06906105-3054-4bda-9751-04902e03aefe",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
   "number": 2,
-  "shortId": "",
-  "priority": 0,
   "slug": "theming-02-migrate-heca-config-to-heca-theme",
   "title": "theming-02: Migrate heca-config to heca-theme",
   "status": "done",
@@ -32,8 +30,6 @@
       "id": "8065027a-834d-4904-b61c-f84fabf79b26",
       "phaseId": "06906105-3054-4bda-9751-04902e03aefe",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "remove-dead-heca-config",
       "title": "Remove dead code from heca-config",
       "status": "done",
@@ -54,8 +50,6 @@
       "id": "cb62c1ec-83fc-405f-8c1b-05f818669cde",
       "phaseId": "06906105-3054-4bda-9751-04902e03aefe",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "add-heca-theme-dep",
       "title": "Add heca-theme as dependency",
       "status": "done",
@@ -76,8 +70,6 @@
       "id": "18508e26-3c7a-401a-9be1-d53ebaf061cd",
       "phaseId": "06906105-3054-4bda-9751-04902e03aefe",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "default-theme-grid-tron",
       "title": "Change default theme to grid_tron",
       "status": "done",
@@ -96,7 +88,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.245Z",
-  "updatedAt": "2026-07-01T18:10:58.813Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:10:58.813Z"
 }

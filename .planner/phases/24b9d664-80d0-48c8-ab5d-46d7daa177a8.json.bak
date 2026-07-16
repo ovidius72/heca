@@ -2,8 +2,6 @@
   "id": "24b9d664-80d0-48c8-ab5d-46d7daa177a8",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
   "number": 11,
-  "shortId": "",
-  "priority": 0,
   "slug": "terminal-08-terminal-ux-and-attention-features",
   "title": "terminal-08: Terminal UX and attention features",
   "status": "done",
@@ -33,8 +31,6 @@
       "id": "54f8bd7e-6216-4e08-9461-ae10fd68f2cd",
       "phaseId": "24b9d664-80d0-48c8-ab5d-46d7daa177a8",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "osc8-open-surfaces",
       "title": "OSC 8 hyperlink open surfaces",
       "status": "done",
@@ -55,8 +51,6 @@
       "id": "deb2e235-4877-43cd-bae4-adfb3da49d03",
       "phaseId": "24b9d664-80d0-48c8-ab5d-46d7daa177a8",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "bell-attention-policy",
       "title": "Bell handling with attention policy",
       "status": "done",
@@ -77,8 +71,6 @@
       "id": "065be443-2027-4825-8c5d-03ec9a870196",
       "phaseId": "24b9d664-80d0-48c8-ab5d-46d7daa177a8",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "url-linkify-terminal",
       "title": "URL linkify within terminal content",
       "status": "done",
@@ -99,8 +91,6 @@
       "id": "d2c157e7-e7b2-457a-97f5-0605df7d8103",
       "phaseId": "24b9d664-80d0-48c8-ab5d-46d7daa177a8",
       "number": 4,
-      "shortId": "",
-      "priority": 0,
       "shortName": "terminal-scrollback-search",
       "title": "Scrollback search",
       "status": "done",
@@ -119,7 +109,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:11:57.226Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:11:57.226Z"
 }

@@ -2,8 +2,6 @@
   "id": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
   "number": 4,
-  "shortId": "",
-  "priority": 0,
   "slug": "gridui-04-showcase-coverage-and-visual-regression",
   "title": "gridui-04: Showcase coverage and visual regression",
   "status": "planned",
@@ -31,8 +29,6 @@
       "id": "d7b4523a-c813-4cfd-bee5-e9726906e036",
       "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "visual-regression-snapshots",
       "title": "Visual regression snapshots for widget states",
       "status": "planned",
@@ -53,8 +49,6 @@
       "id": "e4f328e7-0ef8-45ac-b261-dc7959ec0a0e",
       "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "audit-showcase-demos",
       "title": "Audit showcase for missing widget demos",
       "status": "planned",
@@ -73,7 +67,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:13:27.647Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:13:27.647Z"
 }

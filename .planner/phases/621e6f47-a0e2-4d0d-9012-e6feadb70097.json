@@ -2,8 +2,6 @@
   "id": "621e6f47-a0e2-4d0d-9012-e6feadb70097",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 2,
-  "shortId": "",
-  "priority": 0,
   "slug": "app-06-sidebar-wiring-collapsed-rail",
   "title": "app-06: Sidebar wiring + collapsed rail",
   "status": "planned",
@@ -32,8 +30,6 @@
       "id": "ac234827-5339-41e8-a9aa-c2669e58d665",
       "phaseId": "621e6f47-a0e2-4d0d-9012-e6feadb70097",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "migrate-collapsed-rail",
       "title": "Migrate collapsed sidebar rail to grid-ui",
       "status": "planned",
@@ -54,8 +50,6 @@
       "id": "9f33fdd8-eeda-415b-a3f1-64112774734d",
       "phaseId": "621e6f47-a0e2-4d0d-9012-e6feadb70097",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "wire-sidebar-buttons",
       "title": "Wire sidebar buttons",
       "status": "planned",
@@ -76,8 +70,6 @@
       "id": "8665a8a6-d811-4d81-b81f-fb13749bc0aa",
       "phaseId": "621e6f47-a0e2-4d0d-9012-e6feadb70097",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "enter-sidebarnav-without-force",
       "title": "Enter SidebarNav WITHOUT force-expanding",
       "status": "planned",
@@ -96,7 +88,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-03T11:11:02.367Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-03T11:11:02.367Z"
 }

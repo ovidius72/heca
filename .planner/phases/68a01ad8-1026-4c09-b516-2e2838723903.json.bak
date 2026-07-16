@@ -2,8 +2,6 @@
   "id": "68a01ad8-1026-4c09-b516-2e2838723903",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 15,
-  "shortId": "",
-  "priority": 0,
   "slug": "viewnode-all-widgets-viewnode-all-widgets-compositional-refactor",
   "title": "viewnode-all-widgets: ViewNode → all widgets (compositional refactor)",
   "status": "done",
@@ -33,8 +31,6 @@
       "id": "c9937902-a2bd-4ed3-8115-551bf87a7396",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "realize-coverage",
       "title": "viewnode-task-1: Complete realize coverage",
       "status": "canceled",
@@ -64,8 +60,6 @@
       "id": "3d8841ae-3adc-4016-a83d-dec93a4c942b",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "compose-leaf-widgets",
       "title": "viewnode-task-2: Compose leaf widgets (Button first)",
       "status": "done",
@@ -86,8 +80,6 @@
       "id": "23d2e8b8-e251-4ae5-9f74-cd28ae96ff4b",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "viewnode-task-3-exhaustive-wid",
       "title": "viewnode-task-3: Exhaustive widget docs for the composition changes (both audiences)",
       "status": "done",
@@ -108,8 +100,6 @@
       "id": "ee13e1f3-f329-46be-9c2a-6552d245e627",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
       "number": 4,
-      "shortId": "",
-      "priority": 0,
       "shortName": "viewnode-task-4-retire-root-ha",
       "title": "viewnode-task-4 retire root HANDOFF and fix stale Modal reference",
       "status": "done",
@@ -128,7 +118,5 @@
     }
   ],
   "createdAt": "2026-07-13T15:29:44.427Z",
-  "updatedAt": "2026-07-13T21:21:40.336Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-13T21:21:40.336Z"
 }

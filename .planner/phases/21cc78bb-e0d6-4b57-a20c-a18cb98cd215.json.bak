@@ -2,8 +2,6 @@
   "id": "21cc78bb-e0d6-4b57-a20c-a18cb98cd215",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
   "number": 4,
-  "shortId": "",
-  "priority": 0,
   "slug": "theming-05-migrate-hand-drawn-chrome-to-grid-ui-widgets",
   "title": "theming-05: Migrate hand-drawn chrome to grid-ui widgets",
   "status": "done",
@@ -33,8 +31,6 @@
       "id": "e3d98f58-9516-43a4-8207-3ad964f7eb07",
       "phaseId": "21cc78bb-e0d6-4b57-a20c-a18cb98cd215",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "migrate-statusbar-gridui",
       "title": "Migrate status bar to grid-ui widgets",
       "status": "done",
@@ -55,8 +51,6 @@
       "id": "f0d7a0ef-ac6c-40da-9eab-9829b0ad133a",
       "phaseId": "21cc78bb-e0d6-4b57-a20c-a18cb98cd215",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "migrate-sidebar-tree",
       "title": "Migrate sidebar tree to grid-ui widgets",
       "status": "done",
@@ -77,8 +71,6 @@
       "id": "12fe4fc5-909e-4194-82fb-9a2af0ec3925",
       "phaseId": "21cc78bb-e0d6-4b57-a20c-a18cb98cd215",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "migrate-tabbar-gridui",
       "title": "Migrate tab bar to grid-ui widget",
       "status": "done",
@@ -99,8 +91,6 @@
       "id": "85f71f30-9c77-44e4-a156-b0a6e4efc568",
       "phaseId": "21cc78bb-e0d6-4b57-a20c-a18cb98cd215",
       "number": 4,
-      "shortId": "",
-      "priority": 0,
       "shortName": "migrate-railcell",
       "title": "Migrate collapsed sidebar rail to RailCell",
       "status": "done",
@@ -119,7 +109,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:10:58.813Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:10:58.813Z"
 }

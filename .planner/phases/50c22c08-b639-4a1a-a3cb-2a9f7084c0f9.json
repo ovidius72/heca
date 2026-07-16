@@ -2,8 +2,6 @@
   "id": "50c22c08-b639-4a1a-a3cb-2a9f7084c0f9",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 8,
-  "shortId": "",
-  "priority": 0,
   "slug": "app-05-workspace-drag-to-reorder",
   "title": "app-05: Workspace drag-to-reorder",
   "status": "planned",
@@ -33,8 +31,6 @@
       "id": "d8ebde50-62a9-469c-bd13-b94a0eab8fd1",
       "phaseId": "50c22c08-b639-4a1a-a3cb-2a9f7084c0f9",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "workspace-drag-payload",
       "title": "Add Workspace drag payload",
       "status": "planned",
@@ -55,8 +51,6 @@
       "id": "07adf34a-c743-4f9d-8bc8-8001d5f2efad",
       "phaseId": "50c22c08-b639-4a1a-a3cb-2a9f7084c0f9",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "move-workspace-action",
       "title": "MoveWorkspace action and handler",
       "status": "planned",
@@ -77,8 +71,6 @@
       "id": "b9ec89da-9cd9-4b72-8efc-8e89ecb43203",
       "phaseId": "50c22c08-b639-4a1a-a3cb-2a9f7084c0f9",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "workspace-rows-draggable",
       "title": "Make workspace rows draggable",
       "status": "planned",
@@ -99,8 +91,6 @@
       "id": "eb960be7-92ab-4ed8-80d9-1a8e579ab114",
       "phaseId": "50c22c08-b639-4a1a-a3cb-2a9f7084c0f9",
       "number": 4,
-      "shortId": "",
-      "priority": 0,
       "shortName": "workspace-drop-reorder",
       "title": "Workspace drop reorder logic",
       "status": "planned",
@@ -119,7 +109,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:14:28.688Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:14:28.688Z"
 }

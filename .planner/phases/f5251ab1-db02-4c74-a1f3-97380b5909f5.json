@@ -2,8 +2,6 @@
   "id": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
   "featureId": "eef184fb-863e-476f-8839-0dff37443acf",
   "number": 1,
-  "shortId": "",
-  "priority": 0,
   "slug": "agents-01-agent-status-tracking-and-sounds",
   "title": "agents-01: Agent status tracking and sounds",
   "status": "deferred",
@@ -39,8 +37,6 @@
       "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "agentdriver-registry",
       "title": "AgentDriver trait and registry",
       "status": "deferred",
@@ -67,8 +63,6 @@
       "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "agent-status-display",
       "title": "Agent status display in pane chrome",
       "status": "deferred",
@@ -95,8 +89,6 @@
       "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "builtin-agent-drivers",
       "title": "Built-in agent drivers",
       "status": "deferred",
@@ -123,8 +115,6 @@
       "id": "a52865e6-5a18-4c67-8634-2e3127307000",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
       "number": 4,
-      "shortId": "",
-      "priority": 0,
       "shortName": "agent-transition-sounds",
       "title": "Transition sounds via rodio",
       "status": "deferred",
@@ -149,7 +139,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T19:58:10.784796Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T19:58:10.784796Z"
 }

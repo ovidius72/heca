@@ -2,8 +2,6 @@
   "id": "903725c6-bb78-44a1-a25a-a720cdde68ff",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
   "number": 2,
-  "shortId": "",
-  "priority": 0,
   "slug": "terminal-01-dirty-region-terminal-rendering",
   "title": "terminal-01: Dirty-region terminal rendering",
   "status": "done",
@@ -30,8 +28,6 @@
       "id": "fe981bc6-d6bf-4fec-b6d9-13ab2d3722d9",
       "phaseId": "903725c6-bb78-44a1-a25a-a720cdde68ff",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "render-dirty-rows",
       "title": "Render only dirty rows instead of full pane",
       "status": "done",
@@ -50,7 +46,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:11:32.026Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:11:32.026Z"
 }
