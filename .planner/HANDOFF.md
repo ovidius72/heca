@@ -1,24 +1,39 @@
-Reason: context limited (~65% used); pausing at a clean boundary after committing T010
+# Handoff
 
-# Handoff — 2026-07-16
+**Created at:** 2026-07-16
+**Updated at:** 2026-07-16
+**Reason:** Context ~70% used. Pause at a clean boundary: F003/P011/T010 committed; next step (showcase→ScrollRegion) is a render-loop refactor that needs a fresh session + interactive GPU verification.
 
-## Branch `feat/action-task-c` — NOT pushed. Recent commits (newest first):
-- `6162a51` chore(planner): T010 done; add T011 + T012
-- `c84528a` feat(grid-ui): ScrollRegion two-axis + scrollable surface (F003/P011/T010)
-- `70b7292` docs(planner): T009 overlay/scroll rework design + T010 split
-- `c152ef7` / `9c92696` — F003/P011/T005 Select modal-form marshalling (done)
+## Current focus
+F003 (🧩 Pluggable Chrome) / P011 (plugin-ui). The scroll/overlay rework. Branch `feat/action-task-c` — **NOT pushed**.
 
-## Done this session (F003 = 🧩 Pluggable Chrome, P011 = plugin-ui)
-- **T005 (plugin-task-ui-4) DONE**: named Select in a modal body marshals its chosen value into ModalResult::Action.data.
-- **T010 DONE + user-verified**: ScrollRegion → two-axis + scrollable surface (StyleExt), horizontal scrollbar, gutter + clean corner, click-in-track paging, Event::Scroll made two-axis (host maps Shift→horizontal). REMOVED the widget's hardcoded keys + tab-stop focusability (tmux model).
+## What was being done
+Building the reusable scrollable surface (ScrollRegion) and settling keyboard-scroll policy. T005 (Select modal-form marshalling) and T010 (ScrollRegion two-axis + surface) are DONE + user-verified. Discovered the app ALREADY has terminal scroll actions/keybindings, so the redundant "app scroll actions" task was deleted.
 
-## NEXT (user-chosen priority order)
-1. **T012 — GLOW REGRESSION** (do next). Broad: user lists NO rest-glow on separator, grid, Inputs, Buttons, Pane frame-variants, Pane info-bar, ScrollRegion (both), EXPLORER container, PANES container, drop indicator — glow now only on FOCUSED elements. Almost certainly a GLOBAL rest-glow loss, not per-widget. Leads in the T012 description: scaled_glow (component.rs ~1093) scales by theme.colors.glow_size; showcase glow select works for OLD widgets; refactored widgets likely stopped passing a rest-state glow. git-diff refactored widget paint() glow usage vs pre-refactor. VERIFY in GPU showcase (glow select scales all widgets at rest).
-2. **T011 — app scroll actions** (prefix-gated, configurable, RPC) — gated on ScrollRegion being mounted in the app (sidebar/panels), so later.
-3. **T009 (plugin-task-ui-7) BUG A/B/C** — the overlay/scroll rework: overlays hosted ABOVE the scroll (fixes nested-Select z/occlusion + Dialog-off-screen), base Overlay widget, and the showcase whole-page ScrollRegion.both() adoption (BUG C, coupled with overlays-above-scroll). Design in docs/overlay-design.md §"T009 rework".
+## How to resume
+`/planner load`, then read this handoff. Immediate next task = the showcase→ScrollRegion conversion (see Next steps #1). Run `cargo run -p heca-renderer --example showcase` to verify each visual change (mandatory — headless can't see rendering).
 
-## HARD RULES (learned/confirmed this session)
-- NO plain-key defaults (tmux): scroll bindings must be prefix-gated + configurable. Widgets bind no keys.
-- Do NOT ship unverified rendering/layout widget changes — green unit tests ≠ verified; the user drives the GPU showcase. (A speculative Dialog::on_layout regressed and was reverted.)
-- Refer to features/phases/tasks by Fxxx/Pxxx/Txxx ids.
-- Update docs/widgets.md (both audiences + code examples) whenever a widget changes.
+## Files touched (committed on feat/action-task-c)
+- `heca-grid-ui/src/widgets/scroll_region.rs` — two-axis, scrollbars, gutter/corner, click-track paging, StyleExt, keys/focusability REMOVED.
+- `heca-grid-ui/src/component.rs` — `Event::Scroll` now two-axis (`delta_x`/`delta_y`).
+- `heca-grid-ui/src/widgets/select.rs`, `lib.rs`, `widgets/mod.rs` (ScrollAxes export).
+- `heca-renderer/examples/showcase.rs` — two-axis demo + wheel handler (host Shift→horizontal).
+- `docs/widgets.md` (ScrollRegion + Select/Dialog), `docs/overlay-design.md` (T009 rework design), `heca-grid-ui/tests/phase_a.rs`.
+- Commits: `c84528a` (ScrollRegion feat), `9c92696` (Select marshalling), `70b7292`/`c152ef7`/`6162a51` (planner/design).
+
+## Blockers
+- Showcase page scroll = manual `offset_tree` (showcase.rs:2314-2334); converting to a root ScrollRegion is a render-loop refactor AND couples with hosting overlays above the scroll (else Dialog/dropdowns scroll+clip). Needs GPU verification.
+- App does NOT mount a chrome ScrollRegion yet (only `realize` maps `WidgetKind::Scroll`→ScrollRegion). So chrome-side keyboard scroll has no target until the sidebar/chrome uses ScrollRegion.
+
+## Next steps
+1. **Showcase → `ScrollRegion.both()`** (T010 step 5 / T009 Part 2, coupled): replace `offset_tree`/`scroll_y` with a root ScrollRegion sized to the window; host the overlays (Dialog/Select/ContextMenu/CommandPalette/ToastStack) ABOVE it (not inside the scrolled tree). Verify horizontal+vertical page scroll and that overlays stay fixed/centered. This also fixes BUG C (no horizontal page scroll) and BUG B (Dialog off-screen).
+2. **T012 — glow regression** (broad: separator/grid/Inputs/Buttons/Panes/containers/drop-indicator have NO rest glow, only focused). Global rest-glow loss. Leads: `scaled_glow` (component.rs ~1093) scales by `theme.colors.glow_size`; git-diff refactored widgets' paint() glow usage vs pre-refactor.
+3. **T009 (plugin-task-ui-7)** — base Overlay widget + nested-overlay z/occlusion (BUG A).
+
+## Recent decisions
+- tmux model: NO plain-key defaults; scroll bindings are prefix/modifier-gated + configurable. The ScrollRegion WIDGET binds no keys and is not a tab-stop.
+- App ALREADY has scroll actions + keybindings (scroll_page_up/down→Shift+PageUp/Down, scroll_line_up/down, scrollback_*, scroll_view_left/right→prefix+Shift+Arrow, scroll_to_offset for RPC). The redundant T011 task was DELETED.
+- Do NOT ship unverified rendering/layout changes — the user drives the GPU showcase.
+
+## Reminder
+Refer to features/phases/tasks by Fxxx/Pxxx/Txxx. Update docs/widgets.md (both audiences + code examples) on any widget change. Don't push without asking.
