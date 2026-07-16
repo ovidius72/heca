@@ -33,7 +33,8 @@
     "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
     "586953dc-a2af-45cc-8eff-f6d5441f6ece",
     "126d0855-658d-471f-86a6-27eb144fc591",
-    "d5962a9a-2776-4bd9-a629-5d44f1e33a81"
+    "d5962a9a-2776-4bd9-a629-5d44f1e33a81",
+    "b413c466-8239-4787-94f3-b1623d041aad"
   ],
   "tasks": [
     {
@@ -202,7 +203,7 @@
       "number": 9,
       "shortName": "plugin-task-ui-7",
       "title": "plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)",
-      "status": "in-progress",
+      "status": "done",
       "description": "EVERY widget must be able to receive a ViewNode (arbitrary child subtree) as its content — the real SwiftUI/Flutter model.\n\n## Scope (original, locked with user 2026-07-08)\n1. Composition-first widgets [SETTLED done per AGENTS.md]. 2. realize() coverage complete [SETTLED done]. 3. Any ViewNode renders, any widget hosts any widget.\nOverlay direction: base Overlay widget with Modal/Dialog as specializations (composition, not inheritance); BLOCKING STAYS A LAYER PROPERTY; overlay sizing + scrollable body gaps. Update showcase + docs/widgets.md; styling from theme; vocabulary host-owned.\n\n## DONE 2026-07-16 — Part 2 steps 2+3, USER-VERIFIED, commit 431e0d1 (PR #244 to main)\nShowcase page root = ScrollRegion.both() (BUG C fixed); overlays hosted above the scroll in a second tree (BUG B fixed); ScrollRegion children-first wheel + on_layout re-clamp + press-and-hold track paging; Component::overlay_occludes + overlay_occluded_at hook (right-click gate; ToastStack cards / Dialog / CommandPalette / Select impls; ContextMenu deliberately default). Docs + tests complete. User confirmed right-click over page widgets opening the menu is the wanted baseline.\n\n## STEP 4 BUILT 2026-07-16 — base Overlay widget + BUG A fix (uncommitted, AWAITING USER GPU VERIFICATION)\n- NEW heca-grid-ui/src/widgets/overlay.rs: base `Overlay` widget — viewport-filling centering layer, single `panel` child (`.panel()`/`.panel_boxed()` for realized content), BLOCKING AS A LAYER PROPERTY (`.blocking(bool)`: true = scrim + swallow outside input; false = light-dismiss fall-through), `.on_outside_click`, open_signal; focusable/overlay_active while open; overlay_occludes = viewport when blocking else panel rect; standalone event semantics (nested-overlay-first, outside-click hook, blocking swallow). Chrome (scrim/drop-shadow/surface fill/bracket reticle) moved here from Dialog. Anchor-to-rect positioning NOT built yet (no consumer this round) — planned extension.\n- Dialog REFACTORED to compose Overlay: Dialog = full-size passthrough → Overlay (blocking) → panel [title, body?, action-row]. Dialog keeps behaviour (focus trap, field-first keyboard, dismissible policy); paint override deleted (Overlay paints the layer); open signal IS the overlay's.\n- BUG A FIXED at low level, two halves:\n  (a) PAINT: scene.rs overlay segments now carry NESTING DEPTH; Scene::overlay_segments() yields depth-ordered (stable within depth) — a nested overlay (Select list in a Dialog body) composites ABOVE everything its parent draws, including the action buttons painted after it. Tests: nested_overlay_keeps_parent_segment_and_composites_on_top, sibling_overlays_keep_record_order_within_a_depth.\n  (b) INPUT: Dialog offers PointerMoved / Scroll / Widget* intents to an overlay-active descendant FIRST (focus.offer_to_overlay), and presses route through dispatch_trapped when the point is in the panel OR occluded by a nested overlay (overlay_occluded_at) — so an open Select captures hover/wheel/keys over the buttons; Dismiss closes the DROPDOWN (not the dialog), Activate commits its row.\n- Showcase: Dialog body now INCLUDES a nested Select (\"Archive target\") — the deliberately-omitted BUG A case is now the verification demo.\n- heca/src/chrome/overlay.rs test updated to the composed structure (root → Overlay → panel).\n- Docs: widgets.md new §Overlay entry (native + declarative/host-only note), §Dialog rewritten (composes Overlay + nested-overlays-work note), Scene/PaintCx with_overlay table row (depth ordering); AGENTS.md catalogs; overlay-design.md phasing (steps 4–5 built). Full rustdoc.\n- Workspace tests green, clippy clean, showcase builds.\n\nVERIFY (user, GPU showcase): open the Dialog (DELETE PANE button) →\n(a) open the \"Archive target\" Select INSIDE it: its list paints ABOVE the Cancel/Delete buttons (no show-through), buttons under the open list do NOT hover, wheel over the list scrolls the list (not the page), Esc closes the LIST first (second Esc dismisses the dialog), clicking a row commits and closes the list only;\n(b) dialog still centers, scrim still dims, buttons/Input/Checkbox still work, Tab traps, outside click dismisses;\n(c) no regression in the top-level Selects / palette / menu / toasts / page scroll.\n\n## REMAINING after step-4 verification (explicit deferrals, recorded — not silent debt)\n- Overlay anchor-to-rect positioning (clamp + flip) — build when the first specialization converts.\n- Convert Select / Tooltip / ContextMenu / CommandPalette panels to compose Overlay (they keep their own correct placement/chrome today).\n- Fold in overlay sizing (.panel_size) + scrollable body (ScrollRegion in a modal body) gaps from the original scope.\n\n## BUG A — nested Select-in-Dialog (found 2026-07-15) — FIX BUILT (above), awaiting GPU verification. Original diagnosis preserved in docs/overlay-design.md + git history of this task.\n## BUG B — Dialog off-screen in scrolled content — FIXED + verified (431e0d1).\n## BUG C — no horizontal page scroll — FIXED + verified (431e0d1).",
       "notes": "",
       "statusLog": [
@@ -213,6 +214,14 @@
           "toStatus": "planned",
           "title": "Reverting: user chose F003/P011/T005 (plugin-task-ui-4, Dialog + rich modal bodies) as the task to work on instead of T009. T009 not started; no work done.",
           "description": "Reverting: user chose F003/P011/T005 (plugin-task-ui-4, Dialog + rich modal bodies) as the task to work on instead of T009. T009 not started; no work done."
+        },
+        {
+          "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00-check-002-in-progress-done",
+          "date": "2026-07-16T22:33:28.120Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "DONE — all delivered scope user-verified in the GPU showcase. (1) Composition-first widgets + full realize() coverage: SETTLED done earlier (AGENTS.md). (2) Overlay/scroll rework complete across commits c84528a (T010 Part 1), 431e0d1 (steps 2+3: whole-page ScrollRegion.both() + overlays hosted above the scroll — BUG B and BUG C fixed, verified 2026-07-16), d448702 (step 4: base Overlay widget with blocking-as-a-layer-property, Dialog composes it; BUG A fixed low-level via depth-ordered scene overlay segments + nested-overlay-first input routing in Dialog; nested Select-in-Dialog showcase demo — verified \"works great\" 2026-07-17). Step 5 docs done (widgets.md §Overlay + §Dialog + Scene depth ordering; overlay-design.md phasing closed). Explicit remaining scope moved to F003/P011/T014 \"Overlay follow-ups\" (anchor-to-rect mode, converting Select/Tooltip/ContextMenu/CommandPalette panels, .panel_size + scrollable modal body, SDF glyph glow) — recorded, not silent debt. Bug diagnoses preserved in git history of this task + docs/overlay-design.md.",
+          "description": "DONE — all delivered scope user-verified in the GPU showcase. (1) Composition-first widgets + full realize() coverage: SETTLED done earlier (AGENTS.md). (2) Overlay/scroll rework complete across commits c84528a (T010 Part 1), 431e0d1 (steps 2+3: whole-page ScrollRegion.both() + overlays hosted above the scroll — BUG B and BUG C fixed, verified 2026-07-16), d448702 (step 4: base Overlay widget with blocking-as-a-layer-property, Dialog composes it; BUG A fixed low-level via depth-ordered scene overlay segments + nested-overlay-first input routing in Dialog; nested Select-in-Dialog showcase demo — verified \"works great\" 2026-07-17). Step 5 docs done (widgets.md §Overlay + §Dialog + Scene depth ordering; overlay-design.md phasing closed). Explicit remaining scope moved to F003/P011/T014 \"Overlay follow-ups\" (anchor-to-rect mode, converting Select/Tooltip/ContextMenu/CommandPalette panels, .panel_size + scrollable modal body, SDF glyph glow) — recorded, not silent debt. Bug diagnoses preserved in git history of this task + docs/overlay-design.md."
         }
       ],
       "decisions": [],
@@ -221,9 +230,9 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-15T17:45:26.715Z",
-      "completedAt": "",
+      "completedAt": "2026-07-16T22:33:28.120Z",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-16T13:54:31.454Z"
+      "updatedAt": "2026-07-16T22:33:28.120Z"
     },
     {
       "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
@@ -313,6 +322,22 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-002-in-progress-done",
+          "date": "2026-07-16T22:32:10.849Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "DONE — commit 7ff3b59 (single commit with T014 focus work, branch feat/action-task-c, PR #244). Diagnosis: no regression existed — most control surfaces never passed a rest glow, so glow_size had nothing to scale at rest. Fix (user-directed model): theme owns the glow COLOR (theme.glow + per-widget tones), the config glow_size setting owns the AMOUNT (none/thin/medium/large via the scaled_glow chokepoint), and the new interaction.control_rest_glow token + base-level PaintCx::rest_glow(radius) give every surface a faint rest halo: Button P/D/Outline (tight REST_GLOW_RADIUS=12 at rest; hover halo unchanged), Input, Toggle track, Checkbox box, Select trigger, Pane, DockFrame fill, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (severity-toned). User verified across two GPU rounds; round-3 findings (button halo too wide, toasts/cards/styled-region flat) fixed in the same commit. Deliberately flat: Secondary/Ghost/Link buttons, unfilled rows, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled controls. FOLLOW-UP recorded: SDF glyph/text glow renderer capability so Icons can halo (glyphs are text runs; glow is a rect-renderer feature). Docs: widgets.md \"The glow model — who owns what\" + per-widget notes.",
+          "description": "DONE — commit 7ff3b59 (single commit with T014 focus work, branch feat/action-task-c, PR #244). Diagnosis: no regression existed — most control surfaces never passed a rest glow, so glow_size had nothing to scale at rest. Fix (user-directed model): theme owns the glow COLOR (theme.glow + per-widget tones), the config glow_size setting owns the AMOUNT (none/thin/medium/large via the scaled_glow chokepoint), and the new interaction.control_rest_glow token + base-level PaintCx::rest_glow(radius) give every surface a faint rest halo: Button P/D/Outline (tight REST_GLOW_RADIUS=12 at rest; hover halo unchanged), Input, Toggle track, Checkbox box, Select trigger, Pane, DockFrame fill, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (severity-toned). User verified across two GPU rounds; round-3 findings (button halo too wide, toasts/cards/styled-region flat) fixed in the same commit. Deliberately flat: Secondary/Ghost/Link buttons, unfilled rows, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled controls. FOLLOW-UP recorded: SDF glyph/text glow renderer capability so Icons can halo (glyphs are text runs; glow is a rect-renderer feature). Docs: widgets.md \"The glow model — who owns what\" + per-widget notes."
+        },
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-003-done-in-progress",
+          "date": "2026-07-16T22:33:06.712Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "Reopened: round 3 (REST_GLOW_RADIUS on buttons, severity-toned Toast glow, filled-Row cards, styled ScrollRegion fallback) is committed in 7ff3b59 but NOT yet user-verified in the GPU showcase — per the user's process rule, a task awaiting testing stays in-progress. NOTE (process, recorded): the commit should have waited for this verification; committed early by mistake. Remaining to close: user confirms in the showcase — button rest halo matches other controls, toasts (t) halo in severity tone, pane cards halo, styled two-axis region halos, GLOW select none→large scales all of it, icons deliberately flat (renderer follow-up in T014-followups task).",
+          "description": "Reopened: round 3 (REST_GLOW_RADIUS on buttons, severity-toned Toast glow, filled-Row cards, styled ScrollRegion fallback) is committed in 7ff3b59 but NOT yet user-verified in the GPU showcase — per the user's process rule, a task awaiting testing stays in-progress. NOTE (process, recorded): the commit should have waited for this verification; committed early by mistake. Remaining to close: user confirms in the showcase — button rest halo matches other controls, toasts (t) halo in severity tone, pane cards halo, styled two-axis region halos, GLOW select none→large scales all of it, icons deliberately flat (renderer follow-up in T014-followups task)."
         }
       ],
       "decisions": [],
@@ -344,7 +369,7 @@
       "startedAt": "2026-07-16T18:03:56.794Z",
       "completedAt": "",
       "createdAt": "2026-07-16T08:40:57.189Z",
-      "updatedAt": "2026-07-16T22:30:51.808Z"
+      "updatedAt": "2026-07-16T22:33:06.712Z"
     },
     {
       "id": "126d0855-658d-471f-86a6-27eb144fc591",
@@ -459,8 +484,28 @@
       "completedAt": "2026-07-16T22:30:21.690Z",
       "createdAt": "2026-07-16T17:23:03.026Z",
       "updatedAt": "2026-07-16T22:30:21.690Z"
+    },
+    {
+      "id": "b413c466-8239-4787-94f3-b1623d041aad",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 14,
+      "shortName": "overlay-follow-ups-anchor-to-r",
+      "title": "Overlay follow-ups: anchor-to-rect mode + convert Select/Tooltip/ContextMenu/CommandPalette panels; overlay sizing + scrollable modal body; SDF glyph glow",
+      "status": "planned",
+      "description": "Follow-up scope explicitly deferred out of T009 (plugin-task-ui-7, base Overlay + BUG A fix, done 2026-07-17 at commit d448702) and T011 (rest glow, done at 7ff3b59) — recorded here so it is not untracked debt.\n\nCURRENT STATE:\n- heca-grid-ui/src/widgets/overlay.rs: base `Overlay` widget exists — viewport-filling CENTER positioning, blocking-as-a-layer-property (scrim + swallow vs light-dismiss), panel chrome (scrim/drop-shadow/surface fill/bracket reticle), .panel()/.panel_boxed(), open_signal, on_outside_click, overlay_active/occludes, standalone nested-overlay-first event routing. Dialog composes it (dialog.rs: Dialog = passthrough → Overlay(blocking) → panel).\n- Select (select.rs panel_rect/place_options/open_up flip), Tooltip, ContextMenu (anchor+clamp/flip at cursor), CommandPalette (top-center panel) still own their placement + panel chrome individually — correct behavior, duplicated presentation.\n- Scene overlay segments are depth-ordered (nested overlays composite above their parents) — scene.rs.\n- Icon/glyph glow is impossible today: Icon draws a TextCmd; glow exists only in the SDF RECT renderer (heca-renderer/src/grid.rs).\n\nTO BUILD (each step verified interactively in the GPU showcase):\n1. Overlay ANCHOR-TO-RECT positioning mode (anchor to a trigger rect, clamped to the viewport + flipped above when no room below — the logic select.rs open_list/panel_top and context_menu.rs panel_rect each implement today), so dropdown/popover/tooltip specializations can compose Overlay. Build it WITH its first consumer (do not land unconsumed API).\n2. Convert the panel PRESENTATION of Select / Tooltip / ContextMenu / CommandPalette to compose Overlay (non-blocking/light-dismiss variants); each keeps its interaction (rows/cursor/typing). One widget per verified step; Select is the hardest (rows are placed children — only its panel chrome/positioning moves).\n3. Original T009 scope gaps: overlay sizing (.panel_size) + scrollable modal body (a ScrollRegion inside a Dialog body — needs T009's nested-overlay routing which now exists).\n4. RENDERER: SDF glyph/text glow capability so Icon (and RailCell's bare-icon rest) can carry the theme rest glow — glyphs are text runs (TextCmd has no glow field); needs a glyph halo pass or SDF text rendering in heca-renderer. Then wire Icon to PaintCx::rest_glow like the surfaces (T011 follow-up, user-requested).\n\nEDGE CASES: nested anchored overlays (a Tooltip on a row inside an open Select panel); anchored overlay near viewport corners (clamp both axes); blocking vs light-dismiss occlusion answers (overlay_occludes) must follow the mode.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-16T22:32:38.867Z",
+      "updatedAt": "2026-07-16T22:32:38.867Z"
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-16T22:30:51.808Z"
+  "updatedAt": "2026-07-16T22:33:28.120Z"
 }
