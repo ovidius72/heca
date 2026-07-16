@@ -165,22 +165,26 @@ first (mirroring the host's `focus.rs` overlay scan) and stops propagation to si
 descendant's `panel_rect`.
 
 ## Phasing (each verified interactively before the next)
-1. `ScrollRegion` two-axis + horizontal scrollbar (+ optional `StyleExt`). Showcase demo section proves
-   it. ← **start here (the user's immediate ask)**
-2. Showcase whole-page uses `ScrollRegion::new().both()` (drop `offset_tree`). Confirms BUG C fixed.
-3. Overlay layer hosting in the showcase: Dialog + a Select's panel render above the scroll. Confirms
-   BUG B, then BUG A fixed.
+1. ✅ `ScrollRegion` two-axis + horizontal scrollbar (+ optional `StyleExt`). Showcase demo section
+   proves it. (T010, commit `c84528a`, user-verified.)
+2. ✅ *(built 2026-07-16, pending interactive verification)* Showcase whole-page uses
+   `ScrollRegion::new().both()` (drop `offset_tree`). Confirms BUG C fixed. Also made the widget's
+   wheel routing **children-first** (innermost hovered region wins) so a whole-page region composes
+   with embedded ones.
+3. ✅ *(built 2026-07-16, pending interactive verification)* Overlay layer hosting in the showcase: a
+   second retained tree (`overlays`: Dialog/palette/menu/toasts) laid out at viewport size,
+   dispatched before and painted after the page. Confirms BUG B. (BUG A — a Select nested *inside*
+   the Dialog — still needs step 4's layer routing.)
 4. Base `Overlay` widget refactor: Dialog/dropdown/tooltip compose it; blocking as a layer property.
 5. Docs (`docs/widgets.md` ScrollRegion + the new Overlay) + showcase + rustdoc, per the both-audiences
-   rule. Read all styling from theme.
+   rule. Read all styling from theme. (ScrollRegion/Dialog entries updated with steps 2–3.)
 
-## Open questions (decide before building)
-- **Q1 — scrollbar visibility:** overlay scrollbars (drawn over content, auto-hide) or reserve gutter
-  space? (Lean overlay/auto-hide, matching the current vertical thumb.)
-- **Q2 — offset type:** two `Signal<f32>` (x/y) or one `Signal<Point>`? (Lean two signals — smaller
-  diff, keeps the existing `scroll_offset()` accessor working for the vertical case.)
-- **Q3 — overlay host in the showcase:** a minimal `LayerRegistry`-style overlay slot in the example, or
-  lift the app's overlay host into `heca-grid-ui`? (Lean: minimal showcase-side slot first; the base
-  `Overlay` + host generalization is Phase 4.)
-- **Q4 — scope now:** do Part 1 (scrollable surface) end-to-end first and land it, then Part 2
-  (overlays) as a follow-up? (Lean yes — Part 1 is the user's ask and is independently useful.)
+## Open questions — resolved
+- **Q1 — scrollbar visibility:** each bar reserves a clipped gutter (content never sits under a
+  thumb); tracks stop short of each other's gutter (clean corner). Decided in T010.
+- **Q2 — offset type:** two `Signal<f32>` (`scroll_offset()` / `scroll_offset_x()`) — back-compat.
+  Decided in T010.
+- **Q3 — overlay host in the showcase:** minimal showcase-side slot (a second retained tree above the
+  page scroll), per the lean; the base `Overlay` + host generalization stays Phase 4.
+- **Q4 — scope:** Part 1 landed first (T010), Part 2 steps 2+3 together (they are coupled: page
+  scroll without overlay hosting re-triggers BUG B).

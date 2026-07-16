@@ -262,6 +262,13 @@ impl Component for Dialog {
         self.is_open()
     }
 
+    /// An open dialog is **modal**: its scrim covers the whole viewport, so every
+    /// point is occluded — a host must not synthesize a page-level action (e.g.
+    /// open a context menu) anywhere while it is open.
+    fn overlay_occludes(&self, _pos: Point) -> bool {
+        self.is_open()
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() || !self.is_open() {
             return;

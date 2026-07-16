@@ -327,6 +327,22 @@ impl Component for ToastStack {
         !self.entries.borrow().is_empty()
     }
 
+    /// A toast **card** occludes the points it covers (the corner stack draws
+    /// above the page), even though the stack as a whole doesn't grab input —
+    /// a host must not synthesize a page-level action (e.g. open a context menu)
+    /// under a card. Points between/outside the cards are not occluded. Uses the
+    /// same `layout()` as `event`, so the answer matches the hit-testing.
+    fn overlay_occludes(&self, pos: Point) -> bool {
+        if self.entries.borrow().is_empty() {
+            return false;
+        }
+        self.layout();
+        self.entries
+            .borrow()
+            .iter()
+            .any(|e| e.toast.base().bounds.contains(pos))
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;

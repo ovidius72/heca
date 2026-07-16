@@ -51,6 +51,7 @@ pub use builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
+    overlay_occluded_at,
     install_frame_request, request_frame,
 };
 pub use keymap::{KeyChord, Keymap};

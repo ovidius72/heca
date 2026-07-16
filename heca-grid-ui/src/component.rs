@@ -91,6 +91,25 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
     acc
 }
 
+/// Walk the tree and report whether any widget's **overlay surface occludes**
+/// `pos` (see [`Component::overlay_occludes`]). The host's gate for synthesizing
+/// a page-level action from raw input (e.g. right-click → context menu): if an
+/// overlay above the page owns that point — an open modal's scrim, a palette, a
+/// toast card — the action must not fire underneath it. Hidden subtrees are
+/// skipped (their bounds are stale).
+pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
+    let b = root.base();
+    if !b.visible.get_untracked() || b.style.hidden {
+        return false;
+    }
+    if root.overlay_occludes(pos) {
+        return true;
+    }
+    b.children
+        .iter()
+        .any(|c| overlay_occluded_at(c.as_ref(), pos))
+}
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.
@@ -361,6 +380,22 @@ pub trait Component {
     /// first, so it can capture clicks/keys outside its layout bounds. Default
     /// `false`; see [`FocusManager`](crate::focus::FocusManager).
     fn overlay_active(&self) -> bool {
+        false
+    }
+
+    /// Whether this component's **overlay surface geometrically occludes** `pos`
+    /// (logical px). A host asks this before synthesizing a page-level action from
+    /// a raw input — e.g. right-click → "open the context menu": if the point is
+    /// covered by an overlay drawn above the page, the action must not fire
+    /// underneath it. Distinct from [`overlay_active`](Self::overlay_active)
+    /// (input **grab**): a non-grabbing overlay like a toast card still occludes
+    /// the points it covers, while a **modal** overlay (an open `Dialog` scrim)
+    /// occludes the whole viewport. A widget whose open overlay deliberately
+    /// yields to a fresh trigger (a `ContextMenu`, where a second right-click
+    /// re-anchors) keeps the default. Scan a tree with
+    /// [`overlay_occluded_at`]. Default `false` (plain widgets never occlude).
+    fn overlay_occludes(&self, pos: Point) -> bool {
+        let _ = pos;
         false
     }
 

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::scene::{BracketCmd, DrawCommand, Glow, ScanlineCmd};
+use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
 use heca_grid_ui::{Component, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
@@ -206,7 +206,15 @@ fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
 /// Handles the host keeps after building the UI, to drive chrome interactions
 /// from the keymap (the same signals an RPC layer would write).
 struct BuiltUi {
-    ui: Flex,
+    /// The page tree: a whole-window two-axis `ScrollRegion` (T009 — replaces the
+    /// old manual `offset_tree` page scroll) whose single child is the demo column.
+    ui: ScrollRegion,
+    /// The overlay layer ABOVE the page scroll: viewport-anchored widgets (Dialog /
+    /// CommandPalette / ContextMenu / ToastStack) live here so they center/anchor on
+    /// the real window and never scroll or clip with the page (BUG B). Laid out and
+    /// dispatched separately, painted after `ui` — the showcase's minimal stand-in
+    /// for the app's layer stack (`LayerRegistry`).
+    overlays: Flex,
     /// Sidebar display mode (G5); `[` toggles full width ⇄ icon rail.
     sidebar_mode: Signal<RegionMode>,
     /// Per-cell pick-letter hints for the workspaces rail; `p` lights them up.
@@ -395,7 +403,39 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
         .on_action(|id| println!("[showcase] toast {id} action"));
 
-    let ui = Flex::column()
+    // Dialog (T009 / BUG B): the widget is hosted in the OVERLAY layer above the
+    // page scroll — never in-flow inside scrolled content, where taffy would center
+    // it in its slot and put it off-screen once the page scrolls. The page keeps
+    // only the trigger button; both sides share `dialog_open`.
+    let dialog = Dialog::new("Delete pane?");
+    let dialog_open = dialog.open_signal();
+    let (cancel_open, delete_open, dismiss_open) = (dialog_open, dialog_open, dialog_open);
+    let dialog = dialog
+        // A RICH body — not just a message, but a Column holding a warning Label + real
+        // form fields (Input + Checkbox), proving the body is arbitrary composed content.
+        // In `heca` any named value node in a `ViewNode` body (Input/Toggle/Checkbox/Select)
+        // marshals its value into `ModalResult::Action.data` (see docs/widgets.md §Dialog).
+        // NB: an overlay-in-overlay (a Select opened inside a Dialog) is a separate,
+        // not-yet-supported case tracked in plugin-task-ui-7, so it's kept out of the demo.
+        .body(
+            Flex::column()
+                .gap(8.0)
+                .child(Label::new("This action cannot be undone."))
+                .child(caption("Confirm name"))
+                .child(Input::new().value("pane-1").on_change(report))
+                .child(Checkbox::new().label("Also close its column").on_change(report)),
+        )
+        .action(Button::secondary("Cancel").on_click(move || {
+            println!("[showcase] dialog cancelled");
+            cancel_open.set(false);
+        }))
+        .action(Button::destructive("Delete").on_click(move || {
+            println!("[showcase] dialog: pane deleted");
+            delete_open.set(false);
+        }))
+        .on_dismiss(move || dismiss_open.set(false));
+
+    let page = Flex::column()
         .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
@@ -1020,46 +1060,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // destructive button opens it. Tab / ←→ move focus, Enter/Space activate. The
         // buttons close it via the open signal; Esc / scrim fire `on_dismiss` (here it
         // closes the demo; in `heca` the host points it at a `CloseOverlay` action).
-        // Renders nothing until opened.
+        // Renders nothing until opened. The Dialog WIDGET lives in the overlay layer
+        // (see `dialog` above the page) — only its trigger sits in the scrolled page.
         .child(caption("Dialog"))
-        .child({
-            let dialog = Dialog::new("Delete pane?");
-            let open = dialog.open_signal();
-            let (cancel_open, delete_open, dismiss_open) = (open, open, open);
-            let dialog = dialog
-                // A RICH body — not just a message, but a Column holding a warning Label + real
-                // form fields (Input + Checkbox), proving the body is arbitrary composed content.
-                // In `heca` any named value node in a `ViewNode` body (Input/Toggle/Checkbox/Select)
-                // marshals its value into `ModalResult::Action.data` (see docs/widgets.md §Dialog).
-                // NB: an overlay-in-overlay (a Select opened inside a Dialog) is a separate,
-                // not-yet-supported case tracked in plugin-task-ui-7, so it's kept out of the demo.
-                .body(
-                    Flex::column()
-                        .gap(8.0)
-                        .child(Label::new("This action cannot be undone."))
-                        .child(caption("Confirm name"))
-                        .child(Input::new().value("pane-1").on_change(report))
-                        .child(Checkbox::new().label("Also close its column").on_change(report)),
-                )
-                .action(
-                    Button::secondary("Cancel").on_click(move || {
-                        println!("[showcase] dialog cancelled");
-                        cancel_open.set(false);
-                    }),
-                )
-                .action(
-                    Button::destructive("Delete").on_click(move || {
-                        println!("[showcase] dialog: pane deleted");
-                        delete_open.set(false);
-                    }),
-                )
-                .on_dismiss(move || dismiss_open.set(false));
-            Flex::row()
-                .gap(12.0)
-                .align(Align::Center)
-                .child(Button::destructive("DELETE PANE (DIALOG)…").on_click(move || open.set(true)))
-                .child(dialog)
-        })
+        .child(
+            Flex::row().gap(12.0).align(Align::Center).child(
+                Button::destructive("DELETE PANE (DIALOG)…")
+                    .on_click(move || dialog_open.set(true)),
+            ),
+        )
         // Pane frame variants: three Panes side-by-side showing None, Bordered,
         // and Bracketed modes. Each has a background + border so the decoration
         // is visible. Click and keyboard interactivity via the `.on_activate`
@@ -1747,15 +1756,32 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(sidebar)
                 .child(panes_col)
         })
-        // The command palette overlays everything when open (Ctrl+K).
-        .child(caption("CommandPalette — press Ctrl+K"))
-        .child(palette)
+        // The command palette overlays everything when open (Ctrl+K) — the widget
+        // itself lives in the overlay layer; this caption just documents the key.
+        .child(caption("CommandPalette — press Ctrl+K"));
+
+    // Root (T009): the whole page inside a two-axis scroll viewport — this replaces
+    // the old manual `offset_tree` shift and adds horizontal page scroll (BUG C).
+    // `align(Start)` keeps the page at its NATURAL width (the region measures
+    // horizontal overflow from its direct child); when the window is wider than the
+    // content, `render()` stretches the page back to the window so the centered
+    // sections stay centered (two-pass layout there).
+    let ui = ScrollRegion::new().both().align(Align::Start).child(page);
+
+    // The overlay layer: viewport-anchored widgets composited ABOVE the scrolled
+    // page — a Dialog taffy-centers on the real window (BUG B), the palette/menu
+    // anchor to the viewport, toasts corner-anchor. Input is offered to this tree
+    // first; everything here paints after (= over) the page.
+    let overlays = Flex::column()
+        .child(dialog)
         // The right-click context menu overlays at the cursor when open.
         .child(menu)
         // The toast stack overlays a corner (presentation only; app owns the list).
-        .child(toast_stack);
+        .child(toast_stack)
+        .child(palette);
     BuiltUi {
         ui,
+        overlays,
         sidebar_mode,
         rail_hints,
         rail_states: rail_states.borrow().clone(),
@@ -1768,18 +1794,16 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     }
 }
 
-/// Shift every node's absolute bounds down by `dy` (negative scrolls the page up).
-/// Used for whole-page scrolling: the window framebuffer clips the overflow.
-fn offset_tree(c: &mut dyn Component, dy: f64) {
-    c.base_mut().bounds.loc.y += dy;
-    for child in c.base_mut().children.iter_mut() {
-        offset_tree(child.as_mut(), dy);
-    }
-}
-
-/// Paint the tree, then decorate bordered surfaces with corner brackets and add
-/// a full-window scanline overlay.
-fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_demo: bool) -> Scene {
+/// Paint the page tree, then the overlay layer on top of it, and add a
+/// full-window scanline overlay.
+fn build_scene(
+    root: &dyn Component,
+    overlays: &dyn Component,
+    theme: &Theme,
+    w: f32,
+    h: f32,
+    show_clip_demo: bool,
+) -> Scene {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
@@ -1794,22 +1818,9 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
             None,
         );
         root.paint(&mut cx);
-    }
-    // Corner brackets on the cards (first row) only — not the small buttons.
-    if let Some(card_row) = root.base().children.first() {
-        for card in &card_row.base().children {
-            scene.push(DrawCommand::Brackets(BracketCmd {
-                rect: card.base().bounds,
-                color: theme.colors.accent,
-                len: 14.0,
-                thickness: 1.5,
-                glow: Some(Glow {
-                    color: theme.colors.glow,
-                    radius: 6.0,
-                    intensity: 1.0,
-                }),
-            }));
-        }
+        // The overlay layer paints after (= above) the scrolled page; its widgets
+        // anchor to the viewport, not to the page's scroll offset.
+        overlays.paint(&mut cx);
     }
     // Clip-primitive demo (task B), toggled by `c`: a centered overlay viewport
     // whose text content is taller than the box and offset by a fractional amount,
@@ -1887,7 +1898,11 @@ struct GpuState {
     compositor: heca_renderer::composite::Compositor,
     scale_factor: f64,
     theme: Theme,
-    ui: Flex,
+    /// The page tree: a whole-window two-axis `ScrollRegion` wrapping the demo column.
+    ui: ScrollRegion,
+    /// The overlay layer above the page scroll (Dialog / palette / menu / toasts):
+    /// viewport-sized, dispatched before and painted after `ui`.
+    overlays: Flex,
     /// Host-owned sidebar display mode (G5); `[` toggles expanded ⇄ icon rail.
     sidebar_mode: Signal<RegionMode>,
     /// Workspaces-rail pick state: `p` lights the keycaps, a letter selects, Esc cancels.
@@ -1917,7 +1932,6 @@ struct GpuState {
     /// Last-applied theme index — when `ctl.theme_idx` differs, load a new theme.
     current_theme_idx: usize,
     ctl: ThemeCtl,
-    scroll_y: f32,
     cursor: Point,
     last_frame: Instant,
     /// Seconds until the next scheduled frame: `Some(0.0)` ≈ continuous animation
@@ -1934,9 +1948,10 @@ struct GpuState {
     applied_size: WidgetSize,
     /// The zoom level last applied (relayout when it changes).
     applied_zoom: f32,
-    content_h: f32,
-    applied_scroll: f32,
     focus: FocusManager,
+    /// Focus/dispatch state for the overlay layer tree (`overlays`) — its own
+    /// manager so overlay routing never disturbs the page tree's focus.
+    focus_ov: FocusManager,
     shift: bool,
     /// The widget keymap (`widget-keys-config`) — this demo host uses the built-in defaults;
     /// the heca app builds its own from `[keys.widgets]`.
@@ -2027,6 +2042,7 @@ impl GpuState {
         let built = build_ui(&theme, ctl);
         let BuiltUi {
             ui,
+            overlays,
             sidebar_mode,
             rail_hints,
             rail_states,
@@ -2050,6 +2066,7 @@ impl GpuState {
             scale_factor,
             theme,
             ui,
+            overlays,
             sidebar_mode,
             rail_hints,
             rail_states,
@@ -2067,7 +2084,6 @@ impl GpuState {
             zoom_mode: false,
             current_theme_idx: 0,
             ctl,
-            scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
             next_frame_in: None,
@@ -2075,9 +2091,8 @@ impl GpuState {
             layout_dirty: true,
             applied_size: WidgetSize::Normal,
             applied_zoom: ZOOM_DEFAULT,
-            content_h: 0.0,
-            applied_scroll: 0.0,
             focus: FocusManager::new(),
+            focus_ov: FocusManager::new(),
             shift: false,
             keymap: Keymap::with_defaults(),
         }
@@ -2182,8 +2197,15 @@ impl GpuState {
     fn route_overlay_key(&mut self, gk: GridKey) -> bool {
         let mods = self.grid_mods();
         let keymap = self.keymap.clone();
-        keymap.dispatch(gk, mods, |ev| self.focus.offer_to_overlay(&mut self.ui, ev))
-            == Handled::Yes
+        keymap.dispatch(gk, mods, |ev| {
+            // The overlay layer first (Dialog / palette / menu live above the page);
+            // when nothing there is open, an overlay INSIDE the page (an open Select
+            // dropdown) still gets its keys via the page tree's own overlay scan.
+            match self.focus_ov.offer_to_overlay(&mut self.overlays, ev) {
+                Handled::Yes => Handled::Yes,
+                Handled::No => self.focus.offer_to_overlay(&mut self.ui, ev),
+            }
+        }) == Handled::Yes
     }
 
     /// Route a key to the **focused** (non-overlay) widget via the widget [`Keymap`] — the demo
@@ -2222,7 +2244,8 @@ impl GpuState {
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.05);
         self.last_frame = now;
-        let animating = self.ui.tick(dt);
+        // Tick BOTH trees (bitwise `|` so neither is short-circuited away).
+        let animating = self.ui.tick(dt) | self.overlays.tick(dt);
 
         // Zoom-aware scale: a bigger effective scale shrinks the logical viewport, so
         // the same widgets render larger (a global zoom). Feed it to both renderers
@@ -2253,6 +2276,7 @@ impl GpuState {
             let built = build_ui(&self.theme, self.ctl);
             let BuiltUi {
                 ui,
+                overlays,
                 sidebar_mode,
                 rail_hints,
                 rail_states,
@@ -2264,6 +2288,7 @@ impl GpuState {
                 toasts,
             } = built;
             self.ui = ui;
+            self.overlays = overlays;
             self.sidebar_mode = sidebar_mode;
             self.rail_hints = rail_hints;
             self.rail_states = rail_states;
@@ -2274,8 +2299,7 @@ impl GpuState {
             self.menu_anchor = menu_anchor;
             self.toasts = toasts;
             self.focus.clear(&mut self.ui);
-            self.scroll_y = 0.0;
-            self.applied_scroll = 0.0;
+            self.focus_ov.clear(&mut self.overlays);
             self.layout_dirty = true;
             self.force_full = true;
             self.window
@@ -2296,6 +2320,7 @@ impl GpuState {
         let size = self.ctl.size.get_untracked();
         if size != self.applied_size {
             apply_size(&mut self.ui, size);
+            apply_size(&mut self.overlays, size);
             self.applied_size = size;
             self.layout_dirty = true;
         }
@@ -2311,33 +2336,62 @@ impl GpuState {
         // event) — never on pure-animation frames. The full per-frame taffy
         // relayout was the bulk of the render() CPU.
         if self.layout_dirty {
+            // The root ScrollRegion IS the window; the page inside it lays out at
+            // natural size and the region scrolls/clips it (T009 — replaces the old
+            // manual `offset_tree` shift; the scroll offset survives relayout, the
+            // region re-clamps + re-applies it in `on_layout`).
             self.ui.base_mut().style.width = Length::Px(w);
-            self.ui.base_mut().style.height = Length::Auto;
+            self.ui.base_mut().style.height = Length::Px(h);
+            // Pass 1 — page at NATURAL width, so content wider than the window makes
+            // the page (the region's direct child) wider and horizontal scrolling
+            // engages (the region measures overflow from its direct children).
+            self.ui.base_mut().children[0].base_mut().style.width = Length::Auto;
             LayoutEngine::new()
                 .base_font(self.theme.font_size)
-                .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
-            self.content_h = self.ui.base().bounds.size.h as f32;
-            self.applied_scroll = 0.0;
+                .compute(&mut self.ui, Size::new(w as f64, h as f64));
+            // Pass 2 — only when the window is WIDER than the content: stretch the
+            // page back to the window so its centered sections stay centered. (Natural
+            // width only matters when the content actually overflows.)
+            if self.ui.base().children[0].base().bounds.size.w < w as f64 {
+                self.ui.base_mut().children[0].base_mut().style.width = Length::Px(w);
+                LayoutEngine::new()
+                    .base_font(self.theme.font_size)
+                    .compute(&mut self.ui, Size::new(w as f64, h as f64));
+            }
+            // The overlay layer lays out at the viewport size, independent of the
+            // page scroll — a Dialog taffy-centers on the real window (BUG B).
+            self.overlays.base_mut().style.width = Length::Px(w);
+            self.overlays.base_mut().style.height = Length::Px(h);
+            LayoutEngine::new()
+                .base_font(self.theme.font_size)
+                .compute(&mut self.overlays, Size::new(w as f64, h as f64));
             self.layout_dirty = false;
             self.force_full = true; // relayout moves everything → repaint in full
         }
-        // Whole-page scroll: shift the cached tree by only the delta since the
-        // offset already baked into its bounds (window edges clip).
-        self.scroll_y = self.scroll_y.clamp(0.0, (self.content_h - h).max(0.0));
-        let scroll_delta = (self.applied_scroll - self.scroll_y) as f64;
-        if scroll_delta != 0.0 {
-            offset_tree(&mut self.ui, scroll_delta);
-            self.applied_scroll = self.scroll_y;
-            self.force_full = true; // the whole page shifted
-        }
 
-        let scene = build_scene(&self.ui, &self.theme, w, h, self.clip_demo);
+        let scene = build_scene(&self.ui, &self.overlays, &self.theme, w, h, self.clip_demo);
 
         // Damage region for this frame: full on an input/layout/scroll change (it can
         // alter unknown regions), otherwise just the widgets that flagged themselves
         // needs-paint (a spinner, the caret) — so an animation repaints only its rect.
-        // `collect_damage` also clears the flags.
-        let dirty = heca_grid_ui::collect_damage(&self.ui);
+        // `collect_damage` also clears the flags. Union damage across BOTH trees.
+        let dirty = match (
+            heca_grid_ui::collect_damage(&self.ui),
+            heca_grid_ui::collect_damage(&self.overlays),
+        ) {
+            (Some(a), Some(b)) => {
+                let x0 = a.loc.x.min(b.loc.x);
+                let y0 = a.loc.y.min(b.loc.y);
+                let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+                let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+                Some(Rectangle::new(
+                    Point::new(x0, y0),
+                    Size::new(x1 - x0, y1 - y0),
+                ))
+            }
+            (a, None) => a,
+            (None, b) => b,
+        };
         let damage: Option<[f32; 4]> = if std::mem::take(&mut self.force_full) {
             None // whole frame
         } else {
@@ -2421,7 +2475,13 @@ impl GpuState {
         self.next_frame_in = if animating {
             Some(0.0)
         } else {
-            self.ui.next_redraw()
+            // Soonest timed wake across BOTH trees (e.g. a caret in the page vs. a
+            // toast slide in the overlay layer).
+            match (self.ui.next_redraw(), self.overlays.next_redraw()) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, None) => a,
+                (None, b) => b,
+            }
         };
     }
 }
@@ -2471,14 +2531,16 @@ impl ApplicationHandler for App {
                 state.cursor = Point::new(position.x / eff, position.y / eff);
                 // The OS manages the cursor (arrow in content, resize at the
                 // decorated window's edges) — don't override it.
-                // Route hover through grid-ui: an open overlay gets first dibs but
-                // only swallows it if it consumes it (an input-grabbing Modal/dropdown
+                // Route hover through grid-ui: the overlay LAYER gets first dibs but
+                // only swallows it if it consumes it (an input-grabbing Dialog/palette
                 // returns Yes so items behind don't hover; the ToastStack returns No so
                 // buttons behind it still hover/animate while toasts show), otherwise
-                // it falls to the widget under the cursor.
-                state
-                    .focus
-                    .dispatch(&mut state.ui, &Event::PointerMoved { pos: state.cursor });
+                // it falls to the page tree (whose own overlay scan covers an open
+                // Select dropdown) and then the widget under the cursor.
+                let ev = Event::PointerMoved { pos: state.cursor };
+                if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
+                    state.focus.dispatch(&mut state.ui, &ev);
+                }
                 state.window.request_redraw();
             }
             WindowEvent::MouseInput {
@@ -2486,13 +2548,15 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                // Route the click through grid-ui: an open overlay (e.g. a Select
-                // dropdown) gets first dibs so it can capture clicks on rows outside
-                // its layout bounds; otherwise dispatch focuses the clicked widget
-                // (clearing focus on a miss) and delivers the press.
-                state
-                    .focus
-                    .dispatch(&mut state.ui, &Event::PointerPressed { pos: state.cursor });
+                // Route the click through grid-ui: the overlay layer first (an open
+                // Dialog/palette/menu captures it), then the page tree — whose own
+                // overlay scan lets an open Select dropdown capture clicks on rows
+                // outside its layout bounds; otherwise dispatch focuses the clicked
+                // widget (clearing focus on a miss) and delivers the press.
+                let ev = Event::PointerPressed { pos: state.cursor };
+                if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
+                    state.focus.dispatch(&mut state.ui, &ev);
+                }
                 state.layout_dirty = true; // a click can change content/size
                 state.window.request_redraw();
             }
@@ -2502,22 +2566,35 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 // Right-click opens the context menu at the cursor (the host decides
-                // *where* and *when*; the widget just renders + captures input).
-                state.menu_anchor.set(state.cursor);
-                state.menu_open.set(true);
-                state.layout_dirty = true;
-                state.window.request_redraw();
+                // *where* and *when*; the widget just renders + captures input) —
+                // but NOT when the point is occluded by an overlay drawn above the
+                // page (an open Dialog/palette, a toast card, an open dropdown's
+                // panel): the overlay owns that pixel, and a menu opening underneath
+                // reads as broken layering. An already-open ContextMenu deliberately
+                // does NOT occlude — a second right-click re-anchors it (standard
+                // menu behavior). Both trees are scanned: the overlay layer and the
+                // page (whose open Select panels also occlude).
+                let occluded = heca_grid_ui::overlay_occluded_at(&state.overlays, state.cursor)
+                    || heca_grid_ui::overlay_occluded_at(&state.ui, state.cursor);
+                if !occluded {
+                    state.menu_anchor.set(state.cursor);
+                    state.menu_open.set(true);
+                    state.layout_dirty = true;
+                    state.window.request_redraw();
+                }
             }
             WindowEvent::MouseInput {
                 state: ElementState::Released,
                 button: MouseButton::Left,
                 ..
             } => {
-                // Deliver the release so a grabbed widget (e.g. a ScrollRegion
-                // thumb drag) can end its grab — without this the drag never stops.
-                state
-                    .focus
-                    .dispatch(&mut state.ui, &Event::PointerReleased { pos: state.cursor });
+                // Deliver the release to BOTH trees so a grabbed widget (a ScrollRegion
+                // thumb drag in the page, a pressed Dialog button in the overlay layer)
+                // always ends its grab — a release must never be swallowed by one tree
+                // away from the other.
+                let ev = Event::PointerReleased { pos: state.cursor };
+                state.focus_ov.dispatch(&mut state.overlays, &ev);
+                state.focus.dispatch(&mut state.ui, &ev);
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -2542,16 +2619,15 @@ impl ApplicationHandler for App {
                     } else {
                         (dx_raw, dy_raw)
                     };
-                    // Route scroll through grid-ui: an open overlay (Select dropdown /
-                    // Modal) gets it first but only swallows it if it consumes it — a
-                    // non-scrolling overlay like the ToastStack lets it fall through.
-                    // When nothing in the tree consumes it, scroll the whole page.
-                    if state
-                        .focus
-                        .dispatch(&mut state.ui, &Event::Scroll { delta_x: dx, delta_y: dy })
-                        == Handled::No
-                    {
-                        state.scroll_y += dy * 40.0;
+                    // Route scroll through grid-ui: the overlay layer first (an open
+                    // Dialog/palette may scroll its own body), then the page tree — an
+                    // open Select dropdown takes it via the page's overlay scan, an
+                    // embedded ScrollRegion under the cursor consumes it, and otherwise
+                    // the ROOT ScrollRegion scrolls the whole page (T009 — the manual
+                    // `scroll_y` fallback is gone; the page is a real scroll viewport).
+                    let ev = Event::Scroll { delta_x: dx, delta_y: dy };
+                    if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
+                        state.focus.dispatch(&mut state.ui, &ev);
                     }
                     state.window.request_redraw();
                 }
@@ -2561,14 +2637,17 @@ impl ApplicationHandler for App {
                 state.shift = s.shift_key();
                 state.ctrl = s.control_key();
                 state.meta = s.super_key();
-                // Broadcast to the tree so text widgets can do word-wise editing
-                // (and the command palette can track Ctrl for Ctrl+J/K nav).
-                state.ui.event(&Event::ModifiersChanged(Modifiers {
+                // Broadcast to BOTH trees so text widgets can do word-wise editing
+                // (and the command palette — in the overlay layer — can track Ctrl
+                // for Ctrl+J/K nav).
+                let ev = Event::ModifiersChanged(Modifiers {
                     ctrl: s.control_key(),
                     alt: s.alt_key(),
                     shift: s.shift_key(),
                     meta: s.super_key(),
-                }));
+                });
+                state.ui.event(&ev);
+                state.overlays.event(&ev);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
