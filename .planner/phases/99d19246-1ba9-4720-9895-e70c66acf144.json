@@ -4,7 +4,7 @@
   "number": 11,
   "slug": "plugin-ui-declarative-widget-tree-ui-model-viewnode",
   "title": "plugin-ui: Declarative widget-tree UI model (ViewNode)",
-  "status": "in-progress",
+  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -311,7 +311,7 @@
       "number": 11,
       "shortName": "regression-widget-glow-only-on",
       "title": "REGRESSION: widget glow only on focused elements (lost rest-state glow)",
-      "status": "in-progress",
+      "status": "done",
       "description": "Reported by user 2026-07-16. SYMPTOM: changing the glow-size Select no longer visibly affects widgets at rest; glow appears only on focused/hovered elements.\n\n## DIAGNOSIS (code archaeology — original hypothesis FALSIFIED)\nNo regression event exists: widget glow conditions AND values byte-identical since pre-refactor baseline 833c214; scaled_glow chokepoint, showcase wiring, renderer path all correct. TRUTH: most control surfaces never passed a REST glow — glow was a hover/on/checked affordance — so glow_size had almost nothing to scale at rest.\n\n## FIX (user direction: theme owns the glow COLOR, the config glow_size setting owns the amount, honored by ALL widgets at widget-base level)\n- Theme token `interaction.control_rest_glow: u8` (default 30 ≈ 0.12; 0 = flat; serde-default) + BASE-LEVEL `PaintCx::rest_glow(radius)` (component.rs, beside scaled_glow): color from theme.colors.glow, intensity from the token; runs through scaled_glow so glow_size (none/thin/medium/large) scales presence+radius+strength uniformly.\n- Wired at rest: Button Primary/Destructive/Outline, Input, Toggle track, Checkbox BOX, Select trigger, Pane (all variants), DockFrame fill, Tag (toned), Alert (toned).\n\n## ROUND 3 (2026-07-17, from user's first GPU pass) — uncommitted, awaiting final verification\nUser findings + fixes:\n1. \"Button glow too much vs other widgets\" → new REST_GLOW_RADIUS = 12 for the resting base rect (the hover halo keeps GLOW_RADIUS 30); Outline lerps radius rest→hover with p.\n2. \"Toasts have no glow\" → Toast card surface now carries the rest glow, toned to its severity.\n3. \"Icons no glow\" → NOT POSSIBLE at the widget level: an Icon is a glyph text run (TextCmd) and glow is an SDF RECT renderer feature — a glyph halo needs a renderer capability (SDF text/glyph glow). RECORDED as a follow-up (renderer feature), documented in widgets.md; not faked with rects. RailCell's bare-icon rest state is flat for the same reason (by design).\n4. \"ScrollRegion no glow (probably correct?)\" → frameless region: CORRECT (no surface). A STYLED region (.background/.border scrollable panel) now falls back to the rest glow when no explicit .glow set.\n5. \"Not all chrome elements have glow\" → FILLED Row (the list/pane cards, e.g. showcase PANES) now falls back to the rest glow; unfilled Row/Item rows, ChromeRegion (layout shell) and RailCell rest stay deliberately flat (no surface). DockFrame fill was already wired in round 2.\nFocus batch (T014) verified \"Perfect\" by user; regression glance \"looks good\".\n- Docs: widgets.md consolidated \"The glow model — who owns what\" + \"The focus model — ring visibility\" sections (TOC updated) on top of the per-widget notes; config.default.toml glow_size/show_focus_border comments.\n- Workspace green, clippy clean. Single commit with the focus work per user request.\n\nVERIFY (user, GPU showcase): button rest halo now matches other controls; toasts (t) halo in their severity tone; pane cards in the chrome demo halo; the styled two-axis ScrollRegion demo halos; GLOW select none→large scales all of it; icons still flat (renderer follow-up).\n\n## FOLLOW-UP (recorded, out of scope here): SDF glyph/text glow renderer capability so Icon (and RailCell's bare-icon rest) can halo.",
       "notes": "",
       "statusLog": [
@@ -338,6 +338,14 @@
           "toStatus": "in-progress",
           "title": "Reopened: round 3 (REST_GLOW_RADIUS on buttons, severity-toned Toast glow, filled-Row cards, styled ScrollRegion fallback) is committed in 7ff3b59 but NOT yet user-verified in the GPU showcase — per the user's process rule, a task awaiting testing stays in-progress. NOTE (process, recorded): the commit should have waited for this verification; committed early by mistake. Remaining to close: user confirms in the showcase — button rest halo matches other controls, toasts (t) halo in severity tone, pane cards halo, styled two-axis region halos, GLOW select none→large scales all of it, icons deliberately flat (renderer follow-up in T014-followups task).",
           "description": "Reopened: round 3 (REST_GLOW_RADIUS on buttons, severity-toned Toast glow, filled-Row cards, styled ScrollRegion fallback) is committed in 7ff3b59 but NOT yet user-verified in the GPU showcase — per the user's process rule, a task awaiting testing stays in-progress. NOTE (process, recorded): the commit should have waited for this verification; committed early by mistake. Remaining to close: user confirms in the showcase — button rest halo matches other controls, toasts (t) halo in severity tone, pane cards halo, styled two-axis region halos, GLOW select none→large scales all of it, icons deliberately flat (renderer follow-up in T014-followups task)."
+        },
+        {
+          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-004-in-progress-done",
+          "date": "2026-07-16T22:55:06.215Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "DONE — user-verified in the GPU showcase across rounds 4-6 (\"perfect. all is ok\"), commits 7ff3b59 (rest-glow model + focus batch) and 319a349 (tuning). Final model: theme owns the glow COLOR (theme.glow; toasts deliberately use it, not their severity tone — severity under the accent bracket frame blended purple); the glow_size setting owns the AMOUNT via the scaled_glow chokepoint (Thin strength raised 0.5→0.75 so it is distinct from None on faint rest glows); interaction.control_rest_glow + PaintCx::rest_glow(radius) give every surface the rest halo. Coverage: Button all bordered variants incl. Secondary (REST_GLOW_RADIUS 12; hover 30→16; Ghost glows with its hover fade), Input, Toggle, Checkbox box, Select trigger, Pane, DockFrame, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (radius 14). Deliberately flat: Ghost/Link at rest, unfilled rows, Choice option rows, Tabs strip, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled. FOLLOW-UP in T014: SDF glyph glow so Icons can halo. Docs: widgets.md \"The glow model — who owns what\" + per-widget notes.",
+          "description": "DONE — user-verified in the GPU showcase across rounds 4-6 (\"perfect. all is ok\"), commits 7ff3b59 (rest-glow model + focus batch) and 319a349 (tuning). Final model: theme owns the glow COLOR (theme.glow; toasts deliberately use it, not their severity tone — severity under the accent bracket frame blended purple); the glow_size setting owns the AMOUNT via the scaled_glow chokepoint (Thin strength raised 0.5→0.75 so it is distinct from None on faint rest glows); interaction.control_rest_glow + PaintCx::rest_glow(radius) give every surface the rest halo. Coverage: Button all bordered variants incl. Secondary (REST_GLOW_RADIUS 12; hover 30→16; Ghost glows with its hover fade), Input, Toggle, Checkbox box, Select trigger, Pane, DockFrame, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (radius 14). Deliberately flat: Ghost/Link at rest, unfilled rows, Choice option rows, Tabs strip, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled. FOLLOW-UP in T014: SDF glyph glow so Icons can halo. Docs: widgets.md \"The glow model — who owns what\" + per-widget notes."
         }
       ],
       "decisions": [],
@@ -367,9 +375,9 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-16T18:03:56.794Z",
-      "completedAt": "",
+      "completedAt": "2026-07-16T22:55:06.215Z",
       "createdAt": "2026-07-16T08:40:57.189Z",
-      "updatedAt": "2026-07-16T22:33:06.712Z"
+      "updatedAt": "2026-07-16T22:55:06.215Z"
     },
     {
       "id": "126d0855-658d-471f-86a6-27eb144fc591",
@@ -507,5 +515,5 @@
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-16T22:33:28.120Z"
+  "updatedAt": "2026-07-16T22:55:06.215Z"
 }

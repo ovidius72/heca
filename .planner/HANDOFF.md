@@ -1,60 +1,32 @@
 # Handoff
 
-Created at: 2026-07-16T15:37:14.280Z
-Updated at: 2026-07-16T15:37:14.280Z
-Reason: session shutdown (quit)
-
-## Progress snapshot
-- Features: 2/10 done, 1 active
-- Phases: 27/77 done, 1 active/discovery
-- Tasks: 112/299 done, 1 active
+**Created at:** 2026-07-17
+**Reason:** Session end (context ~70%). Clean boundary: everything built this session is user-verified, committed, and pushed.
 
 ## Current focus
-- Feature: `ebb9ceb0-ea12-4374-af6e-12aa4256bcc3` — 🧩 Pluggable Chrome Architecture (in-progress)
-- Phase: `99d19246-1ba9-4720-9895-e70c66acf144` — plugin-ui: Declarative widget-tree UI model (ViewNode) (in-progress)
-- Task: `2a269cea-f5a9-421b-9da7-eb1893dc9c00` — plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode) (in-progress)
+F003 (🧩 Pluggable Chrome) / P011 (plugin-ui). Branch `feat/action-task-c`, **pushed**, PR **#244** open to main (covers action-task-C, T005, T010, T009, T011, T013).
 
-## What was being done
-No additional execution notes were captured.
+## What was completed this session (ALL user-verified in the GPU showcase)
+- **T009 (plugin-task-ui-7) DONE** — overlay/scroll rework complete: showcase page = root `ScrollRegion::new().both()` (BUG C fixed, commit 431e0d1); overlays hosted in a second tree above the scroll (BUG B fixed); base `Overlay` widget (blocking = a layer property) with Dialog composing it; BUG A (nested Select-in-Dialog) fixed low-level — depth-ordered scene overlay segments + nested-overlay-first routing in Dialog (commit d448702). ScrollRegion also gained: children-first wheel (innermost wins), on_layout re-clamp (zoom-out stale-offset bug), press-and-hold track paging.
+- **T011 DONE (commits 7ff3b59 + 319a349)** — glow model: theme owns the COLOR (`theme.glow`), the `glow_size` setting owns the AMOUNT (scaled_glow chokepoint; Thin strength 0.5→0.75), new `interaction.control_rest_glow` token + `PaintCx::rest_glow(radius)` = rest halo on every surface (all bordered Button variants incl. Secondary, Input, Toggle, Checkbox box, Select trigger, Pane, DockFrame, filled Row cards, styled ScrollRegion, Tag, Alert, Toast radius 14 in theme color). Ghost glows with its hover fade. Deliberately flat: Ghost/Link rest, unfilled rows, Choice, Tabs strip, RailCell rest, frameless ScrollRegion, shells, disabled.
+- **T013 DONE (in 7ff3b59)** — focus: `Base::shows_focus_ring()` (focused && focus_visible) gates all 13 ring sites → ring only on KEYBOARD nav; `[appearance] show_focus_border` override (chrome_gui_theme, live-reload); Checkbox rings its box only.
+- `Component::overlay_occludes` + `overlay_occluded_at` (geometric occlusion ≠ overlay_active input grab) — right-click gate; ContextMenu deliberately does not occlude (re-anchor).
+- Docs: widgets.md has consolidated **"The glow model — who owns what"** and **"The focus model — ring visibility"** sections + §Overlay entry + updated §Dialog/§ScrollRegion; overlay-design.md phasing closed.
 
-## Current Task Statuses (phase 99d19246-1ba9-4720-9895-e70c66acf144)
-- ✅ `972dbde6-37b9-438b-acc4-4ec9be7fd3cd` — plugin-task-ui-1 — ViewNode model + PropValue + Intent (done)
-- ✅ `d3555dc1-fd37-415e-98e4-bd1307ed75ad` — plugin-ui core execution — InteractionIntent::View + OverlayHost + confirm migration (done)
-- ✅ `8b510741-5108-41c1-af0c-c8ad5b04ebe5` — Surface compositor + LayerRegistry (step 1) (done)
-- ✅ `2cd2ee16-abca-4362-80cc-31a0a08f5ede` — plugin-task-ui-3 — realize() mapper (done)
-- ✅ `fc199765-dfbe-4c2a-99b4-e3a64cf49686` — plugin-task-ui-4 — Dialog widget + rich modal bodies (done)
-- 📋 `6c81c18b-1b80-4128-ba2a-276791879edb` — plugin-task-ui-2 — Typed SwiftUI-style builder SDK (planned)
-- 📋 `cf390afd-99f3-4a5a-b79c-71edad09b29e` — plugin-task-ui-5 — Table widget (on demand) (planned)
-- 📋 `4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3` — plugin-task-ui-6 — Author docs (planned)
-- 🚧 `2a269cea-f5a9-421b-9da7-eb1893dc9c00` — plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode) (in-progress)
-- ✅ `c0e2d0de-3e8c-49da-bdd8-529d530a1cf2` — ScrollRegion two-axis + scrollable surface (overlay/scroll rework Part 1) (done)
-- 📋 `586953dc-a2af-45cc-8eff-f6d5441f6ece` — REGRESSION: widget glow only on focused elements (lost rest-state glow) (planned)
-- 📋 `126d0855-658d-471f-86a6-27eb144fc591` — ScrollRegion keyboard-scroll actions (prefix+Home/End/PgUp/PgDown; horizontal trigger TBD) (planned)
+## Open tasks in P011 (pick next)
+1. **T012 — ScrollRegion keyboard-scroll actions** (planned): NEW app actions prefix+Home/End/PgUp/PgDown; OPEN decisions with user: horizontal trigger (prefix+Shift+Arrow is TAKEN by view pan) and target routing (focused/hovered region). Full Adding-New-Actions checklist.
+2. **T014 — Overlay follow-ups** (planned): anchor-to-rect mode (build WITH first consumer), convert Select/Tooltip/ContextMenu/CommandPalette panels to compose Overlay, `.panel_size` + scrollable modal body, SDF glyph glow renderer capability (so Icons can halo — user-requested).
+3. **T006 (builder SDK), T007 (Table on demand), T008 (author docs)** — earlier planned tasks.
 
 ## How to resume
-1. Open task 2a269cea-f5a9-421b-9da7-eb1893dc9c00 (plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)).
-2. Read `.planner/HANDOFF.md` and compare it with the latest planner data.
-3. Confirm whether the current task is already in-progress before doing implementation work.
-4. Continue with the next activity: Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
+`/planner load`, read this handoff, pick a task (likely T012 or T014), `planner task start`. Verify every visual change interactively: `cargo run -p heca-renderer --example showcase` — the USER drives it; green unit tests are NOT sufficient for rendering changes.
 
-## Files to inspect first
-- .planner/project.json
-- .planner/features.json
-- .planner/phases/99d19246-1ba9-4720-9895-e70c66acf144.json
-- .planner/resume.json
-- .planner/HANDOFF.md
-- .planner/generated/PLAN.md
+## Process rules re-affirmed this session (do not violate)
+- A task awaiting the user's test stays **in-progress**, and the **commit waits** for that verification. Sequence: build → user verifies → task status → commit (memory: no-pr-while-awaiting-test-feedback).
+- Ids as Fxxx/Pxxx/Txxx. Planner numbering is authoritative (a past handoff called the glow task "T012"; it is T011).
+- Widget docs: BOTH rustdoc + docs/widgets.md, both audiences, code examples, every builder.
+- Known perf note (user-accepted, low prio): window resize relayout slightly laggy (two-pass natural-width layout on dirty frames).
 
-## Blockers
-- None recorded
-
-## Next steps
-- Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
-
-## Recent activity
-- Latest feature update: 🧩 Pluggable Chrome Architecture (in-progress) at 2026-07-13T15:29:44.427Z
-- Latest phase update: plugin-ui: Declarative widget-tree UI model (ViewNode) (in-progress) at 2026-07-16T13:54:31.454Z
-- Latest task update: plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode) (in-progress) at 2026-07-16T13:54:31.454Z
-
-## Reminder
-- When work is fully resumed and this handoff is no longer needed, delete `.planner/HANDOFF.md`.
+## Known open questions
+- T012's horizontal-scroll trigger + action→region routing need the user's decision before building.
+- Toast z vs palette (toast layer paints above overlays tree since T009 step 2/3 restructure — cosmetic, unreported).
