@@ -94,7 +94,11 @@ impl GlowLevel {
     pub fn strength_scale(self) -> f32 {
         match self {
             GlowLevel::None => 0.0,
-            GlowLevel::Thin => 0.5,
+            // 0.75 (was 0.5): with the faint rest glows (`control_rest_glow` ≈ 0.12
+            // base) a 0.5× strength on a 0.5× radius was nearly invisible — Thin
+            // read the same as None (user-reported). Thin = tight halo (the 0.5×
+            // radius carries the "thin"), still clearly present.
+            GlowLevel::Thin => 0.75,
             GlowLevel::Medium => 1.0,
             GlowLevel::Large => 1.6,
         }

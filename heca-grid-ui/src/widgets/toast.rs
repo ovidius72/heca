@@ -38,8 +38,10 @@ const BODY_SCALE: f32 = 0.9;
 /// Action button height (logical px) and horizontal text padding.
 const ACTION_H: f64 = 24.0;
 const ACTION_PAD_X: f64 = 12.0;
-/// Rest-glow spread radius (px) — the card's share of the theme rest halo.
-const GLOW_RADIUS: f32 = 10.0;
+/// Rest-glow spread radius (px) — the card's share of the theme rest halo. A
+/// touch wider than the small controls (12): the toast is a card-sized surface
+/// and a tight halo read visibly weaker beside them (user-reported).
+const GLOW_RADIUS: f32 = 14.0;
 /// The × dismiss hit-square edge as a multiple of the resolved font.
 const DISMISS_SCALE: f32 = 1.4;
 /// Default card width.
@@ -325,9 +327,11 @@ impl Component for Toast {
 
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
         // reticle frame (GridCN fidelity — same as the Modal panel, #79). The theme
-        // rest glow (`PaintCx::rest_glow`), toned to the severity, keeps toasts in
-        // the shared neon identity and scaling with `glow_size` (T011).
-        let glow = cx.rest_glow(GLOW_RADIUS).map(|g| Glow { color: tone, ..g });
+        // rest glow (`PaintCx::rest_glow`) keeps toasts scaling with `glow_size`
+        // (T011) — in the THEME glow color, not the severity tone: the bracket
+        // frame is always accent, and a danger-red halo under a blue frame blends
+        // to a muddy purple fringe (user-reported).
+        let glow = cx.rest_glow(GLOW_RADIUS);
         cx.rect(b, surface.lerp(tone, toast_tint as f32 / 255.0), None, card_radius, glow);
         cx.bracket_frame(b);
 

@@ -538,13 +538,17 @@ fn glow_strength_scales_with_glow_size() {
     let thin = intensity_at(GlowLevel::Thin);
     let large = intensity_at(GlowLevel::Large);
     assert!(medium > 0.0, "medium glow intensity must be positive");
+    // Assert against the curve itself (Thin must sit strictly between None and
+    // Medium — its exact value is a tuning knob, e.g. 0.5→0.75 when Thin read
+    // the same as None on the faint rest glows).
     assert!(
-        (thin - medium * 0.5).abs() < 1e-4,
-        "thin should halve glow strength"
+        (thin - medium * GlowLevel::Thin.strength_scale()).abs() < 1e-4,
+        "thin follows its strength_scale"
     );
+    assert!(thin > 0.0 && thin < medium, "thin sits between none and medium");
     assert!(
-        (large - medium * 1.6).abs() < 1e-4,
-        "large should be 1.6x glow strength"
+        (large - medium * GlowLevel::Large.strength_scale()).abs() < 1e-4,
+        "large follows its strength_scale"
     );
 }
 

@@ -339,15 +339,19 @@ is, and one token gives every surface a faint halo at rest.**
 | **Rest presence** | `interaction.control_rest_glow` token (×255 intensity; `0` = flat rest look) via **`PaintCx::rest_glow(radius)`** — the one shared definition; each widget passes only its halo radius | whether surfaces halo **before** any hover/focus/active state |
 | **State glows** | each widget (hover sweep, toggle-on, checked pop, active pill/bar, attention pulse…) | drawn **on top** of the rest glow, same chokepoint |
 
-**Carries the rest glow:** Button (Primary/Destructive/Outline — tight `REST_GLOW_RADIUS`, far
-smaller than the hover halo), Input, Toggle track, Checkbox **box**, Select trigger, Pane (all
-frame variants), DockFrame fill, **filled** `Row` (list/pane cards), styled `ScrollRegion`
-(scrollable panel), Tag, Alert, Toast card — plus the widgets that always glowed (Badge,
-StatusDot, active Tab, lit Gauge, MarkerGroup, and any surface given an explicit StyleExt
-`.glow(..)`, which always **wins over** the rest fallback).
+**Carries the rest glow:** Button (every bordered variant — Primary/Secondary/Destructive/
+Outline — at a tight `REST_GLOW_RADIUS`, far smaller than the hover halo), Input, Toggle track,
+Checkbox **box**, Select trigger, Pane (all frame variants), DockFrame fill, **filled** `Row`
+(list/pane cards), styled `ScrollRegion` (scrollable panel), Tag, Alert, Toast card (theme glow
+color — a severity-toned halo under the always-accent bracket frame blended to a muddy fringe)
+— plus the widgets that always glowed (Badge, StatusDot, active Tab, lit Gauge, MarkerGroup,
+and any surface given an explicit StyleExt `.glow(..)`, which always **wins over** the rest
+fallback).
 
-**Deliberately flat at rest:** Secondary buttons (quiet by design), Ghost/Link buttons, unfilled
-`Row`/`Item` list rows, `RailCell` (rest = bare icon), frameless `ScrollRegion`, layout shells
+**Deliberately flat at rest:** Ghost/Link buttons (surface-less — Ghost's fading-in hover
+surface + border glow with the fade), unfilled `Row`/`Item` list rows, `Choice` option rows (the hosting
+control owns the surface), the `Tabs` strip (no container surface; the active pill + underline
+glow), `RailCell` (rest = bare icon), frameless `ScrollRegion`, layout shells
 (`Flex`/`ChromeRegion`) — they have no surface, so there is nothing to halo. Disabled controls
 never halo. `Button::glow(false)` opts a single button out of rest + hover glow.
 
@@ -944,11 +948,11 @@ re-emits the node with the new value instead.
 ### Button
 
 Interactive surface; look driven by variant × size, with animated per-variant hover and a
-press flash. Focusable; Space/Enter activate like a click. The bordered variants
-(Primary/Destructive/Outline) carry a faint theme **rest glow**
+press flash. Focusable; Space/Enter activate like a click. Every bordered variant
+(Primary/Secondary/Destructive/Outline) carries a faint theme **rest glow**
 (`interaction.control_rest_glow`, tone follows the variant) so `glow_size` visibly scales them
-before hover/focus; Secondary (deliberately quiet) and the surface-less Ghost/Link stay flat at
-rest; `.glow(false)` disables both the rest and hover glow.
+before hover/focus; the surface-less Ghost/Link stay flat at rest (Ghost's fading-in hover
+surface glows with it); `.glow(false)` disables both the rest and hover glow.
 
 **Its content is composed from child components** — the button paints only its own chrome (fill,
 border, hover sweep, press flash, focus ring, all from the `Theme`) and lets the layout engine place

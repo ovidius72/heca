@@ -5,21 +5,21 @@
 //! | Variant | Hover behavior |
 //! |---------|----------------|
 //! | Primary (default) | solid border + accent fill that **sweeps bottom→top** with a glow |
-//! | Secondary | subtle `muted` fill + `muted` border (theme-consistent — never rides on `surface`); both firm toward `foreground` on hover, no glow |
+//! | Secondary | subtle `muted` fill + `muted` border (theme-consistent — never rides on `surface`); both firm toward `foreground` on hover (no extra hover glow) |
 //! | Destructive | like default but red, **fades in** (no sweep) |
 //! | Outline | dim border → accent, faint fill + glow |
-//! | Ghost | no border/bg at rest → **opaque bg + border fade in** |
+//! | Ghost | no border/bg at rest → **opaque bg + border fade in**, glowing with the fade |
 //! | Link | text only → **underline** appears |
 //!
 //! Hover progress animates over time via [`Component::tick`]. Glow and border
 //! are toggleable (`.glow(bool)`, `.bordered(bool)`).
 //!
-//! **Rest glow.** The bordered variants (Primary / Destructive / Outline) also carry a
-//! faint theme-driven halo **at rest** — intensity from
+//! **Rest glow.** Every bordered variant (Primary / Secondary / Destructive / Outline)
+//! carries a faint theme-driven halo **at rest** — intensity from
 //! `interaction.control_rest_glow`, tone from the variant (danger for Destructive) —
 //! so the control shows the neon identity before any hover/focus and the `glow_size`
-//! setting visibly scales it. Secondary (deliberately quiet) and the surface-less
-//! Ghost/Link stay flat at rest; disabled controls never halo.
+//! setting visibly scales it. Ghost/Link are surface-less at rest (nothing to halo);
+//! Ghost's fading-in hover surface glows with it. Disabled controls never halo.
 //!
 //! **Disabled look.** When `disabled`, a button drops its vivid accent/danger chrome to the
 //! theme `muted` tone and draws its label in `muted` at a reduced alpha
@@ -41,7 +41,9 @@ use heca_core::layout::{Point, Rectangle, Size};
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
-const GLOW_RADIUS: f32 = 30.0;
+/// Matches the other controls' hover halos (Select/Toggle 16, Checkbox 14);
+/// the previous 30 made a hovered button visibly out of family (user-reported).
+const GLOW_RADIUS: f32 = 16.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
 const GLOW_INTENSITY: f32 = 0.12;
 /// REST glow spread radius (px) — deliberately much tighter than the hover halo
@@ -479,7 +481,7 @@ impl Component for Button {
                     muted.with_alpha(SECONDARY_FILL_ALPHA),
                     self.animated_border(bc, p, border_width, ia.control_rest_border as f32),
                     radius,
-                    None,
+                    rest_glow(glow_c),
                 );
                 self.paint_content(cx, foreground);
             }
@@ -512,7 +514,14 @@ impl Component for Button {
                 } else {
                     None
                 };
-                cx.rect(b, surface.with_alpha(alpha(p)), border, radius, None);
+                // Surface-less at rest (no halo), but the hover surface + border that
+                // fade in glow with the fade — like every other hovered control.
+                let g = (self.show_glow && !disabled && p > 0.0).then_some(Glow {
+                    color: glow_c,
+                    radius: GLOW_RADIUS,
+                    intensity: GLOW_INTENSITY * p,
+                });
+                cx.rect(b, surface.with_alpha(alpha(p)), border, radius, g);
                 self.paint_content(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Link => {
