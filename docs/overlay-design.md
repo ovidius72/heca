@@ -91,3 +91,96 @@ rendering. ~5 lines in the event loop / render.
 2. **First cut**: single-select `Select` only (recommended), or multi-select too?
 3. **Modal scrim / focus-trap**: defer to phase 3 (recommended), or need it now?
 4. **Positioning**: dropdown always below the trigger first (recommended), flip-up-near-edge later?
+
+---
+
+# T009 rework — reusable scrollable surface + overlays above the scroll (2026-07-15)
+
+Status: **proposal, awaiting approval.** This is the plan for `plugin-task-ui-7` (F003/P011/T009).
+Phase 1 above shipped (`with_overlay` + `overlay_active` + `Select`/`Tooltip`/`Dialog`). Three bugs
+found while demoing a Select-in-Dialog in the showcase (see the T009 planner entry — BUG A/B/C) share
+one theme: **overlays and scroll don't compose.** This section designs the fix.
+
+> **Verification rule for this whole rework:** every step is verified **interactively in the GPU
+> showcase** (the user drives it). Rendering/layout/overlay/scroll behaviour is NOT provable by
+> headless unit tests — a speculative `Dialog::on_layout` viewport-recenter passed its unit tests and
+> still regressed the showcase (off-screen + backdrop-but-no-panel), and was reverted. Unit-test the
+> pure math; confirm the visual before moving on.
+
+## The two root problems
+
+1. **No horizontal scroll, and the page scroll is ad-hoc.** The showcase scrolls with a manual
+   `offset_tree(dy)` (showcase.rs ~L1740) that shifts every node's bounds — **vertical only**. Content
+   wider than the window runs off-screen with no scrollbar (BUG C). `ScrollRegion` (the real embeddable
+   viewport) is used for *one demo section*, not the page.
+2. **Overlays live *inside* the scrolled content.** The Dialog is mounted as an in-flow `.child(...)`,
+   so the page scroll shifts it, and taffy centers it in its slot → off-screen (BUG B). A `Select`
+   opened inside the Dialog paints/routes only in local tree order, so the Dialog's later-painted
+   buttons land on top and still hover (BUG A).
+
+## Part 1 — a reusable scrollable surface (the user's ask)
+
+**Keep `ScrollRegion` as THE reusable scroll primitive — do not add a parallel widget.** It already
+bakes `-offset` into child bounds (bounds === drawn === clickable), clips via `PushClip`, and resets in
+`on_layout`. Extend it, don't fork it.
+
+**1a. Two-axis scrolling.** Add horizontal alongside the existing vertical:
+- `axes`: `ScrollAxes { Vertical (default), Horizontal, Both }` via builders `.horizontal()` / `.both()`
+  (default stays `Vertical` — back-compat, zero change for current callers).
+- Offset becomes per-axis (`scroll_x` / `scroll_y` signals, or one `Point` offset); children laid out at
+  natural size on **both** axes so content overflows horizontally too; bake `-offset` on both axes.
+- A **horizontal scrollbar** (bottom edge) mirroring the vertical thumb (theme-accent grip, wide grab
+  lane, `control_radius`). Auto-shown only when that axis overflows.
+- Wheel: plain wheel → vertical; **Shift+wheel → horizontal**; a 2-D trackpad delta drives both. Each
+  axis clamped to `[0, max]`.
+
+**1b. "Scrollable *surface*" styling (optional, composable).** So a scroll region can *be* a framed
+surface (the user's "surface scrollable"), give `ScrollRegion` optional `StyleExt`
+(`.background/.border/.radius/.glow`) — same theme-driven tokens every surface reads. A plain
+`ScrollRegion::new().both()` stays frameless; `.background(..).border(..)` makes it a scrollable panel.
+No new widget, no hardcoded styling.
+
+**1c. Showcase adopts it.** Replace the manual `offset_tree` page-scroll with a single root
+`ScrollRegion::new().both()` wrapping the content. Fixes BUG C and dogfoods the primitive. The app can
+later reuse the same widget for sidebar/panels.
+
+## Part 2 — host overlays *above* the scroll (fixes BUG A + BUG B)
+
+Overlays must NOT sit inside the scrolled subtree. Host them in a **top-level overlay layer anchored to
+the viewport**, above the `ScrollRegion` — the same shape the app already has (`LayerRegistry` / the
+`Modal` band). Then:
+- a Dialog centers on the real viewport (it is not inside the scroll offset) → **BUG B fixed**;
+- a nested `Select`'s open panel composites in the overlay layer **above** the Dialog's buttons, and
+  input routes to the top overlay first → **BUG A fixed**.
+
+**Base `Overlay` widget (composition, not inheritance).** Extract the panel/scrim/positioning into a
+base `Overlay`; `Dialog` (modal + actions), dropdown/popover, and tooltip become specializations that
+*compose* it. **Blocking is a layer property** (modal blocks + scrim; popover is light-dismiss), not a
+per-widget reimplementation. Positioning (center-on-viewport / anchor-to-rect, clamped + flipped) lives
+once in the base — which is exactly what the failed `Dialog::on_layout` tried to hand-roll in the wrong
+coordinate space.
+
+**Occlusion routing.** An overlay container delivers pointer/key to an `overlay_active` descendant
+first (mirroring the host's `focus.rs` overlay scan) and stops propagation to siblings occluded by the
+descendant's `panel_rect`.
+
+## Phasing (each verified interactively before the next)
+1. `ScrollRegion` two-axis + horizontal scrollbar (+ optional `StyleExt`). Showcase demo section proves
+   it. ← **start here (the user's immediate ask)**
+2. Showcase whole-page uses `ScrollRegion::new().both()` (drop `offset_tree`). Confirms BUG C fixed.
+3. Overlay layer hosting in the showcase: Dialog + a Select's panel render above the scroll. Confirms
+   BUG B, then BUG A fixed.
+4. Base `Overlay` widget refactor: Dialog/dropdown/tooltip compose it; blocking as a layer property.
+5. Docs (`docs/widgets.md` ScrollRegion + the new Overlay) + showcase + rustdoc, per the both-audiences
+   rule. Read all styling from theme.
+
+## Open questions (decide before building)
+- **Q1 — scrollbar visibility:** overlay scrollbars (drawn over content, auto-hide) or reserve gutter
+  space? (Lean overlay/auto-hide, matching the current vertical thumb.)
+- **Q2 — offset type:** two `Signal<f32>` (x/y) or one `Signal<Point>`? (Lean two signals — smaller
+  diff, keeps the existing `scroll_offset()` accessor working for the vertical case.)
+- **Q3 — overlay host in the showcase:** a minimal `LayerRegistry`-style overlay slot in the example, or
+  lift the app's overlay host into `heca-grid-ui`? (Lean: minimal showcase-side slot first; the base
+  `Overlay` + host generalization is Phase 4.)
+- **Q4 — scope now:** do Part 1 (scrollable surface) end-to-end first and land it, then Part 2
+  (overlays) as a follow-up? (Lean yes — Part 1 is the user's ask and is independently useful.)

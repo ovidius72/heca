@@ -29,7 +29,8 @@
     "6c81c18b-1b80-4128-ba2a-276791879edb",
     "cf390afd-99f3-4a5a-b79c-71edad09b29e",
     "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
-    "2a269cea-f5a9-421b-9da7-eb1893dc9c00"
+    "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
+    "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2"
   ],
   "tasks": [
     {
@@ -118,8 +119,8 @@
       "number": 5,
       "shortName": "plugin-task-ui-4",
       "title": "plugin-task-ui-4 — Dialog widget + rich modal bodies",
-      "status": "in-progress",
-      "description": "LARGELY DONE for the modal case: added heca-grid-ui::Dialog (real body + real action Button children; scrim/centering/focus-trap; self-contained keyboard). OverlayHost::open_modal takes ModalSpec { title, body: ViewNode, actions }, realizes the body via realize, builds it into a Dialog layer. Showcase demo + docs/widgets.md §Dialog added.\n\n## Progress 2026-07-15 (scoped against code)\nForm marshalling was ALREADY wired for Input/Toggle/Checkbox: interaction.rs:673 `collect_overlay_form` → `ModalResult::Action{data}` on SubmitOverlay. The ONE gap was Select.\n\nDONE this session (branch feat/action-task-c, awaiting commit approval):\n- realize.rs: named `Select` now marshals its CHOSEN OPTION VALUE (not index) into form data — new `option_values(node)` helper + reader over `select.state()` index → value.\n- overlay.rs: fixed stale `ModalResult::Action` doc (Input→Text, Toggle/Checkbox→Bool, Select→Text).\n- Tests: `named_select_is_collected_as_its_chosen_value` + `rich_modal_body_marshals_every_named_field`. All suites green, clippy 0 (only pre-existing block v0.1.6 dep note).\n- docs/widgets.md: §Dialog modal-from-data prose+example add Select field; §Select notes `name` opts into form submission.\n- showcase.rs: Dialog demo body enriched to a NON-overlay rich form (Label + Input + Checkbox) — deliberately not nesting a Select (see BUG A in T009).\n\nREGRESSIONS FOUND + HANDLED (moved to T009, NOT T005):\n- BUG A (nested Select inside Dialog: z-order show-through + hover fall-through) → documented in T009.\n- BUG B (Dialog off-screen when mounted in-flow in the scrolled showcase). Attempted a widget fix (Dialog::on_layout viewport-recenter) — it REGRESSED (still off-screen + backdrop-but-no-panel on re-open because showcase bounds are in scrolled-tree coords, not screen coords) so it was REVERTED. Dialog restored to taffy-only centering (correct in the app). Full analysis + correct approach in T009 BUG B.\n- BUG C (showcase has no horizontal scrollbar; ScrollRegion is vertical-only) → noted in T009.\n\nREMAINING for T005: none functional — the marshalling deliverable is complete and tested. Table = T007. Ready to mark done after user commit approval.",
+      "status": "done",
+      "description": "LARGELY DONE for the modal case: added heca-grid-ui::Dialog (real body + real action Button children; scrim/centering/focus-trap; self-contained keyboard). OverlayHost::open_modal takes ModalSpec { title, body: ViewNode, actions }, realizes the body via realize, builds it into a Dialog layer. Showcase demo + docs/widgets.md §Dialog added.\n\n## Progress 2026-07-15 (scoped against code)\nForm marshalling was ALREADY wired for Input/Toggle/Checkbox: interaction.rs:673 `collect_overlay_form` → `ModalResult::Action{data}` on SubmitOverlay. The ONE gap was Select.\n\nDONE this session (branch feat/action-task-c, awaiting commit approval):\n- realize.rs: named `Select` now marshals its CHOSEN OPTION VALUE (not index) into form data — new `option_values(node)` helper + reader over `select.state()` index → value.\n- overlay.rs: fixed stale `ModalResult::Action` doc (Input→Text, Toggle/Checkbox→Bool, Select→Text).\n- Tests: `named_select_is_collected_as_its_chosen_value` + `rich_modal_body_marshals_every_named_field`. All suites green, clippy 0 (only pre-existing block v0.1.6 dep note).\n- docs/widgets.md: §Dialog modal-from-data prose+example add Select field; §Select notes `name` opts into form submission.\n- showcase.rs: Dialog demo body enriched to a NON-overlay rich form (Label + Input + Checkbox) — deliberately not nesting a Select (see BUG A in T009).\n\nREGRESSIONS FOUND + HANDLED (moved to T009, NOT T005):\n- BUG A (nested Select inside Dialog: z-order show-through + hover fall-through) → documented in T009.\n- BUG B (Dialog off-screen when mounted in-flow in the scrolled showcase). Attempted a widget fix (Dialog::on_layout viewport-recenter) — it REGRESSED (still off-screen + backdrop-but-no-panel on re-open because showcase bounds are in scrolled-tree coords, not screen coords) so it was REVERTED. Dialog restored to taffy-only centering (correct in the app). Full analysis + correct approach in T009 BUG B.\n- BUG C (showcase has no horizontal scrollbar; ScrollRegion is vertical-only) → noted in T009.\n\nREMAINING for T005: none functional — the marshalling deliverable is complete and tested. Table = T007. Ready to mark done after user commit approval.\n\n---\n**Completion summary:**\nDONE. Commit 9c92696 (feat) + c152ef7 (planner) on branch feat/action-task-c. Named Select in a ViewNode modal body now marshals its chosen option VALUE into ModalResult::Action.data (was the last value-widget not marshalling; Input/Toggle/Checkbox already did via interaction.rs:673 collect_overlay_form). Files: heca/src/chrome/realize.rs (new option_values() helper + Select name-binding), heca/src/chrome/overlay.rs (ModalResult::Action doc fix), docs/widgets.md (§Dialog + §Select code examples for named form fields), heca-renderer/examples/showcase.rs (Dialog demo → non-overlay rich form). Tests: named_select_is_collected_as_its_chosen_value, rich_modal_body_marshals_every_named_field. Full workspace green, clippy clean. Table deferred to T007. Overlay-rendering bugs surfaced by the demo (nested-overlay z/occlusion, Dialog off-screen when scrolled, no horizontal scroll) were NOT part of this task and are documented in T009 (plugin-task-ui-7).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -128,9 +129,9 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-15T17:45:46.666Z",
-      "completedAt": "",
+      "completedAt": "2026-07-15T20:04:38.057Z",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-15T19:48:54.529Z"
+      "updatedAt": "2026-07-15T20:04:38.057Z"
     },
     {
       "id": "6c81c18b-1b80-4128-ba2a-276791879edb",
@@ -198,7 +199,7 @@
       "number": 9,
       "shortName": "plugin-task-ui-7",
       "title": "plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)",
-      "status": "planned",
+      "status": "in-progress",
       "description": "EVERY widget must be able to receive a ViewNode (arbitrary child subtree) as its content — the real SwiftUI/Flutter model.\n\n## Scope (original, locked with user 2026-07-08)\n1. Make grid-ui widgets composition-first: accept an arbitrary child Component/subtree as content, not only scalar props. Start Label/Button/IconButton/Badge/Tag, then generalize.\n2. Complete realize() coverage so every WidgetKind maps to its widget (no empty fallback).\n3. Result: any ViewNode renders, any widget can host any widget.\nOverlay direction: rename the overlay panel to a base Overlay widget with Modal/Dialog as specializations (composition, not inheritance); BLOCKING STAYS A LAYER PROPERTY; fold in overlay sizing (.panel_size) + scrollable body (ScrollRegion) gaps. FORMALIZE AS ITS OWN PHASE before touching overlay widgets. Update showcase + docs/widgets.md; read all styling from theme; keep vocabulary host-owned.\n\n## BUG A — nested overlay: a Select opened INSIDE a Dialog (found 2026-07-15, F003/P011/T005 showcase)\nTwo symptoms, ONE root cause: a descendant overlay's panel is not composited/routed above the Dialog's own LATER siblings.\n- SHOW-THROUGH (paint/z-order): Dialog paints panel children in order [title, body(Select), action-row]; the Select queues its open list via `cx.with_overlay`, but the action buttons paint AFTER it in the same pass → buttons land on top of the panel (looks translucent; it is z-order — the `surface` token is opaque). See heca-grid-ui/src/widgets/dialog.rs paint child-loop + select.rs open-list paint (~line 622).\n- HOVER FALL-THROUGH (input/occlusion): dialog.rs `event()` PointerMoved (~line 336) forwards to the WHOLE panel subtree with no overlay-first routing, so the button under the open panel still highlights. Select's own occlusion (select.rs:696, consume-move-within-panel_rect) works only at the TOP level, because the host routes to `overlay_active` widgets first (focus.rs deliver_event overlay scan ~line 138); the Dialog does not replicate that for a nested open overlay.\nFIX (as part of the base-Overlay rework, \"blocking stays a layer property\"):\n1. Route a nested descendant overlay through the app LayerRegistry / surface-compositor as its OWN layer, so an open Select composites above ALL sibling/ancestor chrome — not just local paint order. Nested `cx.with_overlay` inside another overlay is insufficient.\n2. Overlay containers (Dialog + the future base Overlay) must deliver pointer/key to an `overlay_active` descendant FIRST (mirror focus.rs overlay scan) and stop propagation to occluded siblings when the descendant's panel_rect contains the pointer.\n\n## BUG B — Dialog off-screen when mounted in-flow / inside a scrolled container (found 2026-07-15)\nIn the app the Dialog is the layer root: taffy centering (root Pct(1.0)² + Justify/Align Center) centers it on the viewport correctly — NO bug there. In the SHOWCASE it is mounted as `.child(dialog)` inside a vertically-scrolled column, so its box is an in-flow slot and taffy centers the panel inside that slot → off-screen when the trigger is scrolled near the bottom.\nFAILED FIX ATTEMPT (2026-07-15, reverted): added `Dialog::on_layout` that shifted the panel to `cx.viewport()`-center via `shift_subtree`. It REGRESSED badly: (a) still off-screen, (b) on re-open the scrim/backdrop painted but the panel did not. WHY: the showcase renders its tree with a vertical SCROLL, so a widget's bounds are in scrolled-tree coordinates, NOT screen coordinates; centering on the absolute `cx.viewport()` throws the panel outside the visible content region. `shift_subtree` is destructive and must be re-derived each layout pass — the showcase's re-open/layout cadence left the panel shifted away while the viewport-anchored scrim still painted (→ backdrop-but-no-panel). Lesson: a Dialog cannot self-center on the absolute viewport when it lives inside a scrolled/offset subtree; centering must be relative to the visible region, or the Dialog must be hosted as a real top-level overlay layer.\nCORRECT APPROACH (do here, verify INTERACTIVELY in the GPU showcase — do NOT ship unverified widget changes again): make overlays (Dialog included) host through the app LayerRegistry as their own top-level layer above the scrolled content (same mechanism as the app), rather than living as an in-flow child. Then centering on the viewport is correct because the layer is not inside the scroll offset. This unifies with BUG A's fix (nested/all overlays route through the layer stack).\n\n## BUG C — showcase has no HORIZONTAL scroll (found 2026-07-15)\nScrollRegion is vertical-only by design (grid-ui-chrome-plan.md §2.8 lists horizontal scroll under Future). Content wider than the viewport runs off-screen with no scrollbar. Add horizontal scroll to ScrollRegion (+ a horizontal scrollbar) as part of the overlay/scroll gap-fill, or track separately.\n\nNB: BUG B's widget change was REVERTED (dialog.rs restored to taffy-only centering); the Dialog remains correct in the app. All three belong to this overlay/scroll rework and must be verified interactively.",
       "notes": "",
       "statusLog": [
@@ -219,9 +220,80 @@
       "startedAt": "2026-07-15T17:45:26.715Z",
       "completedAt": "",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-15T19:48:22.444Z"
+      "updatedAt": "2026-07-15T20:04:42.241Z"
+    },
+    {
+      "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 10,
+      "shortName": "scrollregion-two-axis-scrollab",
+      "title": "ScrollRegion two-axis + scrollable surface (overlay/scroll rework Part 1)",
+      "status": "in-progress",
+      "description": "Part 1 of the overlay/scroll rework (design: docs/overlay-design.md §\"T009 rework\"; sibling: plugin-task-ui-7/T009 owns Part 2 = overlays above the scroll + base Overlay widget). Fixes BUG C (showcase content wider than the viewport runs off-screen with no scrollbar).\n\nCURRENT STATE:\n- `ScrollRegion` (heca-grid-ui/src/widgets/scroll_region.rs) is an embeddable VERTICAL-ONLY scroll viewport. It bakes `-scroll_offset` into child bounds (bounds === drawn === clickable), clips via renderer PushClip/PopClip, resets `applied_offset` in `Component::on_layout` (post-order, so the shift never compounds). Public API: `new()`, `scroll_offset() -> Signal<f32>`, `scroll_to(f32)`, `ensure_visible(Rectangle)`, `scroll_to_child(usize)`. Wheel via `Event::Scroll`; auto vertical scrollbar (theme-accent thumb, wide grab lane, control_radius). Module doc explicitly says \"v1 is vertical-only; horizontal scrolling is future work.\"\n- The SHOWCASE scrolls its whole page with a MANUAL `offset_tree(dy)` (heca-renderer/examples/showcase.rs ~L1740) — vertical only — NOT a ScrollRegion. That is why wide content has no horizontal scrollbar.\n- `Surface`/`StyleExt` (background/border/radius/glow) exist as theme-driven builders on surfaces.\n\nDESIRED STATE (extend ScrollRegion; DO NOT add a parallel widget):\n1. Two-axis scrolling. Add `ScrollAxes { Vertical (default), Horizontal, Both }` via builders `.horizontal()`/`.both()` (default Vertical = back-compat; existing callers unchanged). Per-axis offset — decision Q2 lean: keep the existing `scroll_offset()` Signal<f32> as the vertical accessor and ADD a horizontal `scroll_offset_x()` Signal<f32> (two signals, smaller diff) rather than switching to a Point. Lay children at natural size on BOTH axes (no shrink) so content overflows horizontally; bake `-offset` on both axes in the same place the vertical shift is applied; clip to the region rect (already done).\n2. Horizontal scrollbar on the bottom edge mirroring the vertical thumb (theme-accent grip, wide invisible grab lane, control_radius); auto-shown only when the horizontal axis overflows. Q1 lean: overlay/auto-hide over content (match the vertical thumb), no reserved gutter.\n3. Wheel/trackpad: plain `Event::Scroll` delta → vertical; Shift+wheel → horizontal; a 2-D delta drives both. Clamp each axis to [0, max_offset]. Confirm what `Event::Scroll` carries (dx/dy? modifiers?) in component.rs before wiring.\n4. Optional \"scrollable surface\" styling: give ScrollRegion optional `StyleExt` (background/border/radius/glow), theme-driven — a plain `ScrollRegion::new()` stays frameless, `.background(..).border(..)` makes it a scrollable panel. No hardcoded styling.\n5. Showcase adopts it: replace the manual `offset_tree` page-scroll with a root `ScrollRegion::new().both()` wrapping the content (dogfood; fixes BUG C). NB: overlays (Dialog/Select) must be hosted ABOVE this scroll — that is Part 2 (T009); until then the in-flow Dialog stays off-screen when scrolled (BUG B) — do not attempt to fix BUG B here.\n\nEDGE CASES: content smaller than viewport on an axis → no scrollbar, offset pinned 0; on_layout must reset BOTH axes' applied offsets; `ensure_visible`/`scroll_to_child` stay vertical for now (or extend if cheap); back-compat — `scroll_offset()` semantics unchanged for vertical-only callers.\n\nVERIFY INTERACTIVELY (mandatory — see the no-unverified-rendering lesson): unit-test the pure clamp/offset math; then the USER runs `cargo run -p heca-renderer --example showcase` to confirm horizontal + vertical scroll, the bottom scrollbar, Shift+wheel, and that a styled scrollable surface renders. Do NOT mark done on green unit tests alone.\n\nDOCS (both audiences, per the rule): docs/widgets.md ScrollRegion entry (new builders + horizontal scrollbar + StyleExt, native + declarative examples) + rustdoc; showcase demo section.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-001-add-scrollaxes-horizontal-both-builders-default-vertical-back-compat",
+          "title": "Add ScrollAxes + .horizontal()/.both() builders (default Vertical, back-compat)",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-002-add-horizontal-offset-signal-scroll-offset-x-bake-offset-on-both-axes-on-layout-resets-both",
+          "title": "Add horizontal offset signal + scroll_offset_x(); bake -offset on both axes; on_layout resets both",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-003-horizontal-scrollbar-bottom-edge-mirroring-the-vertical-thumb-auto-shown-on-overflow",
+          "title": "Horizontal scrollbar (bottom edge) mirroring the vertical thumb; auto-shown on overflow",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-004-wheel-plain-vertical-shift-wheel-horizontal-2-d-delta-both-clamp-each-axis",
+          "title": "Wheel: plain=vertical, Shift+wheel=horizontal, 2-D delta=both; clamp each axis",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-005-optional-styleext-background-border-radius-glow-so-it-can-be-a-scrollable-surface",
+          "title": "Optional StyleExt (background/border/radius/glow) so it can be a scrollable surface",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-006-showcase-whole-page-uses-scrollregion-new-both-drop-offset-tree-fixes-bug-c",
+          "title": "Showcase whole-page uses ScrollRegion::new().both() (drop offset_tree) — fixes BUG C",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-007-unit-tests-for-clamp-offset-math-both-axes",
+          "title": "Unit tests for clamp/offset math (both axes)",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-008-user-verifies-in-the-gpu-showcase-horizontal-vertical-scroll-scrollbar-shift-wheel-styled-surface",
+          "title": "USER verifies in the GPU showcase (horizontal+vertical scroll, scrollbar, Shift+wheel, styled surface)",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-009-docs-widgets-md-scrollregion-entry-rustdoc-native-declarative-examples-showcase-section",
+          "title": "docs/widgets.md ScrollRegion entry + rustdoc (native + declarative examples) + showcase section",
+          "checked": false
+        },
+        {
+          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-010-cargo-clippy-workspace-all-targets-all-features-clean-rust-skill-review-before-commit",
+          "title": "cargo clippy --workspace --all-targets --all-features clean; rust-skill review before commit",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-16T06:32:40.603Z",
+      "completedAt": "",
+      "createdAt": "2026-07-16T06:32:29.772Z",
+      "updatedAt": "2026-07-16T06:32:40.603Z"
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-15T19:48:54.529Z"
+  "updatedAt": "2026-07-16T06:32:40.603Z"
 }
