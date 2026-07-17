@@ -24,7 +24,7 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
-use crate::widgets::Glyph;
+use crate::widgets::{place_at_point, Glyph};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -304,27 +304,16 @@ impl ContextMenu {
         let panel_w = (content_w + 2.0 * PAD).clamp(MIN_W, MAX_W);
         let panel_h = 2.0 * PAD + self.entries.len().max(1) as f64 * row_h;
 
-        let a = self.anchor.get();
-        let (vw, vh) = if vp.w.is_finite() { (vp.w, vp.h) } else { (panel_w, panel_h) };
-        let (mut x, mut y) = if self.centered {
-            // Anchor = desired panel center: place the panel centered on it (no inset), then clamp.
-            (a.x - panel_w / 2.0, a.y - panel_h / 2.0)
-        } else {
-            // Prefer down-right of the anchor; flip/clamp to keep the panel on-screen.
-            let mut x = a.x + ANCHOR_INSET;
-            if x + panel_w > vw {
-                x = (a.x - panel_w - ANCHOR_INSET).max(0.0);
-            }
-            let mut y = a.y + ANCHOR_INSET;
-            if y + panel_h > vh {
-                y = (a.y - panel_h - ANCHOR_INSET).max(0.0);
-            }
-            (x, y)
-        };
-        x = x.clamp(0.0, (vw - panel_w).max(0.0));
-        y = y.clamp(0.0, (vh - panel_h).max(0.0));
-
-        Rectangle::new(Point::new(x, y), Size::new(panel_w, panel_h))
+        // Placement (down-right of the cursor, flip up-left, clamp — or centered on
+        // the anchor for keyboard/RPC-opened menus) lives in the shared overlay
+        // placement authority so it is not re-derived per widget.
+        place_at_point(
+            self.anchor.get(),
+            Size::new(panel_w, panel_h),
+            vp,
+            ANCHOR_INSET,
+            self.centered,
+        )
     }
 
     fn row_rect(&self, panel: Rectangle, idx: usize) -> Rectangle {

@@ -2194,6 +2194,21 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   scrim, outside input falls through), `.open(bool)`,
   `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
+- **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
+  `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
+  [`Dialog`](#dialog) case) or `OverlayPosition::Anchored { anchor, gap }` (dropdown/popover:
+  below the trigger rect, flipped above when there's no room, left-edge aligned, clamped into the
+  viewport). `.anchored(rect)` is sugar for the anchored mode with the default gap
+  (`DEFAULT_ANCHOR_GAP`); `.set_anchor(rect)` re-anchors in place (a host following a moved
+  trigger). Anchored placement is baked into the panel child's bounds on layout (the subtree-shift
+  trick — so paint and hit-testing follow), and it is idempotent. Pair an anchored overlay with
+  `.blocking(false)` for a light-dismiss popover. The placement math is the free function
+  `place_anchored(anchor, panel, viewport, gap) -> Rectangle` — the single authority for
+  rect-anchored (dropdown) flip/clamp placement. Its sibling
+  `place_at_point(anchor, panel, viewport, inset, centered) -> Rectangle` is the authority for
+  **point-anchored** placement (down-right of a cursor, flip up-left, or centered on the point);
+  [`ContextMenu`](#contextmenu) delegates its placement to it. ([`Select`](#select) is the
+  intended first consumer of `place_anchored`.)
 - **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
   layout).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);

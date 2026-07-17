@@ -5,11 +5,15 @@
 //! (the T009 overlay rework): a *blocking* overlay paints a dimming scrim over
 //! the whole viewport and swallows outside input (modal — [`Dialog`](super::Dialog));
 //! a non-blocking one lets outside input fall through (light-dismiss popovers).
-//! Positioning lives here once: the base fills the viewport (`Pct(1.0)`²) and
+//! Positioning is a [property](OverlayPosition) of this layer: the default
+//! [`Center`](OverlayPosition::Center) fills the viewport (`Pct(1.0)`²) and
 //! **centers** its single panel child with real taffy layout, so every
-//! descendant gets true bounds (hint picker + pointer hit-testing need them).
-//! (Anchor-to-rect positioning for dropdown/popover/tooltip specializations is
-//! the planned extension — those widgets still own their placement today.)
+//! descendant gets true bounds (hint picker + pointer hit-testing need them);
+//! [`Anchored`](OverlayPosition::Anchored) instead hangs the panel off a trigger
+//! rect (below/flip-above/clamp — [`place_anchored`]) for dropdown/popover
+//! specializations. (The `Select`/`Tooltip`/`ContextMenu` widgets still own their
+//! placement today; converting their panel *presentation* to compose an anchored
+//! `Overlay` is the follow-up — the placement authority now lives here.)
 //!
 //! **Composition, not inheritance.** A specialized overlay widget ([`Dialog`](super::Dialog))
 //! *composes* an `Overlay` as its subtree — the `Overlay` owns presentation
@@ -27,7 +31,7 @@
 //! [`Scene::overlay_segments`](crate::scene::Scene::overlay_segments).
 
 use crate::builders::LayoutExt;
-use crate::component::{paint_child, Base, Component, Event, Handled, PaintCx};
+use crate::component::{paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx};
 use crate::focus::FocusManager;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::Shadow;
@@ -40,6 +44,140 @@ use std::cell::Cell;
 const SHADOW_BLUR_MULT: f32 = 4.0;
 /// Downward shadow offset lifting the panel off the scrim/page.
 const SHADOW_DROP: f32 = 12.0;
+
+/// Where an [`Overlay`] places its panel.
+///
+/// - [`Center`](OverlayPosition::Center) — the default: fill the viewport and
+///   center the panel with real taffy layout (a modal [`Dialog`](super::Dialog)).
+/// - [`Anchored`](OverlayPosition::Anchored) — dropdown/popover placement: the
+///   panel is put **below** an anchor rect (a trigger), flipped **above** when
+///   there is no room below, aligned to the anchor's left edge, and clamped into
+///   the viewport so it never spills off-screen. This is the shared placement the
+///   `Select` dropdown and `ContextMenu` each hand-roll today
+///   ([`place_anchored`] is the one authority).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OverlayPosition {
+    /// Fill the viewport and center the panel (modal default).
+    Center,
+    /// Anchor the panel to a trigger rect (dropdown/popover): below, flipped
+    /// above when no room, left-edge aligned, clamped into the viewport.
+    Anchored {
+        /// The trigger rect (viewport coordinates) the panel hangs off.
+        anchor: Rectangle,
+        /// Gap between the anchor edge and the panel.
+        gap: f64,
+    },
+}
+
+/// Default gap between an anchored panel and its trigger (logical px).
+pub const DEFAULT_ANCHOR_GAP: f64 = 4.0;
+
+/// Place a `panel`-sized rect against an `anchor` rect for a dropdown/popover:
+/// **below** the anchor by `gap`, **flipped above** when the panel would overflow
+/// the viewport bottom and there is more room above, **left-edge aligned** to the
+/// anchor, and finally **clamped** on both axes into the viewport so it never
+/// spills off-screen.
+///
+/// This is the single authority for anchor-to-rect placement — the flip/clamp
+/// logic that `select.rs` (`open_list`/`panel_top`) and `context_menu.rs`
+/// (`layout`) each reimplement. An **infinite** viewport axis (before the first
+/// paint has cached one) disables clamping/flipping on that axis: the panel is
+/// simply placed below the anchor.
+///
+/// # Examples
+/// ```
+/// use heca_grid_ui::widgets::place_anchored;
+/// use heca_core::layout::{Point, Rectangle, Size};
+///
+/// let anchor = Rectangle::new(Point::new(10.0, 100.0), Size::new(120.0, 30.0));
+/// let panel = Size::new(120.0, 80.0);
+/// let vp = Size::new(800.0, 600.0);
+/// // Plenty of room below → placed just under the trigger.
+/// let r = place_anchored(anchor, panel, vp, 4.0);
+/// assert_eq!(r.loc.y, 100.0 + 30.0 + 4.0);
+/// assert_eq!(r.loc.x, 10.0);
+/// ```
+pub fn place_anchored(anchor: Rectangle, panel: Size, viewport: Size, gap: f64) -> Rectangle {
+    let below_y = anchor.loc.y + anchor.size.h + gap;
+    let above_y = anchor.loc.y - gap - panel.h;
+
+    let mut x = anchor.loc.x;
+    let mut y = below_y;
+
+    if viewport.h.is_finite() {
+        let fits_below = below_y + panel.h <= viewport.h;
+        let fits_above = above_y >= 0.0;
+        if !fits_below && fits_above {
+            // No room below, room above → flip up.
+            y = above_y;
+        } else if !fits_below && !fits_above {
+            // Neither side fits fully: take the side with more room, then clamp.
+            let room_below = (viewport.h - below_y).max(0.0);
+            let room_above = (anchor.loc.y - gap).max(0.0);
+            y = if room_above > room_below { above_y } else { below_y };
+        }
+        y = y.clamp(0.0, (viewport.h - panel.h).max(0.0));
+    }
+    if viewport.w.is_finite() {
+        x = x.clamp(0.0, (viewport.w - panel.w).max(0.0));
+    }
+    Rectangle::new(Point::new(x, y), panel)
+}
+
+/// Place a `panel`-sized rect against a **cursor point** for a context menu /
+/// point-anchored popover: preferred **down-right** of the anchor by `inset`,
+/// flipped **up-left** when the panel would overflow the viewport edge, then
+/// clamped on both axes. When `centered` is true the panel is instead **centered
+/// on** the anchor (a keyboard/RPC-opened menu with no pointer target).
+///
+/// This is the single authority for point-anchored placement — the logic
+/// [`ContextMenu`](super::ContextMenu)'s `layout` reimplemented inline. As with
+/// `ContextMenu` today, an **infinite** viewport (before the first paint caches
+/// one) collapses the placement to the origin; callers cache a real viewport at
+/// paint before relying on the result.
+///
+/// # Examples
+/// ```
+/// use heca_grid_ui::widgets::place_at_point;
+/// use heca_core::layout::{Point, Size};
+///
+/// // Room down-right → top-left is offset from the cursor by the inset.
+/// let r = place_at_point(Point::new(100.0, 100.0), Size::new(160.0, 80.0),
+///                        Size::new(800.0, 600.0), 2.0, false);
+/// assert_eq!(r.loc, Point::new(102.0, 102.0));
+/// ```
+pub fn place_at_point(
+    anchor: Point,
+    panel: Size,
+    viewport: Size,
+    inset: f64,
+    centered: bool,
+) -> Rectangle {
+    // Mirror ContextMenu's viewport handling exactly: an infinite viewport falls
+    // back to the panel's own size as the clamp bound (collapsing to the origin).
+    let (vw, vh) = if viewport.w.is_finite() {
+        (viewport.w, viewport.h)
+    } else {
+        (panel.w, panel.h)
+    };
+    let (mut x, mut y) = if centered {
+        (anchor.x - panel.w / 2.0, anchor.y - panel.h / 2.0)
+    } else {
+        // Prefer down-right of the anchor; flip to up-left when it would overflow.
+        let mut x = anchor.x + inset;
+        if x + panel.w > vw {
+            x = (anchor.x - panel.w - inset).max(0.0);
+        }
+        let mut y = anchor.y + inset;
+        if y + panel.h > vh {
+            y = (anchor.y - panel.h - inset).max(0.0);
+        }
+        (x, y)
+    };
+    x = x.clamp(0.0, (vw - panel.w).max(0.0));
+    y = y.clamp(0.0, (vh - panel.h).max(0.0));
+    Rectangle::new(Point::new(x, y), panel)
+}
 
 /// The base overlay surface: a viewport-filling, centering layer that paints a
 /// panel (its single child) with the shared overlay chrome — optional scrim,
@@ -60,7 +198,9 @@ pub struct Overlay {
     /// Fired when a press lands outside the panel — the standalone dismissal
     /// hook (a composing widget usually implements its own policy instead).
     on_outside_click: Option<Box<dyn Fn()>>,
-    /// Last-seen viewport, cached during paint for the scrim rect.
+    /// How the panel is placed: centered (default) or anchored to a trigger rect.
+    position: OverlayPosition,
+    /// Last-seen viewport, cached during paint (scrim rect + anchored placement).
     viewport: Cell<Size>,
 }
 
@@ -79,6 +219,7 @@ impl Overlay {
             open: signal(false),
             blocking: true,
             on_outside_click: None,
+            position: OverlayPosition::Center,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
         }
     }
@@ -106,6 +247,60 @@ impl Overlay {
     pub fn blocking(mut self, blocking: bool) -> Self {
         self.blocking = blocking;
         self
+    }
+
+    /// Set the panel placement (default [`OverlayPosition::Center`]).
+    pub fn position(mut self, position: OverlayPosition) -> Self {
+        self.position = position;
+        self
+    }
+
+    /// Anchor the panel to a trigger `rect` (dropdown/popover placement): below,
+    /// flipped above when no room, left-edge aligned, clamped into the viewport —
+    /// see [`place_anchored`]. Uses [`DEFAULT_ANCHOR_GAP`]; pair with a
+    /// non-[`blocking`](Overlay::blocking) layer for a light-dismiss popover.
+    pub fn anchored(mut self, rect: Rectangle) -> Self {
+        self.position = OverlayPosition::Anchored {
+            anchor: rect,
+            gap: DEFAULT_ANCHOR_GAP,
+        };
+        self
+    }
+
+    /// Update the anchor rect of an [`Anchored`](OverlayPosition::Anchored)
+    /// overlay in place (a host re-anchoring to a moved trigger). No-op in
+    /// [`Center`](OverlayPosition::Center) mode.
+    pub fn set_anchor(&mut self, rect: Rectangle) {
+        if let OverlayPosition::Anchored { anchor, .. } = &mut self.position
+            && *anchor != rect
+        {
+            *anchor = rect;
+            self.place_panel();
+        }
+    }
+
+    /// Place the panel for an anchored overlay by baking the placement offset into
+    /// the panel child's bounds (the same subtree-shift trick `Select`/`ScrollRegion`
+    /// use). Idempotent: the target is absolute, so re-running never compounds.
+    /// A no-op in [`Center`](OverlayPosition::Center) mode (taffy centers there).
+    fn place_panel(&mut self) {
+        let OverlayPosition::Anchored { anchor, gap } = self.position else {
+            return;
+        };
+        let Some(child) = self.base.children.first_mut() else {
+            return;
+        };
+        let current = child.base().bounds;
+        if current.size == Size::new(0.0, 0.0) {
+            return; // Not laid out yet — nothing to place.
+        }
+        let target = place_anchored(anchor, current.size, self.viewport.get(), gap);
+        let dx = target.loc.x - current.loc.x;
+        let dy = target.loc.y - current.loc.y;
+        if dx != 0.0 || dy != 0.0 {
+            shift_subtree(child.as_mut(), dx, dy);
+            self.base.mark_needs_paint();
+        }
     }
 
     /// Set the initial open state.
@@ -164,6 +359,14 @@ impl Component for Overlay {
 
     fn overlay_active(&self) -> bool {
         self.is_open()
+    }
+
+    /// Layout just reset the panel to its taffy-computed position; in
+    /// [`Anchored`](OverlayPosition::Anchored) mode, re-place it against the
+    /// trigger rect (idempotent — see [`place_panel`](Overlay::place_panel)).
+    /// [`Center`](OverlayPosition::Center) mode keeps taffy's centering untouched.
+    fn on_layout(&mut self) {
+        self.place_panel();
     }
 
     /// A **blocking** overlay occludes the whole viewport (its scrim owns every
@@ -333,5 +536,131 @@ mod tests {
             "light layer lets the outside press fall through"
         );
         assert!(dismissed.get(), "outside press fired the dismissal hook");
+    }
+
+    // ── Anchor-to-rect placement (place_anchored) ──
+
+    /// A trigger with plenty of room below → panel sits just under it, left-aligned.
+    #[test]
+    fn anchored_places_below_with_room() {
+        let anchor = Rectangle::new(Point::new(40.0, 100.0), Size::new(120.0, 30.0));
+        let panel = Size::new(120.0, 80.0);
+        let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
+        assert_eq!(r.loc.x, 40.0, "left-edge aligned to the anchor");
+        assert_eq!(r.loc.y, 100.0 + 30.0 + 4.0, "gap below the anchor bottom");
+    }
+
+    /// No room below but room above → the panel flips up above the trigger.
+    #[test]
+    fn anchored_flips_above_when_no_room_below() {
+        // Anchor near the viewport bottom: 80px panel won't fit in the 40px below.
+        let anchor = Rectangle::new(Point::new(40.0, 560.0), Size::new(120.0, 30.0));
+        let panel = Size::new(120.0, 80.0);
+        let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
+        assert_eq!(r.loc.y, 560.0 - 4.0 - 80.0, "flipped to sit above the anchor");
+    }
+
+    /// Neither side fully fits → take the side with more room, then clamp on-screen.
+    #[test]
+    fn anchored_picks_more_room_when_neither_side_fits() {
+        // Tall panel (500) in a short viewport (600); anchor low → more room above.
+        let anchor = Rectangle::new(Point::new(0.0, 450.0), Size::new(100.0, 30.0));
+        let panel = Size::new(100.0, 500.0);
+        let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
+        // Room above (450-4=446) > room below (600-484=116) → flip up, then clamp ≥ 0.
+        assert_eq!(r.loc.y, 0.0, "clamped to the top after choosing the roomier side");
+    }
+
+    /// The panel is clamped so it never spills past the right/bottom viewport edge.
+    #[test]
+    fn anchored_clamps_into_viewport() {
+        let anchor = Rectangle::new(Point::new(760.0, 20.0), Size::new(120.0, 30.0));
+        let panel = Size::new(120.0, 80.0);
+        let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
+        assert_eq!(r.loc.x, 800.0 - 120.0, "right edge clamped into the viewport");
+        assert!(r.loc.x >= 0.0);
+    }
+
+    /// A negative/off-left anchor is clamped back to x = 0.
+    #[test]
+    fn anchored_clamps_left_edge() {
+        let anchor = Rectangle::new(Point::new(-30.0, 20.0), Size::new(120.0, 30.0));
+        let panel = Size::new(120.0, 80.0);
+        let r = place_anchored(anchor, panel, Size::new(800.0, 600.0), 4.0);
+        assert_eq!(r.loc.x, 0.0, "left edge clamped to the viewport origin");
+    }
+
+    /// An infinite viewport (before the first paint caches one) disables clamping
+    /// and flipping — the panel is simply placed below the anchor.
+    #[test]
+    fn anchored_infinite_viewport_places_below_without_clamp() {
+        let anchor = Rectangle::new(Point::new(900.0, 50.0), Size::new(120.0, 30.0));
+        let panel = Size::new(120.0, 80.0);
+        let inf = Size::new(f64::INFINITY, f64::INFINITY);
+        let r = place_anchored(anchor, panel, inf, 4.0);
+        assert_eq!(r.loc.x, 900.0, "no clamp with an infinite viewport");
+        assert_eq!(r.loc.y, 50.0 + 30.0 + 4.0, "placed below the anchor");
+    }
+
+    // ── Point-anchored placement (place_at_point) ──
+
+    /// Room down-right of the cursor → top-left offset from the anchor by the inset.
+    #[test]
+    fn at_point_places_down_right_with_room() {
+        let r = place_at_point(
+            Point::new(100.0, 100.0),
+            Size::new(160.0, 80.0),
+            Size::new(800.0, 600.0),
+            2.0,
+            false,
+        );
+        assert_eq!(r.loc, Point::new(102.0, 102.0));
+    }
+
+    /// Cursor near the right/bottom edge → the panel flips up-left of the anchor.
+    #[test]
+    fn at_point_flips_up_left_near_edges() {
+        // Anchor at (780, 580); a 160x80 panel can't go right/down in an 800x600 vp.
+        let r = place_at_point(
+            Point::new(780.0, 580.0),
+            Size::new(160.0, 80.0),
+            Size::new(800.0, 600.0),
+            2.0,
+            false,
+        );
+        // Flipped: x = 780-160-2 = 618, y = 580-80-2 = 498, both within the viewport.
+        assert_eq!(r.loc, Point::new(618.0, 498.0));
+    }
+
+    /// Centered mode puts the panel *center* on the anchor (keyboard/RPC-opened menu).
+    #[test]
+    fn at_point_centered_puts_center_on_anchor() {
+        let anchor = Point::new(1000.0, 1000.0);
+        let panel = Size::new(160.0, 80.0);
+        let r = place_at_point(anchor, panel, Size::new(2000.0, 2000.0), 2.0, true);
+        assert!((r.loc.x + panel.w / 2.0 - anchor.x).abs() < 1e-9);
+        assert!((r.loc.y + panel.h / 2.0 - anchor.y).abs() < 1e-9);
+    }
+
+    /// End-to-end: an anchored overlay bakes the placement into the panel child's
+    /// bounds on layout (so paint/hit-testing follow), and it is idempotent.
+    #[test]
+    fn anchored_overlay_places_panel_child_on_layout() {
+        let anchor = Rectangle::new(Point::new(40.0, 100.0), Size::new(120.0, 30.0));
+        let mut o = Overlay::new()
+            .blocking(false)
+            .anchored(anchor)
+            .panel(Flex::column().child(Label::new("hi")))
+            .open(true);
+        // Simulate a layout pass: taffy placed the panel somewhere with a real size.
+        o.base.children[0].base_mut().bounds =
+            Rectangle::new(Point::new(300.0, 300.0), Size::new(120.0, 80.0));
+        o.viewport.set(Size::new(800.0, 600.0));
+        o.on_layout();
+        let placed = o.panel_bounds();
+        assert_eq!(placed.loc, Point::new(40.0, 134.0), "panel anchored below trigger");
+        // Idempotent: a second on_layout must not compound the offset.
+        o.on_layout();
+        assert_eq!(o.panel_bounds().loc, placed.loc, "re-placing is idempotent");
     }
 }
