@@ -62,7 +62,7 @@
       "number": 3,
       "name": "🧩 Pluggable Chrome Architecture",
       "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
-      "status": "planned",
+      "status": "blocked",
       "discussedAt": "",
       "contextReady": false,
       "contextReadyReason": "",

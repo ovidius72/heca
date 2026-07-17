@@ -1,11 +1,15 @@
 {
-  "updatedAt": "2026-07-16T22:55:06.516Z",
+  "updatedAt": "2026-07-16T23:14:28.067Z",
   "currentPhaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-  "inProgressTaskIds": [],
+  "inProgressTaskIds": [
+    "b413c466-8239-4787-94f3-b1623d041aad"
+  ],
   "nextSteps": [
     "Continue with plugin-03: Built-in provider system and WorkspacesContainer migration"
   ],
-  "blockers": [],
+  "blockers": [
+    "126d0855-658d-471f-86a6-27eb144fc591: ScrollRegion keyboard-scroll actions (prefix+Home/End/PgUp/PgDown; horizontal trigger TBD)"
+  ],
   "notes": "Planner synchronized with BACKLOG.md. plugin-01 and plugin-02 now marked done. plugin-03 in progress.",
   "lastSessionSummary": "Synced planner with origin/main backlog. Updated feature/phase statuses for pluggable chrome and compositor frost.",
   "guardBypassUntil": ""
