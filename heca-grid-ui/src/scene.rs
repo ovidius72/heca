@@ -45,6 +45,20 @@ pub struct Scene {
     /// be recorded → not drawn). Depth lets nesting close each segment in order and only leave
     /// overlay mode at depth 0.
     overlay_depth: usize,
+    /// Clip rects currently open in the **overlay** layer (pushed by `PushClip`,
+    /// popped by `PopClip`).
+    ///
+    /// Segments are rendered independently, each starting with an empty clip stack,
+    /// so a clip that was opened *before* a nested overlay split the stream would be
+    /// silently lost for the parent's remaining draws. That is exactly what happened
+    /// with a `Select` opened inside a scrolled `Dialog` body: the rows painted after
+    /// the dropdown escaped the `ScrollRegion`'s clip and drew outside the modal.
+    /// Tracking the open clips lets [`end_overlay`](Scene::end_overlay) re-establish
+    /// them on the continuation segment, keeping every segment self-contained.
+    overlay_clips: Vec<Rectangle>,
+    /// `overlay_clips` depth saved at each [`begin_overlay`](Scene::begin_overlay),
+    /// so a nested overlay's own clips can't leak into the parent's continuation.
+    clip_depth_stack: Vec<usize>,
 }
 
 impl Scene {
@@ -57,6 +71,15 @@ impl Scene {
     /// [`begin_overlay`](Scene::begin_overlay)).
     pub fn push(&mut self, cmd: DrawCommand) {
         if self.to_overlay {
+            // Track clips open in this layer so a nested overlay splitting the
+            // stream can't lose them (see `overlay_clips`).
+            match &cmd {
+                DrawCommand::PushClip(r) => self.overlay_clips.push(*r),
+                DrawCommand::PopClip => {
+                    self.overlay_clips.pop();
+                }
+                _ => {}
+            }
             self.overlay.push(cmd);
         } else {
             self.commands.push(cmd);
@@ -79,6 +102,11 @@ impl Scene {
         self.to_overlay = true;
         self.seg_start = self.overlay.len();
         self.overlay_depth += 1;
+        // Remember how many clips were open, so `end_overlay` restores exactly
+        // those and not any the nested overlay opened. The nested segment itself
+        // starts UNCLIPPED on purpose: a dropdown opened inside a scroll region
+        // must be able to extend beyond it.
+        self.clip_depth_stack.push(self.overlay_clips.len());
     }
 
     /// Stop routing to the overlay layer for this level, closing the current segment (recorded
@@ -96,6 +124,20 @@ impl Scene {
         if self.overlay_depth == 0 {
             self.to_overlay = false;
         }
+        // Drop any clip the nested overlay left open, then RE-ESTABLISH the ones
+        // that were open around it. Segments render independently with a fresh
+        // clip stack, so without this the parent's remaining draws would be
+        // unclipped — the rows of a scrolled dialog body painting outside the
+        // modal after a Select was opened inside it.
+        let restore_to = self.clip_depth_stack.pop().unwrap_or(0);
+        self.overlay_clips.truncate(restore_to);
+        if self.to_overlay && !self.overlay_clips.is_empty() {
+            // Append directly: these are a *replay* of already-tracked clips, so
+            // they must not be re-tracked by `push`.
+            for rect in self.overlay_clips.clone() {
+                self.overlay.push(DrawCommand::PushClip(rect));
+            }
+        }
     }
 
     /// Clear all commands (reuse the allocation across frames).
@@ -103,6 +145,8 @@ impl Scene {
         self.commands.clear();
         self.overlay.clear();
         self.overlay_segs.clear();
+        self.overlay_clips.clear();
+        self.clip_depth_stack.clear();
         self.to_overlay = false;
         self.seg_start = 0;
         self.overlay_depth = 0;
@@ -349,15 +393,94 @@ mod tests {
         DrawCommand::PushClip(Rectangle::new(Point::default(), Size::new(w, w)))
     }
 
+    /// A neutral, distinguishable command for the SEGMENTATION tests. They only
+    /// need to tell commands apart; using `PushClip` for that would entangle them
+    /// with real clip semantics (an unpopped clip is restored on the parent's
+    /// continuation segment — see the clip test below).
+    fn marker(n: f64) -> DrawCommand {
+        DrawCommand::Rect(RectCmd {
+            rect: Rectangle::new(Point::default(), Size::new(n, n)),
+            fill: Color::rgb(1, 2, 3),
+            border: None,
+            radius: 0.0,
+            glow: None,
+            shadow: None,
+        })
+    }
+
+    /// **Regression guard.** A nested overlay splits the parent's segment, and
+    /// segments render independently with a fresh clip stack — so a clip opened
+    /// *before* the nested overlay must be re-established on the parent's
+    /// continuation segment, or everything the parent draws afterwards is
+    /// unclipped.
+    ///
+    /// Real symptom: opening a `Select` inside a scrolled `Dialog` body made the
+    /// rows painted after it escape the `ScrollRegion`'s clip and draw outside the
+    /// modal. The nested overlay itself must stay UNCLIPPED (a dropdown legitimately
+    /// extends past the region it lives in).
+    #[test]
+    fn a_clip_open_around_a_nested_overlay_is_restored_after_it() {
+        let row = || {
+            DrawCommand::Rect(RectCmd {
+                rect: Rectangle::new(Point::default(), Size::new(10.0, 10.0)),
+                fill: Color::rgb(1, 2, 3),
+                border: None,
+                radius: 0.0,
+                glow: None,
+                shadow: None,
+            })
+        };
+
+        let mut s = Scene::new();
+        s.begin_overlay(); // the Dialog's layer
+        s.push(clip(100.0)); // the ScrollRegion clips its body
+        s.push(row()); // a row, clipped
+        s.begin_overlay(); // a Select opens INSIDE the clipped body
+        s.push(row()); // the dropdown panel
+        s.end_overlay();
+        s.push(row()); // the rows the parent draws AFTER the dropdown
+        s.push(DrawCommand::PopClip);
+        s.end_overlay();
+
+        let segments: Vec<Scene> = s.overlay_segments().collect();
+
+        // The nested dropdown must NOT inherit the clip — it legitimately extends
+        // beyond the region it was opened inside.
+        let nested = segments
+            .iter()
+            .find(|seg| seg.iter().count() == 1)
+            .expect("the nested overlay is its own single-command segment");
+        assert!(
+            !nested.iter().any(|c| matches!(c, DrawCommand::PushClip(_))),
+            "a nested overlay starts unclipped so a dropdown can escape its region"
+        );
+
+        // …but the parent's continuation must re-open it, or those later rows
+        // paint outside the modal (the reported bug). NB segments are yielded
+        // depth-ordered, so the continuation is *not* simply the last one — find it
+        // by the `PopClip` that closes the region.
+        let continuation = segments
+            .iter()
+            .find(|seg| seg.iter().any(|c| matches!(c, DrawCommand::PopClip)))
+            .expect("the parent's continuation segment closes the clip");
+        assert!(
+            continuation
+                .iter()
+                .any(|c| matches!(c, DrawCommand::PushClip(_))),
+            "the clip open before the nested overlay must be re-established, else \
+             everything the parent draws after the dropdown escapes it"
+        );
+    }
+
     #[test]
     fn overlay_segments_yields_one_per_nonempty_begin_end_pair() {
         let mut s = Scene::new();
         s.begin_overlay(); // overlay A: two commands
-        s.push(clip(1.0));
-        s.push(clip(1.5));
+        s.push(marker(1.0));
+        s.push(marker(1.5));
         s.end_overlay();
         s.begin_overlay(); // overlay B: one command
-        s.push(clip(2.0));
+        s.push(marker(2.0));
         s.end_overlay();
 
         let segs: Vec<Scene> = s.overlay_segments().collect();
@@ -370,12 +493,12 @@ mod tests {
         // Each segment holds exactly its own commands, in paint (z) order: A then B.
         assert_eq!(
             segs[0].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(1.0), clip(1.5)],
+            vec![marker(1.0), marker(1.5)],
             "first segment should hold overlay A's commands"
         );
         assert_eq!(
             segs[1].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(2.0)],
+            vec![marker(2.0)],
             "second segment should hold overlay B's command"
         );
     }
@@ -395,13 +518,13 @@ mod tests {
     #[test]
     fn base_layer_excludes_overlay_commands() {
         let mut s = Scene::new();
-        s.push(clip(0.0)); // base
+        s.push(marker(0.0)); // base
         s.begin_overlay();
-        s.push(clip(1.0)); // overlay
+        s.push(marker(1.0)); // overlay
         s.end_overlay();
         assert_eq!(
             s.base_layer().iter().cloned().collect::<Vec<_>>(),
-            vec![clip(0.0)],
+            vec![marker(0.0)],
             "base layer should hold only base commands, not overlay ones"
         );
     }
@@ -417,28 +540,28 @@ mod tests {
         // parent-before, parent-after, then the deeper child.
         let mut s = Scene::new();
         s.begin_overlay(); // outer (Dialog panel)
-        s.push(clip(1.0)); // panel, before the nested overlay
+        s.push(marker(1.0)); // panel, before the nested overlay
         s.begin_overlay(); // inner (Select dropdown)
-        s.push(clip(2.0)); // dropdown list
+        s.push(marker(2.0)); // dropdown list
         s.end_overlay(); // close inner — must NOT drop the outer
-        s.push(clip(3.0)); // outer continues (action buttons, drawn after the nest)
+        s.push(marker(3.0)); // outer continues (action buttons, drawn after the nest)
         s.end_overlay(); // close outer
 
         let segs: Vec<Scene> = s.overlay_segments().collect();
         assert_eq!(segs.len(), 3, "parent segment must survive the nested child");
         assert_eq!(
             segs[0].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(1.0)],
+            vec![marker(1.0)],
             "segment 0 = parent content before the nest"
         );
         assert_eq!(
             segs[1].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(3.0)],
+            vec![marker(3.0)],
             "segment 1 = parent content after the nest (same depth as segment 0)"
         );
         assert_eq!(
             segs[2].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(2.0)],
+            vec![marker(2.0)],
             "segment 2 = the nested overlay, rendered LAST so it occludes the whole parent"
         );
     }
@@ -449,17 +572,17 @@ mod tests {
         // stack painted after it) keep record order — the later one still occludes the earlier.
         let mut s = Scene::new();
         s.begin_overlay();
-        s.push(clip(1.0));
+        s.push(marker(1.0));
         s.end_overlay();
         s.begin_overlay();
-        s.push(clip(2.0));
+        s.push(marker(2.0));
         s.end_overlay();
         let segs: Vec<Scene> = s.overlay_segments().collect();
         assert_eq!(segs.len(), 2);
-        assert_eq!(segs[0].iter().cloned().collect::<Vec<_>>(), vec![clip(1.0)]);
+        assert_eq!(segs[0].iter().cloned().collect::<Vec<_>>(), vec![marker(1.0)]);
         assert_eq!(
             segs[1].iter().cloned().collect::<Vec<_>>(),
-            vec![clip(2.0)],
+            vec![marker(2.0)],
             "same-depth overlays render in record order (later on top)"
         );
     }
@@ -472,12 +595,12 @@ mod tests {
         s.begin_overlay();
         s.begin_overlay();
         s.end_overlay(); // inner closed, but still inside the outer overlay
-        s.push(clip(9.0)); // still overlay-targeted
+        s.push(marker(9.0)); // still overlay-targeted
         s.end_overlay(); // outer closed → back to base
-        s.push(clip(8.0)); // base
+        s.push(marker(8.0)); // base
         assert_eq!(
             s.base_layer().iter().cloned().collect::<Vec<_>>(),
-            vec![clip(8.0)],
+            vec![marker(8.0)],
             "the mid-nest push must not leak to base; only post-outer-close pushes are base"
         );
     }
