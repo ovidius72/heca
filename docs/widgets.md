@@ -2230,15 +2230,30 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   `overlay_occludes` = whole viewport when blocking, else the panel rect.
 - **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` is the single
   authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
-  surface fill, and the bracket reticle (the `Pane`/`DockFrame` visual language). `PanelChrome`'s
-  optional `border`/`glow` are the per-widget accents layered on top; the shared parts are not
-  configurable, which is what makes every overlay panel read as one surface. The base `Overlay` passes
-  `PanelChrome::default()` (no edge, no halo); [`Select`](#select), [`ContextMenu`](#contextmenu), and
+  surface fill, the per-widget accents, and the panel's **edge**. The base `Overlay` passes
+  `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#contextmenu), and
   [`CommandPalette`](#commandpalette) call the same painter with their own accent border + glow,
   because each owns content that cannot be handed to an `Overlay` as a single panel child (`Select`'s
   option rows are *placed children*; the menu/palette draw their rows from data). Call it inside a
   `with_overlay` block — it does not open the overlay layer itself, and a blocking layer's **scrim**
   is separate from the panel chrome (the palette paints its own scrim first).
+- **The panel edge is a user setting, not a widget decision** — `Theme.colors.overlay_frame`
+  (`FrameStyle`), driven by the app's `[appearance] overlay_border_style` (`none | bordered |
+  bracketed`, live-reloading like the rest). It owns the **whole** edge, so the three styles are
+  genuinely distinct:
+
+  | `overlay_frame` | Edge | Corner reticle |
+  |---|---|---|
+  | `bracketed` (default) | yes | yes |
+  | `bordered` | yes | no |
+  | `none` | **no** | no |
+
+  `PanelChrome.border` is the widget's preferred edge **colour** — honoured when the style draws an
+  edge, ignored under `none` (otherwise `none` could not remove a `Select`'s accent border). When a
+  widget supplies no border, the theme's neutral `border` fills in, so `bordered` still shows an edge
+  on the base `Overlay`. The **fill and glow are never suppressed**: the halo is the panel's neon
+  identity, not a frame, so it survives `none`. The showcase drives the same token live via its
+  **OVERLAY FRAME** select (it builds its own `Theme` and never reads `config.toml`).
 - **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
   (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
   composites above everything this layer draws — see the
@@ -2315,8 +2330,10 @@ impl Component for MyPopoverWidget {
         if self.open {
             cx.with_overlay(|cx| {                        // the overlay LAYER is yours to open
                 let panel = self.panel_rect();
+                // Your identity only — whether an edge is drawn at all is the
+                // user's `overlay_frame` setting, applied by the painter.
                 paint_panel_chrome(cx, panel, PanelChrome {
-                    border: Some(cx.theme().colors.accent.into()), // your identity, optional
+                    border: Some(cx.theme().colors.accent.into()), // preferred edge COLOUR
                     glow: None,
                 });
                 for child in self.visible_rows() { child.paint(cx); }
