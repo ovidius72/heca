@@ -42,7 +42,7 @@ use crate::component::{
 };
 use crate::focus::FocusManager;
 use crate::reactive::{Signal, SignalGet, SignalUpdate};
-use crate::style::{Justify, Length};
+use crate::style::{Justify, Length, Spacing};
 use crate::widgets::{Flex, Label, Overlay};
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -164,7 +164,16 @@ impl Dialog {
     /// overflow — and the title and buttons stay put because only the body flexes.
     /// With an unsized panel there is no leftover space, so this changes nothing.
     ///
-    /// Only defaults are filled in: an explicit width the caller set is respected.
+    /// It also gives the body a default **gap between its children** so a dialog's
+    /// fields breathe whether or not the body scrolls — the same spacing a
+    /// [`ScrollRegion`](super::ScrollRegion) body already applies to itself, now
+    /// applied to a plain container body too, so the modal is consistent either
+    /// way. (A label + its control should be grouped into one tight unit, e.g. a
+    /// `Field`, so this larger gap falls *between* fields, never between a label
+    /// and its own input.)
+    ///
+    /// Only defaults are filled in: an explicit width / grow / gap the caller set
+    /// is respected.
     fn fit_body(&mut self) {
         let idx = self.panel_mut().children.len() - 1;
         let style = &mut self.panel_mut().children[idx].base_mut().style;
@@ -173,6 +182,9 @@ impl Dialog {
         }
         if style.flex_grow == 0.0 {
             style.flex_grow = 1.0;
+        }
+        if style.gap == 0.0 && style.gap_spacing.is_none() {
+            style.gap_spacing = Some(Spacing::Md);
         }
     }
 
