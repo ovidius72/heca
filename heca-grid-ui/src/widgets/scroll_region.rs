@@ -210,7 +210,7 @@ impl ScrollRegion {
         // font, the size variant and UI zoom (a px value tuned at one font size is
         // wrong at every other). A caller can still override either.
         base.style.pad_spacing_y = Some(Spacing::Sm);
-        base.style.gap_spacing = Some(Spacing::Sm);
+        base.style.gap_spacing = Some(Spacing::Md);
         Self {
             base,
             axes: ScrollAxes::default(),
