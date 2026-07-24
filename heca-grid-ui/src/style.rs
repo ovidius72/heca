@@ -257,6 +257,12 @@ pub struct Style {
     pub pad_spacing_x: Option<Spacing>,
     /// Vertical padding as a theme [`Spacing`] token — resolved to px from the font at layout.
     pub pad_spacing_y: Option<Spacing>,
+    /// Gap between children as a theme [`Spacing`] token — resolved to px from the
+    /// inherited font at layout (sets [`gap`](Self::gap)). `None` ⇒ use the raw
+    /// `gap` px. Prefer this over a literal: a token scales with the font, the size
+    /// variant and UI zoom, so rows stay comfortably spaced at every scale instead
+    /// of being tuned once for one font size.
+    pub gap_spacing: Option<Spacing>,
     pub width: Length,
     pub height: Length,
     /// Minimum size. `None` ⇒ taffy's default, which for a flex item is
@@ -354,6 +360,7 @@ impl Default for Style {
             padding_y: None,
             pad_spacing_x: None,
             pad_spacing_y: None,
+            gap_spacing: None,
             width: Length::Auto,
             height: Length::Auto,
             min_width: None,

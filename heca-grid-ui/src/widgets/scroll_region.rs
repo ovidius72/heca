@@ -43,7 +43,7 @@ use crate::component::{
     paint_child, route_event, shift_subtree, Base, Component, Event, Handled, PaintCx,
 };
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::style::{Direction, Length};
+use crate::style::{Direction, Length, Spacing};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Visible scrollbar thumb width (logical px).
@@ -77,11 +77,6 @@ const SURFACE_GLOW_RADIUS: f32 = 12.0;
 /// scissored flat against the edge and read as a cut-off row. Sized to the surface
 /// glow spread above.
 const GLOW_BLEED: f64 = SURFACE_GLOW_RADIUS as f64;
-/// Default vertical padding inside the viewport, so the first/last rows aren't
-/// flush against the clip edge.
-const CONTENT_PAD_Y: f32 = 6.0;
-/// Default gap between rows — a scrolled list is easier to scan with a little air.
-const ROW_GAP: f32 = 4.0;
 /// Delay (seconds) before a held track-press starts repeating its paging.
 const TRACK_REPEAT_DELAY: f32 = 0.35;
 /// Interval (seconds) between repeated pages while the track press stays held.
@@ -210,11 +205,12 @@ impl ScrollRegion {
         base.style.min_height = Some(Length::Px(0.0));
         base.style.flex_shrink = Some(1.0);
         // Breathing room so the first and last rows don't sit flush against the
-        // clip edge (which reads as content jammed into the frame), and a small
-        // default gap between rows — a scrolled list is a list, and rows that touch
-        // are hard to scan. Both are plain style, so a caller can still override.
-        base.style.padding_y = Some(CONTENT_PAD_Y);
-        base.style.gap = ROW_GAP;
+        // clip edge, and a real gap between children — rows that touch are hard to
+        // scan. Both are theme SPACING TOKENS, not literals, so they scale with the
+        // font, the size variant and UI zoom (a px value tuned at one font size is
+        // wrong at every other). A caller can still override either.
+        base.style.pad_spacing_y = Some(Spacing::Sm);
+        base.style.gap_spacing = Some(Spacing::Sm);
         Self {
             base,
             axes: ScrollAxes::default(),

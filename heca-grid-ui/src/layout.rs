@@ -96,6 +96,9 @@ impl LayoutEngine {
             if let Some(sp) = s.pad_spacing_y {
                 s.padding_y = Some(resolved * sp.scale());
             }
+            if let Some(sp) = s.gap_spacing {
+                s.gap = resolved * sp.scale();
+            }
         }
         c.remeasure();
         let style = c.taffy_style();
