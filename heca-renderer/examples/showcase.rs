@@ -106,6 +106,14 @@ const INTENSITY_OPTS: [Intensity; 4] = [
     Intensity::Heavy,
 ];
 
+/// Overlay-panel frame options, in the order shown by the OVERLAY FRAME select.
+/// This mirrors the app's `[appearance] overlay_border_style` setting — which the
+/// showcase cannot read (it builds its own `Theme` and never loads `config.toml`),
+/// so the control writes the same `theme.colors.overlay_frame` token the config
+/// path writes in the real app.
+const OVERLAY_FRAME_OPTS: [FrameStyle; 3] =
+    [FrameStyle::Bracketed, FrameStyle::Bordered, FrameStyle::None];
+
 /// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`, `HEADER`).
 const SIZE_OPTS: [WidgetSize; 4] = [
     WidgetSize::Normal,
@@ -177,6 +185,9 @@ struct ThemeCtl {
     border: Signal<f32>,
     font: Signal<f32>,
     intensity: Signal<Intensity>,
+    /// Frame drawn around overlay panels (dialog / dropdown / menu / palette) —
+    /// the showcase stand-in for `[appearance] overlay_border_style`.
+    overlay_frame: Signal<FrameStyle>,
     /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
     size: Signal<WidgetSize>,
     /// Global UI zoom level (continuous, `ZOOM_MIN..=ZOOM_MAX`).
@@ -347,6 +358,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.intensity.get_untracked())
         .unwrap_or(2);
+    let overlay_frame_idx = OVERLAY_FRAME_OPTS
+        .iter()
+        .position(|x| *x == ctl.overlay_frame.get_untracked())
+        .unwrap_or(0);
     let size_idx = SIZE_OPTS
         .iter()
         .position(|x| *x == ctl.size.get_untracked())
@@ -836,6 +851,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
                                 ctl.intensity.set(INTENSITY_OPTS[i.min(3)]);
+                            }
+                        }),
+                )
+                // The frame every OVERLAY panel draws (this Select's own dropdown
+                // included, so the change is visible the moment you reopen it).
+                // Mirrors `[appearance] overlay_border_style` in the real app.
+                .child(Label::new("OVERLAY FRAME").color(theme.colors.muted).font_scale(0.85))
+                .child(
+                    Select::new(["BRACKETED", "BORDERED", "NONE"])
+                        .selected(overlay_frame_idx)
+                        .on_change(move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.overlay_frame.set(
+                                    OVERLAY_FRAME_OPTS[i.min(OVERLAY_FRAME_OPTS.len() - 1)],
+                                );
                             }
                         }),
                 ),
@@ -2042,6 +2072,7 @@ impl GpuState {
             border: signal(theme.colors.border_width),
             font: signal(theme.font_size),
             intensity: signal(theme.colors.intensity),
+            overlay_frame: signal(theme.colors.overlay_frame),
             size: signal(WidgetSize::Normal),
             zoom: signal(ZOOM_DEFAULT),
             theme_idx: signal(0),
@@ -2279,6 +2310,7 @@ impl GpuState {
             self.ctl.border.set(self.theme.colors.border_width);
             self.ctl.font.set(self.theme.font_size);
             self.ctl.intensity.set(self.theme.colors.intensity);
+            self.ctl.overlay_frame.set(self.theme.colors.overlay_frame);
 
             let built = build_ui(&self.theme, self.ctl);
             let BuiltUi {
@@ -2318,6 +2350,7 @@ impl GpuState {
         self.theme.colors.border_radius = self.ctl.radius.get_untracked();
         self.theme.colors.border_width = self.ctl.border.get_untracked();
         self.theme.colors.intensity = self.ctl.intensity.get_untracked();
+        self.theme.colors.overlay_frame = self.ctl.overlay_frame.get_untracked();
         let font = self.ctl.font.get_untracked();
         if (font - self.theme.font_size).abs() > f32::EPSILON {
             self.theme.font_size = font;
