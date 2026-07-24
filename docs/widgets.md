@@ -2233,10 +2233,12 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   surface fill, and the bracket reticle (the `Pane`/`DockFrame` visual language). `PanelChrome`'s
   optional `border`/`glow` are the per-widget accents layered on top; the shared parts are not
   configurable, which is what makes every overlay panel read as one surface. The base `Overlay` passes
-  `PanelChrome::default()` (no edge, no halo); [`Select`](#select)'s dropdown calls the same painter
-  with its accent border + neon glow, because its option rows are *placed children* and so cannot be
-  handed to an `Overlay` as a panel. Call it inside a `with_overlay` block — it does not open the
-  overlay layer itself.
+  `PanelChrome::default()` (no edge, no halo); [`Select`](#select), [`ContextMenu`](#contextmenu), and
+  [`CommandPalette`](#commandpalette) call the same painter with their own accent border + glow,
+  because each owns content that cannot be handed to an `Overlay` as a single panel child (`Select`'s
+  option rows are *placed children*; the menu/palette draw their rows from data). Call it inside a
+  `with_overlay` block — it does not open the overlay layer itself, and a blocking layer's **scrim**
+  is separate from the panel chrome (the palette paints its own scrim first).
 - **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
   (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
   composites above everything this layer draws — see the
@@ -2349,7 +2351,7 @@ impl Component for MyPopoverWidget {
 |---|---|---|
 | A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
 | A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#contextmenu) |
-| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select) |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette) |
 
 Use `AnchorSide::Auto` unless you already decided the side. Force `Below`/`Above` when the
 decision and the panel's **size** are computed together (`Select` picks the side and its visible

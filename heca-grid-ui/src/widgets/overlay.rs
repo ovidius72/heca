@@ -34,16 +34,20 @@ use crate::builders::LayoutExt;
 use crate::component::{paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx};
 use crate::focus::FocusManager;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::color::Color;
 use crate::scene::{Border, Glow, Shadow};
+use crate::theme::FrameStyle;
 use crate::style::{Align, Justify, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
 /// Multiplier on the theme `shadow.blur` token — an overlay panel is large and
-/// wants a wider, softer halo than the small-surface base token.
-const SHADOW_BLUR_MULT: f32 = 4.0;
-/// Downward shadow offset lifting the panel off the scrim/page.
-const SHADOW_DROP: f32 = 12.0;
+/// wants a wider, softer halo than the small-surface base token. Raised from 4.0
+/// (2026-07-24): the panel read as barely lifted off the page.
+const SHADOW_BLUR_MULT: f32 = 6.0;
+/// Downward shadow offset lifting the panel off the scrim/page. Raised from 12.0
+/// alongside the blur so the panel sits more clearly *above* what's behind it.
+const SHADOW_DROP: f32 = 16.0;
 
 /// Where an [`Overlay`] places its panel.
 ///
@@ -95,13 +99,16 @@ pub struct PanelChrome {
 /// cannot drift apart. Call it inside a [`PaintCx::with_overlay`] block; it does not
 /// open the overlay layer itself.
 pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome) {
-    let (surface, shadow, shadow_blur, radius) = {
+    let (surface, shadow, shadow_blur, radius, frame, border_color, border_width) = {
         let t = cx.theme();
         (
             t.colors.surface,
             t.shadow_color(),
             t.colors.shadow.blur,
             t.colors.border_radius,
+            t.colors.overlay_frame,
+            t.colors.border,
+            t.colors.border_width,
         )
     };
     cx.drop_shadow(
@@ -114,8 +121,30 @@ pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome
             dy: SHADOW_DROP,
         },
     );
+    // The panel's own fill + the widget's accent border/glow.
     cx.rect(rect, surface, chrome.border, radius, chrome.glow);
-    cx.bracket_frame(rect);
+    // The shared FRAME is a theme/config decision (`overlay_frame`), never
+    // hardcoded: bracket reticle (default), a plain edge, or nothing.
+    match frame {
+        FrameStyle::Bracketed => cx.bracket_frame(rect),
+        FrameStyle::Bordered => {
+            // Only add an edge when the widget didn't already draw its own, so a
+            // Select/menu accent border isn't doubled up.
+            if chrome.border.is_none() {
+                cx.rect(
+                    rect,
+                    Color::TRANSPARENT,
+                    Some(Border {
+                        color: border_color,
+                        width: border_width,
+                    }),
+                    radius,
+                    None,
+                );
+            }
+        }
+        FrameStyle::None => {}
+    }
 }
 
 /// Which side of the anchor an [`Anchored`](OverlayPosition::Anchored) panel goes on.

@@ -2259,6 +2259,12 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     theme.colors.show_focus_border = state
         .appearance
         .effective_show_focus_border(&state.theme);
+    // Overlay-panel frame style (config `overlay_border_style`, theme fallback) —
+    // bracket reticle / plain edge / none for dialogs, dropdowns, context menus and
+    // the command palette. Read at paint time, so it live-reloads like the rest.
+    theme.colors.overlay_frame = state
+        .appearance
+        .effective_overlay_border_style(&state.theme);
     // Global decorative border width (config `border_width`, theme fallback) — the
     // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
     // chrome + sidebar frame width.

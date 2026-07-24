@@ -8,7 +8,7 @@
 use crate::color::Color;
 use crate::font::DEFAULT_MONO_FAMILY;
 
-pub use heca_theme::{GlowLevel, Intensity};
+pub use heca_theme::{FrameStyle, GlowLevel, Intensity};
 
 /// Palette + effect tokens for a component tree.
 ///

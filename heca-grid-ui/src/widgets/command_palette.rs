@@ -21,7 +21,7 @@ use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, Widg
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::widgets::{Glyph, Input};
+use crate::widgets::{paint_panel_chrome, Glyph, Input, PanelChrome};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 
@@ -353,17 +353,17 @@ impl Component for CommandPalette {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (background, surface, accent, glow_c, foreground, muted, ctrl_radius, radius) = {
+        // NB: the panel's own surface fill + corner radius are read by the shared
+        // `paint_panel_chrome`, so they are deliberately not pulled out here.
+        let (background, accent, glow_c, foreground, muted, ctrl_radius) = {
             let t = cx.theme();
             (
                 t.colors.background,
-                t.colors.surface,
                 t.colors.accent,
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.control_radius(),
-                t.colors.border_radius,
             )
         };
         let font = self.base.font;
@@ -382,17 +382,22 @@ impl Component for CommandPalette {
                 panel
             };
             cx.rect(scrim, background.with_alpha(cx.theme().colors.interaction.scrim), None, 0.0, None);
+            // The SHARED overlay panel chrome (drop shadow + theme surface fill +
+            // bracket reticle) so the palette reads as the same surface as every
+            // other overlay panel, plus its own accent edge and glow. The scrim
+            // above is the blocking LAYER's, not part of the panel chrome.
             let panel_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
-            cx.rect(
+            paint_panel_chrome(
+                cx,
                 panel,
-                surface,
-                panel_border,
-                radius,
-                Some(Glow {
-                    color: glow_c,
-                    radius: 12.0,
-                    intensity: 0.3,
-                }),
+                PanelChrome {
+                    border: panel_border,
+                    glow: Some(Glow {
+                        color: glow_c,
+                        radius: 12.0,
+                        intensity: 0.3,
+                    }),
+                },
             );
 
             // Query line: a real Input, positioned + focused + painted manually

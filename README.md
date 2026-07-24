@@ -597,6 +597,12 @@ sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
 glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
 intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
 
+# Overlay panels (dialogs, dropdowns, context menus, command palette)
+overlay_border_style = "bracketed"   # bracketed | bordered | none — the shared frame around an
+                                     # overlay panel. `bracketed` = accent corner reticle (default),
+                                     # `bordered` = plain edge, `none` = no frame. Each widget's own
+                                     # accent border/glow is separate and unaffected.
+
 # Keyboard focus outline
 show_focus_border = true   # draw the focus ring at all
 # focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`

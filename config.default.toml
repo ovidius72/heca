@@ -186,9 +186,15 @@ background_transparency = 0
 #                     outline on every widget; true (default via the theme) shows
 #                     it on KEYBOARD focus only (Tab/arrows) — never on a mouse
 #                     click. true|false
+# overlay_border_style : frame drawn around OVERLAY panels — dialogs, dropdowns,
+#                     context menus, the command palette. bracketed (default via
+#                     the theme) = the accent corner reticle; bordered = a plain
+#                     continuous edge; none = no shared frame (each widget's own
+#                     accent border + glow are unaffected). none|bordered|bracketed
 # glow_size = "medium"
 # intensity = "medium"
 # show_focus_border = true
+# overlay_border_style = "bracketed"
 
 # ── GLOBAL border defaults (every surface inherits these when its own field is
 #    unset; each then falls back to the theme) ──

@@ -155,6 +155,25 @@ impl Default for Shadow {
     }
 }
 
+/// Frame decoration style for a container surface. The theme-level vocabulary
+/// behind the app's `[appearance] *_border_style` settings and the grid-ui
+/// `PaneFrame`; serialised `snake_case` (`"none" | "bordered" | "bracketed"`).
+///
+/// It lives here, in the theme crate, because `heca-grid-ui` reads it at paint
+/// time (via `Theme`) and cannot depend on the app's config crate — the same path
+/// `show_focus_border` takes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameStyle {
+    /// No frame — fill (and any per-widget border/glow) only.
+    None,
+    /// A clean continuous border in the surface's border color.
+    Bordered,
+    /// The accent corner-bracket reticle (bright rounded corners + dimmed line).
+    #[default]
+    Bracketed,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Theme
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -242,6 +261,15 @@ pub struct Theme {
     pub intensity: Intensity,
     #[serde(default = "default_true")]
     pub show_focus_border: bool,
+    /// Frame decoration drawn around an **overlay panel** (dialog, dropdown,
+    /// context menu, command palette) by the shared overlay panel chrome.
+    /// Defaults to [`FrameStyle::Bracketed`] — the accent corner reticle that
+    /// matches `Pane`/`DockFrame`. Set it in a theme (`overlay_frame = "bordered"`)
+    /// or per-user via `[appearance] overlay_border_style` to get a plain edge
+    /// (`bordered`) or no frame at all (`none`). The widget's own accent border and
+    /// glow are separate — this token only governs the shared frame.
+    #[serde(default)]
+    pub overlay_frame: FrameStyle,
     /// Optional color of the keyboard **focus outline** — the thin ring drawn just *outside* a
     /// focused widget (see [`effective_focus_ring`](Self::effective_focus_ring) /
     /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html)). `None` → the accent shifted
@@ -701,10 +729,12 @@ mod tests {
 
     #[test]
     fn glow_level_strength_scales() {
-        // GlowLevel is the sole owner of glow strength; curve preserves the
-        // former Intensity::glow_scale() values exactly (none/thin/medium/large).
+        // GlowLevel is the sole owner of glow strength. The curve started as the
+        // former Intensity::glow_scale() values; `Thin` was since raised 0.5 → 0.75
+        // (T011) because at 0.5× strength on a 0.5× radius the faint rest glows read
+        // as None. `Thin` stays "thin" via its 0.5× *radius*, not a faded alpha.
         assert!((GlowLevel::None.strength_scale()).abs() < f32::EPSILON);
-        assert!((GlowLevel::Thin.strength_scale() - 0.5).abs() < f32::EPSILON);
+        assert!((GlowLevel::Thin.strength_scale() - 0.75).abs() < f32::EPSILON);
         assert!((GlowLevel::Medium.strength_scale() - 1.0).abs() < f32::EPSILON);
         assert!((GlowLevel::Large.strength_scale() - 1.6).abs() < f32::EPSILON);
     }

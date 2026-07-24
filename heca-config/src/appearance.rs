@@ -1,5 +1,5 @@
 use crate::color::Color;
-use crate::theme::{GlowLevel, Intensity, Theme};
+use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
 use serde::{Deserialize, Serialize};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -91,6 +91,20 @@ pub enum BorderStyle {
     Bordered,
     /// The accent corner-bracket reticle (bright rounded corners + a dimmed line).
     Bracketed,
+}
+
+/// The config enum is the user-facing spelling of the theme's [`FrameStyle`];
+/// they are the same three choices, so one converts into the other rather than
+/// each consumer re-matching. (The theme owns the vocabulary because
+/// `heca-grid-ui` reads it at paint time and cannot depend on this crate.)
+impl From<BorderStyle> for FrameStyle {
+    fn from(s: BorderStyle) -> Self {
+        match s {
+            BorderStyle::None => FrameStyle::None,
+            BorderStyle::Bordered => FrameStyle::Bordered,
+            BorderStyle::Bracketed => FrameStyle::Bracketed,
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -487,6 +501,13 @@ pub struct AppearanceConfig {
     /// (focus-visible semantics).
     #[serde(default)]
     pub show_focus_border: Option<bool>,
+    /// Frame style for **overlay panels** — dialogs, dropdowns, context menus,
+    /// the command palette. `None` → inherits `theme.overlay_frame` (themes
+    /// default `bracketed`, the accent corner reticle). Set `bordered` for a plain
+    /// continuous edge, or `none` for no shared frame at all (each widget's own
+    /// accent border and glow are unaffected). `none | bordered | bracketed`.
+    #[serde(default)]
+    pub overlay_border_style: Option<BorderStyle>,
 
     // ── Global border defaults (every surface inherits these when its own field
     //    is unset; each in turn falls back to the theme). ──
@@ -636,6 +657,16 @@ impl AppearanceConfig {
     /// `theme.show_focus_border`. `false` removes the focus ring everywhere.
     pub fn effective_show_focus_border(&self, theme: &Theme) -> bool {
         self.show_focus_border.unwrap_or(theme.show_focus_border)
+    }
+
+    /// Effective **overlay panel** frame style: config override →
+    /// `theme.overlay_frame` (themes default `bracketed`). Governs the shared
+    /// frame the overlay panel chrome draws around dialogs / dropdowns / context
+    /// menus / the command palette — not each widget's own accent border or glow.
+    pub fn effective_overlay_border_style(&self, theme: &Theme) -> FrameStyle {
+        self.overlay_border_style
+            .map(FrameStyle::from)
+            .unwrap_or(theme.overlay_frame)
     }
 
     // ── Pane chrome resolvers ──
@@ -816,6 +847,7 @@ impl Default for AppearanceConfig {
             glow_size: None,
             intensity: None,
             show_focus_border: None,
+            overlay_border_style: None,
             border_width: None,
             border_color: None,
             border_radius: None,
@@ -1187,6 +1219,36 @@ theme = "mocha"
         assert_eq!(
             cfg.effective_pane_floating_border_color(&mocha),
             Color::new(1, 2, 3, 255)
+        );
+    }
+
+    /// The overlay-panel frame is a config/theme decision, never hardcoded: an
+    /// `[appearance] overlay_border_style` override wins, otherwise the theme's
+    /// `overlay_frame` (themes default `bracketed`).
+    #[test]
+    fn overlay_border_style_overrides_the_theme_else_inherits_it() {
+        let mut theme = Theme::default();
+
+        let dflt = AppearanceConfig::default();
+        assert_eq!(dflt.overlay_border_style, None, "unset by default");
+        assert_eq!(
+            dflt.effective_overlay_border_style(&theme),
+            FrameStyle::Bracketed,
+            "inherits the theme (bracket reticle)"
+        );
+
+        // The theme, not the config, moves it when the user hasn't overridden.
+        theme.overlay_frame = FrameStyle::None;
+        assert_eq!(dflt.effective_overlay_border_style(&theme), FrameStyle::None);
+
+        // A config override wins over the theme, and parses snake_case.
+        let cfg: AppearanceConfig = toml::from_str("overlay_border_style = \"bordered\"")
+            .expect("overlay_border_style should parse snake_case");
+        assert_eq!(cfg.overlay_border_style, Some(BorderStyle::Bordered));
+        assert_eq!(
+            cfg.effective_overlay_border_style(&theme),
+            FrameStyle::Bordered,
+            "config override beats the theme"
         );
     }
 

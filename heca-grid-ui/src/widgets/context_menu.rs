@@ -24,7 +24,7 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
-use crate::widgets::{place_at_point, Glyph};
+use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, PanelChrome};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -352,17 +352,17 @@ impl Component for ContextMenu {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (surface, accent, glow_c, foreground, muted, danger, ctrl_radius, radius) = {
+        // NB: the panel's own surface fill + corner radius are read by the shared
+        // `paint_panel_chrome`, so they are deliberately not pulled out here.
+        let (accent, glow_c, foreground, muted, danger, ctrl_radius) = {
             let t = cx.theme();
             (
-                t.colors.surface,
                 t.colors.accent,
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.danger,
                 t.colors.control_radius(),
-                t.colors.border_radius,
             )
         };
         let font = self.base.font;
@@ -370,17 +370,20 @@ impl Component for ContextMenu {
         self.panel.set(panel);
 
         cx.with_overlay(|cx| {
-            // Panel — a glowing accent-bordered surface (no scrim: context menus
-            // dismiss on outside-click rather than darkening the whole view).
+            // Panel — the SHARED overlay panel chrome (drop shadow + theme surface
+            // fill + bracket reticle), so a menu reads as the same surface as every
+            // other overlay panel. On top of it the menu keeps its own identity: an
+            // accent edge and the glow it shares with the CommandPalette (the glow
+            // radius still scales with the theme `glow_size`). No scrim — context
+            // menus dismiss on outside-click rather than darkening the whole view.
             let panel_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
-            cx.rect(
+            paint_panel_chrome(
+                cx,
                 panel,
-                surface,
-                panel_border,
-                radius,
-                // Match the CommandPalette panel glow so the two overlays read as
-                // one family (radius still scales with the theme `glow_size`).
-                Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                PanelChrome {
+                    border: panel_border,
+                    glow: Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                },
             );
 
             for (i, e) in self.entries.iter().enumerate() {
