@@ -463,16 +463,50 @@ lists widget-specific methods; layout/style builders come from the traits above.
 
 ### Flex / Container
 
-Layout-only flexible box. **`Container`** and `container()` are aliases.
+Layout-only flexible box — the workhorse for arranging children. **`Container`** and `container()`
+are aliases. It's the tool for grouping: nest a `Flex` inside a `Flex` to build any arrangement,
+including form fields (see below), so most layouts need no dedicated widget.
 
 - **Construct**: `Flex::row()`, `Flex::column()`, `container()`.
-- **Traits**: `LayoutExt`, `Parent`. (No `StyleExt` — it's purely arrangement.)
+- **Direction / distribution**: `.direction(Direction)`; `.justify(Justify)` (main-axis:
+  `Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`/`SpaceEvenly`); `.align(Align)` (cross-axis:
+  `Start`/`Center`/`End`/`Stretch` — the default `Stretch` makes an `Auto`-sized child fill the
+  cross axis; `.align_self(Align)` overrides it for one child).
+- **Gap between children**: `.gap(px)` for a raw value, or **`.gap_spacing(Spacing)`** for a
+  **font-relative theme token** (`None`/`Xs`/`Sm`/`Md`/`Lg`) — resolved from the inherited font at
+  layout, so it scales with the font, size variant, and UI zoom. **Prefer the token**; a raw px gap
+  is tuned for one font size and wrong at every other.
+- **Padding**: `.padding(px)` / `.padding_xy(x, y)` for raw px, or the tokens `.pad_all(Spacing)` /
+  `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
+- **Sizing** (from `LayoutExt`, shared by every widget): `.width(Length)` / `.height(Length)`
+  (`Auto` / `Px` / `Pct`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
+- **Traits**: `LayoutExt`, `Parent`. (No `StyleExt` — it's purely arrangement; use
+  [`Surface`](#surface) when you need a background/border/glow.)
 
 ```rust
 Flex::row().gap(12.0).align(Align::Center)
     .child(StatusDot::online())
     .child(Label::new("GRID LINK"));
 ```
+
+**Form fields — grouping with two gap scales (no `Field` widget needed).** A label and its control
+are one *couple* (tight); couples are separated by a larger gap. Express it with two nested `Flex`
+columns at different `gap_spacing` — the inner tight gap couples label↔control, the outer roomier gap
+falls *between* fields:
+
+```rust
+let field = |label, control| Flex::column().gap_spacing(Spacing::Xs)   // tight: label ↔ its control
+    .child(Label::new(label).color(theme.muted))
+    .child(control);
+
+Flex::column().gap_spacing(Spacing::Md)                                 // roomy: between fields
+    .child(field("Confirm name", Input::new().value("pane-1")))
+    .child(field("Archive target", Select::new(["SCRATCHPAD", "TRASH"])))
+    .child(Checkbox::new().label("Also close its column"));
+```
+
+A [`Dialog`](#dialog) body already defaults its own children to `gap_spacing(Md)`, so dropping the
+`field(...)` groups straight into `.body(...)` gives correct form spacing with no per-modal setup.
 
 ### Surface
 
