@@ -36,7 +36,8 @@
     "d5962a9a-2776-4bd9-a629-5d44f1e33a81",
     "b413c466-8239-4787-94f3-b1623d041aad",
     "bb22b786-77f8-4e23-ae65-f11c5c0a6c58",
-    "33f9e6f5-3f69-4849-8bc0-e4cccb111877"
+    "33f9e6f5-3f69-4849-8bc0-e4cccb111877",
+    "9af494a0-c1ff-43d5-8e65-cdd0ed813634"
   ],
   "tasks": [
     {
@@ -563,8 +564,37 @@
       "completedAt": "",
       "createdAt": "2026-07-24T17:25:55.451Z",
       "updatedAt": "2026-07-24T17:25:55.451Z"
+    },
+    {
+      "id": "9af494a0-c1ff-43d5-8e65-cdd0ed813634",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 17,
+      "shortName": "field-widget-label-control-gro",
+      "title": "Field widget — label + control grouping (form spacing)",
+      "status": "deferred",
+      "description": "USER-RAISED 2026-07-24: form fields need label+control TIGHT and larger space BETWEEN field groups — a grouping problem a uniform container gap can't solve.\n\n⚠️ REFRAMED 2026-07-24 → OPTIONAL, DEFERRED. The user then asked whether Flex could be the container instead of a new widget. Verified: YES — Flex has everything to lay this out. So a Field widget is NOT required for correct alignment; it is only ergonomics/semantics. Deferred until it earns its place.\n\nWHAT NOW WORKS WITHOUT A NEW WIDGET:\n- `Flex::column().gap_spacing(Spacing::Xs).child(Label).child(control)` = a tight label+control \"field\".\n- Put those in the Dialog body (or any column) which defaults to `gap_spacing = Md` (dialog.rs fit_body, commit ce3a0f2) → the Md gap falls BETWEEN fields, the Xs gap couples each label to its control. The two spacings compose; neither container knows about the other.\n- Enablers landed this session: `Style::gap_spacing: Option<Spacing>` + layout resolution (c89605d) and `LayoutExt::gap_spacing(Spacing)` builder (3f9cae6), so the tight gap is a font-relative TOKEN, not a hardcoded px.\n\nBUILD A `Field` WIDGET ONLY IF it earns its keep beyond what Flex already does:\n1. Less boilerplate / a named semantic unit (Field::new(label).child(control)) reused across forms.\n2. A declarative `WidgetKind::Field` so plugins/RPC author forms via ViewNode (realize arm + every-kind-realizes test) — this is the strongest reason, since a plain Flex grouping is not a distinct kind.\n3. Consistent default field spacing + a helper-text / error slot in ONE place.\nIf those aren't needed, the Flex recipe is the answer and this task stays closed.\n\nIf built (heca-grid-ui/src/widgets/field.rs): compose Label (caption) + single control slot (`impl Component`, never a closed enum — THE WIDGET ARCHITECTURE), tight internal gap (Spacing::Xs), embed Base + impl Component + builder traits; ViewNode kind + realize arm; docs BOTH audiences + showcase demo (convert the Delete-pane dialog's caption+Input/Select pairs). Edge cases: caption-less field (control only); tall control (caption pinned above); muted caption content color.\nVERIFICATION: visual (showcase) + structural unit test.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "9af494a0-c1ff-43d5-8e65-cdd0ed813634-check-001-planned-deferred",
+          "date": "2026-07-24T19:51:41.158Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Reframing after establishing (2026-07-24) that Flex already lays this out; a Field widget is now optional ergonomics, not required for alignment.",
+          "description": "Reframing after establishing (2026-07-24) that Flex already lays this out; a Field widget is now optional ergonomics, not required for alignment."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-24T19:46:47.138Z",
+      "updatedAt": "2026-07-24T19:51:41.158Z"
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-24T19:21:09.528Z"
+  "updatedAt": "2026-07-24T19:51:41.158Z"
 }
