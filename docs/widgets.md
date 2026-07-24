@@ -2305,10 +2305,14 @@ child. [`Select`](#select) is the case: its option rows are **placed children of
 they cannot be handed to an `Overlay` without breaking the `bounds === drawn === clickable`
 invariant. Such a widget still must not hand-roll placement or chrome:
 
+> `MySelect` below is a **cut-down sketch of the real [`Select`](#select)** — a trigger with a
+> dropdown of rows — reduced to the parts that matter here. The shipped version is
+> `heca-grid-ui/src/widgets/select.rs`; read it alongside this.
+
 ```rust
 use heca_grid_ui::widgets::{paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome};
 
-impl MyPopoverWidget {
+impl MySelect {
     /// The panel rect. MUST be a pure function of bounds + side + content size —
     /// see the invariant below.
     fn panel_rect(&self) -> Rectangle {
@@ -2324,7 +2328,7 @@ impl MyPopoverWidget {
     }
 }
 
-impl Component for MyPopoverWidget {
+impl Component for MySelect {
     fn paint(&self, cx: &mut PaintCx) {
         // …trigger chrome here…
         if self.open {
