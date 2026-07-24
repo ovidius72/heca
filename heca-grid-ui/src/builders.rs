@@ -41,6 +41,15 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.gap = v;
         self
     }
+    /// Gap between children from a theme [`Spacing`](crate::style::Spacing) token —
+    /// resolved to px from the inherited font at layout, so it scales with the
+    /// font, size variant and UI zoom (unlike a raw [`gap`](LayoutExt::gap) px).
+    /// Use it to group form fields: a tight `Spacing::Xs` inside a label+control
+    /// couple, a roomier `Spacing::Md` between couples — no new widget needed.
+    fn gap_spacing(mut self, s: crate::style::Spacing) -> Self {
+        self.base_mut().style.gap_spacing = Some(s);
+        self
+    }
     /// Outer margin on all sides.
     fn margin(mut self, m: f32) -> Self {
         self.base_mut().style.margin = m;
