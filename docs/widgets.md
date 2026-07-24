@@ -2183,10 +2183,13 @@ viewport-filling, centering layer that decorates its single **panel** child with
 overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and the bracket
 reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
 *blocking* overlay (default) paints the scrim and swallows outside input (modal); a
-non-blocking one lets outside input fall through (light-dismiss). Positioning lives here once —
-the panel taffy-centers on the viewport, so every descendant gets true bounds (anchor-to-rect
-positioning for dropdown/popover/tooltip specializations is the planned extension; those still
-own their placement today).
+non-blocking one lets outside input fall through (light-dismiss). **Positioning lives here once**:
+`Center` taffy-centers the panel on the viewport (so every descendant gets true bounds), and
+`Anchored` hangs it off a trigger rect for dropdowns/popovers. The placement math and the panel
+chrome are also exposed as **free functions** ([`place_anchored_on`](#overlay),
+[`place_at_point`](#overlay), [`paint_panel_chrome`](#overlay)) so a widget that cannot hand its
+content to an `Overlay` — like [`Select`](#select), whose option rows are *placed children* — still
+shares the one implementation instead of hand-rolling a second one.
 
 **Composition, not inheritance.** [`Dialog`](#dialog) *composes* an `Overlay` as its subtree:
 the `Overlay` owns presentation + geometry ([`overlay_occludes`](#component-trait)); the
@@ -2254,6 +2257,104 @@ let visible = overlay.open_signal();
 mounts a layer itself; it submits a spec (e.g. `ModalSpec` with a `ViewNode` body) and the
 **host** builds the layer (`Dialog`/`Overlay`) around the realized content — overlay hosting,
 z-order, and blocking policy stay host-owned (§2.7 of the plugin plan).
+
+#### Implementing an overlay-panel widget
+
+There are **two ways** to give a widget an overlay panel. Pick by one question: *can the panel's
+content be a single child component?*
+
+**A. Compose an `Overlay`** — the default. Your content is one subtree, so hand it over and let the
+layer own placement, chrome, scrim, and dismissal. This is what [`Dialog`](#dialog) does.
+
+```rust
+use heca_grid_ui::prelude::*;
+use heca_grid_ui::widgets::{Overlay, OverlayPosition, DEFAULT_ANCHOR_GAP};
+
+// A light-dismiss popover anchored under its trigger.
+let popover = Overlay::new()
+    .blocking(false)                       // no scrim; outside input falls through
+    .anchored(trigger.base().bounds)       // below the trigger, flip above, clamp on-screen
+    .panel(Card::new().padding(10.0).child(Label::new("Popover body")))
+    .on_outside_click(move || close())     // light-dismiss
+    .open(true);
+
+// Re-anchor in place when the trigger moves (scroll, resize) — no rebuild:
+// popover.set_anchor(trigger.base().bounds);
+```
+
+**B. Paint the panel yourself, but reuse the authorities** — when the content *cannot* be one
+child. [`Select`](#select) is the case: its option rows are **placed children of the `Select`**
+(laid out in the trigger's flow, then moved into the panel by baking offsets into their bounds), so
+they cannot be handed to an `Overlay` without breaking the `bounds === drawn === clickable`
+invariant. Such a widget still must not hand-roll placement or chrome:
+
+```rust
+use heca_grid_ui::widgets::{paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome};
+
+impl MyPopoverWidget {
+    /// The panel rect. MUST be a pure function of bounds + side + content size —
+    /// see the invariant below.
+    fn panel_rect(&self) -> Rectangle {
+        let b = self.base.bounds;
+        let side = if self.open_up { AnchorSide::Above } else { AnchorSide::Below };
+        place_anchored_on(
+            b,                                            // anchor = the trigger rect
+            Size::new(b.size.w, self.panel_h()),          // panel size you computed
+            Size::new(f64::INFINITY, f64::INFINITY),      // see the invariant below
+            DEFAULT_ANCHOR_GAP,
+            side,
+        )
+    }
+}
+
+impl Component for MyPopoverWidget {
+    fn paint(&self, cx: &mut PaintCx) {
+        // …trigger chrome here…
+        if self.open {
+            cx.with_overlay(|cx| {                        // the overlay LAYER is yours to open
+                let panel = self.panel_rect();
+                paint_panel_chrome(cx, panel, PanelChrome {
+                    border: Some(cx.theme().colors.accent.into()), // your identity, optional
+                    glow: None,
+                });
+                for child in self.visible_rows() { child.paint(cx); }
+            });
+        }
+    }
+}
+```
+
+> ##### ⚠️ The invariant: a rect used to *place* children must be **pure**
+>
+> If the same rect both positions child components (during layout / an `on_layout` placement
+> pass) **and** is drawn during paint, it must be a pure function of already-settled inputs —
+> bounds, a decided side, measured child sizes. Layout and paint run at **different moments**, so
+> anything time-varying (most temptingly: clamping against a viewport that `paint` caches) makes
+> the two calls disagree, and the rows visibly **detach from their panel**.
+>
+> This is a real regression that shipped and was reverted: clamping `Select`'s panel to the
+> viewport put the rows outside the panel when the list flipped above (a negative `y` snapped to
+> `0`), and pushed row content onto the border for a trigger near the right edge. Keep such a
+> panel on-screen by **capping how much content you show** (`Select` caps the visible row count
+> when it opens), not by moving the panel after the fact. Pass an infinite viewport to
+> `place_anchored_on` to opt out of clamping, and add a test that mutates the cached viewport and
+> asserts the rect does not move (`open_panel_rect_is_independent_of_the_cached_viewport`).
+>
+> An `Overlay` you *compose* (path A) is not exposed to this: it places its panel child in
+> `on_layout` and paints from the child's real bounds, so there is only one source of truth.
+
+**Which authority to call**
+
+| You have | Call | Used by |
+|---|---|---|
+| A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
+| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#contextmenu) |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select) |
+
+Use `AnchorSide::Auto` unless you already decided the side. Force `Below`/`Above` when the
+decision and the panel's **size** are computed together (`Select` picks the side and its visible
+row count in one pass, because the height depends on the side) — otherwise the placement could
+flip to a side the size was not computed for.
 
 ### Dialog
 
