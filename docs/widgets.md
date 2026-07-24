@@ -2224,6 +2224,14 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   chose (still clamped into the viewport, never flipped away). Both
   [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#contextmenu)
   (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
+- **Sizing**: `.panel_size(width: Length, height: Length)` gives the panel an explicit size instead
+  of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
+  behaviour there; a `Length::Pct` resolves against the **viewport**, since the `Overlay` fills it
+  (`Pct(0.6)` = 60% of the viewport). Call order does not matter — the size is stored and re-applied
+  whenever `.panel()`/`.panel_boxed()` replaces the child.
+  **Why it matters:** a [`ScrollRegion`](#scrollregion) only scrolls when its parent *bounds* it. An
+  unsized panel grows with its content, so a long body never overflows and no scrollbar appears.
+  Size the panel and the body can scroll inside it.
 - **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
   layout).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
@@ -2446,6 +2454,20 @@ the dialog) and `Activate` commits its row.
   (focuses the first focusable — a text field body if present, so the user types immediately;
   otherwise the first button as a safe default), plus `.body_boxed(Box<dyn Component>)` for a body
   from a mapper (e.g. `realize`).
+- **Sizing + a scrollable body**: `.panel_size(width: Length, height: Length)` bounds the panel
+  instead of letting it hug its content (default = hug; `Length::Auto` keeps hugging on that axis;
+  `Length::Pct` resolves against the **viewport**). This is what makes a long body scrollable: a
+  [`ScrollRegion`](#scrollregion) only scrolls when its parent bounds it, so wrap the body in one and
+  size the panel. Put **only the body** in the region — the title and the action row stay fixed:
+
+  ```rust
+  Dialog::new("Pick a container")
+      .panel_size(Length::Pct(0.5), Length::Pct(0.6))   // 50% × 60% of the viewport
+      .body(ScrollRegion::new().child(long_list))       // only this scrolls
+      .action(Button::secondary("Cancel"))
+  ```
+  A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the
+  nested-overlay routing from the T009 rework), so overlay-in-scrolled-overlay is supported.
 - **Accessor**: `.open_signal() -> Signal<bool>`.
 
 ```rust

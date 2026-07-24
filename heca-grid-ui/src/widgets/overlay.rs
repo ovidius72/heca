@@ -40,6 +40,9 @@ use crate::style::{Align, Justify, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
+/// Gap kept between an overlay panel and the window edge, so a maxed-out panel's
+/// border (and its glow) is never shaved off by the viewport boundary.
+const VIEWPORT_MARGIN: f32 = 24.0;
 /// Multiplier on the theme `shadow.blur` token — an overlay panel is large and
 /// wants a wider, softer halo than the small-surface base token. Raised from 4.0
 /// (2026-07-24): the panel read as barely lifted off the page.
@@ -333,6 +336,9 @@ pub struct Overlay {
     on_outside_click: Option<Box<dyn Fn()>>,
     /// How the panel is placed: centered (default) or anchored to a trigger rect.
     position: OverlayPosition,
+    /// Explicit panel size, applied to the panel child's style. `None` (default)
+    /// leaves the panel to size itself from its content.
+    panel_size: Option<(Length, Length)>,
     /// Last-seen viewport, cached during paint (scrim rect + anchored placement).
     viewport: Cell<Size>,
 }
@@ -347,12 +353,18 @@ impl Overlay {
         base.style.height = Length::Pct(1.0);
         base.style.justify = Justify::Center;
         base.style.align = Align::Center;
+        // Breathing room between the panel and the window edge. It doubles as the
+        // inset for the viewport cap in `apply_panel_size`: the panel's `Pct(1.0)`
+        // max resolves against this padded content box, so even a huge panel keeps
+        // this margin and its border/glow is never shaved by the window edge.
+        base.style.padding = VIEWPORT_MARGIN;
         Self {
             base,
             open: signal(false),
             blocking: true,
             on_outside_click: None,
             position: OverlayPosition::Center,
+            panel_size: None,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
         }
     }
@@ -363,6 +375,7 @@ impl Overlay {
     pub fn panel(mut self, panel: impl Component + 'static) -> Self {
         self.base.children.clear();
         self.base.children.push(Box::new(panel));
+        self.apply_panel_size();
         self
     }
 
@@ -372,7 +385,57 @@ impl Overlay {
     pub fn panel_boxed(mut self, panel: Box<dyn Component>) -> Self {
         self.base.children.clear();
         self.base.children.push(panel);
+        self.apply_panel_size();
         self
+    }
+
+    /// Give the panel an explicit size instead of letting it hug its content.
+    ///
+    /// The main reason to want this: **a [`ScrollRegion`](super::ScrollRegion)
+    /// only scrolls when its parent bounds it.** A panel that sizes to its content
+    /// simply grows with a long body, so nothing ever overflows and no scrollbar
+    /// appears. Give the panel a height and the body can scroll inside it.
+    ///
+    /// `Length::Auto` on an axis means "as before" (hug the content). A
+    /// [`Pct`](Length::Pct) resolves against the **viewport**, because the
+    /// `Overlay` itself fills it — so `Pct(0.8)` is 80% of the viewport, not 80%
+    /// of anything the caller laid out.
+    ///
+    /// Call order does not matter: this is stored on the overlay and re-applied
+    /// whenever the panel is (re)set by [`panel`](Overlay::panel) /
+    /// [`panel_boxed`](Overlay::panel_boxed).
+    ///
+    /// ```ignore
+    /// // A modal that is 60% of the viewport wide and 70% tall, whose body scrolls.
+    /// Overlay::new()
+    ///     .panel_size(Length::Pct(0.6), Length::Pct(0.7))
+    ///     .panel(Flex::column().child(ScrollRegion::new().child(long_content)))
+    /// ```
+    pub fn panel_size(mut self, width: Length, height: Length) -> Self {
+        self.panel_size = Some((width, height));
+        self.apply_panel_size();
+        self
+    }
+
+    /// Push the configured panel size onto the panel child's style, and **always**
+    /// cap the panel at the viewport.
+    ///
+    /// The cap is unconditional, not part of `panel_size`: the `Overlay` fills the
+    /// viewport, so `Pct(1.0)` here *is* the window. Without it a fixed `Px` panel
+    /// (or a big content-sized one) draws larger than the window and gets cut off
+    /// by the screen edge on both sides — a dialog must never be bigger than the
+    /// thing it is centered in.
+    fn apply_panel_size(&mut self) {
+        let Some(panel) = self.base.children.first_mut() else {
+            return;
+        };
+        let style = &mut panel.base_mut().style;
+        style.max_width = Some(Length::Pct(1.0));
+        style.max_height = Some(Length::Pct(1.0));
+        if let Some((w, h)) = self.panel_size {
+            style.width = w;
+            style.height = h;
+        }
     }
 
     /// Layer policy: `true` (default) = modal — dimming scrim + outside input
@@ -581,10 +644,26 @@ impl Component for Overlay {
                 let _ = panel_root.event(ev);
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
-            // A blocking layer owns the wheel too (the page behind must not
-            // scroll); a nested scrollable inside the panel already had first
-            // dibs via the overlay scan above.
+            // A press has to be matched by its RELEASE inside the panel, or a
+            // widget that grabbed the pointer never lets go — a `ScrollRegion`
+            // thumb drag stayed stuck to the cursor because the release never
+            // reached it (the overlay swallowed it as an unhandled event).
+            Event::PointerReleased { .. } => {
+                let panel_root = self.base.children[0].as_mut();
+                let _ = panel_root.event(ev);
+                if self.blocking { Handled::Yes } else { Handled::No }
+            }
+            // The panel gets the wheel FIRST — a scrollable inside a modal (a long
+            // dialog body) must scroll. The overlay scan above only offers to an
+            // `overlay_active` descendant (a nested dropdown), and a `ScrollRegion`
+            // is not one, so without this it never saw the wheel at all. Only if
+            // the panel doesn't take it does the blocking layer swallow it, which
+            // is what keeps the page behind a modal from scrolling.
             Event::Scroll { .. } => {
+                let panel_root = self.base.children[0].as_mut();
+                if panel_root.event(ev) == Handled::Yes {
+                    return Handled::Yes;
+                }
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
             _ => Handled::No,
@@ -652,6 +731,62 @@ mod tests {
             "light layer lets the outside press fall through"
         );
         assert!(dismissed.get(), "outside press fired the dismissal hook");
+    }
+
+    // ── Panel sizing (.panel_size) ──
+
+    /// The size lands on the panel child whichever order the builders are called
+    /// in — `panel()` clears and re-pushes the child, so the overlay has to keep
+    /// the size and re-apply it.
+    #[test]
+    fn panel_size_applies_regardless_of_builder_order() {
+        let want_w = Length::Pct(0.6);
+        let want_h = Length::Px(420.0);
+
+        // size first, then panel
+        let a = Overlay::new()
+            .panel_size(want_w, want_h)
+            .panel(Flex::column().child(Label::new("body")));
+        let style = &a.base.children[0].base().style;
+        assert_eq!(style.width, want_w);
+        assert_eq!(style.height, want_h);
+
+        // panel first, then size
+        let b = Overlay::new()
+            .panel(Flex::column().child(Label::new("body")))
+            .panel_size(want_w, want_h);
+        let style = &b.base.children[0].base().style;
+        assert_eq!(style.width, want_w);
+        assert_eq!(style.height, want_h);
+    }
+
+    /// **Regression guard.** A panel must never be larger than the viewport it is
+    /// centered in: an oversized one gets cut off by the window edge on *both*
+    /// sides (a dialog bigger than the window — user-reported). The cap is
+    /// unconditional, so it also protects a content-sized panel, not just a
+    /// `panel_size`d one.
+    #[test]
+    fn panel_never_exceeds_the_viewport() {
+        use crate::widgets::ScrollRegion;
+        // Ask for a panel far bigger than the viewport we lay out in.
+        let mut o = Overlay::new()
+            .panel_size(Length::Px(4000.0), Length::Px(3000.0))
+            .panel(ScrollRegion::new().child(Label::new("tall")))
+            .open(true);
+        crate::LayoutEngine::new().compute(&mut o, Size::new(800.0, 600.0));
+        let panel = o.panel_bounds();
+        assert!(panel.size.w <= 800.0, "panel width capped, got {}", panel.size.w);
+        assert!(panel.size.h <= 600.0, "panel height capped, got {}", panel.size.h);
+    }
+
+    /// Unset (the default) leaves the panel hugging its own content — the sizing
+    /// API must not silently impose a size on every existing overlay.
+    #[test]
+    fn panel_size_is_opt_in() {
+        let o = Overlay::new().panel(Flex::column().child(Label::new("body")));
+        let style = &o.base.children[0].base().style;
+        assert_eq!(style.width, Length::Auto, "untouched by default");
+        assert_eq!(style.height, Length::Auto);
     }
 
     // ── Shared panel chrome + the `overlay_frame` edge policy ──

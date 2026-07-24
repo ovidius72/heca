@@ -43,7 +43,7 @@ use crate::component::{
     paint_child, route_event, shift_subtree, Base, Component, Event, Handled, PaintCx,
 };
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::style::Direction;
+use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Visible scrollbar thumb width (logical px).
@@ -72,6 +72,16 @@ const WHEEL_STEP_FRAC: f64 = 0.1;
 /// Rest-glow spread radius (px) for a STYLED region (a scrollable panel) — its
 /// share of the theme rest halo; a frameless region has no surface and no glow.
 const SURFACE_GLOW_RADIUS: f32 = 12.0;
+/// How far the content clip is widened on an axis this region does **not** scroll,
+/// so a child's rest-glow halo (drawn outside the child's own bounds) isn't
+/// scissored flat against the edge and read as a cut-off row. Sized to the surface
+/// glow spread above.
+const GLOW_BLEED: f64 = SURFACE_GLOW_RADIUS as f64;
+/// Default vertical padding inside the viewport, so the first/last rows aren't
+/// flush against the clip edge.
+const CONTENT_PAD_Y: f32 = 6.0;
+/// Default gap between rows — a scrolled list is easier to scan with a little air.
+const ROW_GAP: f32 = 4.0;
 /// Delay (seconds) before a held track-press starts repeating its paging.
 const TRACK_REPEAT_DELAY: f32 = 0.35;
 /// Interval (seconds) between repeated pages while the track press stays held.
@@ -188,6 +198,23 @@ impl ScrollRegion {
         // scroll actions that call `scroll_to`/`scroll_by`/`ensure_visible` — never by
         // the widget swallowing raw keys. See docs/overlay-design.md (scroll actions).
         base.style.direction = Direction::Column;
+        // A scroll viewport must be allowed to be SMALLER than its content — that
+        // is the whole point of it. Flexbox defaults fight this twice: a flex item's
+        // `min-height` is `auto` (= its content size) and this crate sets
+        // `flex_shrink: 0` so explicit widget sizes are never squished. Left at the
+        // defaults, a region inside a bounded parent (a sized `Dialog` panel) grows
+        // to its content and **overflows the panel instead of scrolling** — no
+        // overflow, so no scrollbar. Opting out of both here means a region scrolls
+        // wherever it is put, without every caller having to know this.
+        base.style.min_width = Some(Length::Px(0.0));
+        base.style.min_height = Some(Length::Px(0.0));
+        base.style.flex_shrink = Some(1.0);
+        // Breathing room so the first and last rows don't sit flush against the
+        // clip edge (which reads as content jammed into the frame), and a small
+        // default gap between rows — a scrolled list is a list, and rows that touch
+        // are hard to scan. Both are plain style, so a caller can still override.
+        base.style.padding_y = Some(CONTENT_PAD_Y);
+        base.style.gap = ROW_GAP;
         Self {
             base,
             axes: ScrollAxes::default(),
@@ -575,6 +602,21 @@ impl Component for ScrollRegion {
         }
         if self.h_overflow() {
             content_clip.size.h = (content_clip.size.h - SCROLLBAR_GUTTER).max(0.0);
+        }
+        // Widen the clip on an axis the region does NOT scroll, so a child's GLOW
+        // (which paints outside its own bounds — every bordered surface carries a
+        // rest halo) isn't scissored flat against the edge, which reads as the row
+        // being "cut off". Only the scrolling axis needs a tight clip — that is the
+        // one where content genuinely moves through the viewport and must be cut at
+        // the boundary. A non-scrolling axis has nothing to hide, so the few px of
+        // bleed is free.
+        if !self.axes.is_horizontal() {
+            content_clip.loc.x -= GLOW_BLEED;
+            content_clip.size.w += 2.0 * GLOW_BLEED;
+        }
+        if !self.axes.is_vertical() {
+            content_clip.loc.y -= GLOW_BLEED;
+            content_clip.size.h += 2.0 * GLOW_BLEED;
         }
         // Keep the baked shift current (paint takes `&self`, so sync via the
         // signal value; the shift was already applied by the last `event`/layout

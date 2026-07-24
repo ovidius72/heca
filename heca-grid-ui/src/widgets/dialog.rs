@@ -112,10 +112,35 @@ impl Dialog {
         }
     }
 
+    /// Give the dialog panel an explicit size instead of letting it hug its content.
+    ///
+    /// The reason you usually want it: **a [`ScrollRegion`](super::ScrollRegion) only
+    /// scrolls when its parent bounds it.** A panel that sizes to its content just grows
+    /// with a long [`body`](Dialog::body), so nothing overflows and no scrollbar appears.
+    /// Give the panel a height and the body scrolls inside it — while the title and the
+    /// action row stay put, because only the body is inside the region:
+    ///
+    /// ```ignore
+    /// Dialog::new("Pick a container")
+    ///     .panel_size(Length::Pct(0.5), Length::Pct(0.6))   // 50% × 60% of the VIEWPORT
+    ///     .body(ScrollRegion::new().child(long_list))       // only the body scrolls
+    ///     .action(Button::new("Cancel"))
+    /// ```
+    ///
+    /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
+    /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
+    pub fn panel_size(mut self, width: Length, height: Length) -> Self {
+        let style = &mut self.panel_mut().style;
+        style.width = width;
+        style.height = height;
+        self
+    }
+
     /// Set the dialog **body** — an arbitrary component (a message label, a form, a table…),
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
     pub fn body(mut self, body: impl Component + 'static) -> Self {
         self.panel_mut().children.push(Box::new(body));
+        self.fit_body();
         self
     }
 
@@ -124,7 +149,31 @@ impl Dialog {
     /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
     pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
         self.panel_mut().children.push(body);
+        self.fit_body();
         self
+    }
+
+    /// Make the body behave the way a dialog body always should, so no caller has
+    /// to remember it: **fill the panel's width** (instead of hugging its content
+    /// and sitting to the left) and **take the space left between the title and the
+    /// action row** (instead of the row floating up under a short body).
+    ///
+    /// The second part is what makes a scrollable body work: with a bounded panel
+    /// ([`panel_size`](Dialog::panel_size)) the body gets the leftover height, so a
+    /// [`ScrollRegion`](super::ScrollRegion) inside it has a real viewport to
+    /// overflow — and the title and buttons stay put because only the body flexes.
+    /// With an unsized panel there is no leftover space, so this changes nothing.
+    ///
+    /// Only defaults are filled in: an explicit width the caller set is respected.
+    fn fit_body(&mut self) {
+        let idx = self.panel_mut().children.len() - 1;
+        let style = &mut self.panel_mut().children[idx].base_mut().style;
+        if style.width == Length::Auto {
+            style.width = Length::Pct(1.0);
+        }
+        if style.flex_grow == 0.0 {
+            style.flex_grow = 1.0;
+        }
     }
 
     /// Append an action **button** (a real [`Button`](super::Button) the caller has already
@@ -385,11 +434,25 @@ impl Component for Dialog {
                 // the configurable `[keys.widgets]` bindings (→ `WidgetIntent`).
                 Handled::No
             }
-            // Scroll: a nested open overlay (a Select's list) scrolls first; otherwise the
-            // modal swallows the wheel — the page behind must not scroll.
+            // A press inside the panel must be matched by its RELEASE, or a widget
+            // that grabbed the pointer never lets go: a `ScrollRegion` thumb drag
+            // stayed stuck to the cursor because the release fell through to the
+            // catch-all below and never reached the region.
+            Event::PointerReleased { .. } => {
+                let panel = self.base.children[0].base_mut().children[0].as_mut();
+                let _ = panel.event(ev);
+                Handled::Yes
+            }
+            // Scroll: a nested open overlay (a Select's list) scrolls first; then the
+            // panel itself, so a scrollable BODY works inside a modal — the overlay
+            // scan only reaches `overlay_active` descendants and a `ScrollRegion` is
+            // not one, so without this the wheel never got to it. Only if nothing
+            // took it does the modal swallow it, keeping the page behind still.
             Event::Scroll { .. } => {
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
-                let _ = self.focus.offer_to_overlay(panel, ev);
+                if self.focus.offer_to_overlay(panel, ev) == Handled::No {
+                    let _ = panel.event(ev);
+                }
                 Handled::Yes
             }
             _ => Handled::No,
@@ -474,6 +537,51 @@ mod tests {
             .map(|(i, _)| i)
             .collect()
     }
+
+    /// The whole point of `panel_size`: a sized panel **bounds** its body, so a
+    /// `ScrollRegion` inside it actually overflows and scrolls. Unsized, the panel
+    /// grows to fit the content and the region never has anything to scroll.
+    #[test]
+    fn a_sized_panel_bounds_a_scrollable_body() {
+        use crate::widgets::ScrollRegion;
+        use crate::Length;
+
+        // 12 rows, far taller than the 200px panel we ask for.
+        let long_body = || {
+            let mut region = ScrollRegion::new();
+            for i in 0..12 {
+                region = region.child(Label::new(format!("row {i}")));
+            }
+            region
+        };
+
+        let viewport = Size::new(600.0, 400.0);
+
+        let mut sized = Dialog::new("Long list")
+            .panel_size(Length::Px(300.0), Length::Px(200.0))
+            .body(long_body())
+            .open(true);
+        crate::LayoutEngine::new().compute(&mut sized, viewport);
+        let panel = sized.panel_bounds();
+        assert!(
+            (panel.size.h - 200.0).abs() < 1.0,
+            "panel honours the requested height, got {}",
+            panel.size.h
+        );
+        assert!(
+            panel.size.h < viewport.h,
+            "a bounded panel is smaller than the viewport, so the body can overflow"
+        );
+
+        // Unsized, the same body makes the panel grow instead (nothing to scroll).
+        let mut unsized_dialog = Dialog::new("Long list").body(long_body()).open(true);
+        crate::LayoutEngine::new().compute(&mut unsized_dialog, viewport);
+        assert!(
+            unsized_dialog.panel_bounds().size.h > panel.size.h,
+            "without panel_size the panel hugs the tall content"
+        );
+    }
+
 
     #[test]
     fn clicking_panel_body_keeps_button_focus() {

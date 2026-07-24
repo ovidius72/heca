@@ -433,9 +433,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // (see docs/widgets.md §Dialog). The Select is an OVERLAY-IN-OVERLAY (T009 step 4):
         // its open list must composite ABOVE the dialog's action buttons (a deeper scene
         // segment) and capture hover/wheel/keys over them — not show through or fall through.
+        // SIZED panel + SCROLLABLE body: `panel_size` bounds the panel, which is what
+        // lets the `ScrollRegion` around the body actually overflow and scroll. The
+        // title and the action row stay put — only the body scrolls, because only the
+        // body is inside the region. The nested Select above still has to composite
+        // ABOVE the buttons even while the body is scrolled.
+        // SIZED panel: `panel_size` bounds the panel so the scrollable list below has
+        // something to overflow. A `Pct` tracks the window; `Px` would pin it.
+        // A bounded panel (fixed px — a dialog is not viewport-proportional) so the
+        // scrollable body has something to overflow. Note what the caller does NOT
+        // have to say: the body fills the panel width and takes the leftover height
+        // on its own, so the title and the action row stay put while it scrolls.
+        .panel_size(Length::Px(560.0), Length::Px(420.0))
         .body(
-            Flex::column()
-                .gap(8.0)
+            ScrollRegion::new()
                 .child(Label::new("This action cannot be undone."))
                 .child(caption("Confirm name"))
                 .child(Input::new().value("pane-1").on_change(report))
@@ -445,7 +456,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .selected(2)
                         .on_change(report),
                 )
-                .child(Checkbox::new().label("Also close its column").on_change(report)),
+                .child(Checkbox::new().label("Also close its column").on_change(report))
+                .child(caption("Affected panes"))
+                .child(Label::new("· pane-1  (zsh)"))
+                .child(Label::new("· pane-2  (nvim)"))
+                .child(Label::new("· pane-3  (cargo watch)"))
+                .child(Label::new("· pane-4  (lazygit)"))
+                .child(Label::new("· pane-5  (htop)"))
+                .child(Label::new("· pane-6  (docker logs)"))
+                .child(Label::new("· pane-7  (tail -f)"))
+                .child(Label::new("· pane-8  (psql)"))
+                .child(Label::new("· pane-9  (redis-cli)"))
+                .child(Label::new("· pane-10 (k9s)")),
         )
         .action(Button::secondary("Cancel").on_click(move || {
             println!("[showcase] dialog cancelled");

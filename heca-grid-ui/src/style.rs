@@ -259,7 +259,26 @@ pub struct Style {
     pub pad_spacing_y: Option<Spacing>,
     pub width: Length,
     pub height: Length,
+    /// Minimum size. `None` ⇒ taffy's default, which for a flex item is
+    /// **`auto` = its content size** — i.e. it will *not* shrink below its
+    /// content. Set `Px(0.0)` to allow shrinking, which a scrolling viewport
+    /// ([`ScrollRegion`](crate::widgets::ScrollRegion)) needs: without it a
+    /// region in a bounded panel overflows its parent instead of scrolling
+    /// (the classic flexbox `min-height: auto` trap).
+    pub min_width: Option<Length>,
+    /// Minimum height — see [`min_width`](Style::min_width).
+    pub min_height: Option<Length>,
+    /// Maximum width. `None` ⇒ unbounded. Used to cap a node against its parent —
+    /// an overlay panel is capped at `Pct(1.0)` so a fixed `Px` size can never
+    /// make a dialog larger than the window.
+    pub max_width: Option<Length>,
+    /// Maximum height — see [`max_width`](Style::max_width).
+    pub max_height: Option<Length>,
     pub flex_grow: f32,
+    /// Flex shrink factor. `None` ⇒ `0.0`: widgets use explicit sizes and a flex
+    /// container must never squish them. A widget that *should* absorb the
+    /// squeeze (again, a scroll viewport) opts in with `Some(1.0)`.
+    pub flex_shrink: Option<f32>,
 
     // ── Visual ──
     pub fill: Option<Color>,
@@ -337,7 +356,12 @@ impl Default for Style {
             pad_spacing_y: None,
             width: Length::Auto,
             height: Length::Auto,
+            min_width: None,
+            min_height: None,
+            max_width: None,
+            max_height: None,
             flex_grow: 0.0,
+            flex_shrink: None,
             fill: None,
             border: None,
             glow: None,
@@ -406,9 +430,20 @@ impl Style {
                 width: self.width.to_taffy(),
                 height: self.height.to_taffy(),
             },
+            // `None` leaves taffy's default (`auto`), which for a flex item is its
+            // content size — the reason an unset region refuses to shrink.
+            min_size: Size {
+                width: self.min_width.map_or_else(auto, Length::to_taffy),
+                height: self.min_height.map_or_else(auto, Length::to_taffy),
+            },
+            max_size: Size {
+                width: self.max_width.map_or_else(auto, Length::to_taffy),
+                height: self.max_height.map_or_else(auto, Length::to_taffy),
+            },
             flex_grow: self.flex_grow,
-            // Widgets use explicit Px sizes; never let a flex container squish them.
-            flex_shrink: 0.0,
+            // Widgets use explicit Px sizes; never let a flex container squish them
+            // — unless the widget opts in (a scroll viewport must absorb the squeeze).
+            flex_shrink: self.flex_shrink.unwrap_or(0.0),
             // Child placement when this component sits in a Grid (else Auto).
             grid_column: grid_line(self.grid_cell.map(|c| (c.col, c.col_span))),
             grid_row: grid_line(self.grid_cell.map(|c| (c.row, c.row_span))),
