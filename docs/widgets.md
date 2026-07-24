@@ -2156,15 +2156,30 @@ auto-hintable and the host stamps the keycap for it.
 ### Tooltip
 
 A transparent wrapper that reveals a floating label when the pointer rests over its child past a
-short delay. The bubble (rounded surface + accent border + soft glow + text) is drawn on the
-**overlay layer** so it sits above siblings. Placement is **viewport-aware on all four sides**:
-the preferred side flips to its opposite when there's no room (`Top`↔`Bottom`, `Left`↔`Right`)
-and the cross-axis is clamped on-screen. It captures **no** input — the wrapped widget stays
-fully interactive (forwards events + focus).
+short delay. The bubble is drawn on the **overlay layer** so it sits above siblings. It captures
+**no** input — the wrapped widget stays fully interactive (forwards events + focus).
 
-- **Construct**: `Tooltip::new(child, text)`.
+**It hand-rolls neither its placement nor its surface** — both come from the shared authorities,
+so a tooltip cannot drift away from the rest of the overlay family:
+
+- **Placement** is [`place_beside`](#overlay), the four-sided authority: the bubble is **centered**
+  on the chosen side of the target, **flips** to the opposite side when there's no room
+  (`Top`↔`Bottom`, `Left`↔`Right`), and its **cross-axis** is clamped on-screen. Only the cross
+  axis clamps — sliding the bubble along the main axis would move it *over* the thing it
+  describes, so an unfittable bubble overflows instead.
+- **Surface** is [`paint_panel_chrome`](#overlay), the same painter every overlay panel uses.
+  So `[appearance] overlay_border_style` (`none | bordered | bracketed`) governs the tooltip's
+  edge exactly as it governs a dialog or a dropdown. The tooltip supplies only its own identity:
+  the accent edge colour (`interaction.tooltip_border`), a tighter/fainter halo than a panel's,
+  and `PanelElevation::Hover` — the shared shadow at a quarter depth, because the full panel
+  shadow is larger than a ~30px bubble.
+
+- **Construct**: `Tooltip::new(child, text)`, or `Tooltip::new_signal(child, Signal<String>)` for
+  a reactive label.
 - **Builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
   `.delay(seconds)` (hover delay before reveal, default `0.5`).
+- **`TooltipSide` is `BesideSide`** — the same type, re-exported under the name that reads better
+  at a call site. There is one four-sided vocabulary, not two.
 
 ```rust
 Tooltip::new(
@@ -2172,6 +2187,11 @@ Tooltip::new(
     "Close",
 ).side(TooltipSide::Bottom);
 ```
+
+**Declarative (`ViewNode`).** Host-only — there is no `WidgetKind::Tooltip`. A tooltip wraps a
+widget in the *retained* tree and is revealed by hover state the host owns; in the heca app an
+action button's tip is derived from its `WmAction` centrally (next section), never authored per
+call site.
 
 > The raw `Tooltip::new(button, "Close")` above hardcodes the text. **In the heca app,
 > do not do this for an action button** — see the next section: the tip (and its
@@ -2270,7 +2290,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   layout).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
   `overlay_occludes` = whole viewport when blocking, else the panel rect.
-- **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` is the single
+- **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow, elevation })` is the single
   authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
   surface fill, the per-widget accents, and the panel's **edge**. The base `Overlay` passes
   `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#contextmenu), and
@@ -2296,6 +2316,20 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   on the base `Overlay`. The **fill and glow are never suppressed**: the halo is the panel's neon
   identity, not a frame, so it survives `none`. The showcase drives the same token live via its
   **OVERLAY FRAME** select (it builds its own `Theme` and never reads `config.toml`).
+- **Depth is a semantic variant, not a number** — `PanelChrome.elevation` (`PanelElevation`). The
+  shadow's *shape* is defined once and scaled, so surfaces at different depths still read as the
+  same material. A caller picks the depth; it never supplies a blur radius or an offset.
+
+  | `PanelElevation` | Used by | Shadow |
+  |---|---|---|
+  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette) | full depth |
+  | `Hover` | [`Tooltip`](#tooltip) | 25% of it (blur *and* drop scale together) |
+
+  Why it exists: the panel shadow is tuned for surfaces hundreds of pixels across. Applied unscaled
+  to a ~30px tooltip bubble it is **larger than the surface casting it** — verified in the showcase
+  and rejected. `Hover` keeps the shared chrome at a depth that suits a transient bubble.
+  **The shadow is not part of the frame policy** — it is depth, not an edge, so `overlay_frame:
+  none` removes the border but never the shadow.
 - **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
   (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
   composites above everything this layer draws — see the
@@ -2414,7 +2448,23 @@ impl Component for MySelect {
 |---|---|---|
 | A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
 | A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#contextmenu) |
-| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette) |
+| A target rect, **centered on any of 4 sides** (hover bubble) | `place_beside(anchor, panel, vp, gap, side)` with `BesideSide::{Top,Bottom,Left,Right}` | [`Tooltip`](#tooltip) |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
+
+The three placement authorities differ in **alignment**, which is why they are three functions and
+not one with flags:
+
+| Authority | Anchor | Cross-axis alignment | Flips between |
+|---|---|---|---|
+| `place_anchored_on` | a rect | leading-edge aligned | below ↔ above |
+| `place_at_point` | a point | corner-offset from the point | down-right ↔ up-left |
+| `place_beside` | a rect | **centered** | all four sides |
+
+> ⚠️ **`place_beside` results may depend on the viewport** (both the flip and the clamp read it),
+> which the [purity invariant](#-the-invariant-a-rect-used-to-place-children-must-be-pure) forbids
+> for a rect that positions children. It is safe for `Tooltip` only because that bubble is
+> **drawn**, never laid out into — its text is a `cx.text` call, not a child component. If you use
+> `place_beside` to place real children, you inherit the detach bug. Draw-only, or don't use it.
 
 Use `AnchorSide::Auto` unless you already decided the side. Force `Below`/`Above` when the
 decision and the panel's **size** are computed together (`Select` picks the side and its visible

@@ -21,7 +21,7 @@ use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, Widg
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::widgets::{paint_panel_chrome, Glyph, Input, PanelChrome};
+use crate::widgets::{paint_panel_chrome, Glyph, Input, PanelChrome, PanelElevation};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 
@@ -397,6 +397,7 @@ impl Component for CommandPalette {
                         radius: 12.0,
                         intensity: 0.3,
                     }),
+                    elevation: PanelElevation::Panel,
                 },
             );
 

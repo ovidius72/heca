@@ -97,6 +97,50 @@ pub struct PanelChrome {
     /// governed by `overlay_frame`: the halo is the panel's neon identity, not a
     /// frame, so it survives `FrameStyle::None`.
     pub glow: Option<Glow>,
+    /// How far above the page this surface sits — the depth its drop shadow
+    /// expresses. See [`PanelElevation`].
+    pub elevation: PanelElevation,
+}
+
+/// How high above the page an overlay surface sits, and therefore how much drop
+/// shadow it casts.
+///
+/// The shadow's *shape* is shared — one definition, scaled — so surfaces at
+/// different depths still read as the same material. A caller picks the semantic
+/// depth; it never supplies a blur radius or an offset.
+///
+/// This exists because the panel shadow was tuned for surfaces that own the screen
+/// (a dialog is hundreds of pixels across). Applied unscaled to a ~30px
+/// [`Tooltip`](super::Tooltip) bubble, the same shadow is **larger than the surface
+/// casting it** — user-verified 2026-07-25 as "too much". A transient hover bubble
+/// is not at dialog depth, so it does not take the dialog's shadow.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PanelElevation {
+    /// A surface that owns the screen: [`Dialog`](super::Dialog), a
+    /// [`Select`](super::Select) dropdown, [`ContextMenu`](super::ContextMenu),
+    /// [`CommandPalette`](super::CommandPalette). Full shadow depth.
+    #[default]
+    Panel,
+    /// A transient surface hovering just above its target — the
+    /// [`Tooltip`](super::Tooltip) bubble. Same shadow shape at
+    /// [`HOVER_SHADOW_SCALE`] of the depth: enough to lift it off the page, not
+    /// enough to read as a panel.
+    Hover,
+}
+
+/// Fraction of the [`Panel`](PanelElevation::Panel) shadow that a
+/// [`Hover`](PanelElevation::Hover) surface casts. Blur and offset scale together,
+/// so the shadow keeps its shape and only loses depth.
+const HOVER_SHADOW_SCALE: f32 = 0.25;
+
+impl PanelElevation {
+    /// Multiplier applied to both the shadow's blur and its drop offset.
+    fn shadow_scale(self) -> f32 {
+        match self {
+            Self::Panel => 1.0,
+            Self::Hover => HOVER_SHADOW_SCALE,
+        }
+    }
 }
 
 /// Paint the **shared overlay panel chrome** into `rect`: drop shadow (lifting the
@@ -123,6 +167,11 @@ pub struct PanelChrome {
 /// the style draws an edge and **ignored** under `None` (otherwise `None` could not
 /// remove a `Select`'s accent border, which is the bug this ownership rule fixes).
 /// The fill and the glow are never suppressed.
+///
+/// The **drop shadow is not part of the frame policy** — it is depth, not an edge, so
+/// `overlay_frame` never removes it. Its size comes from
+/// [`chrome.elevation`](PanelChrome::elevation): full for a panel, a quarter of it for
+/// a [`Hover`](PanelElevation::Hover) surface.
 pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome) {
     let (surface, shadow, shadow_blur, radius, frame, border_color, border_width) = {
         let t = cx.theme();
@@ -136,14 +185,17 @@ pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome
             t.colors.border_width,
         )
     };
+    // One shadow shape for every overlay surface, scaled by how high it sits — so a
+    // dialog and a tooltip read as the same material at different depths.
+    let depth = chrome.elevation.shadow_scale();
     cx.drop_shadow(
         rect,
         radius,
         Shadow {
             color: shadow,
-            radius: shadow_blur * SHADOW_BLUR_MULT,
+            radius: shadow_blur * SHADOW_BLUR_MULT * depth,
             dx: 0.0,
-            dy: SHADOW_DROP,
+            dy: SHADOW_DROP * depth,
         },
     );
     // `overlay_frame` owns the panel's whole EDGE — so `None` really means no
@@ -312,6 +364,145 @@ pub fn place_at_point(
     };
     x = x.clamp(0.0, (vw - panel.w).max(0.0));
     y = y.clamp(0.0, (vh - panel.h).max(0.0));
+    Rectangle::new(Point::new(x, y), panel)
+}
+
+/// Which side of the anchor a [`place_beside`] panel sits on.
+///
+/// Unlike [`AnchorSide`] (a dropdown's vertical below/above decision) this is the
+/// full four-sided vocabulary, and the side is always **explicit** — there is no
+/// `Auto`, because "beside" has no natural default direction the way a dropdown
+/// has "below". The placement still flips to the opposite side when the chosen one
+/// does not fit.
+///
+/// Re-exported as [`TooltipSide`](super::TooltipSide) — the same type under the
+/// name that reads better at a [`Tooltip`](super::Tooltip) call site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BesideSide {
+    /// Above the anchor (flips to [`Bottom`](BesideSide::Bottom) when there is no room).
+    #[default]
+    Top,
+    /// Below the anchor (flips to [`Top`](BesideSide::Top) when there is no room).
+    Bottom,
+    /// Left of the anchor (flips to [`Right`](BesideSide::Right) when there is no room).
+    Left,
+    /// Right of the anchor (flips to [`Left`](BesideSide::Left) when there is no room).
+    Right,
+}
+
+impl BesideSide {
+    /// The side this one flips to when it does not fit.
+    fn opposite(self) -> Self {
+        match self {
+            Self::Top => Self::Bottom,
+            Self::Bottom => Self::Top,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+
+    /// Whether a `panel`-sized rect fits on this side of `anchor` within `viewport`.
+    fn fits(self, anchor: Rectangle, panel: Size, viewport: Size, gap: f64) -> bool {
+        match self {
+            Self::Top => anchor.loc.y - panel.h - gap >= 0.0,
+            Self::Bottom => anchor.loc.y + anchor.size.h + panel.h + gap <= viewport.h,
+            Self::Left => anchor.loc.x - panel.w - gap >= 0.0,
+            Self::Right => anchor.loc.x + anchor.size.w + panel.w + gap <= viewport.w,
+        }
+    }
+}
+
+/// Place a `panel`-sized rect **beside** an `anchor` rect on any of the four
+/// sides: offset from the chosen edge by `gap`, **centered** on the cross axis,
+/// **flipped** to the opposite side when the chosen one has no room (and the
+/// opposite does), and finally **clamped** on the cross axis so it never spills
+/// off-screen.
+///
+/// This is the single authority for four-sided, centered placement — the rule
+/// [`Tooltip`](super::Tooltip) used to hand-roll. It is a different rule in kind
+/// from the other two authorities, which is why it is its own function:
+///
+/// | Authority | Anchor | Alignment | Flips |
+/// |---|---|---|---|
+/// | [`place_anchored_on`] | a rect | leading-edge aligned | below ↔ above |
+/// | [`place_at_point`] | a point | corner-offset from the point | down-right ↔ up-left |
+/// | `place_beside` | a rect | **centered** on the cross axis | all four sides |
+///
+/// # Not clamped on the main axis — deliberately
+///
+/// Only the **cross** axis (the one the side does not pin) is clamped. The flip
+/// is the main axis's answer to "no room"; clamping it as well would slide the
+/// panel *over* its anchor, which for a hover bubble means covering the very thing
+/// it describes. When neither side fits, the chosen side is kept and the panel may
+/// overflow — a smaller panel is the fix, not a moved one.
+///
+/// # The purity note
+///
+/// Unlike a dropdown's panel rect, this result **may** depend on the viewport (the
+/// flip and the clamp both read it). That is safe **only because a `place_beside`
+/// panel places no child components** — its content is drawn, not laid out into it.
+/// If you place children with this rect, you inherit the detach bug documented on
+/// [`place_anchored_on`]'s callers: layout and paint run at different moments, so a
+/// viewport-dependent rect makes the two disagree. Draw-only, or don't use it.
+///
+/// An **infinite** viewport axis (before the first paint has cached one) disables
+/// flipping and clamping against that axis.
+///
+/// # Examples
+/// ```
+/// use heca_grid_ui::widgets::{place_beside, BesideSide};
+/// use heca_core::layout::{Point, Rectangle, Size};
+///
+/// let anchor = Rectangle::new(Point::new(100.0, 100.0), Size::new(40.0, 20.0));
+/// let panel = Size::new(80.0, 24.0);
+/// let vp = Size::new(800.0, 600.0);
+///
+/// // Room above → sits on top, centered over the anchor.
+/// let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Top);
+/// assert_eq!(r.loc.y, 100.0 - 24.0 - 6.0);
+/// assert_eq!(r.loc.x, 100.0 + (40.0 - 80.0) / 2.0);
+/// ```
+pub fn place_beside(
+    anchor: Rectangle,
+    panel: Size,
+    viewport: Size,
+    gap: f64,
+    side: BesideSide,
+) -> Rectangle {
+    // Keep the preferred side unless it does not fit and the opposite one does.
+    let opposite = side.opposite();
+    let flip =
+        !side.fits(anchor, panel, viewport, gap) && opposite.fits(anchor, panel, viewport, gap);
+    let side = if flip { opposite } else { side };
+
+    let (mut x, mut y) = match side {
+        BesideSide::Top => (
+            anchor.loc.x + (anchor.size.w - panel.w) / 2.0,
+            anchor.loc.y - panel.h - gap,
+        ),
+        BesideSide::Bottom => (
+            anchor.loc.x + (anchor.size.w - panel.w) / 2.0,
+            anchor.loc.y + anchor.size.h + gap,
+        ),
+        BesideSide::Left => (
+            anchor.loc.x - panel.w - gap,
+            anchor.loc.y + (anchor.size.h - panel.h) / 2.0,
+        ),
+        BesideSide::Right => (
+            anchor.loc.x + anchor.size.w + gap,
+            anchor.loc.y + (anchor.size.h - panel.h) / 2.0,
+        ),
+    };
+    // Clamp the cross axis only — see "Not clamped on the main axis" above.
+    match side {
+        BesideSide::Top | BesideSide::Bottom if viewport.w.is_finite() => {
+            x = x.clamp(0.0, (viewport.w - panel.w).max(0.0));
+        }
+        BesideSide::Left | BesideSide::Right if viewport.h.is_finite() => {
+            y = y.clamp(0.0, (viewport.h - panel.h).max(0.0));
+        }
+        _ => {}
+    }
     Rectangle::new(Point::new(x, y), panel)
 }
 
@@ -824,6 +1015,7 @@ mod tests {
                 width: 2.0,
             }),
             glow: None,
+            elevation: PanelElevation::Panel,
         };
 
         let none = chrome_edge_count(FrameStyle::None, accent);
@@ -985,6 +1177,206 @@ mod tests {
         let r = place_at_point(anchor, panel, Size::new(2000.0, 2000.0), 2.0, true);
         assert!((r.loc.x + panel.w / 2.0 - anchor.x).abs() < 1e-9);
         assert!((r.loc.y + panel.h / 2.0 - anchor.y).abs() < 1e-9);
+    }
+
+    /// Paint the shared chrome at `elevation` and report the drop shadow it emitted.
+    fn chrome_shadow(elevation: PanelElevation) -> Shadow {
+        use crate::scene::DrawCommand;
+        use crate::Scene;
+        let theme = crate::theme::Theme::default();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 100.0));
+            paint_panel_chrome(
+                &mut cx,
+                rect,
+                PanelChrome {
+                    elevation,
+                    ..PanelChrome::default()
+                },
+            );
+        }
+        // A drop shadow is recorded as a transparent `RectCmd` carrying `shadow`.
+        scene
+            .iter()
+            .find_map(|cmd| match cmd {
+                DrawCommand::Rect(r) => r.shadow,
+                _ => None,
+            })
+            .expect("panel chrome always casts a shadow")
+    }
+
+    /// **User-verified regression guard (2026-07-25).** The panel shadow is tuned
+    /// for surfaces hundreds of px across; unscaled on a ~30px tooltip bubble it is
+    /// larger than the bubble itself ("the shadow is too much"). A `Hover` surface
+    /// casts a fraction of it.
+    #[test]
+    fn hover_elevation_casts_a_shallower_shadow_than_a_panel() {
+        let panel = chrome_shadow(PanelElevation::Panel);
+        let hover = chrome_shadow(PanelElevation::Hover);
+        assert!(
+            hover.radius < panel.radius,
+            "hover blur {} should be under the panel's {}",
+            hover.radius,
+            panel.radius
+        );
+    }
+
+    /// Blur and drop scale by the *same* factor, so the shadow keeps its shape and
+    /// only loses depth — a hover bubble must not get a differently-shaped shadow.
+    #[test]
+    fn hover_elevation_scales_blur_and_drop_together() {
+        let panel = chrome_shadow(PanelElevation::Panel);
+        let hover = chrome_shadow(PanelElevation::Hover);
+        assert!(
+            ((hover.radius / panel.radius) - (hover.dy / panel.dy)).abs() < 1e-6,
+            "blur ratio {} != drop ratio {}",
+            hover.radius / panel.radius,
+            hover.dy / panel.dy
+        );
+    }
+
+    /// Elevation is depth, not an edge: it must not disturb the frame policy.
+    #[test]
+    fn hover_elevation_leaves_the_edge_policy_untouched() {
+        let hover = PanelChrome {
+            elevation: PanelElevation::Hover,
+            ..PanelChrome::default()
+        };
+        assert_eq!(
+            chrome_edge_count(FrameStyle::None, hover),
+            0,
+            "None still means no edge at any elevation"
+        );
+    }
+
+    // ── Four-sided, centered placement (place_beside) ──
+
+    /// The anchor used by the `beside_*` tests: a 40×20 target in the middle of an
+    /// 800×600 viewport, with a 80×24 panel — wider than the anchor, so a centered
+    /// result has a *negative* offset and can't be confused with edge alignment.
+    fn beside_case() -> (Rectangle, Size, Size) {
+        (
+            Rectangle::new(Point::new(400.0, 300.0), Size::new(40.0, 20.0)),
+            Size::new(80.0, 24.0),
+            Size::new(800.0, 600.0),
+        )
+    }
+
+    /// The defining difference from `place_anchored_on`: a vertical side centers
+    /// the panel **horizontally** on the anchor rather than aligning its left edge.
+    /// The panel is deliberately wider than the anchor, so a centered result has a
+    /// negative offset and cannot be confused with edge alignment.
+    #[test]
+    fn beside_top_centers_the_panel_horizontally_on_the_anchor() {
+        let (anchor, panel, vp) = beside_case();
+        let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Top);
+        let anchor_mid = anchor.loc.x + anchor.size.w / 2.0;
+        assert!(
+            (r.loc.x + panel.w / 2.0 - anchor_mid).abs() < 1e-9,
+            "panel centre {} should sit on the anchor centre {anchor_mid}",
+            r.loc.x + panel.w / 2.0
+        );
+    }
+
+    /// A horizontal side centers the panel **vertically** — the same rule on the
+    /// other axis.
+    #[test]
+    fn beside_left_centers_the_panel_vertically_on_the_anchor() {
+        let (anchor, panel, vp) = beside_case();
+        let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Left);
+        let anchor_mid = anchor.loc.y + anchor.size.h / 2.0;
+        assert!(
+            (r.loc.y + panel.h / 2.0 - anchor_mid).abs() < 1e-9,
+            "panel centre {} should sit on the anchor centre {anchor_mid}",
+            r.loc.y + panel.h / 2.0
+        );
+    }
+
+    /// Gap shared by the `beside_flips_*` cases.
+    const BESIDE_GAP: f64 = 6.0;
+
+    /// Place the shared 80×24 panel beside a 40×20 anchor pinned at `(x, y)`,
+    /// inside the shared 800×600 viewport. One line of arrangement so each flip
+    /// case below is a single assertion.
+    fn beside_at(x: f64, y: f64, side: BesideSide) -> Rectangle {
+        let (_, panel, vp) = beside_case();
+        let anchor = Rectangle::new(Point::new(x, y), Size::new(40.0, 20.0));
+        place_beside(anchor, panel, vp, BESIDE_GAP, side)
+    }
+
+    /// An anchor flush against the viewport top leaves no room above, so a `Top`
+    /// preference lands below it instead.
+    #[test]
+    fn beside_top_flips_below_when_the_anchor_hugs_the_viewport_top() {
+        let r = beside_at(400.0, 0.0, BesideSide::Top);
+        assert_eq!(r.loc.y, 20.0 + BESIDE_GAP);
+    }
+
+    /// …and the mirror case: no room below flips a `Bottom` preference above.
+    #[test]
+    fn beside_bottom_flips_above_when_the_anchor_hugs_the_viewport_bottom() {
+        let r = beside_at(400.0, 580.0, BesideSide::Bottom);
+        assert_eq!(r.loc.y, 580.0 - 24.0 - BESIDE_GAP);
+    }
+
+    /// The horizontal axis flips by the same rule: no room left → placed right.
+    #[test]
+    fn beside_left_flips_right_when_the_anchor_hugs_the_viewport_left() {
+        let r = beside_at(0.0, 300.0, BesideSide::Left);
+        assert_eq!(r.loc.x, 40.0 + BESIDE_GAP);
+    }
+
+    /// …and no room right → placed left.
+    #[test]
+    fn beside_right_flips_left_when_the_anchor_hugs_the_viewport_right() {
+        let r = beside_at(760.0, 300.0, BesideSide::Right);
+        assert_eq!(r.loc.x, 760.0 - 80.0 - BESIDE_GAP);
+    }
+
+    /// Only the **cross** axis is clamped. An anchor near the left edge slides the
+    /// panel right so it stays on screen, without touching the side it sits on.
+    #[test]
+    fn beside_clamps_only_the_cross_axis() {
+        let (_, panel, vp) = beside_case();
+        // Anchor hugging the left edge: centring would put x at 5 - 40 = -35.
+        let anchor = Rectangle::new(Point::new(5.0, 300.0), Size::new(40.0, 20.0));
+        let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Top);
+        assert_eq!(r.loc.x, 0.0, "cross axis clamped into the viewport");
+        assert_eq!(r.loc.y, 300.0 - panel.h - 6.0, "main axis untouched by the clamp");
+    }
+
+    /// **Documents the deliberate rule.** When neither side fits, the preferred side
+    /// is kept and the panel is allowed to overflow — clamping the main axis would
+    /// slide the bubble *over* the target it describes. A smaller panel is the fix.
+    #[test]
+    fn beside_keeps_the_preferred_side_when_neither_fits() {
+        // A viewport barely taller than the anchor: no room above or below.
+        let anchor = Rectangle::new(Point::new(10.0, 2.0), Size::new(40.0, 20.0));
+        let vp = Size::new(800.0, 26.0);
+        let panel = Size::new(80.0, 24.0);
+        let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Top);
+        assert_eq!(
+            r.loc.y,
+            2.0 - 24.0 - 6.0,
+            "preferred side kept; the panel overflows rather than covering the anchor"
+        );
+    }
+
+    /// Before the first paint caches a viewport, an infinite axis disables both the
+    /// flip and the clamp against it — the panel simply goes on the preferred side.
+    #[test]
+    fn beside_infinite_viewport_keeps_the_preferred_side_unclamped() {
+        let (anchor, panel, _) = beside_case();
+        let vp = Size::new(f64::INFINITY, f64::INFINITY);
+        let r = place_beside(anchor, panel, vp, 6.0, BesideSide::Bottom);
+        assert_eq!(r.loc.y, 300.0 + 20.0 + 6.0, "preferred side kept, no flip");
+        assert_eq!(
+            r.loc.x,
+            400.0 + (40.0 - 80.0) / 2.0,
+            "centred and left negative — an infinite axis disables the clamp"
+        );
     }
 
     /// End-to-end: an anchored overlay bakes the placement into the panel child's

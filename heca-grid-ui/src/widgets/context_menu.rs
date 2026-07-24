@@ -24,7 +24,7 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
-use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, PanelChrome};
+use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, PanelChrome, PanelElevation};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -383,6 +383,7 @@ impl Component for ContextMenu {
                 PanelChrome {
                     border: panel_border,
                     glow: Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                    elevation: PanelElevation::Panel,
                 },
             );
 

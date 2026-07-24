@@ -60,8 +60,9 @@ pub use command_palette::{Command, CommandPalette};
 pub use context_menu::{ContextMenu, MenuEntry};
 pub use dialog::Dialog;
 pub use overlay::{
-    paint_panel_chrome, place_anchored, place_anchored_on, place_at_point, AnchorSide, Overlay,
-    OverlayPosition, PanelChrome, DEFAULT_ANCHOR_GAP,
+    paint_panel_chrome, place_anchored, place_anchored_on, place_at_point, place_beside,
+    AnchorSide, BesideSide, Overlay, OverlayPosition, PanelChrome, PanelElevation,
+    DEFAULT_ANCHOR_GAP,
 };
 pub use dock_frame::DockFrame;
 pub use flex::{Container, Flex, container};

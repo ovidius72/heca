@@ -1113,6 +1113,33 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     .side(TooltipSide::Bottom),
                 ),
         )
+        // The four-sided placement authority (`place_beside`), one button per side.
+        // Hover each: the bubble centers on that side of its target and FLIPS to the
+        // opposite side when the viewport edge leaves no room — scroll this row to the
+        // top/bottom of the window to see Top/Bottom flip. The bubbles paint through
+        // the shared `paint_panel_chrome`, so the OVERLAY FRAME select at the top of
+        // the page restyles them exactly as it restyles the dialog and the dropdown.
+        .child(
+            Flex::row()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(Tooltip::new(
+                    Button::secondary("TOP").on_click(|| {}),
+                    "Above the target",
+                ))
+                .child(
+                    Tooltip::new(Button::secondary("BOTTOM").on_click(|| {}), "Below the target")
+                        .side(TooltipSide::Bottom),
+                )
+                .child(
+                    Tooltip::new(Button::secondary("LEFT").on_click(|| {}), "Left of the target")
+                        .side(TooltipSide::Left),
+                )
+                .child(
+                    Tooltip::new(Button::secondary("RIGHT").on_click(|| {}), "Right of the target")
+                        .side(TooltipSide::Right),
+                ),
+        )
         // Dialog: a centered confirm panel over a scrim that holds REAL child components
         // (the body + real action `Button`s), so its buttons are hint targets +
         // focus-traversed as components (a hand-drawn panel could do neither). The

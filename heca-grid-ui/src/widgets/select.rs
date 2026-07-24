@@ -54,7 +54,9 @@ use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Length};
 use crate::widgets::choice::{self, choice_at, Choice};
-use crate::widgets::overlay::{paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome};
+use crate::widgets::overlay::{
+    paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome, PanelElevation,
+};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -669,6 +671,7 @@ impl Component for Select {
                             radius: GLOW_RADIUS,
                             intensity: GLOW_INTENSITY,
                         }),
+                        elevation: PanelElevation::Panel,
                     },
                 );
 
