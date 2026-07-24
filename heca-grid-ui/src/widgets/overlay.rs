@@ -34,7 +34,7 @@ use crate::builders::LayoutExt;
 use crate::component::{paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx};
 use crate::focus::FocusManager;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::Shadow;
+use crate::scene::{Border, Glow, Shadow};
 use crate::style::{Align, Justify, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
@@ -72,6 +72,71 @@ pub enum OverlayPosition {
 /// Default gap between an anchored panel and its trigger (logical px).
 pub const DEFAULT_ANCHOR_GAP: f64 = 4.0;
 
+/// Optional per-widget accents layered onto the shared overlay panel chrome by
+/// [`paint_panel_chrome`] — a specialization's own identity (e.g. a
+/// [`Select`](super::Select) dropdown's accent edge + neon halo). The shared parts
+/// (drop shadow, theme surface fill, bracket reticle) are not configurable: they
+/// are what makes every overlay panel read as the same surface.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PanelChrome {
+    /// Border drawn on the panel fill. `None` (the base [`Overlay`]) = no edge.
+    pub border: Option<Border>,
+    /// Glow on the panel fill. `None` (the base [`Overlay`]) = no halo.
+    pub glow: Option<Glow>,
+}
+
+/// Paint the **shared overlay panel chrome** into `rect`: drop shadow (lifting the
+/// panel off the page), the theme surface fill, and the bracket reticle — the same
+/// visual language as `Pane` / `DockFrame` — plus any per-widget `chrome` accents.
+///
+/// This is the single authority for what an overlay panel *looks like*, so the base
+/// [`Overlay`] and the widgets that own their own panel (a `Select` dropdown, whose
+/// option rows are placed children and therefore cannot be handed to an `Overlay`)
+/// cannot drift apart. Call it inside a [`PaintCx::with_overlay`] block; it does not
+/// open the overlay layer itself.
+pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome) {
+    let (surface, shadow, shadow_blur, radius) = {
+        let t = cx.theme();
+        (
+            t.colors.surface,
+            t.shadow_color(),
+            t.colors.shadow.blur,
+            t.colors.border_radius,
+        )
+    };
+    cx.drop_shadow(
+        rect,
+        radius,
+        Shadow {
+            color: shadow,
+            radius: shadow_blur * SHADOW_BLUR_MULT,
+            dx: 0.0,
+            dy: SHADOW_DROP,
+        },
+    );
+    cx.rect(rect, surface, chrome.border, radius, chrome.glow);
+    cx.bracket_frame(rect);
+}
+
+/// Which side of the anchor an [`Anchored`](OverlayPosition::Anchored) panel goes on.
+///
+/// [`Auto`](AnchorSide::Auto) is the usual choice — the placement picks below,
+/// flipping above when there is no room. A caller that has **already** decided the
+/// direction passes [`Below`](AnchorSide::Below) / [`Above`](AnchorSide::Above) so
+/// the placement honours it instead of re-deciding: [`Select`](super::Select) does
+/// this because its flip decision and its visible-row count are computed together
+/// (the panel's height depends on the side), so the two must not disagree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum AnchorSide {
+    /// Prefer below; flip above when there is no room below (and more above).
+    #[default]
+    Auto,
+    /// Force below the anchor (still clamped into the viewport).
+    Below,
+    /// Force above the anchor (still clamped into the viewport).
+    Above,
+}
+
 /// Place a `panel`-sized rect against an `anchor` rect for a dropdown/popover:
 /// **below** the anchor by `gap`, **flipped above** when the panel would overflow
 /// the viewport bottom and there is more room above, **left-edge aligned** to the
@@ -98,23 +163,45 @@ pub const DEFAULT_ANCHOR_GAP: f64 = 4.0;
 /// assert_eq!(r.loc.x, 10.0);
 /// ```
 pub fn place_anchored(anchor: Rectangle, panel: Size, viewport: Size, gap: f64) -> Rectangle {
+    place_anchored_on(anchor, panel, viewport, gap, AnchorSide::Auto)
+}
+
+/// [`place_anchored`] with an explicit [`AnchorSide`] — the full form.
+///
+/// `side` controls only the **flip decision**; clamping into the viewport still
+/// applies on both axes, so a forced side never puts the panel off-screen. Use
+/// [`AnchorSide::Auto`] unless the caller has already chosen a direction (see
+/// [`AnchorSide`]).
+pub fn place_anchored_on(
+    anchor: Rectangle,
+    panel: Size,
+    viewport: Size,
+    gap: f64,
+    side: AnchorSide,
+) -> Rectangle {
     let below_y = anchor.loc.y + anchor.size.h + gap;
     let above_y = anchor.loc.y - gap - panel.h;
 
     let mut x = anchor.loc.x;
-    let mut y = below_y;
+    let mut y = match side {
+        AnchorSide::Below => below_y,
+        AnchorSide::Above => above_y,
+        AnchorSide::Auto => below_y,
+    };
 
     if viewport.h.is_finite() {
-        let fits_below = below_y + panel.h <= viewport.h;
-        let fits_above = above_y >= 0.0;
-        if !fits_below && fits_above {
-            // No room below, room above → flip up.
-            y = above_y;
-        } else if !fits_below && !fits_above {
-            // Neither side fits fully: take the side with more room, then clamp.
-            let room_below = (viewport.h - below_y).max(0.0);
-            let room_above = (anchor.loc.y - gap).max(0.0);
-            y = if room_above > room_below { above_y } else { below_y };
+        if side == AnchorSide::Auto {
+            let fits_below = below_y + panel.h <= viewport.h;
+            let fits_above = above_y >= 0.0;
+            if !fits_below && fits_above {
+                // No room below, room above → flip up.
+                y = above_y;
+            } else if !fits_below && !fits_above {
+                // Neither side fits fully: take the side with more room, then clamp.
+                let room_below = (viewport.h - below_y).max(0.0);
+                let room_above = (anchor.loc.y - gap).max(0.0);
+                y = if room_above > room_below { above_y } else { below_y };
+            }
         }
         y = y.clamp(0.0, (viewport.h - panel.h).max(0.0));
     }
@@ -380,16 +467,9 @@ impl Component for Overlay {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (background, surface, scrim_a, shadow, shadow_blur, radius) = {
+        let (background, scrim_a) = {
             let t = cx.theme();
-            (
-                t.colors.background,
-                t.colors.surface,
-                t.colors.interaction.scrim,
-                t.shadow_color(),
-                t.colors.shadow.blur,
-                t.colors.border_radius,
-            )
+            (t.colors.background, t.colors.interaction.scrim)
         };
         let panel = self.panel_bounds();
 
@@ -407,19 +487,9 @@ impl Component for Overlay {
             }
 
             // Lift the panel, fill it, stamp the shared bracket reticle (same
-            // visual language as Pane / DockFrame).
-            cx.drop_shadow(
-                panel,
-                radius,
-                Shadow {
-                    color: shadow,
-                    radius: shadow_blur * SHADOW_BLUR_MULT,
-                    dx: 0.0,
-                    dy: SHADOW_DROP,
-                },
-            );
-            cx.rect(panel, surface, None, radius, None);
-            cx.bracket_frame(panel);
+            // visual language as Pane / DockFrame) — the base layer takes the
+            // chrome plain; specializations pass their own accents.
+            paint_panel_chrome(cx, panel, PanelChrome::default());
 
             // The panel's real children on top of the fill. A nested overlay
             // painted in here records a DEEPER scene segment → composites above
@@ -600,6 +670,28 @@ mod tests {
         let r = place_anchored(anchor, panel, inf, 4.0);
         assert_eq!(r.loc.x, 900.0, "no clamp with an infinite viewport");
         assert_eq!(r.loc.y, 50.0 + 30.0 + 4.0, "placed below the anchor");
+    }
+
+    /// A forced side is honoured even when the automatic rule would flip: the
+    /// caller (a `Select` that sized its list for that side) owns the decision.
+    #[test]
+    fn anchored_forced_side_is_honoured_over_the_auto_flip() {
+        // Anchor near the bottom: Auto would flip up, but Below is forced.
+        let anchor = Rectangle::new(Point::new(40.0, 560.0), Size::new(120.0, 30.0));
+        let panel = Size::new(120.0, 80.0);
+        let vp = Size::new(800.0, 600.0);
+        let auto = place_anchored_on(anchor, panel, vp, 4.0, AnchorSide::Auto);
+        assert_eq!(auto.loc.y, 560.0 - 4.0 - 80.0, "auto flips up");
+
+        let forced = place_anchored_on(anchor, panel, vp, 4.0, AnchorSide::Below);
+        // Below would start at 594 and overflow, so it clamps to the bottom edge —
+        // but it never flips to the other side.
+        assert_eq!(forced.loc.y, 600.0 - 80.0, "forced Below clamps, does not flip");
+
+        // And a forced Above near the TOP clamps instead of flipping down.
+        let top_anchor = Rectangle::new(Point::new(40.0, 10.0), Size::new(120.0, 30.0));
+        let up = place_anchored_on(top_anchor, panel, vp, 4.0, AnchorSide::Above);
+        assert_eq!(up.loc.y, 0.0, "forced Above clamps to the top");
     }
 
     // ── Point-anchored placement (place_at_point) ──

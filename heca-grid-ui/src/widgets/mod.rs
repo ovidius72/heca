@@ -59,7 +59,10 @@ pub use chrome_region::{ChromeRegion, RegionMode};
 pub use command_palette::{Command, CommandPalette};
 pub use context_menu::{ContextMenu, MenuEntry};
 pub use dialog::Dialog;
-pub use overlay::{place_anchored, place_at_point, Overlay, OverlayPosition, DEFAULT_ANCHOR_GAP};
+pub use overlay::{
+    paint_panel_chrome, place_anchored, place_anchored_on, place_at_point, AnchorSide, Overlay,
+    OverlayPosition, PanelChrome, DEFAULT_ANCHOR_GAP,
+};
 pub use dock_frame::DockFrame;
 pub use flex::{Container, Flex, container};
 pub use gauge::Gauge;

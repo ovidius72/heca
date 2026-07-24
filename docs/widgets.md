@@ -1343,6 +1343,15 @@ The trigger **width hugs the widest option** (the engine measures the real rows 
 instead of counting characters), and everything scales with the font and the size variant. The open
 panel **flips above** the trigger when there's no room below, **caps** its visible rows to what fits
 in the `PaintCx` viewport, and **scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
+The panel's geometry comes from the shared placement authority
+([`place_anchored_on`](#overlay), anchored to the trigger rect and clamped into the viewport). The
+flip **side is passed in, not re-derived**: opening the list picks the side and the visible-row count
+*together* (the panel's height depends on the side), so the placement honours that decision rather
+than risking a disagreement with the row count. Its **presentation** is the shared
+[`paint_panel_chrome`](#overlay) (drop shadow + surface fill + bracket reticle) with the dropdown's
+own accent border and glow layered on — so an open list reads as the same surface as a `Dialog`
+panel, while still looking like an open control. The rows stay *placed children* of the `Select`
+(that is why it paints the panel itself rather than composing an `Overlay`).
 
 - **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`,
   **sugar** that builds a `Choice::labeled(text, text)` per option (the value *is* the text) ·
@@ -2206,13 +2215,25 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   `place_anchored(anchor, panel, viewport, gap) -> Rectangle` — the single authority for
   rect-anchored (dropdown) flip/clamp placement. Its sibling
   `place_at_point(anchor, panel, viewport, inset, centered) -> Rectangle` is the authority for
-  **point-anchored** placement (down-right of a cursor, flip up-left, or centered on the point);
-  [`ContextMenu`](#contextmenu) delegates its placement to it. ([`Select`](#select) is the
-  intended first consumer of `place_anchored`.)
+  **point-anchored** placement (down-right of a cursor, flip up-left, or centered on the point).
+  `place_anchored_on(..., side: AnchorSide)` is the full form of the former: `AnchorSide::Auto`
+  (default — flip by available room), or `Below`/`Above` to **force** a side the caller already
+  chose (still clamped into the viewport, never flipped away). Both
+  [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#contextmenu)
+  (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
 - **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
   layout).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
   `overlay_occludes` = whole viewport when blocking, else the panel rect.
+- **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` is the single
+  authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
+  surface fill, and the bracket reticle (the `Pane`/`DockFrame` visual language). `PanelChrome`'s
+  optional `border`/`glow` are the per-widget accents layered on top; the shared parts are not
+  configurable, which is what makes every overlay panel read as one surface. The base `Overlay` passes
+  `PanelChrome::default()` (no edge, no halo); [`Select`](#select)'s dropdown calls the same painter
+  with its accent border + neon glow, because its option rows are *placed children* and so cannot be
+  handed to an `Overlay` as a panel. Call it inside a `with_overlay` block — it does not open the
+  overlay layer itself.
 - **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
   (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
   composites above everything this layer draws — see the

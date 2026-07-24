@@ -54,6 +54,7 @@ use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Length};
 use crate::widgets::choice::{self, choice_at, Choice};
+use crate::widgets::overlay::{paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -123,8 +124,9 @@ pub struct Select {
     /// so rows of different heights (a two-line option) stack correctly instead of being forced
     /// onto an arithmetic grid.
     natural_h: Vec<f64>,
-    /// Last-seen viewport height (set during paint), used to flip/cap the list.
-    viewport_h: Cell<f64>,
+    /// Last-seen viewport (set during paint), used to flip/cap the list and to
+    /// clamp the panel on-screen via the shared placement authority.
+    viewport: Cell<Size>,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -151,7 +153,7 @@ impl Select {
             vis_rows: MAX_VISIBLE,
             open_up: false,
             natural_h: Vec::new(),
-            viewport_h: Cell::new(f64::MAX),
+            viewport: Cell::new(Size::new(f64::INFINITY, f64::MAX)),
             on_change: None,
         };
         select.remeasure();
@@ -300,22 +302,37 @@ impl Select {
         2.0 * PANEL_PAD + (lo..hi).map(|i| self.row_h(i)).sum::<f64>()
     }
 
-    /// Y of the panel top — below the trigger normally, above it when flipped up.
-    fn panel_top(&self) -> f64 {
-        let b = self.base.bounds;
-        if self.open_up {
-            b.loc.y - PANEL_GAP - self.panel_h()
-        } else {
-            b.loc.y + b.size.h + PANEL_GAP
-        }
-    }
-
     /// The bounding rect of the open option list (panel).
+    ///
+    /// Placement goes through the **shared overlay placement authority**
+    /// ([`place_anchored_on`]): the panel hangs off the trigger rect, on the side
+    /// [`open_list`](Select::open_list) already chose. The side is passed
+    /// explicitly rather than re-decided, because the flip and the visible-row
+    /// count are computed **together** in `open_list` (the panel's height depends
+    /// on the side) — letting the placement re-decide could disagree with the row
+    /// count. Width tracks the trigger, so the control and its list stay one unit.
+    ///
+    /// **This must stay a pure function of `bounds` + side + row heights.** It is
+    /// the *same* rect [`place_options`](Select::place_options) lays the rows into
+    /// and [`paint`](Component::paint) draws the panel at, but those run at
+    /// different moments (layout vs paint). Anything time-varying here — notably
+    /// clamping against a viewport cached during paint — makes the two calls
+    /// disagree, and the rows visibly detach from their panel. The list is kept
+    /// on-screen by capping the visible row *count* in `open_list`, not by moving
+    /// the panel, so an infinite viewport is passed deliberately.
     fn panel_rect(&self) -> Rectangle {
         let b = self.base.bounds;
-        Rectangle::new(
-            Point::new(b.loc.x, self.panel_top()),
+        let side = if self.open_up {
+            AnchorSide::Above
+        } else {
+            AnchorSide::Below
+        };
+        place_anchored_on(
+            b,
             Size::new(b.size.w, self.panel_h()),
+            Size::new(f64::INFINITY, f64::INFINITY),
+            PANEL_GAP,
+            side,
         )
     }
 
@@ -427,7 +444,7 @@ impl Select {
         self.open = true;
         self.highlight = self.selected.get_untracked();
 
-        let vp = self.viewport_h.get();
+        let vp = self.viewport.get().h;
         let b = self.base.bounds;
         let space_below = (vp - (b.loc.y + b.size.h) - 2.0 * PANEL_GAP).max(0.0);
         let space_above = (b.loc.y - 2.0 * PANEL_GAP).max(0.0);
@@ -543,7 +560,7 @@ impl Component for Select {
             return;
         }
         // Remember the viewport so the next `open_list` can flip/cap the panel.
-        self.viewport_h.set(cx.viewport().h);
+        self.viewport.set(cx.viewport());
         let disabled = self.base.disabled.get_untracked();
         let active = self.open || self.base.focused.get_untracked();
         let (surface, accent, glow_c, muted, foreground, radius, bw, ia) = {
@@ -634,20 +651,25 @@ impl Component for Select {
         if self.open && !disabled {
             cx.with_overlay(|cx| {
                 let panel = self.panel_rect();
-                let glow = Some(Glow {
-                    color: glow_c,
-                    radius: GLOW_RADIUS,
-                    intensity: GLOW_INTENSITY,
-                });
-                cx.rect(
+                // The panel's presentation comes from the SHARED overlay panel
+                // chrome (drop shadow + theme surface fill + bracket reticle), so a
+                // dropdown reads as the same surface as every other overlay panel.
+                // The dropdown keeps its own identity on top: the accent edge and
+                // the neon halo that mark it as an open control.
+                paint_panel_chrome(
+                    cx,
                     panel,
-                    surface,
-                    Some(Border {
-                        color: accent,
-                        width: bw,
-                    }),
-                    radius,
-                    glow,
+                    PanelChrome {
+                        border: Some(Border {
+                            color: accent,
+                            width: bw,
+                        }),
+                        glow: Some(Glow {
+                            color: glow_c,
+                            radius: GLOW_RADIUS,
+                            intensity: GLOW_INTENSITY,
+                        }),
+                    },
                 );
 
                 // Only the visible window is drawn — its rows were placed there, and their bounds
@@ -789,3 +811,93 @@ impl Select {
 }
 
 impl LayoutExt for Select {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 3-option select with a laid-out trigger rect and a known viewport.
+    fn select_at(trigger: Rectangle, viewport: Size) -> Select {
+        let mut s = Select::new(["low", "medium", "high"]);
+        s.base.bounds = trigger;
+        s.viewport.set(viewport);
+        s
+    }
+
+    /// With room below, the panel hangs under the trigger: left-aligned to it,
+    /// one `PANEL_GAP` down, and as wide as the trigger.
+    #[test]
+    fn open_panel_sits_below_the_trigger_when_there_is_room() {
+        let trigger = Rectangle::new(Point::new(40.0, 100.0), Size::new(120.0, 30.0));
+        let mut s = select_at(trigger, Size::new(800.0, 600.0));
+        s.open_list();
+        assert!(!s.open_up, "room below → no flip");
+        let p = s.panel_rect();
+        assert_eq!(p.loc.x, 40.0, "left-aligned to the trigger");
+        assert_eq!(p.loc.y, 100.0 + 30.0 + PANEL_GAP, "gap below the trigger");
+        assert_eq!(p.size.w, 120.0, "panel width tracks the trigger");
+    }
+
+    /// Near the viewport bottom the list flips **above** the trigger, and the
+    /// placement honours that decision (it does not re-derive the side).
+    #[test]
+    fn open_panel_flips_above_near_the_viewport_bottom() {
+        let trigger = Rectangle::new(Point::new(40.0, 560.0), Size::new(120.0, 30.0));
+        let mut s = select_at(trigger, Size::new(800.0, 600.0));
+        s.open_list();
+        assert!(s.open_up, "no room below → flipped up");
+        let p = s.panel_rect();
+        assert_eq!(
+            p.loc.y,
+            560.0 - PANEL_GAP - p.size.h,
+            "panel bottom sits a gap above the trigger top"
+        );
+        assert!(p.loc.y >= 0.0, "still on-screen");
+    }
+
+    /// **Regression guard.** The panel rect must be a pure function of the trigger
+    /// bounds + side + row heights — it is computed once when the rows are placed
+    /// (layout) and again when the panel is drawn (paint), and those run at
+    /// different moments. Making it depend on anything time-varying (a viewport
+    /// cached during paint, used to clamp) makes the two disagree and the rows
+    /// visibly detach from the panel — which is exactly what happened when the
+    /// list flipped **above** the trigger and a tall panel's negative `y` got
+    /// clamped to the viewport top on one of the two calls.
+    #[test]
+    fn open_panel_rect_is_independent_of_the_cached_viewport() {
+        let trigger = Rectangle::new(Point::new(760.0, 560.0), Size::new(120.0, 30.0));
+        let mut s = select_at(trigger, Size::new(800.0, 600.0));
+        s.open_list();
+        let before = s.panel_rect();
+        // A different viewport (resize, or the value paint caches vs. what layout
+        // saw) must not move the panel out from under its rows.
+        s.viewport.set(Size::new(400.0, 200.0));
+        assert_eq!(s.panel_rect(), before, "panel rect must not track the viewport");
+        s.viewport.set(Size::new(f64::INFINITY, f64::INFINITY));
+        assert_eq!(s.panel_rect(), before, "…nor an unset one");
+    }
+
+    /// Flipped above, the panel's geometry matches the original hand-rolled
+    /// formula exactly: bottom edge one gap above the trigger top, no clamping.
+    #[test]
+    fn flipped_panel_is_not_clamped_even_when_it_overflows_the_top() {
+        // A trigger high on screen with a tall list: the panel legitimately starts
+        // at a negative y. Clamping it here is what detached the rows.
+        let trigger = Rectangle::new(Point::new(40.0, 60.0), Size::new(120.0, 30.0));
+        let mut s = select_at(trigger, Size::new(800.0, 600.0));
+        s.open_up = true;
+        s.open = true;
+        let p = s.panel_rect();
+        assert_eq!(p.loc.y, 60.0 - PANEL_GAP - p.size.h, "exact flip-above formula");
+    }
+
+    /// Closed, the panel is not consulted: the widget reports no overlay and the
+    /// chosen option stands in the trigger.
+    #[test]
+    fn closed_select_is_not_an_overlay() {
+        let trigger = Rectangle::new(Point::new(40.0, 100.0), Size::new(120.0, 30.0));
+        let s = select_at(trigger, Size::new(800.0, 600.0));
+        assert!(!s.overlay_active());
+        assert!(!s.overlay_occludes(Point::new(45.0, 140.0)));
+    }
+}
