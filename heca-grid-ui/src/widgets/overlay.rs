@@ -34,7 +34,6 @@ use crate::builders::LayoutExt;
 use crate::component::{paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx};
 use crate::focus::FocusManager;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::color::Color;
 use crate::scene::{Border, Glow, Shadow};
 use crate::theme::FrameStyle;
 use crate::style::{Align, Justify, Length};
@@ -78,26 +77,49 @@ pub const DEFAULT_ANCHOR_GAP: f64 = 4.0;
 
 /// Optional per-widget accents layered onto the shared overlay panel chrome by
 /// [`paint_panel_chrome`] — a specialization's own identity (e.g. a
-/// [`Select`](super::Select) dropdown's accent edge + neon halo). The shared parts
-/// (drop shadow, theme surface fill, bracket reticle) are not configurable: they
-/// are what makes every overlay panel read as the same surface.
+/// [`Select`](super::Select) dropdown's accent edge + neon halo). The drop shadow
+/// and theme surface fill are not configurable: they are what makes every overlay
+/// panel read as the same surface. Whether an **edge** is drawn at all is the
+/// user's call, not the widget's — see
+/// [`FrameStyle`](crate::theme::FrameStyle)/`overlay_frame`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PanelChrome {
-    /// Border drawn on the panel fill. `None` (the base [`Overlay`]) = no edge.
+    /// The widget's preferred edge (color + width) — used **only** when
+    /// `overlay_frame` draws an edge (`Bordered`/`Bracketed`), and ignored under
+    /// [`FrameStyle::None`](crate::theme::FrameStyle::None). `None` here falls back
+    /// to the theme's neutral `border` color, so the base [`Overlay`] still gets an
+    /// edge when the user asks for one.
     pub border: Option<Border>,
-    /// Glow on the panel fill. `None` (the base [`Overlay`]) = no halo.
+    /// Glow on the panel fill. `None` (the base [`Overlay`]) = no halo. **Not**
+    /// governed by `overlay_frame`: the halo is the panel's neon identity, not a
+    /// frame, so it survives `FrameStyle::None`.
     pub glow: Option<Glow>,
 }
 
 /// Paint the **shared overlay panel chrome** into `rect`: drop shadow (lifting the
-/// panel off the page), the theme surface fill, and the bracket reticle — the same
-/// visual language as `Pane` / `DockFrame` — plus any per-widget `chrome` accents.
+/// panel off the page), the theme surface fill, the per-widget `chrome` accents, and
+/// the panel's **edge** as the user configured it.
 ///
 /// This is the single authority for what an overlay panel *looks like*, so the base
 /// [`Overlay`] and the widgets that own their own panel (a `Select` dropdown, whose
 /// option rows are placed children and therefore cannot be handed to an `Overlay`)
 /// cannot drift apart. Call it inside a [`PaintCx::with_overlay`] block; it does not
 /// open the overlay layer itself.
+///
+/// The edge follows [`Theme::overlay_frame`](crate::theme::FrameStyle) — the app's
+/// `[appearance] overlay_border_style` — and it owns the **whole** edge, so the
+/// three styles are genuinely distinct:
+///
+/// | `overlay_frame` | Edge | Corner reticle |
+/// |---|---|---|
+/// | `Bracketed` (default) | yes | yes |
+/// | `Bordered` | yes | no |
+/// | `None` | **no** | no |
+///
+/// A widget's own `chrome.border` is its preferred edge *color*; it is honoured when
+/// the style draws an edge and **ignored** under `None` (otherwise `None` could not
+/// remove a `Select`'s accent border, which is the bug this ownership rule fixes).
+/// The fill and the glow are never suppressed.
 pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome) {
     let (surface, shadow, shadow_blur, radius, frame, border_color, border_width) = {
         let t = cx.theme();
@@ -121,29 +143,24 @@ pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome
             dy: SHADOW_DROP,
         },
     );
-    // The panel's own fill + the widget's accent border/glow.
-    cx.rect(rect, surface, chrome.border, radius, chrome.glow);
-    // The shared FRAME is a theme/config decision (`overlay_frame`), never
-    // hardcoded: bracket reticle (default), a plain edge, or nothing.
-    match frame {
-        FrameStyle::Bracketed => cx.bracket_frame(rect),
-        FrameStyle::Bordered => {
-            // Only add an edge when the widget didn't already draw its own, so a
-            // Select/menu accent border isn't doubled up.
-            if chrome.border.is_none() {
-                cx.rect(
-                    rect,
-                    Color::TRANSPARENT,
-                    Some(Border {
-                        color: border_color,
-                        width: border_width,
-                    }),
-                    radius,
-                    None,
-                );
-            }
-        }
-        FrameStyle::None => {}
+    // `overlay_frame` owns the panel's whole EDGE — so `None` really means no
+    // edge, not "no brackets but keep the border". The widget's own accent border
+    // is its preferred edge *color*, honoured only when the style draws an edge;
+    // the fill and the glow are never suppressed (the glow is the panel's neon
+    // identity, not a frame).
+    let edge = match frame {
+        // Bracketed / Bordered both draw an edge: the widget's accent border when
+        // it has one, else the theme's neutral border.
+        FrameStyle::Bracketed | FrameStyle::Bordered => chrome.border.or(Some(Border {
+            color: border_color,
+            width: border_width,
+        })),
+        FrameStyle::None => None,
+    };
+    cx.rect(rect, surface, edge, radius, chrome.glow);
+    // The corner reticle is the extra that distinguishes Bracketed from Bordered.
+    if frame == FrameStyle::Bracketed {
+        cx.bracket_frame(rect);
     }
 }
 
@@ -635,6 +652,78 @@ mod tests {
             "light layer lets the outside press fall through"
         );
         assert!(dismissed.get(), "outside press fired the dismissal hook");
+    }
+
+    // ── Shared panel chrome + the `overlay_frame` edge policy ──
+
+    /// Paint the shared chrome with a given `overlay_frame` and report how many
+    /// **bordered** draw commands it emitted. Counting bordered commands (rather
+    /// than asserting exact widths) keeps the test about the edge *policy* and
+    /// robust to how the reticle happens to be drawn.
+    fn chrome_edge_count(frame: FrameStyle, chrome: PanelChrome) -> usize {
+        use crate::scene::DrawCommand;
+        use crate::Scene;
+        let mut theme = crate::theme::Theme::default();
+        theme.colors.overlay_frame = frame;
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 100.0));
+            paint_panel_chrome(&mut cx, rect, chrome);
+        }
+        scene
+            .iter()
+            .filter(|cmd| matches!(cmd, DrawCommand::Rect(r) if r.border.is_some()))
+            .count()
+    }
+
+    /// **Regression guard.** `overlay_frame` owns the panel's whole edge, so `None`
+    /// must remove the border too — not merely the corner reticle. The first version
+    /// drew the widget's `chrome.border` unconditionally, so selecting "none" left a
+    /// `Select`'s accent border on screen (user-reported).
+    #[test]
+    fn overlay_frame_none_removes_the_edge_entirely() {
+        let accent = PanelChrome {
+            border: Some(Border {
+                color: crate::color::Color::rgb(1, 2, 3),
+                width: 2.0,
+            }),
+            glow: None,
+        };
+
+        let none = chrome_edge_count(FrameStyle::None, accent);
+        assert_eq!(
+            none, 0,
+            "None must draw NO edge, even when the widget supplied one"
+        );
+
+        let bordered = chrome_edge_count(FrameStyle::Bordered, accent);
+        assert_eq!(bordered, 1, "Bordered draws exactly the panel edge");
+
+        // Bracketed = the same edge plus the corner reticle, so strictly more.
+        let bracketed = chrome_edge_count(FrameStyle::Bracketed, accent);
+        assert!(
+            bracketed > bordered,
+            "Bracketed adds the reticle on top of the edge ({bracketed} vs {bordered})"
+        );
+    }
+
+    /// A widget that supplies no border of its own still gets an edge when the user
+    /// asked for one (the theme's neutral border colour) — and still none under
+    /// `FrameStyle::None`.
+    #[test]
+    fn overlay_frame_falls_back_to_the_theme_border_when_the_widget_has_none() {
+        let plain = PanelChrome::default();
+        assert_eq!(
+            chrome_edge_count(FrameStyle::Bordered, plain),
+            1,
+            "theme border fills in for the base Overlay"
+        );
+        assert_eq!(
+            chrome_edge_count(FrameStyle::None, plain),
+            0,
+            "…but None still means no edge"
+        );
     }
 
     // ── Anchor-to-rect placement (place_anchored) ──
