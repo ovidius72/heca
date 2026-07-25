@@ -285,11 +285,46 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 # ─────────────────────────────────────────────────────────────────────────────
 # Custom modes — [[keys.mode]]
 # ─────────────────────────────────────────────────────────────────────────────
-# A mode is a sub-keymap entered via a trigger; `sticky = true` stays active until
-# Esc. The three modes below (resize, sidebar, selection) are heca's built-ins.
-# heca always merges these built-ins back in at runtime BY NAME, so redefining one
-# only extends/overrides its bindings — you will not lose sidebar/selection
-# navigation by adding your own mode.
+# A mode is a sub-keymap: while it is active, its own bindings apply instead of the
+# normal ones. Each mode takes three fields plus its bindings.
+#
+#   name     The mode's name. The built-ins are `resize`, `sidebar`, `selection`.
+#
+#   trigger  The key that ENTERS the mode, e.g. "prefix+r". Same key syntax as any
+#            other binding. Leave it EMPTY ("") for a mode that has no key of its
+#            own — something else in heca puts you there. `selection` is like this:
+#            you enter it with the `enter_selection_mode` action (prefix+s by
+#            default) or by scrolling up at a prompt, never via a trigger.
+#
+#   sticky   true  = stay in the mode until Esc (default).
+#            false = run one binding, then drop back to Normal.
+#
+# ⚠️ REDEFINING A BUILT-IN MODE — read this before copying one of the blocks below.
+# heca merges the built-ins back in at runtime BY NAME, but the three fields are
+# NOT treated the same way:
+#
+#   bindings          are ADDED to the built-in ones (your extra keys just work,
+#                     and you keep every default key of that mode)
+#   trigger, sticky   REPLACE the built-in values
+#
+# So if you redefine a mode to add one key, you must repeat its `trigger` and
+# `sticky` exactly as they are here. Omitting `trigger` sets it to "" — and for a
+# mode like `resize` that silently means prefix+r no longer enters it, with nothing
+# to tell you why.
+#
+# Adding `p` as a second "previous search match" key, keeping everything else:
+#
+#   [[keys.mode]]
+#   name = "selection"
+#   trigger = ""        # copied from below — omitting it would clear the trigger
+#   sticky = true       # copied from below — omitting it would reset stickiness
+#
+#   [[keys.mode.bindings]]
+#   action = "search_prev_match"
+#   keys = "p"
+#
+# These blocks also work in `config.toml`: both files are merged into one config
+# before they are read, so `[keys]` is honoured in either.
 
 # ── resize ── (prefix+r → sticky resize mode)
 [[keys.mode]]
