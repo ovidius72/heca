@@ -149,16 +149,25 @@
       "status": "planned",
       "description": "Typed, SwiftUI-style builder SDK that emits ViewNode (Column::new().gap(8).child(...)). Ergonomic authoring layer over the uniform node; the WASM SDK re-exports it.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "6c81c18b-1b80-4128-ba2a-276791879edb-check-001-in-progress-planned",
+          "date": "2026-07-25T19:16:30.000Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Back to planned 2026-07-25: started this session, then split. The research it triggered found that the declarative model cannot express padding, an input placeholder, scroll axes, a separator or a clickable row — so building a typed builder on today's vocabulary would freeze those holes into a compile-checked API. The model correction moved to the new phase F003/P017 (plugin-ui-gaps, 9 tasks). Nobody is working on this task; it resumes once P017 has landed, and then builds the typed builders on a corrected model. Note also that its line \"the WASM SDK re-exports it\" cannot be literally true while the model lives in the app crate — recorded as F003/P017/T9.",
+          "description": "Back to planned 2026-07-25: started this session, then split. The research it triggered found that the declarative model cannot express padding, an input placeholder, scroll axes, a separator or a clickable row — so building a typed builder on today's vocabulary would freeze those holes into a compile-checked API. The model correction moved to the new phase F003/P017 (plugin-ui-gaps, 9 tasks). Nobody is working on this task; it resumes once P017 has landed, and then builds the typed builders on a corrected model. Note also that its line \"the WASM SDK re-exports it\" cannot be literally true while the model lives in the app crate — recorded as F003/P017/T9."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-25T13:10:48.984Z",
       "completedAt": "",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-08T11:47:40.594Z"
+      "updatedAt": "2026-07-25T19:16:30.000Z"
     },
     {
       "id": "cf390afd-99f3-4a5a-b79c-71edad09b29e",
@@ -166,10 +175,19 @@
       "number": 7,
       "shortName": "plugin-task-ui-5",
       "title": "plugin-task-ui-5 — Table widget (on demand)",
-      "status": "planned",
+      "status": "deferred",
       "description": "On demand: add a first-class Table widget to heca-grid-ui (columns/header/row-selection/sort) + showcase + docs/widgets.md + a mapper arm. Until a real consumer needs it, a table is composed from Grid/Row/Label.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cf390afd-99f3-4a5a-b79c-71edad09b29e-check-001-planned-deferred",
+          "date": "2026-07-25T13:10:31.668Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "User decision 2026-07-25: deferred (\"delayed\"). The task's own condition is not met — it is explicitly \"on demand\", and there is no consumer. Verified in code: no Table widget in heca-grid-ui/src/widgets/ and no Table arm in the WidgetKind vocabulary (heca/src/chrome/view.rs). The only table in the repo is the illustrative one in docs/plugin-authoring.md, deliberately composed from Grid/Row/Label to prove composition suffices. Revisit when a real consumer needs sorting/row-selection/headers that composition cannot give.",
+          "description": "User decision 2026-07-25: deferred (\"delayed\"). The task's own condition is not met — it is explicitly \"on demand\", and there is no consumer. Verified in code: no Table widget in heca-grid-ui/src/widgets/ and no Table arm in the WidgetKind vocabulary (heca/src/chrome/view.rs). The only table in the repo is the illustrative one in docs/plugin-authoring.md, deliberately composed from Grid/Row/Label to prove composition suffices. Revisit when a real consumer needs sorting/row-selection/headers that composition cannot give."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -178,7 +196,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-08T11:47:40.594Z"
+      "updatedAt": "2026-07-25T13:10:31.668Z"
     },
     {
       "id": "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
@@ -596,5 +614,5 @@
     }
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
-  "updatedAt": "2026-07-25T08:11:17.244Z"
+  "updatedAt": "2026-07-25T19:16:30.000Z"
 }
