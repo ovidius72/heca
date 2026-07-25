@@ -25,6 +25,7 @@ pub struct Gauge {
     value: Signal<f32>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Gauge {
     /// A new gauge at 0.
     pub fn new() -> Self {

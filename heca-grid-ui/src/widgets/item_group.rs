@@ -30,6 +30,7 @@ pub struct ItemGroup {
     on_toggle: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl ItemGroup {
     /// A new expanded group titled `label`. Add rows with `.child(...)`.
     pub fn new(label: impl Into<String>) -> Self {

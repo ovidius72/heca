@@ -87,6 +87,7 @@ pub struct DockFrame {
     frameless: bool,
 }
 
+#[heca_grid_ui_macros::props]
 impl DockFrame {
     /// A new expanded frame titled `title`. Add body content with `.child(...)`
     /// and header controls with `.header(...)`.

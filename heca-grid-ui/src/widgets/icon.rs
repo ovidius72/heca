@@ -210,6 +210,7 @@ pub struct Icon {
 /// a lit control. The extra reach buys back the area a small emitter cannot.
 const HALO_RADIUS_FRAC: f32 = 0.55;
 
+#[heca_grid_ui_macros::props]
 impl Icon {
     /// A new icon for a named [`Glyph`].
     pub fn new(glyph: Glyph) -> Self {

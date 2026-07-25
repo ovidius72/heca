@@ -67,6 +67,7 @@ pub struct MarkerGroup {
     hovered: Signal<bool>,
 }
 
+#[heca_grid_ui_macros::props]
 impl MarkerGroup {
     /// A new (empty) group. Add rows with `.child(...)`.
     pub fn new() -> Self {

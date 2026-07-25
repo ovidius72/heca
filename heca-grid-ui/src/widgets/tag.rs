@@ -50,6 +50,7 @@ fn segment() -> Flex {
     Flex::row().align(Align::Center).gap(SLOT_GAP)
 }
 
+#[heca_grid_ui_macros::props]
 impl Tag {
     /// A new chip whose first segment shows `label`. Add a leading icon with
     /// [`leading`](Tag::leading), or further segments with [`segment`](Tag::segment).

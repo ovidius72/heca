@@ -48,7 +48,7 @@ const DISMISS_SCALE: f32 = 1.4;
 const DEFAULT_WIDTH: f32 = 320.0;
 
 /// Severity of a [`Toast`], mapped to theme tokens at paint time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ToastSeverity {
     /// Informational (accent).
     #[default]
@@ -115,6 +115,7 @@ pub struct Toast {
     flash_region: Region,
 }
 
+#[heca_grid_ui_macros::props]
 impl Toast {
     /// A new info toast showing `title`. Add body text with [`body`](Toast::body),
     /// an action with [`action`](Toast::action), severity via the convenience
@@ -179,6 +180,7 @@ impl Toast {
     }
 
     /// Set the small body text (a second line under the title).
+    #[heca_grid_ui_macros::prop]
     #[heca_grid_ui_macros::prop]
     pub fn body(mut self, body: impl Into<String>) -> Self {
         self.body = Some(body.into());

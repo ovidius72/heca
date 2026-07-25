@@ -77,6 +77,7 @@ pub struct Choice {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Choice {
     /// A new option standing for `value`, with **no content** — compose it with
     /// [`child`](Parent::child).
