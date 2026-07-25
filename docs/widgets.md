@@ -2114,6 +2114,14 @@ when collapsed to a rail, so every pane stays visible and addressable (vs a tool
 one icon). Centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash;
 focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick letters.
 
+**At rest it publishes a content glow so its bare glyph still haloes.** The cell draws no surface
+at rest — the bare icon *is* the resting look — so there is nothing to carry the halo every
+bordered surface gets. It cannot style its child either (children are `impl Component`), so it
+publishes a glow via `PaintCx::with_content_glow` and the [`Icon`](#icon) pulls it, the same
+publish/pull mechanism [content color](#scene--drawcommand--paintcx-for-building-widgets) uses.
+Hover and active already have their own lit chrome, so they do not double it, and the glyph keeps
+ownership of the halo's *reach* — only it knows how big it is.
+
 > **Not currently mounted in the app (2026-07-11).** The heca sidebar collapsed rail was dropped
 > (a region is Expanded ⇄ Hidden), so nothing in the app builds `RailCell`s today. It remains a
 > supported library widget, reserved for a future generic Provider icon rail — see
@@ -2128,6 +2136,20 @@ focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick let
 ```rust
 RailCell::new(Icon::new(Glyph::Terminal).color(theme.success).size(22.0))
     .cell_size(44.0).active(true).on_activate(move || focus_pane(i));
+
+// The child needs no `.glow(true)`: at rest the cell publishes one and the icon
+// inherits it. Setting it explicitly would light the glyph in hover/active too,
+// where the cell's own chrome is already lit.
+RailCell::new(Icon::new(Glyph::Terminal).size(22.0)).on_activate(move || focus_pane(i));
+```
+
+**Declarative (`ViewNode`).** `WidgetKind::RailCell`, prop `icon` (a Glyph **name**) + `size`,
+event `press`. The resting halo needs no prop — it comes from the cell.
+
+```rust
+ViewNode::new(WidgetKind::RailCell)
+    .prop("icon", PropValue::Glyph("terminal".into()))
+    .on_press(Intent::new("focus_pane").arg("pane_id", PropValue::Int(id)));
 ```
 
 ### KeyHint
