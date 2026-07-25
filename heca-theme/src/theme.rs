@@ -94,7 +94,11 @@ impl GlowLevel {
     pub fn strength_scale(self) -> f32 {
         match self {
             GlowLevel::None => 0.0,
-            GlowLevel::Thin => 0.5,
+            // 0.75 (was 0.5): with the faint rest glows (`control_rest_glow` ≈ 0.12
+            // base) a 0.5× strength on a 0.5× radius was nearly invisible — Thin
+            // read the same as None (user-reported). Thin = tight halo (the 0.5×
+            // radius carries the "thin"), still clearly present.
+            GlowLevel::Thin => 0.75,
             GlowLevel::Medium => 1.0,
             GlowLevel::Large => 1.6,
         }
@@ -149,6 +153,25 @@ impl Default for Shadow {
             blur: 8.0,
         }
     }
+}
+
+/// Frame decoration style for a container surface. The theme-level vocabulary
+/// behind the app's `[appearance] *_border_style` settings and the grid-ui
+/// `PaneFrame`; serialised `snake_case` (`"none" | "bordered" | "bracketed"`).
+///
+/// It lives here, in the theme crate, because `heca-grid-ui` reads it at paint
+/// time (via `Theme`) and cannot depend on the app's config crate — the same path
+/// `show_focus_border` takes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameStyle {
+    /// No frame — fill (and any per-widget border/glow) only.
+    None,
+    /// A clean continuous border in the surface's border color.
+    Bordered,
+    /// The accent corner-bracket reticle (bright rounded corners + dimmed line).
+    #[default]
+    Bracketed,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -238,6 +261,15 @@ pub struct Theme {
     pub intensity: Intensity,
     #[serde(default = "default_true")]
     pub show_focus_border: bool,
+    /// Frame decoration drawn around an **overlay panel** (dialog, dropdown,
+    /// context menu, command palette) by the shared overlay panel chrome.
+    /// Defaults to [`FrameStyle::Bracketed`] — the accent corner reticle that
+    /// matches `Pane`/`DockFrame`. Set it in a theme (`overlay_frame = "bordered"`)
+    /// or per-user via `[appearance] overlay_border_style` to get a plain edge
+    /// (`bordered`) or no frame at all (`none`). The widget's own accent border and
+    /// glow are separate — this token only governs the shared frame.
+    #[serde(default)]
+    pub overlay_frame: FrameStyle,
     /// Optional color of the keyboard **focus outline** — the thin ring drawn just *outside* a
     /// focused widget (see [`effective_focus_ring`](Self::effective_focus_ring) /
     /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html)). `None` → the accent shifted
@@ -344,6 +376,13 @@ pub struct InteractionAlphas {
     pub control_active_border: u8,
     /// Resting border of a control — unifies button/input/toggle/checkbox/select (was `150` in each).
     pub control_rest_border: u8,
+    /// Resting **glow intensity** of a control's surface (×255 — a `Glow.intensity`
+    /// of `30` ≈ 0.12), so buttons/inputs/toggles/selects carry a faint neon halo at
+    /// rest and the `glow_size` setting visibly scales them without hover/focus.
+    /// `0` = flat rest look (glow only on hover/active), matching the pre-token
+    /// behaviour. Scaled — like every glow — by `glow_size` at the
+    /// `PaintCx::scaled_glow` chokepoint.
+    pub control_rest_glow: u8,
 
     // ── List rows / sidebar cells ──
     /// Hover fill of a list row / sidebar cell — unifies row/item/rail (16/16/18 → 16).
@@ -421,6 +460,7 @@ impl Default for InteractionAlphas {
             control_active_fill: 64,
             control_active_border: 215,
             control_rest_border: 150,
+            control_rest_glow: 30,
             row_hover_fill: 16,
             row_active_fill: 30,
             row_active_border: 185,
@@ -689,10 +729,12 @@ mod tests {
 
     #[test]
     fn glow_level_strength_scales() {
-        // GlowLevel is the sole owner of glow strength; curve preserves the
-        // former Intensity::glow_scale() values exactly (none/thin/medium/large).
+        // GlowLevel is the sole owner of glow strength. The curve started as the
+        // former Intensity::glow_scale() values; `Thin` was since raised 0.5 → 0.75
+        // (T011) because at 0.5× strength on a 0.5× radius the faint rest glows read
+        // as None. `Thin` stays "thin" via its 0.5× *radius*, not a faded alpha.
         assert!((GlowLevel::None.strength_scale()).abs() < f32::EPSILON);
-        assert!((GlowLevel::Thin.strength_scale() - 0.5).abs() < f32::EPSILON);
+        assert!((GlowLevel::Thin.strength_scale() - 0.75).abs() < f32::EPSILON);
         assert!((GlowLevel::Medium.strength_scale() - 1.0).abs() < f32::EPSILON);
         assert!((GlowLevel::Large.strength_scale() - 1.6).abs() < f32::EPSILON);
     }

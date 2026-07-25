@@ -3,7 +3,7 @@ pub use crate::keys::{
 };
 pub use crate::loader::{AppConfig, Config, config_dir};
 pub use crate::settings::{ModifierKey, SettingsConfig};
-pub use heca_theme::{Color, GlowLevel, Intensity, Shadow, Theme};
+pub use heca_theme::{Color, FrameStyle, GlowLevel, Intensity, Shadow, Theme};
 
 /// Load a theme by name.
 ///

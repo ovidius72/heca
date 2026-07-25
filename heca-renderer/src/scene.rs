@@ -97,6 +97,9 @@ pub fn enqueue_scene(
 ) {
     // Active clip rects (each already intersected with its parent), so nested
     // `PushClip`s clip to their intersection. Both renderers scissor to the top.
+    // Glyph halos switch composite mode with the background exactly as rect glows
+    // do — otherwise a halo that adds light is invisible on a light theme.
+    text.set_glow_alpha_scale(glow_alpha_scale);
     let mut clip_stack: Vec<[f32; 4]> = Vec::new();
     for cmd in scene.iter() {
         match cmd {
@@ -153,6 +156,13 @@ pub fn enqueue_scene(
                     t.style.italic,
                     t.align,
                     t.font == FontRole::Icon,
+                    // The scene asks for a halo declaratively; the text renderer
+                    // decides how to realize it (see `TextGlow`).
+                    t.glow.map(|g| crate::text::TextGlow {
+                        color: g.color.to_f32x4(),
+                        radius: g.radius,
+                        intensity: g.intensity,
+                    }),
                 );
             }
             DrawCommand::PushClip(r) => {

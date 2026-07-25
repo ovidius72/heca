@@ -38,6 +38,10 @@ const BODY_SCALE: f32 = 0.9;
 /// Action button height (logical px) and horizontal text padding.
 const ACTION_H: f64 = 24.0;
 const ACTION_PAD_X: f64 = 12.0;
+/// Rest-glow spread radius (px) — the card's share of the theme rest halo. A
+/// touch wider than the small controls (12): the toast is a card-sized surface
+/// and a tight halo read visibly weaker beside them (user-reported).
+const GLOW_RADIUS: f32 = 14.0;
 /// The × dismiss hit-square edge as a multiple of the resolved font.
 const DISMISS_SCALE: f32 = 1.4;
 /// Default card width.
@@ -322,8 +326,13 @@ impl Component for Toast {
         let body_fs = self.base.font * BODY_SCALE;
 
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
-        // reticle frame (GridCN fidelity — same as the Modal panel, #79).
-        cx.rect(b, surface.lerp(tone, toast_tint as f32 / 255.0), None, card_radius, None);
+        // reticle frame (GridCN fidelity — same as the Modal panel, #79). The theme
+        // rest glow (`PaintCx::rest_glow`) keeps toasts scaling with `glow_size`
+        // (T011) — in the THEME glow color, not the severity tone: the bracket
+        // frame is always accent, and a danger-red halo under a blue frame blends
+        // to a muddy purple fringe (user-reported).
+        let glow = cx.rest_glow(GLOW_RADIUS);
+        cx.rect(b, surface.lerp(tone, toast_tint as f32 / 255.0), None, card_radius, glow);
         cx.bracket_frame(b);
 
         // Leading severity icon (single-layer, toned).
@@ -372,7 +381,7 @@ impl Component for Toast {
             }
         }
         // Focus ring when clickable + focused (theme-aware shift of the toast tone).
-        if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        if self.focusable() && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
             let ring = cx.theme().colors.focus_ring_tone(tone);
             cx.focus_ring(b, ring, card_radius);
         }

@@ -106,6 +106,14 @@ const INTENSITY_OPTS: [Intensity; 4] = [
     Intensity::Heavy,
 ];
 
+/// Overlay-panel frame options, in the order shown by the OVERLAY FRAME select.
+/// This mirrors the app's `[appearance] overlay_border_style` setting — which the
+/// showcase cannot read (it builds its own `Theme` and never loads `config.toml`),
+/// so the control writes the same `theme.colors.overlay_frame` token the config
+/// path writes in the real app.
+const OVERLAY_FRAME_OPTS: [FrameStyle; 3] =
+    [FrameStyle::Bracketed, FrameStyle::Bordered, FrameStyle::None];
+
 /// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`, `HEADER`).
 const SIZE_OPTS: [WidgetSize; 4] = [
     WidgetSize::Normal,
@@ -177,6 +185,9 @@ struct ThemeCtl {
     border: Signal<f32>,
     font: Signal<f32>,
     intensity: Signal<Intensity>,
+    /// Frame drawn around overlay panels (dialog / dropdown / menu / palette) —
+    /// the showcase stand-in for `[appearance] overlay_border_style`.
+    overlay_frame: Signal<FrameStyle>,
     /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
     size: Signal<WidgetSize>,
     /// Global UI zoom level (continuous, `ZOOM_MIN..=ZOOM_MAX`).
@@ -347,6 +358,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.intensity.get_untracked())
         .unwrap_or(2);
+    let overlay_frame_idx = OVERLAY_FRAME_OPTS
+        .iter()
+        .position(|x| *x == ctl.overlay_frame.get_untracked())
+        .unwrap_or(0);
     let size_idx = SIZE_OPTS
         .iter()
         .position(|x| *x == ctl.size.get_untracked())
@@ -418,9 +433,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // (see docs/widgets.md §Dialog). The Select is an OVERLAY-IN-OVERLAY (T009 step 4):
         // its open list must composite ABOVE the dialog's action buttons (a deeper scene
         // segment) and capture hover/wheel/keys over them — not show through or fall through.
+        // SIZED panel + SCROLLABLE body: `panel_size` bounds the panel, which is what
+        // lets the `ScrollRegion` around the body actually overflow and scroll. The
+        // title and the action row stay put — only the body scrolls, because only the
+        // body is inside the region. The nested Select above still has to composite
+        // ABOVE the buttons even while the body is scrolled.
+        // SIZED panel: `panel_size` bounds the panel so the scrollable list below has
+        // something to overflow. A `Pct` tracks the window; `Px` would pin it.
+        // A bounded panel (fixed px — a dialog is not viewport-proportional) so the
+        // scrollable body has something to overflow. Note what the caller does NOT
+        // have to say: the body fills the panel width and takes the leftover height
+        // on its own, so the title and the action row stay put while it scrolls.
+        .panel_size(Length::Px(560.0), Length::Px(420.0))
         .body(
-            Flex::column()
-                .gap(8.0)
+            ScrollRegion::new()
                 .child(Label::new("This action cannot be undone."))
                 .child(caption("Confirm name"))
                 .child(Input::new().value("pane-1").on_change(report))
@@ -430,7 +456,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .selected(2)
                         .on_change(report),
                 )
-                .child(Checkbox::new().label("Also close its column").on_change(report)),
+                .child(Checkbox::new().label("Also close its column").on_change(report))
+                .child(caption("Affected panes"))
+                .child(Label::new("· pane-1  (zsh)"))
+                .child(Label::new("· pane-2  (nvim)"))
+                .child(Label::new("· pane-3  (cargo watch)"))
+                .child(Label::new("· pane-4  (lazygit)"))
+                .child(Label::new("· pane-5  (htop)"))
+                .child(Label::new("· pane-6  (docker logs)"))
+                .child(Label::new("· pane-7  (tail -f)"))
+                .child(Label::new("· pane-8  (psql)"))
+                .child(Label::new("· pane-9  (redis-cli)"))
+                .child(Label::new("· pane-10 (k9s)")),
         )
         .action(Button::secondary("Cancel").on_click(move || {
             println!("[showcase] dialog cancelled");
@@ -838,6 +875,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 ctl.intensity.set(INTENSITY_OPTS[i.min(3)]);
                             }
                         }),
+                )
+                // The frame every OVERLAY panel draws (this Select's own dropdown
+                // included, so the change is visible the moment you reopen it).
+                // Mirrors `[appearance] overlay_border_style` in the real app.
+                .child(Label::new("OVERLAY FRAME").color(theme.colors.muted).font_scale(0.85))
+                .child(
+                    Select::new(["BRACKETED", "BORDERED", "NONE"])
+                        .selected(overlay_frame_idx)
+                        .on_change(move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.overlay_frame.set(
+                                    OVERLAY_FRAME_OPTS[i.min(OVERLAY_FRAME_OPTS.len() - 1)],
+                                );
+                            }
+                        }),
                 ),
         )
         // Live theme controls — glow size, corner radius, border width. Each
@@ -1006,6 +1058,48 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             }
             grid.child(row)
         })
+        // Glyph halo: a bare icon can carry the same resting glow every bordered
+        // SURFACE has. Flat vs `.glow(true)`, side by side, so the difference is
+        // visible without hunting. It goes through the one `scaled_glow` chokepoint,
+        // so the GLOW SIZE select above scales both — and `none` removes the halo
+        // here exactly as it removes every other glow in the UI.
+        .child(caption("Icon — glyph halo (glow_size scales it; none removes it)"))
+        .child(
+            Flex::row()
+                .gap(28.0)
+                .align(Align::Center)
+                .child(
+                    Flex::column()
+                        .gap(6.0)
+                        .align(Align::Center)
+                        .child(Icon::new(Glyph::Lightning).color(theme.colors.accent).size(34.0))
+                        .child(Label::new("FLAT").font_scale(0.62).color(theme.colors.muted)),
+                )
+                .child(
+                    Flex::column()
+                        .gap(6.0)
+                        .align(Align::Center)
+                        .child(
+                            Icon::new(Glyph::Lightning)
+                                .color(theme.colors.accent)
+                                .size(34.0)
+                                .glow(true),
+                        )
+                        .child(Label::new("GLOW").font_scale(0.62).color(theme.colors.muted)),
+                )
+                .child(
+                    Flex::column()
+                        .gap(6.0)
+                        .align(Align::Center)
+                        .child(
+                            Icon::new(Glyph::Terminal)
+                                .color(theme.colors.foreground)
+                                .size(34.0)
+                                .glow(true),
+                        )
+                        .child(Label::new("GLOW").font_scale(0.62).color(theme.colors.muted)),
+                ),
+        )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
         // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.
@@ -1059,6 +1153,33 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         "Close",
                     )
                     .side(TooltipSide::Bottom),
+                ),
+        )
+        // The four-sided placement authority (`place_beside`), one button per side.
+        // Hover each: the bubble centers on that side of its target and FLIPS to the
+        // opposite side when the viewport edge leaves no room — scroll this row to the
+        // top/bottom of the window to see Top/Bottom flip. The bubbles paint through
+        // the shared `paint_panel_chrome`, so the OVERLAY FRAME select at the top of
+        // the page restyles them exactly as it restyles the dialog and the dropdown.
+        .child(
+            Flex::row()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(Tooltip::new(
+                    Button::secondary("TOP").on_click(|| {}),
+                    "Above the target",
+                ))
+                .child(
+                    Tooltip::new(Button::secondary("BOTTOM").on_click(|| {}), "Below the target")
+                        .side(TooltipSide::Bottom),
+                )
+                .child(
+                    Tooltip::new(Button::secondary("LEFT").on_click(|| {}), "Left of the target")
+                        .side(TooltipSide::Left),
+                )
+                .child(
+                    Tooltip::new(Button::secondary("RIGHT").on_click(|| {}), "Right of the target")
+                        .side(TooltipSide::Right),
                 ),
         )
         // Dialog: a centered confirm panel over a scrim that holds REAL child components
@@ -2042,6 +2163,7 @@ impl GpuState {
             border: signal(theme.colors.border_width),
             font: signal(theme.font_size),
             intensity: signal(theme.colors.intensity),
+            overlay_frame: signal(theme.colors.overlay_frame),
             size: signal(WidgetSize::Normal),
             zoom: signal(ZOOM_DEFAULT),
             theme_idx: signal(0),
@@ -2279,6 +2401,7 @@ impl GpuState {
             self.ctl.border.set(self.theme.colors.border_width);
             self.ctl.font.set(self.theme.font_size);
             self.ctl.intensity.set(self.theme.colors.intensity);
+            self.ctl.overlay_frame.set(self.theme.colors.overlay_frame);
 
             let built = build_ui(&self.theme, self.ctl);
             let BuiltUi {
@@ -2318,6 +2441,7 @@ impl GpuState {
         self.theme.colors.border_radius = self.ctl.radius.get_untracked();
         self.theme.colors.border_width = self.ctl.border.get_untracked();
         self.theme.colors.intensity = self.ctl.intensity.get_untracked();
+        self.theme.colors.overlay_frame = self.ctl.overlay_frame.get_untracked();
         let font = self.ctl.font.get_untracked();
         if (font - self.theme.font_size).abs() > f32::EPSILON {
             self.theme.font_size = font;

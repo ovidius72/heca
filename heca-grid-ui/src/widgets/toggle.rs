@@ -138,10 +138,15 @@ impl Component for Toggle {
         let rest_border = ia.control_rest_border as f32;
         let border_a = rest_border + (255.0 - rest_border) * p;
         let border = cx.border(muted.lerp(accent, p).with_alpha(border_a.round() as u8));
-        let track_glow = (!disabled && p > 0.0).then_some(Glow {
+        // Rest → on: the theme rest glow (`PaintCx::rest_glow`) carries a faint halo
+        // while off, blending into the stronger on-glow as `p` rises — so `glow_size`
+        // visibly scales the control at rest too (T011).
+        let rest_i = cx.rest_glow(GLOW_RADIUS).map_or(0.0, |g| g.intensity);
+        let track_i = (GLOW_INTENSITY * p).max(rest_i);
+        let track_glow = (!disabled && track_i > 0.0).then_some(Glow {
             color: glow_c,
             radius: GLOW_RADIUS,
-            intensity: GLOW_INTENSITY * p,
+            intensity: track_i,
         });
         // Track radius follows the theme but rounds harder (pill widget), clamped
         // to the pill max — so at a moderate theme radius it reads as a capsule.
@@ -186,7 +191,7 @@ impl Component for Toggle {
         }
 
         // Focus ring — shown whenever focused (theme-aware color, outside the track).
-        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        if !disabled && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
             let ring = cx.theme().colors.effective_focus_ring();
             cx.focus_ring(track, ring, radius);
         }

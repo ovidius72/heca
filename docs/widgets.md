@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
+- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -162,7 +162,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `focused` | `Signal<bool>` | Holds keyboard focus. |
 | `focusable` | `bool` | Whether the widget **opts into** keyboard focus (default `false`). Interactive widgets set it `true` — in the constructor (always-focusable controls) or when a callback is wired (e.g. a `Row`'s `.on_activate`). The `Component::focusable()` default is `focusable && !disabled`, so widgets no longer re-implement that check; only genuinely dynamic ones (an overlay focusable only while open) override the method. |
 | `focus_barrier` | `bool` | Whether this widget is the **only** focus target in its subtree — focus traversal visits it but never descends into its children (default `false`). Set by controls that **compose** their content (`Button`, `Item`): a control is one click target, so it must be one Tab stop, whatever it holds. Without it a focusable child (a `Toggle` used as decoration) would take its own Tab stop while being click-dead, since the control consumes the press in its own `event`. Orthogonal to `style.hidden`, which drops a subtree from layout *and* focus. |
-| `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`). Widgets now draw their `focus_ring` whenever `focused`, so the ring shows for both; this flag is retained for widgets that still want a keyboard-only distinction. |
+| `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`: `advance` → `true`, click-focus → `false`). **Every widget gates its focus ring on `Base::shows_focus_ring()`** (= `focused && focus_visible` — CSS `:focus-visible` semantics), so a mouse click focuses a widget (Enter/Space work, the caret shows) **without** drawing the ring; only keyboard navigation rings. The ring is also removable app-wide via `[appearance] show_focus_border = false` (theme token `show_focus_border`). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
 | `children` | `Vec<Box<dyn Component>>` | Child components. |
 | `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
@@ -307,8 +307,10 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 | `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
 | `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus indicator (`focus_ring`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
 | `focus_ring` | `Option<Color>` | Color of the keyboard **focus outline** drawn by `PaintCx::focus_ring` (every widget). Unset ⇒ derived per-tone by `effective_focus_ring()` / `focus_ring_tone()`: the tone (accent, or `danger` for a destructive button) shifted toward `foreground`, which brightens the ring on dark themes and darkens it on light themes so it stays distinct from the widget's own border. Set it to pin the default/accent focus color; the `danger` ring always derives. |
-| `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
+| `show_focus_border` | `bool` | Focus-ring **kill switch** (default `true`); every ring draw is gated on it. Overridable per-config via `[appearance] show_focus_border`. Rings additionally show only on **keyboard** focus (`Base::shows_focus_ring()`), never on click. |
+| `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius **and strength**. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
+| `interaction.control_rest_glow` | `u8` | **Rest-state glow intensity** of control surfaces (×255; `30` ≈ 0.12; `0` = flat rest look). Button (Primary/Destructive/Outline), Input, Toggle track, Checkbox box, and the Select trigger halo faintly **at rest** with it — so a control shows the neon identity before hover/focus and `glow_size` visibly scales it at rest. Scaled by `glow_size` like every glow; disabled controls never halo. |
 | `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
 | `active_wash_alpha` | `f32` (0..1) | Opacity of the accent **wash** `DockFrame::active(true)` paints over an active frame (e.g. the active workspace). |
 | `card_background_alpha` | `f32` (0..1) | Opacity of a sidebar/list card's resting background tint (e.g. each pane card). |
@@ -319,10 +321,67 @@ Helper: **`theme.control_radius()`** → `radius × 0.5` (corners for small cont
 > theme so a global change scales every widget proportionally.
 
 - **`GlowLevel{None, Thin, Medium, Large}`** — glow halo size. `.radius_scale()` (0 / 0.5 /
-  1.0 / 2.0), `.parse(&str)` (for config.toml), `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
+  1.0 / 2.0), `.strength_scale()` (0 / 0.5 / 1.0 / 1.6), `.parse(&str)` (for config.toml),
+  `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
 - **`Intensity{Off, Low, Medium, Heavy}`** — CRT scanline strength. `.scanline_opacity()`
   (Off=0 → Heavy=0.20), `.next()` (cycles). *Glow and intensity are independent* — glow is
   owned by `glow_size`, so changing intensity affects only the scanline overlay.
+
+### The glow model — who owns what
+
+One sentence: **the theme owns the glow COLOR, the `glow_size` setting owns how much glow there
+is, and one token gives every surface a faint halo at rest.**
+
+| Layer | Owner | What it controls |
+|---|---|---|
+| **Color** | theme `glow` token (per-widget **tone** overrides: a Destructive button halos in `danger`, a Toast/Alert/Tag in its severity/own color) | the halo hue |
+| **Amount** | `glow_size` setting (`[appearance] glow_size` override → theme; `none\|thin\|medium\|large`) | presence + halo radius (`radius_scale`) + strength (`strength_scale`) of **every** glow, applied at the single `PaintCx` chokepoint (`scaled_glow`, inside `.rect(..)`) — nothing bypasses it |
+| **Rest presence** | `interaction.control_rest_glow` token (×255 intensity; `0` = flat rest look) via **`PaintCx::rest_glow(radius)`** — the one shared definition; each widget passes only its halo radius | whether surfaces halo **before** any hover/focus/active state |
+| **State glows** | each widget (hover sweep, toggle-on, checked pop, active pill/bar, attention pulse…) | drawn **on top** of the rest glow, same chokepoint |
+
+**Carries the rest glow:** Button (every bordered variant — Primary/Secondary/Destructive/
+Outline — at a tight `REST_GLOW_RADIUS`, far smaller than the hover halo), Input, Toggle track,
+Checkbox **box**, Select trigger, Pane (all frame variants), DockFrame fill, **filled** `Row`
+(list/pane cards), styled `ScrollRegion` (scrollable panel), Tag, Alert, Toast card (theme glow
+color — a severity-toned halo under the always-accent bracket frame blended to a muddy fringe)
+— plus the widgets that always glowed (Badge, StatusDot, active Tab, lit Gauge, MarkerGroup,
+and any surface given an explicit StyleExt `.glow(..)`, which always **wins over** the rest
+fallback).
+
+**Deliberately flat at rest:** Ghost/Link buttons (surface-less — Ghost's fading-in hover
+surface + border glow with the fade), unfilled `Row`/`Item` list rows, `Choice` option rows (the hosting
+control owns the surface), the `Tabs` strip (no container surface; the active pill + underline
+glow), `RailCell` (rest = bare icon), frameless `ScrollRegion`, layout shells
+(`Flex`/`ChromeRegion`) — they have no surface, so there is nothing to halo. Disabled controls
+never halo. `Button::glow(false)` opts a single button out of rest + hover glow.
+
+**Icons/glyphs can glow** (since the glyph-halo work): `TextCmd` carries an optional glow just as
+`RectCmd` does, and `heca-renderer` realizes it by **blurring the glyph's coverage mask** into its
+own atlas entry and drawing that once behind the sharp glyph, with zero alpha so premultiplied
+blending adds light without occluding.
+Opt in per glyph with [`Icon::glow(true)`](#icon), or let a control publish a **content glow** its
+composed glyphs inherit (how [`RailCell`](#railcell) lights its resting icon). It runs through the
+same `scaled_glow` chokepoint as every other glow, so `glow_size` scales it and `none` removes it.
+**Terminal cell glyphs never take it** — they are the hottest path in the app and a halo multiplies
+a run's vertex count.
+
+> The halo is a *renderer* choice, not a scene one: the scene says "this run glows", the renderer
+> decides how. The blur is a true Gaussian (three box passes) computed once per
+> `(glyph, size, sigma)` and cached in the atlas like any other glyph, so it costs **one** quad to
+> draw and scales with `glow_size` for free.
+>
+> An earlier attempt drew the glyph many times around a ring instead. It was abandoned: a ring is a
+> discrete shell, so the copies read as spokes and arcs rather than as light, and it degraded as the
+> radius grew because a fixed tap count spreads thinner. Do not reintroduce it.
+
+### The focus model — ring visibility
+
+| Question | Answer |
+|---|---|
+| When does the ring draw? | Only on **keyboard** focus: every widget gates its ring on `Base::shows_focus_ring()` (= `focused && focus_visible`, CSS `:focus-visible`). A mouse click focuses the widget (Enter/Space work, the caret shows) but never rings; Tab/arrows (`FocusManager::advance`) ring. |
+| Can I turn it off? | Yes — `[appearance] show_focus_border = false` (config override → theme `show_focus_border` token, default `true`); live-reloads with `prefix+Shift+r`. |
+| How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
+| What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
 
 ### `Color`
 
@@ -419,16 +478,50 @@ lists widget-specific methods; layout/style builders come from the traits above.
 
 ### Flex / Container
 
-Layout-only flexible box. **`Container`** and `container()` are aliases.
+Layout-only flexible box — the workhorse for arranging children. **`Container`** and `container()`
+are aliases. It's the tool for grouping: nest a `Flex` inside a `Flex` to build any arrangement,
+including form fields (see below), so most layouts need no dedicated widget.
 
 - **Construct**: `Flex::row()`, `Flex::column()`, `container()`.
-- **Traits**: `LayoutExt`, `Parent`. (No `StyleExt` — it's purely arrangement.)
+- **Direction / distribution**: `.direction(Direction)`; `.justify(Justify)` (main-axis:
+  `Start`/`Center`/`End`/`SpaceBetween`/`SpaceAround`/`SpaceEvenly`); `.align(Align)` (cross-axis:
+  `Start`/`Center`/`End`/`Stretch` — the default `Stretch` makes an `Auto`-sized child fill the
+  cross axis; `.align_self(Align)` overrides it for one child).
+- **Gap between children**: `.gap(px)` for a raw value, or **`.gap_spacing(Spacing)`** for a
+  **font-relative theme token** (`None`/`Xs`/`Sm`/`Md`/`Lg`) — resolved from the inherited font at
+  layout, so it scales with the font, size variant, and UI zoom. **Prefer the token**; a raw px gap
+  is tuned for one font size and wrong at every other.
+- **Padding**: `.padding(px)` / `.padding_xy(x, y)` for raw px, or the tokens `.pad_all(Spacing)` /
+  `.pad_x(Spacing)` / `.pad_y(Spacing)` (same font-relative scaling as `gap_spacing`).
+- **Sizing** (from `LayoutExt`, shared by every widget): `.width(Length)` / `.height(Length)`
+  (`Auto` / `Px` / `Pct`), `.grow(f32)` (flex-grow, absorb leftover space), `.margin*`.
+- **Traits**: `LayoutExt`, `Parent`. (No `StyleExt` — it's purely arrangement; use
+  [`Surface`](#surface) when you need a background/border/glow.)
 
 ```rust
 Flex::row().gap(12.0).align(Align::Center)
     .child(StatusDot::online())
     .child(Label::new("GRID LINK"));
 ```
+
+**Form fields — grouping with two gap scales (no `Field` widget needed).** A label and its control
+are one *couple* (tight); couples are separated by a larger gap. Express it with two nested `Flex`
+columns at different `gap_spacing` — the inner tight gap couples label↔control, the outer roomier gap
+falls *between* fields:
+
+```rust
+let field = |label, control| Flex::column().gap_spacing(Spacing::Xs)   // tight: label ↔ its control
+    .child(Label::new(label).color(theme.muted))
+    .child(control);
+
+Flex::column().gap_spacing(Spacing::Md)                                 // roomy: between fields
+    .child(field("Confirm name", Input::new().value("pane-1")))
+    .child(field("Archive target", Select::new(["SCRATCHPAD", "TRASH"])))
+    .child(Checkbox::new().label("Also close its column"));
+```
+
+A [`Dialog`](#dialog) body already defaults its own children to `gap_spacing(Md)`, so dropping the
+`field(...)` groups straight into `.body(...)` gives correct form spacing with no per-modal setup.
 
 ### Surface
 
@@ -904,7 +997,11 @@ re-emits the node with the new value instead.
 ### Button
 
 Interactive surface; look driven by variant × size, with animated per-variant hover and a
-press flash. Focusable; Space/Enter activate like a click.
+press flash. Focusable; Space/Enter activate like a click. Every bordered variant
+(Primary/Secondary/Destructive/Outline) carries a faint theme **rest glow**
+(`interaction.control_rest_glow`, tone follows the variant) so `glow_size` visibly scales them
+before hover/focus; the surface-less Ghost/Link stay flat at rest (Ghost's fading-in hover
+surface glows with it); `.glow(false)` disables both the rest and hover glow.
 
 **Its content is composed from child components** — the button paints only its own chrome (fill,
 border, hover sweep, press flash, focus ring, all from the `Theme`) and lets the layout engine place
@@ -1086,7 +1183,8 @@ IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
 
 ### Toggle
 
-Sliding on/off switch (translucent accent fill + light knob + glow when on). Focusable;
+Sliding on/off switch (translucent accent fill + light knob + glow when on; the track carries
+the faint theme rest glow — `interaction.control_rest_glow` — while off). Focusable;
 Space/Enter or click flips it.
 
 - **Construct**: `Toggle::new()` (off).
@@ -1103,7 +1201,10 @@ Toggle::new().on(true).on_change(|a| {
 ### Checkbox
 
 Bordered box with a pop-in accent indicator, plus an optional **clickable label** on
-either side. Focusable; Space/Enter or a click anywhere on box/label toggles it.
+either side. Focusable; Space/Enter or a click anywhere on box/label toggles it. The
+**box** (not the label) carries the faint theme rest glow (`interaction.control_rest_glow`),
+and the keyboard focus ring wraps the **box only** — the standard control ring; the label
+stays clickable but un-ringed.
 
 - **Construct**: `Checkbox::new()`.
 - **Builders**: `.checked(bool)`, `.label(text)`, `.label_side(LabelSide)` (`Right` default,
@@ -1120,7 +1221,8 @@ Checkbox::new().label("LEFT LABEL").label_side(LabelSide::Left);
 ### Input
 
 Single-line editable text field with a blinking caret, placeholder, and a full
-mouse/keyboard selection + editing model. Focusable.
+mouse/keyboard selection + editing model. Focusable. The field carries the faint theme
+rest glow (`interaction.control_rest_glow`).
 
 - **Construct**: `Input::new()`.
 - **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
@@ -1267,7 +1369,8 @@ option list paints in the scene's overlay layer (on top of everything) and the w
 [Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)); while open,
 `overlay_occludes(pos)` reports the **panel rect**, so a host's page-level gates (e.g. right-click →
 context menu) skip points the list covers (see [`Component` trait](#component-trait)). Focusable,
-and **one Tab stop** ([`Base.focus_barrier`](#base)) — the options are not separate stops.
+and **one Tab stop** ([`Base.focus_barrier`](#base)) — the options are not separate stops. The
+trigger carries the faint theme rest glow (`interaction.control_rest_glow`).
 
 **Its options are [`Choice`](#choice) children.** So an option is not a string: it is a value plus
 whatever content you compose — an icon and a label, a two-line row, a `Badge`. `Select` owns only the
@@ -1289,6 +1392,15 @@ The trigger **width hugs the widest option** (the engine measures the real rows 
 instead of counting characters), and everything scales with the font and the size variant. The open
 panel **flips above** the trigger when there's no room below, **caps** its visible rows to what fits
 in the `PaintCx` viewport, and **scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
+The panel's geometry comes from the shared placement authority
+([`place_anchored_on`](#overlay), anchored to the trigger rect and clamped into the viewport). The
+flip **side is passed in, not re-derived**: opening the list picks the side and the visible-row count
+*together* (the panel's height depends on the side), so the placement honours that decision rather
+than risking a disagreement with the row count. Its **presentation** is the shared
+[`paint_panel_chrome`](#overlay) (drop shadow + surface fill + bracket reticle) with the dropdown's
+own accent border and glow layered on — so an open list reads as the same surface as a `Dialog`
+panel, while still looking like an open control. The rows stay *placed children* of the `Select`
+(that is why it paints the panel itself rather than composing an `Overlay`).
 
 - **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`,
   **sugar** that builds a `Choice::labeled(text, text)` per option (the value *is* the text) ·
@@ -1756,7 +1868,27 @@ enclosing control, falling back to `theme.foreground`; the secondary layer follo
 - **Construct**: `Icon::new(Glyph)`.
 - **Builders**: `.size(px)` (glyph pixels — **not** the `WidgetSize` variant; use
   `Style::set_size` for that, since `size` is taken), `.color(Color)` (primary — opts out of
-  inheritance), `.secondary_color(Color)`.
+  inheritance), `.secondary_color(Color)`, `.glow(bool)` (default `false` — see below).
+
+**A glyph can halo** (`.glow(true)`). Until now only bordered *surfaces* carried the resting glow
+(`interaction.control_rest_glow`); a bare glyph was always flat, because glow lived only in the SDF
+**rect** renderer. `TextCmd` now carries an optional glow the way `RectCmd` does, and the renderer
+realizes it by drawing a pre-blurred copy of the glyph behind itself.
+
+  - It goes through the **same `scaled_glow` chokepoint** as every surface, so `glow_size = none`
+    removes it along with every other halo, and the other levels scale it. It is not a second glow
+    system.
+  - It is **opt-in, not automatic**: most icons sit inside a control that is already glowing (a
+    Button's leading icon, a pane-header action), and haloing those too would double the light.
+    Turn it on for a glyph that stands alone on the background.
+  - Only the **primary** layer haloes — haloing the secondary wash too would double the light on
+    every duotone glyph and cost a second set of taps for nothing.
+  - A glyph inside a control that publishes a **content glow** inherits one without the flag. That
+    is how [`RailCell`](#railcell) lights its resting bare icon: a control holds its children as
+    `impl Component` and cannot style them, so it publishes and the glyph pulls — exactly the
+    mechanism [content color](#scene--drawcommand--paintcx-for-building-widgets) already uses.
+  - **Never on terminal text.** Cell glyphs are the hottest path in the app; the halo multiplies a
+    run's vertex count, so the terminal path hard-codes no glow.
 - **Declarative**: `WidgetKind::Icon`, prop `icon` (a Glyph **name**, e.g. `"trash"`, `"git_branch"`
   — resolved by `glyph_from_name` in `realize.rs`; an unknown name renders no icon, never panics).
 
@@ -1782,9 +1914,15 @@ ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into(
 
 ```rust
 Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);
+// A standalone glyph that should read as lit:
+Icon::new(Glyph::Lightning).color(theme.accent).size(34.0).glow(true);
 // Render the whole set (what the showcase does):
 for &g in Glyph::ALL { /* Icon::new(g) … */ }
 ```
+
+> **Declarative note:** `glow` is not a `ViewNode` prop. It is a *rendering* decision the host
+> makes about a glyph standing alone versus one inside a lit control — a plugin describes what the
+> icon **is**, and the host decides how it is lit, the same split that keeps colors out of props.
 
 ### Tag
 
@@ -1976,6 +2114,14 @@ when collapsed to a rail, so every pane stays visible and addressable (vs a tool
 one icon). Centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash;
 focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick letters.
 
+**At rest it publishes a content glow so its bare glyph still haloes.** The cell draws no surface
+at rest — the bare icon *is* the resting look — so there is nothing to carry the halo every
+bordered surface gets. It cannot style its child either (children are `impl Component`), so it
+publishes a glow via `PaintCx::with_content_glow` and the [`Icon`](#icon) pulls it, the same
+publish/pull mechanism [content color](#scene--drawcommand--paintcx-for-building-widgets) uses.
+Hover and active already have their own lit chrome, so they do not double it, and the glyph keeps
+ownership of the halo's *reach* — only it knows how big it is.
+
 > **Not currently mounted in the app (2026-07-11).** The heca sidebar collapsed rail was dropped
 > (a region is Expanded ⇄ Hidden), so nothing in the app builds `RailCell`s today. It remains a
 > supported library widget, reserved for a future generic Provider icon rail — see
@@ -1990,6 +2136,20 @@ focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick let
 ```rust
 RailCell::new(Icon::new(Glyph::Terminal).color(theme.success).size(22.0))
     .cell_size(44.0).active(true).on_activate(move || focus_pane(i));
+
+// The child needs no `.glow(true)`: at rest the cell publishes one and the icon
+// inherits it. Setting it explicitly would light the glyph in hover/active too,
+// where the cell's own chrome is already lit.
+RailCell::new(Icon::new(Glyph::Terminal).size(22.0)).on_activate(move || focus_pane(i));
+```
+
+**Declarative (`ViewNode`).** `WidgetKind::RailCell`, prop `icon` (a Glyph **name**) + `size`,
+event `press`. The resting halo needs no prop — it comes from the cell.
+
+```rust
+ViewNode::new(WidgetKind::RailCell)
+    .prop("icon", PropValue::Glyph("terminal".into()))
+    .on_press(Intent::new("focus_pane").arg("pane_id", PropValue::Int(id)));
 ```
 
 ### KeyHint
@@ -2059,15 +2219,30 @@ auto-hintable and the host stamps the keycap for it.
 ### Tooltip
 
 A transparent wrapper that reveals a floating label when the pointer rests over its child past a
-short delay. The bubble (rounded surface + accent border + soft glow + text) is drawn on the
-**overlay layer** so it sits above siblings. Placement is **viewport-aware on all four sides**:
-the preferred side flips to its opposite when there's no room (`Top`↔`Bottom`, `Left`↔`Right`)
-and the cross-axis is clamped on-screen. It captures **no** input — the wrapped widget stays
-fully interactive (forwards events + focus).
+short delay. The bubble is drawn on the **overlay layer** so it sits above siblings. It captures
+**no** input — the wrapped widget stays fully interactive (forwards events + focus).
 
-- **Construct**: `Tooltip::new(child, text)`.
+**It hand-rolls neither its placement nor its surface** — both come from the shared authorities,
+so a tooltip cannot drift away from the rest of the overlay family:
+
+- **Placement** is [`place_beside`](#overlay), the four-sided authority: the bubble is **centered**
+  on the chosen side of the target, **flips** to the opposite side when there's no room
+  (`Top`↔`Bottom`, `Left`↔`Right`), and its **cross-axis** is clamped on-screen. Only the cross
+  axis clamps — sliding the bubble along the main axis would move it *over* the thing it
+  describes, so an unfittable bubble overflows instead.
+- **Surface** is [`paint_panel_chrome`](#overlay), the same painter every overlay panel uses.
+  So `[appearance] overlay_border_style` (`none | bordered | bracketed`) governs the tooltip's
+  edge exactly as it governs a dialog or a dropdown. The tooltip supplies only its own identity:
+  the accent edge colour (`interaction.tooltip_border`), a tighter/fainter halo than a panel's,
+  and `PanelElevation::Hover` — the shared shadow at a quarter depth, because the full panel
+  shadow is larger than a ~30px bubble.
+
+- **Construct**: `Tooltip::new(child, text)`, or `Tooltip::new_signal(child, Signal<String>)` for
+  a reactive label.
 - **Builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
   `.delay(seconds)` (hover delay before reveal, default `0.5`).
+- **`TooltipSide` is `BesideSide`** — the same type, re-exported under the name that reads better
+  at a call site. There is one four-sided vocabulary, not two.
 
 ```rust
 Tooltip::new(
@@ -2075,6 +2250,11 @@ Tooltip::new(
     "Close",
 ).side(TooltipSide::Bottom);
 ```
+
+**Declarative (`ViewNode`).** Host-only — there is no `WidgetKind::Tooltip`. A tooltip wraps a
+widget in the *retained* tree and is revealed by hover state the host owns; in the heca app an
+action button's tip is derived from its `WmAction` centrally (next section), never authored per
+call site.
 
 > The raw `Tooltip::new(button, "Close")` above hardcodes the text. **In the heca app,
 > do not do this for an action button** — see the next section: the tip (and its
@@ -2120,10 +2300,13 @@ viewport-filling, centering layer that decorates its single **panel** child with
 overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and the bracket
 reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
 *blocking* overlay (default) paints the scrim and swallows outside input (modal); a
-non-blocking one lets outside input fall through (light-dismiss). Positioning lives here once —
-the panel taffy-centers on the viewport, so every descendant gets true bounds (anchor-to-rect
-positioning for dropdown/popover/tooltip specializations is the planned extension; those still
-own their placement today).
+non-blocking one lets outside input fall through (light-dismiss). **Positioning lives here once**:
+`Center` taffy-centers the panel on the viewport (so every descendant gets true bounds), and
+`Anchored` hangs it off a trigger rect for dropdowns/popovers. The placement math and the panel
+chrome are also exposed as **free functions** ([`place_anchored_on`](#overlay),
+[`place_at_point`](#overlay), [`paint_panel_chrome`](#overlay)) so a widget that cannot hand its
+content to an `Overlay` — like [`Select`](#select), whose option rows are *placed children* — still
+shares the one implementation instead of hand-rolling a second one.
 
 **Composition, not inheritance.** [`Dialog`](#dialog) *composes* an `Overlay` as its subtree:
 the `Overlay` owns presentation + geometry ([`overlay_occludes`](#component-trait)); the
@@ -2140,10 +2323,76 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   scrim, outside input falls through), `.open(bool)`,
   `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
+- **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
+  `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
+  [`Dialog`](#dialog) case) or `OverlayPosition::Anchored { anchor, gap }` (dropdown/popover:
+  below the trigger rect, flipped above when there's no room, left-edge aligned, clamped into the
+  viewport). `.anchored(rect)` is sugar for the anchored mode with the default gap
+  (`DEFAULT_ANCHOR_GAP`); `.set_anchor(rect)` re-anchors in place (a host following a moved
+  trigger). Anchored placement is baked into the panel child's bounds on layout (the subtree-shift
+  trick — so paint and hit-testing follow), and it is idempotent. Pair an anchored overlay with
+  `.blocking(false)` for a light-dismiss popover. The placement math is the free function
+  `place_anchored(anchor, panel, viewport, gap) -> Rectangle` — the single authority for
+  rect-anchored (dropdown) flip/clamp placement. Its sibling
+  `place_at_point(anchor, panel, viewport, inset, centered) -> Rectangle` is the authority for
+  **point-anchored** placement (down-right of a cursor, flip up-left, or centered on the point).
+  `place_anchored_on(..., side: AnchorSide)` is the full form of the former: `AnchorSide::Auto`
+  (default — flip by available room), or `Below`/`Above` to **force** a side the caller already
+  chose (still clamped into the viewport, never flipped away). Both
+  [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#contextmenu)
+  (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
+- **Sizing**: `.panel_size(width: Length, height: Length)` gives the panel an explicit size instead
+  of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
+  behaviour there; a `Length::Pct` resolves against the **viewport**, since the `Overlay` fills it
+  (`Pct(0.6)` = 60% of the viewport). Call order does not matter — the size is stored and re-applied
+  whenever `.panel()`/`.panel_boxed()` replaces the child.
+  **Why it matters:** a [`ScrollRegion`](#scrollregion) only scrolls when its parent *bounds* it. An
+  unsized panel grows with its content, so a long body never overflows and no scrollbar appears.
+  Size the panel and the body can scroll inside it.
 - **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
   layout).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
   `overlay_occludes` = whole viewport when blocking, else the panel rect.
+- **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow, elevation })` is the single
+  authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
+  surface fill, the per-widget accents, and the panel's **edge**. The base `Overlay` passes
+  `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#contextmenu), and
+  [`CommandPalette`](#commandpalette) call the same painter with their own accent border + glow,
+  because each owns content that cannot be handed to an `Overlay` as a single panel child (`Select`'s
+  option rows are *placed children*; the menu/palette draw their rows from data). Call it inside a
+  `with_overlay` block — it does not open the overlay layer itself, and a blocking layer's **scrim**
+  is separate from the panel chrome (the palette paints its own scrim first).
+- **The panel edge is a user setting, not a widget decision** — `Theme.colors.overlay_frame`
+  (`FrameStyle`), driven by the app's `[appearance] overlay_border_style` (`none | bordered |
+  bracketed`, live-reloading like the rest). It owns the **whole** edge, so the three styles are
+  genuinely distinct:
+
+  | `overlay_frame` | Edge | Corner reticle |
+  |---|---|---|
+  | `bracketed` (default) | yes | yes |
+  | `bordered` | yes | no |
+  | `none` | **no** | no |
+
+  `PanelChrome.border` is the widget's preferred edge **colour** — honoured when the style draws an
+  edge, ignored under `none` (otherwise `none` could not remove a `Select`'s accent border). When a
+  widget supplies no border, the theme's neutral `border` fills in, so `bordered` still shows an edge
+  on the base `Overlay`. The **fill and glow are never suppressed**: the halo is the panel's neon
+  identity, not a frame, so it survives `none`. The showcase drives the same token live via its
+  **OVERLAY FRAME** select (it builds its own `Theme` and never reads `config.toml`).
+- **Depth is a semantic variant, not a number** — `PanelChrome.elevation` (`PanelElevation`). The
+  shadow's *shape* is defined once and scaled, so surfaces at different depths still read as the
+  same material. A caller picks the depth; it never supplies a blur radius or an offset.
+
+  | `PanelElevation` | Used by | Shadow |
+  |---|---|---|
+  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette) | full depth |
+  | `Hover` | [`Tooltip`](#tooltip) | 25% of it (blur *and* drop scale together) |
+
+  Why it exists: the panel shadow is tuned for surfaces hundreds of pixels across. Applied unscaled
+  to a ~30px tooltip bubble it is **larger than the surface casting it** — verified in the showcase
+  and rejected. `Hover` keeps the shared chrome at a depth that suits a transient bubble.
+  **The shadow is not part of the frame policy** — it is depth, not an edge, so `overlay_frame:
+  none` removes the border but never the shadow.
 - **Painting**: everything goes through `with_overlay`, so an overlay opened *inside* the panel
   (a [`Select`](#select) dropdown in a modal body) records a **deeper scene segment** and
   composites above everything this layer draws — see the
@@ -2164,6 +2413,126 @@ let visible = overlay.open_signal();
 mounts a layer itself; it submits a spec (e.g. `ModalSpec` with a `ViewNode` body) and the
 **host** builds the layer (`Dialog`/`Overlay`) around the realized content — overlay hosting,
 z-order, and blocking policy stay host-owned (§2.7 of the plugin plan).
+
+#### Implementing an overlay-panel widget
+
+There are **two ways** to give a widget an overlay panel. Pick by one question: *can the panel's
+content be a single child component?*
+
+**A. Compose an `Overlay`** — the default. Your content is one subtree, so hand it over and let the
+layer own placement, chrome, scrim, and dismissal. This is what [`Dialog`](#dialog) does.
+
+```rust
+use heca_grid_ui::prelude::*;
+use heca_grid_ui::widgets::{Overlay, OverlayPosition, DEFAULT_ANCHOR_GAP};
+
+// A light-dismiss popover anchored under its trigger.
+let popover = Overlay::new()
+    .blocking(false)                       // no scrim; outside input falls through
+    .anchored(trigger.base().bounds)       // below the trigger, flip above, clamp on-screen
+    .panel(Card::new().padding(10.0).child(Label::new("Popover body")))
+    .on_outside_click(move || close())     // light-dismiss
+    .open(true);
+
+// Re-anchor in place when the trigger moves (scroll, resize) — no rebuild:
+// popover.set_anchor(trigger.base().bounds);
+```
+
+**B. Paint the panel yourself, but reuse the authorities** — when the content *cannot* be one
+child. [`Select`](#select) is the case: its option rows are **placed children of the `Select`**
+(laid out in the trigger's flow, then moved into the panel by baking offsets into their bounds), so
+they cannot be handed to an `Overlay` without breaking the `bounds === drawn === clickable`
+invariant. Such a widget still must not hand-roll placement or chrome:
+
+> `MySelect` below is a **cut-down sketch of the real [`Select`](#select)** — a trigger with a
+> dropdown of rows — reduced to the parts that matter here. The shipped version is
+> `heca-grid-ui/src/widgets/select.rs`; read it alongside this.
+
+```rust
+use heca_grid_ui::widgets::{paint_panel_chrome, place_anchored_on, AnchorSide, PanelChrome};
+
+impl MySelect {
+    /// The panel rect. MUST be a pure function of bounds + side + content size —
+    /// see the invariant below.
+    fn panel_rect(&self) -> Rectangle {
+        let b = self.base.bounds;
+        let side = if self.open_up { AnchorSide::Above } else { AnchorSide::Below };
+        place_anchored_on(
+            b,                                            // anchor = the trigger rect
+            Size::new(b.size.w, self.panel_h()),          // panel size you computed
+            Size::new(f64::INFINITY, f64::INFINITY),      // see the invariant below
+            DEFAULT_ANCHOR_GAP,
+            side,
+        )
+    }
+}
+
+impl Component for MySelect {
+    fn paint(&self, cx: &mut PaintCx) {
+        // …trigger chrome here…
+        if self.open {
+            cx.with_overlay(|cx| {                        // the overlay LAYER is yours to open
+                let panel = self.panel_rect();
+                // Your identity only — whether an edge is drawn at all is the
+                // user's `overlay_frame` setting, applied by the painter.
+                paint_panel_chrome(cx, panel, PanelChrome {
+                    border: Some(cx.theme().colors.accent.into()), // preferred edge COLOUR
+                    glow: None,
+                });
+                for child in self.visible_rows() { child.paint(cx); }
+            });
+        }
+    }
+}
+```
+
+> ##### ⚠️ The invariant: a rect used to *place* children must be **pure**
+>
+> If the same rect both positions child components (during layout / an `on_layout` placement
+> pass) **and** is drawn during paint, it must be a pure function of already-settled inputs —
+> bounds, a decided side, measured child sizes. Layout and paint run at **different moments**, so
+> anything time-varying (most temptingly: clamping against a viewport that `paint` caches) makes
+> the two calls disagree, and the rows visibly **detach from their panel**.
+>
+> This is a real regression that shipped and was reverted: clamping `Select`'s panel to the
+> viewport put the rows outside the panel when the list flipped above (a negative `y` snapped to
+> `0`), and pushed row content onto the border for a trigger near the right edge. Keep such a
+> panel on-screen by **capping how much content you show** (`Select` caps the visible row count
+> when it opens), not by moving the panel after the fact. Pass an infinite viewport to
+> `place_anchored_on` to opt out of clamping, and add a test that mutates the cached viewport and
+> asserts the rect does not move (`open_panel_rect_is_independent_of_the_cached_viewport`).
+>
+> An `Overlay` you *compose* (path A) is not exposed to this: it places its panel child in
+> `on_layout` and paints from the child's real bounds, so there is only one source of truth.
+
+**Which authority to call**
+
+| You have | Call | Used by |
+|---|---|---|
+| A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
+| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#contextmenu) |
+| A target rect, **centered on any of 4 sides** (hover bubble) | `place_beside(anchor, panel, vp, gap, side)` with `BesideSide::{Top,Bottom,Left,Right}` | [`Tooltip`](#tooltip) |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
+
+The three placement authorities differ in **alignment**, which is why they are three functions and
+not one with flags:
+
+| Authority | Anchor | Cross-axis alignment | Flips between |
+|---|---|---|---|
+| `place_anchored_on` | a rect | leading-edge aligned | below ↔ above |
+| `place_at_point` | a point | corner-offset from the point | down-right ↔ up-left |
+| `place_beside` | a rect | **centered** | all four sides |
+
+> ⚠️ **`place_beside` results may depend on the viewport** (both the flip and the clamp read it),
+> which the [purity invariant](#-the-invariant-a-rect-used-to-place-children-must-be-pure) forbids
+> for a rect that positions children. It is safe for `Tooltip` only because that bubble is
+> **drawn**, never laid out into — its text is a `cx.text` call, not a child component. If you use
+> `place_beside` to place real children, you inherit the detach bug. Draw-only, or don't use it.
+
+Use `AnchorSide::Auto` unless you already decided the side. Force `Below`/`Above` when the
+decision and the panel's **size** are computed together (`Select` picks the side and its visible
+row count in one pass, because the height depends on the side) — otherwise the placement could
+flip to a side the size was not computed for.
 
 ### Dialog
 
@@ -2232,6 +2601,20 @@ the dialog) and `Activate` commits its row.
   (focuses the first focusable — a text field body if present, so the user types immediately;
   otherwise the first button as a safe default), plus `.body_boxed(Box<dyn Component>)` for a body
   from a mapper (e.g. `realize`).
+- **Sizing + a scrollable body**: `.panel_size(width: Length, height: Length)` bounds the panel
+  instead of letting it hug its content (default = hug; `Length::Auto` keeps hugging on that axis;
+  `Length::Pct` resolves against the **viewport**). This is what makes a long body scrollable: a
+  [`ScrollRegion`](#scrollregion) only scrolls when its parent bounds it, so wrap the body in one and
+  size the panel. Put **only the body** in the region — the title and the action row stay fixed:
+
+  ```rust
+  Dialog::new("Pick a container")
+      .panel_size(Length::Pct(0.5), Length::Pct(0.6))   // 50% × 60% of the viewport
+      .body(ScrollRegion::new().child(long_list))       // only this scrolls
+      .action(Button::secondary("Cancel"))
+  ```
+  A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the
+  nested-overlay routing from the T009 rework), so overlay-in-scrolled-overlay is supported.
 - **Accessor**: `.open_signal() -> Signal<bool>`.
 
 ```rust

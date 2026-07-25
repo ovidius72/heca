@@ -12,7 +12,12 @@
 //! Placement is **viewport-aware on all four sides**: the bubble centers on the
 //! chosen [`TooltipSide`] of the target, but flips to the opposite side when there
 //! isn't room (`Top`↔`Bottom`, `Left`↔`Right`), and its cross-axis is clamped to
-//! the viewport so it never spills off-screen.
+//! the viewport so it never spills off-screen. That rule is not implemented here —
+//! it is the shared [`place_beside`] authority, so the tooltip and any future
+//! four-sided popover cannot drift apart. The bubble's surface likewise comes from
+//! [`paint_panel_chrome`], the one definition of what an overlay panel looks like,
+//! so the user's `overlay_border_style` governs the tooltip exactly as it governs
+//! a dialog or a dropdown.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
@@ -22,6 +27,9 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::Length;
+use crate::widgets::overlay::{
+    paint_panel_chrome, place_beside, BesideSide, PanelChrome, PanelElevation,
+};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 use std::time::Instant;
@@ -36,15 +44,12 @@ fn union(a: Rectangle, b: Rectangle) -> Rectangle {
 }
 
 /// Which side of the target the bubble appears on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum TooltipSide {
-    /// Above the target (flips to `Bottom` if there's no room).
-    #[default]
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
+///
+/// This is [`BesideSide`] — the shared four-sided placement
+/// vocabulary — re-exported under the name that reads better at a tooltip call
+/// site (`Tooltip::new(..).side(TooltipSide::Bottom)`). One type, so the tooltip
+/// and [`place_beside`] can never disagree about what `Top` means.
+pub type TooltipSide = BesideSide;
 
 /// Seconds the pointer must rest before the bubble shows.
 const DEFAULT_DELAY: f32 = 0.5;
@@ -53,6 +58,11 @@ const GAP: f64 = 6.0;
 /// Bubble inner padding.
 const PAD_X: f64 = 8.0;
 const PAD_Y: f64 = 5.0;
+/// Halo falloff on the bubble — the tooltip's own accent identity, layered onto the
+/// shared panel chrome. Deliberately tighter/fainter than a dropdown's: a hover
+/// bubble should read as a light surface, not a panel demanding attention.
+const BUBBLE_GLOW_RADIUS: f32 = 5.0;
+const BUBBLE_GLOW_INTENSITY: f32 = 0.2;
 
 /// A transparent wrapper that reveals a floating label on hover.
 pub struct Tooltip {
@@ -148,51 +158,14 @@ impl Tooltip {
         Some(self.bubble_rect(self.base.bounds, w, h, self.viewport.get()))
     }
 
-    /// Whether a `w×h` bubble fits on `side` of target `b` within viewport `vp`.
-    fn fits(side: TooltipSide, b: Rectangle, w: f64, h: f64, vp: Size) -> bool {
-        match side {
-            TooltipSide::Top => b.loc.y - h - GAP >= 0.0,
-            TooltipSide::Bottom => b.loc.y + b.size.h + h + GAP <= vp.h,
-            TooltipSide::Left => b.loc.x - w - GAP >= 0.0,
-            TooltipSide::Right => b.loc.x + b.size.w + w + GAP <= vp.w,
-        }
-    }
-
-    /// The bubble rect for `w×h` text, anchored to target `b` and made
-    /// **space-aware**: the preferred [`side`](Tooltip::side) flips to its opposite
-    /// when there's no room (all four sides), and the cross-axis is clamped to the
-    /// viewport so the bubble never spills off-screen.
+    /// The bubble rect for a `w×h` label anchored to target `b` within viewport `vp`.
+    ///
+    /// Delegates to the shared [`place_beside`] authority: centered on the chosen
+    /// side, flipped when there is no room, cross-axis clamped. The bubble is
+    /// **drawn**, never a parent to laid-out children, which is what makes a
+    /// viewport-dependent rect safe here (see `place_beside`'s purity note).
     fn bubble_rect(&self, b: Rectangle, w: f64, h: f64, vp: Size) -> Rectangle {
-        // Flip to the opposite side if the preferred one doesn't fit but it does.
-        let opposite = match self.side {
-            TooltipSide::Top => TooltipSide::Bottom,
-            TooltipSide::Bottom => TooltipSide::Top,
-            TooltipSide::Left => TooltipSide::Right,
-            TooltipSide::Right => TooltipSide::Left,
-        };
-        let side = if Self::fits(self.side, b, w, h, vp) || !Self::fits(opposite, b, w, h, vp) {
-            self.side
-        } else {
-            opposite
-        };
-
-        let (mut x, mut y) = match side {
-            TooltipSide::Top => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y - h - GAP),
-            TooltipSide::Bottom => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + b.size.h + GAP),
-            TooltipSide::Left => (b.loc.x - w - GAP, b.loc.y + (b.size.h - h) / 2.0),
-            TooltipSide::Right => (b.loc.x + b.size.w + GAP, b.loc.y + (b.size.h - h) / 2.0),
-        };
-        // Clamp the cross-axis (the one the side doesn't pin) into the viewport.
-        match side {
-            TooltipSide::Top | TooltipSide::Bottom if vp.w.is_finite() => {
-                x = x.clamp(0.0, (vp.w - w).max(0.0));
-            }
-            TooltipSide::Left | TooltipSide::Right if vp.h.is_finite() => {
-                y = y.clamp(0.0, (vp.h - h).max(0.0));
-            }
-            _ => {}
-        }
-        Rectangle::new(Point::new(x, y), Size::new(w, h))
+        place_beside(b, Size::new(w, h), vp, GAP, self.side)
     }
 }
 
@@ -219,34 +192,40 @@ impl Component for Tooltip {
             return;
         }
 
-        let (surface, accent, glow_c, foreground, ctrl_radius) = {
+        let (accent, glow_c, foreground, tip_border) = {
             let t = cx.theme();
             (
-                t.colors.surface,
                 t.colors.accent,
                 t.colors.glow,
                 t.colors.foreground,
-                t.colors.control_radius(),
+                t.colors.interaction.tooltip_border,
             )
         };
         let font = self.base.font;
         let (w, h) = self.bubble_size();
         let rect = self.bubble_rect(self.base.bounds, w, h, cx.viewport());
-        let radius = ctrl_radius.min((h / 2.0) as f32);
 
         // Drawn on the overlay layer so it sits above later siblings.
         cx.with_overlay(|cx| {
-            let border = cx.border(accent.with_alpha(cx.theme().colors.interaction.tooltip_border));
-            cx.rect(
+            // The shared panel painter owns the surface: fill, drop shadow, and the
+            // edge the user configured via `overlay_border_style`. The tooltip
+            // supplies only its own identity — its accent edge colour and halo.
+            let border = cx.border(accent.with_alpha(tip_border));
+            paint_panel_chrome(
+                cx,
                 rect,
-                surface,
-                border,
-                radius,
-                Some(Glow {
-                    color: glow_c,
-                    radius: 5.0,
-                    intensity: 0.2,
-                }),
+                PanelChrome {
+                    border,
+                    glow: Some(Glow {
+                        color: glow_c,
+                        radius: BUBBLE_GLOW_RADIUS,
+                        intensity: BUBBLE_GLOW_INTENSITY,
+                    }),
+                    // A hover bubble is not at dialog depth: the panel shadow was
+                    // tuned for surfaces hundreds of px across and, unscaled, is
+                    // bigger than this ~30px bubble.
+                    elevation: PanelElevation::Hover,
+                },
             );
             cx.text(rect, &text, foreground, font, TextAlign::Center, TextStyle::REGULAR);
         });

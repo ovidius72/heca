@@ -538,13 +538,17 @@ fn glow_strength_scales_with_glow_size() {
     let thin = intensity_at(GlowLevel::Thin);
     let large = intensity_at(GlowLevel::Large);
     assert!(medium > 0.0, "medium glow intensity must be positive");
+    // Assert against the curve itself (Thin must sit strictly between None and
+    // Medium — its exact value is a tuning knob, e.g. 0.5→0.75 when Thin read
+    // the same as None on the faint rest glows).
     assert!(
-        (thin - medium * 0.5).abs() < 1e-4,
-        "thin should halve glow strength"
+        (thin - medium * GlowLevel::Thin.strength_scale()).abs() < 1e-4,
+        "thin follows its strength_scale"
     );
+    assert!(thin > 0.0 && thin < medium, "thin sits between none and medium");
     assert!(
-        (large - medium * 1.6).abs() < 1e-4,
-        "large should be 1.6x glow strength"
+        (large - medium * GlowLevel::Large.strength_scale()).abs() < 1e-4,
+        "large follows its strength_scale"
     );
 }
 
@@ -2160,10 +2164,23 @@ fn pane_draws_rounded_accent_border_no_brackets() {
         matches!(
             c,
             DrawCommand::Rect(r)
-                if r.border.is_some() && r.radius == theme.colors.border_radius && r.glow.is_none()
+                if r.border.is_some() && r.radius == theme.colors.border_radius
         )
     });
     assert!(rounded_border, "pane draws a rounded accent border at the theme radius");
+
+    // The surface carries the faint theme REST glow (`interaction.control_rest_glow`)
+    // so the `glow_size` setting visibly scales panes at rest too (T011).
+    let expected_i = theme.colors.interaction.control_rest_glow as f32 / 255.0;
+    let rest_glow = scene.iter().any(|c| {
+        matches!(
+            c,
+            DrawCommand::Rect(r)
+                if r.border.is_some()
+                    && r.glow.is_some_and(|g| (g.intensity - expected_i).abs() < 1e-6)
+        )
+    });
+    assert!(rest_glow, "pane surface carries the theme rest glow");
 }
 
 #[test]
@@ -3974,5 +3991,37 @@ fn root_scroll_region_sees_horizontal_overflow_through_a_natural_width_page() {
     assert!(
         root.scroll_to_x(10_000.0) > 0.0,
         "root region reports a positive max horizontal offset"
+    );
+}
+
+/// Focus-visible semantics (T014): a mouse click focuses a widget (Enter/Space
+/// work) but draws NO ring; keyboard navigation (advance) shows it. Widgets gate
+/// their ring paint on `Base::shows_focus_ring()`, which is exactly this.
+#[test]
+fn focus_ring_shows_on_keyboard_focus_not_on_mouse_click() {
+    use heca_grid_ui::FocusManager;
+
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+    let b = ui.base().children[0].base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+
+    let mut focus = FocusManager::new();
+    // Click-focus: focused (activation works) but the ring must NOT draw.
+    focus.dispatch(&mut ui, &Event::PointerPressed { pos: center });
+    let a = &ui.base().children[0];
+    assert!(a.base().focused.get_untracked(), "click focuses the widget");
+    assert!(
+        !a.base().shows_focus_ring(),
+        "mouse focus is not focus-visible — no ring"
+    );
+
+    // Keyboard navigation: the newly-focused widget rings.
+    focus.advance(&mut ui, true);
+    assert!(
+        ui.base().children.iter().any(|c| c.base().shows_focus_ring()),
+        "keyboard focus (advance) shows the ring"
     );
 }

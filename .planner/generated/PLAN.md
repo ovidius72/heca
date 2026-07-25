@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-16T13:31:50.586Z
+**Last updated:** 2026-07-25T08:11:17.568Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -80,11 +80,11 @@ Status: ✅ `done`
 
 **Work remaining:** Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.
 
-### 🚧 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
+### 🚫 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — F003 — 🧩 Pluggable Chrome Architecture
 
 Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.
 
-Status: 🚧 `in-progress`
+Status: 🚫 `blocked`
 
 **Phases:**
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
@@ -97,7 +97,7 @@ Status: 🚧 `in-progress`
 - 📋 **74abdac5-8a35-4e5f-a82f-3abb9bb0b738** P008 — plugin-05: Host API actions/overlay/region (0/3 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (4/5 tasks)
-- 🚧 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (6/12 tasks)
+- 🚫 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (12/17 tasks)
 - ✅ **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (8/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
@@ -111,7 +111,7 @@ Espansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pa
 Status: ⏸️ `deferred`
 
 **Phases:**
-- ⏸️ **ef538743-f412-443d-811b-9e02b66106c1** P001 — gridui-01: Scroll/list primitive (1/7 tasks)
+- ⏸️ **ef538743-f412-443d-811b-9e02b66106c1** P001 — gridui-01: Scroll/list primitive (1/8 tasks)
 - 📋 **cb8f1203-9ae5-431d-8e7d-07dad2804396** P002 — gridui-05: Bloom and custom draw effects (0/2 tasks)
 - 📋 **981bc6b0-9529-4a1c-96a3-7c8e34217bc4** P003 — gridui-02: Pane shell header and tabs (0/4 tasks)
 - 📋 **ce5d5ea4-0f84-4e5a-909a-77d8344a2a87** P004 — gridui-04: Showcase coverage and visual regression (0/2 tasks)
@@ -647,7 +647,7 @@ ScrollRegion widget (gridui-task-01, PR #177) shipped — vertical-only, wheel +
 
 Status: ⏸️ `deferred`
 
-**Tasks:** 1/7
+**Tasks:** 1/8
 
 ### 📋 cb8f1203-9ae5-431d-8e7d-07dad2804396 — P002 — gridui-05: Bloom and custom draw effects
 
@@ -786,13 +786,13 @@ Status: 📋 `planned`
 
 **Tasks:** 4/5
 
-### 🚧 99d19246-1ba9-4720-9895-e70c66acf144 — P011 — plugin-ui: Declarative widget-tree UI model (ViewNode)
+### 🚫 99d19246-1ba9-4720-9895-e70c66acf144 — P011 — plugin-ui: Declarative widget-tree UI model (ViewNode)
 
 The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node holds a vector of child widgets — plus the host mapper that realizes it into the retained heca-grid-ui tree. Gate/consumers: the rich overlay body (plugin-task-15), config-plugin render (plugin-task-21), and the WASM contribution description (plugin-task-26) all build on this. Source: pluggable-chrome-plugin-plan.md §2.6.1–2.6.2.
 
-Status: 🚧 `in-progress`
+Status: 🚫 `blocked`
 
-**Tasks:** 6/12
+**Tasks:** 12/17
 
 ### ✅ 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
 

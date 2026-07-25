@@ -233,6 +233,17 @@ impl Base {
     pub fn size_scale(&self) -> f32 {
         self.style.size.pad_scale()
     }
+
+    /// Whether the keyboard **focus ring** should draw: focused AND the focus is
+    /// keyboard-driven ([`focus_visible`](Self::focus_visible)) — CSS
+    /// `:focus-visible` semantics. A mouse click focuses a widget (so Enter/Space
+    /// work, the caret shows, …) but sets `focus_visible = false`, so pointer
+    /// users are not ringed; Tab/arrow navigation sets it `true` and the ring
+    /// appears. Every widget gates its ring paint on this single definition
+    /// (plus the theme's `show_focus_border` and its own disabled check).
+    pub fn shows_focus_ring(&self) -> bool {
+        self.focused.get_untracked() && self.focus_visible.get_untracked()
+    }
 }
 
 impl Default for Base {
@@ -626,6 +637,7 @@ pub struct PaintCx<'a> {
     /// The **inherited content color** for the subtree currently being painted — see
     /// [`with_content_color`](Self::with_content_color). `None` at the root.
     content_color: Option<Color>,
+    content_glow: Option<Glow>,
     /// Translation applied to every draw emitted through this context — see
     /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
     offset: (f64, f64),
@@ -639,6 +651,7 @@ impl<'a> PaintCx<'a> {
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
             content_color: None,
+            content_glow: None,
             offset: (0.0, 0.0),
         }
     }
@@ -763,6 +776,32 @@ impl<'a> PaintCx<'a> {
         self.content_color
     }
 
+    /// Paint the closure's subtree with `glow` as the **inherited content glow** — the
+    /// halo counterpart of [`with_content_color`](Self::with_content_color), and it
+    /// exists for the same reason.
+    ///
+    /// A control that *composes* its content holds its children as `impl Component`:
+    /// it cannot reach in and style them, and it cannot know whether a child is even
+    /// a glyph. [`RailCell`](crate::widgets::RailCell) is the case — its resting look
+    /// *is* a bare icon, so the only way to give that icon a halo is for the cell to
+    /// publish one and let the glyph pull it.
+    ///
+    /// The published glow is **unscaled**, like the one [`rest_glow`](Self::rest_glow)
+    /// returns: `glow_size` is applied once at the drawing chokepoint
+    /// ([`icon_glowing`](Self::icon_glowing), [`rect`](Self::rect)), never by the
+    /// publisher. Scaling before publishing would apply the setting twice.
+    pub fn with_content_glow(&mut self, glow: Option<Glow>, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = std::mem::replace(&mut self.content_glow, glow);
+        f(self);
+        self.content_glow = previous;
+    }
+
+    /// The inherited content glow, if a parent published one via
+    /// [`with_content_glow`](Self::with_content_glow).
+    pub fn content_glow(&self) -> Option<Glow> {
+        self.content_glow
+    }
+
     /// Queue a rounded rectangle with optional border and glow.
     pub fn rect(
         &mut self,
@@ -883,6 +922,7 @@ impl<'a> PaintCx<'a> {
             align,
             style,
             font: FontRole::Text,
+            glow: None,
         }));
     }
 
@@ -890,9 +930,33 @@ impl<'a> PaintCx<'a> {
     /// ([`FontRole::Icon`]). `glyph` is the codepoint as a string; the renderer
     /// selects the embedded icon family. Used by [`Icon`](crate::widgets::Icon).
     pub fn icon(&mut self, rect: Rectangle, glyph: &str, color: Color, size: f32) {
+        self.icon_glowing(rect, glyph, color, size, None);
+    }
+
+    /// [`icon`](PaintCx::icon) with an additive halo behind the glyph.
+    ///
+    /// This is the glyph counterpart of a surface's glow, and it goes through the
+    /// **same chokepoint**: `glow` is scaled by the theme's `glow_size` token before
+    /// it reaches the scene, so `GlowLevel::None` drops the halo entirely and every
+    /// other level scales it exactly as it scales a rect's. Pass
+    /// [`rest_glow`](PaintCx::rest_glow) to give a bare glyph the same faint resting
+    /// halo that bordered surfaces carry.
+    ///
+    /// A halo is deliberately opt-in per call rather than a property of the icon
+    /// font: terminal cell glyphs are the hottest path in the app and must never
+    /// take it.
+    pub fn icon_glowing(
+        &mut self,
+        rect: Rectangle,
+        glyph: &str,
+        color: Color,
+        size: f32,
+        glow: Option<Glow>,
+    ) {
         if self.culled(rect) {
             return;
         }
+        let glow = self.scaled_glow(glow);
         self.scene.push(DrawCommand::Text(TextCmd {
             rect: self.placed(rect),
             text: glyph.to_string(),
@@ -901,6 +965,7 @@ impl<'a> PaintCx<'a> {
             align: TextAlign::Center,
             style: TextStyle::REGULAR,
             font: FontRole::Icon,
+            glow,
         }));
     }
 
@@ -1119,6 +1184,24 @@ impl<'a> PaintCx<'a> {
             s.radius,
             s.glow,
         );
+    }
+
+    /// The theme-driven **rest glow** a widget surface carries before any
+    /// hover/focus/active state: color from the theme's `glow` token, intensity
+    /// from `interaction.control_rest_glow` (`None` when that token is `0` — the
+    /// flat look), halo radius supplied by the caller (each widget scales its own).
+    /// This is the single definition every widget shares, so the whole library
+    /// honors the `glow_size` setting at rest uniformly (the returned glow runs
+    /// through [`scaled_glow`](Self::scaled_glow) in `rect` like every other).
+    /// Widgets add their own gates on top (a disabled control never halos); a
+    /// tone-following widget (e.g. a destructive button) overrides the color.
+    pub fn rest_glow(&self, radius: f32) -> Option<Glow> {
+        let i = self.theme.colors.interaction.control_rest_glow;
+        (i > 0).then_some(Glow {
+            color: self.theme.colors.glow,
+            radius,
+            intensity: i as f32 / 255.0,
+        })
     }
 
     /// Scale a glow by the theme's `glow_size` token (the **sole** owner of glow:

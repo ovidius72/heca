@@ -43,7 +43,7 @@ use crate::component::{
     paint_child, route_event, shift_subtree, Base, Component, Event, Handled, PaintCx,
 };
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::style::Direction;
+use crate::style::{Direction, Length, Spacing};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Visible scrollbar thumb width (logical px).
@@ -69,6 +69,14 @@ const SCROLLBAR_GUTTER: f64 = SCROLLBAR_W + 2.0 * SCROLLBAR_PAD;
 /// previous build multiplied by a fixed line count × font, which made each notch
 /// jump ~75% of a small viewport and overshoot.)
 const WHEEL_STEP_FRAC: f64 = 0.1;
+/// Rest-glow spread radius (px) for a STYLED region (a scrollable panel) — its
+/// share of the theme rest halo; a frameless region has no surface and no glow.
+const SURFACE_GLOW_RADIUS: f32 = 12.0;
+/// How far the content clip is widened on an axis this region does **not** scroll,
+/// so a child's rest-glow halo (drawn outside the child's own bounds) isn't
+/// scissored flat against the edge and read as a cut-off row. Sized to the surface
+/// glow spread above.
+const GLOW_BLEED: f64 = SURFACE_GLOW_RADIUS as f64;
 /// Delay (seconds) before a held track-press starts repeating its paging.
 const TRACK_REPEAT_DELAY: f32 = 0.35;
 /// Interval (seconds) between repeated pages while the track press stays held.
@@ -185,6 +193,24 @@ impl ScrollRegion {
         // scroll actions that call `scroll_to`/`scroll_by`/`ensure_visible` — never by
         // the widget swallowing raw keys. See docs/overlay-design.md (scroll actions).
         base.style.direction = Direction::Column;
+        // A scroll viewport must be allowed to be SMALLER than its content — that
+        // is the whole point of it. Flexbox defaults fight this twice: a flex item's
+        // `min-height` is `auto` (= its content size) and this crate sets
+        // `flex_shrink: 0` so explicit widget sizes are never squished. Left at the
+        // defaults, a region inside a bounded parent (a sized `Dialog` panel) grows
+        // to its content and **overflows the panel instead of scrolling** — no
+        // overflow, so no scrollbar. Opting out of both here means a region scrolls
+        // wherever it is put, without every caller having to know this.
+        base.style.min_width = Some(Length::Px(0.0));
+        base.style.min_height = Some(Length::Px(0.0));
+        base.style.flex_shrink = Some(1.0);
+        // Breathing room so the first and last rows don't sit flush against the
+        // clip edge, and a real gap between children — rows that touch are hard to
+        // scan. Both are theme SPACING TOKENS, not literals, so they scale with the
+        // font, the size variant and UI zoom (a px value tuned at one font size is
+        // wrong at every other). A caller can still override either.
+        base.style.pad_spacing_y = Some(Spacing::Sm);
+        base.style.gap_spacing = Some(Spacing::Md);
         Self {
             base,
             axes: ScrollAxes::default(),
@@ -547,8 +573,21 @@ impl Component for ScrollRegion {
         let vp = self.base.bounds;
         // Styled-surface decoration (background/border/glow/radius from the theme
         // via `StyleExt`) painted in viewport space, before the clipped content — a
-        // plain region sets none of these and stays frameless.
-        cx.paint_base(&self.base);
+        // plain region sets none of these and stays frameless (and, having no
+        // surface, carries no glow). A STYLED region (a scrollable panel) without an
+        // explicit `.glow(..)` falls back to the theme rest glow, like every surface.
+        let s = &self.base.style;
+        if (s.fill.is_some() || s.border.is_some()) && s.glow.is_none() {
+            cx.rect(
+                vp,
+                s.fill.unwrap_or(crate::color::Color::TRANSPARENT),
+                s.border,
+                s.radius,
+                cx.rest_glow(SURFACE_GLOW_RADIUS),
+            );
+        } else {
+            cx.paint_base(&self.base);
+        }
         // Reserve a gutter for each visible scrollbar so content is never drawn
         // *under* the thumb: clip the content short of the lane on the right (when
         // the vertical bar shows) and/or the bottom (horizontal bar). The thumbs are
@@ -559,6 +598,21 @@ impl Component for ScrollRegion {
         }
         if self.h_overflow() {
             content_clip.size.h = (content_clip.size.h - SCROLLBAR_GUTTER).max(0.0);
+        }
+        // Widen the clip on an axis the region does NOT scroll, so a child's GLOW
+        // (which paints outside its own bounds — every bordered surface carries a
+        // rest halo) isn't scissored flat against the edge, which reads as the row
+        // being "cut off". Only the scrolling axis needs a tight clip — that is the
+        // one where content genuinely moves through the viewport and must be cut at
+        // the boundary. A non-scrolling axis has nothing to hide, so the few px of
+        // bleed is free.
+        if !self.axes.is_horizontal() {
+            content_clip.loc.x -= GLOW_BLEED;
+            content_clip.size.w += 2.0 * GLOW_BLEED;
+        }
+        if !self.axes.is_vertical() {
+            content_clip.loc.y -= GLOW_BLEED;
+            content_clip.size.h += 2.0 * GLOW_BLEED;
         }
         // Keep the baked shift current (paint takes `&self`, so sync via the
         // signal value; the shift was already applied by the last `event`/layout

@@ -24,7 +24,7 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
-use crate::widgets::Glyph;
+use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, PanelChrome, PanelElevation};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
@@ -304,27 +304,16 @@ impl ContextMenu {
         let panel_w = (content_w + 2.0 * PAD).clamp(MIN_W, MAX_W);
         let panel_h = 2.0 * PAD + self.entries.len().max(1) as f64 * row_h;
 
-        let a = self.anchor.get();
-        let (vw, vh) = if vp.w.is_finite() { (vp.w, vp.h) } else { (panel_w, panel_h) };
-        let (mut x, mut y) = if self.centered {
-            // Anchor = desired panel center: place the panel centered on it (no inset), then clamp.
-            (a.x - panel_w / 2.0, a.y - panel_h / 2.0)
-        } else {
-            // Prefer down-right of the anchor; flip/clamp to keep the panel on-screen.
-            let mut x = a.x + ANCHOR_INSET;
-            if x + panel_w > vw {
-                x = (a.x - panel_w - ANCHOR_INSET).max(0.0);
-            }
-            let mut y = a.y + ANCHOR_INSET;
-            if y + panel_h > vh {
-                y = (a.y - panel_h - ANCHOR_INSET).max(0.0);
-            }
-            (x, y)
-        };
-        x = x.clamp(0.0, (vw - panel_w).max(0.0));
-        y = y.clamp(0.0, (vh - panel_h).max(0.0));
-
-        Rectangle::new(Point::new(x, y), Size::new(panel_w, panel_h))
+        // Placement (down-right of the cursor, flip up-left, clamp — or centered on
+        // the anchor for keyboard/RPC-opened menus) lives in the shared overlay
+        // placement authority so it is not re-derived per widget.
+        place_at_point(
+            self.anchor.get(),
+            Size::new(panel_w, panel_h),
+            vp,
+            ANCHOR_INSET,
+            self.centered,
+        )
     }
 
     fn row_rect(&self, panel: Rectangle, idx: usize) -> Rectangle {
@@ -363,17 +352,17 @@ impl Component for ContextMenu {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (surface, accent, glow_c, foreground, muted, danger, ctrl_radius, radius) = {
+        // NB: the panel's own surface fill + corner radius are read by the shared
+        // `paint_panel_chrome`, so they are deliberately not pulled out here.
+        let (accent, glow_c, foreground, muted, danger, ctrl_radius) = {
             let t = cx.theme();
             (
-                t.colors.surface,
                 t.colors.accent,
                 t.colors.glow,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.danger,
                 t.colors.control_radius(),
-                t.colors.border_radius,
             )
         };
         let font = self.base.font;
@@ -381,17 +370,21 @@ impl Component for ContextMenu {
         self.panel.set(panel);
 
         cx.with_overlay(|cx| {
-            // Panel — a glowing accent-bordered surface (no scrim: context menus
-            // dismiss on outside-click rather than darkening the whole view).
+            // Panel — the SHARED overlay panel chrome (drop shadow + theme surface
+            // fill + bracket reticle), so a menu reads as the same surface as every
+            // other overlay panel. On top of it the menu keeps its own identity: an
+            // accent edge and the glow it shares with the CommandPalette (the glow
+            // radius still scales with the theme `glow_size`). No scrim — context
+            // menus dismiss on outside-click rather than darkening the whole view.
             let panel_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
-            cx.rect(
+            paint_panel_chrome(
+                cx,
                 panel,
-                surface,
-                panel_border,
-                radius,
-                // Match the CommandPalette panel glow so the two overlays read as
-                // one family (radius still scales with the theme `glow_size`).
-                Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                PanelChrome {
+                    border: panel_border,
+                    glow: Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                    elevation: PanelElevation::Panel,
+                },
             );
 
             for (i, e) in self.entries.iter().enumerate() {

@@ -835,6 +835,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -855,6 +856,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_initial_snapshot_matches_requested_size() {
+        let _serial = shell_test_guard();
         let backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
             .expect("terminal backend should initialize");
 
@@ -869,6 +871,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_resize_updates_snapshot_dimensions() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
             .expect("terminal backend should initialize");
 
@@ -885,6 +888,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_initial_damage_is_full_then_none() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
             .expect("terminal backend should initialize");
 
@@ -900,6 +904,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_resize_forces_full_damage() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
             .expect("terminal backend should initialize");
         let _ = backend.take_terminal_damage();
@@ -914,6 +919,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_process_input_reaches_shell() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
         let marker = "HECA_INPUT_OK";
@@ -930,6 +936,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_output_produces_row_damage() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
         let marker = "HECA_DAMAGE_ROWS";
@@ -956,6 +963,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_preserves_grapheme_output() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
         let marker = "e\u{301}🙂";
@@ -975,6 +983,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_exit_sets_should_close() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
 
@@ -991,6 +1000,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_exit_captures_code_via_take_exit() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
 
@@ -1014,6 +1024,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_update_is_stable_after_exit() {
+        let _serial = shell_test_guard();
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
 
@@ -1088,6 +1099,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_nvim_tui_produces_non_default_background_cells() {
+        let _serial = shell_test_guard();
         if !command_exists("nvim") {
             return;
         }
@@ -1116,6 +1128,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_bash_integration_reports_success_error_and_cwd() {
+        let _serial = shell_test_guard();
         let bash = PathBuf::from("/bin/bash");
         if !bash.exists() {
             return;
@@ -1184,6 +1197,7 @@ mod tests {
 
     #[test]
     fn terminal_backend_zsh_integration_detects_nvim_as_running_program() {
+        let _serial = shell_test_guard();
         let zsh = PathBuf::from("/bin/zsh");
         if !zsh.exists() || !command_exists("nvim") {
             return;
@@ -1268,12 +1282,78 @@ mod tests {
         );
     }
 
+    /// Serialises the tests that spawn a real shell on a PTY.
+    ///
+    /// These contend for a scarce OS resource: every one of them forks a shell and
+    /// allocates a pty, and `cargo test` runs them in parallel. Under that contention
+    /// a shell intermittently never came up at all — no output for the full 30s
+    /// timeout — landing on a different test each run. Running the suite with
+    /// `--test-threads=1` made it disappear completely (0 failures in 4 runs against
+    /// ~2 in 6 parallel), which is what identified the contention as the cause rather
+    /// than anything in the backend.
+    ///
+    /// A test-local lock is used instead of demanding `--test-threads=1` globally, so
+    /// only these tests serialise and the other ~75 in this crate still run in
+    /// parallel.
+    fn shell_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static SHELL_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        // A panicking test poisons the lock; that failure is already being reported,
+        // so recover rather than cascading an unrelated PoisonError into every
+        // sibling test.
+        SHELL_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// How long to wait for one handshake attempt before re-sending it.
+    const WARM_ATTEMPT: Duration = Duration::from_millis(400);
+
+    /// Block until the shell is genuinely ready to *read* input, by round-tripping a
+    /// marker through it and re-sending until it comes back.
+    ///
+    /// This was a flat 200ms sleep, and it made every test that types into the shell
+    /// intermittently fail — roughly two runs in six locally, landing on a different
+    /// test each time and burning the full 30s timeout when it did.
+    ///
+    /// The cause is not merely that a shell can take longer than 200ms to start under
+    /// `cargo test`'s parallelism. It is that `sh` calls `tcsetattr(TCSAFLUSH)` while
+    /// setting up the terminal, and **`TCSAFLUSH` discards pending input**. Anything
+    /// written into the PTY before that moment is thrown away, not buffered — so
+    /// "write early and let the tty queue it" does not work, and no amount of waiting
+    /// *afterwards* recovers the lost keystrokes.
+    ///
+    /// Waiting for the shell's *prompt* is not a fix either: whether `sh` prints one
+    /// depends on `PS1` and on how it judges interactivity, so a prompt may never
+    /// arrive. The only reliable readiness signal is a full round trip, retried until
+    /// it survives the flush.
     fn warm_shell(backend: &mut TerminalBackend) {
-        let deadline = Instant::now() + Duration::from_millis(200);
+        const READY_MARKER: &str = "HECA_SHELL_READY";
+        let deadline = Instant::now() + TEST_TIMEOUT;
+        while Instant::now() < deadline {
+            backend.process_input(shell_echo_command(READY_MARKER).as_bytes());
+            let seen = pump_backend_for(backend, WARM_ATTEMPT, |backend| {
+                terminal_text(backend).contains(READY_MARKER)
+            });
+            if seen {
+                return;
+            }
+        }
+        panic!("shell never echoed a handshake within {TEST_TIMEOUT:?}");
+    }
+
+    /// [`pump_backend_until`] with an explicit, shorter budget — for polling that is
+    /// expected to be retried rather than to succeed on the first attempt.
+    fn pump_backend_for<F>(backend: &mut TerminalBackend, budget: Duration, mut predicate: F) -> bool
+    where
+        F: FnMut(&TerminalBackend) -> bool,
+    {
+        let deadline = Instant::now() + budget;
         while Instant::now() < deadline {
             let _ = backend.update();
+            if predicate(backend) {
+                return true;
+            }
             thread::sleep(TEST_POLL_INTERVAL);
         }
+        false
     }
 
     fn pump_backend_until<F>(backend: &mut TerminalBackend, mut predicate: F) -> bool
@@ -1339,10 +1419,25 @@ mod tests {
         "exit\r"
     }
 
+    /// Hands every caller its own shell-integration directory.
+    ///
+    /// The path used to be keyed on the **process id** alone, so every test in the
+    /// binary shared one directory — while `cargo test` runs them in parallel and at
+    /// least one of them ends by `remove_dir_all`-ing its tree. A test could therefore
+    /// have its rcfiles deleted out from under a shell that was still starting, after
+    /// which that shell produced no output at all and the test spun out its full 30s
+    /// timeout. It presented as flakiness (~2 runs in 6, landing on a different test
+    /// each time) but it is a straightforward shared-mutable-state bug: serialising
+    /// the suite made it vanish, which is what pinned it.
+    ///
+    /// A per-call counter is enough — the pid still separates concurrent `cargo test`
+    /// invocations, and the counter separates tests within one binary.
     fn write_shell_integration_assets_for_test() -> ShellIntegrationAssets {
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
         let root = std::env::temp_dir().join(format!(
-            "heca-shell-integration-test-{}",
-            std::process::id()
+            "heca-shell-integration-test-{}-{}",
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
         ));
         let zsh_dir = root.join("zsh");
         fs::create_dir_all(&zsh_dir).expect("temp shell integration dir");

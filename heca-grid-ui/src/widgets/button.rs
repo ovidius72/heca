@@ -5,14 +5,21 @@
 //! | Variant | Hover behavior |
 //! |---------|----------------|
 //! | Primary (default) | solid border + accent fill that **sweeps bottom→top** with a glow |
-//! | Secondary | subtle `muted` fill + `muted` border (theme-consistent — never rides on `surface`); both firm toward `foreground` on hover, no glow |
+//! | Secondary | subtle `muted` fill + `muted` border (theme-consistent — never rides on `surface`); both firm toward `foreground` on hover (no extra hover glow) |
 //! | Destructive | like default but red, **fades in** (no sweep) |
 //! | Outline | dim border → accent, faint fill + glow |
-//! | Ghost | no border/bg at rest → **opaque bg + border fade in** |
+//! | Ghost | no border/bg at rest → **opaque bg + border fade in**, glowing with the fade |
 //! | Link | text only → **underline** appears |
 //!
 //! Hover progress animates over time via [`Component::tick`]. Glow and border
 //! are toggleable (`.glow(bool)`, `.bordered(bool)`).
+//!
+//! **Rest glow.** Every bordered variant (Primary / Secondary / Destructive / Outline)
+//! carries a faint theme-driven halo **at rest** — intensity from
+//! `interaction.control_rest_glow`, tone from the variant (danger for Destructive) —
+//! so the control shows the neon identity before any hover/focus and the `glow_size`
+//! setting visibly scales it. Ghost/Link are surface-less at rest (nothing to halo);
+//! Ghost's fading-in hover surface glows with it. Disabled controls never halo.
 //!
 //! **Disabled look.** When `disabled`, a button drops its vivid accent/danger chrome to the
 //! theme `muted` tone and draws its label in `muted` at a reduced alpha
@@ -34,9 +41,15 @@ use heca_core::layout::{Point, Rectangle, Size};
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
-const GLOW_RADIUS: f32 = 30.0;
+/// Matches the other controls' hover halos (Select/Toggle 16, Checkbox 14);
+/// the previous 30 made a hovered button visibly out of family (user-reported).
+const GLOW_RADIUS: f32 = 16.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
 const GLOW_INTENSITY: f32 = 0.12;
+/// REST glow spread radius (px) — deliberately much tighter than the hover halo
+/// so a resting button reads like every other control (Input/Select ≈ 12), not
+/// like a hovered one.
+const REST_GLOW_RADIUS: f32 = 12.0;
 /// Opacity of the `Secondary` variant's **fill** — a faint `theme.muted` tint. Using `muted`
 /// (a foreground-family token that always contrasts the surface and never equals it) instead of
 /// `theme.surface` gives Secondary a consistent "subtly filled" identity on **every** theme:
@@ -227,7 +240,8 @@ impl Button {
         self
     }
 
-    /// Enable or disable the hover glow (default: enabled).
+    /// Enable or disable the glow — both the hover glow and the faint theme
+    /// rest glow (`interaction.control_rest_glow`). Default: enabled.
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
         self
@@ -412,6 +426,18 @@ impl Component for Button {
         let (accent, danger) = if disabled { (muted, muted) } else { (accent, danger) };
         let b = self.base.bounds;
 
+        // Faint theme-driven REST glow (`PaintCx::rest_glow`) on the bordered
+        // variants, so a control carries the neon identity before any hover/focus and
+        // the `glow_size` setting visibly scales it at rest (T011). The tone follows
+        // the variant (a destructive button halos in `danger`). Ghost/Link are
+        // surface-less at rest and Secondary is the deliberately-quiet variant — none
+        // of them halo; a disabled control is flat.
+        let base_rest = (self.show_glow && !disabled)
+            .then(|| cx.rest_glow(REST_GLOW_RADIUS))
+            .flatten();
+        let rest_i = base_rest.map_or(0.0, |g| g.intensity);
+        let rest_glow = |color: Color| base_rest.map(|g| Glow { color, ..g });
+
         match self.variant {
             ButtonVariant::Primary => {
                 cx.rect(
@@ -419,7 +445,7 @@ impl Component for Button {
                     surface,
                     self.animated_border(accent, p, border_width, ia.control_rest_border as f32),
                     radius,
-                    None,
+                    rest_glow(glow_c),
                 );
                 if p > 0.0 {
                     self.paint_rising_fill(cx, accent, glow_c, p, radius);
@@ -432,7 +458,7 @@ impl Component for Button {
                     surface,
                     self.animated_border(danger, p, border_width, ia.control_rest_border as f32),
                     radius,
-                    None,
+                    rest_glow(danger),
                 );
                 if p > 0.0 {
                     let g = self.show_glow.then_some(Glow {
@@ -455,18 +481,21 @@ impl Component for Button {
                     muted.with_alpha(SECONDARY_FILL_ALPHA),
                     self.animated_border(bc, p, border_width, ia.control_rest_border as f32),
                     radius,
-                    None,
+                    rest_glow(glow_c),
                 );
                 self.paint_content(cx, foreground);
             }
             ButtonVariant::Outline => {
                 // Hover: vivid accent border, text → primary (accent), lightest glow.
+                // At rest the theme rest-glow carries the halo (tight radius); hover
+                // blends both radius and intensity over it as `p` rises.
                 let fill = accent.with_alpha(alpha(p * 0.1));
-                let g = (self.show_glow && p > 0.0).then_some(Glow {
+                let g = self.show_glow.then_some(Glow {
                     color: glow_c,
-                    radius: GLOW_RADIUS * 0.8,
-                    intensity: GLOW_INTENSITY * 0.6 * p,
+                    radius: REST_GLOW_RADIUS + (GLOW_RADIUS * 0.8 - REST_GLOW_RADIUS) * p,
+                    intensity: (GLOW_INTENSITY * 0.6 * p).max(rest_i),
                 });
+                let g = g.filter(|g| g.intensity > 0.0);
                 cx.rect(
                     b,
                     fill,
@@ -485,7 +514,14 @@ impl Component for Button {
                 } else {
                     None
                 };
-                cx.rect(b, surface.with_alpha(alpha(p)), border, radius, None);
+                // Surface-less at rest (no halo), but the hover surface + border that
+                // fade in glow with the fade — like every other hovered control.
+                let g = (self.show_glow && !disabled && p > 0.0).then_some(Glow {
+                    color: glow_c,
+                    radius: GLOW_RADIUS,
+                    intensity: GLOW_INTENSITY * p,
+                });
+                cx.rect(b, surface.with_alpha(alpha(p)), border, radius, g);
                 self.paint_content(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Link => {
@@ -515,7 +551,7 @@ impl Component for Button {
         // Focus ring — shown whenever the button is focused (not keyboard-only) and enabled. It
         // follows the button's own tone (a destructive button rings in `danger`, not `accent`) so
         // the focus cue matches the widget's border colour instead of clashing with it.
-        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+        if !disabled && self.base.shows_focus_ring() && cx.theme().colors.show_focus_border {
             // Focus-outline tone (theme-driven, light/dark-aware): the accent case uses the
             // theme's `focus_ring` token or the accent shifted toward `foreground`; a destructive
             // button derives the same shift from its own `danger` tone. Both stay distinct from the

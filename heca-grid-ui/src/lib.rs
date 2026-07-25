@@ -62,7 +62,7 @@ pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
 pub use style::{Align, Direction, GridCell, Justify, Length, Spacing, Style, Track, WidgetSize};
-pub use theme::{GlowLevel, Intensity, Theme};
+pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Flex, Gauge, Glyph,
@@ -84,7 +84,7 @@ pub mod prelude {
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::{TextAlign, TextStyle};
     pub use crate::style::{Align, Direction, GridCell, Justify, Length, Spacing, Track, WidgetSize};
-    pub use crate::theme::{GlowLevel, Intensity, Theme};
+    pub use crate::theme::{FrameStyle, GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Flex, Gauge,

@@ -23,6 +23,9 @@ use crate::widgets::Icon;
 
 /// Default square cell extent (logical px).
 const DEFAULT_CELL: f32 = 40.0;
+/// Halo falloff for the resting bare glyph, in logical px. Matches [`Icon`]'s own so
+/// a rail cell and a standalone glowing icon read the same.
+const ICON_HALO_RADIUS: f32 = 6.0;
 /// Glow radius/intensity of the active cell (scaled by the theme's `glow_size`).
 const ACTIVE_GLOW_RADIUS: f32 = 9.0;
 const ACTIVE_GLOW_INTENSITY: f32 = 0.22;
@@ -144,10 +147,20 @@ impl Component for RailCell {
             cx.rect(b, foreground.with_alpha(cx.theme().colors.interaction.row_hover_fill), None, cell_radius, None);
         }
 
-        // The icon (carries its own status color).
-        for child in &self.base.children {
-            child.paint(cx);
-        }
+        // The icon (carries its own status color). At rest the cell draws no surface
+        // at all — the bare glyph *is* the resting look — so there is nothing to carry
+        // the halo that every bordered surface gets. Publish one for the subtree and
+        // let the glyph pull it; the cell cannot style a child it holds as
+        // `impl Component`. Hover and active already have their own lit chrome, so
+        // they do not double it.
+        let rest_glow = (!active && !self.hovered.get_untracked() && !disabled)
+            .then(|| cx.rest_glow(ICON_HALO_RADIUS))
+            .flatten();
+        cx.with_content_glow(rest_glow, |cx| {
+            for child in &self.base.children {
+                child.paint(cx);
+            }
+        });
 
         if self.interactive() && !disabled {
             cx.flash(b, self.flash.amount() * 0.5, cell_radius);
@@ -157,7 +170,7 @@ impl Component for RailCell {
         }
         if self.interactive()
             && !disabled
-            && self.base.focused.get_untracked()
+            && self.base.shows_focus_ring()
             && cx.theme().colors.show_focus_border
         {
             let ring = cx.theme().colors.effective_focus_ring();
