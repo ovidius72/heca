@@ -53,7 +53,18 @@ impl LayoutEngine {
         self.tree
             .compute_layout(node, space)
             .expect("taffy layout should not fail for a well-formed tree");
-        self.assign(root, Point::new(0.0, 0.0));
+        // Taffy lays the root out inside the space it is given, so the root has no
+        // parent box to be offset within and its margin is dropped. Apply it here, or
+        // `.margin_left(x)` on a root silently does nothing while working on every
+        // child — which is not a difference a caller can see. That trap put a
+        // correctly-built overlay a whole pane away from its target: no error, no
+        // warning, it simply drew somewhere else.
+        let style = &root.base().style;
+        let origin = Point::new(
+            style.margin_left.unwrap_or(style.margin) as f64,
+            style.margin_top.unwrap_or(style.margin) as f64,
+        );
+        self.assign(root, origin);
     }
 
     /// Recursively create taffy nodes for `c` and its children.
@@ -144,5 +155,54 @@ impl LayoutEngine {
 impl Default for LayoutEngine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builders::{LayoutExt, Parent};
+    use crate::style::Length;
+    use crate::widgets::Flex;
+
+    /// **Regression guard.** Taffy leaves the root at the origin of the space it is
+    /// given, so a margin on the root used to be silently dropped — it worked on every
+    /// child, and nothing distinguished the root. A caller positioning a box by margin
+    /// got no error and no warning; the box simply drew at the window's corner instead
+    /// of where it was put. That cost a mis-placed overlay a whole pane away from its
+    /// target before the engine applied it here.
+    #[test]
+    fn the_root_is_offset_by_its_own_margin() {
+        let mut root = Flex::row()
+            .width(Length::Px(100.0))
+            .height(Length::Px(50.0))
+            .margin_left(600.0)
+            .margin_top(100.0);
+        LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+        assert_eq!(root.base().bounds.loc, Point::new(600.0, 100.0));
+    }
+
+    /// The offset carries into descendants — a child of an offset root must move with
+    /// it, not stay behind at the window's corner.
+    #[test]
+    fn a_root_margin_moves_the_whole_subtree() {
+        let mut root = Flex::row()
+            .width(Length::Px(100.0))
+            .height(Length::Px(50.0))
+            .margin_left(600.0)
+            .margin_top(100.0)
+            .child(Flex::row().width(Length::Px(20.0)).height(Length::Px(20.0)));
+        LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+        let child = root.base().children[0].base().bounds.loc;
+        assert_eq!(child, Point::new(600.0, 100.0));
+    }
+
+    /// A root without a margin still starts at the origin — the common case must not
+    /// shift.
+    #[test]
+    fn a_root_without_a_margin_starts_at_the_origin() {
+        let mut root = Flex::row().width(Length::Px(100.0)).height(Length::Px(50.0));
+        LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
+        assert_eq!(root.base().bounds.loc, Point::new(0.0, 0.0));
     }
 }

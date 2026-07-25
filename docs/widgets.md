@@ -3341,7 +3341,7 @@ position it**: build a box the size of the target region, offset it with margins
 
 ```rust
 // A tag pinned to the bottom-right of a pane at (px, py, pw, ph).
-let pane_box = Flex::row()
+let mut root = Flex::row()
     .justify(Justify::End)          // ← push to the right edge
     .align(Align::End)              // ← push to the bottom edge
     .width(Length::Px(pw))          // ← the target region…
@@ -3351,22 +3351,15 @@ let pane_box = Flex::row()
     .padding(Spacing::Sm.scale() * theme.font_size)   // token, not a literal
     .child(Tag::new(label).color(theme.colors.accent));
 
-// The viewport-sized wrapper is REQUIRED — see the warning below.
-let mut root = Flex::row()
-    .width(Length::Px(viewport.w as f32))
-    .height(Length::Px(viewport.h as f32))
-    .child(pane_box);
-
 LayoutEngine::new().base_font(theme.font_size).compute(&mut root, viewport);
 root.paint(&mut cx);
 ```
 
-> ⚠️ **Never put the offset on the root.** `LayoutEngine::compute` assigns the root at
-> `(0, 0)` unconditionally, so a margin set on it is silently dropped — your widget lands at
-> `(width, height)` measured from the *window's* top-left instead of the region's. It does not
-> error, warn, or look obviously broken: it just draws somewhere else entirely. (In `heca` this
-> put the search bar over the sidebar, a whole pane away from the terminal it belonged to.)
-> Margins are only honoured on a **child**, so the offset box always needs a parent.
+Margins work on the **root** as well as on a child — `compute` offsets the root by its own
+margin, so the box above lands at `(px, py)` with no wrapper needed. (It did not always:
+the root was pinned at `(0, 0)` and its margin silently discarded, which drew `heca`'s
+search bar over the sidebar, a whole pane from the terminal it described. Fixed in the
+engine rather than worked around, so this reads the way it looks.)
 
 Nothing here measures text or computes a size — `Tag` hugs its content and the engine does
 the rest. This is what `heca`'s scrollback-search bar does; it previously guessed its own

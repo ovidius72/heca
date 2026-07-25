@@ -2109,13 +2109,12 @@ fn paint_pane_search(
 /// exactly that size and the caller paints the retained field into it. The size is
 /// measured by the layout engine, never derived from a character count.
 ///
-/// Pure so it can be tested without a GPU or an `AppState`; the placement bug this
-/// guards against (see the nesting note below) is invisible to every other check.
+/// Pure so it can be tested without a GPU or an `AppState`, which is how its
+/// placement is covered.
 fn search_bar_tree(
     field: Size,
     count: Option<String>,
     pane: Rectangle,
-    viewport: Size,
     theme: &GuiTheme,
 ) -> Flex {
     // The query slot, then the match position as a separate chip so it reads as
@@ -2135,7 +2134,7 @@ fn search_bar_tree(
     // A box the size of the pane, offset to the pane's origin, with the bar pushed
     // into its bottom-right corner. The engine does the positioning; nothing here
     // measures text or computes a coordinate.
-    let pane_box = Flex::row()
+    Flex::row()
         .justify(Justify::End)
         .align(Align::End)
         .width(Length::Px(pane.size.w as f32))
@@ -2143,18 +2142,7 @@ fn search_bar_tree(
         .margin_left(pane.loc.x as f32)
         .margin_top(pane.loc.y as f32)
         .padding(Spacing::Sm.scale() * theme.font_size)
-        .child(row);
-
-    // ⚠️ The viewport-sized wrapper is load-bearing, not decoration. `LayoutEngine`
-    // assigns the ROOT at `(0, 0)` unconditionally, so a margin on the root is
-    // silently dropped — the pane box would land at the window's origin and the bar
-    // would draw over whatever happens to be at `(pw, ph)` from the top-left corner
-    // (observed: it rendered over the sidebar, a whole pane away from its own). The
-    // margins are only honoured on a CHILD, so the pane box needs a parent.
-    Flex::row()
-        .width(Length::Px(viewport.w as f32))
-        .height(Length::Px(viewport.h as f32))
-        .child(pane_box)
+        .child(row)
 }
 
 /// The query field + match counter at the searched pane's bottom-right corner.
@@ -2204,7 +2192,7 @@ fn paint_search_bar(
         Point::new(px as f64, py as f64),
         Size::new(pw as f64, ph as f64),
     );
-    let mut root = search_bar_tree(field_size, count, pane, viewport, theme);
+    let mut root = search_bar_tree(field_size, count, pane, theme);
     LayoutEngine::new()
         .base_font(theme.font_size)
         .compute(&mut root, viewport);
@@ -2221,10 +2209,9 @@ fn paint_search_bar(
 }
 
 /// Bounds of the slot [`search_bar_tree`] reserved for the query field:
-/// wrapper → pane box → row → first child.
+/// pane box → row → first child.
 fn search_field_slot(root: &Flex) -> Option<Rectangle> {
-    let pane_box = root.base().children.first()?;
-    let row = pane_box.base().children.first()?;
+    let row = root.base().children.first()?;
     Some(row.base().children.first()?.base().bounds)
 }
 
@@ -4116,12 +4103,12 @@ mod search_bar_tests {
     /// bounds — the row holding the field slot and the counter.
     fn laid_out_bar_bounds(field: Size, count: Option<String>) -> Rectangle {
         let theme = GuiTheme::default();
-        let mut root = search_bar_tree(field, count, pane(), viewport(), &theme);
+        let mut root = search_bar_tree(field, count, pane(), &theme);
         LayoutEngine::new()
             .base_font(theme.font_size)
             .compute(&mut root, viewport());
-        // root -> pane box -> row
-        root.base().children[0].base().children[0].base().bounds
+        // root (pane box) -> row
+        root.base().children[0].base().bounds
     }
 
     /// A representative measured field size.
@@ -4129,11 +4116,10 @@ mod search_bar_tests {
         Size::new(w, 22.0)
     }
 
-    /// **Regression guard.** `LayoutEngine` assigns the root at `(0, 0)` and drops a
-    /// margin set on it, so the first version — which put the pane offset on the root
-    /// — rendered the bar at `(pw, ph)` from the window's top-left. On a two-pane
-    /// layout that placed it over the *sidebar*, a whole pane away from the terminal
-    /// it belonged to.
+    /// **Regression guard.** The bar is positioned purely by margins on its box, so
+    /// it must land inside the pane it belongs to. This caught the engine silently
+    /// dropping a root's margin, which drew the bar over the *sidebar* — a whole pane
+    /// away from the terminal it described.
     #[test]
     fn the_search_bar_lands_inside_its_pane() {
         let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
@@ -4177,7 +4163,7 @@ mod search_bar_tests {
     fn the_reserved_slot_matches_the_field_size() {
         let theme = GuiTheme::default();
         let f = field(140.0);
-        let mut root = search_bar_tree(f, Some("1/3".into()), pane(), viewport(), &theme);
+        let mut root = search_bar_tree(f, Some("1/3".into()), pane(), &theme);
         LayoutEngine::new()
             .base_font(theme.font_size)
             .compute(&mut root, viewport());
