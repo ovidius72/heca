@@ -2911,9 +2911,38 @@ child is styled by putting props on *that child*. The builder chains for ergonom
 a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
 ≡ `Column().children([a,b])`.
 
+### Layout props — every kind, no list
+
+**Any field of [`Style.layout`](#style--layout-enums) is a prop on any kind**, spelled exactly as
+the field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+`justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
+`flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+
+`realize` never enumerates them — it merges by name against `Layout`'s own fields. Add a field to
+`Layout` and a description can set it with **no change to the mapper**. The counterpart is that
+`Visual` is not serializable, so appearance (fill, border, glow, radius, font sizes) is unreachable
+from a description by construction rather than by a rule someone has to enforce.
+
+Values read the way you would write them:
+
+```rust
+ViewNode::new(WidgetKind::Column)
+    .prop("padding", PropValue::Int(12))                     // px
+    .prop("width",   PropValue::Text("50%".into()))          // "auto" | 240 | "50%"
+    .prop("justify", PropValue::Text("space_between".into())) // enums by name, snake_case
+    .prop("gap_spacing", PropValue::Text("md".into()))        // theme token, scales with the font
+```
+
+The merge lands **on top of** the constructed widget, so a widget's own constructor settings survive
+any property the node doesn't mention — a `Scroll` keeps the zeroed min-sizes and shrink factor that
+let a viewport be smaller than its content.
+
 ### Props & events by kind (what `realize` reads today)
 
-Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input.
+These are the props a kind reads **in addition to** the layout set above.
+
+Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
+and a bad value costs only itself: the good props on the same node still apply.
 
 > **A `Button`'s children are its content, and they win.** A Button node *with* children is realized
 > as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
@@ -2925,7 +2954,7 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 
 | Kind | Props it reads | Events |
 |------|----------------|--------|
-| `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+| `Column` / `Row` | (layout only — see above) | — |
 | `Card` | `text` (title) + children | — |
 | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |

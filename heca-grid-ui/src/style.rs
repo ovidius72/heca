@@ -6,9 +6,11 @@
 
 use crate::color::Color;
 use crate::scene::{Border, Glow};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Main-axis direction of a flex container.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Direction {
     #[default]
     Row,
@@ -16,7 +18,8 @@ pub enum Direction {
 }
 
 /// Main-axis distribution of children.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Justify {
     #[default]
     Start,
@@ -28,7 +31,8 @@ pub enum Justify {
 }
 
 /// Cross-axis alignment of children.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Align {
     Start,
     Center,
@@ -48,7 +52,8 @@ pub enum Align {
 /// (`1.25×` the base font) with a tight cluster padding, for icon buttons that sit in a
 /// pane/info-bar header and must read a touch larger than the body text.
 /// Set per widget via [`LayoutExt::size`](crate::builders::LayoutExt::size).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WidgetSize {
     /// Compact controls (`0.8×`).
     Small,
@@ -93,7 +98,8 @@ impl WidgetSize {
 /// A theme-derived **spacing** token for container padding. Resolved to px from the
 /// inherited font at layout time (so it scales with the theme / font zoom) — callers
 /// pick a token instead of hand-computing px. Used via `LayoutExt::pad`/`pad_x`/`pad_y`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Spacing {
     None,
     Xs,
@@ -116,6 +122,11 @@ impl Spacing {
 }
 
 /// A size along one axis.
+///
+/// Serializes to the spelling an author would reach for rather than to its enum shape:
+/// [`Auto`](Self::Auto) is `"auto"`, [`Px`](Self::Px) is a bare number, and [`Pct`](Self::Pct) is a
+/// percentage string (`"50%"`). So a declarative description writes `"width": 240` or
+/// `"width": "50%"`, not `{"px": 240}`. Round-trips, which the layout merge relies on.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Length {
     /// Sized by content / flex rules.
@@ -125,6 +136,46 @@ pub enum Length {
     Px(f32),
     /// Fraction of the parent (`0.0..=1.0`).
     Pct(f32),
+}
+
+impl Serialize for Length {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match *self {
+            Length::Auto => s.serialize_str("auto"),
+            Length::Px(v) => s.serialize_f32(v),
+            Length::Pct(v) => s.serialize_str(&format!("{}%", v * 100.0)),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Length {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Num(f32),
+            Text(String),
+        }
+        match Repr::deserialize(d)? {
+            Repr::Num(v) => Ok(Length::Px(v)),
+            Repr::Text(t) => {
+                let t = t.trim();
+                if t.eq_ignore_ascii_case("auto") {
+                    Ok(Length::Auto)
+                } else if let Some(pct) = t.strip_suffix('%') {
+                    pct.trim()
+                        .parse::<f32>()
+                        .map(|v| Length::Pct(v / 100.0))
+                        .map_err(|_| D::Error::custom("percentage is not a number"))
+                } else {
+                    t.parse::<f32>()
+                        .map(Length::Px)
+                        .map_err(|_| D::Error::custom("expected a number, \"auto\", or a percentage"))
+                }
+            }
+        }
+    }
 }
 
 impl Length {
@@ -168,7 +219,7 @@ impl Track {
 
 /// Placement of a child within a [`Grid`](crate::widgets::Grid): a 1-based start
 /// column/row plus a span. `Copy`, so it lives on [`Style`] without breaking it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GridCell {
     /// 1-based start column.
     pub col: u16,
@@ -279,7 +330,8 @@ pub struct Style {
 /// is not. [`size`](Self::size) lives here rather than in `Visual` because it is *semantic*
 /// (`Small`/`Normal`/`Big`) rather than a pixel value, and because the layout pass both reads it
 /// and cascades it to children.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Layout {
     // ── Arrangement ──
     pub direction: Direction,

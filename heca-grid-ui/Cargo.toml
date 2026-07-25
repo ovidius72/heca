@@ -10,3 +10,4 @@ heca-core = { path = "../heca-core" }
 heca-theme = { path = "../heca-theme" }
 floem_reactive = "0.2"
 taffy = "0.7"
+serde = { version = "1", features = ["derive"] }

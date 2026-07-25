@@ -35,10 +35,10 @@
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
-    Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
+    Action, Alert, Align, Badge, BadgeButton, Base, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData,
-    StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
+    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select,
+    SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -100,15 +100,84 @@ pub(crate) fn realize(
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     let mut realized = realize_kind(node, emit, hints, forms);
-    // Self-alignment is a property of the node *inside its parent*, so it applies to every kind —
-    // read it once here rather than in each arm.
-    if let Some(align) = align_prop(node, "align_self") {
-        realized.base_mut().style.layout.align_self = Some(align);
-    }
-    if let Some(justify) = align_prop(node, "justify_self") {
-        realized.base_mut().style.layout.justify_self = Some(justify);
-    }
+    // Layout belongs to every kind, so it is read once here rather than in each arm — and it is
+    // read *generically*, by name against `Layout`'s own fields. There is deliberately no list of
+    // property names in this file: add a field to `Layout` and a description can set it, with no
+    // change here. `Visual` is not serializable, so appearance stays unreachable the same way.
+    merge_layout_props(node, realized.base_mut());
     realized
+}
+
+/// Apply a node's layout properties on top of the **already-constructed** widget.
+///
+/// On top, not from scratch: widgets set deliberate non-default layout in their constructors
+/// (`ScrollRegion::new()` zeroes its min sizes and opts into shrinking so a viewport can be smaller
+/// than its content). Rebuilding from `Layout::default()` would silently break those, so this reads
+/// the live values, overlays only the keys the node actually carries, and writes back.
+///
+/// Total for untrusted input, as the rest of `realize` is: an unknown key is skipped, and a value
+/// that does not fit its field is dropped *individually* — one bad property never discards the
+/// good ones and never panics.
+fn merge_layout_props(node: &ViewNode, base: &mut Base) {
+    if node.props.is_empty() {
+        return;
+    }
+    let Ok(serde_json::Value::Object(current)) = serde_json::to_value(base.style.layout) else {
+        return;
+    };
+    // Only keys that name a real `Layout` field; `current` IS that field list, derived not written.
+    let incoming: Vec<(&String, serde_json::Value)> = node
+        .props
+        .iter()
+        .filter(|(key, _)| current.contains_key(key.as_str()))
+        .filter_map(|(key, value)| prop_to_json(value).map(|v| (key, v)))
+        .collect();
+    if incoming.is_empty() {
+        return;
+    }
+
+    let mut merged = current.clone();
+    for (key, value) in &incoming {
+        merged.insert((*key).clone(), value.clone());
+    }
+    // Fast path: everything fits. Otherwise fall back to applying one key at a time so a single
+    // bad value costs only itself.
+    if let Ok(layout) = serde_json::from_value::<Layout>(serde_json::Value::Object(merged)) {
+        base.style.layout = layout;
+        return;
+    }
+    let mut acc = current;
+    for (key, value) in incoming {
+        let mut candidate = acc.clone();
+        candidate.insert(key.clone(), value);
+        if serde_json::from_value::<Layout>(serde_json::Value::Object(candidate.clone())).is_ok() {
+            acc = candidate;
+        }
+    }
+    if let Ok(layout) = serde_json::from_value::<Layout>(serde_json::Value::Object(acc)) {
+        base.style.layout = layout;
+    }
+}
+
+/// A [`PropValue`] as the JSON scalar its field expects — the enums travel as their
+/// **names** (`"center"`, `"space_between"`, `"small"`), matching how glyphs and colours already
+/// cross the boundary. Colours and glyphs never name a `Layout` field, so they are simply strings
+/// here and get filtered out by the field-name check.
+fn prop_to_json(value: &PropValue) -> Option<serde_json::Value> {
+    Some(match value {
+        PropValue::Bool(b) => serde_json::Value::Bool(*b),
+        PropValue::Int(i) => serde_json::Value::from(*i),
+        PropValue::Float(f) => serde_json::Number::from_f64(*f).map(Into::into)?,
+        PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => {
+            serde_json::Value::String(t.clone())
+        }
+        PropValue::Size(s) => serde_json::to_value(s).ok()?,
+        PropValue::Variant(v) => serde_json::to_value(v).ok()?,
+        PropValue::Align(a) => serde_json::to_value(a).ok()?,
+        PropValue::List(items) => {
+            serde_json::Value::Array(items.iter().filter_map(prop_to_json).collect())
+        }
+    })
 }
 
 /// The per-kind mapping — see [`realize`], which wraps it with the props every node can carry.
@@ -444,12 +513,8 @@ fn realize_flex(
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    if let Some(gap) = f32_prop(node, "gap") {
-        flex = flex.gap(gap);
-    }
-    if let Some(align) = align_prop(node, "align") {
-        flex = flex.align(align);
-    }
+    // `gap`, `align` and every other layout property are applied generically by
+    // `merge_layout_props` in `realize`, for every kind — not read per-arm here.
     for child in &node.children {
         // `child()` takes an `impl Component` and boxes it; a `Box<dyn Component>` isn't
         // `Component`, so push the already-boxed child directly.
@@ -636,15 +701,10 @@ fn realize_grid(
     if let Some(areas) = string_list(node, "areas") {
         grid = grid.areas(areas.iter().map(String::as_str));
     }
-    // How the items sit inside their cells: `align` vertically, `justify_items` horizontally. Both
-    // default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell — so a
-    // row of mixed-height content needs `align: center` to share a centre line.
-    if let Some(align) = align_prop(node, "align") {
-        grid = grid.align(align);
-    }
-    if let Some(justify) = align_prop(node, "justify_items") {
-        grid = grid.justify_items(justify);
-    }
+    // How the items sit inside their cells — `align` vertically, `justify_items` horizontally —
+    // arrives through the generic layout merge in `realize`, like every other layout property.
+    // Both default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell,
+    // so a row of mixed-height content needs `align: center` to share a centre line.
     for child in &node.children {
         let realized = realize(child, emit, hints, forms);
         match child.props.get("area").and_then(PropValue::as_text) {
@@ -987,6 +1047,7 @@ fn map_size(s: ViewSize) -> WidgetSize {
 mod tests {
     use super::*;
     use crate::chrome::Intent;
+    use heca_grid_ui::{Justify, Length};
     use std::rc::Rc;
 
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
@@ -1909,5 +1970,104 @@ mod tests {
             Some("renamed"),
         );
         assert!(forms.text_signal("missing").is_none());
+    }
+
+    // ── Generic layout merge (F003/P017/T2) ──────────────────────────────────────────────
+    // The point of these: `realize` holds NO list of layout property names. Everything below
+    // works because `Layout`'s own fields are the vocabulary.
+
+    /// Properties that NO arm in this file has ever read — `padding`, `width`, `justify`,
+    /// `flex_grow`, `margin` — reach the widget anyway, on a kind with no layout code of its own.
+    /// This is the regression guard for the whole task: it fails the moment someone reintroduces
+    /// a hand-written property list that happens to omit one of these.
+    #[test]
+    fn layout_properties_never_named_in_realize_still_reach_the_widget() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Column)
+            .prop("padding", PropValue::Int(12))
+            .prop("width", PropValue::Int(240))
+            .prop("justify", PropValue::Text("space_between".into()))
+            .prop("flex_grow", PropValue::Float(1.0))
+            .prop("margin", PropValue::Float(6.0));
+
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let l = w.base().style.layout;
+        assert_eq!(l.padding, 12.0, "padding — in the original design doc, never implemented");
+        assert_eq!(l.width, Length::Px(240.0));
+        assert_eq!(l.justify, Justify::SpaceBetween, "enum by name, snake_case");
+        assert_eq!(l.flex_grow, 1.0);
+        assert_eq!(l.margin, 6.0);
+    }
+
+    /// `Length` reads the way an author would write it: a bare number is px, `"auto"` is auto,
+    /// and a percentage string is a fraction — not the enum's `{"px": 240}` shape.
+    #[test]
+    fn length_accepts_the_spelling_an_author_would_reach_for() {
+        let mut hints = HintTargetRegistry::default();
+        let mut case = |p: PropValue| {
+            let node = ViewNode::new(WidgetKind::Surface).prop("width", p);
+            realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default())
+                .base()
+                .style
+                .layout
+                .width
+        };
+        assert_eq!(case(PropValue::Int(240)), Length::Px(240.0));
+        assert_eq!(case(PropValue::Float(12.5)), Length::Px(12.5));
+        assert_eq!(case(PropValue::Text("auto".into())), Length::Auto);
+        assert_eq!(case(PropValue::Text("50%".into())), Length::Pct(0.5));
+    }
+
+    /// Untrusted input stays total, and — the part that matters — a single bad value costs only
+    /// itself. A wrong type, an unparseable length and an unknown key all get dropped while the
+    /// good properties on the same node still land.
+    #[test]
+    fn a_bad_property_never_takes_the_good_ones_with_it() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Column)
+            .prop("gap", PropValue::Int(8))
+            .prop("padding", PropValue::Text("not a number".into()))
+            .prop("width", PropValue::Text("50 furlongs".into()))
+            .prop("nonsense_key", PropValue::Int(3))
+            .prop("justify", PropValue::Text("sideways".into()))
+            .prop("margin", PropValue::Float(4.0));
+
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let l = w.base().style.layout;
+        assert_eq!(l.gap, 8.0, "good property survives a bad neighbour");
+        assert_eq!(l.margin, 4.0, "and so does one declared after the bad ones");
+        assert_eq!(l.padding, 0.0, "bad value ignored — the default stands");
+        assert_eq!(l.width, Length::Auto, "unparseable length ignored");
+        assert_eq!(l.justify, Justify::Start, "unknown enum name ignored");
+    }
+
+    /// The merge lands ON TOP of the constructed widget. `ScrollRegion::new()` zeroes its min
+    /// sizes and opts into shrinking so a viewport can be smaller than its content; rebuilding
+    /// from `Layout::default()` would undo that and the region would silently stop scrolling.
+    #[test]
+    fn merging_preserves_layout_the_widget_set_in_its_constructor() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Scroll).prop("padding", PropValue::Int(4));
+
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let l = w.base().style.layout;
+        assert_eq!(l.padding, 4.0, "the property the node did carry");
+        assert_eq!(l.min_height, Some(Length::Px(0.0)), "constructor value survives");
+        assert_eq!(l.min_width, Some(Length::Px(0.0)));
+        assert_eq!(l.flex_shrink, Some(1.0), "without this a scroll region cannot shrink");
+        assert!(l.gap_spacing.is_some(), "theme spacing token survives");
+    }
+
+    /// A node with no properties leaves the widget exactly as its constructor built it.
+    #[test]
+    fn a_node_with_no_properties_changes_nothing() {
+        let mut hints = HintTargetRegistry::default();
+        let bare = realize(
+            &ViewNode::new(WidgetKind::Scroll),
+            &noop_emitter(),
+            &mut hints,
+            &mut FormBindings::default(),
+        );
+        assert_eq!(bare.base().style.layout, ScrollRegion::new().base().style.layout);
     }
 }

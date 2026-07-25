@@ -308,13 +308,30 @@ pub type Events = BTreeMap<String, Intent>;
 ///     );
 /// ```
 ///
+/// # Layout props — every kind, no list
+/// **Any field of [`Layout`](heca_grid_ui::Layout) is a prop on any kind**, named exactly as the
+/// field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+/// `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
+/// `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+///
+/// `realize` does **not** enumerate them — it merges by name against `Layout`'s own fields, so a
+/// field added there is settable from a description with no change to the mapper. The counterpart
+/// is that `Visual` (fill, border, glow, radius, font_size, font_scale) is not serializable, so
+/// appearance is unreachable from a description by construction, not by a rule someone enforces.
+///
+/// Values read the way an author would write them: enums by **name** (`"center"`,
+/// `"space_between"`, `"small"`), and a `Length` as a bare number (px), `"auto"`, or `"50%"`.
+/// The merge lands **on top of** the constructed widget, so a widget's own constructor settings
+/// survive any property it does not mention.
+///
 /// # Props & events by kind (what `realize` reads today)
 /// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
-/// so `realize` is total. A node reads only the props relevant to its `kind`:
+/// so `realize` is total, and a bad value costs only itself: its neighbours on the same node still
+/// apply. Below are the props a kind reads **in addition to** the layout set above:
 ///
 /// | Kind | Props it reads | Events |
 /// |------|----------------|--------|
-/// | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+/// | `Column` / `Row` | (layout only — see above) | — |
 /// | `Card` | `text` (title) + children | — |
 /// | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
 /// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
