@@ -384,7 +384,7 @@ pub(crate) async fn init_state(
         modifiers: winit::keyboard::ModifiersState::default(),
         selection: app_state::SelectionState::new(),
         bell_flash_until: None,
-        search: None,
+        searches: std::collections::BTreeMap::new(),
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],

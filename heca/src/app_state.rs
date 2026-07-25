@@ -131,12 +131,20 @@ pub enum InputMode {
 /// Active scrollback search: the query, its matches across the searched pane's
 /// scrollback, and the currently-focused match. Lives on [`AppState`] so `n`/`N`
 /// navigation works after the query overlay closes back into selection mode.
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SearchState {
-    /// Pane whose scrollback is being searched.
-    pub pane_id: PaneId,
-    /// Current query text (edited live in [`InputMode::Search`]).
-    pub query: String,
+    /// The query field — a **real [`Input`]**, so the whole editing model comes for
+    /// free and behaves exactly as every other text field in the app: selection,
+    /// caret motion, word/line delete (`Ctrl+u`, `Ctrl+w`, `Alt+Backspace`),
+    /// select-all, click-to-place-caret.
+    ///
+    /// It used to be a bare `String` that a hand-written key handler pushed
+    /// characters onto — it understood Backspace and nothing else, so every editing
+    /// shortcut silently did nothing here while working everywhere else.
+    ///
+    /// Driven manually (bounds + font set at paint) rather than living in the focus
+    /// tree, because the bar is drawn as an overlay on the chrome scene. This is the
+    /// same arrangement [`CommandPalette`]'s query line uses.
+    pub input: std::cell::RefCell<heca_grid_ui::widgets::Input>,
     /// All matches, ascending by stable row / column.
     pub matches: Vec<heca_core::backend::SearchMatch>,
     /// Index into `matches` of the focused match, if any.
@@ -726,9 +734,21 @@ pub struct AppState {
     /// terminal bell when `[appearance.terminal] bell_visual` is on; the render pass
     /// draws a fading content-area overlay until `Instant::now()` reaches it.
     pub bell_flash_until: Option<std::time::Instant>,
-    /// Active scrollback search (`None` = none). Drives the query overlay, match
-    /// highlights, and `n`/`N` navigation. terminal-task-19.
-    pub search: Option<SearchState>,
+    /// Active scrollback searches, **one per pane**. Drives each pane's query bar,
+    /// its match highlights, and `n`/`N` navigation. terminal-task-19.
+    ///
+    /// Per-pane rather than a single global search: with one shared slot, starting a
+    /// search in a second pane silently destroyed the first pane's — its bar and
+    /// highlights vanished and there was no way to get them back. Every pane now
+    /// keeps its own, and they all render at once.
+    ///
+    /// A `BTreeMap` so iteration order is stable — panes draw in a deterministic
+    /// order frame to frame rather than wandering with hash seeding.
+    ///
+    /// Reach it through [`search_for`](Self::search_for) /
+    /// [`focused_search`](Self::focused_search) and friends rather than indexing, so
+    /// "the search the keyboard is driving" has exactly one definition.
+    pub searches: std::collections::BTreeMap<PaneId, SearchState>,
     // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay
     // layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
     /// Most recently focused pane (for "go back" behavior).
@@ -816,6 +836,39 @@ pub struct AppState {
 }
 
 impl AppState {
+
+    /// The scrollback search for `pane`, if it has one.
+    pub fn search_for(&self, pane: PaneId) -> Option<&SearchState> {
+        self.searches.get(&pane)
+    }
+
+    /// The pane the keyboard's search acts on: the **selection's** pane if copy-mode
+    /// owns one, else the focused pane.
+    ///
+    /// One definition, used by every search entry point — starting a search, editing
+    /// the query, stepping matches, cancelling. They must agree: a search started for
+    /// one pane while edits were applied to another would leave the query frozen,
+    /// because the keystrokes would land on an entry that does not exist. The old
+    /// single-search state avoided this by carrying its own `pane_id`; with per-pane
+    /// storage the resolution itself has to be shared.
+    pub fn search_target_pane(&self) -> Option<PaneId> {
+        match self.selection.owner() {
+            Some(crate::app::selection_model::SelectionOwner::Pane(id)) => Some(id),
+            _ => self.focused_pane,
+        }
+    }
+
+    /// The search the keyboard is driving — see [`search_target_pane`](Self::search_target_pane).
+    pub fn active_search_mut(&mut self) -> Option<&mut SearchState> {
+        let pane = self.search_target_pane()?;
+        self.searches.get_mut(&pane)
+    }
+
+    /// Drop `pane`'s search, if any. Called when a pane closes so a dead pane cannot
+    /// leave a search behind that nothing can reach or clear.
+    pub fn clear_search(&mut self, pane: PaneId) {
+        self.searches.remove(&pane);
+    }
     pub fn mark_full_redraw(&mut self) {
         self.needs_redraw = true;
     }

@@ -213,6 +213,13 @@ pub fn on_mouse_input(
 
     match (button, button_state) {
         (MouseButton::Left, ElementState::Pressed) => {
+            // A click on a search field re-enters query entry and places the caret.
+            // Checked first: the bar floats above pane content, so a press that lands
+            // on it must not also be read as a click into the terminal underneath.
+            if search_field_press(state, pos) {
+                return None;
+            }
+
             // Cmd+click on a terminal hyperlink → open it. Link-first: checked
             // before the interactive-move gesture (Cmd is the move modifier), so
             // a Cmd+click that lands on a link opens it and consumes the press,
@@ -608,3 +615,39 @@ pub(crate) fn interactive_move_modifier_held(state: &AppState) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// Route a left-press that lands on a pane's search field into that field: focus it,
+/// re-enter query entry, and let the `Input` place the caret (it hit-tests the char
+/// position from its own bounds + font, both set when the bar was painted).
+///
+/// Returns whether the press was consumed.
+///
+/// Without this the field was a dead end: Enter left query entry, and there was no way
+/// back in — clicking it did nothing, because the bar is painted onto the chrome scene
+/// and never took part in hit-testing.
+fn search_field_press(state: &mut AppState, pos: (f32, f32)) -> bool {
+    use heca_grid_ui::Component as _;
+    use heca_grid_ui::reactive::SignalUpdate as _;
+
+    let pos = heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64);
+    let hit = state.searches.iter().find_map(|(&pane_id, search)| {
+        search
+            .input
+            .borrow()
+            .base()
+            .bounds
+            .contains(pos)
+            .then_some(pane_id)
+    });
+    let Some(pane_id) = hit else {
+        return false;
+    };
+    if let Some(search) = state.searches.get(&pane_id) {
+        let mut field = search.input.borrow_mut();
+        field.base_mut().focused.set(true);
+        field.event(&heca_grid_ui::Event::PointerPressed { pos });
+    }
+    state.input_mode = crate::app_state::InputMode::Search;
+    state.needs_redraw = true;
+    true
+}

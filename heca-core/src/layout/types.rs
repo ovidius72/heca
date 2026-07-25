@@ -7,7 +7,10 @@ pub struct SessionId(pub u64);
 pub struct WorkspaceId(pub u64);
 
 /// Unique identifier for a column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// `Ord` so panes can key an ordered map: iteration order is then stable frame to
+// frame, which matters wherever per-pane state is *drawn* (e.g. each pane's
+// scrollback-search bar) and would otherwise wander with hash seeding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PaneId(pub u64);
 
 impl std::fmt::Display for PaneId {

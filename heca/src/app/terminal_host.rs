@@ -8,6 +8,8 @@ use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use heca_grid_ui::Component as _;
+use heca_grid_ui::reactive::SignalUpdate as _;
 use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 
 /// Default cell height in logical pixels for PixelDelta → line conversion
@@ -841,12 +843,8 @@ pub(crate) fn hyperlink_uri_at_stable_cell(
 /// Enter scrollback-search query entry for the selection's (or focused) pane.
 /// No-op when there is no terminal-backed pane to search. terminal-task-19.
 pub(crate) fn enter_scrollback_search(state: &mut AppState) {
-    let pane_id = match state.selection.owner() {
-        Some(SelectionOwner::Pane(id)) => id,
-        None => match state.focused_pane {
-            Some(id) => id,
-            None => return,
-        },
+    let Some(pane_id) = state.search_target_pane() else {
+        return;
     };
     if state
         .backends
@@ -856,12 +854,29 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
     {
         return;
     }
-    state.search = Some(crate::app_state::SearchState {
+    // Re-entering search on a pane that already has one RESUMES it: the query, its
+    // matches and the caret are all still there. Inserting a fresh state here wiped
+    // whatever had been typed, so `/` after Enter was indistinguishable from having
+    // no way back into the field at all.
+    if let Some(existing) = state.searches.get(&pane_id) {
+        existing.input.borrow_mut().base_mut().focused.set(true);
+        state.input_mode = InputMode::Search;
+        state.needs_redraw = true;
+        return;
+    }
+    state.searches.insert(
         pane_id,
-        query: String::new(),
-        matches: Vec::new(),
-        current: None,
-    });
+        crate::app_state::SearchState {
+            // Focused so the caret shows and the field accepts editing keys.
+            input: std::cell::RefCell::new({
+                let mut field = heca_grid_ui::widgets::Input::new();
+                field.base_mut().focused.set(true);
+                field
+            }),
+            matches: Vec::new(),
+            current: None,
+        },
+    );
     state.input_mode = InputMode::Search;
     state.needs_redraw = true;
 }
@@ -869,11 +884,12 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
 /// Re-run the search for the current query, refresh the match list, focus the match
 /// nearest at/above the caret (else the last), and jump to it.
 pub(crate) fn run_scrollback_search(state: &mut AppState) {
-    let Some((pane_id, query)) = state
-        .search
-        .as_ref()
-        .map(|s| (s.pane_id, s.query.clone()))
-    else {
+    // The pane whose query the keyboard is editing — same resolution the search was
+    // started with, so edits land on the entry that exists.
+    let Some(pane_id) = state.search_target_pane() else {
+        return;
+    };
+    let Some(query) = state.search_for(pane_id).map(|s| s.input.borrow().value_str()) else {
         return;
     };
     let cols = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
@@ -898,7 +914,7 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
                 .unwrap_or(matches.len() - 1),
         )
     };
-    if let Some(search) = state.search.as_mut() {
+    if let Some(search) = state.searches.get_mut(&pane_id) {
         search.matches = matches;
         search.current = current;
     }
@@ -907,7 +923,7 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
 
 /// Move the focused match by one (wrapping) and jump to it. `forward` = next match.
 pub(crate) fn search_step(state: &mut AppState, forward: bool) {
-    let stepped = state.search.as_mut().and_then(|search| {
+    let stepped = state.active_search_mut().and_then(|search| {
         let n = search.matches.len();
         if n == 0 {
             return None;
@@ -929,11 +945,13 @@ pub(crate) fn search_step(state: &mut AppState, forward: bool) {
 /// Place the selection caret on the focused match's first cell and scroll it into
 /// view. No-op when no match is focused.
 fn jump_to_current_match(state: &mut AppState) {
-    let Some((pane_id, m)) = state.search.as_ref().and_then(|s| {
-        s.current
-            .and_then(|i| s.matches.get(i))
-            .map(|m| (s.pane_id, m.clone()))
-    }) else {
+    let Some(pane_id) = state.search_target_pane() else {
+        return;
+    };
+    let Some(m) = state
+        .search_for(pane_id)
+        .and_then(|s| s.current.and_then(|i| s.matches.get(i)).cloned())
+    else {
         return;
     };
     state

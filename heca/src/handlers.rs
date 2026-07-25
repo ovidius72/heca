@@ -1111,20 +1111,28 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
     let WmAction::ClosePaneById { pane_id } = action else {
         return;
     };
+    // Recorded here and cleared below: the workspace borrow is still live inside this
+    // block, so per-pane cleanup that goes through `&mut state` has to wait for it.
+    let mut closed: Option<PaneId> = None;
     if let Some(ws) = state.session.active_workspace_mut() {
         if let Some((ci, pi)) = crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id) {
             if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
                 state.backends.remove_for_pane(removed.id);
+                closed = Some(removed.id);
             }
         } else if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == *pane_id)
         {
             let removed = ws.floating_panes.remove(float_idx);
             state.backends.remove_for_pane(removed.pane.id);
+            closed = Some(removed.pane.id);
             if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
                 ws.deactivate_floating_panes();
                 ws.focus_domain = FocusDomain::Tiled;
             }
         }
+    }
+    if let Some(id) = closed {
+        state.clear_search(id);
     }
     close_workspace_if_empty(state);
     after_layout_change(state);
@@ -1215,6 +1223,9 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
         .map(|col| col.panes.iter().map(|p| p.id).collect())
         .unwrap_or_default();
 
+    for &id in &pane_ids {
+        state.clear_search(id);
+    }
     state.backends.remove_all(pane_ids);
 
     // Remove the column
@@ -1256,6 +1267,9 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         })
         .unwrap_or_default();
 
+    for &id in &pane_ids {
+        state.clear_search(id);
+    }
     state.backends.remove_all(pane_ids);
 
     // Remove the workspace
@@ -2510,8 +2524,11 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
         backend.scroll_to_bottom();
     }
     state.selection.clear();
-    // Leaving the copy-mode session also ends any scrollback search.
-    state.search = None;
+    // Leaving the copy-mode session also ends that pane's scrollback search; other
+    // panes keep theirs.
+    if let Some(pane) = state.search_target_pane() {
+        state.clear_search(pane);
+    }
     if matches!(state.input_mode, InputMode::Selection) {
         state.input_mode = InputMode::Normal;
     }

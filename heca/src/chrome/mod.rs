@@ -2018,8 +2018,6 @@ pub(crate) fn paint_layers(
 /// Peak alpha for a non-current search-match highlight; the current match is bolder.
 const SEARCH_HL_ALPHA: u8 = 64;
 const SEARCH_HL_CURRENT_ALPHA: u8 = 150;
-/// Search bar glyph size (logical px).
-const SEARCH_BAR_FONT: f32 = 13.0;
 
 /// Paint the scrollback-search overlay: a highlight rect over every visible match
 /// (the focused one bolder) plus a `/query` bar anchored to the searched pane's
@@ -2032,10 +2030,26 @@ pub(crate) fn paint_search(
     h: f32,
     theme: &GuiTheme,
 ) {
-    let Some(search) = state.search.as_ref() else {
+    if state.searches.is_empty() {
         return;
-    };
-    let pane_id = search.pane_id;
+    }
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+    // Every pane that has a search draws its own highlights and bar. They are
+    // independent, so a search in one pane never disturbs another's.
+    for (&pane_id, search) in &state.searches {
+        paint_pane_search(state, &mut cx, pane_id, search, theme, Size::new(w as f64, h as f64));
+    }
+}
+
+/// Match highlights + query bar for one pane's search.
+fn paint_pane_search(
+    state: &crate::app_state::AppState,
+    cx: &mut PaintCx,
+    pane_id: PaneId,
+    search: &crate::app_state::SearchState,
+    theme: &GuiTheme,
+    viewport: Size,
+) {
     let Some(snapshot) = state
         .backends
         .get(pane_id)
@@ -2050,8 +2064,6 @@ pub(crate) fn paint_search(
         .unwrap_or((8.0, 16.0));
     let top = snapshot.viewport_top_stable_row;
     let rows = snapshot.rows as isize;
-
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
 
     // Match highlights over the visible viewport.
     for (i, m) in search.matches.iter().enumerate() {
@@ -2077,60 +2089,130 @@ pub(crate) fn paint_search(
         } else {
             SEARCH_HL_ALPHA
         };
-        cx.rect(rect, theme.colors.accent.with_alpha(alpha), None, 2.0, None);
+        // A match highlight tracks terminal cells, not chrome, so it stays a painted
+        // rect rather than a widget — but its corner still comes from the theme.
+        cx.rect(
+            rect,
+            theme.colors.accent.with_alpha(alpha),
+            None,
+            theme.colors.control_radius(),
+            None,
+        );
     }
 
-    paint_search_bar(state, &mut cx, search, theme);
+    paint_search_bar(state, cx, pane_id, search, theme, viewport);
 }
 
-/// The `/query  n/total` bar at the searched pane's bottom-right corner.
+/// Build the search bar's widget tree, positioned at `pane`'s bottom-right corner.
+///
+/// `field` is the size the query [`Input`] measured to — the tree reserves a slot of
+/// exactly that size and the caller paints the retained field into it. The size is
+/// measured by the layout engine, never derived from a character count.
+///
+/// Pure so it can be tested without a GPU or an `AppState`, which is how its
+/// placement is covered.
+fn search_bar_tree(
+    field: Size,
+    count: Option<String>,
+    pane: Rectangle,
+    theme: &GuiTheme,
+) -> Flex {
+    // The query slot, then the match position as a separate chip so it reads as
+    // distinct information rather than as part of what was typed.
+    let mut row = Flex::row()
+        .align(Align::Center)
+        .gap_spacing(Spacing::Sm)
+        .child(
+            Flex::row()
+                .width(Length::Px(field.w as f32))
+                .height(Length::Px(field.h as f32)),
+        );
+    if let Some(count) = count {
+        row = row.child(Tag::new(count).color(theme.colors.accent));
+    }
+
+    // A box the size of the pane, offset to the pane's origin, with the bar pushed
+    // into its bottom-right corner. The engine does the positioning; nothing here
+    // measures text or computes a coordinate.
+    Flex::row()
+        .justify(Justify::End)
+        .align(Align::End)
+        .width(Length::Px(pane.size.w as f32))
+        .height(Length::Px(pane.size.h as f32))
+        .margin_left(pane.loc.x as f32)
+        .margin_top(pane.loc.y as f32)
+        .padding(Spacing::Sm.scale() * theme.font_size)
+        .child(row)
+}
+
+/// The query field + match counter at the searched pane's bottom-right corner.
+///
+/// The query is a real [`Input`], so its caret, selection and the whole editing model
+/// are the library's rather than reimplemented here. It is retained in [`SearchState`]
+/// (a field must keep its caret across frames) and therefore cannot be moved into the
+/// per-frame tree — so the tree reserves a slot and the field is painted into it, the
+/// same arrangement [`CommandPalette`](heca_grid_ui::widgets::CommandPalette) uses for
+/// its own query line.
 fn paint_search_bar(
     state: &crate::app_state::AppState,
     cx: &mut PaintCx,
+    pane_id: PaneId,
     search: &crate::app_state::SearchState,
     theme: &GuiTheme,
+    viewport: Size,
 ) {
     let Some((_, px, py, pw, ph)) = crate::app::terminal_host::pane_outer_frames(state)
         .into_iter()
-        .find(|(id, ..)| *id == search.pane_id)
+        .find(|(id, ..)| *id == pane_id)
     else {
         return;
     };
-    let count = if search.query.is_empty() {
-        String::new()
-    } else if search.matches.is_empty() {
-        "  no matches".to_string()
-    } else {
-        let pos = search.current.map(|i| i + 1).unwrap_or(0);
-        format!("  {}/{}", pos, search.matches.len())
+
+    let query = search.input.borrow().value_str();
+    let count = (!query.is_empty()).then(|| {
+        if search.matches.is_empty() {
+            "no matches".to_string()
+        } else {
+            let pos = search.current.map(|i| i + 1).unwrap_or(0);
+            format!("{}/{}", pos, search.matches.len())
+        }
+    });
+
+    // Measure the field on its own first: the engine sizes it, so the bar reserves
+    // exactly what it needs without anyone estimating a width from the query length.
+    let field_size = {
+        let mut field = search.input.borrow_mut();
+        LayoutEngine::new()
+            .base_font(theme.font_size)
+            .compute(&mut *field, viewport);
+        field.base().bounds.size
     };
-    let label = format!("/{}{}", search.query, count);
 
-    let font = SEARCH_BAR_FONT;
-    let pad = 8.0_f64;
-    let advance = font as f64 * 0.62;
-    let bar_w = (label.chars().count() as f64 * advance + 2.0 * pad).clamp(120.0, 480.0);
-    let bar_h = font as f64 + 2.0 * pad;
-    // Bottom-right of the pane, inset a little.
-    let inset = 8.0_f64;
-    let x = (px + pw) as f64 - bar_w - inset;
-    let y = (py + ph) as f64 - bar_h - inset;
-    let rect = Rectangle::new(Point::new(x, y), Size::new(bar_w, bar_h));
+    let pane = Rectangle::new(
+        Point::new(px as f64, py as f64),
+        Size::new(pw as f64, ph as f64),
+    );
+    let mut root = search_bar_tree(field_size, count, pane, theme);
+    LayoutEngine::new()
+        .base_font(theme.font_size)
+        .compute(&mut root, viewport);
+    root.paint(cx);
 
-    let border = cx.border(theme.colors.accent.with_alpha(200));
-    cx.rect(rect, theme.colors.surface, border, theme.colors.control_radius(), None);
-    let text_rect = Rectangle::new(
-        Point::new(x + pad, y),
-        Size::new(bar_w - 2.0 * pad, bar_h),
-    );
-    cx.text(
-        text_rect,
-        &label,
-        theme.colors.foreground,
-        font,
-        heca_grid_ui::scene::TextAlign::Start,
-        heca_grid_ui::TextStyle::REGULAR,
-    );
+    // Draw the retained field into the slot the tree reserved for it.
+    let Some(slot) = search_field_slot(&root) else {
+        return;
+    };
+    let mut field = search.input.borrow_mut();
+    field.base_mut().bounds = slot;
+    field.base_mut().font = theme.font_size;
+    field.paint(cx);
+}
+
+/// Bounds of the slot [`search_bar_tree`] reserved for the query field:
+/// pane box → row → first child.
+fn search_field_slot(root: &Flex) -> Option<Rectangle> {
+    let row = root.base().children.first()?;
+    Some(row.base().children.first()?.base().bounds)
 }
 
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
@@ -4001,4 +4083,91 @@ mod tests {
         );
     }
 
+}
+
+#[cfg(test)]
+mod search_bar_tests {
+    use super::*;
+
+    /// A pane deliberately far from the window origin: a bar placed relative to the
+    /// window instead of the pane lands nowhere near this rect.
+    fn pane() -> Rectangle {
+        Rectangle::new(Point::new(600.0, 100.0), Size::new(640.0, 1400.0))
+    }
+
+    fn viewport() -> Size {
+        Size::new(1900.0, 1600.0)
+    }
+
+    /// Lay the bar out for a query field of `field` size and return the bar's own
+    /// bounds — the row holding the field slot and the counter.
+    fn laid_out_bar_bounds(field: Size, count: Option<String>) -> Rectangle {
+        let theme = GuiTheme::default();
+        let mut root = search_bar_tree(field, count, pane(), &theme);
+        LayoutEngine::new()
+            .base_font(theme.font_size)
+            .compute(&mut root, viewport());
+        // root (pane box) -> row
+        root.base().children[0].base().bounds
+    }
+
+    /// A representative measured field size.
+    fn field(w: f64) -> Size {
+        Size::new(w, 22.0)
+    }
+
+    /// **Regression guard.** The bar is positioned purely by margins on its box, so
+    /// it must land inside the pane it belongs to. This caught the engine silently
+    /// dropping a root's margin, which drew the bar over the *sidebar* — a whole pane
+    /// away from the terminal it described.
+    #[test]
+    fn the_search_bar_lands_inside_its_pane() {
+        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
+        let p = pane();
+        assert!(
+            b.loc.x >= p.loc.x
+                && b.loc.y >= p.loc.y
+                && b.loc.x + b.size.w <= p.loc.x + p.size.w
+                && b.loc.y + b.size.h <= p.loc.y + p.size.h,
+            "bar at {:?} escaped its pane {p:?}",
+            b
+        );
+    }
+
+    /// It is anchored to the bottom-right specifically, not merely somewhere inside.
+    #[test]
+    fn the_search_bar_hugs_the_bottom_right_corner() {
+        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
+        let p = pane();
+        let right_gap = (p.loc.x + p.size.w) - (b.loc.x + b.size.w);
+        let bottom_gap = (p.loc.y + p.size.h) - (b.loc.y + b.size.h);
+        assert!(
+            right_gap < p.size.w / 2.0 && bottom_gap < p.size.h / 2.0,
+            "expected bottom-right; gaps were right={right_gap} bottom={bottom_gap}"
+        );
+    }
+
+    /// The bar is sized by the field the engine measured, not by arithmetic — the old
+    /// version clamped width to a hand-picked 120..480 range computed from a hardcoded
+    /// glyph advance ratio.
+    #[test]
+    fn a_wider_field_makes_a_wider_bar() {
+        let narrow = laid_out_bar_bounds(field(80.0), None).size.w;
+        let wide = laid_out_bar_bounds(field(300.0), None).size.w;
+        assert!(wide > narrow, "wide bar {wide} should exceed narrow {narrow}");
+    }
+
+    /// **The field must land in the slot the tree reserved**, or the caret and the
+    /// text would draw somewhere other than the bar the user sees.
+    #[test]
+    fn the_reserved_slot_matches_the_field_size() {
+        let theme = GuiTheme::default();
+        let f = field(140.0);
+        let mut root = search_bar_tree(f, Some("1/3".into()), pane(), &theme);
+        LayoutEngine::new()
+            .base_font(theme.font_size)
+            .compute(&mut root, viewport());
+        let slot = search_field_slot(&root).expect("the tree always reserves a slot");
+        assert_eq!((slot.size.w, slot.size.h), (f.w, f.h));
+    }
 }

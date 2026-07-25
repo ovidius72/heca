@@ -1259,8 +1259,8 @@ Modes are groups of bindings that stay active until `Escape` or `Enter` is press
 # Custom modes
 [[keys.mode]]
 name = "my_mode"
-trigger = "prefix+o"      # How to enter the mode
-sticky = true             # true = stay until Esc/Enter
+trigger = "prefix+o"      # Key that enters the mode; "" = no key of its own
+sticky = true             # true = stay until Esc (default); false = one key, then exit
 
 [[keys.mode.bindings]]
 action = "focus_left"
@@ -1270,6 +1270,40 @@ keys = "h"
 action = "focus_right"
 keys = "l"
 ```
+
+#### Adding a key to a built-in mode
+
+The built-in modes (`resize`, `sidebar`, `selection`) are merged back in by name, so
+you can add a key without redeclaring the whole mode — but the fields are not merged
+the same way:
+
+| field | when you redefine a built-in mode |
+|---|---|
+| `bindings` | **added** to the built-in ones — you keep every default key |
+| `trigger`, `sticky` | **replace** the built-in values |
+
+So repeat `trigger` and `sticky` exactly as the default file has them. Omitting
+`trigger` sets it to `""`, which for a mode like `resize` silently means `prefix+r`
+stops entering it.
+
+```toml
+# Add `p` as a second "previous search match" key, keeping every other selection key.
+[[keys.mode]]
+name = "selection"
+trigger = ""      # as in keybindings.default.toml — omitting it would clear the trigger
+sticky = true     # as in keybindings.default.toml — omitting it would reset stickiness
+
+[[keys.mode.bindings]]
+action = "search_prev_match"
+keys = "p"
+```
+
+An **empty `trigger`** means the mode has no key of its own — something else in heca
+puts you there. `selection` works this way: you enter it with the
+`enter_selection_mode` action (`prefix+s`) or by scrolling up at a prompt.
+
+These blocks work in `config.toml` as well as `keybindings.toml`: both files are
+merged into one configuration before it is read.
 
 **Selection mode** is a built-in sticky mode entered with `prefix+s`, or
 automatically by scrolling up with the wheel at a non-grabbed prompt.

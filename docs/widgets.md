@@ -26,7 +26,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
-- [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
+- [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
 
 ---
 
@@ -3330,6 +3330,47 @@ Flex::column()
         ),
     );
 ```
+
+### Placing a widget at an app-chosen rect
+
+Sometimes the host knows *where* something goes but the widget should still own *what it
+looks like* — a chip pinned to a pane's corner, a badge over a cell. The temptation is to
+measure the text yourself and call `cx.rect` + `cx.text`; don't. **Let the layout engine
+position it**: build a box the size of the target region, offset it with margins, and let
+`justify`/`align` place the content inside.
+
+```rust
+// A tag pinned to the bottom-right of a pane at (px, py, pw, ph).
+let mut root = Flex::row()
+    .justify(Justify::End)          // ← push to the right edge
+    .align(Align::End)              // ← push to the bottom edge
+    .width(Length::Px(pw))          // ← the target region…
+    .height(Length::Px(ph))
+    .margin_left(px)                // ← …offset to where it lives
+    .margin_top(py)
+    .padding(Spacing::Sm.scale() * theme.font_size)   // token, not a literal
+    .child(Tag::new(label).color(theme.colors.accent));
+
+LayoutEngine::new().base_font(theme.font_size).compute(&mut root, viewport);
+root.paint(&mut cx);
+```
+
+Margins work on the **root** as well as on a child — `compute` offsets the root by its own
+margin, so the box above lands at `(px, py)` with no wrapper needed. (It did not always:
+the root was pinned at `(0, 0)` and its margin silently discarded, which drew `heca`'s
+search bar over the sidebar, a whole pane from the terminal it described. Fixed in the
+engine rather than worked around, so this reads the way it looks.)
+
+Nothing here measures text or computes a size — `Tag` hugs its content and the engine does
+the rest. This is what `heca`'s scrollback-search bar does; it previously guessed its own
+width from a hardcoded glyph advance ratio (`chars × font × 0.62`), which broke for any
+font whose advance differed and had to be re-tuned by hand.
+
+**When a painted primitive is still correct:** content-area *effects* that track something
+other than the widget tree — a bell flash washing the pane, a highlight rect over terminal
+cells — stay `cx.rect` calls. A widget per terminal match would be absurd. The rule is about
+**chrome**: anything the user reads as UI is a widget. Even then the values come from the
+theme (`theme.colors.control_radius()`), never literals.
 
 ### Building a custom widget
 
