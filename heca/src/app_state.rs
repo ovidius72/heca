@@ -131,10 +131,20 @@ pub enum InputMode {
 /// Active scrollback search: the query, its matches across the searched pane's
 /// scrollback, and the currently-focused match. Lives on [`AppState`] so `n`/`N`
 /// navigation works after the query overlay closes back into selection mode.
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SearchState {
-    /// Current query text (edited live in [`InputMode::Search`]).
-    pub query: String,
+    /// The query field — a **real [`Input`]**, so the whole editing model comes for
+    /// free and behaves exactly as every other text field in the app: selection,
+    /// caret motion, word/line delete (`Ctrl+u`, `Ctrl+w`, `Alt+Backspace`),
+    /// select-all, click-to-place-caret.
+    ///
+    /// It used to be a bare `String` that a hand-written key handler pushed
+    /// characters onto — it understood Backspace and nothing else, so every editing
+    /// shortcut silently did nothing here while working everywhere else.
+    ///
+    /// Driven manually (bounds + font set at paint) rather than living in the focus
+    /// tree, because the bar is drawn as an overlay on the chrome scene. This is the
+    /// same arrangement [`CommandPalette`]'s query line uses.
+    pub input: std::cell::RefCell<heca_grid_ui::widgets::Input>,
     /// All matches, ascending by stable row / column.
     pub matches: Vec<heca_core::backend::SearchMatch>,
     /// Index into `matches` of the focused match, if any.

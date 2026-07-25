@@ -4,6 +4,7 @@
 //! preserving the existing key handling behavior.
 
 use crate::actions::ActionRegistry;
+use heca_grid_ui::Component as _;
 use crate::app::interaction::InteractionSource;
 use crate::app::interaction::{dispatch_action, dispatch_action_ref};
 use crate::app::keyboard::{
@@ -144,7 +145,6 @@ pub(crate) fn handle_keyboard_input(
 fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-    let is_backspace = matches!(ctx.logical_key, Key::Named(NamedKey::Backspace));
 
     if is_escape {
         // Cancels only this pane's search; other panes keep theirs.
@@ -152,18 +152,48 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
             state.clear_search(pane);
         }
         state.input_mode = InputMode::Selection;
-    } else if is_enter {
+        state.needs_redraw = true;
+        return;
+    }
+    if is_enter {
         // Keep the matches for n/N; just leave query-entry.
         state.input_mode = InputMode::Selection;
-    } else if is_backspace {
-        if let Some(search) = state.active_search_mut() {
-            search.query.pop();
+        state.needs_redraw = true;
+        return;
+    }
+
+    // Everything else is *text editing*, so it goes to the `Input` through the same
+    // host-owned widget keymap every other field uses (`widget-keys-config`). That is
+    // what makes `Ctrl+u`, `Ctrl+w`, select-all and caret motion behave here exactly
+    // as they do in a dialog or the command palette — this handler used to parse
+    // Backspace and single characters itself and silently ignored the rest.
+    let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(ctx.event_combo) else {
+        return;
+    };
+    // Deliver the real character for plain typing so case and shifted symbols survive;
+    // the combo key stays lowercased for chord matching only. Mirrors the overlay path.
+    let key = {
+        let mut cs = ctx.key_text.chars();
+        match (cs.next(), cs.next()) {
+            (Some(c), None) if !mods.ctrl && !mods.meta && !c.is_control() && c != ' ' => {
+                heca_grid_ui::GridKey::Char(c)
+            }
+            _ => combo_key,
         }
-        crate::app::terminal_host::run_scrollback_search(state);
-    } else if ctx.key_text.chars().count() == 1 && !ctx.is_ctrl {
-        if let Some(search) = state.active_search_mut() {
-            search.query.push_str(ctx.key_text);
+    };
+    let keymap = state.widget_keymap.clone();
+    let mut edited = false;
+    keymap.dispatch(key, mods, |ev| {
+        match state.active_search_mut() {
+            Some(search) => {
+                let handled = search.input.borrow_mut().event(ev);
+                edited |= handled == heca_grid_ui::Handled::Yes;
+                handled
+            }
+            None => heca_grid_ui::Handled::No,
         }
+    });
+    if edited {
         crate::app::terminal_host::run_scrollback_search(state);
     }
     state.needs_redraw = true;

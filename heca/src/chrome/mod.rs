@@ -2105,26 +2105,34 @@ fn paint_pane_search(
 
 /// Build the search bar's widget tree, positioned at `pane`'s bottom-right corner.
 ///
-/// Pure so it can be tested without a GPU or an `AppState` — the placement bug this
-/// guards against (see the nesting note below) is invisible to every other check.
+/// `field` is the size the query [`Input`] measured to — the tree reserves a slot of
+/// exactly that size and the caller paints the retained field into it. The size is
+/// measured by the layout engine, never derived from a character count.
 ///
-/// `count` is the match readout (`3/12`, `no matches`) or `None` when there is
-/// nothing to report yet.
+/// Pure so it can be tested without a GPU or an `AppState`; the placement bug this
+/// guards against (see the nesting note below) is invisible to every other check.
 fn search_bar_tree(
-    query: &str,
+    field: Size,
     count: Option<String>,
     pane: Rectangle,
     viewport: Size,
     theme: &GuiTheme,
 ) -> Flex {
-    // The query is the primary label; the match position is a divided segment, so it
-    // reads as separate information rather than as part of what was typed.
-    let mut tag = Tag::new(format!("/{query}")).color(theme.colors.accent);
+    // The query slot, then the match position as a separate chip so it reads as
+    // distinct information rather than as part of what was typed.
+    let mut row = Flex::row()
+        .align(Align::Center)
+        .gap_spacing(Spacing::Sm)
+        .child(
+            Flex::row()
+                .width(Length::Px(field.w as f32))
+                .height(Length::Px(field.h as f32)),
+        );
     if let Some(count) = count {
-        tag = tag.segment_text(count, None);
+        row = row.child(Tag::new(count).color(theme.colors.accent));
     }
 
-    // A box the size of the pane, offset to the pane's origin, with the tag pushed
+    // A box the size of the pane, offset to the pane's origin, with the bar pushed
     // into its bottom-right corner. The engine does the positioning; nothing here
     // measures text or computes a coordinate.
     let pane_box = Flex::row()
@@ -2135,7 +2143,7 @@ fn search_bar_tree(
         .margin_left(pane.loc.x as f32)
         .margin_top(pane.loc.y as f32)
         .padding(Spacing::Sm.scale() * theme.font_size)
-        .child(tag);
+        .child(row);
 
     // ⚠️ The viewport-sized wrapper is load-bearing, not decoration. `LayoutEngine`
     // assigns the ROOT at `(0, 0)` unconditionally, so a margin on the root is
@@ -2149,12 +2157,14 @@ fn search_bar_tree(
         .child(pane_box)
 }
 
-/// The `/query  n/total` bar at the searched pane's bottom-right corner.
+/// The query field + match counter at the searched pane's bottom-right corner.
 ///
-/// Composed from library widgets — a segmented [`Tag`] laid out by [`Flex`] — rather
-/// than hand-drawn. The engine positions it and the `Tag` owns its surface, so nothing
-/// here measures text, computes padding, or picks a colour. Before this it did all
-/// three, with a hardcoded glyph advance ratio to guess the label's width.
+/// The query is a real [`Input`], so its caret, selection and the whole editing model
+/// are the library's rather than reimplemented here. It is retained in [`SearchState`]
+/// (a field must keep its caret across frames) and therefore cannot be moved into the
+/// per-frame tree — so the tree reserves a slot and the field is painted into it, the
+/// same arrangement [`CommandPalette`](heca_grid_ui::widgets::CommandPalette) uses for
+/// its own query line.
 fn paint_search_bar(
     state: &crate::app_state::AppState,
     cx: &mut PaintCx,
@@ -2170,7 +2180,8 @@ fn paint_search_bar(
         return;
     };
 
-    let count = (!search.query.is_empty()).then(|| {
+    let query = search.input.borrow().value_str();
+    let count = (!query.is_empty()).then(|| {
         if search.matches.is_empty() {
             "no matches".to_string()
         } else {
@@ -2179,15 +2190,42 @@ fn paint_search_bar(
         }
     });
 
+    // Measure the field on its own first: the engine sizes it, so the bar reserves
+    // exactly what it needs without anyone estimating a width from the query length.
+    let field_size = {
+        let mut field = search.input.borrow_mut();
+        LayoutEngine::new()
+            .base_font(theme.font_size)
+            .compute(&mut *field, viewport);
+        field.base().bounds.size
+    };
+
     let pane = Rectangle::new(
         Point::new(px as f64, py as f64),
         Size::new(pw as f64, ph as f64),
     );
-    let mut root = search_bar_tree(&search.query, count, pane, viewport, theme);
+    let mut root = search_bar_tree(field_size, count, pane, viewport, theme);
     LayoutEngine::new()
         .base_font(theme.font_size)
         .compute(&mut root, viewport);
     root.paint(cx);
+
+    // Draw the retained field into the slot the tree reserved for it.
+    let Some(slot) = search_field_slot(&root) else {
+        return;
+    };
+    let mut field = search.input.borrow_mut();
+    field.base_mut().bounds = slot;
+    field.base_mut().font = theme.font_size;
+    field.paint(cx);
+}
+
+/// Bounds of the slot [`search_bar_tree`] reserved for the query field:
+/// wrapper → pane box → row → first child.
+fn search_field_slot(root: &Flex) -> Option<Rectangle> {
+    let pane_box = root.base().children.first()?;
+    let row = pane_box.base().children.first()?;
+    Some(row.base().children.first()?.base().bounds)
 }
 
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
@@ -4074,16 +4112,21 @@ mod search_bar_tests {
         Size::new(1900.0, 1600.0)
     }
 
-    /// Lay the bar out and return the deepest laid-out descendant's bounds — the tag
-    /// itself, wherever the engine put it.
-    fn laid_out_tag_bounds(query: &str, count: Option<String>) -> Rectangle {
+    /// Lay the bar out for a query field of `field` size and return the bar's own
+    /// bounds — the row holding the field slot and the counter.
+    fn laid_out_bar_bounds(field: Size, count: Option<String>) -> Rectangle {
         let theme = GuiTheme::default();
-        let mut root = search_bar_tree(query, count, pane(), viewport(), &theme);
+        let mut root = search_bar_tree(field, count, pane(), viewport(), &theme);
         LayoutEngine::new()
             .base_font(theme.font_size)
             .compute(&mut root, viewport());
-        // root -> pane box -> tag
+        // root -> pane box -> row
         root.base().children[0].base().children[0].base().bounds
+    }
+
+    /// A representative measured field size.
+    fn field(w: f64) -> Size {
+        Size::new(w, 22.0)
     }
 
     /// **Regression guard.** `LayoutEngine` assigns the root at `(0, 0)` and drops a
@@ -4093,7 +4136,7 @@ mod search_bar_tests {
     /// it belonged to.
     #[test]
     fn the_search_bar_lands_inside_its_pane() {
-        let b = laid_out_tag_bounds("antonio", Some("29/36".into()));
+        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
         let p = pane();
         assert!(
             b.loc.x >= p.loc.x
@@ -4108,7 +4151,7 @@ mod search_bar_tests {
     /// It is anchored to the bottom-right specifically, not merely somewhere inside.
     #[test]
     fn the_search_bar_hugs_the_bottom_right_corner() {
-        let b = laid_out_tag_bounds("antonio", Some("29/36".into()));
+        let b = laid_out_bar_bounds(field(120.0), Some("29/36".into()));
         let p = pane();
         let right_gap = (p.loc.x + p.size.w) - (b.loc.x + b.size.w);
         let bottom_gap = (p.loc.y + p.size.h) - (b.loc.y + b.size.h);
@@ -4118,13 +4161,27 @@ mod search_bar_tests {
         );
     }
 
-    /// The bar hugs its label instead of being sized by arithmetic, so a longer query
-    /// makes it wider — the old version clamped width to a hand-picked 120..480 range
-    /// computed from a hardcoded glyph advance.
+    /// The bar is sized by the field the engine measured, not by arithmetic — the old
+    /// version clamped width to a hand-picked 120..480 range computed from a hardcoded
+    /// glyph advance ratio.
     #[test]
-    fn a_longer_query_makes_a_wider_bar() {
-        let short = laid_out_tag_bounds("a", None).size.w;
-        let long = laid_out_tag_bounds("a-much-longer-search-query", None).size.w;
-        assert!(long > short, "long bar {long} should exceed short {short}");
+    fn a_wider_field_makes_a_wider_bar() {
+        let narrow = laid_out_bar_bounds(field(80.0), None).size.w;
+        let wide = laid_out_bar_bounds(field(300.0), None).size.w;
+        assert!(wide > narrow, "wide bar {wide} should exceed narrow {narrow}");
+    }
+
+    /// **The field must land in the slot the tree reserved**, or the caret and the
+    /// text would draw somewhere other than the bar the user sees.
+    #[test]
+    fn the_reserved_slot_matches_the_field_size() {
+        let theme = GuiTheme::default();
+        let f = field(140.0);
+        let mut root = search_bar_tree(f, Some("1/3".into()), pane(), viewport(), &theme);
+        LayoutEngine::new()
+            .base_font(theme.font_size)
+            .compute(&mut root, viewport());
+        let slot = search_field_slot(&root).expect("the tree always reserves a slot");
+        assert_eq!((slot.size.w, slot.size.h), (f.w, f.h));
     }
 }

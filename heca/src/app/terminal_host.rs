@@ -8,6 +8,8 @@ use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use heca_grid_ui::Component as _;
+use heca_grid_ui::reactive::SignalUpdate as _;
 use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 
 /// Default cell height in logical pixels for PixelDelta → line conversion
@@ -855,7 +857,12 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
     state.searches.insert(
         pane_id,
         crate::app_state::SearchState {
-            query: String::new(),
+            // Focused so the caret shows and the field accepts editing keys.
+            input: std::cell::RefCell::new({
+                let mut field = heca_grid_ui::widgets::Input::new();
+                field.base_mut().focused.set(true);
+                field
+            }),
             matches: Vec::new(),
             current: None,
         },
@@ -872,7 +879,7 @@ pub(crate) fn run_scrollback_search(state: &mut AppState) {
     let Some(pane_id) = state.search_target_pane() else {
         return;
     };
-    let Some(query) = state.search_for(pane_id).map(|s| s.query.clone()) else {
+    let Some(query) = state.search_for(pane_id).map(|s| s.input.borrow().value_str()) else {
         return;
     };
     let cols = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
