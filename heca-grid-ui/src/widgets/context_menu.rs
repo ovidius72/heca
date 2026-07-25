@@ -39,6 +39,7 @@ pub struct MenuEntry {
     on_select: Box<dyn Fn()>,
 }
 
+#[heca_grid_ui_macros::props]
 impl MenuEntry {
     /// An entry with `label` that runs `on_select` when chosen.
     pub fn new(label: impl Into<String>, on_select: impl Fn() + 'static) -> Self {
@@ -54,6 +55,7 @@ impl MenuEntry {
     }
 
     /// An optional leading icon.
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.icon = Some(glyph);
         self
@@ -68,18 +70,21 @@ impl MenuEntry {
 
     /// An optional textual shortcut hint (e.g. `"prefix+x"`), drawn left of the
     /// quick-pick keycap. Informational only — not pressable inside the menu.
+    #[heca_grid_ui_macros::prop]
     pub fn shortcut(mut self, hint: impl Into<String>) -> Self {
         self.shortcut = Some(hint.into());
         self
     }
 
     /// Mark this entry as **destructive** — its label renders in the `danger` hue.
+    #[heca_grid_ui_macros::prop]
     pub fn danger(mut self, danger: bool) -> Self {
         self.danger = danger;
         self
     }
 
     /// Enable/disable the entry. A disabled entry is dimmed and cannot be selected.
+    #[heca_grid_ui_macros::prop]
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -165,6 +170,7 @@ impl ContextMenu {
 
     /// Center the panel on the anchor (anchor = desired center) instead of placing the
     /// top-left at the anchor. For keyboard/RPC-opened menus with no pointer target.
+    #[heca_grid_ui_macros::prop]
     pub fn centered(mut self, on: bool) -> Self {
         self.centered = on;
         self

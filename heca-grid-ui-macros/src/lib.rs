@@ -34,17 +34,18 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, ImplItem, ItemImpl, Type
 /// Also emits `PROP_NAMES` (what this widget exposes) and `HOST_ONLY_BUILDERS` (what it
 /// deliberately does not), which is what the drift guard compares against the real method list.
 ///
-/// `#[prop(late)]` marks a property that must be applied **after** children are attached —
-/// `Select::selected` and `Tabs::selected` clamp against the option count, so applying them early
-/// would clamp against nothing. The caller applies the early pass, attaches children, then the
-/// late pass.
+/// **Properties are order-independent, and nobody has to think about that.** They are applied
+/// after children are attached, so a builder that clamps against its children (`Select::selected`,
+/// `Tabs::selected`) sees the real ones. There is no early/late marker and no sequencing for an
+/// author, a caller or an agent to reason about. If a widget ever *does* have two properties whose
+/// order matters, that is a bug in the widget — fix it there, do not push the ordering onto
+/// everyone else.
 #[proc_macro_attribute]
 pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(item as ItemImpl);
     let self_ty = &input.self_ty;
 
-    let mut early = Vec::new();
-    let mut late = Vec::new();
+    let mut applies = Vec::new();
     let mut exposed = Vec::new();
     let mut host_only = Vec::new();
 
@@ -68,11 +69,21 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
             continue;
         };
         let attr = f.attrs.remove(idx);
-        let is_late = attr
-            .parse_args::<syn::Ident>()
-            .map(|i| i == "late")
-            .unwrap_or(false);
-
+        // `#[prop]` takes NO arguments, and that is enforced rather than merely documented.
+        // Any argument here would be a sequencing hint — `late`, `after = "x"` — and sequencing is
+        // exactly what nobody should have to think about. Rejecting it at compile time stops the
+        // concept being reintroduced one widget at a time.
+        if !matches!(attr.meta, syn::Meta::Path(_)) {
+            return syn::Error::new_spanned(
+                attr,
+                "`#[prop]` takes no arguments: properties are order-independent by construction. \
+                 They are applied after children are attached, so a builder that clamps against \
+                 its children already sees them. If two properties on a widget genuinely depend \
+                 on each other, fix that widget's setters — do not add sequencing here.",
+            )
+            .to_compile_error()
+            .into();
+        }
         let key = name.to_string();
         let Some(arg) = f.sig.inputs.iter().nth(1) else { continue };
         let conversion = match arg_conversion(arg) {
@@ -86,7 +97,7 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
             },
         };
         exposed.push(key);
-        if is_late { late.push(arm) } else { early.push(arm) }
+        applies.push(arm);
     }
 
     let expanded = quote! {
@@ -97,11 +108,7 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
             const HOST_ONLY_BUILDERS: &'static [&'static str] = &[#(#host_only),*];
 
             fn set_prop(self, key: &str, value: &::heca_grid_ui::PropInput) -> Self {
-                match key { #(#early)* _ => self }
-            }
-
-            fn set_late_prop(self, key: &str, value: &::heca_grid_ui::PropInput) -> Self {
-                match key { #(#late)* _ => self }
+                match key { #(#applies)* _ => self }
             }
         }
     };

@@ -29,7 +29,7 @@ const PRIMARY_OFFSET: u32 = 1;
 /// A curated set of Phosphor icons, by name. Each value is the **secondary**
 /// (`:before`) codepoint; the primary layer is `secondary + 1`. Iterate
 /// [`Glyph::ALL`] for the whole set (e.g. to render an icon gallery).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
 pub enum Glyph {
     Folder,
     FolderOpen,
@@ -90,6 +90,7 @@ pub enum Glyph {
     SquareHalfBottom,
 }
 
+#[heca_grid_ui_macros::props]
 impl Glyph {
     /// Every curated glyph, in enum order — the single enumerable source of the icon
     /// set. Rust can't iterate enum variants without a macro/dependency, so this list
@@ -231,6 +232,7 @@ impl Icon {
     }
 
     /// Explicit glyph size in logical px (overrides the inherited font size).
+    #[heca_grid_ui_macros::prop]
     pub fn size(mut self, px: f32) -> Self {
         self.size = Some(px);
         self.remeasure();
@@ -266,6 +268,7 @@ impl Icon {
     /// A glyph inside a control that publishes a content glow (see
     /// [`PaintCx::with_content_glow`](crate::component::PaintCx::with_content_glow))
     /// inherits one without this flag; the flag is the standalone case.
+    #[heca_grid_ui_macros::prop]
     pub fn glow(mut self, glow: bool) -> Self {
         self.glow = glow;
         self

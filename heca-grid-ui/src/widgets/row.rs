@@ -61,6 +61,7 @@ pub struct Row {
     attention_color: Option<Color>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Row {
     /// A new (horizontal) row. Add content with `.child(...)`; make it
     /// clickable/selectable with [`on_activate`](Row::on_activate).
@@ -121,6 +122,7 @@ impl Row {
     }
 
     /// How the active state is indicated (default [`ActiveMarker::Bar`]).
+    #[heca_grid_ui_macros::prop]
     pub fn marker(mut self, marker: ActiveMarker) -> Self {
         self.marker = marker;
         self

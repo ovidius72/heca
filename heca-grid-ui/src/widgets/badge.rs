@@ -23,7 +23,7 @@ const GLOW_RADIUS: f32 = 10.0;
 const GLOW_INTENSITY: f32 = 0.07;
 
 /// Visual variant of a [`Badge`], mapped to theme tokens at paint time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum BadgeVariant {
     /// Accent (primary) chip.
     #[default]
@@ -48,6 +48,7 @@ pub struct Badge {
     variant: BadgeVariant,
 }
 
+#[heca_grid_ui_macros::props]
 impl Badge {
     /// A new accent badge showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
@@ -85,6 +86,7 @@ impl Badge {
     }
 
     /// Set the variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: BadgeVariant) -> Self {
         self.variant = variant;
         self

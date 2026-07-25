@@ -55,6 +55,7 @@ pub enum ToastCorner {
     BottomLeft,
 }
 
+#[heca_grid_ui_macros::props]
 impl ToastCorner {
     fn is_right(self) -> bool {
         matches!(self, ToastCorner::TopRight | ToastCorner::BottomRight)
@@ -94,22 +95,27 @@ impl ToastSpec {
             dismissible: true,
         }
     }
+    #[heca_grid_ui_macros::prop]
     pub fn severity(mut self, s: ToastSeverity) -> Self {
         self.severity = s;
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, g: Glyph) -> Self {
         self.icon = Some(g);
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn body(mut self, b: impl Into<String>) -> Self {
         self.body = Some(b.into());
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn action(mut self, label: impl Into<String>) -> Self {
         self.action = Some(label.into());
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self
@@ -156,18 +162,21 @@ impl ToastStack {
     }
 
     /// Which viewport corner to anchor to (default [`ToastCorner::TopRight`]).
+    #[heca_grid_ui_macros::prop]
     pub fn corner(mut self, corner: ToastCorner) -> Self {
         self.corner = corner;
         self
     }
 
     /// Gap between stacked toasts (logical px).
+    #[heca_grid_ui_macros::prop]
     pub fn gap(mut self, gap: f32) -> Self {
         self.gap = gap;
         self
     }
 
     /// Inset from the viewport edges (logical px).
+    #[heca_grid_ui_macros::prop]
     pub fn margin(mut self, margin: f32) -> Self {
         self.margin = margin;
         self

@@ -76,11 +76,27 @@ pub trait SetProp: Sized {
     /// Apply a property. Unknown key or unusable value ⇒ unchanged.
     fn set_prop(self, key: &str, value: &PropInput) -> Self;
 
-    /// Apply a property that must land **after** children exist.
+    /// Apply every property the caller can supply.
     ///
-    /// `Select::selected` and `Tabs::selected` clamp against the number of options, so applying
-    /// them before the options are attached would clamp against zero. Marked `#[prop(late)]`.
-    fn set_late_prop(self, key: &str, value: &PropInput) -> Self;
+    /// **Order is not something anyone has to think about.** Call this *after* attaching children
+    /// and every property is independent: a builder that clamps against its children
+    /// (`Select::selected`) sees the real ones, so there is no sequencing for an author, a caller
+    /// or an agent to get right. Iteration follows [`PROP_NAMES`](Self::PROP_NAMES) purely so the
+    /// result is reproducible, not because the order carries meaning.
+    ///
+    /// If a widget ever gains two properties whose order genuinely matters, that is a bug **in
+    /// that widget** — make its setters independent. Do not reintroduce sequencing for everyone.
+    ///
+    /// `get` is asked for each property in turn and returns `None` for ones the caller lacks.
+    fn apply_props(self, get: impl Fn(&str) -> Option<PropInput>) -> Self {
+        let mut widget = self;
+        for key in Self::PROP_NAMES {
+            if let Some(value) = get(key) {
+                widget = widget.set_prop(key, &value);
+            }
+        }
+        widget
+    }
 }
 
 /// Resolves an enum variant from its name, derived so that adding a variant extends the accepted
@@ -133,6 +149,25 @@ mod tests {
         assert_eq!(b.clone_axes(), ScrollAxes::Vertical, "unknown key");
         let c = Input::new().set_prop("placeholder", &PropInput::Bool(true));
         assert_eq!(c.placeholder_str(), "", "wrong type for the builder");
+    }
+
+    /// Properties are independent: supplying them says nothing about sequence, and the result is
+    /// the same either way. Nobody — author, caller or agent — has to reason about order.
+    #[test]
+    fn properties_are_order_independent() {
+        let supplied = |key: &str| match key {
+            "value" => Some(PropInput::Text("typed".into())),
+            "placeholder" => Some(PropInput::Text("hint".into())),
+            _ => None,
+        };
+        let one_way = Input::new().apply_props(supplied);
+        let other_way = Input::new()
+            .set_prop("placeholder", &PropInput::Text("hint".into()))
+            .set_prop("value", &PropInput::Text("typed".into()));
+        assert_eq!(one_way.value_str(), other_way.value_str());
+        assert_eq!(one_way.placeholder_str(), other_way.placeholder_str());
+        assert_eq!(one_way.value_str(), "typed");
+        assert_eq!(one_way.placeholder_str(), "hint");
     }
 
     /// A number written as text still reaches a numeric builder — a description that carries

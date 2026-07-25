@@ -59,6 +59,7 @@ pub struct Label {
     strikethrough: Signal<bool>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Label {
     /// A label showing `text`.
     pub fn new(text: impl Into<String>) -> Self {
@@ -81,6 +82,7 @@ impl Label {
     }
 
     /// Text horizontal alignment.
+    #[heca_grid_ui_macros::prop]
     pub fn align(mut self, align: TextAlign) -> Self {
         self.align = align;
         self
@@ -163,6 +165,7 @@ impl Label {
     }
 
     /// Explicit font size in logical px — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, size: f32) -> Self {
         self.base.style.visual.font_size = size;
         self.base.font = size;
@@ -172,6 +175,7 @@ impl Label {
 
     /// Semantic font multiplier relative to the inherited base font (header ≈ 2.0,
     /// caption ≈ 0.8). Scales with a global font change.
+    #[heca_grid_ui_macros::prop]
     pub fn font_scale(mut self, scale: f32) -> Self {
         self.base.style.visual.font_scale = scale;
         self

@@ -291,7 +291,7 @@ pub struct BracketCmd {
 }
 
 /// Horizontal text alignment within the target rect.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum TextAlign {
     #[default]
     Start,

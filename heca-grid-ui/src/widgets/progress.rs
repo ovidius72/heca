@@ -30,6 +30,7 @@ pub struct ProgressBar {
     shown: f32,
 }
 
+#[heca_grid_ui_macros::props]
 impl ProgressBar {
     /// A new bar at 0.
     pub fn new() -> Self {
@@ -44,6 +45,7 @@ impl ProgressBar {
     }
 
     /// Set the initial value (clamped to `0.0..=1.0`, no animation).
+    #[heca_grid_ui_macros::prop]
     pub fn value(mut self, value: f32) -> Self {
         let v = value.clamp(0.0, 1.0);
         self.value.set(v);

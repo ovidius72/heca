@@ -79,6 +79,7 @@ pub struct Dialog {
     has_actions: bool,
 }
 
+#[heca_grid_ui_macros::props]
 impl Dialog {
     /// A new (closed) dialog titled `title`. Add content with [`body`](Dialog::body) and
     /// buttons with [`action`](Dialog::action), in that order.
@@ -209,6 +210,7 @@ impl Dialog {
 
     /// `false` forces an explicit choice — Esc / scrim are swallowed without dismissing.
     /// Pair with a cancel button so there's always a non-destructive way out.
+    #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self
@@ -223,6 +225,7 @@ impl Dialog {
 
     /// Set the initial open state (focusing the first focusable — the safe default when the
     /// caller orders `[Cancel, …, Confirm]`).
+    #[heca_grid_ui_macros::prop]
     pub fn open(mut self, open: bool) -> Self {
         self.open.set(open);
         if open {

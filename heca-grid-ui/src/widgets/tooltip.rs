@@ -82,6 +82,7 @@ pub struct Tooltip {
     last_shown: Cell<bool>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Tooltip {
     /// Wrap `child`, showing `text` on hover.
     pub fn new(child: impl Component + 'static, text: impl Into<String>) -> Self {
@@ -122,12 +123,14 @@ impl Tooltip {
     }
 
     /// Which side of the target to anchor to (default [`TooltipSide::Top`]).
+    #[heca_grid_ui_macros::prop]
     pub fn side(mut self, side: TooltipSide) -> Self {
         self.side = side;
         self
     }
 
     /// Hover delay before the bubble appears, in seconds (default `0.5`).
+    #[heca_grid_ui_macros::prop]
     pub fn delay(mut self, seconds: f32) -> Self {
         self.delay = seconds.max(0.0);
         self

@@ -41,6 +41,7 @@ pub struct BadgeButton {
     on_click: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl BadgeButton {
     /// A new accent badge button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
@@ -82,6 +83,7 @@ impl BadgeButton {
     }
 
     /// Set the visual variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: BadgeVariant) -> Self {
         self.variant = variant;
         self

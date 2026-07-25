@@ -61,6 +61,7 @@ pub enum ToastSeverity {
     Danger,
 }
 
+#[heca_grid_ui_macros::props]
 impl ToastSeverity {
     /// The default leading glyph for this severity (overridable via [`Toast::icon`]).
     fn default_glyph(self) -> Glyph {
@@ -156,12 +157,14 @@ impl Toast {
     }
 
     /// Set the severity (hue + default leading glyph).
+    #[heca_grid_ui_macros::prop]
     pub fn severity(mut self, severity: ToastSeverity) -> Self {
         self.severity = severity;
         self
     }
 
     /// Override the leading glyph (default: the severity glyph).
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.icon = Some(glyph);
         self.show_icon = true;
@@ -176,6 +179,7 @@ impl Toast {
     }
 
     /// Set the small body text (a second line under the title).
+    #[heca_grid_ui_macros::prop]
     pub fn body(mut self, body: impl Into<String>) -> Self {
         self.body = Some(body.into());
         self.remeasure();
@@ -191,6 +195,7 @@ impl Toast {
     }
 
     /// Whether the × dismiss affordance is shown (default `true`).
+    #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self

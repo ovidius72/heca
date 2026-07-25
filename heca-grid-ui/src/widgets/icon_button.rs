@@ -44,6 +44,7 @@ pub struct IconButton {
     on_click: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl IconButton {
     /// A new icon button wrapping `icon`, centered.
     pub fn new(icon: Icon) -> Self {
@@ -70,6 +71,7 @@ impl IconButton {
     /// Pin a square button of `px` (icon centered); otherwise it hugs the icon.
     /// Named `cell` (not `size`) so the shared [`LayoutExt::size`] size-variant
     /// builder stays available on `IconButton`.
+    #[heca_grid_ui_macros::prop]
     pub fn cell(mut self, px: f32) -> Self {
         self.cell = Some(px);
         self.remeasure();
@@ -83,6 +85,7 @@ impl IconButton {
     }
 
     /// Enable or disable the hover glow (default: enabled).
+    #[heca_grid_ui_macros::prop]
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
         self
@@ -92,6 +95,7 @@ impl IconButton {
     /// tone-tinted fill + firm border (the held version of its hover frame, matching
     /// the [`Toggle`](super::Toggle) on-state) so it reads as an active *status*
     /// rather than a passive icon. Hover/press still layer on top.
+    #[heca_grid_ui_macros::prop]
     pub fn active(mut self, on: bool) -> Self {
         self.active = on;
         self

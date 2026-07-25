@@ -133,6 +133,7 @@ pub enum PanelElevation {
 /// so the shadow keeps its shape and only loses depth.
 const HOVER_SHADOW_SCALE: f32 = 0.25;
 
+#[heca_grid_ui_macros::props]
 impl PanelElevation {
     /// Multiplier applied to both the shadow's blur and its drop offset.
     fn shadow_scale(self) -> f32 {
@@ -227,7 +228,7 @@ pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome
 /// the placement honours it instead of re-deciding: [`Select`](super::Select) does
 /// this because its flip decision and its visible-row count are computed together
 /// (the panel's height depends on the side), so the two must not disagree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum AnchorSide {
     /// Prefer below; flip above when there is no room below (and more above).
     #[default]
@@ -377,7 +378,7 @@ pub fn place_at_point(
 ///
 /// Re-exported as [`TooltipSide`](super::TooltipSide) — the same type under the
 /// name that reads better at a [`Tooltip`](super::Tooltip) call site.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum BesideSide {
     /// Above the anchor (flips to [`Bottom`](BesideSide::Bottom) when there is no room).
     #[default]
@@ -631,6 +632,7 @@ impl Overlay {
 
     /// Layer policy: `true` (default) = modal — dimming scrim + outside input
     /// swallowed; `false` = light layer — no scrim, outside input falls through.
+    #[heca_grid_ui_macros::prop]
     pub fn blocking(mut self, blocking: bool) -> Self {
         self.blocking = blocking;
         self

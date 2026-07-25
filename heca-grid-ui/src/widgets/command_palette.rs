@@ -33,6 +33,7 @@ pub struct Command {
     on_run: Box<dyn Fn()>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Command {
     /// A command with `label` that runs `on_run` when selected.
     pub fn new(label: impl Into<String>, on_run: impl Fn() + 'static) -> Self {
@@ -45,12 +46,14 @@ impl Command {
     }
 
     /// An optional leading icon.
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.icon = Some(glyph);
         self
     }
 
     /// An optional right-aligned keybinding hint (e.g. `"⌘K"`).
+    #[heca_grid_ui_macros::prop]
     pub fn key(mut self, hint: impl Into<String>) -> Self {
         self.key = Some(hint.into());
         self
@@ -167,6 +170,7 @@ impl CommandPalette {
     }
 
     /// Set the empty-query placeholder text.
+    #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
         self.placeholder = text.into();
         self

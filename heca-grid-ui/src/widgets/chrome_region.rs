@@ -62,6 +62,7 @@ pub struct ChromeRegion {
     rail_px: f32,
 }
 
+#[heca_grid_ui_macros::props]
 impl ChromeRegion {
     fn with(orientation: Orientation) -> Self {
         let mut base = Base::new();
@@ -108,12 +109,14 @@ impl ChromeRegion {
     }
 
     /// Expanded extent along the collapsing axis (sidebar width / bar height, px).
+    #[heca_grid_ui_macros::prop]
     pub fn expanded_size(mut self, px: f32) -> Self {
         self.expanded_px = px;
         self
     }
 
     /// Collapsed icon-rail extent along the collapsing axis (px).
+    #[heca_grid_ui_macros::prop]
     pub fn rail_size(mut self, px: f32) -> Self {
         self.rail_px = px;
         self

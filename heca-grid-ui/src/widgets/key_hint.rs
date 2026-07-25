@@ -25,7 +25,7 @@ use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Where the keycap sits over the target.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum HintPlacement {
     /// Centered along the top edge — for compact square targets (rail icon cells).
     #[default]
@@ -172,6 +172,7 @@ pub struct KeyHint {
     offset_y: f64,
 }
 
+#[heca_grid_ui_macros::props]
 impl KeyHint {
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
     pub fn new(child: impl Component + 'static) -> Self {
@@ -208,12 +209,14 @@ impl KeyHint {
     }
 
     /// Where the keycap sits over the target (default [`HintPlacement::TopCenter`]).
+    #[heca_grid_ui_macros::prop]
     pub fn placement(mut self, placement: HintPlacement) -> Self {
         self.placement = placement;
         self
     }
 
     /// Explicit keycap font size in logical px (overrides the font-derived size).
+    #[heca_grid_ui_macros::prop]
     pub fn size(mut self, px: f32) -> Self {
         self.size = Some(px);
         self
@@ -228,6 +231,7 @@ impl KeyHint {
     /// Nudge the keycap down by `px` logical pixels after placement (positive = down).
     /// Use it to drop a `TopCenter` cap from a tall target's top edge onto its header
     /// row (e.g. align with a workspace dock's title).
+    #[heca_grid_ui_macros::prop]
     pub fn offset_y(mut self, px: f64) -> Self {
         self.offset_y = px;
         self

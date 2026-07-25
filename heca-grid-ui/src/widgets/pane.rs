@@ -31,7 +31,7 @@ use crate::style::Direction;
 const GLOW_RADIUS: f32 = 12.0;
 
 /// Frame decoration mode for a [`Pane`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
 pub enum PaneFrame {
     /// Fill only — no border, no brackets. Use when you just want the
     /// background without any frame decoration.
@@ -60,6 +60,7 @@ pub struct Pane {
     border_width: Option<f32>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Pane {
     /// A new vertical (column) pane with the default [`PaneFrame::Bordered`].
     /// Content is inset by 8.0 px by default — override with `.padding(x)`.
@@ -82,6 +83,7 @@ impl Pane {
     }
 
     /// Choose the frame decoration mode.
+    #[heca_grid_ui_macros::prop]
     pub fn frame(mut self, f: PaneFrame) -> Self {
         self.frame = f;
         self

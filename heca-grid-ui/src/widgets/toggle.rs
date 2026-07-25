@@ -49,6 +49,7 @@ pub struct Toggle {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Toggle {
     /// A new toggle, off by default.
     pub fn new() -> Self {
@@ -67,6 +68,7 @@ impl Toggle {
     }
 
     /// Set the initial on-state (starts the knob at that end, no animation).
+    #[heca_grid_ui_macros::prop]
     pub fn on(mut self, on: bool) -> Self {
         self.on.set(on);
         self.progress = if on { 1.0 } else { 0.0 };

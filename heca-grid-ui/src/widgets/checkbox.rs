@@ -38,7 +38,7 @@ const GLOW_RADIUS: f32 = 14.0;
 const GLOW_INTENSITY: f32 = 0.09;
 
 /// Which side of the box the [`Checkbox`] label sits on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum LabelSide {
     /// Label to the right of the box (default).
     #[default]
@@ -64,6 +64,7 @@ pub struct Checkbox {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Checkbox {
     /// A new checkbox, unchecked and label-less by default.
     pub fn new() -> Self {
@@ -84,6 +85,7 @@ impl Checkbox {
     }
 
     /// Set the initial checked state (no animation).
+    #[heca_grid_ui_macros::prop]
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked.set(checked);
         self.progress = if checked { 1.0 } else { 0.0 };
@@ -91,6 +93,7 @@ impl Checkbox {
     }
 
     /// Add a label next to the box. Clicking the label toggles the checkbox.
+    #[heca_grid_ui_macros::prop]
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self.remeasure();
@@ -98,6 +101,7 @@ impl Checkbox {
     }
 
     /// Choose which side the label sits on (default [`LabelSide::Right`]).
+    #[heca_grid_ui_macros::prop]
     pub fn label_side(mut self, side: LabelSide) -> Self {
         self.label_side = side;
         self

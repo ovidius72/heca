@@ -42,6 +42,7 @@ pub struct RailCell {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl RailCell {
     /// A new cell wrapping `icon`, centered in a square. Make it
     /// clickable/keyboard-activatable with [`on_activate`](RailCell::on_activate).
@@ -65,6 +66,7 @@ impl RailCell {
     }
 
     /// Square cell extent in logical px (default 40).
+    #[heca_grid_ui_macros::prop]
     pub fn cell_size(mut self, px: f32) -> Self {
         self.cell = px;
         self.remeasure();

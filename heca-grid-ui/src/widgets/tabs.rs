@@ -72,6 +72,7 @@ pub struct Tabs {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Tabs {
     /// An empty tab strip — add tabs with [`tab`](Tabs::tab).
     pub fn empty() -> Self {
@@ -123,6 +124,7 @@ impl Tabs {
     }
 
     /// Explicit font size — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
         self.base.style.visual.font_size = fs;
         self.base.font = fs;

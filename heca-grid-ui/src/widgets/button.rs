@@ -64,7 +64,7 @@ const SECONDARY_FILL_ALPHA: u8 = 36;
 const DISABLED_CONTENT_ALPHA: f32 = 0.38;
 
 /// Visual variant of a [`Button`] (GridCN/shadcn set).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ButtonVariant {
     /// Accent border; fill sweeps in from the bottom on hover.
     #[default]
@@ -155,6 +155,7 @@ pub struct Button {
     on_click: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Button {
     /// An **empty** primary button — no content. Compose it with [`child`](Parent::child) /
     /// [`icon`](Self::icon) / [`content_boxed`](Self::content_boxed).
@@ -193,6 +194,7 @@ impl Button {
 
     /// Prepend a leading [`Icon`] — sugar for a child, so `Button::new("Save").icon(Glyph::Check)`
     /// holds `[Icon, Label]`. The icon inherits the button's state color and size variant.
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.base.children.insert(0, Box::new(Icon::new(glyph)));
         self
@@ -227,12 +229,14 @@ impl Button {
     }
 
     /// Set the variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = variant;
         self
     }
 
     /// Set an explicit font size — overrides the inherited theme font + size scale.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
         self.base.style.visual.font_size = fs;
         self.base.font = fs;
@@ -242,12 +246,14 @@ impl Button {
 
     /// Enable or disable the glow — both the hover glow and the faint theme
     /// rest glow (`interaction.control_rest_glow`). Default: enabled.
+    #[heca_grid_ui_macros::prop]
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
         self
     }
 
     /// Show or hide the border (default: shown for bordered variants).
+    #[heca_grid_ui_macros::prop]
     pub fn bordered(mut self, enabled: bool) -> Self {
         self.show_border = enabled;
         self

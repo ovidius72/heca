@@ -53,7 +53,7 @@ const TRAILING: usize = 2;
 
 /// How an [`Item`]'s active state is indicated. Set per context; the row carries
 /// the `active` bool, the marker decides how it's shown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ActiveMarker {
     /// No marker — only the tinted bg + accent label (default; plain rows /
     /// dropdown options without a bar).
@@ -97,6 +97,7 @@ pub struct Item {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Item {
     /// A new row showing `label`, with empty slots.
     pub fn new(label: impl Into<String>) -> Self {
@@ -141,6 +142,7 @@ impl Item {
     /// Applied to the label **child** as well: an explicit `font_size` pins one node only (unlike
     /// the size *variant*, which the layout pass inherits down the tree), so the row and its text
     /// would otherwise disagree.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
         self.base.style.visual.font_size = fs;
         self.base.font = fs;
@@ -188,18 +190,21 @@ impl Item {
 
     /// Set how the active state is visually indicated. Defaults to
     /// [`ActiveMarker::None`] (tinted bg + accent label only).
+    #[heca_grid_ui_macros::prop]
     pub fn marker(mut self, marker: ActiveMarker) -> Self {
         self.marker = marker;
         self
     }
 
     /// Render the label muted (section-header style).
+    #[heca_grid_ui_macros::prop]
     pub fn muted(mut self, muted: bool) -> Self {
         self.muted = muted;
         self
     }
 
     /// Draw a rounded border (chip frame) around the leading slot.
+    #[heca_grid_ui_macros::prop]
     pub fn leading_bordered(mut self, bordered: bool) -> Self {
         self.leading_border = bordered;
         self
@@ -207,6 +212,7 @@ impl Item {
 
     /// Draw a rounded border (chip frame) around the trailing slot — e.g. a
     /// keymap hint like `⌘P`.
+    #[heca_grid_ui_macros::prop]
     pub fn trailing_bordered(mut self, bordered: bool) -> Self {
         self.trailing_border = bordered;
         self

@@ -132,6 +132,7 @@ pub struct Select {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Select {
     /// An empty select — add options with [`option`](Select::option).
     pub fn empty() -> Self {
@@ -189,6 +190,7 @@ impl Select {
     }
 
     /// Explicit font size — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
         self.base.style.visual.font_size = fs;
         self.base.font = fs;

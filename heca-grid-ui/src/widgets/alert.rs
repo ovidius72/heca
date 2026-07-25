@@ -24,7 +24,7 @@ const DEFAULT_WIDTH: f32 = 360.0;
 const GLOW_RADIUS: f32 = 10.0;
 
 /// Visual variant of an [`Alert`], mapped to theme tokens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum AlertVariant {
     /// Informational (accent).
     #[default]
@@ -45,6 +45,7 @@ pub struct Alert {
     variant: AlertVariant,
 }
 
+#[heca_grid_ui_macros::props]
 impl Alert {
     /// A new info alert with `title`. Add body text with [`body`](Alert::body).
     pub fn new(title: impl Into<String>) -> Self {
@@ -75,12 +76,14 @@ impl Alert {
     }
 
     /// Set the variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: AlertVariant) -> Self {
         self.variant = variant;
         self
     }
 
     /// Set the body text (shown on a second line).
+    #[heca_grid_ui_macros::prop]
     pub fn body(mut self, body: impl Into<String>) -> Self {
         self.body = Some(body.into());
         self.remeasure();
