@@ -25,6 +25,10 @@
 //!
 //! See `grid-ui-plan.md` for the full phase plan.
 
+// So the generated `impl ::heca_grid_ui::SetProp` from `#[props]` resolves inside this crate too,
+// not only in downstream ones. Without it the macro would need a different path when used here.
+extern crate self as heca_grid_ui;
+
 pub mod action;
 pub mod builders;
 pub mod color;
@@ -61,6 +65,9 @@ pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
+pub mod prop;
+pub use heca_grid_ui_macros::{prop, props, PropName};
+pub use prop::{PropInput, PropName, SetProp};
 pub use style::{
     Align, Direction, GridCell, Justify, Layout, Length, Spacing, Style, Track, Visual, WidgetSize,
 };

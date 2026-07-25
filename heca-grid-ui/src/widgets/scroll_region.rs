@@ -97,7 +97,7 @@ struct TrackRepeat {
 /// Which axes a [`ScrollRegion`] scrolls. Default [`Vertical`](ScrollAxes::Vertical)
 /// keeps every existing caller unchanged; opt into horizontal with
 /// [`horizontal`](ScrollRegion::horizontal) / [`both`](ScrollRegion::both).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ScrollAxes {
     /// Vertical only (the historical default).
     #[default]
@@ -183,6 +183,7 @@ pub struct ScrollRegion {
     track_repeat: Option<TrackRepeat>,
 }
 
+#[heca_grid_ui_macros::props]
 impl ScrollRegion {
     /// A new vertical scroll region.
     pub fn new() -> Self {
@@ -240,6 +241,12 @@ impl ScrollRegion {
     }
 
     /// Set the scrolling axes explicitly (default [`ScrollAxes::Vertical`]).
+    /// Which axes this region scrolls.
+    pub fn clone_axes(&self) -> ScrollAxes {
+        self.axes
+    }
+
+    #[heca_grid_ui_macros::prop]
     pub fn axes(mut self, axes: ScrollAxes) -> Self {
         self.axes = axes;
         self

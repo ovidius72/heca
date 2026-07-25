@@ -72,6 +72,7 @@ pub struct Input {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Input {
     /// A new empty input.
     pub fn new() -> Self {
@@ -95,6 +96,7 @@ impl Input {
     }
 
     /// Explicit font size — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
         self.base.style.visual.font_size = fs;
         self.base.font = fs;
@@ -103,6 +105,7 @@ impl Input {
     }
 
     /// Set the initial text (caret lands at the end).
+    #[heca_grid_ui_macros::prop]
     pub fn value(mut self, value: impl Into<String>) -> Self {
         self.set_value(value);
         self
@@ -119,6 +122,12 @@ impl Input {
     }
 
     /// Set the placeholder shown while empty and unfocused.
+    /// The placeholder text as set (empty when unset).
+    pub fn placeholder_str(&self) -> &str {
+        &self.placeholder
+    }
+
+    #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
         self.placeholder = placeholder.into();
         self
