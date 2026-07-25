@@ -2,6 +2,8 @@
   "id": "87939acb-c177-4c6b-b4d7-2df14c25390d",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
   "number": 3,
+  "shortId": "",
+  "priority": 0,
   "slug": "nvim-06-markdown-layer",
   "title": "nvim-06: Markdown layer",
   "status": "planned",
@@ -29,6 +31,8 @@
       "id": "35f3891d-a670-4bc7-a9d2-9405c602566f",
       "phaseId": "87939acb-c177-4c6b-b4d7-2df14c25390d",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "read-buffer-rpc",
       "title": "Read buffer content via RPC",
       "status": "planned",
@@ -49,6 +53,8 @@
       "id": "80d65d00-ea07-4725-9891-69499125f645",
       "phaseId": "87939acb-c177-4c6b-b4d7-2df14c25390d",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "markdown-preview",
       "title": "Render native rich markdown preview",
       "status": "planned",
@@ -67,5 +73,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:15:25.608Z"
+  "updatedAt": "2026-07-01T18:15:25.608Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

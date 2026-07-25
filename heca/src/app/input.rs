@@ -147,18 +147,21 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     let is_backspace = matches!(ctx.logical_key, Key::Named(NamedKey::Backspace));
 
     if is_escape {
-        state.search = None;
+        // Cancels only this pane's search; other panes keep theirs.
+        if let Some(pane) = state.search_target_pane() {
+            state.clear_search(pane);
+        }
         state.input_mode = InputMode::Selection;
     } else if is_enter {
         // Keep the matches for n/N; just leave query-entry.
         state.input_mode = InputMode::Selection;
     } else if is_backspace {
-        if let Some(search) = state.search.as_mut() {
+        if let Some(search) = state.active_search_mut() {
             search.query.pop();
         }
         crate::app::terminal_host::run_scrollback_search(state);
     } else if ctx.key_text.chars().count() == 1 && !ctx.is_ctrl {
-        if let Some(search) = state.search.as_mut() {
+        if let Some(search) = state.active_search_mut() {
             search.query.push_str(ctx.key_text);
         }
         crate::app::terminal_host::run_scrollback_search(state);

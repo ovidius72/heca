@@ -2,6 +2,8 @@
   "id": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
   "number": 4,
+  "shortId": "",
+  "priority": 0,
   "slug": "nvim-05-image-layer",
   "title": "nvim-05: Image layer",
   "status": "planned",
@@ -30,6 +32,8 @@
       "id": "88ebda68-22af-4fce-96c3-4d1e445f7313",
       "phaseId": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "nvim-image-rpc",
       "title": "Dedicated RPC channel for images",
       "status": "planned",
@@ -50,6 +54,8 @@
       "id": "771b4aef-b174-438a-977e-cc2308084632",
       "phaseId": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "image-anchor-buffer",
       "title": "Image anchor to buffer and window",
       "status": "planned",
@@ -70,6 +76,8 @@
       "id": "addecabb-0eb8-4e8d-a9ef-57f793a4738a",
       "phaseId": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "reuse-image-renderer",
       "title": "Reuse ImageRenderer from terminal",
       "status": "planned",
@@ -88,5 +96,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:15:25.598Z"
+  "updatedAt": "2026-07-01T18:15:25.598Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

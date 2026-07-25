@@ -2,6 +2,8 @@
   "id": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
   "number": 10,
+  "shortId": "",
+  "priority": 0,
   "slug": "terminal-07-clipboard-and-paste",
   "title": "terminal-07: Clipboard and paste",
   "status": "done",
@@ -30,6 +32,8 @@
       "id": "dd739da5-65f0-4c87-b2d9-d2ca1b7d1931",
       "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
       "number": 1,
+      "shortId": "",
+      "priority": 0,
       "shortName": "copy-system-clipboard",
       "title": "Copy to system clipboard",
       "status": "done",
@@ -50,6 +54,8 @@
       "id": "61e79a33-90d1-43c2-8e40-d67c6a098b73",
       "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
       "number": 2,
+      "shortId": "",
+      "priority": 0,
       "shortName": "bracketed-paste",
       "title": "Bracketed paste support",
       "status": "done",
@@ -70,6 +76,8 @@
       "id": "73118e33-542e-4e89-bf89-37cc77ab684a",
       "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
       "number": 3,
+      "shortId": "",
+      "priority": 0,
       "shortName": "osc52-clipboard-write",
       "title": "OSC 52 clipboard write",
       "status": "done",
@@ -88,5 +96,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:11:32.026Z"
+  "updatedAt": "2026-07-01T18:11:32.026Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }
