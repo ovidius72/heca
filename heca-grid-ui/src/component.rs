@@ -637,6 +637,7 @@ pub struct PaintCx<'a> {
     /// The **inherited content color** for the subtree currently being painted — see
     /// [`with_content_color`](Self::with_content_color). `None` at the root.
     content_color: Option<Color>,
+    content_glow: Option<Glow>,
     /// Translation applied to every draw emitted through this context — see
     /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
     offset: (f64, f64),
@@ -650,6 +651,7 @@ impl<'a> PaintCx<'a> {
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
             content_color: None,
+            content_glow: None,
             offset: (0.0, 0.0),
         }
     }
@@ -774,6 +776,32 @@ impl<'a> PaintCx<'a> {
         self.content_color
     }
 
+    /// Paint the closure's subtree with `glow` as the **inherited content glow** — the
+    /// halo counterpart of [`with_content_color`](Self::with_content_color), and it
+    /// exists for the same reason.
+    ///
+    /// A control that *composes* its content holds its children as `impl Component`:
+    /// it cannot reach in and style them, and it cannot know whether a child is even
+    /// a glyph. [`RailCell`](crate::widgets::RailCell) is the case — its resting look
+    /// *is* a bare icon, so the only way to give that icon a halo is for the cell to
+    /// publish one and let the glyph pull it.
+    ///
+    /// The published glow is **unscaled**, like the one [`rest_glow`](Self::rest_glow)
+    /// returns: `glow_size` is applied once at the drawing chokepoint
+    /// ([`icon_glowing`](Self::icon_glowing), [`rect`](Self::rect)), never by the
+    /// publisher. Scaling before publishing would apply the setting twice.
+    pub fn with_content_glow(&mut self, glow: Option<Glow>, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = std::mem::replace(&mut self.content_glow, glow);
+        f(self);
+        self.content_glow = previous;
+    }
+
+    /// The inherited content glow, if a parent published one via
+    /// [`with_content_glow`](Self::with_content_glow).
+    pub fn content_glow(&self) -> Option<Glow> {
+        self.content_glow
+    }
+
     /// Queue a rounded rectangle with optional border and glow.
     pub fn rect(
         &mut self,
@@ -894,6 +922,7 @@ impl<'a> PaintCx<'a> {
             align,
             style,
             font: FontRole::Text,
+            glow: None,
         }));
     }
 
@@ -901,9 +930,33 @@ impl<'a> PaintCx<'a> {
     /// ([`FontRole::Icon`]). `glyph` is the codepoint as a string; the renderer
     /// selects the embedded icon family. Used by [`Icon`](crate::widgets::Icon).
     pub fn icon(&mut self, rect: Rectangle, glyph: &str, color: Color, size: f32) {
+        self.icon_glowing(rect, glyph, color, size, None);
+    }
+
+    /// [`icon`](PaintCx::icon) with an additive halo behind the glyph.
+    ///
+    /// This is the glyph counterpart of a surface's glow, and it goes through the
+    /// **same chokepoint**: `glow` is scaled by the theme's `glow_size` token before
+    /// it reaches the scene, so `GlowLevel::None` drops the halo entirely and every
+    /// other level scales it exactly as it scales a rect's. Pass
+    /// [`rest_glow`](PaintCx::rest_glow) to give a bare glyph the same faint resting
+    /// halo that bordered surfaces carry.
+    ///
+    /// A halo is deliberately opt-in per call rather than a property of the icon
+    /// font: terminal cell glyphs are the hottest path in the app and must never
+    /// take it.
+    pub fn icon_glowing(
+        &mut self,
+        rect: Rectangle,
+        glyph: &str,
+        color: Color,
+        size: f32,
+        glow: Option<Glow>,
+    ) {
         if self.culled(rect) {
             return;
         }
+        let glow = self.scaled_glow(glow);
         self.scene.push(DrawCommand::Text(TextCmd {
             rect: self.placed(rect),
             text: glyph.to_string(),
@@ -912,6 +965,7 @@ impl<'a> PaintCx<'a> {
             align: TextAlign::Center,
             style: TextStyle::REGULAR,
             font: FontRole::Icon,
+            glow,
         }));
     }
 

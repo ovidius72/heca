@@ -14,12 +14,15 @@ struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) texcoord: vec2<f32>,
     @location(2) color: vec4<f32>,
+    // 0.0 = normal glyph, 1.0 = additive halo tap. See TextVertex::additive.
+    @location(3) additive: f32,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) texcoord: vec2<f32>,
     @location(1) color: vec4<f32>,
+    @location(2) additive: f32,
 };
 
 fn srgb_to_linear_channel(v: f32) -> f32 {
@@ -45,6 +48,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.clip_position = vec4<f32>(x, y, 0.0, 1.0);
     out.texcoord = in.texcoord;
     out.color = in.color;
+    out.additive = in.additive;
     return out;
 }
 
@@ -52,5 +56,9 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let cov = textureSample(text_texture, text_sampler, in.texcoord).r;
     let a = in.color.a * cov;
-    return vec4<f32>(srgb_to_linear(in.color.rgb) * a, a);
+    // Premultiplied-alpha blending is `dst = src.rgb + dst.rgb * (1 - src.a)`, so
+    // emitting light with a zero alpha adds it without occluding anything behind —
+    // which is what makes a halo tap read as glow rather than as a grey smear.
+    let out_a = a * (1.0 - in.additive);
+    return vec4<f32>(srgb_to_linear(in.color.rgb) * a, out_a);
 }

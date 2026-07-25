@@ -19,6 +19,7 @@
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, signal};
+use crate::scene::Glow;
 use crate::style::Length;
 
 /// Offset from a duotone glyph's secondary (`:before`) codepoint to its primary
@@ -191,7 +192,22 @@ pub struct Icon {
     color: Option<Color>,
     /// Secondary-layer color override (default: primary at theme alpha).
     secondary: Option<Color>,
+    /// Opt-in resting halo (see [`Icon::glow`]).
+    glow: bool,
 }
+
+/// Halo falloff as a fraction of the glyph's own size.
+///
+/// Derived rather than fixed, because an icon is not a fixed size: a 34px glyph and
+/// a 16px glyph need proportionally different reach, and a constant would make one
+/// of them wrong.
+///
+/// **Deliberately wider than a surface's rest glow, not equal to it.** Perceived glow
+/// is total emitted light, which scales with the emitting *perimeter* — a glyph's is
+/// roughly a quarter of a button's, so matching the radius (which an earlier version
+/// did, at 0.35 ≈ the button's 12px) left the glyph visibly dimmer and tighter beside
+/// a lit control. The extra reach buys back the area a small emitter cannot.
+const HALO_RADIUS_FRAC: f32 = 0.55;
 
 impl Icon {
     /// A new icon for a named [`Glyph`].
@@ -202,6 +218,7 @@ impl Icon {
             seen_glyph: glyph,
             size: None,
             color: None,
+            glow: false,
             secondary: None,
         };
         icon.remeasure();
@@ -231,6 +248,26 @@ impl Icon {
     /// [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha)).
     pub fn secondary_color(mut self, c: Color) -> Self {
         self.secondary = Some(c);
+        self
+    }
+
+    /// Give the glyph the theme's resting halo (default `false` — flat).
+    ///
+    /// This is the glyph counterpart of the rest glow every bordered *surface*
+    /// carries: it reads `interaction.control_rest_glow` and scales with `glow_size`
+    /// exactly as a surface's does, so `glow_size = none` removes it along with every
+    /// other halo in the UI.
+    ///
+    /// It is **opt-in rather than automatic**, because most icons in the app sit
+    /// inside a control that is already glowing — a Button's leading icon, a pane
+    /// header action — and haloing those too would double the light. Turn it on for a
+    /// glyph that stands alone on the background and should still read as lit.
+    ///
+    /// A glyph inside a control that publishes a content glow (see
+    /// [`PaintCx::with_content_glow`](crate::component::PaintCx::with_content_glow))
+    /// inherits one without this flag; the flag is the standalone case.
+    pub fn glow(mut self, glow: bool) -> Self {
+        self.glow = glow;
         self
     }
 
@@ -279,12 +316,31 @@ impl Component for Icon {
         let rect = self.base.bounds;
         let secondary_cp = self.glyph.get_untracked().secondary();
 
-        // Secondary (background) layer first, then the primary layer on top.
+        // Own opt-in → the enclosing control's inherited content glow → flat. Same
+        // resolution order as the colour above, for the same reason: a glyph composed
+        // inside a control (a `RailCell`'s bare-icon rest state) cannot be reached and
+        // styled by that control, so the control publishes and the glyph pulls.
+        //
+        // The reach is always ours, even on the inherited path: a parent knows it
+        // wants the glyph lit, but only the glyph knows how big it is.
+        let halo_radius = size * HALO_RADIUS_FRAC;
+        let glow = if self.glow {
+            cx.rest_glow(halo_radius)
+        } else {
+            cx.content_glow().map(|g| Glow {
+                radius: halo_radius,
+                ..g
+            })
+        };
+
+        // Secondary (background) layer first, then the primary layer on top. Only the
+        // primary carries the halo: haloing both would double the light on every
+        // two-layer glyph and cost a second set of taps for no visible gain.
         if let Some(c) = char::from_u32(secondary_cp) {
             cx.icon(rect, &c.to_string(), secondary, size);
         }
         if let Some(c) = char::from_u32(secondary_cp + PRIMARY_OFFSET) {
-            cx.icon(rect, &c.to_string(), primary, size);
+            cx.icon_glowing(rect, &c.to_string(), primary, size, glow);
         }
     }
 
@@ -317,5 +373,71 @@ mod tests {
             );
         }
         assert_eq!(seen.len(), Glyph::ALL.len());
+    }
+
+    mod glow {
+        use super::super::Icon;
+        use crate::component::{Component, PaintCx};
+        use crate::scene::{DrawCommand, Scene};
+        use crate::theme::{GlowLevel, Theme};
+
+        /// Paint one icon and report the halo on its **primary** glyph run (the last
+        /// text command it emits).
+        fn primary_glow(icon: Icon, glow_size: GlowLevel) -> Option<crate::scene::Glow> {
+            let mut theme = Theme::default();
+            theme.colors.glow_size = glow_size;
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                icon.paint(&mut cx);
+            }
+            scene
+                .iter()
+                .filter_map(|cmd| match cmd {
+                    DrawCommand::Text(t) => Some(t.glow),
+                    _ => None,
+                })
+                .last()
+                .expect("an icon paints at least one glyph run")
+        }
+
+        /// An icon is flat unless it asks for a halo — most icons sit inside a control
+        /// that is already glowing, so haloing every one would double the light.
+        #[test]
+        fn an_icon_is_flat_by_default() {
+            let glow = primary_glow(Icon::new(super::Glyph::Search), GlowLevel::Medium);
+            assert!(glow.is_none(), "unglowing icon emitted {glow:?}");
+        }
+
+        /// Opting in puts the halo on the glyph run for the renderer to realize.
+        #[test]
+        fn opting_in_carries_a_halo_on_the_glyph_run() {
+            let glow = primary_glow(Icon::new(super::Glyph::Search).glow(true), GlowLevel::Medium);
+            assert!(glow.is_some(), "glow(true) emitted no halo");
+        }
+
+        /// **The chokepoint.** A glyph halo is not a second glow system: it goes
+        /// through the same `scaled_glow` as every surface, so the `glow_size` setting
+        /// removes it along with the rest.
+        #[test]
+        fn glow_size_none_removes_the_glyph_halo() {
+            let glow = primary_glow(Icon::new(super::Glyph::Search).glow(true), GlowLevel::None);
+            assert!(glow.is_none(), "glow_size=none still emitted {glow:?}");
+        }
+
+        /// …and the level scales it, rather than the glyph baking a fixed intensity.
+        #[test]
+        fn glow_size_scales_the_glyph_halo() {
+            let thin = primary_glow(Icon::new(super::Glyph::Search).glow(true), GlowLevel::Thin)
+                .expect("thin halo");
+            let large = primary_glow(Icon::new(super::Glyph::Search).glow(true), GlowLevel::Large)
+                .expect("large halo");
+            assert!(
+                large.radius > thin.radius,
+                "large halo radius {} should exceed thin's {}",
+                large.radius,
+                thin.radius
+            );
+        }
     }
 }

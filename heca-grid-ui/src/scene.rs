@@ -371,6 +371,15 @@ pub struct TextCmd {
     pub style: TextStyle,
     /// Which font family shapes this run (text vs. icon glyph font).
     pub font: FontRole,
+    /// Additive halo behind the glyphs, or `None` for flat text (the default, and
+    /// what every terminal run uses).
+    ///
+    /// This is **declarative, exactly like [`RectCmd::glow`]**: the scene says *this
+    /// run glows, this colour, this falloff* and the renderer decides how to realize
+    /// it. `heca-renderer` currently does so by blurring the glyph's coverage mask
+    /// into its own atlas entry and drawing that behind the sharp glyph — but that is
+    /// a renderer detail, and replacing it changes no scene code and no widget.
+    pub glow: Option<Glow>,
 }
 
 /// A scanline overlay confined to a region.

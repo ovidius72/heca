@@ -1058,6 +1058,48 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             }
             grid.child(row)
         })
+        // Glyph halo: a bare icon can carry the same resting glow every bordered
+        // SURFACE has. Flat vs `.glow(true)`, side by side, so the difference is
+        // visible without hunting. It goes through the one `scaled_glow` chokepoint,
+        // so the GLOW SIZE select above scales both — and `none` removes the halo
+        // here exactly as it removes every other glow in the UI.
+        .child(caption("Icon — glyph halo (glow_size scales it; none removes it)"))
+        .child(
+            Flex::row()
+                .gap(28.0)
+                .align(Align::Center)
+                .child(
+                    Flex::column()
+                        .gap(6.0)
+                        .align(Align::Center)
+                        .child(Icon::new(Glyph::Lightning).color(theme.colors.accent).size(34.0))
+                        .child(Label::new("FLAT").font_scale(0.62).color(theme.colors.muted)),
+                )
+                .child(
+                    Flex::column()
+                        .gap(6.0)
+                        .align(Align::Center)
+                        .child(
+                            Icon::new(Glyph::Lightning)
+                                .color(theme.colors.accent)
+                                .size(34.0)
+                                .glow(true),
+                        )
+                        .child(Label::new("GLOW").font_scale(0.62).color(theme.colors.muted)),
+                )
+                .child(
+                    Flex::column()
+                        .gap(6.0)
+                        .align(Align::Center)
+                        .child(
+                            Icon::new(Glyph::Terminal)
+                                .color(theme.colors.foreground)
+                                .size(34.0)
+                                .glow(true),
+                        )
+                        .child(Label::new("GLOW").font_scale(0.62).color(theme.colors.muted)),
+                ),
+        )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
         // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.

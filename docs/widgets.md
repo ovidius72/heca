@@ -355,9 +355,24 @@ glow), `RailCell` (rest = bare icon), frameless `ScrollRegion`, layout shells
 (`Flex`/`ChromeRegion`) — they have no surface, so there is nothing to halo. Disabled controls
 never halo. `Button::glow(false)` opts a single button out of rest + hover glow.
 
-**Icons/glyphs cannot glow yet**: an `Icon` is a text run (`TextCmd`) and glow is a feature of
-the SDF **rect** renderer — a glyph halo needs a renderer capability (tracked; do not fake it
-with rects).
+**Icons/glyphs can glow** (since the glyph-halo work): `TextCmd` carries an optional glow just as
+`RectCmd` does, and `heca-renderer` realizes it by **blurring the glyph's coverage mask** into its
+own atlas entry and drawing that once behind the sharp glyph, with zero alpha so premultiplied
+blending adds light without occluding.
+Opt in per glyph with [`Icon::glow(true)`](#icon), or let a control publish a **content glow** its
+composed glyphs inherit (how [`RailCell`](#railcell) lights its resting icon). It runs through the
+same `scaled_glow` chokepoint as every other glow, so `glow_size` scales it and `none` removes it.
+**Terminal cell glyphs never take it** — they are the hottest path in the app and a halo multiplies
+a run's vertex count.
+
+> The halo is a *renderer* choice, not a scene one: the scene says "this run glows", the renderer
+> decides how. The blur is a true Gaussian (three box passes) computed once per
+> `(glyph, size, sigma)` and cached in the atlas like any other glyph, so it costs **one** quad to
+> draw and scales with `glow_size` for free.
+>
+> An earlier attempt drew the glyph many times around a ring instead. It was abandoned: a ring is a
+> discrete shell, so the copies read as spokes and arcs rather than as light, and it degraded as the
+> radius grew because a fixed tap count spreads thinner. Do not reintroduce it.
 
 ### The focus model — ring visibility
 
@@ -1853,7 +1868,27 @@ enclosing control, falling back to `theme.foreground`; the secondary layer follo
 - **Construct**: `Icon::new(Glyph)`.
 - **Builders**: `.size(px)` (glyph pixels — **not** the `WidgetSize` variant; use
   `Style::set_size` for that, since `size` is taken), `.color(Color)` (primary — opts out of
-  inheritance), `.secondary_color(Color)`.
+  inheritance), `.secondary_color(Color)`, `.glow(bool)` (default `false` — see below).
+
+**A glyph can halo** (`.glow(true)`). Until now only bordered *surfaces* carried the resting glow
+(`interaction.control_rest_glow`); a bare glyph was always flat, because glow lived only in the SDF
+**rect** renderer. `TextCmd` now carries an optional glow the way `RectCmd` does, and the renderer
+realizes it by drawing a pre-blurred copy of the glyph behind itself.
+
+  - It goes through the **same `scaled_glow` chokepoint** as every surface, so `glow_size = none`
+    removes it along with every other halo, and the other levels scale it. It is not a second glow
+    system.
+  - It is **opt-in, not automatic**: most icons sit inside a control that is already glowing (a
+    Button's leading icon, a pane-header action), and haloing those too would double the light.
+    Turn it on for a glyph that stands alone on the background.
+  - Only the **primary** layer haloes — haloing the secondary wash too would double the light on
+    every duotone glyph and cost a second set of taps for nothing.
+  - A glyph inside a control that publishes a **content glow** inherits one without the flag. That
+    is how [`RailCell`](#railcell) lights its resting bare icon: a control holds its children as
+    `impl Component` and cannot style them, so it publishes and the glyph pulls — exactly the
+    mechanism [content color](#scene--drawcommand--paintcx-for-building-widgets) already uses.
+  - **Never on terminal text.** Cell glyphs are the hottest path in the app; the halo multiplies a
+    run's vertex count, so the terminal path hard-codes no glow.
 - **Declarative**: `WidgetKind::Icon`, prop `icon` (a Glyph **name**, e.g. `"trash"`, `"git_branch"`
   — resolved by `glyph_from_name` in `realize.rs`; an unknown name renders no icon, never panics).
 
@@ -1879,9 +1914,15 @@ ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into(
 
 ```rust
 Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);
+// A standalone glyph that should read as lit:
+Icon::new(Glyph::Lightning).color(theme.accent).size(34.0).glow(true);
 // Render the whole set (what the showcase does):
 for &g in Glyph::ALL { /* Icon::new(g) … */ }
 ```
+
+> **Declarative note:** `glow` is not a `ViewNode` prop. It is a *rendering* decision the host
+> makes about a glyph standing alone versus one inside a lit control — a plugin describes what the
+> icon **is**, and the host decides how it is lit, the same split that keeps colors out of props.
 
 ### Tag
 

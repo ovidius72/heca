@@ -1,3 +1,4 @@
+use cosmic_text::CacheKey;
 use cosmic_text::{
     Attrs, Buffer, Family, FeatureTag, FontFeatures, FontSystem, Metrics, Shaping, Style,
     SwashCache, Weight,
@@ -16,6 +17,11 @@ struct TextVertex {
     position: [f32; 2],
     texcoord: [f32; 2],
     color: [f32; 4],
+    /// `0.0` = a normal glyph (occludes what is behind it); `1.0` = an additive
+    /// halo tap (adds light, writes no alpha). Under premultiplied-alpha blending
+    /// a fragment with `a == 0` and `rgb > 0` is exactly additive — the same trick
+    /// `grid.wgsl` uses to let a rect's glow add light without occluding.
+    additive: f32,
 }
 
 #[repr(C)]
@@ -41,6 +47,56 @@ pub struct TextBox {
     pub h: f32,
 }
 
+/// An additive halo behind a text run, mirroring `heca-grid-ui`'s `Glow` on a rect.
+///
+/// The scene asks for a glow declaratively; *how* it is realized is this renderer's
+/// choice. The glyph atlas stores coverage masks (`R8Unorm`) with one texel of
+/// padding, so a multi-tap blur read in the fragment shader would bleed into
+/// neighbouring atlas entries — hence the halo is built from offset copies of the
+/// run drawn additively beneath the sharp glyphs. Swapping this for a true SDF text
+/// pass later would change nothing above this layer.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct TextGlow {
+    /// Halo colour (alpha is the caller's overall strength).
+    pub color: [f32; 4],
+    /// Falloff radius in logical pixels — how far the halo reaches.
+    pub radius: f32,
+    /// Strength multiplier in `0.0..=1.0`.
+    pub intensity: f32,
+}
+
+impl TextGlow {
+    /// Whether this glow actually produces a halo. A glow with no reach, no
+    /// strength, or no opacity draws nothing.
+    ///
+    /// This is the **single** definition of "inert", used both when emitting the
+    /// halo and when hashing the cache key. If the two ever disagreed, a run whose
+    /// glow draws nothing would still hash differently from an unglowing one and
+    /// rebuild its geometry every frame.
+    fn is_visible(self) -> bool {
+        self.radius > 0.0 && self.intensity > 0.0 && self.color[3] > 0.0
+    }
+}
+
+/// Blur sigma as a fraction of [`TextGlow::radius`].
+///
+/// A Gaussian is visually spent by about 3 sigma, so a third of the requested radius
+/// puts the halo's visible edge at that radius.
+const HALO_SIGMA_FRAC: f32 = 1.0 / 3.0;
+/// Strength multiplier on a **dark** background, where the halo composites
+/// additively.
+///
+/// Above `1.0` on purpose. Because the blurred mask is renormalized to full peak,
+/// `1.0` would make a glyph's halo peak at exactly a lit surface's — which measures
+/// equal but *looks* dimmer, since a glyph emits over a far smaller perimeter than a
+/// button does. This compensates for the area a small emitter cannot cover.
+const HALO_DARK_GAIN: f32 = 1.6;
+/// Strength multiplier on a **light** background, applied on top of the rect
+/// shader's own light-background curve (`sqrt(base) * glow_alpha_scale`). Carries the
+/// same small-emitter compensation as [`HALO_DARK_GAIN`], so the two themes stay in
+/// step when either is retuned.
+const HALO_LIGHT_GAIN: f32 = 1.6;
+
 struct TextCommand {
     text: String,
     /// Position: top-left `(x, y)` when `centered` is false, otherwise the box
@@ -65,6 +121,10 @@ struct TextCommand {
     font_family: Option<String>,
     /// Clip rect (logical px) this label is scissored to, if any.
     clip: Option<[f32; 4]>,
+    /// Additive halo behind this run, or `None` for flat text. Always `None` for
+    /// terminal runs: cell glyphs are the hottest path in the app and a halo would
+    /// multiply their vertex count.
+    glow: Option<TextGlow>,
     /// Terminal run metadata. When set, the command is one shaped row-run of
     /// terminal cells: the shaper sees the whole run text (so OpenType ligatures
     /// like `->`/`!=` can form), and the emission snaps every glyph back to its
@@ -143,6 +203,10 @@ struct PlacedGlyph {
     w: f32,
     h: f32,
     uv: [f32; 4],
+    /// Identity of the rasterized glyph, kept so a halo can ask the atlas for a
+    /// **blurred** variant of this same glyph at emission time. The layout itself is
+    /// cached independently of any glow, so the blur cannot be resolved earlier.
+    cache_key: CacheKey,
 }
 
 /// A shaped label's cached layout: its glyph quads + the metrics needed to place
@@ -230,6 +294,30 @@ struct EmitKey {
     /// Whether ligatures are applied (terminal runs only; `true` otherwise).
     /// Toggling it changes the shaped glyphs, so it must be part of the identity.
     ligatures: bool,
+    /// Halo composite mode (`glow_alpha_scale`) in `f32::to_bits()` form, or `0`
+    /// when the run has no visible halo.
+    glow_mode_bits: u32,
+    /// Halo colour/radius/intensity in `f32::to_bits()` form (`None` → all zero).
+    /// The halo quads are baked into the cached vertices, so changing the glow must
+    /// miss the retained-geometry cache and rebuild.
+    glow_bits: [u32; 6],
+}
+
+/// `Option<TextGlow>` → stable bits for [`EmitKey`]. An inert glow
+/// ([`TextGlow::is_visible`]) hashes identically to `None`, because both emit no
+/// halo and must therefore share cached geometry rather than rebuild it.
+fn glow_bits(glow: Option<TextGlow>) -> [u32; 6] {
+    match glow.filter(|g| g.is_visible()) {
+        Some(g) => [
+            g.color[0].to_bits(),
+            g.color[1].to_bits(),
+            g.color[2].to_bits(),
+            g.color[3].to_bits(),
+            g.radius.to_bits(),
+            g.intensity.to_bits(),
+        ],
+        None => [0; 6],
+    }
 }
 
 /// A label's fully-placed glyph quads in screen space, cached across frames. The
@@ -269,6 +357,9 @@ fn hash_colors(colors: &[[f32; 4]]) -> u64 {
 }
 
 pub struct TextRenderer {
+    /// Glyph-halo compositing mode for the current scene (see
+    /// [`set_glow_alpha_scale`](TextRenderer::set_glow_alpha_scale)).
+    glow_alpha_scale: f32,
     font_system: FontSystem,
     swash_cache: SwashCache,
     pipeline: wgpu::RenderPipeline,
@@ -412,6 +503,11 @@ impl TextRenderer {
                             shader_location: 2,
                             format: wgpu::VertexFormat::Float32x4,
                         },
+                        wgpu::VertexAttribute {
+                            offset: (std::mem::size_of::<[f32; 4]>() * 2) as wgpu::BufferAddress,
+                            shader_location: 3,
+                            format: wgpu::VertexFormat::Float32,
+                        },
                     ],
                 }],
             },
@@ -467,6 +563,11 @@ impl TextRenderer {
                             offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
                             shader_location: 2,
                             format: wgpu::VertexFormat::Float32x4,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: (std::mem::size_of::<[f32; 4]>() * 2) as wgpu::BufferAddress,
+                            shader_location: 3,
+                            format: wgpu::VertexFormat::Float32,
                         },
                     ],
                 }],
@@ -556,6 +657,7 @@ impl TextRenderer {
             .load_font_data(font::DEFAULT_TERMINAL_BOLD_BYTES.to_vec());
 
         Self {
+            glow_alpha_scale: 0.0,
             font_system,
             swash_cache: SwashCache::new(),
             pipeline,
@@ -587,6 +689,16 @@ impl TextRenderer {
             _pad: [0.0; 2],
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+    }
+
+    /// Select how glyph halos composite for this scene, mirroring the rect
+    /// renderer's `glow_alpha_scale`: `0.0` = additive (dark backgrounds), non-zero
+    /// = translucent tinted halo (light backgrounds, where *adding* light to a
+    /// near-white surface does nothing).
+    ///
+    /// Baked into the cached geometry, so a change invalidates the emission cache.
+    pub fn set_glow_alpha_scale(&mut self, scale: f32) {
+        self.glow_alpha_scale = scale;
     }
 
     pub fn set_scale_factor(&mut self, scale: f64) {
@@ -723,6 +835,7 @@ impl TextRenderer {
             icon: false,
             font_family: None,
             clip: self.current_clip,
+            glow: None,
             run: None,
         });
     }
@@ -747,6 +860,7 @@ impl TextRenderer {
         italic: bool,
         align: TextAlign,
         icon: bool,
+        glow: Option<TextGlow>,
     ) {
         self.commands.push(TextCommand {
             text: text.to_string(),
@@ -770,6 +884,7 @@ impl TextRenderer {
             icon,
             font_family: None,
             clip: self.current_clip,
+            glow,
             run: None,
         });
     }
@@ -800,6 +915,7 @@ impl TextRenderer {
             icon,
             font_family: style.font_family.map(str::to_string),
             clip: self.current_clip,
+            glow: None,
             run: None,
         });
     }
@@ -843,6 +959,9 @@ impl TextRenderer {
             icon: false,
             font_family: style.font_family.map(str::to_string),
             clip: self.current_clip,
+            // Never: cell glyphs are the hottest path in the app (thousands per
+            // frame) and a halo multiplies their vertex count by the ring taps.
+            glow: None,
             run: Some(TerminalRun {
                 cell_w,
                 byte_cols: byte_cols.to_vec(),
@@ -872,6 +991,13 @@ impl TextRenderer {
         for cmd in &commands {
             let scaled_size = cmd.font_size * scale;
             let emit_key = EmitKey {
+                glow_bits: glow_bits(cmd.glow),
+                // The halo's colour AND its composite mode are baked into the
+                // cached vertices, so switching theme brightness must rebuild.
+                glow_mode_bits: cmd
+                    .glow
+                    .filter(|g| g.is_visible())
+                    .map_or(0, |_| self.glow_alpha_scale.to_bits()),
                 text: cmd.text.clone(),
                 size_bits: scaled_size.to_bits(),
                 bold: cmd.bold,
@@ -1006,7 +1132,7 @@ impl TextRenderer {
             let mut line_top = 0.0f32;
             let mut line_height = 0.0f32;
             // (glyph left, glyph top in physical px, atlas entry).
-            let mut placed: Vec<(i32, i32, crate::atlas::AtlasGlyph)> = Vec::new();
+            let mut placed: Vec<(i32, i32, crate::atlas::AtlasGlyph, CacheKey)> = Vec::new();
             for run in buffer.layout_runs() {
                 line_top = run.line_top;
                 line_height = run.line_height;
@@ -1025,7 +1151,7 @@ impl TextRenderer {
                     min_x = min_x.min(left);
                     min_y = min_y.min(top);
                     max_x = max_x.max(left + ag.width as i32);
-                    placed.push((left, top, ag));
+                    placed.push((left, top, ag, physical.cache_key));
                 }
             }
 
@@ -1042,12 +1168,13 @@ impl TextRenderer {
             } else {
                 let glyphs = placed
                     .into_iter()
-                    .map(|(l, t, ag)| PlacedGlyph {
+                    .map(|(l, t, ag, cache_key)| PlacedGlyph {
                         rel_x: (l - min_x) as f32,
                         rel_y: (t - min_y) as f32,
                         w: ag.width as f32,
                         h: ag.height as f32,
                         uv: ag.uv,
+                        cache_key,
                     })
                     .collect();
                 LabelLayout {
@@ -1095,7 +1222,106 @@ impl TextRenderer {
         } else {
             0.0
         };
-        let mut verts: Vec<TextVertex> = Vec::with_capacity(layout.glyphs.len() * 4);
+        // One textured quad in screen space. Takes explicit geometry because the
+        // sharp glyph and its halo sample different atlas entries at different sizes.
+        let push_quad = |verts: &mut Vec<TextVertex>,
+                         rel_x: f32,
+                         rel_y: f32,
+                         w: f32,
+                         h: f32,
+                         uv: [f32; 4],
+                         color: [f32; 4],
+                         additive: f32| {
+            let gx = screen_x + rel_x / scale;
+            let gy = screen_y + rel_y / scale;
+            let gw = w / scale;
+            let gh = h / scale;
+            let [u0, v0, u1, v1] = uv;
+            let top_x = gx + faux_italic_skew * 0.5;
+            let bottom_x = gx - faux_italic_skew * 0.5;
+            for (position, texcoord) in [
+                ([top_x, gy], [u0, v0]),
+                ([top_x + gw, gy], [u1, v0]),
+                ([bottom_x + gw, gy + gh], [u1, v1]),
+                ([bottom_x, gy + gh], [u0, v1]),
+            ] {
+                verts.push(TextVertex {
+                    position,
+                    texcoord,
+                    color,
+                    additive,
+                });
+            }
+        };
+
+        let halo = cmd.glow.filter(|g| g.is_visible());
+        let mut verts: Vec<TextVertex> =
+            Vec::with_capacity(layout.glyphs.len() * 4 * (1 + usize::from(halo.is_some())));
+
+        // Halo first, so the sharp glyphs land on top of it. ONE quad per glyph,
+        // sampling a pre-blurred copy of that glyph's coverage mask — a continuous
+        // falloff, rather than a stack of offset copies whose shells read as spokes.
+        let mut halo_reach = 0.0f32;
+        if let Some(g) = halo {
+            // Light backgrounds take a translucent tinted halo; dark ones take added
+            // light. Adding light to a near-white surface does nothing, which is why
+            // the rect renderer makes the same switch (`grid.wgsl`'s alpha path).
+            let tinted = self.glow_alpha_scale > 0.0;
+            let additive = if tinted { 0.0 } else { 1.0 };
+            let base = g.color[3] * g.intensity;
+            // Because the blurred mask is renormalized to full peak, `base` IS the
+            // halo's peak alpha — the same quantity the rect shader's glow peaks at,
+            // so the two are directly comparable rather than eyeballed.
+            let alpha = if tinted {
+                // Mirror the rect shader's light-background curve (`grid.wgsl`):
+                // the square root lifts a faint intensity into a visible tint, which
+                // a linear scale cannot do against a near-white surface.
+                base.sqrt() * self.glow_alpha_scale * HALO_LIGHT_GAIN
+            } else {
+                base * HALO_DARK_GAIN
+            }
+            .clamp(0.0, 1.0);
+            let color = [g.color[0], g.color[1], g.color[2], alpha];
+            // Sigma is in physical px, like everything the atlas rasterizes.
+            let sigma = g.radius * HALO_SIGMA_FRAC * scale;
+            halo_reach = g.radius;
+
+            // Collected first: the atlas needs `&mut self` while `push_quad` borrows
+            // the frame's placement values.
+            let blurred: Vec<(usize, crate::atlas::AtlasGlyph)> = layout
+                .glyphs
+                .iter()
+                .enumerate()
+                .filter_map(|(i, glyph)| {
+                    let entry = self.atlas.glyph_blurred(
+                        queue,
+                        &mut self.font_system,
+                        &mut self.swash_cache,
+                        glyph.cache_key,
+                        sigma,
+                    )?;
+                    Some((i, entry))
+                })
+                .collect();
+
+            for (i, entry) in blurred {
+                let glyph = &layout.glyphs[i];
+                // The blurred bitmap is the glyph's, grown by the blur's padding on
+                // every side; recover that padding to place it concentrically.
+                let pad = (entry.width as f32 - glyph.w) * 0.5;
+                push_quad(
+                    &mut verts,
+                    glyph.rel_x - pad,
+                    glyph.rel_y - pad,
+                    entry.width as f32,
+                    entry.height as f32,
+                    entry.uv,
+                    color,
+                    additive,
+                );
+            }
+        }
+
         let (mut bx0, mut by0) = (f32::MAX, f32::MAX);
         let (mut bx1, mut by1) = (f32::MIN, f32::MIN);
         for g in &layout.glyphs {
@@ -1103,37 +1329,35 @@ impl TextRenderer {
             let gy = screen_y + g.rel_y / scale;
             let gw = g.w / scale;
             let gh = g.h / scale;
-            let [u0, v0, u1, v1] = g.uv;
             let top_x = gx + faux_italic_skew * 0.5;
             let bottom_x = gx - faux_italic_skew * 0.5;
-            verts.push(TextVertex {
-                position: [top_x, gy],
-                texcoord: [u0, v0],
-                color: cmd.color,
-            });
-            verts.push(TextVertex {
-                position: [top_x + gw, gy],
-                texcoord: [u1, v0],
-                color: cmd.color,
-            });
-            verts.push(TextVertex {
-                position: [bottom_x + gw, gy + gh],
-                texcoord: [u1, v1],
-                color: cmd.color,
-            });
-            verts.push(TextVertex {
-                position: [bottom_x, gy + gh],
-                texcoord: [u0, v1],
-                color: cmd.color,
-            });
+            push_quad(
+                &mut verts,
+                g.rel_x,
+                g.rel_y,
+                g.w,
+                g.h,
+                g.uv,
+                cmd.color,
+                0.0,
+            );
             bx0 = bx0.min(bottom_x);
             by0 = by0.min(gy);
             bx1 = bx1.max(top_x + gw);
             by1 = by1.max(gy + gh);
         }
+
+        // The ink box must contain the halo too, or damage/clip culling would
+        // scissor away the very light the halo adds outside the glyph box.
+        let reach = halo_reach;
         Emitted {
             verts,
-            bbox: [bx0, by0, bx1 - bx0, by1 - by0],
+            bbox: [
+                bx0 - reach,
+                by0 - reach,
+                (bx1 - bx0) + reach * 2.0,
+                (by1 - by0) + reach * 2.0,
+            ],
             last_used: self.frame,
         }
     }
@@ -1307,21 +1531,25 @@ impl TextRenderer {
                 position: [top_x, gy],
                 texcoord: [u0, v0],
                 color,
+                additive: 0.0,
             });
             verts.push(TextVertex {
                 position: [top_x + gw, gy],
                 texcoord: [u1, v0],
                 color,
+                additive: 0.0,
             });
             verts.push(TextVertex {
                 position: [bottom_x + gw, gy + gh],
                 texcoord: [u1, v1],
                 color,
+                additive: 0.0,
             });
             verts.push(TextVertex {
                 position: [bottom_x, gy + gh],
                 texcoord: [u0, v1],
                 color,
+                additive: 0.0,
             });
             bx0 = bx0.min(bottom_x);
             by0 = by0.min(gy);
@@ -1453,6 +1681,8 @@ mod tests {
             cell_w_bits: 0,
             run_colors_hash: 0,
             ligatures: true,
+            glow_bits: glow_bits(None),
+            glow_mode_bits: 0,
         };
         assert_eq!(base, base.clone(), "identical inputs ⇒ a cache hit");
 
@@ -1465,6 +1695,32 @@ mod tests {
         let mut moved = base.clone();
         moved.box_bits = [11.0, 20.0, 0.0, 0.0].map(f32::to_bits);
         assert_ne!(base, moved, "a move is a different emission");
+    }
+
+    /// The halo quads are baked into the cached vertices, so changing the glow must
+    /// miss the retained-geometry cache — otherwise a glyph would keep the halo it
+    /// had when it was first emitted.
+    #[test]
+    fn emit_key_distinguishes_the_glow() {
+        let flat = glow_bits(None);
+        let lit = glow_bits(Some(TextGlow {
+            color: [0.0, 1.0, 1.0, 1.0],
+            radius: 6.0,
+            intensity: 0.5,
+        }));
+        assert_ne!(flat, lit);
+    }
+
+    /// A fully transparent glow emits no halo, so it must hash like no glow at all —
+    /// otherwise identical output would rebuild every frame.
+    #[test]
+    fn emit_key_treats_a_transparent_glow_as_no_glow() {
+        let transparent = glow_bits(Some(TextGlow {
+            color: [0.0, 1.0, 1.0, 0.0],
+            radius: 0.0,
+            intensity: 0.0,
+        }));
+        assert_eq!(glow_bits(None), transparent);
     }
 
     #[test]
