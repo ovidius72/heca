@@ -854,6 +854,16 @@ pub(crate) fn enter_scrollback_search(state: &mut AppState) {
     {
         return;
     }
+    // Re-entering search on a pane that already has one RESUMES it: the query, its
+    // matches and the caret are all still there. Inserting a fresh state here wiped
+    // whatever had been typed, so `/` after Enter was indistinguishable from having
+    // no way back into the field at all.
+    if let Some(existing) = state.searches.get(&pane_id) {
+        existing.input.borrow_mut().base_mut().focused.set(true);
+        state.input_mode = InputMode::Search;
+        state.needs_redraw = true;
+        return;
+    }
     state.searches.insert(
         pane_id,
         crate::app_state::SearchState {

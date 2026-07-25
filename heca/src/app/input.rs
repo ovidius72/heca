@@ -5,6 +5,7 @@
 
 use crate::actions::ActionRegistry;
 use heca_grid_ui::Component as _;
+use heca_grid_ui::reactive::SignalUpdate as _;
 use crate::app::interaction::InteractionSource;
 use crate::app::interaction::{dispatch_action, dispatch_action_ref};
 use crate::app::keyboard::{
@@ -156,7 +157,11 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
         return;
     }
     if is_enter {
-        // Keep the matches for n/N; just leave query-entry.
+        // Keep the matches for n/N; just leave query-entry. The field is no longer
+        // taking keys, so it must not keep showing a caret as though it were.
+        if let Some(search) = state.active_search_mut() {
+            search.input.borrow_mut().base_mut().focused.set(false);
+        }
         state.input_mode = InputMode::Selection;
         state.needs_redraw = true;
         return;
