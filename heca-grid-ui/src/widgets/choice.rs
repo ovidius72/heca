@@ -84,9 +84,9 @@ impl Choice {
         let mut base = Base::new();
         // Content is laid out as a centered row; padding/gap derive from the size variant in
         // `remeasure`, and the variant itself cascades to the content during layout.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Start;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Start;
         // One option = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
         let mut choice = Self {
@@ -166,10 +166,10 @@ impl Component for Choice {
     /// both derive from the resolved font + size variant, so the whole affordance scales together.
     fn remeasure(&mut self) {
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.padding = pad;
-        self.base.style.gap = self.base.font * GAP_RATIO;
-        self.base.style.width = Length::Auto;
-        self.base.style.height = Length::Auto;
+        self.base.style.layout.padding = pad;
+        self.base.style.layout.gap = self.base.font * GAP_RATIO;
+        self.base.style.layout.width = Length::Auto;
+        self.base.style.layout.height = Length::Auto;
     }
 
     fn paint(&self, cx: &mut PaintCx) {

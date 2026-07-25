@@ -164,7 +164,7 @@ impl Label {
 
     /// Explicit font size in logical px — overrides the inherited theme font.
     pub fn font_size(mut self, size: f32) -> Self {
-        self.base.style.font_size = size;
+        self.base.style.visual.font_size = size;
         self.base.font = size;
         self.remeasure();
         self
@@ -173,7 +173,7 @@ impl Label {
     /// Semantic font multiplier relative to the inherited base font (header ≈ 2.0,
     /// caption ≈ 0.8). Scales with a global font change.
     pub fn font_scale(mut self, scale: f32) -> Self {
-        self.base.style.font_scale = scale;
+        self.base.style.visual.font_scale = scale;
         self
     }
 
@@ -204,8 +204,8 @@ impl Component for Label {
         self.seen_text = text.clone();
         let chars = text.chars().count() as f32;
         let fs = self.base.font;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO);
+        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
+        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

@@ -120,7 +120,7 @@ impl Toast {
     /// constructors, and wire dismissal with [`on_dismiss`](Toast::on_dismiss).
     pub fn new(title: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         let mut toast = Self {
             base,
             severity: ToastSeverity::Info,
@@ -303,7 +303,7 @@ impl Component for Toast {
             h += GAP + ACTION_H;
         }
         // The leading icon never exceeds the title line, so it doesn't grow height.
-        self.base.style.height = Length::Px((2.0 * PAD + h) as f32);
+        self.base.style.layout.height = Length::Px((2.0 * PAD + h) as f32);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

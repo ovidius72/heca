@@ -65,8 +65,8 @@ impl Pane {
     /// Content is inset by 8.0 px by default — override with `.padding(x)`.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
-        base.style.padding = 8.0;
+        base.style.layout.direction = Direction::Column;
+        base.style.layout.padding = 8.0;
         Self {
             base,
             frame: PaneFrame::Bordered,
@@ -77,7 +77,7 @@ impl Pane {
     /// A horizontal (row) pane.
     pub fn row() -> Self {
         let mut pane = Self::new();
-        pane.base.style.direction = Direction::Row;
+        pane.base.style.layout.direction = Direction::Row;
         pane
     }
 
@@ -130,18 +130,18 @@ impl Component for Pane {
             return;
         }
         let b = self.base.bounds;
-        let fill = self.base.style.fill;
+        let fill = self.base.style.visual.fill;
 
         // Radius: per-widget override (> 0), else theme fallback.
-        let radius = if self.base.style.radius > 0.0 {
-            self.base.style.radius
+        let radius = if self.base.style.visual.radius > 0.0 {
+            self.base.style.visual.radius
         } else {
             cx.theme().colors.border_radius
         };
         // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the
         // theme rest glow (`PaintCx::rest_glow`) gives the pane the shared neon
         // identity at rest, scaled by the `glow_size` setting (T011).
-        let glow = self.base.style.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+        let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
 
         match self.frame {
             PaneFrame::None => {
@@ -162,7 +162,7 @@ impl Component for Pane {
                     let t = cx.theme();
                     (t.colors.border, t.colors.border_width)
                 };
-                let color = self.base.style.border.map_or(tb_color, |bd| bd.color);
+                let color = self.base.style.visual.border.map_or(tb_color, |bd| bd.color);
                 // Width: per-widget override (`.border_width(w)`) when set, else the
                 // live theme width (so the global BORDER control still drives panes
                 // that don't opt out).

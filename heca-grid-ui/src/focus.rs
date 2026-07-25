@@ -27,7 +27,7 @@ fn for_each_focusable(
     idx: &mut usize,
     f: &mut dyn FnMut(usize, &mut dyn Component),
 ) {
-    if c.base().style.hidden {
+    if c.base().style.layout.hidden {
         return;
     }
     if c.focusable() {

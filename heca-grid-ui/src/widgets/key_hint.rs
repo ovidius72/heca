@@ -177,13 +177,13 @@ impl KeyHint {
     pub fn new(child: impl Component + 'static) -> Self {
         let mut base = Base::new();
         // Hug the child so the wrapper's bounds match it (overlay positions off them).
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
         // Column direction so the single child stretches to the wrapper's full width
         // (cross-axis, default `Align::Stretch`). This keeps the wrapper transparent
         // to a stretching parent: a wide list row fills its column instead of
         // shrinking to content width, while a hugged square target is unaffected.
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         base.children.push(Box::new(child));
         Self {
             base,

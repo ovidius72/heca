@@ -43,7 +43,7 @@ impl ItemGroup {
             .on_activate(move || expanded.set(!expanded.get_untracked()));
 
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         base.children.push(Box::new(header));
         Self {
             base,
@@ -82,7 +82,7 @@ impl ItemGroup {
         let open = self.expanded.get_untracked();
         self.chevron.set(chevron_for(open).to_string());
         for row in self.base.children.iter_mut().skip(HEADER + 1) {
-            row.base_mut().style.hidden = !open;
+            row.base_mut().style.layout.hidden = !open;
         }
     }
 }

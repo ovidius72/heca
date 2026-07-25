@@ -101,12 +101,12 @@ impl Item {
     /// A new row showing `label`, with empty slots.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Row;
-        base.style.justify = Justify::Start; // the growing label pushes the trailing slot right
-        base.style.align = Align::Center; // center slots vertically (kbd hint, dot)
-        base.style.padding = PAD_H as f32;
-        base.style.gap = GAP as f32;
-        base.style.height = Length::Px(ROW_H);
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.justify = Justify::Start; // the growing label pushes the trailing slot right
+        base.style.layout.align = Align::Center; // center slots vertically (kbd hint, dot)
+        base.style.layout.padding = PAD_H as f32;
+        base.style.layout.gap = GAP as f32;
+        base.style.layout.height = Length::Px(ROW_H);
         // One control = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
 
@@ -142,10 +142,10 @@ impl Item {
     /// the size *variant*, which the layout pass inherits down the tree), so the row and its text
     /// would otherwise disagree.
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         let label = self.base.children[LABEL].base_mut();
-        label.style.font_size = fs;
+        label.style.visual.font_size = fs;
         label.font = fs;
         self.remeasure();
         self
@@ -255,7 +255,7 @@ impl Component for Item {
 
     /// Row height scales with the resolved font (keeps the default 38px at 15px).
     fn remeasure(&mut self) {
-        self.base.style.height = Length::Px(self.base.font * (ROW_H / FONT_SIZE));
+        self.base.style.layout.height = Length::Px(self.base.font * (ROW_H / FONT_SIZE));
     }
 
     fn paint(&self, cx: &mut PaintCx) {

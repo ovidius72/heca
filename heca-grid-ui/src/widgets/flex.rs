@@ -38,7 +38,7 @@ impl Flex {
 
     fn with_direction(direction: Direction) -> Self {
         let mut base = Base::new();
-        base.style.direction = direction;
+        base.style.layout.direction = direction;
         Self { base }
     }
 }

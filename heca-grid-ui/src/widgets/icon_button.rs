@@ -49,10 +49,10 @@ impl IconButton {
     pub fn new(icon: Icon) -> Self {
         let mut base = Base::new();
         // Center the single icon child; pad it so the hover frame has breathing room.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
-        base.style.padding = DEFAULT_PAD;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
+        base.style.layout.padding = DEFAULT_PAD;
         base.children.push(Box::new(icon));
         Self {
             base,
@@ -130,11 +130,11 @@ impl Component for IconButton {
     /// (see [`Style::size_explicit`](crate::style::Style::size_explicit)), so the whole affordance
     /// grows/shrinks together without this widget copying the variant into its child.
     fn remeasure(&mut self) {
-        let size = self.base.style.size;
-        self.base.style.padding = DEFAULT_PAD * size.pad_scale();
+        let size = self.base.style.layout.size;
+        self.base.style.layout.padding = DEFAULT_PAD * size.pad_scale();
         let len = self.cell.map(Length::Px).unwrap_or(Length::Auto);
-        self.base.style.width = len;
-        self.base.style.height = len;
+        self.base.style.layout.width = len;
+        self.base.style.layout.height = len;
     }
 
     fn paint(&self, cx: &mut PaintCx) {

@@ -959,9 +959,9 @@ pub(crate) fn sync_pane_viewport_widgets(
             continue;
         };
         if scrollbar_visible {
-            widgets.scrollbar.base_mut().style.width =
+            widgets.scrollbar.base_mut().style.layout.width =
                 heca_grid_ui::style::Length::Px(8.0);
-            widgets.scrollbar.base_mut().style.height =
+            widgets.scrollbar.base_mut().style.layout.height =
                 heca_grid_ui::style::Length::Px(content_rect.size.h as f32);
             LayoutEngine::new().base_font(font).compute(
                 &mut widgets.scrollbar,
@@ -1324,9 +1324,9 @@ pub(crate) struct RepaintWatch {
 impl RepaintWatch {
     pub(crate) fn new(child: impl Component + 'static) -> (Self, Signal<u64>) {
         let mut base = heca_grid_ui::Base::new();
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
-        base.style.direction = heca_grid_ui::Direction::Column;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
+        base.style.layout.direction = heca_grid_ui::Direction::Column;
         base.children.push(Box::new(child));
         let request = signal(0_u64);
         (
@@ -1354,7 +1354,7 @@ impl Component for RepaintWatch {
             return;
         }
         for child in &self.base.children {
-            if child.base().style.hidden {
+            if child.base().style.layout.hidden {
                 continue;
             }
             child.paint(cx);

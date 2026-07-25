@@ -168,9 +168,9 @@ impl Button {
         base.focus_barrier = true;
         // Content is laid out as a centered row; padding/gap derive from the size variant in
         // `remeasure`, and the variant itself is set via `LayoutExt::size`.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
         let mut button = Self {
             base,
             variant: ButtonVariant::Primary,
@@ -234,7 +234,7 @@ impl Button {
 
     /// Set an explicit font size — overrides the inherited theme font + size scale.
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
@@ -313,7 +313,7 @@ impl Button {
     /// content whatever it is, instead of a width faked from a character count.
     fn content_box(&self) -> Rectangle {
         let b = self.base.bounds;
-        let pad = self.base.style.padding_x.unwrap_or(self.base.style.padding) as f64;
+        let pad = self.base.style.layout.padding_x.unwrap_or(self.base.style.layout.padding) as f64;
         Rectangle::new(
             Point::new(b.loc.x + pad, b.loc.y),
             Size::new((b.size.w - 2.0 * pad).max(0.0), b.size.h),
@@ -375,12 +375,12 @@ impl Component for Button {
     fn remeasure(&mut self) {
         let fs = self.base.font;
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.padding = pad;
-        self.base.style.padding_x = Some(pad + fs * MONO_ADVANCE_RATIO);
-        self.base.style.padding_y = Some(pad);
-        self.base.style.gap = fs * GAP_RATIO;
-        self.base.style.width = Length::Auto;
-        self.base.style.height = Length::Auto;
+        self.base.style.layout.padding = pad;
+        self.base.style.layout.padding_x = Some(pad + fs * MONO_ADVANCE_RATIO);
+        self.base.style.layout.padding_y = Some(pad);
+        self.base.style.layout.gap = fs * GAP_RATIO;
+        self.base.style.layout.width = Length::Auto;
+        self.base.style.layout.height = Length::Auto;
     }
 
     fn paint(&self, cx: &mut PaintCx) {

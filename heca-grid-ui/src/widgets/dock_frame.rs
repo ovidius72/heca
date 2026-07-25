@@ -120,10 +120,10 @@ impl DockFrame {
         let body = Flex::column().gap(BODY_GAP);
 
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         // Inset content from the brackets and space the title bar off the body.
-        base.style.padding = CONTENT_PAD;
-        base.style.gap = HEADER_BODY_GAP;
+        base.style.layout.padding = CONTENT_PAD;
+        base.style.layout.gap = HEADER_BODY_GAP;
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
         // Invariant relied on by `header`/`child`/`sync` index access below.
@@ -266,14 +266,14 @@ impl DockFrame {
         let rail = self
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
-        self.base.children[HEADER].base_mut().style.hidden = rail;
-        self.base.children[BODY].base_mut().style.hidden = rail || !open;
+        self.base.children[HEADER].base_mut().style.layout.hidden = rail;
+        self.base.children[BODY].base_mut().style.layout.hidden = rail || !open;
         if self.base.children.len() > RAIL {
-            self.base.children[RAIL].base_mut().style.hidden = !rail;
+            self.base.children[RAIL].base_mut().style.layout.hidden = !rail;
         }
         // Tighten the frame inset in the rail so the icon fits the thin column;
         // frameless docks tighten too since there are no brackets to clear.
-        self.base.style.padding = if rail {
+        self.base.style.layout.padding = if rail {
             RAIL_PAD
         } else if self.frameless {
             FRAMELESS_PAD
@@ -307,13 +307,13 @@ impl Component for DockFrame {
         }
         let radius = cx.theme().colors.border_radius;
         let b = self.base.bounds;
-        let fill = self.base.style.fill;
+        let fill = self.base.style.visual.fill;
 
         // Background fill — rounded by theme radius. An explicit `.glow(..)`
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the
         // shared neon identity at rest, scaled by `glow_size` (T011).
         if let Some(f) = fill {
-            let glow = self.base.style.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+            let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
             cx.rect(b, f, None, radius, glow);
         }
 

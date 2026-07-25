@@ -61,7 +61,9 @@ pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
-pub use style::{Align, Direction, GridCell, Justify, Length, Spacing, Style, Track, WidgetSize};
+pub use style::{
+    Align, Direction, GridCell, Justify, Layout, Length, Spacing, Style, Track, Visual, WidgetSize,
+};
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,

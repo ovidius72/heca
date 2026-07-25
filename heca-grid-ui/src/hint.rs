@@ -36,7 +36,7 @@ impl HintTargetId {
 /// Should this subtree be enumerated? Hidden widgets have stale bounds and never
 /// receive input, so they're skipped (matching paint / event / drag resolution).
 fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.hidden
+    !c.base().visible.get_untracked() || c.base().style.layout.hidden
 }
 
 /// Enumerate **every** hint target in the tree with its laid-out bounds, in

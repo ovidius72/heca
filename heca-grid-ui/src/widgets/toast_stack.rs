@@ -290,9 +290,9 @@ impl ToastStack {
             .iter_mut()
             .map(|e| {
                 e.toast.base_mut().font = font;
-                e.toast.base_mut().style.width = Length::Px(TOAST_W);
+                e.toast.base_mut().style.layout.width = Length::Px(TOAST_W);
                 e.toast.remeasure();
-                match e.toast.base().style.height {
+                match e.toast.base().style.layout.height {
                     Length::Px(h) => h,
                     _ => font,
                 }

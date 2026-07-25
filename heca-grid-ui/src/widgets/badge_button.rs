@@ -46,7 +46,7 @@ impl BadgeButton {
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.font_scale = BADGE_FONT_SCALE;
+        base.style.visual.font_scale = BADGE_FONT_SCALE;
         let mut button = Self {
             base,
             label: signal(label.into()),
@@ -128,8 +128,8 @@ impl Component for BadgeButton {
         let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
+        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -285,9 +285,9 @@ mod tests {
     #[test]
     fn label_signal_remeasures_on_tick() {
         let mut b = BadgeButton::new("A");
-        let old = b.base().style.width;
+        let old = b.base().style.layout.width;
         b.label_signal().set("HELLO".to_string());
         let _ = b.tick(0.016);
-        assert_ne!(b.base().style.width, old);
+        assert_ne!(b.base().style.layout.width, old);
     }
 }

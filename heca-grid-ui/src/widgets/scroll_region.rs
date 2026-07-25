@@ -192,7 +192,7 @@ impl ScrollRegion {
         // Keyboard scrolling is driven by the HOST through prefix-gated, configurable
         // scroll actions that call `scroll_to`/`scroll_by`/`ensure_visible` — never by
         // the widget swallowing raw keys. See docs/overlay-design.md (scroll actions).
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         // A scroll viewport must be allowed to be SMALLER than its content — that
         // is the whole point of it. Flexbox defaults fight this twice: a flex item's
         // `min-height` is `auto` (= its content size) and this crate sets
@@ -201,16 +201,16 @@ impl ScrollRegion {
         // to its content and **overflows the panel instead of scrolling** — no
         // overflow, so no scrollbar. Opting out of both here means a region scrolls
         // wherever it is put, without every caller having to know this.
-        base.style.min_width = Some(Length::Px(0.0));
-        base.style.min_height = Some(Length::Px(0.0));
-        base.style.flex_shrink = Some(1.0);
+        base.style.layout.min_width = Some(Length::Px(0.0));
+        base.style.layout.min_height = Some(Length::Px(0.0));
+        base.style.layout.flex_shrink = Some(1.0);
         // Breathing room so the first and last rows don't sit flush against the
         // clip edge, and a real gap between children — rows that touch are hard to
         // scan. Both are theme SPACING TOKENS, not literals, so they scale with the
         // font, the size variant and UI zoom (a px value tuned at one font size is
         // wrong at every other). A caller can still override either.
-        base.style.pad_spacing_y = Some(Spacing::Sm);
-        base.style.gap_spacing = Some(Spacing::Md);
+        base.style.layout.pad_spacing_y = Some(Spacing::Sm);
+        base.style.layout.gap_spacing = Some(Spacing::Md);
         Self {
             base,
             axes: ScrollAxes::default(),
@@ -577,12 +577,12 @@ impl Component for ScrollRegion {
         // surface, carries no glow). A STYLED region (a scrollable panel) without an
         // explicit `.glow(..)` falls back to the theme rest glow, like every surface.
         let s = &self.base.style;
-        if (s.fill.is_some() || s.border.is_some()) && s.glow.is_none() {
+        if (s.visual.fill.is_some() || s.visual.border.is_some()) && s.visual.glow.is_none() {
             cx.rect(
                 vp,
-                s.fill.unwrap_or(crate::color::Color::TRANSPARENT),
-                s.border,
-                s.radius,
+                s.visual.fill.unwrap_or(crate::color::Color::TRANSPARENT),
+                s.visual.border,
+                s.visual.radius,
                 cx.rest_glow(SURFACE_GLOW_RADIUS),
             );
         } else {

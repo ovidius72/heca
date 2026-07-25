@@ -22,9 +22,9 @@ impl Card {
     /// A card with a `title` header label. Add body content with `.child(...)`.
     pub fn new(title: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
-        base.style.padding = 18.0;
-        base.style.gap = 10.0;
+        base.style.layout.direction = Direction::Column;
+        base.style.layout.padding = 18.0;
+        base.style.layout.gap = 10.0;
         base.children
             .push(Box::new(Label::new(title).font_scale(TITLE_SCALE)));
         Self { base }
@@ -51,17 +51,17 @@ impl Component for Card {
         };
         let s = &self.base.style;
         // Keep the styled border color, but take its width from the theme.
-        let border = s.border.map(|b| Border {
+        let border = s.visual.border.map(|b| Border {
             color: b.color,
             width: bw,
         });
-        if s.fill.is_some() || border.is_some() || s.glow.is_some() {
+        if s.visual.fill.is_some() || border.is_some() || s.visual.glow.is_some() {
             cx.rect(
                 self.base.bounds,
-                s.fill.unwrap_or(Color::TRANSPARENT),
+                s.visual.fill.unwrap_or(Color::TRANSPARENT),
                 border,
                 radius,
-                s.glow,
+                s.visual.glow,
             );
         }
         for child in &self.base.children {

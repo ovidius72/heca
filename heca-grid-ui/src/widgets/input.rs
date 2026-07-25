@@ -77,8 +77,8 @@ impl Input {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.width = Length::Px(DEFAULT_WIDTH);
-        base.style.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
         Self {
             base,
             text: signal(String::new()),
@@ -96,7 +96,7 @@ impl Input {
 
     /// Explicit font size — overrides the inherited theme font.
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
@@ -442,7 +442,7 @@ impl Component for Input {
     /// Field height tracks the resolved font + size-scaled padding.
     fn remeasure(&mut self) {
         let pad = self.pad() as f32;
-        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * pad);
+        self.base.style.layout.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * pad);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

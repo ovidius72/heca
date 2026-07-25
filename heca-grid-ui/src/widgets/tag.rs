@@ -55,12 +55,12 @@ impl Tag {
     /// [`leading`](Tag::leading), or further segments with [`segment`](Tag::segment).
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
-        base.style.padding_x = Some(PAD_X);
-        base.style.padding_y = Some(PAD_Y);
-        base.style.gap = SEG_GAP;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
+        base.style.layout.padding_x = Some(PAD_X);
+        base.style.layout.padding_y = Some(PAD_Y);
+        base.style.layout.gap = SEG_GAP;
         let label = Label::new(label).font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
         base.children.push(Box::new(segment().child(label)));

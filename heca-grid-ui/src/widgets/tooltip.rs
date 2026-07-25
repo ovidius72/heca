@@ -87,8 +87,8 @@ impl Tooltip {
     pub fn new(child: impl Component + 'static, text: impl Into<String>) -> Self {
         let mut base = Base::new();
         // Hug the child so the wrapper's bounds match it (hover + anchor use them).
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
         base.children.push(Box::new(child));
         let text = signal(text.into());
         Self {
@@ -106,8 +106,8 @@ impl Tooltip {
     /// Wrap `child`, showing reactive `text` on hover.
     pub fn new_signal(child: impl Component + 'static, text: Signal<String>) -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
         base.children.push(Box::new(child));
         Self {
             base,

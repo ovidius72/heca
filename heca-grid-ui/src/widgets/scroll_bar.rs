@@ -46,8 +46,8 @@ impl ScrollBar {
     /// A new scrollbar. Width is fixed; hosts set the height via layout/bounds.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
-        base.style.width = Length::Px(8.0);
+        base.style.layout.direction = Direction::Column;
+        base.style.layout.width = Length::Px(8.0);
         Self {
             base,
             content_extent: signal(0.0),

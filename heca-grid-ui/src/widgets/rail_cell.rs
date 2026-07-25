@@ -48,9 +48,9 @@ impl RailCell {
     pub fn new(icon: Icon) -> Self {
         let mut base = Base::new();
         // Center the single icon child both ways within the square cell.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
         base.children.push(Box::new(icon));
         let mut cell = Self {
             base,
@@ -112,8 +112,8 @@ impl Component for RailCell {
 
     /// A fixed square along both axes.
     fn remeasure(&mut self) {
-        self.base.style.width = Length::Px(self.cell);
-        self.base.style.height = Length::Px(self.cell);
+        self.base.style.layout.width = Length::Px(self.cell);
+        self.base.style.layout.height = Length::Px(self.cell);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

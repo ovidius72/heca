@@ -106,7 +106,7 @@ impl Grid {
         col_span: u16,
         row_span: u16,
     ) -> Self {
-        child.base_mut().style.grid_cell = Some(GridCell {
+        child.base_mut().style.layout.grid_cell = Some(GridCell {
             col,
             row,
             col_span,
@@ -119,7 +119,7 @@ impl Grid {
     /// Place a child into a previously-defined named [`area`](Grid::areas).
     /// Unknown names fall back to grid auto-placement.
     pub fn area(mut self, mut child: impl Component + 'static, name: &str) -> Self {
-        child.base_mut().style.grid_cell = self.areas.get(name).copied();
+        child.base_mut().style.layout.grid_cell = self.areas.get(name).copied();
         self.base.children.push(Box::new(child));
         self
     }
@@ -132,7 +132,7 @@ impl Grid {
     /// Call it **after** [`areas`](Grid::areas) — an unknown (or not-yet-defined) name falls back to
     /// grid auto-placement rather than erroring.
     pub fn area_boxed(mut self, mut child: Box<dyn Component>, name: &str) -> Self {
-        child.base_mut().style.grid_cell = self.areas.get(name).copied();
+        child.base_mut().style.layout.grid_cell = self.areas.get(name).copied();
         self.base.children.push(child);
         self
     }
@@ -146,7 +146,7 @@ impl Grid {
         col_span: u16,
         row_span: u16,
     ) -> Self {
-        child.base_mut().style.grid_cell = Some(GridCell {
+        child.base_mut().style.layout.grid_cell = Some(GridCell {
             col,
             row,
             col_span,
@@ -174,7 +174,7 @@ impl Component for Grid {
     /// Inject `display: grid` + the track templates; child placement comes from
     /// each child's `style.grid_cell` (see [`Style::to_taffy`]).
     fn taffy_style(&self) -> taffy::Style {
-        self.base.style.to_taffy_grid(&self.columns, &self.rows)
+        self.base.style.layout.to_taffy_grid(&self.columns, &self.rows)
     }
 
     fn paint(&self, cx: &mut PaintCx) {

@@ -29,8 +29,8 @@ impl Gauge {
     /// A new gauge at 0.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(DEFAULT_WIDTH);
-        base.style.height = Length::Px(HEIGHT);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.height = Length::Px(HEIGHT);
         Self {
             base,
             value: signal(0.0),

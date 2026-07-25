@@ -206,10 +206,82 @@ impl Align {
     }
 }
 
-/// Layout + visual style for a component.
+/// The **host-owned appearance** half of [`Style`] — the pixels.
+///
+/// Everything here resolves against the [`Theme`](crate::theme::Theme), so **none of it may be set
+/// from a declarative description**: a description carries semantic intent (a variant, a
+/// [`Layout::size`], a colour *name*) and the host decides what that looks like. See
+/// `pluggable-chrome-plugin-plan.md` §2.6.1 rule C.
+///
+/// This is a separate type rather than a naming convention because the boundary then costs nothing
+/// to maintain: [`Layout`] is serializable and `Visual` simply is not, so a field added here is
+/// unreachable from a description **by default**, and a field added to `Layout` is reachable **by
+/// default**. Neither requires an attribute, a list, or anyone remembering. There is nothing whose
+/// deletion would quietly open colours up to plugins.
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Visual {
+    pub fill: Option<Color>,
+    pub border: Option<Border>,
+    pub glow: Option<Glow>,
+    pub radius: f32,
+    /// Explicit font size in logical px. `0.0` = inherit the theme base font.
+    pub font_size: f32,
+    /// Multiplier applied to the inherited base font (header ≈ 2.0, caption ≈ 0.8,
+    /// body = 1.0). Ignored when [`font_size`](Self::font_size) is set explicitly.
+    ///
+    /// A raw multiplier, so it is host-only: the semantic route a description *can* take is
+    /// [`Style::size`] (`Small`/`Normal`/`Big`), which scales font and padding together and
+    /// cascades to children.
+    pub font_scale: f32,
+}
+
+impl Default for Visual {
+    fn default() -> Self {
+        Self {
+            fill: None,
+            border: None,
+            glow: None,
+            radius: 0.0,
+            // 0.0 = inherit the theme's `font_size`; a widget's `.font_size(x)`
+            // (x > 0) overrides it. Resolved centrally during layout.
+            font_size: 0.0,
+            font_scale: 1.0,
+        }
+    }
+}
+
+/// A component's style: two peer halves, [`layout`](Self::layout) and [`visual`](Self::visual).
+///
+/// The split is the **plugin boundary**, and it is a boundary the library already lived by before
+/// plugins existed — `AGENTS.md` requires every widget to read colours, fonts and radii from the
+/// [`Theme`](crate::theme::Theme) and hardcode nothing. "Caller-owned" versus "theme-owned" is a
+/// real distinction here on its own terms; the declarative boundary just falls on the same line.
+///
+/// - [`Layout`] — arrangement plus the semantic [`size`](Layout::size) variant. Serializable, and
+///   what a declarative description is allowed to set.
+/// - [`Visual`] — appearance. Not serializable, and never settable from a description.
+///
+/// Both are peers on purpose: neither half is privileged, and adding a field to either one gets
+/// the right reachability with no further action. Builder methods
+/// ([`LayoutExt`](crate::builders::LayoutExt) / [`StyleExt`](crate::builders::StyleExt)) write
+/// through to the correct half, so callers never name it.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Style {
-    // ── Layout ──
+    /// Arrangement + the semantic size variant — the caller-owned half.
+    pub layout: Layout,
+    /// Appearance — the theme-owned half.
+    pub visual: Visual,
+}
+
+/// The **caller-owned arrangement** half of [`Style`] — how a component sits and how big it is.
+///
+/// Serializable, so a declarative description may set any of it; see [`Visual`] for the half that
+/// is not. [`size`](Self::size) lives here rather than in `Visual` because it is *semantic*
+/// (`Small`/`Normal`/`Big`) rather than a pixel value, and because the layout pass both reads it
+/// and cascades it to children.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Layout {
+    // ── Arrangement ──
     pub direction: Direction,
     pub justify: Justify,
     pub align: Align,
@@ -286,20 +358,8 @@ pub struct Style {
     /// squeeze (again, a scroll viewport) opts in with `Some(1.0)`.
     pub flex_shrink: Option<f32>,
 
-    // ── Visual ──
-    pub fill: Option<Color>,
-    pub border: Option<Border>,
-    pub glow: Option<Glow>,
-    pub accent: Color,
-    pub fg: Color,
-    pub radius: f32,
-    /// Explicit font size in logical px. `0.0` = inherit the theme base font.
-    pub font_size: f32,
-    /// Semantic multiplier applied to the inherited base font (header ≈ 2.0,
-    /// caption ≈ 0.8, body = 1.0). Ignored when `font_size` is set explicitly.
-    pub font_scale: f32,
     /// Overall size variant — scales font + intrinsic padding together. Composes
-    /// with [`font_scale`](Self::font_scale) (both multiply the base font).
+    /// with [`Visual::font_scale`] (both multiply the base font).
     ///
     /// **Inherited down the tree** (like the base font): a node that never called
     /// [`LayoutExt::size`](crate::builders::LayoutExt::size) adopts its parent's variant during
@@ -324,7 +384,7 @@ pub struct Style {
     pub grid_cell: Option<GridCell>,
 }
 
-impl Style {
+impl Layout {
     /// Choose the [size variant](Self::size) **explicitly**, marking it as the caller's choice.
     ///
     /// This is the single place explicitness is recorded: layout then leaves this node's variant
@@ -340,7 +400,7 @@ impl Style {
     }
 }
 
-impl Default for Style {
+impl Default for Layout {
     fn default() -> Self {
         Self {
             direction: Direction::Row,
@@ -369,16 +429,6 @@ impl Default for Style {
             max_height: None,
             flex_grow: 0.0,
             flex_shrink: None,
-            fill: None,
-            border: None,
-            glow: None,
-            accent: Color::rgb(137, 180, 250),
-            fg: Color::rgb(205, 214, 244),
-            radius: 0.0,
-            // 0.0 = inherit the theme's `font_size`; a widget's `.font_size(x)`
-            // (x > 0) overrides it. Resolved centrally during layout.
-            font_size: 0.0,
-            font_scale: 1.0,
             size: WidgetSize::Normal,
             // Not explicitly chosen ⇒ the layout pass may replace it with the parent's variant.
             size_explicit: false,
@@ -388,7 +438,7 @@ impl Default for Style {
     }
 }
 
-impl Style {
+impl Layout {
     /// Map the layout fields onto a `taffy::Style` for the layout engine.
     pub fn to_taffy(&self) -> taffy::Style {
         use taffy::prelude::*;

@@ -103,10 +103,10 @@ pub(crate) fn realize(
     // Self-alignment is a property of the node *inside its parent*, so it applies to every kind —
     // read it once here rather than in each arm.
     if let Some(align) = align_prop(node, "align_self") {
-        realized.base_mut().style.align_self = Some(align);
+        realized.base_mut().style.layout.align_self = Some(align);
     }
     if let Some(justify) = align_prop(node, "justify_self") {
-        realized.base_mut().style.justify_self = Some(justify);
+        realized.base_mut().style.layout.justify_self = Some(justify);
     }
     realized
 }
@@ -1279,11 +1279,11 @@ mod tests {
             "the group's own header, then the two realized rows",
         );
         // Collapsed: the rows leave layout (`display: none`), the header stays.
-        assert!(!group.base().children[0].base().style.hidden, "the header stays");
+        assert!(!group.base().children[0].base().style.layout.hidden, "the header stays");
         assert!(
             group.base().children[1..]
                 .iter()
-                .all(|row| row.base().style.hidden),
+                .all(|row| row.base().style.layout.hidden),
             "`expanded: false` folds the rows away",
         );
     }
@@ -1409,17 +1409,17 @@ mod tests {
 
         // The `icon` area spans both rows of column 1 (it appears twice in the template).
         assert_eq!(
-            children[0].base().style.grid_cell,
+            children[0].base().style.layout.grid_cell,
             Some(heca_grid_ui::GridCell { col: 1, row: 1, col_span: 1, row_span: 2 }),
             "placed into the named area, spanning what the template gives it",
         );
         assert_eq!(
-            children[1].base().style.grid_cell,
+            children[1].base().style.layout.grid_cell,
             Some(heca_grid_ui::GridCell { col: 2, row: 1, col_span: 2, row_span: 1 }),
             "placed by explicit cell; an omitted span defaults to 1",
         );
         assert_eq!(
-            children[2].base().style.grid_cell,
+            children[2].base().style.layout.grid_cell,
             None,
             "no placement props → taffy auto-placement",
         );
@@ -1444,14 +1444,14 @@ mod tests {
             );
 
         let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
-        let style = grid.base().style;
+        let style = grid.base().style.layout;
         assert_eq!(style.align, Align::Center, "vertical: the items in their cells");
         assert_eq!(
             style.justify_items,
             Some(Align::Center),
             "horizontal: `justify_items`, not `justify` (which moves the track set)",
         );
-        let child = grid.base().children[0].base().style;
+        let child = grid.base().children[0].base().style.layout;
         assert_eq!(child.align_self, Some(Align::End));
         assert_eq!(child.justify_self, Some(Align::End));
     }
@@ -1468,7 +1468,7 @@ mod tests {
                     .prop("area", PropValue::Text("nope".into())),
             );
         let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
-        assert_eq!(grid.base().children[0].base().style.grid_cell, None);
+        assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
     }
 
     /// A `Label`'s text attributes are authorable: weight + slant (font attributes) and underline +

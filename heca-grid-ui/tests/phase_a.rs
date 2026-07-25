@@ -2569,7 +2569,7 @@ fn icon_lays_out_as_a_square() {
     // `set_size` (not a raw `style.size = ..`) because the variant must be marked *explicit*,
     // or the layout pass replaces it with the one inherited from the parent — here, the root
     // default. `Icon::size` is glyph pixels, so it can't be the variant builder.
-    icon.base_mut().style.set_size(WidgetSize::Large);
+    icon.base_mut().style.layout.set_size(WidgetSize::Large);
     LayoutEngine::new().compute(&mut icon, Size::new(200.0, 200.0));
     let b = icon.base().bounds;
     assert_eq!(b.size.w, 24.0, "icon width = glyph size");
@@ -2578,7 +2578,7 @@ fn icon_lays_out_as_a_square() {
     // The size variant scales an explicit glyph size too (so icon-only buttons
     // resize): Small renders the same icon smaller.
     let mut small = Icon::new(Glyph::GitBranch).size(24.0);
-    small.base_mut().style.set_size(WidgetSize::Small);
+    small.base_mut().style.layout.set_size(WidgetSize::Small);
     LayoutEngine::new().compute(&mut small, Size::new(200.0, 200.0));
     assert!(small.base().bounds.size.w < 24.0, "Small scales the explicit glyph size down");
 }
@@ -2689,9 +2689,9 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
     LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
     {
         let dock = sidebar.base().children[0].base();
-        assert!(!dock.children[0].base().style.hidden, "header shown while expanded");
-        assert!(!dock.children[1].base().style.hidden, "body shown while expanded");
-        assert!(dock.children[2].base().style.hidden, "rail icon hidden while expanded");
+        assert!(!dock.children[0].base().style.layout.hidden, "header shown while expanded");
+        assert!(!dock.children[1].base().style.layout.hidden, "body shown while expanded");
+        assert!(dock.children[2].base().style.layout.hidden, "rail icon hidden while expanded");
         assert!(dock.children[1].base().bounds.size.h > 0.0, "expanded body has height");
     }
 
@@ -2700,9 +2700,9 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
     LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
     {
         let dock = sidebar.base().children[0].base();
-        assert!(dock.children[0].base().style.hidden, "header folds away in rail mode");
-        assert!(dock.children[1].base().style.hidden, "body folds away in rail mode");
-        assert!(!dock.children[2].base().style.hidden, "rail icon shows in rail mode");
+        assert!(dock.children[0].base().style.layout.hidden, "header folds away in rail mode");
+        assert!(dock.children[1].base().style.layout.hidden, "body folds away in rail mode");
+        assert!(!dock.children[2].base().style.layout.hidden, "rail icon shows in rail mode");
         assert_eq!(dock.children[1].base().bounds.size.h, 0.0, "folded body takes no layout space");
         assert!(dock.children[2].base().bounds.size.h > 0.0, "rail icon is laid out");
     }
@@ -3827,7 +3827,7 @@ fn button_size_variant_cascades_to_composed_content() {
 
     // An explicit choice on the child wins over the inherited one.
     let mut b = Button::new("SAVE").size(WidgetSize::Small);
-    b.base_mut().children[0].base_mut().style.set_size(WidgetSize::Large);
+    b.base_mut().children[0].base_mut().style.layout.set_size(WidgetSize::Large);
     LayoutEngine::new().compute(&mut b, Size::new(400.0, 200.0));
     let pinned = b.base().children[0].base().font;
     assert!(pinned > label_font(WidgetSize::Small), "an explicit child variant is not overwritten");

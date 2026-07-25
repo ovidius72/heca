@@ -67,7 +67,7 @@ impl ChromeRegion {
         let mut base = Base::new();
         // Stack Docks along the region's long axis: a vertical sidebar stacks in
         // a column, a horizontal bar in a row.
-        base.style.direction = match orientation {
+        base.style.layout.direction = match orientation {
             Orientation::Vertical => Direction::Column,
             Orientation::Horizontal => Direction::Row,
         };
@@ -146,7 +146,7 @@ impl ChromeRegion {
     /// axis to the rail when collapsed, fold out of layout when hidden.
     fn sync(&mut self) {
         let mode = self.mode.get_untracked();
-        self.base.style.hidden = mode == RegionMode::Hidden;
+        self.base.style.layout.hidden = mode == RegionMode::Hidden;
         let extent = match mode {
             RegionMode::Expanded => self.expanded_px,
             // The rail extent also stands in while hidden (size is then moot).
@@ -155,8 +155,8 @@ impl ChromeRegion {
         // Only the collapsing (cross) axis is pinned; the long axis stretches to
         // fill the region's slot in the chrome.
         match self.orientation {
-            Orientation::Vertical => self.base.style.width = Length::Px(extent),
-            Orientation::Horizontal => self.base.style.height = Length::Px(extent),
+            Orientation::Vertical => self.base.style.layout.width = Length::Px(extent),
+            Orientation::Horizontal => self.base.style.layout.height = Length::Px(extent),
         }
     }
 }

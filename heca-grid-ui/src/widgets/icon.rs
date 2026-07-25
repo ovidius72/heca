@@ -276,7 +276,7 @@ impl Icon {
             // An explicit px still tracks the size variant (Small/Normal/Large) by
             // its font scale — otherwise icon-only buttons wouldn't resize. The
             // font-driven path already includes the variant via `base.font`.
-            Some(px) => px * self.base.style.size.font_scale(),
+            Some(px) => px * self.base.style.layout.size.font_scale(),
             None => self.base.font,
         }
     }
@@ -293,8 +293,8 @@ impl Component for Icon {
     /// Lay out as a square of the glyph size (font-driven unless explicit).
     fn remeasure(&mut self) {
         let s = self.glyph_size();
-        self.base.style.width = Length::Px(s);
-        self.base.style.height = Length::Px(s);
+        self.base.style.layout.width = Length::Px(s);
+        self.base.style.layout.height = Length::Px(s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

@@ -54,8 +54,8 @@ impl Toggle {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.width = Length::Px(TRACK_W as f32);
-        base.style.height = Length::Px(TRACK_H as f32);
+        base.style.layout.width = Length::Px(TRACK_W as f32);
+        base.style.layout.height = Length::Px(TRACK_H as f32);
         Self {
             base,
             on: signal(false),
@@ -116,8 +116,8 @@ impl Component for Toggle {
     /// The switch is fixed-size (no text); scale the track by the size variant.
     fn remeasure(&mut self) {
         let s = self.base.size_scale();
-        self.base.style.width = Length::Px(TRACK_W as f32 * s);
-        self.base.style.height = Length::Px(TRACK_H as f32 * s);
+        self.base.style.layout.width = Length::Px(TRACK_W as f32 * s);
+        self.base.style.layout.height = Length::Px(TRACK_H as f32 * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

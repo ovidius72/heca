@@ -66,8 +66,8 @@ impl Row {
     /// clickable/selectable with [`on_activate`](Row::on_activate).
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
         Self {
             base,
             active: signal(false),
@@ -181,8 +181,8 @@ impl Component for Row {
         // back to the theme rest glow (`PaintCx::rest_glow`), so cards honor the
         // `glow_size` setting at rest; an unfilled row stays surface-less and flat.
         let s = &self.base.style;
-        if let (Some(fill), None) = (s.fill, s.glow) {
-            cx.rect(b, fill, s.border, s.radius, cx.rest_glow(REST_GLOW_RADIUS));
+        if let (Some(fill), None) = (s.visual.fill, s.visual.glow) {
+            cx.rect(b, fill, s.visual.border, s.visual.radius, cx.rest_glow(REST_GLOW_RADIUS));
         } else {
             cx.paint_base(&self.base);
         }
@@ -200,7 +200,7 @@ impl Component for Row {
         // Without an explicit override, derive the highlight from the row's own fill
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the
         // lighter Item-style accent wash instead of a heavy same-hue tint.
-        let highlight_base = self.highlight.or(self.base.style.fill);
+        let highlight_base = self.highlight.or(self.base.style.visual.fill);
         if active {
             let fill = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_active_fill)
@@ -289,7 +289,7 @@ impl Component for Row {
             cx.flash(b, self.flash.amount() * 0.5, 0.0);
         }
         if disabled {
-            cx.dim(b, self.base.style.radius);
+            cx.dim(b, self.base.style.visual.radius);
         }
         if self.interactive()
             && !disabled

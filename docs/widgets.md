@@ -235,14 +235,39 @@ return `Self` for chaining.
 
 ### `Style` & layout enums
 
-`Style` fields: `direction`, `justify`, `align` (default `Stretch`), `align_self` (`Option<Align>`,
-default `None` ⇒ follow the parent), `gap`, `margin` (+ per-side overrides), `padding`,
-`width`/`height` (`Length`), `flex_grow`, `fill`, `border`, `glow`, `accent`, `fg`,
-`radius`, `font_size`, `font_scale`. Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
+`Style` is **two peer halves** — `style.layout` and `style.visual`. The split is the plugin
+boundary, and it is one the library already lived by: every widget must read colours, fonts and
+radii from the `Theme` and hardcode nothing, so "caller-owned" vs "theme-owned" was already a real
+distinction here. The declarative boundary just falls on the same line.
+
+**`Style.layout` — arrangement + the semantic `size` variant.** The half a declarative
+[`ViewNode`](#declarative-ui-model-viewnode) may set: `direction`, `justify`, `align` (default
+`Stretch`), `align_self` (`Option<Align>`, default `None` ⇒ follow the parent), `gap` (+
+`gap_spacing`), `margin` (+ per-side overrides), `padding` (+ per-axis + spacing tokens),
+`width`/`height` (`Length`), min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`,
+`size`. `to_taffy()` lives here, because these are the fields it reads.
+
+**`Style.visual` — appearance.** `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
+A description may **never** set these: it carries semantic intent (a variant, a `size`, a colour
+*name*) and the host resolves the pixels from the `Theme`
+(`pluggable-chrome-plugin-plan.md` §2.6.1 rule C).
+
+Why two types rather than a naming convention: `Layout` is serializable and `Visual` is not, so a
+field added to `Visual` is unreachable from a description **by default** and a field added to
+`Layout` is reachable **by default**. Neither needs an attribute, a list, or anyone remembering —
+and there is no single line whose deletion would quietly open colours up to plugins.
+
+`size` sits in `layout`, not `visual`, because it is semantic (`Small`/`Normal`/`Big`) rather than
+a pixel value, and the layout pass both reads it and cascades it to children. `font_scale` is in
+`visual` because it is a raw multiplier — use `size` for hierarchy a plugin may express.
+
+Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
 `Align{Start,Center,End,Stretch}`, `Length{Auto,Px(f32)}`.
 
-> `font_size` defaults to `0.0` = **inherit the theme base font**; `font_scale` defaults
-> to `1.0`. See [Font sizing](#font-sizing).
+> `visual.font_size` defaults to `0.0` = **inherit the theme base font**; `visual.font_scale`
+> defaults to `1.0`. See [Font sizing](#font-sizing). **Builder calls are unchanged** —
+> `.gap(..)`, `.fill(..)`, `.font_size(..)` all work exactly as before; only the field path behind
+> them moved, and `LayoutExt`/`StyleExt` write to the correct half for you.
 
 ### Font sizing
 

@@ -67,7 +67,7 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
     }
     fn walk(c: &dyn Component, acc: &mut Option<Rectangle>) {
         let b = c.base();
-        if !b.visible.get_untracked() || b.style.hidden {
+        if !b.visible.get_untracked() || b.style.layout.hidden {
             return;
         }
         if b.needs_paint() {
@@ -99,7 +99,7 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
 /// skipped (their bounds are stale).
 pub fn overlay_occluded_at(root: &dyn Component, pos: Point) -> bool {
     let b = root.base();
-    if !b.visible.get_untracked() || b.style.hidden {
+    if !b.visible.get_untracked() || b.style.layout.hidden {
         return false;
     }
     if root.overlay_occludes(pos) {
@@ -231,7 +231,7 @@ impl Base {
     /// this is tighter than the font so controls get compact, not just smaller. See
     /// [`WidgetSize`](crate::style::WidgetSize).
     pub fn size_scale(&self) -> f32 {
-        self.style.size.pad_scale()
+        self.style.layout.size.pad_scale()
     }
 
     /// Whether the keyboard **focus ring** should draw: focused AND the focus is
@@ -463,7 +463,7 @@ pub trait Component {
     /// taffy config (e.g. [`Grid`](crate::widgets::Grid) injecting `display:
     /// grid` + track templates) override this.
     fn taffy_style(&self) -> taffy::Style {
-        self.base().style.to_taffy()
+        self.base().style.layout.to_taffy()
     }
 
     /// Recompute size from the resolved font ([`Base::font`]). Widgets whose
@@ -577,7 +577,7 @@ pub(crate) fn route_event(children: &mut [Box<dyn Component>], ev: &Event) -> Ha
 /// [`DockFrame`](crate::widgets::DockFrame)) reuse this so a collapsed body/group
 /// never bleeds onto the rest of the tree.
 pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
-    if c.base().style.hidden {
+    if c.base().style.layout.hidden {
         return;
     }
     c.paint(cx);
@@ -1174,15 +1174,15 @@ impl<'a> PaintCx<'a> {
     /// Paint the shared chrome for a component's base (background/border/glow).
     pub fn paint_base(&mut self, base: &Base) {
         let s = &base.style;
-        if s.fill.is_none() && s.border.is_none() && s.glow.is_none() {
+        if s.visual.fill.is_none() && s.visual.border.is_none() && s.visual.glow.is_none() {
             return;
         }
         self.rect(
             base.bounds,
-            s.fill.unwrap_or(Color::TRANSPARENT),
-            s.border,
-            s.radius,
-            s.glow,
+            s.visual.fill.unwrap_or(Color::TRANSPARENT),
+            s.visual.border,
+            s.visual.radius,
+            s.visual.glow,
         );
     }
 

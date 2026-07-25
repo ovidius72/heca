@@ -540,15 +540,15 @@ impl Overlay {
         let mut base = Base::new();
         // Fill the viewport and center the panel on both axes — real taffy
         // centering, so every descendant gets true bounds.
-        base.style.width = Length::Pct(1.0);
-        base.style.height = Length::Pct(1.0);
-        base.style.justify = Justify::Center;
-        base.style.align = Align::Center;
+        base.style.layout.width = Length::Pct(1.0);
+        base.style.layout.height = Length::Pct(1.0);
+        base.style.layout.justify = Justify::Center;
+        base.style.layout.align = Align::Center;
         // Breathing room between the panel and the window edge. It doubles as the
         // inset for the viewport cap in `apply_panel_size`: the panel's `Pct(1.0)`
         // max resolves against this padded content box, so even a huge panel keeps
         // this margin and its border/glow is never shaved by the window edge.
-        base.style.padding = VIEWPORT_MARGIN;
+        base.style.layout.padding = VIEWPORT_MARGIN;
         Self {
             base,
             open: signal(false),
@@ -620,7 +620,7 @@ impl Overlay {
         let Some(panel) = self.base.children.first_mut() else {
             return;
         };
-        let style = &mut panel.base_mut().style;
+        let style = &mut panel.base_mut().style.layout;
         style.max_width = Some(Length::Pct(1.0));
         style.max_height = Some(Length::Pct(1.0));
         if let Some((w, h)) = self.panel_size {
@@ -938,7 +938,7 @@ mod tests {
         let a = Overlay::new()
             .panel_size(want_w, want_h)
             .panel(Flex::column().child(Label::new("body")));
-        let style = &a.base.children[0].base().style;
+        let style = &a.base.children[0].base().style.layout;
         assert_eq!(style.width, want_w);
         assert_eq!(style.height, want_h);
 
@@ -946,7 +946,7 @@ mod tests {
         let b = Overlay::new()
             .panel(Flex::column().child(Label::new("body")))
             .panel_size(want_w, want_h);
-        let style = &b.base.children[0].base().style;
+        let style = &b.base.children[0].base().style.layout;
         assert_eq!(style.width, want_w);
         assert_eq!(style.height, want_h);
     }
@@ -975,7 +975,7 @@ mod tests {
     #[test]
     fn panel_size_is_opt_in() {
         let o = Overlay::new().panel(Flex::column().child(Label::new("body")));
-        let style = &o.base.children[0].base().style;
+        let style = &o.base.children[0].base().style.layout;
         assert_eq!(style.width, Length::Auto, "untouched by default");
         assert_eq!(style.height, Length::Auto);
     }

@@ -32,8 +32,8 @@ impl Separator {
     fn with(orientation: Orientation) -> Self {
         let mut base = Base::new();
         match orientation {
-            Orientation::Horizontal => base.style.height = Length::Px(THICKNESS),
-            Orientation::Vertical => base.style.width = Length::Px(THICKNESS),
+            Orientation::Horizontal => base.style.layout.height = Length::Px(THICKNESS),
+            Orientation::Vertical => base.style.layout.width = Length::Px(THICKNESS),
         }
         Self { base, orientation }
     }
@@ -52,8 +52,8 @@ impl Separator {
     /// on the parent's cross-axis stretch.
     pub fn length(mut self, len: f32) -> Self {
         match self.orientation {
-            Orientation::Horizontal => self.base.style.width = Length::Px(len),
-            Orientation::Vertical => self.base.style.height = Length::Px(len),
+            Orientation::Horizontal => self.base.style.layout.width = Length::Px(len),
+            Orientation::Vertical => self.base.style.layout.height = Length::Px(len),
         }
         self
     }

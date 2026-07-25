@@ -52,7 +52,7 @@ impl Badge {
     /// A new accent badge showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.font_scale = BADGE_FONT_SCALE; // small chip text, relative to base
+        base.style.visual.font_scale = BADGE_FONT_SCALE; // small chip text, relative to base
         let mut badge = Self {
             base,
             label: signal(label.into()),
@@ -118,8 +118,8 @@ impl Component for Badge {
         let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
+        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

@@ -79,10 +79,10 @@ impl Tabs {
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         // One control = one Tab stop: focus never descends into the tabs.
         base.focus_barrier = true;
-        base.style.gap = TAB_GAP;
+        base.style.layout.gap = TAB_GAP;
         // Hug the tabs instead of stretching to fill a column parent (the width is `Auto`, and the
         // default cross-axis alignment is `Stretch`).
-        base.style.align_self = Some(Align::Start);
+        base.style.layout.align_self = Some(Align::Start);
         let mut tabs = Self {
             base,
             tab_states: Vec::new(),
@@ -124,7 +124,7 @@ impl Tabs {
 
     /// Explicit font size — overrides the inherited theme font.
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
@@ -225,12 +225,12 @@ impl Component for Tabs {
     /// measure to "the tallest tab + the band" — a padding on the strip could not do that without
     /// also insetting the tabs, and the underline has to sit *under* them.
     fn remeasure(&mut self) {
-        self.base.style.width = Length::Auto;
-        self.base.style.height = Length::Auto;
-        self.base.style.gap = TAB_GAP * self.base.size_scale();
+        self.base.style.layout.width = Length::Auto;
+        self.base.style.layout.height = Length::Auto;
+        self.base.style.layout.gap = TAB_GAP * self.base.size_scale();
         let band = (UNDERLINE_H as f32 + UNDERLINE_GAP) * self.base.size_scale();
         for child in self.base.children.iter_mut() {
-            child.base_mut().style.margin_bottom = Some(band);
+            child.base_mut().style.layout.margin_bottom = Some(band);
         }
     }
 

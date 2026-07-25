@@ -18,14 +18,14 @@ impl Surface {
     /// A vertical surface (column).
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         Self { base }
     }
 
     /// A horizontal surface (row).
     pub fn row() -> Self {
         let mut s = Self::new();
-        s.base.style.direction = Direction::Row;
+        s.base.style.layout.direction = Direction::Row;
         s
     }
 

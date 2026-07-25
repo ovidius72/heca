@@ -97,8 +97,8 @@ impl Dialog {
 
         // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::new();
-        base.style.width = Length::Pct(1.0);
-        base.style.height = Length::Pct(1.0);
+        base.style.layout.width = Length::Pct(1.0);
+        base.style.layout.height = Length::Pct(1.0);
         base.children.push(Box::new(overlay));
 
         Self {
@@ -130,7 +130,7 @@ impl Dialog {
     /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
     /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
-        let style = &mut self.panel_mut().style;
+        let style = &mut self.panel_mut().style.layout;
         style.width = width;
         style.height = height;
         self
@@ -176,7 +176,7 @@ impl Dialog {
     /// is respected.
     fn fit_body(&mut self) {
         let idx = self.panel_mut().children.len() - 1;
-        let style = &mut self.panel_mut().children[idx].base_mut().style;
+        let style = &mut self.panel_mut().children[idx].base_mut().style.layout;
         if style.width == Length::Auto {
             style.width = Length::Pct(1.0);
         }

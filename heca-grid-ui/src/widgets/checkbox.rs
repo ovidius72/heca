@@ -69,8 +69,8 @@ impl Checkbox {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.width = Length::Px(BOX_SIZE as f32);
-        base.style.height = Length::Px(BOX_SIZE as f32);
+        base.style.layout.width = Length::Px(BOX_SIZE as f32);
+        base.style.layout.height = Length::Px(BOX_SIZE as f32);
         Self {
             base,
             checked: signal(false),
@@ -130,7 +130,7 @@ impl Checkbox {
     }
     fn label_fs(&self) -> f32 {
         // Label is text → font scale (not the tighter padding scale).
-        LABEL_FS * self.base.style.size.font_scale()
+        LABEL_FS * self.base.style.layout.size.font_scale()
     }
 
     fn remeasure(&mut self) {
@@ -140,12 +140,12 @@ impl Checkbox {
                 let fs = self.label_fs();
                 let text_w = label.chars().count() as f32 * fs * MONO_ADVANCE_RATIO;
                 let line = fs * MONO_LINE_RATIO;
-                self.base.style.width = Length::Px(box_size + self.label_gap() as f32 + text_w);
-                self.base.style.height = Length::Px(box_size.max(line));
+                self.base.style.layout.width = Length::Px(box_size + self.label_gap() as f32 + text_w);
+                self.base.style.layout.height = Length::Px(box_size.max(line));
             }
             None => {
-                self.base.style.width = Length::Px(box_size);
-                self.base.style.height = Length::Px(box_size);
+                self.base.style.layout.width = Length::Px(box_size);
+                self.base.style.layout.height = Length::Px(box_size);
             }
         }
     }

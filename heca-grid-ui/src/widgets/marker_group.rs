@@ -71,7 +71,7 @@ impl MarkerGroup {
     /// A new (empty) group. Add rows with `.child(...)`.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         Self {
             base,
             active: signal(false),
@@ -134,7 +134,7 @@ impl Component for MarkerGroup {
     /// the layout is the base column style.
     fn taffy_style(&self) -> taffy::Style {
         use taffy::prelude::length;
-        let mut s = self.base.style.to_taffy();
+        let mut s = self.base.style.layout.to_taffy();
         s.padding.left = length(GRIP_W as f32);
         s
     }
