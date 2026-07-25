@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-25T08:11:17.568Z
+**Last updated:** 2026-07-25T12:55:08.860Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -53,7 +53,7 @@ Status: ✅ `done`
 - ✅ **3fdd622b-1757-40f6-8af0-1767760fa792** P001 — theming-04: Migrate main app (heca) to heca-theme (3/3 tasks)
 - ✅ **06906105-3054-4bda-9751-04902e03aefe** P002 — theming-02: Migrate heca-config to heca-theme (3/3 tasks)
 - ✅ **457bdae8-efba-4665-a795-25120ea154bd** P003 — theming-03: Migrate heca-grid-ui to heca-theme (2/2 tasks)
-- ✅ **21cc78bb-e0d6-4b57-a20c-a18cb98cd215** P004 — theming-05: Migrate hand-drawn chrome to grid-ui widgets (4/4 tasks)
+- ✅ **21cc78bb-e0d6-4b57-a20c-a18cb98cd215** P004 — theming-05: Migrate hand-drawn chrome to grid-ui widgets (5/5 tasks)
 - ✅ **3f91c60a-4a12-47ce-b210-ba1d85cc032a** P005 — theming-01: Showcase visual verification (2/2 tasks)
 
 ### ✅ be986d1d-cc2c-4acc-b703-4b1788a4ff86 — F002 — 🖥️ Terminal Platform Completion
@@ -511,7 +511,7 @@ Migrare tab bar, status bar, collapsed rail e tree/sidebar verso widget grid-ui.
 
 Status: ✅ `done`
 
-**Tasks:** 4/4
+**Tasks:** 5/5
 
 ### ✅ 3f91c60a-4a12-47ce-b210-ba1d85cc032a — P005 — theming-01: Showcase visual verification
 

@@ -2,8 +2,6 @@
   "id": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
   "number": 5,
-  "shortId": "",
-  "priority": 0,
   "slug": "nvim-01-embed-nvim-rpc-render-single-grid",
   "title": "nvim-01: Embed nvim + RPC + render single grid",
   "status": "planned",
@@ -32,8 +30,6 @@
       "id": "754a27df-a876-453c-8c97-af764beb75fa",
       "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "embed-nvim",
       "title": "Embed nvim with --embed flag",
       "status": "planned",
@@ -54,8 +50,6 @@
       "id": "95937176-78be-4b37-8933-39de1a5369e0",
       "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "nvim-msgpack-rpc",
       "title": "msgpack-RPC communication layer",
       "status": "planned",
@@ -76,8 +70,6 @@
       "id": "72778c97-81f4-4748-9b64-7dce0da33d27",
       "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
       "number": 3,
-      "shortId": "",
-      "priority": 0,
       "shortName": "nvim-ui-attach",
       "title": "nvim_ui_attach and render single grid",
       "status": "planned",
@@ -96,7 +88,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:14:56.477Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-01T18:14:56.477Z"
 }

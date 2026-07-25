@@ -2,8 +2,6 @@
   "id": "9cefac90-9fea-427c-9106-9a41e71e8acd",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 12,
-  "shortId": "",
-  "priority": 0,
   "slug": "app-13-mouse-input-leftovers",
   "title": "app-13: Mouse/input leftovers",
   "status": "planned",
@@ -31,8 +29,6 @@
       "id": "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a",
       "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
       "number": 1,
-      "shortId": "",
-      "priority": 0,
       "shortName": "swap-param-delegation",
       "title": "Swap param delegation",
       "status": "planned",
@@ -53,8 +49,6 @@
       "id": "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567",
       "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
       "number": 2,
-      "shortId": "",
-      "priority": 0,
       "shortName": "focus-follows-mouse-delay",
       "title": "Focus follows mouse delay",
       "status": "planned",
@@ -73,7 +67,5 @@
     }
   ],
   "createdAt": "2026-07-14T18:13:04.164Z",
-  "updatedAt": "2026-07-14T18:13:43.153Z",
-  "handoff": "",
-  "handoffUpdatedAt": ""
+  "updatedAt": "2026-07-14T18:13:43.153Z"
 }
