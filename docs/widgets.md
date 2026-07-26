@@ -178,12 +178,93 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `overlay_occludes(&self, pos: Point) -> bool` | `false` | Whether the widget's **overlay surface geometrically covers** `pos`. Distinct from `overlay_active` (input grab): a non-grabbing toast card still occludes the points it covers; a **modal** ([`Dialog`](#dialog) scrim, open [`CommandPalette`](#commandpalette)) occludes the whole viewport; an open [`Select`](#select) occludes its panel rect. A host checks it (via the free fn `heca_grid_ui::overlay_occluded_at(root, pos)`, which scans a tree) before synthesizing a page-level action from raw input — e.g. right-click → context menu must not fire under an overlay. `ContextMenu` deliberately keeps the default so a second right-click re-anchors it. |
 | `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
-| `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
+| `on_event_capture(&mut self, ev) -> Handled` | `No` | Handle an event **before** this widget's children see it. `Yes` stops the walk. See [the event model](#the-event-model--the-framework-walks-the-children). |
+| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. |
+| `routes_own_subtree(&self) -> bool` | `false` | `true` when this widget walks its own children because its subtree is not a plain tree walk. A declared exception, held to the same delivery test. |
+| `clips_children(&self) -> bool` | `false` | `true` when the widget clips its children, so a press or move **outside its bounds** must not reach them — content scrolled out of sight stops being clickable. |
+| `wants_visible(&self) -> bool` | `focused` | `true` when an enclosing [`ScrollRegion`](#scrollregion) should **keep this widget in view**. See [following the cursor](#following-the-cursor). |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
 | `on_layout(&mut self)` | no-op | Called post-order once this node's (and its descendants') bounds are freshly computed. Override to **place** children the engine could not put where they are drawn — a [`ScrollRegion`](#scrollregion) re-bakes its scroll offset, a [`Select`](#select) re-places its option rows into the overlay panel. Bounds are natural again on entry, so the widget re-derives its shift from scratch instead of compounding it. |
 | `on_focus(&mut self, visible: bool)` | set `focused`/`focus_visible` | Gained focus. |
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
+
+### The event model — the framework walks the children
+
+**A widget never routes events to its children.** `heca_grid_ui::dispatch` does that, always:
+
+```
+dispatch(node, ev):
+    node.on_event_capture(ev)   →  Yes stops here      (a modal swallowing, a thumb grab)
+    for child in children.rev() →  dispatch(child, ev)  ← the FRAMEWORK, not the widget
+    node.on_event(ev)                                   (what nobody below wanted)
+```
+
+A widget takes part by implementing at most two methods, and neither mentions its children:
+
+```rust
+impl Component for MyControl {
+    /// Capture: this control is one click target, so its composed content must not
+    /// take the press first.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
+        match ev {
+            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+                self.activate();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+}
+```
+
+**Why it is not a method you override.** It used to be: `Component::event` defaulted to routing, and
+a container that overrode it owned the forwarding. So each container decided, one `match` arm at a
+time, which kinds of event its children were allowed to see — and one that only cared about presses
+silently stranded anything below it needing the wheel or a release. Nothing fails when that happens:
+the child lays out, paints and hit-tests perfectly, and is dead. A `ScrollRegion` was found that way
+three times, in three different surfaces. Now there is no list to fall behind.
+
+**Choosing a hook.** Capture for something you take *away* from your subtree — a swallow, a gesture
+that must beat whatever sits under the cursor, or state that must be current before anything below
+is hit-tested. Bubble for what you do with what nobody below wanted. Capture returning `Handled::No`
+is normal: it means "I looked, carry on".
+
+**The exceptions.** Six widgets declare `routes_own_subtree`, each with the reason on the method:
+[`Select`](#select) (option rows are *placed* children, collapsed to zero size while closed),
+[`Dialog`](#dialog) (routes through an overlay-aware focus scan), [`Overlay`](#overlay) (a closed
+layer's panel must be inert), [`CommandPalette`](#commandpalette) and [`ContextMenu`](#contextmenu)
+(rows drawn from data), and [`ItemGroup`](#itemgroup)/[`DockFrame`](#dockframe) (they report what
+their own subtree did, which must happen even when a child consumed the click).
+
+It is an exception, not a loophole: `tests/pointer_delivery.rs` mounts a probe inside each one and
+fails if any pointer kind goes missing. Owning the walk costs you a proof, not just a comment.
+
+> **Hosts:** deliver the whole pointer set — move, press, release, wheel — to every tree you mount.
+> A release especially: it is what ends a gesture, and it must arrive *wherever the cursor drifted
+> to*. Gating one on position is how a scrollbar thumb ends up welded to the cursor.
+
+### Following the cursor
+
+A widget can say it is the current one, and **every `ScrollRegion` it is ever placed inside brings it
+into view** — no `ensure_visible` call at any host:
+
+```rust
+impl Component for MyRow {
+    /// The navigation cursor is "the current one" for this list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+}
+```
+
+The default is keyboard focus, which is what browsers do. [`Row`](#row),
+[`MarkerGroup`](#markergroup) and [`DockFrame`](#dockframe) add their nav cursor, which is what makes
+the app's keyboard-driven sidebar scroll to follow.
+
+It follows the selection **without fighting the wheel**: the region remembers the target's *natural*
+(unscrolled) position, which changes when the selection moves and stays put when you scroll by hand.
+So it comes to the cursor once, and then leaves you alone.
 
 ### Builder traits
 
@@ -202,6 +283,8 @@ return `Self` for chaining.
 | `.justify_items(Align)` | **Grid only** — how the items sit **horizontally inside their cells** (CSS `justify-items`). Not the same as `.justify()`, which on a grid distributes the whole *track set*. |
 | `.justify_self(Align)` | **Grid only** — horizontal placement of **this** item in its own cell, overriding the grid's `.justify_items()`. |
 | `.padding(f32)` | Inner padding (all sides). |
+| `.padding_xy(x, y)` | Per axis: `x` left+right, `y` top+bottom. |
+| `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
 | `.width(Length)` / `.height(Length)` | `Length::Auto` or `Length::Px(f32)`. |
 | `.grow(f32)` | Flex-grow factor. |
 | `.disabled(bool)` | Dim + make inert + drop from focus order. |
@@ -870,6 +953,19 @@ content shifted past the edge with no scrollbar to bring it back.
   (nothing hardcoded). Each bar reserves a **gutter**: content is clipped short of
   the lane so no content sits under a thumb, and each bar's track stops short of
   the other's gutter so they never overlap in the corner.
+- **The bar takes layout space, it is not drawn over content.** When an axis overflows, the region
+  reserves the bar's lane as padding on that side, so a child is laid out **beside** the bar and
+  keeps its rounded corner. Clipping alone was not enough and looked wrong: a card laid out full
+  width and trimmed at the lane ends on a hard vertical cut, because it still *is* wider than the
+  space it has. The reservation takes `max(existing padding, gutter)` rather than the sum — where the
+  padding is already roomy the bar simply sits in it and both sides stay even. It is applied after
+  layout and lands on the next pass, like a classic scrollbar, and it cannot oscillate: narrowing
+  content only ever makes it taller. `SCROLLBAR_W` is the visible thickness and the number to turn if
+  the bar claims too much room; `THUMB_HIT_W` is the (much wider) grab target, so a slim bar stays
+  just as easy to hit.
+- **The lane belongs to the scrollbar.** A move over it is consumed, so the row *behind* the bar does
+  not light up as hovered. The whole lane, not just the thumb — a press in the track pages, so the
+  track is part of the control, not content.
 - **Click-in-track paging**: clicking the scrollbar track above/below (or left/
   right of) the thumb pages a screenful toward the click — the standard affordance.
   **Press-and-hold repeats**: after a short initial delay (0.35s) the held press
@@ -3543,9 +3639,10 @@ impl Component for Reticle {
 impl LayoutExt for Reticle {}   // opt into .width/.height/.padding/… for free
 ```
 
-Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed, plus
-`remeasure` if the widget's size depends on the font — read `self.base.font`), and opt into
-builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
+Embed `Base`, implement `Component` (override `paint` and, for input,
+[`on_event_capture`/`on_event`](#the-event-model--the-framework-walks-the-children) — **never a
+child walk**, `dispatch` does that — plus `tick` for animation and `remeasure` if the widget's size
+depends on the font, read from `self.base.font`), and opt into builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
 
 If the widget is **interactive**, set `base.focusable = true` (in the constructor for an
