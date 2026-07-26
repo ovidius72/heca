@@ -29,10 +29,17 @@ struct BindingConflict {
 ///
 /// Anything else ⇒ [`ActionRef::Dynamic`] — **not an error** (plugin-04 G3). Config is loaded before
 /// any provider or plugin has registered its actions, so a binding to `plugin.docker.restart` cannot
-/// possibly resolve yet; it resolves at press time through the one dispatch door. A typo lands here
-/// too and no-ops with a debug warning when pressed, which is the price of not rejecting bindings to
-/// actions that legitimately do not exist yet.
+/// possibly resolve yet; it resolves at press time through the one dispatch door. A binding to an
+/// action that never turns up no-ops with a debug warning when pressed, which is the price of not
+/// rejecting bindings to actions that legitimately do not exist yet.
+///
+/// A **misspelled argument** is a different matter and is now reported, loudly, right here — see
+/// [`binding_arg_problems`]. It used to land in the same silence as an unknown action name: a
+/// required argument spelled wrong made `build_action` return `None`, so `focus_pane` with a
+/// `pane_i` fell all the way through to `Dynamic` and did nothing for the rest of the session,
+/// without a word in a release build.
 fn action_ref_from_config(name: &str, args: &HashMap<String, String>) -> ActionRef {
+    log_arg_problems(name, args);
     if let Some(built) = build_action(name, args) {
         return ActionRef::Builtin(built);
     }
@@ -87,6 +94,39 @@ fn format_combo(combo: &KeyCombo) -> String {
     }
     parts.push(combo.key.clone());
     parts.join("+")
+}
+
+/// What is wrong with a binding's `args` table, judged against what the action declares it takes.
+///
+/// Empty for an action heca does not know (a provider's, a plugin's, or a typo in the action name)
+/// — that name is resolved at press time, not here, so there is nothing yet to compare against.
+pub(crate) fn binding_arg_problems(
+    name: &str,
+    args: &HashMap<String, String>,
+) -> Vec<crate::actions::ArgProblem> {
+    match crate::actions::builtin_args(name) {
+        Some(specs) => crate::actions::check_args(&specs, args),
+        None => Vec::new(),
+    }
+}
+
+/// Report a binding's argument mistakes at config load, through the same channel as a keybinding
+/// conflict — unconditionally, not only in a debug build. A wrong argument in `config.toml` is the
+/// user's to fix, so the user has to hear about it.
+fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
+    if cfg!(test) {
+        return;
+    }
+    let problems = binding_arg_problems(name, args);
+    for problem in &problems {
+        eprintln!("[heca] binding '{name}': {problem}");
+    }
+    if problems
+        .iter()
+        .any(|p| matches!(p, crate::actions::ArgProblem::Missing { .. }))
+    {
+        eprintln!("[heca] binding '{name}' cannot be built and will do nothing when pressed");
+    }
 }
 
 fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
@@ -788,8 +828,8 @@ pub fn build_registry() -> ActionRegistry {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_ref_from_config, build_keymap, build_modes, build_registry, build_widget_keymap,
-        format_combo,
+        action_ref_from_config, binding_arg_problems, build_keymap, build_modes, build_registry,
+        build_widget_keymap, format_combo,
     };
     use crate::input::WmAction;
     use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
@@ -930,6 +970,39 @@ mod tests {
             action_ref_from_config("scroll_to_offset", &bad),
             ActionRef::Dynamic(_)
         ));
+    }
+
+    /// A binding whose `args` do not match what the action declares is **named** at load, instead
+    /// of being left for the user to discover by pressing a key that does nothing.
+    #[test]
+    fn a_bindings_argument_mistakes_are_reported_at_load() {
+        use crate::actions::ArgProblem;
+
+        // A well-formed binding says nothing.
+        let mut good = HashMap::new();
+        good.insert("ws_idx".to_string(), "2".to_string());
+        assert!(binding_arg_problems("delete_workspace", &good).is_empty());
+
+        // A misspelled required argument: both halves of the mistake are named.
+        let mut typo = HashMap::new();
+        typo.insert("ws_idxx".to_string(), "2".to_string());
+        let problems = binding_arg_problems("delete_workspace", &typo);
+        assert!(problems.contains(&ArgProblem::Missing {
+            name: "ws_idx".to_string()
+        }));
+        assert!(problems.contains(&ArgProblem::Unknown {
+            name: "ws_idxx".to_string(),
+            did_you_mean: Some("ws_idx".to_string()),
+        }));
+        // …and, because it cannot be built, it is not quietly bound to workspace 0 either.
+        assert!(matches!(
+            action_ref_from_config("delete_workspace", &typo),
+            ActionRef::Dynamic(_)
+        ));
+
+        // An action heca does not know yet is not judged here — it is resolved at press time, when
+        // its provider may have registered it.
+        assert!(binding_arg_problems("plugin.docker.restart", &typo).is_empty());
     }
 
     /// `[keys.unbind]` is keyed by the COMBO, so it retires a dynamic binding exactly as it retires
