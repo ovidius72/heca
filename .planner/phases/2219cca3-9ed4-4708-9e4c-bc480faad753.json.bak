@@ -4,7 +4,7 @@
   "number": 18,
   "slug": "plugin-10-keybinding-command-palette-integration-for-contributed-actions",
   "title": "plugin-10: Keybinding + command-palette integration for contributed actions",
-  "status": "draft",
+  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -20,8 +20,195 @@
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [],
-  "taskIds": [],
-  "tasks": [],
+  "taskIds": [
+    "dcda3d13-0225-42e5-b5bf-d39d4896d580",
+    "2d578290-8e14-4e6b-ad88-7dc398790859",
+    "58a4843a-f15c-4313-86a4-e694f82f8921",
+    "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
+    "fcefde68-ac0e-425d-9ac8-53f3ffa17e49"
+  ],
+  "tasks": [
+    {
+      "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 1,
+      "shortName": "read-default-binding",
+      "title": "Offer ActionMeta.default_binding to the keymap on registration",
+      "status": "planned",
+      "description": "`ActionMeta` already carries `default_binding` (heca/src/actions.rs) and nothing reads it, so registering an action never makes a key work. Read it at `register_dynamic` time and offer it to the keymap. Never hardcode — it goes through `KeymapRegistry` like everything else.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "read-default-binding-c1",
+          "title": "Read default_binding at registration",
+          "checked": false
+        },
+        {
+          "id": "read-default-binding-c2",
+          "title": "Route through KeymapRegistry, never hardcoded",
+          "checked": false
+        },
+        {
+          "id": "read-default-binding-c3",
+          "title": "Test: a registered action's default key fires it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "2d578290-8e14-4e6b-ad88-7dc398790859",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 2,
+      "shortName": "bind-any-action-by-name",
+      "title": "Let config bind ANY action by name, contributed ones included",
+      "status": "planned",
+      "description": "keybindings.default.toml and the user's keybindings only speak to built-in `WmAction`s today. The registry is already keyed by name, so this is a lookup, not a new mechanism. Same syntax as a built-in — a user should not need to know whether an action is built in or contributed.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "bind-any-action-by-name-c1",
+          "title": "Bind by name in config for contributed actions",
+          "checked": false
+        },
+        {
+          "id": "bind-any-action-by-name-c2",
+          "title": "Same syntax as built-ins",
+          "checked": false
+        },
+        {
+          "id": "bind-any-action-by-name-c3",
+          "title": "Unknown name is reported, not silently ignored",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "58a4843a-f15c-4313-86a4-e694f82f8921",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 3,
+      "shortName": "palette-lists-contributed",
+      "title": "Command palette lists contributed actions",
+      "status": "planned",
+      "description": "`ActionCatalog::describe_all()` already returns `ActionInfo` (serde) with label, icon and category — everything a palette needs. The palette does not read it. Feed it from there so contributed actions are listed, searchable and runnable.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "palette-lists-contributed-c1",
+          "title": "Palette reads describe_all()",
+          "checked": false
+        },
+        {
+          "id": "palette-lists-contributed-c2",
+          "title": "Label, icon and category shown",
+          "checked": false
+        },
+        {
+          "id": "palette-lists-contributed-c3",
+          "title": "Running one dispatches it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 4,
+      "shortName": "collision-and-policy",
+      "title": "Binding collisions + ActionPolicy at dispatch (NEEDS A DECISION)",
+      "status": "planned",
+      "description": "⛔ Ask the user first: does a contributed default binding LOSE to an existing one, or WIN? Either way the user must be TOLD when a binding is refused — never silently dropped. F010 (Improvements) already covers notifying about blocked keybindings; reuse it.\n\nAlso: a contributed action must honour `ActionPolicy` at dispatch exactly as a built-in does. It must not bypass the policy system.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "collision-and-policy-c1",
+          "title": "BLOCKING: settle collision behaviour with the user",
+          "checked": false
+        },
+        {
+          "id": "collision-and-policy-c2",
+          "title": "Refused bindings are reported to the user",
+          "checked": false
+        },
+        {
+          "id": "collision-and-policy-c3",
+          "title": "ActionPolicy honoured at dispatch",
+          "checked": false
+        },
+        {
+          "id": "collision-and-policy-c4",
+          "title": "Policy spot-check tests",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 5,
+      "shortName": "unbind-on-unmount",
+      "title": "Bindings disappear when their provider does",
+      "status": "planned",
+      "description": "`register_dynamic` returns an RAII `ActionHandle` and `unregister_dynamic` withdraws handler + meta. The binding must go the same way, or a dead action keeps a key hostage.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "unbind-on-unmount-c1",
+          "title": "Binding withdrawn on unmount via the existing handle",
+          "checked": false
+        },
+        {
+          "id": "unbind-on-unmount-c2",
+          "title": "Test: unmount frees the key",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    }
+  ],
   "createdAt": "2026-07-26T08:38:21.132Z",
-  "updatedAt": "2026-07-26T08:38:21.132Z"
+  "updatedAt": "2026-07-26T11:44:50.918444Z"
 }
