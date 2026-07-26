@@ -3120,17 +3120,47 @@ child is styled by putting props on *that child*. The builder chains for ergonom
 a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
 ≡ `Column().children([a,b])`.
 
-### Layout props — every kind, no list
+### Style props — every kind, no list
 
-**Any field of [`Style.layout`](#style--layout-enums) is a prop on any kind**, spelled exactly as
-the field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
-`justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
-`flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+**Any field of [`Style`](#style--layout-enums) is a prop on any kind**, spelled exactly as the
+field is — both halves:
 
-`realize` never enumerates them — it merges by name against `Layout`'s own fields. Add a field to
-`Layout` and a description can set it with **no change to the mapper**. The counterpart is that
-`Visual` is not serializable, so appearance (fill, border, glow, radius, font sizes) is unreachable
-from a description by construction rather than by a rule someone has to enforce.
+- **Layout**: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+  `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
+  `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+- **Appearance**: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
+
+`realize` never enumerates them — it merges by name against each half's own fields. Add a field to
+either and a description can set it with **no change to the mapper**.
+
+#### Appearance: the theme is the default, not a wall
+
+Changed 2026-07-27. `Visual` used to be deliberately unserializable, so appearance was unreachable
+from a description by construction. It is now an ordinary property, on every widget.
+
+**Set nothing and you follow the theme** — which is what most widgets should do. That is not a new
+behaviour bolted on: `fill` / `border` / `glow` are `Option`, and `radius` / `font_size` use a
+`0.0 = inherit` sentinel, so "unset" already meant "ask the theme" at paint time. A widget that
+overrides nothing is unaffected by any of this.
+
+A **colour** is written two ways, and the difference matters:
+
+```rust
+.prop("fill", PropValue::Color("accent".into()))     // a theme token — PREFER THIS
+.prop("fill", PropValue::Color("#ff8800".into()))    // a literal (also "#ff8800cc")
+```
+
+A **token name** is one of the theme's own colour fields (`accent`, `foreground`, `muted`,
+`border`, `danger`, `warning`, `success`, …). The accepted vocabulary *is* that field list — add a
+colour to the theme and a description can name it, with no table to update anywhere. It resolves
+against the theme the tree is built with, and a theme reload rebuilds every tree, so a token-named
+override **follows the new theme**.
+
+A **hex literal** is exactly the colour it says and does not track the theme. That is the trade you
+make by writing one.
+
+A colour that is neither — a misspelled token — is dropped like any other bad value: that one
+property is skipped and its neighbours on the same node still apply.
 
 Values read the way you would write them:
 

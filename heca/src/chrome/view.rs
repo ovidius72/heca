@@ -325,16 +325,25 @@ pub type Events = BTreeMap<String, Intent>;
 ///     );
 /// ```
 ///
-/// # Layout props — every kind, no list
-/// **Any field of [`Layout`](heca_grid_ui::Layout) is a prop on any kind**, named exactly as the
-/// field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
-/// `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
-/// `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+/// # Style props — every kind, no list
+/// **Any field of [`Layout`](heca_grid_ui::Layout) or [`Visual`](heca_grid_ui::Visual) is a prop on
+/// any kind**, named exactly as the field is. Layout: `padding`, `margin` (+ per-side), `gap`,
+/// `gap_spacing`, `align`, `align_self`, `justify`, `justify_items`, `justify_self`, `direction`,
+/// `width`, `height`, min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+/// Appearance: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 ///
-/// `realize` does **not** enumerate them — it merges by name against `Layout`'s own fields, so a
-/// field added there is settable from a description with no change to the mapper. The counterpart
-/// is that `Visual` (fill, border, glow, radius, font_size, font_scale) is not serializable, so
-/// appearance is unreachable from a description by construction, not by a rule someone enforces.
+/// `realize` does **not** enumerate them — it merges by name against each half's own fields, so a
+/// field added to either is settable from a description with no change to the mapper.
+///
+/// **Appearance became settable 2026-07-27 (F003/P017/T7).** `Visual` used to be unserializable on
+/// purpose, so appearance was unreachable by construction. The theme is the default now, not a
+/// wall: set nothing and you follow the theme, which is what most widgets should do.
+///
+/// A **colour** is a hex literal (`"#ff8800"`, `"#ff8800cc"`) or a **theme token name**
+/// (`"accent"`, `"muted"`, `"danger"` — the theme's own colour fields, so the vocabulary is not a
+/// list anyone maintains). A token resolves against the theme the tree is built with, and a theme
+/// reload rebuilds the trees, so a token-named override follows the new theme. A hex literal does
+/// not — it is exactly the colour it says. **Prefer a token name.**
 ///
 /// Values read the way an author would write them: enums by **name** (`"center"`,
 /// `"space_between"`, `"small"`), and a `Length` as a bare number (px), `"auto"`, or `"50%"`.
@@ -354,7 +363,7 @@ pub type Events = BTreeMap<String, Intent>;
 ///
 /// Deliberately NOT properties, with the reason recorded on each builder: closures (behaviour
 /// crosses as an [`Intent`]), composed content (use `children`), and builders bound to live host
-/// signals. Appearance is currently in this group and is moving out — see F003/P017/T7.
+/// signals. Appearance **used to be** in this group; it left on 2026-07-27 (F003/P017/T7).
 ///
 /// # Props & events by kind
 /// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,

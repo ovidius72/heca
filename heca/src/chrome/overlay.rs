@@ -176,6 +176,9 @@ pub(crate) fn open_modal(
     let root = build_modal_root(
         &spec,
         id,
+        // The theme this tree is built with: a `PropValue::Color` naming a token resolves against
+        // it now. A theme reload rebuilds every overlay, so the token follows (F003/P017/T7).
+        &super::chrome_gui_theme(state),
         &emit,
         &mut state.hint_targets,
         &state.action_shortcuts,
@@ -359,12 +362,13 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
 fn build_modal_root(
     spec: &ModalSpec,
     id: OverlayId,
+    theme: &heca_grid_ui::Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut super::HintTargetRegistry,
     shortcuts: &super::ActionShortcuts,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let body = super::realize(&spec.body, emit, hints, forms);
+    let body = super::realize(&spec.body, theme, emit, hints, forms);
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
         let variant = if action.danger {
@@ -493,7 +497,7 @@ mod tests {
         let mut hints = super::super::HintTargetRegistry::default();
         let shortcuts = super::super::ActionShortcuts::default();
         let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
+        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
 
         // Two actions → two hint targets, each a SubmitOverlay for this overlay.
         assert_eq!(hints.checkpoint() - before, 2);

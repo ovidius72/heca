@@ -35,11 +35,11 @@
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
-    Action, Alert, Align, Badge, BadgeButton, Base, Button, ButtonVariant, Card, Checkbox, Choice,
+    Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, PropInput, RailCell,
+    Item, ItemGroup, Label, LayoutExt, MarkerGroup, PropInput, RailCell,
     Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs,
-    Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
+    Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -96,45 +96,66 @@ impl FormBindings {
 /// children are pushed straight onto `base_mut().children` (the `Vec<Box<dyn Component>>`).
 pub(crate) fn realize(
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let mut realized = realize_kind(node, emit, hints, forms);
-    // Layout belongs to every kind, so it is read once here rather than in each arm — and it is
-    // read *generically*, by name against `Layout`'s own fields. There is deliberately no list of
-    // property names in this file: add a field to `Layout` and a description can set it, with no
-    // change here. `Visual` is not serializable, so appearance stays unreachable the same way.
-    merge_layout_props(node, realized.base_mut());
+    let mut realized = realize_kind(node, theme, emit, hints, forms);
+    // Style belongs to every kind, so it is read once here rather than in each arm — and it is read
+    // *generically*, by name against each half's own fields. There is deliberately no list of
+    // property names in this file: add a field to `Layout` or `Visual` and a description can set
+    // it, with no change here.
+    //
+    // Both halves, since F003/P017/T7: the theme is the default, not a wall. `Visual` used to be
+    // unserializable precisely so appearance could not be reached — that is the rule this replaced.
+    let base = realized.base_mut();
+    let layout = base.style.layout;
+    if let Some(merged) = merge_style_half(node, theme, layout) {
+        base.style.layout = merged;
+    }
+    let visual = base.style.visual;
+    if let Some(merged) = merge_style_half(node, theme, visual) {
+        base.style.visual = merged;
+    }
     realized
 }
 
-/// Apply a node's layout properties on top of the **already-constructed** widget.
+/// Overlay a node's properties onto one half of an **already-constructed** widget's style —
+/// [`Layout`] or [`Visual`]. `None` when the node changes nothing about this half.
 ///
-/// On top, not from scratch: widgets set deliberate non-default layout in their constructors
+/// Generic over the half because the two are merged identically: read the live value as a JSON
+/// object, overlay only the keys the node actually carries, read it back. It was written for
+/// `Layout` alone; pointing it at `Visual` too was all F003/P017/T7 needed on this side, which is
+/// why the split between the halves was worth keeping rather than undoing.
+///
+/// On top, not from scratch: widgets set deliberate non-default style in their constructors
 /// (`ScrollRegion::new()` zeroes its min sizes and opts into shrinking so a viewport can be smaller
-/// than its content). Rebuilding from `Layout::default()` would silently break those, so this reads
-/// the live values, overlays only the keys the node actually carries, and writes back.
+/// than its content). Rebuilding from `Default` would silently break those.
 ///
 /// Total for untrusted input, as the rest of `realize` is: an unknown key is skipped, and a value
 /// that does not fit its field is dropped *individually* — one bad property never discards the
 /// good ones and never panics.
-fn merge_layout_props(node: &ViewNode, base: &mut Base) {
+fn merge_style_half<T>(node: &ViewNode, theme: &Theme, current: T) -> Option<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned,
+{
     if node.props.is_empty() {
-        return;
+        return None;
     }
-    let Ok(serde_json::Value::Object(current)) = serde_json::to_value(base.style.layout) else {
-        return;
+    let Ok(serde_json::Value::Object(current)) = serde_json::to_value(current) else {
+        return None;
     };
-    // Only keys that name a real `Layout` field; `current` IS that field list, derived not written.
+    // Only keys that name a real field of this half; `current` IS that field list, derived not
+    // written. A key that names neither half's field is simply not a style property.
     let incoming: Vec<(&String, serde_json::Value)> = node
         .props
         .iter()
         .filter(|(key, _)| current.contains_key(key.as_str()))
-        .filter_map(|(key, value)| prop_to_json(value).map(|v| (key, v)))
+        .filter_map(|(key, value)| prop_to_json(value, theme).map(|v| (key, v)))
         .collect();
     if incoming.is_empty() {
-        return;
+        return None;
     }
 
     let mut merged = current.clone();
@@ -143,44 +164,76 @@ fn merge_layout_props(node: &ViewNode, base: &mut Base) {
     }
     // Fast path: everything fits. Otherwise fall back to applying one key at a time so a single
     // bad value costs only itself.
-    if let Ok(layout) = serde_json::from_value::<Layout>(serde_json::Value::Object(merged)) {
-        base.style.layout = layout;
-        return;
+    if let Ok(whole) = serde_json::from_value::<T>(serde_json::Value::Object(merged)) {
+        return Some(whole);
     }
     let mut acc = current;
     for (key, value) in incoming {
         let mut candidate = acc.clone();
         candidate.insert(key.clone(), value);
-        if serde_json::from_value::<Layout>(serde_json::Value::Object(candidate.clone())).is_ok() {
+        if serde_json::from_value::<T>(serde_json::Value::Object(candidate.clone())).is_ok() {
             acc = candidate;
         }
     }
-    if let Ok(layout) = serde_json::from_value::<Layout>(serde_json::Value::Object(acc)) {
-        base.style.layout = layout;
-    }
+    serde_json::from_value::<T>(serde_json::Value::Object(acc)).ok()
 }
 
 /// A [`PropValue`] as the JSON scalar its field expects — the enums travel as their
 /// **names** (`"center"`, `"space_between"`, `"small"`), matching how glyphs and colours already
 /// cross the boundary. Colours and glyphs never name a `Layout` field, so they are simply strings
 /// here and get filtered out by the field-name check.
-fn prop_to_json(value: &PropValue) -> Option<serde_json::Value> {
+fn prop_to_json(value: &PropValue, theme: &Theme) -> Option<serde_json::Value> {
     Some(match value {
         PropValue::Bool(b) => serde_json::Value::Bool(*b),
         PropValue::Int(i) => serde_json::Value::from(*i),
         PropValue::Float(f) => serde_json::Number::from_f64(*f).map(Into::into)?,
-        PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => {
-            serde_json::Value::String(t.clone())
-        }
+        // A colour is a hex literal or a THEME TOKEN NAME. A token is resolved here, against the
+        // theme this tree is being built with — the same moment every native widget bakes its
+        // colours in. A theme reload drops the retained trees and rebuilds them (`reload_config`
+        // clears `chrome_tree` and every pane header), so a token-named override follows the new
+        // theme for free, without the colour having to stay unresolved all the way to paint.
+        //
+        // A hex literal is exactly what it says and does not track the theme. That is the trade a
+        // caller makes by writing one, and it is the reason the docs steer toward token names.
+        PropValue::Color(c) => serde_json::Value::String(resolve_color(c, theme)?),
+        PropValue::Text(t) | PropValue::Glyph(t) => serde_json::Value::String(t.clone()),
         PropValue::Size(s) => serde_json::to_value(s).ok()?,
         PropValue::Variant(v) => serde_json::to_value(v).ok()?,
         PropValue::Align(a) => serde_json::to_value(a).ok()?,
-        PropValue::List(items) => {
-            serde_json::Value::Array(items.iter().filter_map(prop_to_json).collect())
-        }
+        PropValue::List(items) => serde_json::Value::Array(
+            items.iter().filter_map(|i| prop_to_json(i, theme)).collect(),
+        ),
     })
 }
 
+
+/// A colour property as the hex string `Color`'s own deserializer accepts.
+///
+/// `#rrggbb` / `#rrggbbaa` / `#rgb` pass straight through — `Color::from_str` owns those spellings
+/// and this does not second-guess it. Anything else is read as a **theme token name** and looked up
+/// among the theme's own colour fields.
+///
+/// The lookup is derived, not written: [`heca_theme::Theme`] is `Serialize` and its colours
+/// serialize as hex strings, so the accepted vocabulary *is* the theme's field list. Add a colour
+/// token to the theme and a description can name it the same day, with no table here to update —
+/// the same arrangement `merge_style_half` uses for the style fields themselves.
+///
+/// `None` for a name the theme does not have, which drops that one property and leaves its
+/// neighbours alone (`merge_style_half` is total for untrusted input).
+fn resolve_color(spec: &str, theme: &Theme) -> Option<String> {
+    if spec.starts_with('#') {
+        return Some(spec.to_string());
+    }
+    let serde_json::Value::Object(tokens) = serde_json::to_value(&theme.colors).ok()? else {
+        return None;
+    };
+    match tokens.get(spec) {
+        // A colour token. Non-colour fields (`name`, the numeric geometry) either are not strings
+        // or do not parse as a colour, so they cannot be named by accident.
+        Some(serde_json::Value::String(hex)) if hex.starts_with('#') => Some(hex.clone()),
+        _ => None,
+    }
+}
 
 /// Feed a node's properties to a widget through its **generated** surface.
 ///
@@ -227,14 +280,15 @@ fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
 /// The per-kind mapping — see [`realize`], which wraps it with the props every node can carry.
 fn realize_kind(
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     match node.kind {
         // ── Containers (attach realized children) ──
-        WidgetKind::VStack => realize_flex(node, Flex::column(), emit, hints, forms),
-        WidgetKind::HStack => realize_flex(node, Flex::row(), emit, hints, forms),
+        WidgetKind::VStack => realize_flex(node, theme, Flex::column(), emit, hints, forms),
+        WidgetKind::HStack => realize_flex(node, theme, Flex::row(), emit, hints, forms),
         // The interactive row — a container that is also a control. `active` / `nav_selected` /
         // `marker` arrive through the generated surface; the press is wired to BOTH a click and a
         // hint target, like `Button`, so `prefix+/` reaches it. Without `on_activate` the widget
@@ -248,21 +302,21 @@ fn realize_kind(
                     .hint_target(id)
                     .on_activate(move || emit(carrier.clone()));
             }
-            attach_children(Box::new(row), node, emit, hints, forms)
+            attach_children(Box::new(row), node, theme, emit, hints, forms)
         }
         WidgetKind::Card => {
-            attach_children(Box::new(Card::new(text_of(node))), node, emit, hints, forms)
+            attach_children(Box::new(Card::new(text_of(node))), node, theme, emit, hints, forms)
         }
         // No dedicated `Panel` widget — a bare panel is a plain `Surface`.
         WidgetKind::Surface | WidgetKind::Panel => {
-            attach_children(Box::new(Surface::new()), node, emit, hints, forms)
+            attach_children(Box::new(Surface::new()), node, theme, emit, hints, forms)
         }
         WidgetKind::Scroll => {
             // `axes` reaches the widget through its own builder, so a declarative region can be
             // horizontal or two-axis — it was vertical-only for as long as this arm named its
             // properties by hand.
             let region = with_props(ScrollRegion::new(), node);
-            attach_children(Box::new(region), node, emit, hints, forms)
+            attach_children(Box::new(region), node, theme, emit, hints, forms)
         }
 
         // ── Leaves ──
@@ -271,7 +325,7 @@ fn realize_kind(
             // the generated surface — `Label`'s builders decide which, not a list here.
             Box::new(with_props(Label::new(text_of(node)), node))
         }
-        WidgetKind::Button => realize_button(node, emit, hints, forms),
+        WidgetKind::Button => realize_button(node, theme, emit, hints, forms),
         WidgetKind::Badge => Box::new(Badge::new(text_of(node))),
         WidgetKind::Tag => Box::new(Tag::new(text_of(node))),
         WidgetKind::Alert => Box::new(Alert::new(text_of(node))),
@@ -352,7 +406,7 @@ fn realize_kind(
             // middle is the label, which comes from `text` — so a child with neither slot name is
             // ignored rather than silently dropped somewhere it doesn't belong.
             for child in &node.children {
-                let realized = realize(child, emit, hints, forms);
+                let realized = realize(child, theme, emit, hints, forms);
                 match slot_of(child) {
                     Some("leading") => it = it.leading_boxed(realized),
                     Some("trailing") => it = it.trailing_boxed(realized),
@@ -377,7 +431,7 @@ fn realize_kind(
         // an icon + a label exactly like a native one, and what carries the chosen *value* back to
         // the author (see `realize_options`).
         WidgetKind::Choice => {
-            let mut choice = realize_choice(node, emit, hints, forms);
+            let mut choice = realize_choice(node, theme, emit, hints, forms);
             // A standalone `Choice` (outside a Select/Tabs) is activatable on its own. Inside a
             // container the container owns the click, so a `press` there is ignored, not half-wired.
             if let Some((id, carrier)) = press_intent(node, hints) {
@@ -390,7 +444,7 @@ fn realize_kind(
         }
         WidgetKind::Select => {
             let mut select = Select::empty();
-            for option in realize_options(node, emit, hints, forms) {
+            for option in realize_options(node, theme, emit, hints, forms) {
                 select = select.option(option);
             }
             // After the options, so `selected` clamps against the real count. That ordering is a
@@ -416,7 +470,7 @@ fn realize_kind(
         }
         WidgetKind::Tabs => {
             let mut tabs = Tabs::empty();
-            for option in realize_options(node, emit, hints, forms) {
+            for option in realize_options(node, theme, emit, hints, forms) {
                 tabs = tabs.tab(option);
             }
             tabs = with_props(tabs, node);
@@ -434,16 +488,16 @@ fn realize_kind(
                 group = group.on_toggle(on_toggle);
             }
             // The group's own header is `children[0]`; the realized rows follow it.
-            attach_children(Box::new(group), node, emit, hints, forms)
+            attach_children(Box::new(group), node, theme, emit, hints, forms)
         }
         WidgetKind::MarkerGroup => {
             let markers = with_props(MarkerGroup::new(), node);
             // An indicator: no events of its own — the rows inside carry their own intents.
-            attach_children(Box::new(markers), node, emit, hints, forms)
+            attach_children(Box::new(markers), node, theme, emit, hints, forms)
         }
 
         // ── Layout ──
-        WidgetKind::Grid => realize_grid(node, emit, hints, forms),
+        WidgetKind::Grid => realize_grid(node, theme, emit, hints, forms),
 
         WidgetKind::DockFrame => {
             // Everything DockFrame exposes arrives through the surface, at the widget's own
@@ -455,7 +509,7 @@ fn realize_kind(
             // Slots: `header` is the controls slot (a search field, a count badge); everything else
             // is body content — the body is the **default slot**, so an unslotted child lands there.
             for child in &node.children {
-                let realized = realize(child, emit, hints, forms);
+                let realized = realize(child, theme, emit, hints, forms);
                 match slot_of(child) {
                     Some("header") => dock = dock.header_boxed(realized),
                     None => dock = dock.child_boxed(realized),
@@ -519,12 +573,13 @@ fn realize_kind(
 fn attach_children(
     mut container: Box<dyn Component>,
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     for child in &node.children {
-        container.base_mut().children.push(realize(child, emit, hints, forms));
+        container.base_mut().children.push(realize(child, theme, emit, hints, forms));
     }
     container
 }
@@ -550,6 +605,7 @@ fn change_intent(node: &ViewNode) -> Option<InteractionIntent> {
 /// recursively realizing + attaching children.
 fn realize_flex(
     node: &ViewNode,
+    theme: &Theme,
     mut flex: Flex,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
@@ -560,7 +616,7 @@ fn realize_flex(
     for child in &node.children {
         // `child()` takes an `impl Component` and boxes it; a `Box<dyn Component>` isn't
         // `Component`, so push the already-boxed child directly.
-        flex.base_mut().children.push(realize(child, emit, hints, forms));
+        flex.base_mut().children.push(realize(child, theme, emit, hints, forms));
     }
     Box::new(flex)
 }
@@ -579,6 +635,7 @@ fn realize_flex(
 /// would — there is one content model underneath.
 fn realize_button(
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
@@ -616,7 +673,7 @@ fn realize_button(
         button
             .base_mut()
             .children
-            .push(realize(child, emit, hints, forms));
+            .push(realize(child, theme, emit, hints, forms));
     }
     button
 }
@@ -633,6 +690,7 @@ fn realize_button(
 /// text stands in for it, so `Choice { text: "HIGH" }` behaves like the native `Choice::labeled`.
 fn realize_choice(
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
@@ -650,7 +708,7 @@ fn realize_choice(
         choice
             .base_mut()
             .children
-            .push(realize(child, emit, hints, forms));
+            .push(realize(child, theme, emit, hints, forms));
     }
     choice
 }
@@ -661,6 +719,7 @@ fn realize_choice(
 /// input, and the options of an option-picker are options.
 fn realize_options(
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
@@ -678,7 +737,7 @@ fn realize_options(
             }
             is_choice
         })
-        .map(|child| realize_choice(child, emit, hints, forms))
+        .map(|child| realize_choice(child, theme, emit, hints, forms))
         .collect()
 }
 
@@ -728,6 +787,7 @@ fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(
 /// placement table to keep in sync with the children.
 fn realize_grid(
     node: &ViewNode,
+    theme: &Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
@@ -748,7 +808,7 @@ fn realize_grid(
     // Both default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell,
     // so a row of mixed-height content needs `align: center` to share a centre line.
     for child in &node.children {
-        let realized = realize(child, emit, hints, forms);
+        let realized = realize(child, theme, emit, hints, forms);
         match child.props.get("area").and_then(PropValue::as_text) {
             Some(area) => grid = grid.area_boxed(realized, area),
             None => match (usize_prop(child, "col"), usize_prop(child, "row")) {
@@ -1101,7 +1161,7 @@ mod tests {
     #[test]
     fn realizes_nested_structure() {
         let mut hints = HintTargetRegistry::default();
-        let root = realize(&confirm_tree(), &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let root = realize(&confirm_tree(), &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(root.base().children.len(), 2, "column: label + row");
         let row = &root.base().children[1];
         assert_eq!(row.base().children.len(), 2, "row: two buttons");
@@ -1114,7 +1174,7 @@ mod tests {
     fn actionable_nodes_register_view_intents() {
         let mut hints = HintTargetRegistry::default();
         let before = hints.checkpoint();
-        let _ = realize(&confirm_tree(), &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let _ = realize(&confirm_tree(), &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(
             hints.checkpoint() - before,
             2,
@@ -1156,7 +1216,7 @@ mod tests {
                     .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")),
             );
 
-        let button = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let button = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let column = &button.base().children;
         assert_eq!(column.len(), 1, "the button holds its composed subtree");
         let column = &column[0].base().children;
@@ -1176,12 +1236,132 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Button)
             .text("Delete")
             .prop("icon", PropValue::Glyph("trash".into()));
-        let button = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let button = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(
             button.base().children.len(),
             2,
             "text + icon props desugar into [Icon, Label] children",
         );
+    }
+
+    // ── Appearance is overridable; the theme is the default (F003/P017/T7) ──
+
+    /// A description sets **any** of `Visual`, not just colour: fill, border, glow, radius and
+    /// font size all arrive through the same generic merge as `Layout`.
+    #[test]
+    fn a_description_can_override_the_whole_of_visual() {
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop("fill", PropValue::Color("#ff8800".into()))
+            .prop("radius", PropValue::Float(12.0))
+            .prop("font_size", PropValue::Float(18.0));
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut HintTargetRegistry::default(),
+            &mut FormBindings::default(),
+        );
+        let visual = w.base().style.visual;
+        assert_eq!(visual.fill, Some(heca_grid_ui::Color::rgb(0xff, 0x88, 0x00)));
+        assert_eq!(visual.radius, 12.0);
+        assert_eq!(visual.font_size, 18.0);
+    }
+
+    /// **Unset still means "ask the theme".** A node that overrides one field leaves every other
+    /// one at the widget's own value, so nothing about a non-overriding widget changed.
+    #[test]
+    fn an_unset_appearance_field_is_left_alone() {
+        let plain = realize(
+            &ViewNode::new(WidgetKind::Surface),
+            &Theme::default(),
+            &noop_emitter(),
+            &mut HintTargetRegistry::default(),
+            &mut FormBindings::default(),
+        );
+        let one_field = realize(
+            &ViewNode::new(WidgetKind::Surface).prop("radius", PropValue::Float(9.0)),
+            &Theme::default(),
+            &noop_emitter(),
+            &mut HintTargetRegistry::default(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(one_field.base().style.visual.radius, 9.0, "the one it set");
+        assert_eq!(
+            one_field.base().style.visual.fill,
+            plain.base().style.visual.fill,
+            "everything else is untouched — unset is not 'set to nothing'",
+        );
+    }
+
+    /// **A theme token name resolves against the theme the tree is built with**, so the same
+    /// description gives a different pixel under a different theme — which is what makes a token
+    /// follow `prefix+Shift+r`, since a reload drops the retained trees and rebuilds them.
+    ///
+    /// A hex literal is the same pixel under either theme. That is the trade a caller makes by
+    /// writing one, and the reason the docs steer toward token names.
+    #[test]
+    fn a_theme_token_follows_the_theme_and_a_hex_literal_does_not() {
+        let mut dark = Theme::default();
+        dark.colors.accent = heca_grid_ui::Color::rgb(0x11, 0x22, 0x33);
+        let mut light = Theme::default();
+        light.colors.accent = heca_grid_ui::Color::rgb(0xee, 0xdd, 0xcc);
+
+        let fill_of = |node: &ViewNode, theme: &Theme| {
+            realize(
+                node,
+                theme,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            )
+            .base()
+            .style
+            .visual
+            .fill
+        };
+
+        let token = ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("accent".into()));
+        assert_eq!(fill_of(&token, &dark), Some(dark.colors.accent));
+        assert_eq!(fill_of(&token, &light), Some(light.colors.accent));
+
+        let hex = ViewNode::new(WidgetKind::Surface).prop("fill", PropValue::Color("#ff0000".into()));
+        let literal = Some(heca_grid_ui::Color::rgb(0xff, 0, 0));
+        assert_eq!(fill_of(&hex, &dark), literal);
+        assert_eq!(fill_of(&hex, &light), literal, "a literal is not a token");
+    }
+
+    /// The accepted token vocabulary **is** the theme's own colour fields — nothing is written down
+    /// twice. Add a colour to the theme and a description can name it with no table to update.
+    #[test]
+    fn the_token_vocabulary_is_the_themes_own_fields() {
+        let theme = Theme::default();
+        for token in ["accent", "foreground", "muted", "border", "danger", "warning", "success"] {
+            assert!(
+                resolve_color(token, &theme).is_some(),
+                "{token} is a theme colour and should resolve",
+            );
+        }
+        assert!(resolve_color("chartreuse", &theme).is_none(), "not a theme colour");
+        // A non-colour theme field cannot be named by accident.
+        assert!(resolve_color("name", &theme).is_none(), "the theme's NAME is not a colour");
+    }
+
+    /// A bad colour costs only itself — `realize` stays total for untrusted input, so the good
+    /// properties on the same node still apply.
+    #[test]
+    fn a_bad_colour_does_not_discard_its_neighbours() {
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop("fill", PropValue::Color("not-a-colour".into()))
+            .prop("radius", PropValue::Float(7.0));
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut HintTargetRegistry::default(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(w.base().style.visual.radius, 7.0, "the good one still applied");
+        assert!(w.base().style.visual.fill.is_none(), "the bad one was dropped, not fatal");
     }
 
     /// **A described `Row` is the interactive widget, not a box.** Click it and its intent fires;
@@ -1208,7 +1388,7 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Label).text("nginx"))
             .child(ViewNode::new(WidgetKind::Badge).text("UP"));
 
-        let mut row = realize(&node, &emit, &mut hints, &mut FormBindings::default());
+        let mut row = realize(&node, &Theme::default(), &emit, &mut hints, &mut FormBindings::default());
         LayoutEngine::new().compute(row.as_mut(), Size::new(400.0, 40.0));
 
         assert_eq!(row.base().children.len(), 2, "it holds its composed content");
@@ -1239,7 +1419,7 @@ mod tests {
         let mut hints = HintTargetRegistry::default();
         let node = ViewNode::new(WidgetKind::Row)
             .child(ViewNode::new(WidgetKind::Label).text("just content"));
-        let row = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let row = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert!(!row.base().focusable);
         assert_eq!(hints.checkpoint(), 0);
         assert_eq!(row.base().children.len(), 1, "it still holds its content");
@@ -1252,7 +1432,7 @@ mod tests {
     fn deferred_kind_is_empty_not_panic() {
         let mut hints = HintTargetRegistry::default();
         let node = ViewNode::new(WidgetKind::Grid);
-        let realized = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(realized.base().children.len(), 0);
         assert_eq!(hints.checkpoint(), 0, "an empty fallback registers no hints");
     }
@@ -1277,7 +1457,7 @@ mod tests {
             .child(option_node("low", "LOW"))
             .child(option_node("high", "HIGH"));
 
-        let select = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let select = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let options = &select.base().children;
         assert_eq!(options.len(), 2, "one option per Choice child");
         assert_eq!(
@@ -1310,7 +1490,7 @@ mod tests {
             .on("change", Intent::new("set_level"))
             .child(option_node("low", "LOW"))
             .child(option_node("high", "HIGH"));
-        let mut select = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let mut select = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
         LayoutEngine::new().compute(select.as_mut(), Size::new(400.0, 300.0));
 
         // Open the dropdown, then click the second option where it actually is (its real bounds).
@@ -1351,7 +1531,7 @@ mod tests {
             .on("change", Intent::new("show_tab"))
             .child(option_node("files", "FILES"))
             .child(option_node("issues", "ISSUES"));
-        let mut tabs = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let mut tabs = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
         LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
         assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
@@ -1372,7 +1552,7 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Choice)
             .prop("value", PropValue::Text("high".into()))
             .text("HIGH");
-        let choice = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let choice = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(choice.base().children.len(), 1, "text desugars to a Label child");
         assert_eq!(choice.text_summary().as_deref(), Some("HIGH"));
     }
@@ -1386,7 +1566,7 @@ mod tests {
             .child(option_node("low", "LOW"))
             .child(ViewNode::new(WidgetKind::Button).text("I am not an option"))
             .child(option_node("high", "HIGH"));
-        let select = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let select = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(
             select.base().children.len(),
             2,
@@ -1410,7 +1590,7 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Item).text("src"))
             .child(ViewNode::new(WidgetKind::Item).text("tests"));
 
-        let mut group = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let mut group = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         // The group applies its expanded state during layout (`remeasure`), like the native widget.
         LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
         assert_eq!(
@@ -1445,7 +1625,7 @@ mod tests {
             .text("EXPLORER")
             .on("toggle", Intent::new("fold_group"))
             .child(ViewNode::new(WidgetKind::Item).text("src"));
-        let mut group = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let mut group = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
         LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
 
         // Click the header (it starts expanded) → it collapses.
@@ -1477,7 +1657,7 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Item).text("pane 1"))
             .child(ViewNode::new(WidgetKind::Item).text("pane 2"));
 
-        let markers = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let markers = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(markers.base().children.len(), 2, "the two realized rows");
         assert_eq!(hints.checkpoint(), 0, "an indicator registers no hint target");
     }
@@ -1543,7 +1723,7 @@ mod tests {
             // Neither → auto-placed.
             .child(ViewNode::new(WidgetKind::Label).text("~/proj"));
 
-        let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let grid = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let children = &grid.base().children;
         assert_eq!(children.len(), 3);
 
@@ -1583,7 +1763,7 @@ mod tests {
                     .prop("justify_self", PropValue::Align(ViewAlign::End)),
             );
 
-        let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let grid = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let style = grid.base().style.layout;
         assert_eq!(style.align, Align::Center, "vertical: the items in their cells");
         assert_eq!(
@@ -1607,7 +1787,7 @@ mod tests {
                     .text("x")
                     .prop("area", PropValue::Text("nope".into())),
             );
-        let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let grid = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
     }
 
@@ -1622,7 +1802,7 @@ mod tests {
             .prop("italic", PropValue::Bool(true))
             .prop("strikethrough", PropValue::Bool(true));
 
-        let label = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let label = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         // Realize hands back a `Box<dyn Component>`, so read the state through the scene: paint it
         // and check the run carries the font attributes and the strike is drawn as a rect.
         use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, TextStyle, Theme};
@@ -1670,7 +1850,7 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Item).text("src"))
             .child(ViewNode::new(WidgetKind::Item).text("tests"));
 
-        let dock = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let dock = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         // The widget's own shape: children[0] = header row [toggle, CONTROLS], children[1] = body.
         let header_controls = &dock.base().children[0].base().children[1];
         assert_eq!(
@@ -1709,7 +1889,7 @@ mod tests {
                     .prop("slot", PropValue::Text("bogus".into())), // unknown → ignored
             );
 
-        let item = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let item = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         // The widget's own shape: [LEADING, LABEL, TRAILING].
         let slots = &item.base().children;
         assert_eq!(slots.len(), 3, "the row keeps its three slots — nothing appended");
@@ -1744,7 +1924,7 @@ mod tests {
             .on("action", Intent::new("rebuild"))
             .on("dismiss", Intent::new("close_toast"));
 
-        let toast = realize(&node, &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let toast = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
         assert!(
             toast.base().children.is_empty(),
             "the Toast draws its own card — it takes no children",
@@ -1855,6 +2035,7 @@ mod tests {
         for &kind in WidgetKind::ALL {
             let mut widget = realize(
                 &sample_node(kind),
+                &Theme::default(),
                 &noop_emitter(),
                 &mut HintTargetRegistry::default(),
                 &mut FormBindings::default(),
@@ -1901,7 +2082,7 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Surface)
             .child(ViewNode::new(WidgetKind::Label).text("a"))
             .child(ViewNode::new(WidgetKind::Label).text("b"));
-        let realized = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(realized.base().children.len(), 2, "surface holds its two content children");
 
         // `Card` prepends a title child, so title + 2 content = 3.
@@ -1909,6 +2090,7 @@ mod tests {
             &ViewNode::new(WidgetKind::Card)
                 .text("Title")
                 .child(ViewNode::new(WidgetKind::Label).text("a")),
+            &Theme::default(),
             &noop_emitter(),
             &mut hints,
             &mut FormBindings::default(),
@@ -1924,6 +2106,7 @@ mod tests {
         let before = hints.checkpoint();
         let _ = realize(
             &ViewNode::new(WidgetKind::Input).on("change", Intent::new("q_changed")),
+            &Theme::default(),
             &noop_emitter(),
             &mut hints,
             &mut FormBindings::default(),
@@ -1934,6 +2117,7 @@ mod tests {
             &ViewNode::new(WidgetKind::Item)
                 .text("Row")
                 .on_press(Intent::new("row_activated")),
+            &Theme::default(),
             &noop_emitter(),
             &mut hints,
             &mut FormBindings::default(),
@@ -1960,7 +2144,7 @@ mod tests {
             )
             // Unnamed → not collected.
             .child(ViewNode::new(WidgetKind::Input).text("ignored"));
-        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+        let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut forms);
 
         let data = forms.collect();
         assert_eq!(data.len(), 2, "only the two named widgets are collected");
@@ -1985,7 +2169,7 @@ mod tests {
             .child(option("low", "Low"))
             .child(option("medium", "Medium"))
             .child(option("high", "High"));
-        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+        let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut forms);
 
         assert_eq!(
             forms.collect().get("priority").and_then(PropValue::as_text),
@@ -2031,7 +2215,7 @@ mod tests {
                             .text("US"),
                     ),
             );
-        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+        let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut forms);
 
         let data = forms.collect();
         assert_eq!(data.len(), 4, "every named field is collected");
@@ -2052,7 +2236,7 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Input)
             .text("term")
             .prop("name", PropValue::Text("name".into()));
-        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+        let _ = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut forms);
 
         let sig = forms.text_signal("name").expect("named input exposes its signal");
         assert_eq!(sig.get_untracked(), "term", "signal reflects the initial value");
@@ -2083,7 +2267,7 @@ mod tests {
             .prop("flex_grow", PropValue::Float(1.0))
             .prop("margin", PropValue::Float(6.0));
 
-        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let l = w.base().style.layout;
         assert_eq!(l.padding, 12.0, "padding — in the original design doc, never implemented");
         assert_eq!(l.width, Length::Px(240.0));
@@ -2099,7 +2283,7 @@ mod tests {
         let mut hints = HintTargetRegistry::default();
         let mut case = |p: PropValue| {
             let node = ViewNode::new(WidgetKind::Surface).prop("width", p);
-            realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default())
+            realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default())
                 .base()
                 .style
                 .layout
@@ -2125,7 +2309,7 @@ mod tests {
             .prop("justify", PropValue::Text("sideways".into()))
             .prop("margin", PropValue::Float(4.0));
 
-        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let l = w.base().style.layout;
         assert_eq!(l.gap, 8.0, "good property survives a bad neighbour");
         assert_eq!(l.margin, 4.0, "and so does one declared after the bad ones");
@@ -2142,7 +2326,7 @@ mod tests {
         let mut hints = HintTargetRegistry::default();
         let node = ViewNode::new(WidgetKind::Scroll).prop("padding", PropValue::Int(4));
 
-        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         let l = w.base().style.layout;
         assert_eq!(l.padding, 4.0, "the property the node did carry");
         assert_eq!(l.min_height, Some(Length::Px(0.0)), "constructor value survives");
@@ -2157,6 +2341,7 @@ mod tests {
         let mut hints = HintTargetRegistry::default();
         let bare = realize(
             &ViewNode::new(WidgetKind::Scroll),
+            &Theme::default(),
             &noop_emitter(),
             &mut hints,
             &mut FormBindings::default(),
@@ -2212,7 +2397,7 @@ mod tests {
             heca_grid_ui::ScrollAxes::Vertical,
             "unknown variant name keeps the default",
         );
-        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(w.base().style.layout.gap, 6.0, "the good property still lands");
     }
 
@@ -2231,6 +2416,7 @@ mod tests {
         let runs = |node: &ViewNode| {
             let mut widget = realize(
                 node,
+                &Theme::default(),
                 &noop_emitter(),
                 &mut HintTargetRegistry::default(),
                 &mut FormBindings::default(),
@@ -2280,6 +2466,7 @@ mod tests {
         let realized_content = || {
             realize(
                 &content,
+                &Theme::default(),
                 &noop_emitter(),
                 &mut HintTargetRegistry::default(),
                 &mut FormBindings::default(),
@@ -2307,6 +2494,7 @@ mod tests {
             }
             paint(realize(
                 &node,
+                &Theme::default(),
                 &noop_emitter(),
                 &mut HintTargetRegistry::default(),
                 &mut FormBindings::default(),
@@ -2360,6 +2548,7 @@ mod tests {
             }
             let mut region = realize(
                 &node,
+                &Theme::default(),
                 &noop_emitter(),
                 &mut HintTargetRegistry::default(),
                 &mut FormBindings::default(),
