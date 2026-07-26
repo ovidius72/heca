@@ -639,6 +639,7 @@ impl Overlay {
     }
 
     /// Set the panel placement (default [`OverlayPosition::Center`]).
+    #[heca_grid_ui_macros::prop]
     pub fn position(mut self, position: OverlayPosition) -> Self {
         self.position = position;
         self
@@ -693,6 +694,7 @@ impl Overlay {
     }
 
     /// Set the initial open state.
+    #[heca_grid_ui_macros::prop]
     pub fn open(self, open: bool) -> Self {
         self.open.set(open);
         self

@@ -157,12 +157,14 @@ impl ContextMenu {
     }
 
     /// Set the initial open state.
+    #[heca_grid_ui_macros::prop]
     pub fn open(self, open: bool) -> Self {
         self.open.set(open);
         self
     }
 
     /// Set the initial anchor (top-left preferred position).
+    #[heca_grid_ui_macros::prop]
     pub fn anchor(self, at: Point) -> Self {
         self.anchor.set(at);
         self

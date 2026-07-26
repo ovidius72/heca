@@ -39,6 +39,7 @@ impl Gauge {
     }
 
     /// Set the initial value (clamped to `0.0..=1.0`).
+    #[heca_grid_ui_macros::prop]
     pub fn value(self, value: f32) -> Self {
         self.value.set(value.clamp(0.0, 1.0));
         self

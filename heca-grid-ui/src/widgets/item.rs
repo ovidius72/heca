@@ -183,6 +183,7 @@ impl Item {
 
     /// Set the active state — the clicked-and-stays current item (tinted bg +
     /// accent label + optional indicator).
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self

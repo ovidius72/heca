@@ -199,6 +199,7 @@ impl Select {
     }
 
     /// Select an initial option (clamped to the option count). Call it **after** the options.
+    #[heca_grid_ui_macros::prop]
     pub fn selected(self, index: usize) -> Self {
         let i = index.min(self.count().saturating_sub(1));
         self.selected.set(i);

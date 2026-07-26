@@ -116,6 +116,7 @@ impl Choice {
     }
 
     /// Set the selected (chosen) state.
+    #[heca_grid_ui_macros::prop]
     pub fn selected(self, selected: bool) -> Self {
         self.selected.set(selected);
         self

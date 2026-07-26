@@ -74,6 +74,7 @@ impl RailCell {
     }
 
     /// Set the active (selected/current) state.
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self

@@ -156,6 +156,7 @@ impl DockFrame {
     }
 
     /// Set the initial expanded state.
+    #[heca_grid_ui_macros::prop]
     pub fn expanded(self, open: bool) -> Self {
         self.expanded.set(open);
         self.chevron.set(chevron_for(open).to_string());
@@ -208,6 +209,7 @@ impl DockFrame {
 
     /// Mark the frame **active** (the current one). An active frame paints a faint
     /// accent wash (`theme.colors.active_wash_alpha`) over itself. Defaults to inactive.
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -221,6 +223,7 @@ impl DockFrame {
 
     /// Mark the frame as the sidebar-nav **cursor** — a hollow accent border,
     /// shown distinctly from the active wash. Defaults to off.
+    #[heca_grid_ui_macros::prop]
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self

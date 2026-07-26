@@ -133,6 +133,7 @@ impl Tabs {
     }
 
     /// Select an initial tab (clamped to the tab count). Call it **after** the tabs.
+    #[heca_grid_ui_macros::prop]
     pub fn selected(self, index: usize) -> Self {
         let i = index.min(self.count().saturating_sub(1));
         self.selected.set(i);

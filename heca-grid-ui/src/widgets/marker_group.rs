@@ -82,6 +82,7 @@ impl MarkerGroup {
     }
 
     /// Set the active state (brightens the bar).
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -94,6 +95,7 @@ impl MarkerGroup {
     }
 
     /// Set the sidebar-nav **cursor** state (full-opacity bar, no active glow).
+    #[heca_grid_ui_macros::prop]
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self

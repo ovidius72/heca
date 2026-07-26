@@ -55,6 +55,7 @@ impl ItemGroup {
     }
 
     /// Set the initial expanded state.
+    #[heca_grid_ui_macros::prop]
     pub fn expanded(self, open: bool) -> Self {
         self.expanded.set(open);
         self.chevron.set(chevron_for(open).to_string());

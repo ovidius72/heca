@@ -39,7 +39,7 @@ const DEFAULT_RAIL: f32 = 48.0;
 /// Display mode of a [`ChromeRegion`]. Read via a signal so children/hosts can
 /// adapt (e.g. a Dock renders its [`DockFrame`](super::DockFrame) icon-only in
 /// the rail); written by the host's toggle action (input parity, P2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum RegionMode {
     /// Full extent — Docks shown normally.
     #[default]
@@ -94,6 +94,7 @@ impl ChromeRegion {
     }
 
     /// Set the initial display mode.
+    #[heca_grid_ui_macros::prop]
     pub fn mode(self, mode: RegionMode) -> Self {
         self.mode.set(mode);
         self

@@ -37,8 +37,9 @@ use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Base, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select,
-    SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
+    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, PropInput, RailCell, ScrollRegion,
+    Select, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track,
+    WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -180,6 +181,49 @@ fn prop_to_json(value: &PropValue) -> Option<serde_json::Value> {
     })
 }
 
+
+/// Feed a node's properties to a widget through its **generated** surface.
+///
+/// This is the whole point of the arrangement: the app names no property here. Which keys a widget
+/// accepts is decided by that widget's own `#[prop]` builders, so a capability added in the library
+/// is reachable from a description the same day, and one that is forgotten fails the drift guard
+/// rather than going quietly missing.
+///
+/// Call it **after** children are attached — properties are order-independent on that condition,
+/// which is what lets a builder that clamps against its children (`Select::selected`) see them.
+fn with_props<W: SetProp>(widget: W, node: &ViewNode) -> W {
+    widget.apply_props(|key| node.props.get(key).and_then(prop_to_input))
+}
+
+/// A [`PropValue`] as the library's neutral scalar. The library never sees the app's model; this
+/// is the one conversion at the boundary.
+///
+/// Enums cross as their **names**, which is how glyphs and colours already travel, so the widget's
+/// own variants are the accepted vocabulary and there is no table of strings on either side.
+fn prop_to_input(value: &PropValue) -> Option<PropInput> {
+    Some(match value {
+        PropValue::Bool(b) => PropInput::Bool(*b),
+        PropValue::Int(i) => PropInput::Number(*i as f64),
+        PropValue::Float(f) => PropInput::Number(*f),
+        PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => {
+            PropInput::Text(t.clone())
+        }
+        PropValue::Size(s) => PropInput::Text(prop_enum_name(s)?),
+        PropValue::Variant(v) => PropInput::Text(prop_enum_name(v)?),
+        PropValue::Align(a) => PropInput::Text(prop_enum_name(a)?),
+        PropValue::List(_) => return None,
+    })
+}
+
+/// The snake_case name serde already gives these enums — reused rather than re-spelled, so the two
+/// paths (the layout merge and the widget surface) cannot disagree about what `"space_between"` is.
+fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
+    match serde_json::to_value(value).ok()? {
+        serde_json::Value::String(s) => Some(s),
+        _ => None,
+    }
+}
+
 /// The per-kind mapping — see [`realize`], which wraps it with the props every node can carry.
 fn realize_kind(
     node: &ViewNode,
@@ -199,19 +243,18 @@ fn realize_kind(
             attach_children(Box::new(Surface::new()), node, emit, hints, forms)
         }
         WidgetKind::Scroll => {
-            attach_children(Box::new(ScrollRegion::new()), node, emit, hints, forms)
+            // `axes` reaches the widget through its own builder, so a declarative region can be
+            // horizontal or two-axis — it was vertical-only for as long as this arm named its
+            // properties by hand.
+            let region = with_props(ScrollRegion::new(), node);
+            attach_children(Box::new(region), node, emit, hints, forms)
         }
 
         // ── Leaves ──
         WidgetKind::Label => {
-            // Weight + slant are font attributes (the shaper picks the glyphs); underline +
-            // strikethrough are decorations the widget draws. Both are plain bools here.
-            let label = Label::new(text_of(node))
-                .bold(bool_prop(node, "bold").unwrap_or(false))
-                .italic(bool_prop(node, "italic").unwrap_or(false))
-                .underline(bool_prop(node, "underline").unwrap_or(false))
-                .strikethrough(bool_prop(node, "strikethrough").unwrap_or(false));
-            Box::new(label)
+            // bold / italic / underline / strikethrough / align / font_size all arrive through
+            // the generated surface — `Label`'s builders decide which, not a list here.
+            Box::new(with_props(Label::new(text_of(node)), node))
         }
         WidgetKind::Button => realize_button(node, emit, hints, forms),
         WidgetKind::Badge => Box::new(Badge::new(text_of(node))),
@@ -230,7 +273,7 @@ fn realize_kind(
             None => Box::new(Flex::empty()),
         },
         WidgetKind::Input => {
-            let mut input = Input::new().value(text_of(node));
+            let mut input = with_props(Input::new().value(text_of(node)), node);
             if let Some(name) = name_prop(node) {
                 let sig = input.text();
                 forms.bind(name.clone(), Box::new(move || PropValue::Text(sig.get_untracked())));
@@ -244,7 +287,7 @@ fn realize_kind(
             Box::new(input)
         }
         WidgetKind::Toggle => {
-            let mut t = Toggle::new().on(bool_prop(node, "on").unwrap_or(false));
+            let mut t = with_props(Toggle::new(), node);
             if let Some(name) = name_prop(node) {
                 let sig = t.state();
                 forms.bind(name, Box::new(move || PropValue::Bool(sig.get_untracked())));
@@ -2069,5 +2112,57 @@ mod tests {
             &mut FormBindings::default(),
         );
         assert_eq!(bare.base().style.layout, ScrollRegion::new().base().style.layout);
+    }
+
+    // ── The generated surface, end to end (F003/P017/T3) ─────────────────────────────────
+    // The two capabilities that started this phase: both existed in the widgets, and neither
+    // could be set from a description while this file named properties by hand.
+
+    /// An input's placeholder. `Input::placeholder` has existed all along and the showcase uses it
+    /// twice, including the command palette — yet a description could not say it.
+    #[test]
+    fn a_description_can_now_set_an_inputs_placeholder() {
+        let node = ViewNode::new(WidgetKind::Input)
+            .text("current")
+            .prop("placeholder", PropValue::Text("type to filter…".into()));
+
+        let input = with_props(Input::new().value(text_of(&node)), &node);
+        assert_eq!(input.placeholder_str(), "type to filter…");
+        assert_eq!(input.value_str(), "current", "the value still lands alongside it");
+    }
+
+    /// A scroll region's axes. `ScrollRegion` has supported both all along — the showcase's own
+    /// root is `.both()` — but every declarative region was vertical, forever.
+    #[test]
+    fn a_description_can_now_ask_for_a_two_axis_scroll_region() {
+        let both = ViewNode::new(WidgetKind::Scroll).prop("axes", PropValue::Text("both".into()));
+        assert_eq!(
+            with_props(ScrollRegion::new(), &both).clone_axes(),
+            heca_grid_ui::ScrollAxes::Both,
+        );
+        assert_eq!(
+            with_props(ScrollRegion::new(), &ViewNode::new(WidgetKind::Scroll)).clone_axes(),
+            heca_grid_ui::ScrollAxes::Vertical,
+            "unset still means the widget's own default",
+        );
+    }
+
+    /// Total for untrusted input: an unknown enum name and a property belonging to a different
+    /// widget both leave the widget alone, and the good property on the same node still lands.
+    #[test]
+    fn the_generated_surface_ignores_what_it_cannot_use() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Scroll)
+            .prop("axes", PropValue::Text("sideways".into()))
+            .prop("placeholder", PropValue::Text("not a scroll property".into()))
+            .prop("gap", PropValue::Int(6));
+
+        assert_eq!(
+            with_props(ScrollRegion::new(), &node).clone_axes(),
+            heca_grid_ui::ScrollAxes::Vertical,
+            "unknown variant name keeps the default",
+        );
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(w.base().style.layout.gap, 6.0, "the good property still lands");
     }
 }

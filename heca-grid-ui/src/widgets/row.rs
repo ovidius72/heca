@@ -116,6 +116,7 @@ impl Row {
     }
 
     /// Set the active (selected) state.
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -136,6 +137,7 @@ impl Row {
     /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
     /// from the filled `active` pill (e.g. the workspaces sidebar highlights the
     /// nav cursor while the real focused pane keeps its pill).
+    #[heca_grid_ui_macros::prop]
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self

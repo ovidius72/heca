@@ -97,6 +97,7 @@ impl Label {
     }
 
     /// Render the label with bold weight.
+    #[heca_grid_ui_macros::prop]
     pub fn bold(self, bold: bool) -> Self {
         self.bold.set(bold);
         self
@@ -111,6 +112,7 @@ impl Label {
 
     /// Render the label slanted — a **synthesized oblique**, not a separate face (see the module
     /// docs): the glyphs are sheared, so the advances (and the monospace grid) are untouched.
+    #[heca_grid_ui_macros::prop]
     pub fn italic(self, italic: bool) -> Self {
         self.italic.set(italic);
         self
@@ -124,6 +126,7 @@ impl Label {
     /// Draw a rule **under** the text. A decoration, not a font attribute: the label paints it as a
     /// rect in its own resolved color, so it tints with the label (including a parent's inherited
     /// content color).
+    #[heca_grid_ui_macros::prop]
     pub fn underline(self, underline: bool) -> Self {
         self.underline.set(underline);
         self
@@ -135,6 +138,7 @@ impl Label {
     }
 
     /// Draw a rule **through** the text (a struck-out / completed item).
+    #[heca_grid_ui_macros::prop]
     pub fn strikethrough(self, strikethrough: bool) -> Self {
         self.strikethrough.set(strikethrough);
         self
