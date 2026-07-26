@@ -892,6 +892,57 @@ content shifted past the edge with no scrollbar to bring it back.
 - **Current scope**: two-axis, nested-region wheel composition. Future: a
   dedicated scrollbar color token and PageUp/PageDown as app actions.
 
+### Using one — the whole surface
+
+**A caller implements nothing.** The wheel, the thumb drag, the click in the track and the
+click-and-hold repeat are all inside the widget. Mount it, give it a size, put children in it:
+
+```rust
+let files = ScrollRegion::new()
+    .both()
+    .height(Length::Px(240.0))
+    .child(rows);
+```
+
+That is a working scroll area. Everything below is optional.
+
+**To watch it**, attach any of three listeners. They only report; none of them makes it scroll:
+
+```rust
+ScrollRegion::new()
+    .both()
+    .height(Length::Px(240.0))
+    .on_scroll_start(|_| status.set("scrolling…"))
+    .on_scroll(|s| gutter.set(s.offset_y / s.max_y))     // every movement — keep it cheap
+    .on_scroll_end(|s| {
+        // `event` is None when OUR OWN `scroll_to` moved it. Reacting to that is how a
+        // "follow the cursor" call ends up fighting the user's wheel.
+        if s.event.is_some() && s.offset_y == s.max_y {
+            load_more_rows();
+        }
+    })
+    .child(rows);
+```
+
+`ScrollInfo` answers everything without asking the region back:
+
+| Field | Is |
+|---|---|
+| `offset_x` / `offset_y` | where it is, in content px (`scrollLeft` / `scrollTop`) |
+| `max_x` / `max_y` | as far as it goes — `offset_y == max_y` is "at the bottom" |
+| `content` | the full size being scrolled (`scrollWidth` / `scrollHeight`) |
+| `viewport` | the visible window (`clientWidth` / `clientHeight`) |
+| `event` | the wheel or press that moved it — **`None` when the host's own `scroll_to` did** |
+
+**When each fires:** `scroll_start` on the first movement, `scroll` on every one, `scroll_end` on the
+release that ends a drag or a held track press. A wheel gesture has no release — nothing tells you
+the user stopped turning it — so its end is a short pause, the same way browsers settle `scrollend`.
+
+**The host's side is one line**, and it is the same line for every widget: deliver the pointer
+events it receives. A container never forwards anything by hand — `dispatch` walks the tree — and a
+host that hands over a subset is caught by `tests/pointer_delivery.rs` and `heca/tests/pointer_funnel.rs`
+rather than by someone eventually noticing a scroll area that doesn't scroll.
+
 **Native.**
 ```rust
 // A two-axis, framed scrollable surface driven from the host.
@@ -909,8 +960,23 @@ grid.scroll_to_x(40.0);   // horizontal
 ```
 
 **Declarative (`ViewNode`).** `WidgetKind::Scroll` realizes to a `ScrollRegion`
-(children attached); axis/style are host-side today (the app builds the styled,
-two-axis region and mounts a realized subtree inside it).
+with its children attached, and **`axes` is a prop** — a described region can be
+horizontal or two-axis, not just vertical:
+
+```rust
+ViewNode::new(WidgetKind::Scroll)
+    .prop("axes", PropValue::Text("both".into()))   // vertical (default) | horizontal | both
+    .prop("width", PropValue::Int(300))
+    .prop("height", PropValue::Int(180))
+    .child(wide_and_tall_content);
+```
+
+The axis name is `ScrollAxes`' own variant, snake_cased, so adding a variant
+extends the accepted vocabulary with no list to update; an **unknown name keeps
+the widget's default** (vertical) rather than failing. `.horizontal()` /
+`.both()` stay host-only — they carry no value, and `axes` is the property form
+of the same setting. **Styling is still host-side**: the app builds the framed
+region and mounts a realized subtree inside it.
 
 > **Real-app integration (sidebar):** selection is container-owned, not widget
 > state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
@@ -1299,16 +1365,14 @@ let name = Input::new().placeholder("CALLSIGN")
     .on_change(|a| { if let SignalData::String(s) = a.data { store(s); } });
 ```
 
-**From a plugin (`ViewNode`).** A plugin never sends an `Edit*` intent itself — it declares an
-`Input`, and the host owns the keyboard model + shortcut resolution above. (See the plugin
-props/events under the `ViewNode` note below.)
-
 **From a plugin (`ViewNode`).** Declare an input in a modal / panel body; the host `realize`s it to
-this widget and owns styling + the whole keyboard model above. Supported props / events:
+this widget and owns styling + the whole keyboard model above — a plugin never sends an `Edit*`
+intent itself, it declares the field and the host resolves the shortcuts. Supported props / events:
 
 | Prop / event | Meaning |
 |---|---|
 | `.text(s)` (`"text"` prop) | initial value |
+| `.prop("placeholder", PropValue::Text("filter…".into()))` | the placeholder shown while the field is empty and unfocused. **Its own key** — `text` is the *value*, so the two are never confused |
 | `.prop("name", PropValue::Text("field".into()))` | opts the field into **form submission** — its live value is returned in `ModalResult::Action.data["field"]` when the overlay is submitted |
 | `.on("change", Intent)` | intent dispatched (with the new text) on every edit |
 
@@ -1318,6 +1382,10 @@ ViewNode::new(WidgetKind::Input)
     .text(current_name)
     .prop("name", PropValue::Text("name".into()))
     .on("change", Intent::new("plugin.rename.changed"));
+
+// An empty filter field that says what to type.
+ViewNode::new(WidgetKind::Input)
+    .prop("placeholder", PropValue::Text("filter containers…".into()));
 ```
 
 ### Tabs
@@ -2983,13 +3051,14 @@ and a bad value costs only itself: the good props on the same node still apply.
 |------|----------------|--------|
 | `Column` / `Row` | (layout only — see above) | — |
 | `Card` | `text` (title) + children | — |
-| `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+| `Surface` / `Panel` | (container — children only) | — |
+| `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
 | `BadgeButton` | `text`, `variant`, `size` | `press` |
 | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
-| `Input` | `text` (value), `name` | `change` |
+| `Input` | `text` (the **value**), `placeholder`, `name` | `change` |
 | `Toggle` | `on` (Bool), `name` | `change` |
 | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 | `Gauge` | `value` (Float) | — |

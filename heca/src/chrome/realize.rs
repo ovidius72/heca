@@ -1236,11 +1236,11 @@ mod tests {
 
         // Open the dropdown, then click the second option where it actually is (its real bounds).
         let trigger = select.base().bounds;
-        select.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(select.as_mut(), &Event::PointerPressed {
             pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
         });
         let high = select.base().children[1].base().bounds;
-        select.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(select.as_mut(), &Event::PointerPressed {
             pos: Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0),
         });
 
@@ -1276,7 +1276,7 @@ mod tests {
         LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
         assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
-        tabs.event(&Event::Widget(WidgetIntent::ItemNext));
+        heca_grid_ui::dispatch(tabs.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
         let fired = fired.borrow();
         let [InteractionIntent::View(intent)] = fired.as_slice() else {
             panic!("expected exactly one View intent, got {fired:?}");
@@ -1371,7 +1371,7 @@ mod tests {
 
         // Click the header (it starts expanded) → it collapses.
         let header = group.base().children[0].base().bounds;
-        group.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(group.as_mut(), &Event::PointerPressed {
             pos: Point::new(header.loc.x + 5.0, header.loc.y + header.size.h / 2.0),
         });
 
@@ -2121,5 +2121,171 @@ mod tests {
         );
         let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(w.base().style.layout.gap, 6.0, "the good property still lands");
+    }
+
+    /// The two tests above read the widget through `with_props`, which is the surface but not the
+    /// path a real description takes. These two go through **`realize` itself** and read the result
+    /// the only way a `Box<dyn Component>` allows — by painting it — so the arm is proven to wire
+    /// the surface, not just the surface proven to exist.
+    ///
+    /// An empty input paints its placeholder, so the text is in the scene when the arm passed it on
+    /// and absent when it did not.
+    #[test]
+    fn a_realized_input_paints_the_placeholder_it_was_given() {
+        use heca_core::layout::Size;
+        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
+
+        let runs = |node: &ViewNode| {
+            let mut widget = realize(
+                node,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            );
+            LayoutEngine::new().compute(widget.as_mut(), Size::new(240.0, 40.0));
+            let theme = Theme::default();
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                widget.paint(&mut cx);
+            }
+            scene
+                .iter()
+                .filter_map(|c| match c {
+                    DrawCommand::Text(t) => Some(t.text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        // No value, so the placeholder is what shows.
+        let with = ViewNode::new(WidgetKind::Input)
+            .prop("placeholder", PropValue::Text("type to filter…".into()));
+        assert!(
+            runs(&with).contains(&"type to filter…".to_string()),
+            "the realized input paints the placeholder it was described with",
+        );
+        assert!(
+            !runs(&ViewNode::new(WidgetKind::Input)).contains(&"type to filter…".to_string()),
+            "and it is the property that put it there, not the widget's own default",
+        );
+    }
+
+    /// A described two-axis region **is** the native one: same widget, same content, same scene.
+    /// The `axes` property is the only difference between the two calls, and it is what makes the
+    /// horizontal bar appear — every declarative region was vertical forever before it.
+    #[test]
+    fn a_realized_two_axis_region_is_the_native_one() {
+        use heca_core::layout::Size;
+        use heca_grid_ui::{LayoutEngine, PaintCx, Parent, Scene, ScrollAxes, Theme};
+
+        // Content wider AND taller than the viewport, so both axes overflow and both bars draw.
+        let content = ViewNode::new(WidgetKind::Column)
+            .prop("width", PropValue::Int(400))
+            .prop("height", PropValue::Int(300))
+            .child(ViewNode::new(WidgetKind::Label).text("content"));
+        let realized_content = || {
+            realize(
+                &content,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            )
+        };
+
+        let paint = |mut widget: Box<dyn Component>| {
+            LayoutEngine::new().compute(widget.as_mut(), Size::new(120.0, 80.0));
+            let theme = Theme::default();
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                widget.paint(&mut cx);
+            }
+            scene.iter().cloned().collect::<Vec<_>>()
+        };
+
+        let described = |axes: Option<&str>| {
+            let mut node = ViewNode::new(WidgetKind::Scroll)
+                .prop("width", PropValue::Int(120))
+                .prop("height", PropValue::Int(80))
+                .child(content.clone());
+            if let Some(axes) = axes {
+                node = node.prop("axes", PropValue::Text(axes.into()));
+            }
+            paint(realize(
+                &node,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            ))
+        };
+
+        let native = |axes: ScrollAxes| {
+            paint(Box::new(
+                ScrollRegion::new()
+                    .axes(axes)
+                    .width(Length::Px(120.0))
+                    .height(Length::Px(80.0))
+                    .child_boxed(realized_content()),
+            ))
+        };
+
+        assert_eq!(described(Some("both")), native(ScrollAxes::Both), "same widget, same scene");
+        assert_eq!(described(None), native(ScrollAxes::Vertical), "unset = the widget's default");
+        assert_ne!(
+            described(Some("both")),
+            described(None),
+            "the property is what adds the second axis (and its bar)",
+        );
+        assert_eq!(
+            described(Some("sideways")),
+            native(ScrollAxes::Vertical),
+            "an unknown axis name keeps the default, through the whole path",
+        );
+    }
+
+    /// And it **scrolls** both ways, not just paints a second bar: a described two-axis region
+    /// consumes a horizontal wheel delta, where a described default region leaves it for the host.
+    /// (The visible behaviour is confirmed in the running app; this pins the routing.)
+    #[test]
+    fn a_realized_two_axis_region_consumes_a_horizontal_wheel() {
+        use heca_core::layout::{Point, Size};
+        use heca_grid_ui::{Event, Handled, LayoutEngine};
+
+        let horizontal_wheel = |axes: Option<&str>| {
+            let mut node = ViewNode::new(WidgetKind::Scroll)
+                .prop("width", PropValue::Int(120))
+                .prop("height", PropValue::Int(80))
+                .child(
+                    ViewNode::new(WidgetKind::Column)
+                        .prop("width", PropValue::Int(400))
+                        .prop("height", PropValue::Int(300))
+                        .child(ViewNode::new(WidgetKind::Label).text("content")),
+                );
+            if let Some(axes) = axes {
+                node = node.prop("axes", PropValue::Text(axes.into()));
+            }
+            let mut region = realize(
+                &node,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            );
+            LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));
+            // The wheel is hover-gated (`Event::Scroll` carries no position), so hover it first.
+            heca_grid_ui::dispatch(region.as_mut(), &Event::PointerMoved { pos: Point::new(60.0, 40.0) });
+            heca_grid_ui::dispatch(region.as_mut(), &Event::Scroll { delta_x: -1.0, delta_y: 0.0 })
+        };
+
+        assert_eq!(
+            horizontal_wheel(Some("both")),
+            Handled::Yes,
+            "a described two-axis region scrolls horizontally",
+        );
+        assert_eq!(
+            horizontal_wheel(None),
+            Handled::No,
+            "a described default region still has no horizontal axis to scroll",
+        );
     }
 }

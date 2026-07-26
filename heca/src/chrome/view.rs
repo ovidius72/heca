@@ -348,12 +348,13 @@ pub type Events = BTreeMap<String, Intent>;
 /// |------|----------------|--------|
 /// | `Column` / `Row` | (layout only — see above) | — |
 /// | `Card` | `text` (title) + children | — |
-/// | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+/// | `Surface` / `Panel` | (container — children only) | — |
+/// | `Scroll` | `axes` (`vertical` \| `horizontal` \| `both`, default vertical) + children | — |
 /// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 /// | `Badge` / `Tag` / `Alert` | `text` | — |
 /// | `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
 /// | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
-/// | `Input` | `text` (value), `name` | `change` |
+/// | `Input` | `text` (the **value**), `placeholder`, `name` | `change` |
 /// | `Toggle` | `on` (Bool), `name` | `change` |
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |
