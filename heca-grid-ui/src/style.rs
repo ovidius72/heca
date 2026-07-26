@@ -376,6 +376,19 @@ pub struct Layout {
     pub padding_x: Option<f32>,
     /// Vertical (top+bottom) padding override; `None` ⇒ use [`padding`](Self::padding).
     pub padding_y: Option<f32>,
+    /// Left padding override; `None` ⇒ use [`padding_x`](Self::padding_x), then
+    /// [`padding`](Self::padding). Mirrors the per-side margins.
+    pub padding_left: Option<f32>,
+    /// Right padding override; `None` ⇒ [`padding_x`](Self::padding_x), then [`padding`](Self::padding).
+    ///
+    /// This is what lets a widget reserve space along one edge without moving the opposite one — a
+    /// [`ScrollRegion`](crate::widgets::ScrollRegion) keeping its content clear of the scrollbar,
+    /// for instance, where padding the whole axis would inset the far side for no reason.
+    pub padding_right: Option<f32>,
+    /// Top padding override; `None` ⇒ [`padding_y`](Self::padding_y), then [`padding`](Self::padding).
+    pub padding_top: Option<f32>,
+    /// Bottom padding override; `None` ⇒ [`padding_y`](Self::padding_y), then [`padding`](Self::padding).
+    pub padding_bottom: Option<f32>,
     /// Horizontal padding as a theme [`Spacing`] token — resolved to px from the font at
     /// layout (sets `padding_x`). `None` ⇒ use the px padding fields.
     pub pad_spacing_x: Option<Spacing>,
@@ -470,6 +483,10 @@ impl Default for Layout {
             padding: 0.0,
             padding_x: None,
             padding_y: None,
+            padding_left: None,
+            padding_right: None,
+            padding_top: None,
+            padding_bottom: None,
             pad_spacing_x: None,
             pad_spacing_y: None,
             gap_spacing: None,
@@ -526,13 +543,14 @@ impl Layout {
                 }
             },
             padding: {
+                // Most specific wins: a side, else its axis, else the uniform value.
                 let px = self.padding_x.unwrap_or(self.padding);
                 let py = self.padding_y.unwrap_or(self.padding);
                 Rect {
-                    left: length(px),
-                    right: length(px),
-                    top: length(py),
-                    bottom: length(py),
+                    left: length(self.padding_left.unwrap_or(px)),
+                    right: length(self.padding_right.unwrap_or(px)),
+                    top: length(self.padding_top.unwrap_or(py)),
+                    bottom: length(self.padding_bottom.unwrap_or(py)),
                 }
             },
             size: Size {

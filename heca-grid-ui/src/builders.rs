@@ -130,6 +130,30 @@ pub trait LayoutExt: Component + Sized {
         s.padding_y = Some(y);
         self
     }
+    /// Inner padding on one side, overriding the axis and the uniform value.
+    ///
+    /// Reserving space along a single edge is not the same as padding the axis: the opposite side
+    /// should not move because this one needed room. A `ScrollRegion` keeping its content clear of
+    /// its scrollbar is the case that asked for it.
+    fn padding_left(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_left = Some(p);
+        self
+    }
+    /// Inner padding on the right only — see [`padding_left`](Self::padding_left).
+    fn padding_right(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_right = Some(p);
+        self
+    }
+    /// Inner padding on the top only — see [`padding_left`](Self::padding_left).
+    fn padding_top(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_top = Some(p);
+        self
+    }
+    /// Inner padding on the bottom only — see [`padding_left`](Self::padding_left).
+    fn padding_bottom(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_bottom = Some(p);
+        self
+    }
     /// Inner padding (both axes) from a theme [`Spacing`](crate::style::Spacing) token —
     /// resolved to px from the font at layout. Prefer this over hand-computed px.
     fn pad_all(mut self, s: crate::style::Spacing) -> Self {
