@@ -1535,7 +1535,7 @@ The agreed behavior for float toggling is:
 - **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
 - **Sidebar shell vs container**: the long-term design separates the sidebar shell from the mounted content container. The current workspace tree should evolve into a built-in `WorkspacesContainer`, not remain the definition of the sidebar itself.
 - **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
-- **Surface compositor (layering)**: on-screen surfaces (background, panes, sidebar, floating panes, overlays/modals, future exposé) form a **tree** whose position defines z-order — no hardcoded levels. One uniform rule (context activation + geometric occlusion) decides what is interactive, starting with the universal KeyHint picker (`prefix+/`). See [`docs/surface-compositor.md`](docs/surface-compositor.md) — the contract for adding any new layer, surface, overlay, or button.
+- **Surface compositor (layering)**: on-screen surfaces (background, panes, sidebar, floating panes, overlays/modals, future exposé) form a **tree** whose position defines z-order — no hardcoded levels. One uniform rule (context activation + geometric occlusion) decides what is interactive, starting with the universal KeyHint picker (`prefix+/`). See the planner (F003/P019) — see the planner (F003/P019) — the contract for adding any new layer, surface, overlay, or button.
 
 ---
 
@@ -1543,7 +1543,7 @@ The agreed behavior for float toggling is:
 
 > **Not yet available.** This describes the *planned* plugin model (target Phase 9)
 > so early adopters can see where it's going. The SDK below does not exist yet.
-> Full guide with detailed examples: **[docs/plugin-authoring.md](docs/plugin-authoring.md)**.
+> Full guide with detailed examples: **[docs/chrome-and-ui.md](docs/chrome-and-ui.md)**.
 
 heca will be extensible via **WASM plugins**. A plugin observes app state, dispatches
 **intents** (never mutating state directly), and contributes UI as a declarative
@@ -1567,7 +1567,7 @@ from nested widgets**: a context menu is a host-owned dropdown the plugin *reque
 declares with `.on_context`), and any plugin widget with an `on_press` intent is
 automatically leader-**hintable**. See the full guide for panel / table / modal-with-form
 examples and the "Context menus & KeyHint" section:
-**[docs/plugin-authoring.md](docs/plugin-authoring.md)**.
+**[docs/chrome-and-ui.md](docs/chrome-and-ui.md)**.
 
 ## Roadmap
 

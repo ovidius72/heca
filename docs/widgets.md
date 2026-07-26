@@ -3,7 +3,7 @@
 The canonical API reference for the **`heca-grid-ui`** component library: every
 foundation type and widget, its properties / methods / events, and runnable
 usage examples. (For the Tron/GridCN visual *vision* and component wishlist see
-[`the-grid-ui.md`](./the-grid-ui.md); this file documents what is **actually
+docs/widgets.md — see docs/widgets.md; this file documents what is **actually
 implemented**.)
 
 `heca-grid-ui` is **GPU-free**: a component tree emits a `Scene` (a display
@@ -250,7 +250,7 @@ distinction here. The declarative boundary just falls on the same line.
 **`Style.visual` — appearance.** `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 A description may **never** set these: it carries semantic intent (a variant, a `size`, a colour
 *name*) and the host resolves the pixels from the `Theme`
-(`pluggable-chrome-plugin-plan.md` §2.6.1 rule C).
+(`chrome-and-ui.md` §2.6.1 rule C).
 
 Why two types rather than a naming convention: `Layout` is serializable and `Visual` is not, so a
 field added to `Visual` is unreachable from a description **by default** and a field added to
@@ -2183,7 +2183,7 @@ ViewNode::new(WidgetKind::RailCell)
 > never creates a `KeyHint`; any plugin widget that exposes an `on_press` intent is
 > auto-hintable ("intent ⇒ hintable"). Likewise a **context menu** is a host-owned
 > dropdown the plugin *requests* (or declares via `.on_context`), not a nested widget.
-> See **[plugin-authoring.md](plugin-authoring.md)** → "Context menus & KeyHint".
+> See **[chrome-and-ui.md](chrome-and-ui.md)** → "Context menus & KeyHint".
 
 A **generic** transparent wrapper that overlays a glowing accent **keycap letter** on any
 actionable child while a host-owned `Signal<Option<String>>` is `Some` — the keyboard pick /
@@ -2850,7 +2850,7 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 > `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }`. On
 > right-click / keyboard-open the host opens the (merged) menu, owns z-order / focus / Esc /
 > click-outside, and returns the chosen entry as an **intent**. See
-> **[plugin-authoring.md](plugin-authoring.md) → "Context menus & KeyHint"**.
+> **[chrome-and-ui.md](chrome-and-ui.md) → "Context menus & KeyHint"**.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
 > `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper

@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-25T21:34:57.080Z
+**Last updated:** 2026-07-26T11:29:06.988Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -97,13 +97,16 @@ Status: 🚫 `blocked`
 - 📋 **74abdac5-8a35-4e5f-a82f-3abb9bb0b738** P008 — plugin-05: Host API actions/overlay/region (0/3 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (4/5 tasks)
-- 🚫 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (12/17 tasks)
+- 🚫 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (13/17 tasks)
 - ✅ **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (8/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
 - ✅ **1df9c36c-5c29-4288-9fe1-7a6e9c72179b** P016 — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (9/9 tasks)
-- 🚧 **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (2/9 tasks)
+- ⏸️ **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (3/9 tasks)
+- 📄 **2219cca3-9ed4-4708-9e4c-bc480faad753** P018 — plugin-10: Keybinding + command-palette integration for contributed actions (0/0 tasks)
+- 📄 **5464ff74-fa17-4412-abaa-95aa19810b33** P019 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/0 tasks)
+- 📄 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P020 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/0 tasks)
 
 ### ⏸️ cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -120,6 +123,8 @@ Status: ⏸️ `deferred`
 - 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** P006 — gridui-07: Crate-review debt (0/9 tasks)
 - 📋 **36628b50-a0b5-4974-852e-96d68c09f11f** P007 — gridui-03: Nerd-Font icon widget (0/4 tasks)
 - 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P008 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
+- 📄 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P009 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/0 tasks)
+- 📄 **029ef1b3-822b-4151-b5b0-b296b042b350** P010 — gridui-09: One border-width control — three paths currently disagree (0/0 tasks)
 
 ### 📋 b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -707,6 +712,18 @@ Dependencies: 68a01ad8-1026-4c09-b516-2e2838723903, 36628b50-a0b5-4974-852e-96d6
 
 **Tasks:** 0/2
 
+### 📄 3ef2f8e6-c79f-47d5-876c-c91ac6f36462 — P009 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch
+
+The drag framework ships but only the left sidebar is a drag surface. Regions and DockFrame have no hooks, so a container cannot be moved between regions.
+
+Status: 📄 `draft`
+
+### 📄 029ef1b3-822b-4151-b5b0-b296b042b350 — P010 — gridui-09: One border-width control — three paths currently disagree
+
+User-reported 2026-06-23: with the global border set to 0, toasts/modals/bracketed panes still show a hairline, and raising it adds no border to a plain Pane.
+
+Status: 📄 `draft`
+
 ### 📋 09bcb3cf-f8ea-454a-913e-ea377c53d37e — P001 — plugin-08: WASM plugin runtime
 
 Runtime WASM per plugin, event bus, contributi alle regioni e action registration.
@@ -789,11 +806,11 @@ Status: 📋 `planned`
 
 ### 🚫 99d19246-1ba9-4720-9895-e70c66acf144 — P011 — plugin-ui: Declarative widget-tree UI model (ViewNode)
 
-The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node holds a vector of child widgets — plus the host mapper that realizes it into the retained heca-grid-ui tree. Gate/consumers: the rich overlay body (plugin-task-15), config-plugin render (plugin-task-21), and the WASM contribution description (plugin-task-26) all build on this. Source: pluggable-chrome-plugin-plan.md §2.6.1–2.6.2.
+The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node holds a vector of child widgets — plus the host mapper that realizes it into the retained heca-grid-ui tree. Gate/consumers: the rich overlay body (plugin-task-15), config-plugin render (plugin-task-21), and the WASM contribution description (plugin-task-26) all build on this. Source: docs/chrome-and-ui.md §2.6.1–2.6.2.
 
 Status: 🚫 `blocked`
 
-**Tasks:** 12/17
+**Tasks:** 13/17
 
 ### ✅ 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
 
@@ -867,13 +884,31 @@ Status: ✅ `done`
 
 **Tasks:** 9/9
 
-### 🚧 4d4aa26b-6245-4c0f-8bdf-64573a7afbf5 — P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining
+### ⏸️ 4d4aa26b-6245-4c0f-8bdf-64573a7afbf5 — P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining
 
 Widgets can do things the ViewNode model cannot say. Close the gaps and remove the hand-written prop list in realize so they cannot come back.
 
-Status: 🚧 `in-progress`
+Status: ⏸️ `deferred`
 
-**Tasks:** 2/9
+**Tasks:** 3/9
+
+### 📄 2219cca3-9ed4-4708-9e4c-bc480faad753 — P018 — plugin-10: Keybinding + command-palette integration for contributed actions
+
+A provider or plugin can register an action, but nothing binds it to a key from config or shows it in the command palette. The plan's Phase 11 half that has no phase.
+
+Status: 📄 `draft`
+
+### 📄 5464ff74-fa17-4412-abaa-95aa19810b33 — P019 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack
+
+The layer registry ships with native content only. Its own comments say the ViewNode path (plugins) and paint/input wiring land later — this is that work.
+
+Status: 📄 `draft`
+
+### 📄 961a2d9f-8fc2-4af7-b302-4cbd1b2493d5 — P020 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract
+
+A Provider describes its content once and the host renders it for the region's mode. Build only when a Provider needs an always-visible status rail.
+
+Status: 📄 `draft`
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P001 — agents-01: Agent status tracking and sounds
 

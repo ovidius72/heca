@@ -2178,7 +2178,7 @@ After user approval, copy this plan into the active backlog/planner source of tr
 
 #### Candidate Files
 
-- `PLAN.md`
+- the planner
 - `BACKLOG.md`
 - `.planner/` extension planner project, if used
 

@@ -608,7 +608,7 @@ has tested, per AGENTS.md).
   - Relations: 6.2.
   - Check: all tests green. **Done 2026-06-22** — `cargo test --workspace`: heca-core 57/57 (the previously env-dependent `terminal_backend_bash_integration…` test now passes after isolating the test shell from the user's `~/.bashrc` — committed on `feature/compositor-05-06-finalize`), heca-grid-ui lib 47/47, heca-renderer 241/241, heca 61/61. The only remaining failure is the pre-existing `heca-grid-ui::toast_action_press_flashes_only_the_action_not_the_whole_card`, which fails on plain `main` too (unrelated to the blur refactor).
 
-- [x] **6.4 Planning docs update** — update `.planning/STATE.md` + `PLAN.md` — mark the blur refactor done; reference this plan file.
+- [x] **6.4 Planning docs update** — update `.planning/STATE.md` + the planner — mark the blur refactor done; reference this plan file.
   - Relations: 6.3.
   - Check: docs updated. **Done 2026-06-22** — Phase 6 tasks + plan status + `BACKLOG.md` compositor note updated; `STATE.md` notes the bash-test fix + clippy/test gates.
 
