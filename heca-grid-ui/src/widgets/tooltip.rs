@@ -21,7 +21,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
-    Base, Component, Event, Handled, PaintCx, paint_child, route_event, soonest_redraw,
+    Base, Component, Event, Handled, PaintCx, paint_child, soonest_redraw,
 };
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
@@ -234,8 +234,10 @@ impl Component for Tooltip {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
-        // Track hover, then route to the child (transparent — never consumes).
+    /// Capture returning `No`: the wrapper is **transparent** — it observes the hover and lets
+    /// everything through, so the wrapped widget stays fully interactive. Capture rather than
+    /// bubble because the clock must start even when the child consumes the move.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if let Event::PointerMoved { pos } = ev {
             let inside = self.base.bounds.contains(*pos);
             if inside != self.hover_since.is_some() {
@@ -244,7 +246,7 @@ impl Component for Tooltip {
                 self.hover_since = inside.then(Instant::now);
             }
         }
-        route_event(&mut self.base.children, ev)
+        Handled::No
     }
 
     fn tick(&mut self, dt: f32) -> bool {

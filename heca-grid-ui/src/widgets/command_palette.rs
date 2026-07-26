@@ -511,12 +511,18 @@ impl Component for CommandPalette {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. While open it grabs the viewport — typing, nav and outside-click dismissal —
+    /// and its command rows are drawn from data, not mounted as children.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even while closed; keep the query field's copy in sync
         // (it needs them for word/line delete). Observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {
             self.modifiers = *m;
-            self.query.borrow_mut().event(ev);
+            crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
             return Handled::No;
         }
         if !self.is_open() {
@@ -553,7 +559,7 @@ impl Component for CommandPalette {
                 // resolves them to a `WidgetIntent` (MenuUp/MenuDown/Activate). Modal capture is
                 // the host's job — do NOT hardcode `Handled::Yes` here.
                 let before = self.query_text();
-                let handled = self.query.borrow_mut().event(ev);
+                let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
                 if self.query_text() != before {
                     self.on_query_changed();
                 }
@@ -585,7 +591,7 @@ impl Component for CommandPalette {
                     let mut q = self.query.borrow_mut();
                     q.base_mut().bounds = query_rect;
                     q.base_mut().font = font;
-                    q.event(ev);
+                    crate::component::dispatch(&mut *q, ev);
                     return Handled::Yes;
                 }
                 let mut ran = false;

@@ -109,9 +109,17 @@ impl Component for ItemGroup {
         self.sync();
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// This widget **watches what its own subtree did**: the header row flips `expanded`, and the
+    /// group reports that as a toggle. That has to happen even when the header consumed the click,
+    /// which is after-the-walk-always — not something either hook expresses. So it owns the walk,
+    /// and `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         let was = self.expanded.get_untracked();
-        // Default routing lets the header Item flip `expanded` on click/Enter.
+        // The header Item flips `expanded` on click/Enter; the controls slot gets first refusal.
         let handled = route_event(&mut self.base.children, ev);
         let now = self.expanded.get_untracked();
         if now != was {

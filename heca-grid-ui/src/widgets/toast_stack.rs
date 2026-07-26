@@ -373,7 +373,9 @@ impl Component for ToastStack {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture: the toasts are not `base.children` — they live in `entries`, reconciled by id — so
+    /// there is no framework walk that could reach them. This is the walk.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.entries.borrow().is_empty() {
             return Handled::No;
         }
@@ -384,7 +386,7 @@ impl Component for ToastStack {
                 let mut entries = self.entries.borrow_mut();
                 for e in entries.iter_mut() {
                     if e.toast.base().bounds.contains(*pos) {
-                        return e.toast.event(ev);
+                        return crate::component::dispatch(&mut e.toast, ev);
                     }
                 }
                 // Missed every toast — let it fall through to the UI behind.
@@ -393,7 +395,7 @@ impl Component for ToastStack {
             Event::PointerMoved { .. } => {
                 let mut entries = self.entries.borrow_mut();
                 for e in entries.iter_mut() {
-                    e.toast.event(ev);
+                    crate::component::dispatch(&mut e.toast, ev);
                 }
                 Handled::No
             }

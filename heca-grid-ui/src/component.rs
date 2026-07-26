@@ -439,9 +439,62 @@ pub trait Component {
         }
     }
 
-    /// Handle an event. Default: route to children, last-added first.
-    fn event(&mut self, ev: &Event) -> Handled {
-        route_event(&mut self.base_mut().children, ev)
+    /// Handle an event **before** this widget's children see it. Default: ignore it.
+    ///
+    /// This is where a widget takes something away from its subtree: a modal swallowing input
+    /// aimed at the page behind it, a control that owns a whole gesture (a scrollbar thumb grab
+    /// beats whatever is under the cursor), or state that must be current before anything below is
+    /// hit-tested. Returning [`Handled::Yes`] stops the walk — the children never see it.
+    ///
+    /// Use it only for those. Anything a widget does with an event its children *declined* belongs
+    /// in [`on_event`](Component::on_event).
+    fn on_event_capture(&mut self, _ev: &Event) -> Handled {
+        Handled::No
+    }
+
+    /// Handle an event this widget's children did not take. Default: ignore it.
+    ///
+    /// **A widget never routes to its children.** [`dispatch`] does that, always, for every event
+    /// — which is the point: forwarding is not a line anyone writes, so it is not a line anyone can
+    /// forget. A container that only cared about presses used to be free to handle the press and
+    /// return, quietly stranding every child that needed the wheel or the release. That is how a
+    /// scroll region ends up mounted, painted, and dead.
+    fn on_event(&mut self, _ev: &Event) -> Handled {
+        Handled::No
+    }
+
+    /// `true` when this widget walks its own children, because its subtree is not a plain tree
+    /// walk. Two widgets do: [`Select`](crate::widgets::Select), whose option rows are *placed*
+    /// children collapsed to zero size while the list is closed, and
+    /// [`Dialog`](crate::widgets::Dialog), which routes through an overlay-aware focus scan.
+    ///
+    /// It is an exception, not a loophole — `tests/pointer_delivery.rs` requires anything claiming
+    /// it to still deliver every pointer kind to its children. Override it with the reason on the
+    /// method, or leave it alone and let [`dispatch`] do the walk.
+    fn routes_own_subtree(&self) -> bool {
+        false
+    }
+
+    /// `true` when this widget wants an enclosing scroll region to **keep it in view**.
+    ///
+    /// The default is keyboard focus, which is what browsers do: focus something off-screen and the
+    /// view comes to it. A widget that is "current" by some other measure — a list's navigation
+    /// cursor, a search hit — overrides this to say so, and then every
+    /// [`ScrollRegion`](crate::widgets::ScrollRegion) it is ever placed inside follows it, with
+    /// nothing wired at the call site.
+    fn wants_visible(&self) -> bool {
+        self.base().focused.get_untracked()
+    }
+
+    /// `true` when this widget **clips** its children to its own bounds, so a press or a move
+    /// outside those bounds must not reach them.
+    ///
+    /// Without it, content scrolled out of a [`ScrollRegion`](crate::widgets::ScrollRegion) stays
+    /// clickable where it *would* have been: its bounds are real, it simply isn't drawn. Paint
+    /// already honours the clip; this is the same rule for input, in the one place that walks the
+    /// tree rather than in each clipping widget's own gate.
+    fn clips_children(&self) -> bool {
+        false
     }
 
     /// Called when this component gains keyboard focus. Default: set the focus
@@ -554,15 +607,76 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
     }
 }
 
-/// Route `ev` to `children` last-added first (top z-order wins), stopping at the
-/// first that consumes it. This is the default [`Component::event`] behavior,
-/// exposed so containers that *wrap* event handling — e.g. detecting a toggle
-/// after delegating to a header (see [`ItemGroup`](crate::widgets::ItemGroup),
-/// [`DockFrame`](crate::widgets::DockFrame)) — reuse it instead of re-rolling the
-/// reverse loop.
+/// Deliver `ev` to `node` and its subtree. **The only child walk in this library.**
+///
+/// Three steps, and a widget takes part by implementing at most two of them:
+///
+/// 1. [`on_event_capture`](Component::on_event_capture) — the widget's chance to take the event
+///    away from its own subtree. `Yes` stops here.
+/// 2. **the children**, last-added first so the top of the z-order wins. No widget writes this.
+/// 3. [`on_event`](Component::on_event) — what the widget does with what nobody below wanted.
+///
+/// Step 2 is the point. It used to live inside each container's `event`, which meant every
+/// container decided, one `match` arm at a time, which kinds of event its children were allowed to
+/// see — and a container that only cared about presses silently stranded any child that needed the
+/// wheel or a release. That is not a mistake anyone makes on purpose; it is what a hand-written
+/// list does over time. Now there is no list.
+pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
+    if node.on_event_capture(ev) == Handled::Yes {
+        return Handled::Yes;
+    }
+    if !node.routes_own_subtree() && !clipped_out(node, ev) {
+        for child in node.base_mut().children.iter_mut().rev() {
+            if dispatch(child.as_mut(), ev) == Handled::Yes {
+                return Handled::Yes;
+            }
+        }
+    }
+    node.on_event(ev)
+}
+
+/// Whether a clipping widget's children should be skipped for this event.
+///
+/// Only presses and moves are positional in the "is it over me" sense. A **release** is
+/// deliberately not gated: a child that grabbed the pointer has to be told the gesture ended,
+/// wherever the cursor drifted to — gating it there is how a drag gets stuck. The wheel is not
+/// gated either; it carries no position and each region decides on its own hover.
+fn clipped_out(node: &dyn Component, ev: &Event) -> bool {
+    if !node.clips_children() {
+        return false;
+    }
+    match ev {
+        Event::PointerPressed { pos } | Event::PointerMoved { pos } => {
+            !node.base().bounds.contains(*pos)
+        }
+        _ => false,
+    }
+}
+
+/// The bounds of the first descendant (or `node` itself) asking to be kept in view, in tree order.
+///
+/// Depth-first so the innermost claim wins: a focused row inside a marked group is the thing to
+/// reveal, not the group.
+pub(crate) fn reveal_target(node: &dyn Component) -> Option<Rectangle> {
+    for child in &node.base().children {
+        if let Some(found) = reveal_target(child.as_ref()) {
+            return Some(found);
+        }
+    }
+    node.wants_visible().then(|| node.base().bounds)
+}
+
+/// [`reveal_target`] over a child list — what a container scans, since it never reveals *itself*.
+pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectangle> {
+    children.iter().find_map(|c| reveal_target(c.as_ref()))
+}
+
+/// Route `ev` to `children` last-added first — the walk [`dispatch`] performs, reachable only by
+/// the two widgets that declare [`routes_own_subtree`](Component::routes_own_subtree) and must
+/// therefore do it themselves.
 pub(crate) fn route_event(children: &mut [Box<dyn Component>], ev: &Event) -> Handled {
     for child in children.iter_mut().rev() {
-        if child.event(ev) == Handled::Yes {
+        if dispatch(child.as_mut(), ev) == Handled::Yes {
             return Handled::Yes;
         }
     }

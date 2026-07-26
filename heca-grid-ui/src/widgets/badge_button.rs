@@ -215,7 +215,10 @@ impl Component for BadgeButton {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.base.visible.get_untracked() || self.base.disabled.get_untracked() {
             return Handled::No;
         }
@@ -277,7 +280,7 @@ mod tests {
             heca_core::layout::Size::new(80.0, 24.0),
         );
         assert_eq!(
-            b.event(&Event::PointerPressed {
+            crate::component::dispatch(&mut b, &Event::PointerPressed {
                 pos: heca_core::layout::Point::new(10.0, 10.0),
             }),
             Handled::Yes

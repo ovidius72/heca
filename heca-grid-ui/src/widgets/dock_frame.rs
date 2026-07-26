@@ -299,6 +299,12 @@ fn chevron_for(open: bool) -> &'static str {
 }
 
 impl Component for DockFrame {
+    /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
+    /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -378,10 +384,17 @@ impl Component for DockFrame {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// This widget **watches what its own subtree did**: the header row flips `expanded`, and the
+    /// group reports that as a toggle. That has to happen even when the header consumed the click,
+    /// which is after-the-walk-always — not something either hook expresses. So it owns the walk,
+    /// and `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         let was = self.expanded.get_untracked();
-        // Default routing lets the header's toggle Item flip `expanded` on
-        // click/Enter (and lets the controls slot consume events first).
+        // The header Item flips `expanded` on click/Enter; the controls slot gets first refusal.
         let handled = route_event(&mut self.base.children, ev);
         let now = self.expanded.get_untracked();
         if now != was {

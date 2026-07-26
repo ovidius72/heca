@@ -721,7 +721,15 @@ impl Component for Select {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. The option rows are **placed children**: collapsed to zero size while the
+    /// list is closed (so they must not be clickable at all) and hit-tested from baked bounds via
+    /// `choice_at` while open — `bounds === drawn === clickable`, which a plain tree walk in
+    /// z-order would break. `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

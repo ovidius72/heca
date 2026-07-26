@@ -813,7 +813,15 @@ impl Component for Overlay {
     /// **Standalone** layer semantics (a composing widget intercepts events
     /// before this runs and applies its own policy — see the module docs):
     /// nested-overlay-first routing, outside-click callback, blocking swallow.
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. A **closed** overlay's panel is still in the tree but must be completely
+    /// inert, and an open one offers input to a nested overlay (a `Select` in the panel) before its
+    /// ordinary children — neither is a plain child walk. `tests/pointer_delivery.rs` holds it to
+    /// delivering every pointer kind to the panel.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
@@ -834,7 +842,7 @@ impl Component for Overlay {
             Event::PointerPressed { pos } => {
                 if panel.contains(*pos) {
                     let panel_root = self.base.children[0].as_mut();
-                    let _ = panel_root.event(ev);
+                    let _ = crate::component::dispatch(panel_root, ev);
                 } else if let Some(f) = &self.on_outside_click {
                     f();
                 }
@@ -842,7 +850,7 @@ impl Component for Overlay {
             }
             Event::PointerMoved { .. } => {
                 let panel_root = self.base.children[0].as_mut();
-                let _ = panel_root.event(ev);
+                let _ = crate::component::dispatch(panel_root, ev);
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
             // A press has to be matched by its RELEASE inside the panel, or a
@@ -851,7 +859,7 @@ impl Component for Overlay {
             // reached it (the overlay swallowed it as an unhandled event).
             Event::PointerReleased { .. } => {
                 let panel_root = self.base.children[0].as_mut();
-                let _ = panel_root.event(ev);
+                let _ = crate::component::dispatch(panel_root, ev);
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
             // The panel gets the wheel FIRST — a scrollable inside a modal (a long
@@ -862,7 +870,7 @@ impl Component for Overlay {
             // is what keeps the page behind a modal from scrolling.
             Event::Scroll { .. } => {
                 let panel_root = self.base.children[0].as_mut();
-                if panel_root.event(ev) == Handled::Yes {
+                if crate::component::dispatch(panel_root, ev) == Handled::Yes {
                     return Handled::Yes;
                 }
                 if self.blocking { Handled::Yes } else { Handled::No }
@@ -893,7 +901,7 @@ mod tests {
         assert!(!o.focusable());
         assert!(!o.overlay_occludes(Point::new(1.0, 1.0)));
         assert_eq!(
-            o.event(&Event::PointerPressed { pos: Point::new(1.0, 1.0) }),
+            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(1.0, 1.0) }),
             Handled::No
         );
     }
@@ -903,11 +911,11 @@ mod tests {
         let mut o = open_overlay();
         assert!(o.overlay_occludes(Point::new(-500.0, -500.0)), "scrim owns every point");
         assert_eq!(
-            o.event(&Event::PointerPressed { pos: Point::new(-500.0, -500.0) }),
+            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(-500.0, -500.0) }),
             Handled::Yes,
             "modal swallows the outside press"
         );
-        assert_eq!(o.event(&Event::Scroll { delta_x: 0.0, delta_y: 1.0 }), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut o, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }), Handled::Yes);
     }
 
     #[test]
@@ -927,7 +935,7 @@ mod tests {
         assert!(o.overlay_occludes(Point::new(110.0, 110.0)), "panel point occludes");
         assert!(!o.overlay_occludes(Point::new(0.0, 0.0)), "outside point does not");
         assert_eq!(
-            o.event(&Event::PointerPressed { pos: Point::new(0.0, 0.0) }),
+            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(0.0, 0.0) }),
             Handled::No,
             "light layer lets the outside press fall through"
         );

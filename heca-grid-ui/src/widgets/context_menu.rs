@@ -464,7 +464,13 @@ impl Component for ContextMenu {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. Its entries are drawn from `MenuEntry` values rather than mounted as
+    /// children, and while open it captures input over its panel.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
@@ -578,14 +584,14 @@ mod tests {
 
         // WidgetIntent::Dismiss (host-resolved from `dismiss`) → dismiss (fires
         // callback, closes), no entry run.
-        m.event(&Event::Widget(WidgetIntent::Dismiss));
+        crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::Dismiss));
         assert_eq!(dismissed.get(), 1, "dismiss fired on_dismiss");
         assert_eq!(ran.get(), 0);
         assert!(!m.is_open(), "closed after dismiss");
 
         // Reopen; a quick-key selection runs the entry and does NOT fire dismiss.
         m.open.set(true);
-        m.event(&Event::Key { key: GridKey::Char('r'), pressed: true });
+        crate::component::dispatch(&mut m, &Event::Key { key: GridKey::Char('r'), pressed: true });
         assert_eq!(ran.get(), 1, "entry ran on quick-key");
         assert_eq!(dismissed.get(), 1, "a selection is not a dismissal");
     }
@@ -611,25 +617,25 @@ mod tests {
         assert_eq!(m.selected, 0, "starts on the first entry");
 
         // Down: skips the disabled middle entry.
-        assert_eq!(m.event(&Event::Widget(WidgetIntent::MenuDown)), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuDown)), Handled::Yes);
         assert_eq!(m.selected, 2, "MenuDown moved past the disabled entry");
 
         // Down again at the end: stays put (no wrap, no panic).
-        m.event(&Event::Widget(WidgetIntent::MenuDown));
+        crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuDown));
         assert_eq!(m.selected, 2, "no wrap past the last enabled entry");
 
         // Up: back to the first, skipping the disabled entry again.
-        assert_eq!(m.event(&Event::Widget(WidgetIntent::MenuUp)), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuUp)), Handled::Yes);
         assert_eq!(m.selected, 0, "MenuUp moved back past the disabled entry");
 
         // Up at the top: stays put.
-        m.event(&Event::Widget(WidgetIntent::MenuUp));
+        crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuUp));
         assert_eq!(m.selected, 0);
 
         // A raw arrow is NOT swallowed: the widget reports it unhandled so the host can resolve
         // it into a `WidgetIntent` and re-deliver. Swallowing it here is what would break nav.
         assert_eq!(
-            m.event(&Event::Key {
+            crate::component::dispatch(&mut m, &Event::Key {
                 key: GridKey::ArrowDown,
                 pressed: true
             }),

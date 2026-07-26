@@ -165,6 +165,12 @@ impl Row {
 }
 
 impl Component for Row {
+    /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
+    /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -325,7 +331,9 @@ impl Component for Row {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }

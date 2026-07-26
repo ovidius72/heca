@@ -197,7 +197,9 @@ impl Component for ScrollBar {
         );
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: a thumb grab is a gesture, and a gesture beats whatever happens to sit
+    /// under the cursor. It also must end on a release the widget receives wherever it lands.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.base.visible.get_untracked() {
             return Handled::No;
         }
@@ -276,13 +278,13 @@ mod tests {
         s.viewport_extent_signal().set(50.0);
         s.base.bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(16.0, 100.0));
         assert_eq!(
-            s.event(&Event::PointerPressed {
+            crate::component::dispatch(&mut s, &Event::PointerPressed {
                 pos: Point::new(8.0, 60.0),
             }),
             Handled::Yes
         );
         assert!(!seen.borrow().is_empty(), "track click emits a new offset");
-        let _ = s.event(&Event::PointerMoved {
+        let _ = crate::component::dispatch(&mut s, &Event::PointerMoved {
             pos: Point::new(8.0, 90.0),
         });
         assert!(seen.borrow().last().copied().unwrap_or_default() > 0.0);

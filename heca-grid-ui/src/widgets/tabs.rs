@@ -288,7 +288,9 @@ impl Component for Tabs {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: the strip is **one Tab stop and one click target**, so a tab is picked
+    /// by `tab_at` here rather than by its `Choice` child consuming the press on its own.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

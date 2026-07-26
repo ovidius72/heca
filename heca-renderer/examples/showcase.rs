@@ -2777,8 +2777,8 @@ impl ApplicationHandler for App {
                     shift: s.shift_key(),
                     meta: s.super_key(),
                 });
-                state.ui.event(&ev);
-                state.overlays.event(&ev);
+                heca_grid_ui::dispatch(&mut state.ui, &ev);
+                heca_grid_ui::dispatch(&mut state.overlays, &ev);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {

@@ -121,12 +121,12 @@ impl Input {
         self.text.set(s);
     }
 
-    /// Set the placeholder shown while empty and unfocused.
     /// The placeholder text as set (empty when unset).
     pub fn placeholder_str(&self) -> &str {
         &self.placeholder
     }
 
+    /// Set the placeholder shown while empty and unfocused.
     #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
         self.placeholder = placeholder.into();
@@ -550,7 +550,9 @@ impl Component for Input {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even when disabled is irrelevant; observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {
             self.mods = *m;
