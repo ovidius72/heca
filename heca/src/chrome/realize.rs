@@ -37,9 +37,9 @@ use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Base, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, PropInput, RailCell, ScrollRegion,
-    Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity,
-    Toggle, Track, WidgetSize,
+    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, PropInput, RailCell,
+    Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs,
+    Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -233,8 +233,23 @@ fn realize_kind(
 ) -> Box<dyn Component> {
     match node.kind {
         // ── Containers (attach realized children) ──
-        WidgetKind::Column => realize_flex(node, Flex::column(), emit, hints, forms),
-        WidgetKind::Row => realize_flex(node, Flex::row(), emit, hints, forms),
+        WidgetKind::VStack => realize_flex(node, Flex::column(), emit, hints, forms),
+        WidgetKind::HStack => realize_flex(node, Flex::row(), emit, hints, forms),
+        // The interactive row — a container that is also a control. `active` / `nav_selected` /
+        // `marker` arrive through the generated surface; the press is wired to BOTH a click and a
+        // hint target, like `Button`, so `prefix+/` reaches it. Without `on_activate` the widget
+        // stays non-focusable and paints no hover, which is the right answer for a row with no
+        // press intent — a described row that nothing can activate should not pretend otherwise.
+        WidgetKind::Row => {
+            let mut row = with_props(GridRow::new(), node);
+            if let Some((id, carrier)) = press_intent(node, hints) {
+                let emit = emit.clone();
+                row = row
+                    .hint_target(id)
+                    .on_activate(move || emit(carrier.clone()));
+            }
+            attach_children(Box::new(row), node, emit, hints, forms)
+        }
         WidgetKind::Card => {
             attach_children(Box::new(Card::new(text_of(node))), node, emit, hints, forms)
         }
@@ -1056,11 +1071,11 @@ mod tests {
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
     /// buttons (Cancel / Delete), each carrying a `"press"` intent.
     fn confirm_tree() -> ViewNode {
-        ViewNode::new(WidgetKind::Column)
+        ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
             .child(
-                ViewNode::new(WidgetKind::Row)
+                ViewNode::new(WidgetKind::HStack)
                     .child(
                         ViewNode::new(WidgetKind::Button)
                             .text("Cancel")
@@ -1128,10 +1143,10 @@ mod tests {
             .prop("variant", PropValue::Variant(ViewVariant::Destructive))
             .on_press(Intent::new("confirm_ok"))
             .child(
-                ViewNode::new(WidgetKind::Column)
+                ViewNode::new(WidgetKind::VStack)
                     .prop("gap", PropValue::Int(4))
                     .child(
-                        ViewNode::new(WidgetKind::Row)
+                        ViewNode::new(WidgetKind::HStack)
                             .child(
                                 ViewNode::new(WidgetKind::Icon)
                                     .prop("icon", PropValue::Glyph("trash".into())),
@@ -1167,6 +1182,67 @@ mod tests {
             2,
             "text + icon props desugar into [Icon, Label] children",
         );
+    }
+
+    /// **A described `Row` is the interactive widget, not a box.** Click it and its intent fires;
+    /// press Enter on it and the same intent fires; it takes one hint target so `prefix+/` reaches
+    /// it; and it holds whatever content it was given.
+    ///
+    /// Before the rename, `WidgetKind::Row` meant `Flex::row()` — a plain box with no focus, no
+    /// hover and no activation — so none of this was reachable from a description at all, and
+    /// `docs/chrome-and-ui.md` shipped an example that assumed otherwise.
+    #[test]
+    fn a_described_row_is_clickable_and_keyboard_activatable() {
+        use heca_grid_ui::{Event, GridKey, LayoutEngine};
+        use heca_core::layout::{Point, Size};
+        use std::cell::RefCell;
+
+        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = fired.clone();
+        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+        let mut hints = HintTargetRegistry::default();
+
+        let node = ViewNode::new(WidgetKind::Row)
+            .prop("active", PropValue::Bool(true))
+            .on_press(Intent::new("docker.select").arg("id", PropValue::Text("web".into())))
+            .child(ViewNode::new(WidgetKind::Label).text("nginx"))
+            .child(ViewNode::new(WidgetKind::Badge).text("UP"));
+
+        let mut row = realize(&node, &emit, &mut hints, &mut FormBindings::default());
+        LayoutEngine::new().compute(row.as_mut(), Size::new(400.0, 40.0));
+
+        assert_eq!(row.base().children.len(), 2, "it holds its composed content");
+        assert!(row.base().focusable, "an actionable row is focusable");
+        assert_eq!(hints.checkpoint(), 1, "one hint target: the row itself");
+
+        let b = row.base().bounds;
+        heca_grid_ui::dispatch(row.as_mut(), &Event::PointerPressed {
+            pos: Point::new(b.loc.x + 5.0, b.loc.y + b.size.h / 2.0),
+        });
+        heca_grid_ui::dispatch(row.as_mut(), &Event::Key { key: GridKey::Enter, pressed: true });
+
+        let fired = fired.borrow();
+        assert_eq!(fired.len(), 2, "a click and an Enter each fire it: {fired:?}");
+        for carrier in fired.iter() {
+            let InteractionIntent::View(intent) = carrier else {
+                panic!("expected a View intent, got {carrier:?}");
+            };
+            assert_eq!(intent.action, "docker.select");
+            assert_eq!(intent.args.get("id"), Some(&PropValue::Text("web".into())));
+        }
+    }
+
+    /// A `Row` with no press intent stays inert — not focusable, no hint target. A described row
+    /// that nothing can activate should not pretend to be a control.
+    #[test]
+    fn a_described_row_without_a_press_intent_is_inert() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Row)
+            .child(ViewNode::new(WidgetKind::Label).text("just content"));
+        let row = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert!(!row.base().focusable);
+        assert_eq!(hints.checkpoint(), 0);
+        assert_eq!(row.base().children.len(), 1, "it still holds its content");
     }
 
     /// A still-deferred structured kind (needs track/slot model support — `Grid`, `choice-6`)
@@ -1694,8 +1770,8 @@ mod tests {
         let node = ViewNode::new(kind);
         match kind {
             // Containers: give them a child, which a correct arm attaches.
-            WidgetKind::Column
-            | WidgetKind::Row
+            WidgetKind::VStack
+            | WidgetKind::HStack
             | WidgetKind::Card
             | WidgetKind::Scroll
             | WidgetKind::Panel
@@ -1714,6 +1790,13 @@ mod tests {
                     .text("A"),
             ),
             WidgetKind::Choice => node.prop("value", PropValue::Text("a".into())).text("A"),
+
+            // The interactive row: a container that is also a control, so it needs both a child
+            // and a press intent — without the intent it is deliberately inert (no focus, no
+            // hover), which would read as "realized to nothing" here.
+            WidgetKind::Row => node
+                .child(ViewNode::new(WidgetKind::Label).text("row"))
+                .on_press(Intent::new("noop")),
 
             // A slotted row: the label is a prop, the slots are children.
             WidgetKind::Item => node.text("row").child(
@@ -1864,7 +1947,7 @@ mod tests {
     fn named_value_widgets_are_collected() {
         let mut hints = HintTargetRegistry::default();
         let mut forms = FormBindings::default();
-        let node = ViewNode::new(WidgetKind::Column)
+        let node = ViewNode::new(WidgetKind::VStack)
             .child(
                 ViewNode::new(WidgetKind::Input)
                     .text("hello")
@@ -1917,7 +2000,7 @@ mod tests {
     fn rich_modal_body_marshals_every_named_field() {
         let mut hints = HintTargetRegistry::default();
         let mut forms = FormBindings::default();
-        let node = ViewNode::new(WidgetKind::Column)
+        let node = ViewNode::new(WidgetKind::VStack)
             .child(
                 ViewNode::new(WidgetKind::Input)
                     .text("nginx")
@@ -1993,7 +2076,7 @@ mod tests {
     #[test]
     fn layout_properties_never_named_in_realize_still_reach_the_widget() {
         let mut hints = HintTargetRegistry::default();
-        let node = ViewNode::new(WidgetKind::Column)
+        let node = ViewNode::new(WidgetKind::VStack)
             .prop("padding", PropValue::Int(12))
             .prop("width", PropValue::Int(240))
             .prop("justify", PropValue::Text("space_between".into()))
@@ -2034,7 +2117,7 @@ mod tests {
     #[test]
     fn a_bad_property_never_takes_the_good_ones_with_it() {
         let mut hints = HintTargetRegistry::default();
-        let node = ViewNode::new(WidgetKind::Column)
+        let node = ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .prop("padding", PropValue::Text("not a number".into()))
             .prop("width", PropValue::Text("50 furlongs".into()))
@@ -2190,7 +2273,7 @@ mod tests {
         use heca_grid_ui::{LayoutEngine, PaintCx, Parent, Scene, ScrollAxes, Theme};
 
         // Content wider AND taller than the viewport, so both axes overflow and both bars draw.
-        let content = ViewNode::new(WidgetKind::Column)
+        let content = ViewNode::new(WidgetKind::VStack)
             .prop("width", PropValue::Int(400))
             .prop("height", PropValue::Int(300))
             .child(ViewNode::new(WidgetKind::Label).text("content"));
@@ -2267,7 +2350,7 @@ mod tests {
                 .prop("width", PropValue::Int(120))
                 .prop("height", PropValue::Int(80))
                 .child(
-                    ViewNode::new(WidgetKind::Column)
+                    ViewNode::new(WidgetKind::VStack)
                         .prop("width", PropValue::Int(400))
                         .prop("height", PropValue::Int(300))
                         .child(ViewNode::new(WidgetKind::Label).text("content")),

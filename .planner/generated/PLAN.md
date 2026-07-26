@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-26T21:50:15.249Z
+**Last updated:** 2026-07-26T22:34:54.183Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -103,7 +103,7 @@ Status: 🚫 `blocked`
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
 - ✅ **1df9c36c-5c29-4288-9fe1-7a6e9c72179b** P016 — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (9/9 tasks)
-- 🚧 **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (4/9 tasks)
+- 🚧 **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (5/9 tasks)
 - 📋 **2219cca3-9ed4-4708-9e4c-bc480faad753** P018 — plugin-10: Keybinding + command-palette integration for contributed actions (0/5 tasks)
 - 📋 **5464ff74-fa17-4412-abaa-95aa19810b33** P019 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P020 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
@@ -903,7 +903,7 @@ Widgets can do things the ViewNode model cannot say. Close the gaps and remove t
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 4/9
+**Tasks:** 5/9
 
 ### 📋 2219cca3-9ed4-4708-9e4c-bc480faad753 — P018 — plugin-10: Keybinding + command-palette integration for contributed actions
 

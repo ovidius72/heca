@@ -112,7 +112,7 @@ boxed setter — `Dialog::body_boxed(Box<dyn Component>)` is the precedent; new 
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::HStack)
         .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
         .child(ViewNode::new(WidgetKind::Label).text("Delete")))
 ```
@@ -170,5 +170,5 @@ These are *not* settled, and are the live design work — everything above is.
 ~~`realize` coverage~~ — **done.** Every kind maps to a live widget, guarded by a test.
 ~~Composing the leaf widgets~~ — **done** (F003/P015, F003/P016).
 
-- **Typed builder SDK** over `ViewNode` (`Column::new().gap(8).child(…)`) — **F003/P011/T006**,
+- **Typed builder SDK** over `ViewNode` (`VStack::new().gap(8).child(…)`) — **F003/P011/T006**,
   waiting on **F003/P017**.

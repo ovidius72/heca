@@ -228,19 +228,33 @@ composing is the model:
 
 ```rust
 Scroll::new().axes(ScrollAxes::Both).child(
-    Column::new().gap(6)
-        .child(Row::new().gap(12)
+    VStack::new().gap(6)
+        // A plain box for the header — it is not clickable.
+        .child(HStack::new().gap(12)
             .child(Label::new("Name"))
             .child(Label::new("Status"))
             .child(Label::new("CPU")))
         .child(Separator::horizontal())
-        .child(rows))
+        // Each body row IS clickable and selectable, so it is a `Row`.
+        .child(Row::new().gap(12)
+            .active(selected == id)
+            .on_press(intent("plugin.docker.select", { "id": id }))
+            .child(Label::new(name))
+            .child(Badge::new(status))
+            .child(Label::new(cpu))))
 ```
 
-The rule between the header and the body is a real widget, so it takes its colour and thickness
-from the theme. It reached the description vocabulary in F003/P017/T5; until then this example could
-not be written as a description at all, and a plugin had to fake the line with a thin sized
-`Surface` that hardcoded both.
+Two things in this example only became writable as a description recently, and both were wrong here
+for a while:
+
+- **The rule** between the header and the body is a real widget, so it takes its colour and
+  thickness from the theme. It reached the vocabulary in F003/P017/T5; before that a plugin had to
+  fake the line with a thin sized `Surface` that hardcoded both.
+- **The clickable row.** `Row` used to name the plain horizontal box, so this example described
+  behaviour — press, selection, hover — against a kind that had none of it, and no reader could
+  tell. F003/P017/T6 renamed the boxes to `VStack` / `HStack` and gave `Row` to the interactive
+  widget it always meant in `heca-grid-ui`. A `Row` with a press intent is focusable, activates on
+  click and on Enter/Space, and is reachable by `prefix+/` like any other actionable node.
 
 ### A modal with a form
 
@@ -625,7 +639,7 @@ struct ViewNode {
 }
 ```
 
-Containers (`Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`, and the modal `body` in
+Containers (`VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`, and the modal `body` in
 §2.7.1) carry `children`; leaves don't. A typed, SwiftUI-like **builder SDK** sits
 on top for ergonomics and emits this uniform node (just as Flutter's typed
 `Widget` classes lower to `Element`/`RenderObject`):

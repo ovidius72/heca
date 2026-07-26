@@ -29,7 +29,18 @@ use std::collections::BTreeMap;
 #[serde(rename_all = "snake_case")]
 pub enum WidgetKind {
     // ── Containers ──
-    Column,
+    /// A vertical box. Plain arrangement — no focus, no hover, no activation.
+    VStack,
+    /// A horizontal box. Plain arrangement — see [`Row`](WidgetKind::Row) for the interactive one.
+    HStack,
+    /// A **clickable, selectable** container for arbitrary content: hover tint, active state with
+    /// a marker, press flash, focus ring, activation by mouse and by Enter/Space.
+    ///
+    /// This is `heca_grid_ui::Row`. The name used to belong to the plain horizontal box, which is
+    /// now [`HStack`](WidgetKind::HStack) — so the library's `Row` and this one finally mean the
+    /// same thing. Before that rename the interactive row had no declarative spelling at all, and
+    /// `docs/chrome-and-ui.md` shipped an example writing this widget's behaviour against the box
+    /// that cannot do it.
     Row,
     Grid,
     Card,
@@ -80,7 +91,8 @@ impl WidgetKind {
     /// rendering an empty container. Keep it in sync with the enum — [`ordinal`](Self::ordinal)
     /// makes that mechanical rather than a matter of discipline (see its docs).
     pub const ALL: &'static [WidgetKind] = &[
-        WidgetKind::Column,
+        WidgetKind::VStack,
+        WidgetKind::HStack,
         WidgetKind::Row,
         WidgetKind::Grid,
         WidgetKind::Card,
@@ -122,37 +134,38 @@ impl WidgetKind {
     /// guard is only as good as the list it walks.
     fn ordinal(self) -> usize {
         match self {
-            WidgetKind::Column => 0,
-            WidgetKind::Row => 1,
-            WidgetKind::Grid => 2,
-            WidgetKind::Card => 3,
-            WidgetKind::Scroll => 4,
-            WidgetKind::Panel => 5,
-            WidgetKind::Surface => 6,
-            WidgetKind::ItemGroup => 7,
-            WidgetKind::DockFrame => 8,
-            WidgetKind::MarkerGroup => 9,
-            WidgetKind::Tabs => 10,
-            WidgetKind::Choice => 11,
-            WidgetKind::Label => 12,
-            WidgetKind::Button => 13,
-            WidgetKind::IconButton => 14,
-            WidgetKind::Badge => 15,
-            WidgetKind::BadgeButton => 16,
-            WidgetKind::Tag => 17,
-            WidgetKind::Icon => 18,
-            WidgetKind::Input => 19,
-            WidgetKind::Select => 20,
-            WidgetKind::Toggle => 21,
-            WidgetKind::Checkbox => 22,
-            WidgetKind::StatusDot => 23,
-            WidgetKind::Gauge => 24,
-            WidgetKind::ScrollBar => 25,
-            WidgetKind::Alert => 26,
-            WidgetKind::Toast => 27,
-            WidgetKind::RailCell => 28,
-            WidgetKind::Item => 29,
-            WidgetKind::Separator => 30,
+            WidgetKind::VStack => 0,
+            WidgetKind::HStack => 1,
+            WidgetKind::Row => 2,
+            WidgetKind::Grid => 3,
+            WidgetKind::Card => 4,
+            WidgetKind::Scroll => 5,
+            WidgetKind::Panel => 6,
+            WidgetKind::Surface => 7,
+            WidgetKind::ItemGroup => 8,
+            WidgetKind::DockFrame => 9,
+            WidgetKind::MarkerGroup => 10,
+            WidgetKind::Tabs => 11,
+            WidgetKind::Choice => 12,
+            WidgetKind::Label => 13,
+            WidgetKind::Button => 14,
+            WidgetKind::IconButton => 15,
+            WidgetKind::Badge => 16,
+            WidgetKind::BadgeButton => 17,
+            WidgetKind::Tag => 18,
+            WidgetKind::Icon => 19,
+            WidgetKind::Input => 20,
+            WidgetKind::Select => 21,
+            WidgetKind::Toggle => 22,
+            WidgetKind::Checkbox => 23,
+            WidgetKind::StatusDot => 24,
+            WidgetKind::Gauge => 25,
+            WidgetKind::ScrollBar => 26,
+            WidgetKind::Alert => 27,
+            WidgetKind::Toast => 28,
+            WidgetKind::RailCell => 29,
+            WidgetKind::Item => 30,
+            WidgetKind::Separator => 31,
         }
     }
 }
@@ -296,7 +309,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// one, `.children([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().children([a,b])`.
 ///
 /// ```ignore
-/// ViewNode::new(WidgetKind::Column)
+/// ViewNode::new(WidgetKind::VStack)
 ///     .prop("gap", PropValue::Int(8))                       // ← the COLUMN's prop
 ///     .child(ViewNode::new(WidgetKind::Label).text("New name"))
 ///     .child(
@@ -498,11 +511,11 @@ mod tests {
 
     /// A small confirm-dialog-shaped tree: a column with a message + two action buttons.
     fn confirm_tree() -> ViewNode {
-        ViewNode::new(WidgetKind::Column)
+        ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
             .child(
-                ViewNode::new(WidgetKind::Row)
+                ViewNode::new(WidgetKind::HStack)
                     .child(
                         ViewNode::new(WidgetKind::Button)
                             .text("Cancel")
@@ -561,7 +574,7 @@ mod tests {
         let back: ViewNode = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(tree, back, "ViewNode must round-trip through JSON (WASM boundary)");
         // Spot-check the shape survived.
-        assert_eq!(back.kind, WidgetKind::Column);
+        assert_eq!(back.kind, WidgetKind::VStack);
         assert_eq!(back.children.len(), 2);
         assert!(back.children[1].children[1].is_actionable());
     }

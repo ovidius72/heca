@@ -1,16 +1,16 @@
 {
-  "updatedAt": "2026-07-26T21:50:15.248Z",
+  "updatedAt": "2026-07-26T22:34:54.182Z",
   "currentPhaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
   "inProgressTaskIds": [
-    "eea3a791-01d6-4ce1-a335-17e3622fae7f"
+    "6e2a7db7-0092-471a-9db3-ff1fbb685152"
   ],
   "nextSteps": [
-    "Continue with plugin-03: Built-in provider system and WorkspacesContainer migration"
+    "F003/P017/T6 + T7, together — both decided with the user 2026-07-27, and both touch view.rs, realize.rs and the same documents. T6: WidgetKind::Row -> HStack, Column -> VStack, and the freed name Row goes to the real interactive widget. T7: the whole of Visual becomes overridable, theme as the default."
   ],
   "blockers": [
     "126d0855-658d-471f-86a6-27eb144fc591: ScrollRegion keyboard-scroll actions (prefix+Home/End/PgUp/PgDown; horizontal trigger TBD)"
   ],
-  "notes": "Planner synchronized with BACKLOG.md. plugin-01 and plugin-02 now marked done. plugin-03 in progress.",
-  "lastSessionSummary": "Synced planner with origin/main backlog. Updated feature/phase statuses for pluggable chrome and compositor frost.",
+  "notes": "plugin-03 (F003/P004) is DONE — the phase and all six tasks, and the code backs it: heca/src/providers/workspaces.rs exists and WorkspacesContainerProvider is registered at heca/src/app/startup.rs:333. This file said otherwise until 2026-07-27: the nextSteps string was written during a BACKLOG.md sync and never updated, so every /planner load recap repeated it. Task operations refresh updatedAt but leave nextSteps and notes untouched — they are free text, so a session that changes direction has to correct them by hand.",
+  "lastSessionSummary": "F003/P010/T6 (an action declares the arguments it takes) and F003/P017/T5 (Separator joins the vocabulary) both shipped on branch feat/action-arg-declaration. P017's T6 and T7 unblocked: the Row naming and the appearance scope were decided with the user.",
   "guardBypassUntil": "2026-07-26T21:31:25.036Z"
 }

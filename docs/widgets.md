@@ -1242,8 +1242,8 @@ Button::empty()
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Column).prop("gap", PropValue::Int(4))
-        .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::VStack).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetKind::HStack)
             .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
             .child(ViewNode::new(WidgetKind::Label).text("Delete")))
         .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
@@ -1329,8 +1329,8 @@ ViewNode::new(WidgetKind::Button)
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Column).prop("gap", PropValue::Int(4))
-        .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::VStack).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetKind::HStack)
             .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
             .child(ViewNode::new(WidgetKind::Label).text("Delete")))
         .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
@@ -1842,10 +1842,29 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
   background under the selection overlay.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
-- **Accessors**: `.state() -> Signal<bool>` (active).
 - **Attention**: when the host sets the bound `attention` signal `true`, the row flashes a few
   times (see [`Attention`](#attention)) and consumes the signal. The host plays any **sound** —
   the library is audio-free.
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Row)
+    .prop("active", PropValue::Bool(selected))
+    .on_press(Intent::new("docker.select").arg("id", PropValue::Text(id)))
+    .child(ViewNode::new(WidgetKind::Label).text(name))
+    .child(ViewNode::new(WidgetKind::Badge).text(status));
+```
+
+Props `realize` reads: `active`, `nav_selected`, `marker`. Events: `press` — wired to a click, to
+Enter/Space, **and** to a KeyHint target, so `prefix+/` reaches the row like any other actionable
+node. With no `press` intent the row is deliberately inert: not focusable, no hover — a described
+row that nothing can activate should not look like a control.
+
+> **`Row` is not `HStack`.** Until F003/P017/T6, `WidgetKind::Row` meant the plain horizontal box
+> and this widget had no declarative spelling at all. The boxes are now `HStack` / `VStack`, and
+> `Row` means the same thing in the model as it does in `heca-grid-ui`. `.highlight(Color)` and
+> `.attention_color(Color)` are still host-only; they become props with F003/P017/T7.
 
 ```rust
 let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radius())
@@ -2877,7 +2896,7 @@ open_modal(
     state,
     ModalSpec {
         title: "Rename pane".into(),
-        body: ViewNode::new(WidgetKind::Column)
+        body: ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .child(ViewNode::new(WidgetKind::Label).text("New name"))
             .child(
@@ -3090,7 +3109,7 @@ is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic nati
 
 | Part | What it is |
 |------|-----------|
-| `kind` | which widget (`WidgetKind`: `Column`/`Row`/`Label`/`Button`/`Input`/…) |
+| `kind` | which widget (`WidgetKind`: `VStack`/`HStack`/`Row`/`Label`/`Button`/`Input`/…) |
 | `props` | this node's **own** values (`name → PropValue`) — **per node, not inherited** |
 | `events` | this node's **own** `event → Intent` bindings (`press` / `change`) — an action **id**, never a closure (keeps it serializable) |
 | `children` | a **`Vec<ViewNode>`**, each a full node with its *own* props/events/children |
@@ -3116,7 +3135,7 @@ from a description by construction rather than by a rule someone has to enforce.
 Values read the way you would write them:
 
 ```rust
-ViewNode::new(WidgetKind::Column)
+ViewNode::new(WidgetKind::VStack)
     .prop("padding", PropValue::Int(12))                     // px
     .prop("width",   PropValue::Text("50%".into()))          // "auto" | 240 | "50%"
     .prop("justify", PropValue::Text("space_between".into())) // enums by name, snake_case
@@ -3171,7 +3190,8 @@ and a bad value costs only itself: the good props on the same node still apply.
 
 | Kind | Props it reads | Events |
 |------|----------------|--------|
-| `Column` / `Row` | (layout only — see above) | — |
+| `VStack` / `HStack` | (layout only — see above) — the plain boxes | — |
+| `Row` | `active`, `nav_selected`, `marker` (`bar` \| `check` \| `none`) + children | `press` |
 | `Card` | `text` (title) + children | — |
 | `Surface` / `Panel` | (container — children only) | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
@@ -3281,7 +3301,7 @@ that is **not** a `Choice` is ignored rather than realized into a broken option.
 
 ```rust
 // A labelled input + a primary button. Each node carries ITS OWN props/events.
-ViewNode::new(WidgetKind::Column)
+ViewNode::new(WidgetKind::VStack)
     .prop("gap", PropValue::Int(8))                                  // ← the COLUMN's prop
     .child(ViewNode::new(WidgetKind::Label).text("New name"))
     .child(
