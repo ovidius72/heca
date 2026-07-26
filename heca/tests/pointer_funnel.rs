@@ -80,6 +80,18 @@ fn the_chrome_tree_gets_the_release_and_the_wheel_too() {
              welded to the cursor otherwise",
         ),
         (
+            "WindowEvent::MouseInput",
+            "dispatch_pane_header_release",
+            "the pane headers were the last seam missing a kind — the first widget mounted there \
+             with a gesture would have been broken on arrival",
+        ),
+        (
+            "WindowEvent::MouseWheel",
+            "dispatch_pane_header_wheel",
+            "nothing in a header scrolls yet, and \"nothing needs it yet\" is the reasoning that \
+             produced every other missing kind",
+        ),
+        (
             "WindowEvent::MouseWheel",
             "chrome_dispatch_wheel",
             "a scroll region in the sidebar scrolls on the wheel, and the terminal must not also \

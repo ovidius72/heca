@@ -1267,6 +1267,38 @@ pub(crate) fn dispatch_pane_header_move(
     over
 }
 
+/// Feed a pointer release into the retained pane headers, so a gesture that started on one can end.
+///
+/// The header seam had a press and a move and no release — the last of the four surfaces to be
+/// missing a kind. Nothing there grabs the pointer *today*, which is exactly why it went unnoticed:
+/// the first widget mounted here that does would have been broken on arrival, the same way a scroll
+/// region was in three other places. Not hit-tested, deliberately: a release ends the gesture
+/// wherever the cursor drifted to.
+pub(crate) fn dispatch_pane_header_release(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    for header in state.pane_headers.values_mut() {
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerReleased { pos: point });
+    }
+}
+
+/// Feed the wheel into the retained pane headers. Returns `true` when one consumed it.
+///
+/// Nothing in a header scrolls today. It is wired anyway, because "no widget here needs it yet" is
+/// the reasoning that produced every other missing kind.
+pub(crate) fn dispatch_pane_header_wheel(
+    state: &mut crate::app_state::AppState,
+    ev: &Event,
+) -> bool {
+    let mut handled = false;
+    for header in state.pane_headers.values_mut() {
+        handled |= heca_grid_ui::dispatch(&mut header.root, ev) == heca_grid_ui::Handled::Yes;
+    }
+    handled
+}
+
 /// Feed a pointer press into the retained terminal viewport widgets. Returns
 /// `true` when any widget consumed the press (badge click or scrollbar drag).
 pub(crate) fn dispatch_pane_viewport_press(

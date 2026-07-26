@@ -309,6 +309,7 @@ pub(crate) fn handle_window_event(
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
                 // release on position is precisely how a thumb ends up welded to the cursor.
                 crate::chrome::chrome_dispatch_release(state, state.mouse.pos);
+                crate::chrome::dispatch_pane_header_release(state, state.mouse.pos);
                 if crate::chrome::dispatch_pane_viewport_release(state, state.mouse.pos) {
                     mouse::update_cursor(state, state.mouse.pos);
                     state.mark_full_redraw();
@@ -355,7 +356,9 @@ pub(crate) fn handle_window_event(
             // The retained chrome tree next: a hovered scroll region in the sidebar takes it, and
             // the terminal must not also scroll. A region gates on its own hover, so this is a
             // no-op whenever the pointer is over a pane.
-            if crate::chrome::chrome_dispatch_wheel(state, &wheel) {
+            if crate::chrome::chrome_dispatch_wheel(state, &wheel)
+                || crate::chrome::dispatch_pane_header_wheel(state, &wheel)
+            {
                 state.mark_full_redraw();
                 return;
             }
