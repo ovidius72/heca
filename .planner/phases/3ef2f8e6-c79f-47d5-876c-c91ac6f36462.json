@@ -4,7 +4,7 @@
   "number": 9,
   "slug": "gridui-08-drag-a-container-between-chrome-regions-dnd-hooks-the-plugin-escape-hatch",
   "title": "gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch",
-  "status": "draft",
+  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -20,8 +20,195 @@
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [],
-  "taskIds": [],
-  "tasks": [],
+  "taskIds": [
+    "1203fec7-aa63-4369-b1de-e02986482f1d",
+    "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
+    "87175753-f899-4090-9acb-28a48d93457a",
+    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
+    "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300"
+  ],
+  "tasks": [
+    {
+      "id": "1203fec7-aa63-4369-b1de-e02986482f1d",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 1,
+      "shortName": "region-drag-surfaces",
+      "title": "Add region drag surfaces — additively",
+      "status": "planned",
+      "description": "`DragSurfaceId` has exactly one variant, `LeftSidebar`. Add right sidebar, top bar and bottom bar. ADDITIVE ONLY: never modify or re-type an existing drag type, never remove or rename a variant. The app constructs these and matches exhaustively, so adding is free and the compiler simply asks for new arms.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "region-drag-surfaces-c1",
+          "title": "New surface variants added additively",
+          "checked": false
+        },
+        {
+          "id": "region-drag-surfaces-c2",
+          "title": "No existing type or variant changed",
+          "checked": false
+        },
+        {
+          "id": "region-drag-surfaces-c3",
+          "title": "Compiler-required match arms filled in",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 2,
+      "shortName": "dockframe-drag-handle",
+      "title": "DockFrame gets the drag handle it was specified with",
+      "status": "planned",
+      "description": "`DockFrame` was specified as title + collapse toggle + DRAG HANDLE + header-controls slot. The handle was never built. It drives `SurfaceDragState` carrying a `DragItem`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "dockframe-drag-handle-c1",
+          "title": "Drag handle drives SurfaceDragState",
+          "checked": false
+        },
+        {
+          "id": "dockframe-drag-handle-c2",
+          "title": "Ghost renders in the overlay layer",
+          "checked": false
+        },
+        {
+          "id": "dockframe-drag-handle-c3",
+          "title": "USER drags a container",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "87175753-f899-4090-9acb-28a48d93457a",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 3,
+      "shortName": "region-drop-targets",
+      "title": "ChromeRegion and inter-dock gaps receive",
+      "status": "planned",
+      "description": "They set `hover_item` when they can accept. `DragContext` already updates hover on EVERY surface, not just the active one, so several drop targets highlight at once — the cross-region model is already there.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "region-drop-targets-c1",
+          "title": "Region and gaps set hover_item",
+          "checked": false
+        },
+        {
+          "id": "region-drop-targets-c2",
+          "title": "Multiple targets highlight at once",
+          "checked": false
+        },
+        {
+          "id": "region-drop-targets-c3",
+          "title": "Insertion line renders in the overlay layer",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 4,
+      "shortName": "action-first-then-drag",
+      "title": "The move is an ACTION first; drag is only the mouse surface",
+      "status": "planned",
+      "description": "⚠️ Build the action BEFORE the drag. On drop, dispatch `chrome.dock.move_to_region` / `chrome.dock.reorder_before` through the registry — never mutate directly. The same move MUST be reachable by keyboard and RPC (input parity, AGENTS.md). A drag that does something no keybinding can do is a rule violation.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "action-first-then-drag-c1",
+          "title": "Actions exist and work from keyboard + RPC first",
+          "checked": false
+        },
+        {
+          "id": "action-first-then-drag-c2",
+          "title": "Drop dispatches the action, never mutates",
+          "checked": false
+        },
+        {
+          "id": "action-first-then-drag-c3",
+          "title": "Follow the full Adding-New-Actions checklist",
+          "checked": false
+        },
+        {
+          "id": "action-first-then-drag-c4",
+          "title": "USER confirms keyboard and mouse agree",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 5,
+      "shortName": "plugin-escape-hatch",
+      "title": "The open variants for plugins (defer until plugins exist)",
+      "status": "planned",
+      "description": "`DragItemKind::Custom(u32)` so non-workspace containers do not inherit window-manager nouns, and `DragSurfaceId::Plugin(PluginSurfaceId)` funnelling dynamic surfaces through runtime dispatch while built-ins keep the fast path. Not needed until F003/P001 — but it is the same code and the same decision, so it lives here.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "plugin-escape-hatch-c1",
+          "title": "Defer until plugins exist",
+          "checked": false
+        },
+        {
+          "id": "plugin-escape-hatch-c2",
+          "title": "One open variant each, additive",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    }
+  ],
   "createdAt": "2026-07-26T08:37:59.875Z",
-  "updatedAt": "2026-07-26T08:37:59.875Z"
+  "updatedAt": "2026-07-26T11:44:50.918444Z"
 }

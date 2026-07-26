@@ -4,7 +4,7 @@
   "number": 20,
   "slug": "plugin-12-region-display-modes-the-collapsed-rail-render-per-mode-provider-contract",
   "title": "plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract",
-  "status": "draft",
+  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -20,8 +20,215 @@
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [],
-  "taskIds": [],
-  "tasks": [],
+  "taskIds": [
+    "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+    "9417690f-e416-42e4-b4a2-8dce72068de3",
+    "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+    "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+    "89ba55be-c2d1-4406-a4fb-0888b58d98b7"
+  ],
+  "tasks": [
+    {
+      "id": "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 1,
+      "shortName": "provider-content-model",
+      "title": "The write-once Group/Item content model",
+      "status": "planned",
+      "description": "A Provider describes its content ONCE as a semantic tree of Groups and Items. Each node carries its meaning a single time: an Item has icon, label, status, intent and expanded-only actions; a Group has identity, collapsed, and children nested to any depth. The author NEVER writes an expanded tree and a collapsed tree — that double authoring is what this rejects, and it would fall on every plugin too.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "provider-content-model-c1",
+          "title": "Group/Item model defined",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c2",
+          "title": "Nesting to any depth",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c3",
+          "title": "No second tree anywhere in the author's code",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "9417690f-e416-42e4-b4a2-8dce72068de3",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 2,
+      "shortName": "realize-per-mode",
+      "title": "Mode-awareness lives in exactly one place: realize()",
+      "status": "planned",
+      "description": "The host renders the one tree for the region's current mode. Expanded → Group becomes a `DockFrame`, Item becomes a `Row` with all extras. Collapsed → a `RailCell` per node, recursively, with expanded-only extras omitted. This must NOT be duplicated across widgets or in the author's code.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "realize-per-mode-c1",
+          "title": "Both renderings come from one tree",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c2",
+          "title": "Mode branch exists only in realize()",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c3",
+          "title": "Group collapse is a generic host behaviour, not workspace-specific",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 3,
+      "shortName": "collapse-flavours",
+      "title": "Two collapse flavours, declared per Provider",
+      "status": "planned",
+      "description": "A LIST provider (workspaces and similar) ENUMERATES — one cell per item when collapsed. A TOOL provider (a Docker panel) FOLDS — the whole provider becomes a single icon. The Provider declares which it is; the host applies it. Still one description, still write once.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "collapse-flavours-c1",
+          "title": "Provider declares its flavour",
+          "checked": false
+        },
+        {
+          "id": "collapse-flavours-c2",
+          "title": "Host applies it",
+          "checked": false
+        },
+        {
+          "id": "collapse-flavours-c3",
+          "title": "Both flavours demonstrated",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 4,
+      "shortName": "railcell-widget-work",
+      "title": "RailCell text label + nav_selected, and Glyph::Stack",
+      "status": "planned",
+      "description": "Verified NOT built 2026-07-26: `RailCell` has no `nav_selected` (0 hits in rail_cell.rs) and `Glyph::Stack` does not exist — `Glyph::FolderSimple` already does. Extend RailCell to show a short text label for the name/number styles, add `nav_selected` mirroring Row / MarkerGroup / DockFrame, and add the Stack glyph. All styling from Theme — no literals.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "railcell-widget-work-c1",
+          "title": "RailCell shows a short text label",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c2",
+          "title": "nav_selected added, mirroring the other widgets",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c3",
+          "title": "Glyph::Stack added",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c4",
+          "title": "All colours from theme tokens",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c5",
+          "title": "docs/widgets.md + showcase updated",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 5,
+      "shortName": "rail-config-and-behaviour",
+      "title": "The two config settings + click, right-click and KeyHint behaviour",
+      "status": "planned",
+      "description": "`workspace_collapsed_style` and `pane_collapsed_style`, both `[appearance]`, typed snake_case enums defaulting to \"icon\", both added to config.default.toml and the README.\n\nBehaviour: a workspace cell click TOGGLES its pane list and does NOT switch workspace; a pane cell click focuses that pane. Right-click shows the SAME context menu as the expanded form — reuse the existing builders. The universal picker stamps letters over the cells. Column-target picks are unavailable while collapsed — an accepted limitation.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "rail-config-and-behaviour-c1",
+          "title": "Both config settings, documented in config.default.toml + README",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c2",
+          "title": "Workspace click toggles, pane click focuses",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c3",
+          "title": "Right-click reuses the expanded menu builders",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c4",
+          "title": "KeyHint over cells",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c5",
+          "title": "USER drives a region through its modes",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    }
+  ],
   "createdAt": "2026-07-26T11:29:06.784Z",
-  "updatedAt": "2026-07-26T11:29:06.784Z"
+  "updatedAt": "2026-07-26T11:44:50.918444Z"
 }

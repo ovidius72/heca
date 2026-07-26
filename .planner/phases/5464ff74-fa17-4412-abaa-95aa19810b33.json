@@ -4,7 +4,7 @@
   "number": 19,
   "slug": "plugin-11-layer-content-from-a-viewnode-paint-and-input-through-the-layer-stack",
   "title": "plugin-11: Layer content from a ViewNode + paint and input through the layer stack",
-  "status": "draft",
+  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -20,8 +20,163 @@
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [],
-  "taskIds": [],
-  "tasks": [],
+  "taskIds": [
+    "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
+    "2afbc43e-4f96-42b0-8202-232f17318401",
+    "eaff801f-599f-4580-b20c-a2abfb842142",
+    "87f64d16-9cf8-48bf-bbe4-1542954e23b1"
+  ],
+  "tasks": [
+    {
+      "id": "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 1,
+      "shortName": "layer-content-viewnode",
+      "title": "Add LayerContent with the View(ViewNode) arm",
+      "status": "planned",
+      "description": "`heca/src/chrome/layers.rs` has `LayerBand` and `LayerKind` but no `LayerContent` — a layer holds a native tree and nothing can hand it a description. Add `LayerContent::{Native(Box<dyn Component>), View(ViewNode)}` and realize the View arm through the ONE bridge (heca/src/chrome/realize.rs). Occluder comes from the realized tree's laid-out bounds — NEVER hardcoded.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "layer-content-viewnode-c1",
+          "title": "Add LayerContent with both arms",
+          "checked": false
+        },
+        {
+          "id": "layer-content-viewnode-c2",
+          "title": "Realize View through realize.rs, not a second path",
+          "checked": false
+        },
+        {
+          "id": "layer-content-viewnode-c3",
+          "title": "Occluder read from real layout",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "2afbc43e-4f96-42b0-8202-232f17318401",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 2,
+      "shortName": "confirm-dialog-as-layer",
+      "title": "Convert the confirm dialog to a layer with hintable buttons",
+      "status": "planned",
+      "description": "Migration step 2 from the design. A modal that draws its buttons manually has no child subtree, so `collect_hint_targets` finds nothing and it shows no keycaps — against the project rule that every action is KeyHint-reachable. Do it the conformant way: `OverlayHost::open_modal` with a ViewNode body and actions, NOT a bespoke modal.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "confirm-dialog-as-layer-c1",
+          "title": "Confirm dialog goes through OverlayHost::open_modal",
+          "checked": false
+        },
+        {
+          "id": "confirm-dialog-as-layer-c2",
+          "title": "Its buttons are real components with hint targets",
+          "checked": false
+        },
+        {
+          "id": "confirm-dialog-as-layer-c3",
+          "title": "USER confirms the keycaps appear",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "eaff801f-599f-4580-b20c-a2abfb842142",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 3,
+      "shortName": "paint-input-through-stack",
+      "title": "Paint and route input through the layer stack",
+      "status": "planned",
+      "description": "Today only hint visibility reads the stack. Draw layers in stack order and route input to the active or modal layer. The invariants must survive: no hardcoded z (z is tree position), buttons never declare a layer (they inherit it from their surface), the active context moves only for context surfaces — never for zoom, scroll or provider selection.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "paint-input-through-stack-c1",
+          "title": "Layers painted in stack order",
+          "checked": false
+        },
+        {
+          "id": "paint-input-through-stack-c2",
+          "title": "Input routed to the active/modal layer",
+          "checked": false
+        },
+        {
+          "id": "paint-input-through-stack-c3",
+          "title": "No hardcoded z anywhere",
+          "checked": false
+        },
+        {
+          "id": "paint-input-through-stack-c4",
+          "title": "USER confirms a layer opened from another sits above it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "87f64d16-9cf8-48bf-bbe4-1542954e23b1",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 4,
+      "shortName": "show-layer-actions",
+      "title": "ShowLayer / HideLayer on-demand layers → a first native exposé",
+      "status": "planned",
+      "description": "Migration step 3. `ShowLayer(id)` makes an OnDemand layer visible and active, so the base context goes dormant when it is a context switch. A keybinding maps to it like any action, so it is rebindable and reachable from mouse and RPC.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "show-layer-actions-c1",
+          "title": "ShowLayer/HideLayer drive OnDemand layers",
+          "checked": false
+        },
+        {
+          "id": "show-layer-actions-c2",
+          "title": "Bindable + RPC-reachable like any action",
+          "checked": false
+        },
+        {
+          "id": "show-layer-actions-c3",
+          "title": "A first native exposé proves it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    }
+  ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-07-26T11:28:31.721Z"
+  "updatedAt": "2026-07-26T11:44:50.918444Z"
 }
