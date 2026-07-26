@@ -54,7 +54,7 @@ fn side_for(bounds: Rectangle, point: Point) -> DropSide {
 /// Should this subtree be considered for hit-testing? Hidden widgets have stale
 /// bounds and never receive input, so they're skipped (matching paint/event).
 fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.hidden
+    !c.base().visible.get_untracked() || c.base().style.layout.hidden
 }
 
 /// Find the **topmost, deepest** drop target whose bounds contain `point`.

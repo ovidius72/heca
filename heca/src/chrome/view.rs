@@ -308,20 +308,53 @@ pub type Events = BTreeMap<String, Intent>;
 ///     );
 /// ```
 ///
-/// # Props & events by kind (what `realize` reads today)
+/// # Layout props — every kind, no list
+/// **Any field of [`Layout`](heca_grid_ui::Layout) is a prop on any kind**, named exactly as the
+/// field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+/// `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
+/// `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+///
+/// `realize` does **not** enumerate them — it merges by name against `Layout`'s own fields, so a
+/// field added there is settable from a description with no change to the mapper. The counterpart
+/// is that `Visual` (fill, border, glow, radius, font_size, font_scale) is not serializable, so
+/// appearance is unreachable from a description by construction, not by a rule someone enforces.
+///
+/// Values read the way an author would write them: enums by **name** (`"center"`,
+/// `"space_between"`, `"small"`), and a `Length` as a bare number (px), `"auto"`, or `"50%"`.
+/// The merge lands **on top of** the constructed widget, so a widget's own constructor settings
+/// survive any property it does not mention.
+///
+/// # Widget props — the widget's own builders decide, not a list here
+/// `realize` names no widget property. Each widget generates its property surface from its own
+/// builders (`#[prop]` in `heca-grid-ui`), so a capability added to a widget is settable from a
+/// description the same day. Every builder must be classified `#[prop]` or `#[host_only("why")]`
+/// — the build fails otherwise, which is what stops a capability going quietly missing the way
+/// `Input::placeholder` and `ScrollRegion`'s second axis did.
+///
+/// **Properties are order-independent.** They are applied after children are attached, so a
+/// builder that clamps against its children (`Select`/`Tabs` `selected`) sees the real ones.
+/// Nothing an author, caller or agent has to think about.
+///
+/// Deliberately NOT properties, with the reason recorded on each builder: closures (behaviour
+/// crosses as an [`Intent`]), composed content (use `children`), and builders bound to live host
+/// signals. Appearance is currently in this group and is moving out — see F003/P017/T7.
+///
+/// # Props & events by kind
 /// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
-/// so `realize` is total. A node reads only the props relevant to its `kind`:
+/// so `realize` is total, and a bad value costs only itself: its neighbours on the same node still
+/// apply. The table below is a **reader's summary**; the widget's builders are the authority:
 ///
 /// | Kind | Props it reads | Events |
 /// |------|----------------|--------|
-/// | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+/// | `Column` / `Row` | (layout only — see above) | — |
 /// | `Card` | `text` (title) + children | — |
-/// | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+/// | `Surface` / `Panel` | (container — children only) | — |
+/// | `Scroll` | `axes` (`vertical` \| `horizontal` \| `both`, default vertical) + children | — |
 /// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 /// | `Badge` / `Tag` / `Alert` | `text` | — |
 /// | `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
 /// | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
-/// | `Input` | `text` (value), `name` | `change` |
+/// | `Input` | `text` (the **value**), `placeholder`, `name` | `change` |
 /// | `Toggle` | `on` (Bool), `name` | `change` |
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |

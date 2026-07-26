@@ -471,7 +471,7 @@ fn column_view(
 }
 
 /// Build the **WorkspacesContainer** content — the workspace tree mounted inside the
-/// sidebar shell (see `heca-sidebar-design-spec`). Each workspace is a `.frameless()`
+/// sidebar shell (see `heca-sidebar-design-spec`). Each workspace is a `.frameless(true)`
 /// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
 /// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
 /// the sidebar for no user value). Pure projection of the [`SidebarTree`].
@@ -520,7 +520,7 @@ fn build_workspaces_container(
         let ws_idx = ws.ws_idx;
         let emit = emit_intent.clone();
         let mut dock = DockFrame::new(ws.name.clone())
-            .frameless()
+            .frameless(true)
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {

@@ -31,7 +31,7 @@ use crate::style::Direction;
 const GLOW_RADIUS: f32 = 12.0;
 
 /// Frame decoration mode for a [`Pane`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
 pub enum PaneFrame {
     /// Fill only — no border, no brackets. Use when you just want the
     /// background without any frame decoration.
@@ -60,13 +60,14 @@ pub struct Pane {
     border_width: Option<f32>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Pane {
     /// A new vertical (column) pane with the default [`PaneFrame::Bordered`].
     /// Content is inset by 8.0 px by default — override with `.padding(x)`.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
-        base.style.padding = 8.0;
+        base.style.layout.direction = Direction::Column;
+        base.style.layout.padding = 8.0;
         Self {
             base,
             frame: PaneFrame::Bordered,
@@ -77,29 +78,33 @@ impl Pane {
     /// A horizontal (row) pane.
     pub fn row() -> Self {
         let mut pane = Self::new();
-        pane.base.style.direction = Direction::Row;
+        pane.base.style.layout.direction = Direction::Row;
         pane
     }
 
     /// Choose the frame decoration mode.
+    #[heca_grid_ui_macros::prop]
     pub fn frame(mut self, f: PaneFrame) -> Self {
         self.frame = f;
         self
     }
 
     /// Shorthand: set frame to [`PaneFrame::Bordered`].
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn bordered(mut self) -> Self {
         self.frame = PaneFrame::Bordered;
         self
     }
 
     /// Shorthand: set frame to [`PaneFrame::Bracketed`].
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn bracketed(mut self) -> Self {
         self.frame = PaneFrame::Bracketed;
         self
     }
 
     /// Shorthand: set frame to [`PaneFrame::None`].
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn frameless(mut self) -> Self {
         self.frame = PaneFrame::None;
         self
@@ -111,6 +116,7 @@ impl Pane {
     /// (e.g. a sidebar shell that wants its own thickness). No effect on the
     /// `Bracketed`/`None` frames. The border color still comes from `.border(color, _)`
     /// when set, else the theme border color.
+    #[heca_grid_ui_macros::host_only("unsupported argument type (impl Into<Option<f32>>)")]
     pub fn border_width(mut self, width: impl Into<Option<f32>>) -> Self {
         self.border_width = width.into();
         self
@@ -130,18 +136,18 @@ impl Component for Pane {
             return;
         }
         let b = self.base.bounds;
-        let fill = self.base.style.fill;
+        let fill = self.base.style.visual.fill;
 
         // Radius: per-widget override (> 0), else theme fallback.
-        let radius = if self.base.style.radius > 0.0 {
-            self.base.style.radius
+        let radius = if self.base.style.visual.radius > 0.0 {
+            self.base.style.visual.radius
         } else {
             cx.theme().colors.border_radius
         };
         // Surface glow: an explicit `.glow(..)` (StyleExt) wins; otherwise the
         // theme rest glow (`PaintCx::rest_glow`) gives the pane the shared neon
         // identity at rest, scaled by the `glow_size` setting (T011).
-        let glow = self.base.style.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+        let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
 
         match self.frame {
             PaneFrame::None => {
@@ -162,7 +168,7 @@ impl Component for Pane {
                     let t = cx.theme();
                     (t.colors.border, t.colors.border_width)
                 };
-                let color = self.base.style.border.map_or(tb_color, |bd| bd.color);
+                let color = self.base.style.visual.border.map_or(tb_color, |bd| bd.color);
                 // Width: per-widget override (`.border_width(w)`) when set, else the
                 // live theme width (so the global BORDER control still drives panes
                 // that don't opt out).

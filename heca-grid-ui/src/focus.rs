@@ -27,7 +27,7 @@ fn for_each_focusable(
     idx: &mut usize,
     f: &mut dyn FnMut(usize, &mut dyn Component),
 ) {
-    if c.base().style.hidden {
+    if c.base().style.layout.hidden {
         return;
     }
     if c.focusable() {
@@ -124,7 +124,7 @@ impl FocusManager {
         let mut idx = 0;
         for_each_focusable(root, &mut idx, &mut |i, c| {
             if i == target {
-                handled = c.event(ev);
+                handled = crate::component::dispatch(c, ev);
             }
         });
         handled
@@ -175,7 +175,7 @@ impl FocusManager {
         let mut idx = 0;
         for_each_focusable(root, &mut idx, &mut |i, c| {
             if i == target {
-                handled = c.event(ev);
+                handled = crate::component::dispatch(c, ev);
             }
         });
         handled
@@ -267,9 +267,9 @@ impl FocusManager {
                 } else {
                     self.focus_at(root, *pos);
                 }
-                root.event(ev)
+                crate::component::dispatch(root, ev)
             }
-            _ => root.event(ev),
+            _ => crate::component::dispatch(root, ev),
         }
     }
 

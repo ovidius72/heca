@@ -53,7 +53,7 @@ const TRAILING: usize = 2;
 
 /// How an [`Item`]'s active state is indicated. Set per context; the row carries
 /// the `active` bool, the marker decides how it's shown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ActiveMarker {
     /// No marker — only the tinted bg + accent label (default; plain rows /
     /// dropdown options without a bar).
@@ -97,16 +97,17 @@ pub struct Item {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Item {
     /// A new row showing `label`, with empty slots.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Row;
-        base.style.justify = Justify::Start; // the growing label pushes the trailing slot right
-        base.style.align = Align::Center; // center slots vertically (kbd hint, dot)
-        base.style.padding = PAD_H as f32;
-        base.style.gap = GAP as f32;
-        base.style.height = Length::Px(ROW_H);
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.justify = Justify::Start; // the growing label pushes the trailing slot right
+        base.style.layout.align = Align::Center; // center slots vertically (kbd hint, dot)
+        base.style.layout.padding = PAD_H as f32;
+        base.style.layout.gap = GAP as f32;
+        base.style.layout.height = Length::Px(ROW_H);
         // One control = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
 
@@ -141,23 +142,26 @@ impl Item {
     /// Applied to the label **child** as well: an explicit `font_size` pins one node only (unlike
     /// the size *variant*, which the layout pass inherits down the tree), so the row and its text
     /// would otherwise disagree.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         let label = self.base.children[LABEL].base_mut();
-        label.style.font_size = fs;
+        label.style.visual.font_size = fs;
         label.font = fs;
         self.remeasure();
         self
     }
 
     /// Set the leading (left) slot — any component (icon, dot, badge…).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading(mut self, c: impl Component + 'static) -> Self {
         self.base.children[LEADING] = Box::new(c);
         self
     }
 
     /// Set the trailing (right) slot — any component (kbd hint, `>`, badge…).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn trailing(mut self, c: impl Component + 'static) -> Self {
         self.base.children[TRAILING] = Box::new(c);
         self
@@ -167,6 +171,7 @@ impl Item {
     /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
     /// go through the `impl Component` setters; same seam as
     /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[LEADING] = c;
         self
@@ -174,6 +179,7 @@ impl Item {
 
     /// [`trailing`](Item::trailing) for an already-boxed component — see
     /// [`leading_boxed`](Item::leading_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn trailing_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[TRAILING] = c;
         self
@@ -181,6 +187,7 @@ impl Item {
 
     /// Set the active state — the clicked-and-stays current item (tinted bg +
     /// accent label + optional indicator).
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -188,18 +195,21 @@ impl Item {
 
     /// Set how the active state is visually indicated. Defaults to
     /// [`ActiveMarker::None`] (tinted bg + accent label only).
+    #[heca_grid_ui_macros::prop]
     pub fn marker(mut self, marker: ActiveMarker) -> Self {
         self.marker = marker;
         self
     }
 
     /// Render the label muted (section-header style).
+    #[heca_grid_ui_macros::prop]
     pub fn muted(mut self, muted: bool) -> Self {
         self.muted = muted;
         self
     }
 
     /// Draw a rounded border (chip frame) around the leading slot.
+    #[heca_grid_ui_macros::prop]
     pub fn leading_bordered(mut self, bordered: bool) -> Self {
         self.leading_border = bordered;
         self
@@ -207,12 +217,14 @@ impl Item {
 
     /// Draw a rounded border (chip frame) around the trailing slot — e.g. a
     /// keymap hint like `⌘P`.
+    #[heca_grid_ui_macros::prop]
     pub fn trailing_bordered(mut self, bordered: bool) -> Self {
         self.trailing_border = bordered;
         self
     }
 
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
@@ -255,7 +267,7 @@ impl Component for Item {
 
     /// Row height scales with the resolved font (keeps the default 38px at 15px).
     fn remeasure(&mut self) {
-        self.base.style.height = Length::Px(self.base.font * (ROW_H / FONT_SIZE));
+        self.base.style.layout.height = Length::Px(self.base.font * (ROW_H / FONT_SIZE));
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -412,7 +424,9 @@ impl Component for Item {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }

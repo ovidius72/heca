@@ -253,7 +253,7 @@ pub fn on_mouse_input(
             // chrome tree so its widget callbacks (the caret's `on_click`) fire, then
             // consume it so it doesn't leak to the content behind.
             if point_in_right_sidebar(state, pos) {
-                crate::chrome::chrome_dispatch_press(state, pos);
+                let _ = crate::chrome::chrome_dispatch_press(state, pos);
                 return None;
             }
 
@@ -261,11 +261,19 @@ pub fn on_mouse_input(
             // as the right sidebar: dispatch into the retained chrome tree and consume.
             // (No tab-click feature today, so swallowing an empty-band click is harmless.)
             if point_in_top_bar(state, pos) {
-                crate::chrome::chrome_dispatch_press(state, pos);
+                let _ = crate::chrome::chrome_dispatch_press(state, pos);
                 return None;
             }
 
-            // Resolve the drag source FIRST. For draggable items we defer any click
+            // The retained chrome tree gets first refusal, because the sidebar now holds real
+            // widgets whose gestures overlap the rows behind them: a press on the scrollbar thumb
+            // is inside the pane card's bounds too, and resolving by geometry first would read it
+            // as a click on that pane. A widget that consumes the press has spoken for it.
+            if crate::chrome::chrome_dispatch_press(state, pos) {
+                return None;
+            }
+
+            // Resolve the drag source. For draggable items we defer any click
             // effect until release if the drag threshold is not crossed.
             let drag_source = crate::chrome::sidebar_drag_source(state, pos);
 
@@ -645,7 +653,7 @@ fn search_field_press(state: &mut AppState, pos: (f32, f32)) -> bool {
     if let Some(search) = state.searches.get(&pane_id) {
         let mut field = search.input.borrow_mut();
         field.base_mut().focused.set(true);
-        field.event(&heca_grid_ui::Event::PointerPressed { pos });
+        heca_grid_ui::dispatch(&mut *field, &heca_grid_ui::Event::PointerPressed { pos });
     }
     state.input_mode = crate::app_state::InputMode::Search;
     state.needs_redraw = true;

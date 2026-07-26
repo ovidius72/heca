@@ -158,7 +158,7 @@ pub(crate) fn handle_window_event(
                         state
                             .layers
                             .top_modal_root_mut()
-                            .map(|root| root.event(ev))
+                            .map(|root| heca_grid_ui::dispatch(root, ev))
                             .unwrap_or(Handled::No)
                     });
                 }
@@ -191,7 +191,7 @@ pub(crate) fn handle_window_event(
             if crate::chrome::top_modal(state).is_some() {
                 let mods = grid_modifiers(state.modifiers);
                 if let Some(root) = state.layers.top_modal_root_mut() {
-                    let _ = root.event(&Event::ModifiersChanged(mods));
+                    let _ = heca_grid_ui::dispatch(root, &Event::ModifiersChanged(mods));
                 }
             }
             // Refresh the cursor affordance: pressing/releasing Cmd over a link
@@ -205,14 +205,14 @@ pub(crate) fn handle_window_event(
                 position.y as f32 / state.scale_factor as f32,
             );
             state.mouse.pos = pos;
-            // A visible modal layer owns the pointer while open (hover on its buttons + menu rows).
-            if crate::chrome::top_modal(state).is_some() {
-                if let Some(root) = state.layers.top_modal_root_mut() {
-                    let _ = root.event(&Event::PointerMoved {
-                        pos: Point::new(pos.0 as f64, pos.1 as f64),
-                    });
-                }
-                state.mark_full_redraw();
+            // A visible modal layer owns the pointer while open (hover on its buttons + menu rows,
+            // and a thumb drag inside its body).
+            if crate::chrome::dispatch_modal_pointer(
+                state,
+                &Event::PointerMoved {
+                    pos: Point::new(pos.0 as f64, pos.1 as f64),
+                },
+            ) {
                 return;
             }
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
@@ -248,16 +248,16 @@ pub(crate) fn handle_window_event(
             // A visible modal layer swallows all button input: a press on a button (its
             // `on_click` emits `SubmitOverlay`) or the scrim (`Dialog::on_dismiss` emits
             // `CloseOverlay`) resolves it; anything else is consumed so clicks don't leak.
+            // The **release** goes in too — this branch used to forward the press alone, which is
+            // what left a body's scrollbar thumb stuck to the cursor: the widget was still waiting
+            // for the end of a gesture the host had decided not to deliver.
             if crate::chrome::top_modal(state).is_some() {
-                if button_state == ElementState::Pressed {
-                    let pos = state.mouse.pos;
-                    if let Some(root) = state.layers.top_modal_root_mut() {
-                        let _ = root.event(&Event::PointerPressed {
-                            pos: Point::new(pos.0 as f64, pos.1 as f64),
-                        });
-                    }
-                }
-                state.mark_full_redraw();
+                let pos = Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64);
+                let ev = match button_state {
+                    ElementState::Pressed => Event::PointerPressed { pos },
+                    ElementState::Released => Event::PointerReleased { pos },
+                };
+                crate::chrome::dispatch_modal_pointer(state, &ev);
                 return;
             }
             // Pane info-bar action **buttons** intercept a plain left-press so a click
@@ -303,11 +303,18 @@ pub(crate) fn handle_window_event(
             }
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Released
-                && crate::chrome::dispatch_pane_viewport_release(state, state.mouse.pos)
             {
-                mouse::update_cursor(state, state.mouse.pos);
-                state.mark_full_redraw();
-                return;
+                // Every retained tree that could have started a gesture gets the release, whether
+                // or not the cursor is still over it — that is what ends a scrollbar drag. The
+                // chrome tree is unconditional: it consumes nothing it did not start, and gating a
+                // release on position is precisely how a thumb ends up welded to the cursor.
+                crate::chrome::chrome_dispatch_release(state, state.mouse.pos);
+                crate::chrome::dispatch_pane_header_release(state, state.mouse.pos);
+                if crate::chrome::dispatch_pane_viewport_release(state, state.mouse.pos) {
+                    mouse::update_cursor(state, state.mouse.pos);
+                    state.mark_full_redraw();
+                    return;
+                }
             }
             let interactive_before = state.mouse.interactive_move.is_some();
             let resize_before = mouse::is_resizing(state);
@@ -335,13 +342,50 @@ pub(crate) fn handle_window_event(
             // Ctrl/Meta+wheel is a font-zoom gesture, resolved by what's under the
             // pointer. It is intercepted at the WM level BEFORE terminal wheel
             // forwarding so the modified wheel never reaches the TUI as a scroll.
-            if !handle_wheel_font_zoom(state, registry, state.mouse.pos, delta) {
-                forward_mouse_wheel(state, state.mouse.pos, delta);
+            if handle_wheel_font_zoom(state, registry, state.mouse.pos, delta) {
+                state.mark_full_redraw();
+                return;
             }
+            // An open modal owns the wheel: its body may be a scroll region, and the page
+            // behind must stay still either way. This branch did not exist, so a described
+            // scroll area inside a modal could not be scrolled at all.
+            let wheel = wheel_event(state, delta);
+            if crate::chrome::dispatch_modal_pointer(state, &wheel) {
+                return;
+            }
+            // The retained chrome tree next: a hovered scroll region in the sidebar takes it, and
+            // the terminal must not also scroll. A region gates on its own hover, so this is a
+            // no-op whenever the pointer is over a pane.
+            if crate::chrome::chrome_dispatch_wheel(state, &wheel)
+                || crate::chrome::dispatch_pane_header_wheel(state, &wheel)
+            {
+                state.mark_full_redraw();
+                return;
+            }
+            forward_mouse_wheel(state, state.mouse.pos, delta);
             state.mark_full_redraw();
         }
         _ => {}
     }
+}
+
+/// A winit wheel delta as grid-ui's [`Event::Scroll`], in **lines** (positive = down / right).
+///
+/// The host owns the modifier→axis mapping, because `Event::Scroll` carries both axes and a plain
+/// mouse wheel only reports the vertical one: `Shift`+wheel is remapped to X. A trackpad already
+/// fills X itself, so it is left alone. Same convention as the showcase, deliberately — a region
+/// must scroll identically wherever it is mounted.
+fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
+    let (dx_raw, dy_raw) = match delta {
+        MouseScrollDelta::LineDelta(x, y) => (-x, -y),
+        MouseScrollDelta::PixelDelta(p) => (-(p.x as f32) / 20.0, -(p.y as f32) / 20.0),
+    };
+    let (delta_x, delta_y) = if state.modifiers.shift_key() && dx_raw == 0.0 {
+        (dy_raw, 0.0)
+    } else {
+        (dx_raw, dy_raw)
+    };
+    Event::Scroll { delta_x, delta_y }
 }
 
 /// Handle a `Ctrl`/`Meta`+wheel font-zoom gesture. Returns `true` when the wheel

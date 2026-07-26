@@ -49,13 +49,14 @@ pub struct Toggle {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Toggle {
     /// A new toggle, off by default.
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.width = Length::Px(TRACK_W as f32);
-        base.style.height = Length::Px(TRACK_H as f32);
+        base.style.layout.width = Length::Px(TRACK_W as f32);
+        base.style.layout.height = Length::Px(TRACK_H as f32);
         Self {
             base,
             on: signal(false),
@@ -67,6 +68,7 @@ impl Toggle {
     }
 
     /// Set the initial on-state (starts the knob at that end, no animation).
+    #[heca_grid_ui_macros::prop]
     pub fn on(mut self, on: bool) -> Self {
         self.on.set(on);
         self.progress = if on { 1.0 } else { 0.0 };
@@ -75,6 +77,7 @@ impl Toggle {
 
     /// Set the change handler. Receives `Action::value("toggle-change",
     /// SignalData::Bool(new_state))` each time the toggle flips.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self
@@ -116,8 +119,8 @@ impl Component for Toggle {
     /// The switch is fixed-size (no text); scale the track by the size variant.
     fn remeasure(&mut self) {
         let s = self.base.size_scale();
-        self.base.style.width = Length::Px(TRACK_W as f32 * s);
-        self.base.style.height = Length::Px(TRACK_H as f32 * s);
+        self.base.style.layout.width = Length::Px(TRACK_W as f32 * s);
+        self.base.style.layout.height = Length::Px(TRACK_H as f32 * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -197,7 +200,10 @@ impl Component for Toggle {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

@@ -35,10 +35,11 @@
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
-    Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
+    Action, Alert, Align, Badge, BadgeButton, Base, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, LayoutExt, MarkerGroup, RailCell, ScrollRegion, Select, SignalData,
-    StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track, WidgetSize,
+    Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, PropInput, RailCell, ScrollRegion,
+    Select, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track,
+    WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -100,15 +101,127 @@ pub(crate) fn realize(
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     let mut realized = realize_kind(node, emit, hints, forms);
-    // Self-alignment is a property of the node *inside its parent*, so it applies to every kind —
-    // read it once here rather than in each arm.
-    if let Some(align) = align_prop(node, "align_self") {
-        realized.base_mut().style.align_self = Some(align);
-    }
-    if let Some(justify) = align_prop(node, "justify_self") {
-        realized.base_mut().style.justify_self = Some(justify);
-    }
+    // Layout belongs to every kind, so it is read once here rather than in each arm — and it is
+    // read *generically*, by name against `Layout`'s own fields. There is deliberately no list of
+    // property names in this file: add a field to `Layout` and a description can set it, with no
+    // change here. `Visual` is not serializable, so appearance stays unreachable the same way.
+    merge_layout_props(node, realized.base_mut());
     realized
+}
+
+/// Apply a node's layout properties on top of the **already-constructed** widget.
+///
+/// On top, not from scratch: widgets set deliberate non-default layout in their constructors
+/// (`ScrollRegion::new()` zeroes its min sizes and opts into shrinking so a viewport can be smaller
+/// than its content). Rebuilding from `Layout::default()` would silently break those, so this reads
+/// the live values, overlays only the keys the node actually carries, and writes back.
+///
+/// Total for untrusted input, as the rest of `realize` is: an unknown key is skipped, and a value
+/// that does not fit its field is dropped *individually* — one bad property never discards the
+/// good ones and never panics.
+fn merge_layout_props(node: &ViewNode, base: &mut Base) {
+    if node.props.is_empty() {
+        return;
+    }
+    let Ok(serde_json::Value::Object(current)) = serde_json::to_value(base.style.layout) else {
+        return;
+    };
+    // Only keys that name a real `Layout` field; `current` IS that field list, derived not written.
+    let incoming: Vec<(&String, serde_json::Value)> = node
+        .props
+        .iter()
+        .filter(|(key, _)| current.contains_key(key.as_str()))
+        .filter_map(|(key, value)| prop_to_json(value).map(|v| (key, v)))
+        .collect();
+    if incoming.is_empty() {
+        return;
+    }
+
+    let mut merged = current.clone();
+    for (key, value) in &incoming {
+        merged.insert((*key).clone(), value.clone());
+    }
+    // Fast path: everything fits. Otherwise fall back to applying one key at a time so a single
+    // bad value costs only itself.
+    if let Ok(layout) = serde_json::from_value::<Layout>(serde_json::Value::Object(merged)) {
+        base.style.layout = layout;
+        return;
+    }
+    let mut acc = current;
+    for (key, value) in incoming {
+        let mut candidate = acc.clone();
+        candidate.insert(key.clone(), value);
+        if serde_json::from_value::<Layout>(serde_json::Value::Object(candidate.clone())).is_ok() {
+            acc = candidate;
+        }
+    }
+    if let Ok(layout) = serde_json::from_value::<Layout>(serde_json::Value::Object(acc)) {
+        base.style.layout = layout;
+    }
+}
+
+/// A [`PropValue`] as the JSON scalar its field expects — the enums travel as their
+/// **names** (`"center"`, `"space_between"`, `"small"`), matching how glyphs and colours already
+/// cross the boundary. Colours and glyphs never name a `Layout` field, so they are simply strings
+/// here and get filtered out by the field-name check.
+fn prop_to_json(value: &PropValue) -> Option<serde_json::Value> {
+    Some(match value {
+        PropValue::Bool(b) => serde_json::Value::Bool(*b),
+        PropValue::Int(i) => serde_json::Value::from(*i),
+        PropValue::Float(f) => serde_json::Number::from_f64(*f).map(Into::into)?,
+        PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => {
+            serde_json::Value::String(t.clone())
+        }
+        PropValue::Size(s) => serde_json::to_value(s).ok()?,
+        PropValue::Variant(v) => serde_json::to_value(v).ok()?,
+        PropValue::Align(a) => serde_json::to_value(a).ok()?,
+        PropValue::List(items) => {
+            serde_json::Value::Array(items.iter().filter_map(prop_to_json).collect())
+        }
+    })
+}
+
+
+/// Feed a node's properties to a widget through its **generated** surface.
+///
+/// This is the whole point of the arrangement: the app names no property here. Which keys a widget
+/// accepts is decided by that widget's own `#[prop]` builders, so a capability added in the library
+/// is reachable from a description the same day, and one that is forgotten fails the drift guard
+/// rather than going quietly missing.
+///
+/// Call it **after** children are attached — properties are order-independent on that condition,
+/// which is what lets a builder that clamps against its children (`Select::selected`) see them.
+fn with_props<W: SetProp>(widget: W, node: &ViewNode) -> W {
+    widget.apply_props(|key| node.props.get(key).and_then(prop_to_input))
+}
+
+/// A [`PropValue`] as the library's neutral scalar. The library never sees the app's model; this
+/// is the one conversion at the boundary.
+///
+/// Enums cross as their **names**, which is how glyphs and colours already travel, so the widget's
+/// own variants are the accepted vocabulary and there is no table of strings on either side.
+fn prop_to_input(value: &PropValue) -> Option<PropInput> {
+    Some(match value {
+        PropValue::Bool(b) => PropInput::Bool(*b),
+        PropValue::Int(i) => PropInput::Number(*i as f64),
+        PropValue::Float(f) => PropInput::Number(*f),
+        PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => {
+            PropInput::Text(t.clone())
+        }
+        PropValue::Size(s) => PropInput::Text(prop_enum_name(s)?),
+        PropValue::Variant(v) => PropInput::Text(prop_enum_name(v)?),
+        PropValue::Align(a) => PropInput::Text(prop_enum_name(a)?),
+        PropValue::List(_) => return None,
+    })
+}
+
+/// The snake_case name serde already gives these enums — reused rather than re-spelled, so the two
+/// paths (the layout merge and the widget surface) cannot disagree about what `"space_between"` is.
+fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
+    match serde_json::to_value(value).ok()? {
+        serde_json::Value::String(s) => Some(s),
+        _ => None,
+    }
 }
 
 /// The per-kind mapping — see [`realize`], which wraps it with the props every node can carry.
@@ -130,19 +243,18 @@ fn realize_kind(
             attach_children(Box::new(Surface::new()), node, emit, hints, forms)
         }
         WidgetKind::Scroll => {
-            attach_children(Box::new(ScrollRegion::new()), node, emit, hints, forms)
+            // `axes` reaches the widget through its own builder, so a declarative region can be
+            // horizontal or two-axis — it was vertical-only for as long as this arm named its
+            // properties by hand.
+            let region = with_props(ScrollRegion::new(), node);
+            attach_children(Box::new(region), node, emit, hints, forms)
         }
 
         // ── Leaves ──
         WidgetKind::Label => {
-            // Weight + slant are font attributes (the shaper picks the glyphs); underline +
-            // strikethrough are decorations the widget draws. Both are plain bools here.
-            let label = Label::new(text_of(node))
-                .bold(bool_prop(node, "bold").unwrap_or(false))
-                .italic(bool_prop(node, "italic").unwrap_or(false))
-                .underline(bool_prop(node, "underline").unwrap_or(false))
-                .strikethrough(bool_prop(node, "strikethrough").unwrap_or(false));
-            Box::new(label)
+            // bold / italic / underline / strikethrough / align / font_size all arrive through
+            // the generated surface — `Label`'s builders decide which, not a list here.
+            Box::new(with_props(Label::new(text_of(node)), node))
         }
         WidgetKind::Button => realize_button(node, emit, hints, forms),
         WidgetKind::Badge => Box::new(Badge::new(text_of(node))),
@@ -150,18 +262,14 @@ fn realize_kind(
         WidgetKind::Alert => Box::new(Alert::new(text_of(node))),
         WidgetKind::StatusDot => Box::new(StatusDot::online()),
         WidgetKind::Gauge => {
-            let mut g = Gauge::new();
-            if let Some(v) = f32_prop(node, "value") {
-                g = g.value(v);
-            }
-            Box::new(g)
+            Box::new(with_props(Gauge::new(), node))
         }
         WidgetKind::Icon => match glyph_prop(node) {
             Some(glyph) => Box::new(Icon::new(glyph)),
             None => Box::new(Flex::empty()),
         },
         WidgetKind::Input => {
-            let mut input = Input::new().value(text_of(node));
+            let mut input = with_props(Input::new().value(text_of(node)), node);
             if let Some(name) = name_prop(node) {
                 let sig = input.text();
                 forms.bind(name.clone(), Box::new(move || PropValue::Text(sig.get_untracked())));
@@ -175,7 +283,7 @@ fn realize_kind(
             Box::new(input)
         }
         WidgetKind::Toggle => {
-            let mut t = Toggle::new().on(bool_prop(node, "on").unwrap_or(false));
+            let mut t = with_props(Toggle::new(), node);
             if let Some(name) = name_prop(node) {
                 let sig = t.state();
                 forms.bind(name, Box::new(move || PropValue::Bool(sig.get_untracked())));
@@ -187,9 +295,8 @@ fn realize_kind(
             Box::new(t)
         }
         WidgetKind::Checkbox => {
-            let mut c = Checkbox::new()
-                .checked(bool_prop(node, "checked").unwrap_or(false))
-                .label(text_of(node));
+            // `checked` arrives through the surface; the widget's own default is already false.
+            let mut c = with_props(Checkbox::new().label(text_of(node)), node);
             if let Some(name) = name_prop(node) {
                 let sig = c.state();
                 forms.bind(name, Box::new(move || PropValue::Bool(sig.get_untracked())));
@@ -268,9 +375,9 @@ fn realize_kind(
             for option in realize_options(node, emit, hints, forms) {
                 select = select.option(option);
             }
-            if let Some(i) = usize_prop(node, "selected") {
-                select = select.selected(i);
-            }
+            // After the options, so `selected` clamps against the real count. That ordering is a
+            // property of this arm's construction, not something a property author must know.
+            select = with_props(select, node);
             if let Some(on_change) = option_change(node, emit) {
                 select = select.on_change(on_change);
             }
@@ -294,9 +401,7 @@ fn realize_kind(
             for option in realize_options(node, emit, hints, forms) {
                 tabs = tabs.tab(option);
             }
-            if let Some(i) = usize_prop(node, "selected") {
-                tabs = tabs.selected(i);
-            }
+            tabs = with_props(tabs, node);
             if let Some(on_change) = option_change(node, emit) {
                 tabs = tabs.on_change(on_change);
             }
@@ -305,8 +410,8 @@ fn realize_kind(
 
         // ── Groups ──
         WidgetKind::ItemGroup => {
-            let mut group =
-                ItemGroup::new(text_of(node)).expanded(bool_prop(node, "expanded").unwrap_or(true));
+            // `expanded` arrives through the surface; the widget already defaults to expanded.
+            let mut group = with_props(ItemGroup::new(text_of(node)), node);
             if let Some(on_toggle) = toggle_change(node, emit) {
                 group = group.on_toggle(on_toggle);
             }
@@ -314,13 +419,7 @@ fn realize_kind(
             attach_children(Box::new(group), node, emit, hints, forms)
         }
         WidgetKind::MarkerGroup => {
-            let mut markers = MarkerGroup::new();
-            if let Some(active) = bool_prop(node, "active") {
-                markers = markers.active(active);
-            }
-            if let Some(nav) = bool_prop(node, "nav_selected") {
-                markers = markers.nav_selected(nav);
-            }
+            let markers = with_props(MarkerGroup::new(), node);
             // An indicator: no events of its own — the rows inside carry their own intents.
             attach_children(Box::new(markers), node, emit, hints, forms)
         }
@@ -329,13 +428,9 @@ fn realize_kind(
         WidgetKind::Grid => realize_grid(node, emit, hints, forms),
 
         WidgetKind::DockFrame => {
-            let mut dock = DockFrame::new(text_of(node))
-                .expanded(bool_prop(node, "expanded").unwrap_or(true))
-                .active(bool_prop(node, "active").unwrap_or(false))
-                .nav_selected(bool_prop(node, "nav_selected").unwrap_or(false));
-            if bool_prop(node, "frameless").unwrap_or(false) {
-                dock = dock.frameless();
-            }
+            // Everything DockFrame exposes arrives through the surface, at the widget's own
+            // defaults when unset.
+            let mut dock = with_props(DockFrame::new(text_of(node)), node);
             if let Some(on_toggle) = toggle_change(node, emit) {
                 dock = dock.on_toggle(on_toggle);
             }
@@ -364,9 +459,7 @@ fn realize_kind(
             if let Some(body) = node.props.get("body").and_then(PropValue::as_text) {
                 toast = toast.body(body);
             }
-            if let Some(dismissible) = bool_prop(node, "dismissible") {
-                toast = toast.dismissible(dismissible);
-            }
+            toast = with_props(toast, node);
             // The inline action is a **labelled button**, not arbitrary content — so it is a prop
             // (`action_text`) plus an `action` intent, not a slot. A slot would have promised
             // composition the widget doesn't offer.
@@ -444,12 +537,8 @@ fn realize_flex(
     hints: &mut HintTargetRegistry,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    if let Some(gap) = f32_prop(node, "gap") {
-        flex = flex.gap(gap);
-    }
-    if let Some(align) = align_prop(node, "align") {
-        flex = flex.align(align);
-    }
+    // `gap`, `align` and every other layout property are applied generically by
+    // `merge_layout_props` in `realize`, for every kind — not read per-arm here.
     for child in &node.children {
         // `child()` takes an `impl Component` and boxes it; a `Box<dyn Component>` isn't
         // `Component`, so push the already-boxed child directly.
@@ -636,15 +725,10 @@ fn realize_grid(
     if let Some(areas) = string_list(node, "areas") {
         grid = grid.areas(areas.iter().map(String::as_str));
     }
-    // How the items sit inside their cells: `align` vertically, `justify_items` horizontally. Both
-    // default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell — so a
-    // row of mixed-height content needs `align: center` to share a centre line.
-    if let Some(align) = align_prop(node, "align") {
-        grid = grid.align(align);
-    }
-    if let Some(justify) = align_prop(node, "justify_items") {
-        grid = grid.justify_items(justify);
-    }
+    // How the items sit inside their cells — `align` vertically, `justify_items` horizontally —
+    // arrives through the generic layout merge in `realize`, like every other layout property.
+    // Both default to `Stretch`, which pins an explicitly-sized item to the top-left of its cell,
+    // so a row of mixed-height content needs `align: center` to share a centre line.
     for child in &node.children {
         let realized = realize(child, emit, hints, forms);
         match child.props.get("area").and_then(PropValue::as_text) {
@@ -798,20 +882,6 @@ fn text_of(node: &ViewNode) -> String {
         .to_string()
 }
 
-/// A numeric prop (`Int` or `Float`) as `f32` — e.g. `"gap"`, `"value"`.
-fn f32_prop(node: &ViewNode, key: &str) -> Option<f32> {
-    match node.props.get(key)? {
-        PropValue::Int(i) => Some(*i as f32),
-        PropValue::Float(f) => Some(*f as f32),
-        _ => None,
-    }
-}
-
-/// A `"bool"`-typed prop (`"on"`, `"checked"`).
-fn bool_prop(node: &ViewNode, key: &str) -> Option<bool> {
-    node.props.get(key).and_then(PropValue::as_bool)
-}
-
 /// An index prop (`"selected"`) as a `usize`. Negative values are ignored (the widget keeps its
 /// default) rather than wrapping — the model is untrusted input.
 fn usize_prop(node: &ViewNode, key: &str) -> Option<usize> {
@@ -924,16 +994,6 @@ fn glyph_from_name(name: &str) -> Option<Glyph> {
     Some(g)
 }
 
-/// An alignment prop mapped to the grid-ui [`Align`] — `"align"` (a container's cross-axis
-/// alignment of its children), `"align_self"` / `"justify_self"` (this node inside its parent), or
-/// `"justify_items"` (a grid's horizontal placement of its items).
-fn align_prop(node: &ViewNode, key: &str) -> Option<Align> {
-    match node.props.get(key)? {
-        PropValue::Align(a) => Some(map_align(*a)),
-        _ => None,
-    }
-}
-
 /// The `"variant"` prop mapped to the grid-ui [`ButtonVariant`].
 fn variant_prop(node: &ViewNode) -> Option<ButtonVariant> {
     match node.props.get("variant")? {
@@ -987,6 +1047,7 @@ fn map_size(s: ViewSize) -> WidgetSize {
 mod tests {
     use super::*;
     use crate::chrome::Intent;
+    use heca_grid_ui::{Justify, Length};
     use std::rc::Rc;
 
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
@@ -1175,11 +1236,11 @@ mod tests {
 
         // Open the dropdown, then click the second option where it actually is (its real bounds).
         let trigger = select.base().bounds;
-        select.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(select.as_mut(), &Event::PointerPressed {
             pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
         });
         let high = select.base().children[1].base().bounds;
-        select.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(select.as_mut(), &Event::PointerPressed {
             pos: Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0),
         });
 
@@ -1215,7 +1276,7 @@ mod tests {
         LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
         assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
-        tabs.event(&Event::Widget(WidgetIntent::ItemNext));
+        heca_grid_ui::dispatch(tabs.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
         let fired = fired.borrow();
         let [InteractionIntent::View(intent)] = fired.as_slice() else {
             panic!("expected exactly one View intent, got {fired:?}");
@@ -1279,11 +1340,11 @@ mod tests {
             "the group's own header, then the two realized rows",
         );
         // Collapsed: the rows leave layout (`display: none`), the header stays.
-        assert!(!group.base().children[0].base().style.hidden, "the header stays");
+        assert!(!group.base().children[0].base().style.layout.hidden, "the header stays");
         assert!(
             group.base().children[1..]
                 .iter()
-                .all(|row| row.base().style.hidden),
+                .all(|row| row.base().style.layout.hidden),
             "`expanded: false` folds the rows away",
         );
     }
@@ -1310,7 +1371,7 @@ mod tests {
 
         // Click the header (it starts expanded) → it collapses.
         let header = group.base().children[0].base().bounds;
-        group.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(group.as_mut(), &Event::PointerPressed {
             pos: Point::new(header.loc.x + 5.0, header.loc.y + header.size.h / 2.0),
         });
 
@@ -1409,17 +1470,17 @@ mod tests {
 
         // The `icon` area spans both rows of column 1 (it appears twice in the template).
         assert_eq!(
-            children[0].base().style.grid_cell,
+            children[0].base().style.layout.grid_cell,
             Some(heca_grid_ui::GridCell { col: 1, row: 1, col_span: 1, row_span: 2 }),
             "placed into the named area, spanning what the template gives it",
         );
         assert_eq!(
-            children[1].base().style.grid_cell,
+            children[1].base().style.layout.grid_cell,
             Some(heca_grid_ui::GridCell { col: 2, row: 1, col_span: 2, row_span: 1 }),
             "placed by explicit cell; an omitted span defaults to 1",
         );
         assert_eq!(
-            children[2].base().style.grid_cell,
+            children[2].base().style.layout.grid_cell,
             None,
             "no placement props → taffy auto-placement",
         );
@@ -1444,14 +1505,14 @@ mod tests {
             );
 
         let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
-        let style = grid.base().style;
+        let style = grid.base().style.layout;
         assert_eq!(style.align, Align::Center, "vertical: the items in their cells");
         assert_eq!(
             style.justify_items,
             Some(Align::Center),
             "horizontal: `justify_items`, not `justify` (which moves the track set)",
         );
-        let child = grid.base().children[0].base().style;
+        let child = grid.base().children[0].base().style.layout;
         assert_eq!(child.align_self, Some(Align::End));
         assert_eq!(child.justify_self, Some(Align::End));
     }
@@ -1468,7 +1529,7 @@ mod tests {
                     .prop("area", PropValue::Text("nope".into())),
             );
         let grid = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
-        assert_eq!(grid.base().children[0].base().style.grid_cell, None);
+        assert_eq!(grid.base().children[0].base().style.layout.grid_cell, None);
     }
 
     /// A `Label`'s text attributes are authorable: weight + slant (font attributes) and underline +
@@ -1909,5 +1970,322 @@ mod tests {
             Some("renamed"),
         );
         assert!(forms.text_signal("missing").is_none());
+    }
+
+    // ── Generic layout merge (F003/P017/T2) ──────────────────────────────────────────────
+    // The point of these: `realize` holds NO list of layout property names. Everything below
+    // works because `Layout`'s own fields are the vocabulary.
+
+    /// Properties that NO arm in this file has ever read — `padding`, `width`, `justify`,
+    /// `flex_grow`, `margin` — reach the widget anyway, on a kind with no layout code of its own.
+    /// This is the regression guard for the whole task: it fails the moment someone reintroduces
+    /// a hand-written property list that happens to omit one of these.
+    #[test]
+    fn layout_properties_never_named_in_realize_still_reach_the_widget() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Column)
+            .prop("padding", PropValue::Int(12))
+            .prop("width", PropValue::Int(240))
+            .prop("justify", PropValue::Text("space_between".into()))
+            .prop("flex_grow", PropValue::Float(1.0))
+            .prop("margin", PropValue::Float(6.0));
+
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let l = w.base().style.layout;
+        assert_eq!(l.padding, 12.0, "padding — in the original design doc, never implemented");
+        assert_eq!(l.width, Length::Px(240.0));
+        assert_eq!(l.justify, Justify::SpaceBetween, "enum by name, snake_case");
+        assert_eq!(l.flex_grow, 1.0);
+        assert_eq!(l.margin, 6.0);
+    }
+
+    /// `Length` reads the way an author would write it: a bare number is px, `"auto"` is auto,
+    /// and a percentage string is a fraction — not the enum's `{"px": 240}` shape.
+    #[test]
+    fn length_accepts_the_spelling_an_author_would_reach_for() {
+        let mut hints = HintTargetRegistry::default();
+        let mut case = |p: PropValue| {
+            let node = ViewNode::new(WidgetKind::Surface).prop("width", p);
+            realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default())
+                .base()
+                .style
+                .layout
+                .width
+        };
+        assert_eq!(case(PropValue::Int(240)), Length::Px(240.0));
+        assert_eq!(case(PropValue::Float(12.5)), Length::Px(12.5));
+        assert_eq!(case(PropValue::Text("auto".into())), Length::Auto);
+        assert_eq!(case(PropValue::Text("50%".into())), Length::Pct(0.5));
+    }
+
+    /// Untrusted input stays total, and — the part that matters — a single bad value costs only
+    /// itself. A wrong type, an unparseable length and an unknown key all get dropped while the
+    /// good properties on the same node still land.
+    #[test]
+    fn a_bad_property_never_takes_the_good_ones_with_it() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Column)
+            .prop("gap", PropValue::Int(8))
+            .prop("padding", PropValue::Text("not a number".into()))
+            .prop("width", PropValue::Text("50 furlongs".into()))
+            .prop("nonsense_key", PropValue::Int(3))
+            .prop("justify", PropValue::Text("sideways".into()))
+            .prop("margin", PropValue::Float(4.0));
+
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let l = w.base().style.layout;
+        assert_eq!(l.gap, 8.0, "good property survives a bad neighbour");
+        assert_eq!(l.margin, 4.0, "and so does one declared after the bad ones");
+        assert_eq!(l.padding, 0.0, "bad value ignored — the default stands");
+        assert_eq!(l.width, Length::Auto, "unparseable length ignored");
+        assert_eq!(l.justify, Justify::Start, "unknown enum name ignored");
+    }
+
+    /// The merge lands ON TOP of the constructed widget. `ScrollRegion::new()` zeroes its min
+    /// sizes and opts into shrinking so a viewport can be smaller than its content; rebuilding
+    /// from `Layout::default()` would undo that and the region would silently stop scrolling.
+    #[test]
+    fn merging_preserves_layout_the_widget_set_in_its_constructor() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Scroll).prop("padding", PropValue::Int(4));
+
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        let l = w.base().style.layout;
+        assert_eq!(l.padding, 4.0, "the property the node did carry");
+        assert_eq!(l.min_height, Some(Length::Px(0.0)), "constructor value survives");
+        assert_eq!(l.min_width, Some(Length::Px(0.0)));
+        assert_eq!(l.flex_shrink, Some(1.0), "without this a scroll region cannot shrink");
+        assert!(l.gap_spacing.is_some(), "theme spacing token survives");
+    }
+
+    /// A node with no properties leaves the widget exactly as its constructor built it.
+    #[test]
+    fn a_node_with_no_properties_changes_nothing() {
+        let mut hints = HintTargetRegistry::default();
+        let bare = realize(
+            &ViewNode::new(WidgetKind::Scroll),
+            &noop_emitter(),
+            &mut hints,
+            &mut FormBindings::default(),
+        );
+        assert_eq!(bare.base().style.layout, ScrollRegion::new().base().style.layout);
+    }
+
+    // ── The generated surface, end to end (F003/P017/T3) ─────────────────────────────────
+    // The two capabilities that started this phase: both existed in the widgets, and neither
+    // could be set from a description while this file named properties by hand.
+
+    /// An input's placeholder. `Input::placeholder` has existed all along and the showcase uses it
+    /// twice, including the command palette — yet a description could not say it.
+    #[test]
+    fn a_description_can_now_set_an_inputs_placeholder() {
+        let node = ViewNode::new(WidgetKind::Input)
+            .text("current")
+            .prop("placeholder", PropValue::Text("type to filter…".into()));
+
+        let input = with_props(Input::new().value(text_of(&node)), &node);
+        assert_eq!(input.placeholder_str(), "type to filter…");
+        assert_eq!(input.value_str(), "current", "the value still lands alongside it");
+    }
+
+    /// A scroll region's axes. `ScrollRegion` has supported both all along — the showcase's own
+    /// root is `.both()` — but every declarative region was vertical, forever.
+    #[test]
+    fn a_description_can_now_ask_for_a_two_axis_scroll_region() {
+        let both = ViewNode::new(WidgetKind::Scroll).prop("axes", PropValue::Text("both".into()));
+        assert_eq!(
+            with_props(ScrollRegion::new(), &both).clone_axes(),
+            heca_grid_ui::ScrollAxes::Both,
+        );
+        assert_eq!(
+            with_props(ScrollRegion::new(), &ViewNode::new(WidgetKind::Scroll)).clone_axes(),
+            heca_grid_ui::ScrollAxes::Vertical,
+            "unset still means the widget's own default",
+        );
+    }
+
+    /// Total for untrusted input: an unknown enum name and a property belonging to a different
+    /// widget both leave the widget alone, and the good property on the same node still lands.
+    #[test]
+    fn the_generated_surface_ignores_what_it_cannot_use() {
+        let mut hints = HintTargetRegistry::default();
+        let node = ViewNode::new(WidgetKind::Scroll)
+            .prop("axes", PropValue::Text("sideways".into()))
+            .prop("placeholder", PropValue::Text("not a scroll property".into()))
+            .prop("gap", PropValue::Int(6));
+
+        assert_eq!(
+            with_props(ScrollRegion::new(), &node).clone_axes(),
+            heca_grid_ui::ScrollAxes::Vertical,
+            "unknown variant name keeps the default",
+        );
+        let w = realize(&node, &noop_emitter(), &mut hints, &mut FormBindings::default());
+        assert_eq!(w.base().style.layout.gap, 6.0, "the good property still lands");
+    }
+
+    /// The two tests above read the widget through `with_props`, which is the surface but not the
+    /// path a real description takes. These two go through **`realize` itself** and read the result
+    /// the only way a `Box<dyn Component>` allows — by painting it — so the arm is proven to wire
+    /// the surface, not just the surface proven to exist.
+    ///
+    /// An empty input paints its placeholder, so the text is in the scene when the arm passed it on
+    /// and absent when it did not.
+    #[test]
+    fn a_realized_input_paints_the_placeholder_it_was_given() {
+        use heca_core::layout::Size;
+        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
+
+        let runs = |node: &ViewNode| {
+            let mut widget = realize(
+                node,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            );
+            LayoutEngine::new().compute(widget.as_mut(), Size::new(240.0, 40.0));
+            let theme = Theme::default();
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                widget.paint(&mut cx);
+            }
+            scene
+                .iter()
+                .filter_map(|c| match c {
+                    DrawCommand::Text(t) => Some(t.text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        // No value, so the placeholder is what shows.
+        let with = ViewNode::new(WidgetKind::Input)
+            .prop("placeholder", PropValue::Text("type to filter…".into()));
+        assert!(
+            runs(&with).contains(&"type to filter…".to_string()),
+            "the realized input paints the placeholder it was described with",
+        );
+        assert!(
+            !runs(&ViewNode::new(WidgetKind::Input)).contains(&"type to filter…".to_string()),
+            "and it is the property that put it there, not the widget's own default",
+        );
+    }
+
+    /// A described two-axis region **is** the native one: same widget, same content, same scene.
+    /// The `axes` property is the only difference between the two calls, and it is what makes the
+    /// horizontal bar appear — every declarative region was vertical forever before it.
+    #[test]
+    fn a_realized_two_axis_region_is_the_native_one() {
+        use heca_core::layout::Size;
+        use heca_grid_ui::{LayoutEngine, PaintCx, Parent, Scene, ScrollAxes, Theme};
+
+        // Content wider AND taller than the viewport, so both axes overflow and both bars draw.
+        let content = ViewNode::new(WidgetKind::Column)
+            .prop("width", PropValue::Int(400))
+            .prop("height", PropValue::Int(300))
+            .child(ViewNode::new(WidgetKind::Label).text("content"));
+        let realized_content = || {
+            realize(
+                &content,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            )
+        };
+
+        let paint = |mut widget: Box<dyn Component>| {
+            LayoutEngine::new().compute(widget.as_mut(), Size::new(120.0, 80.0));
+            let theme = Theme::default();
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                widget.paint(&mut cx);
+            }
+            scene.iter().cloned().collect::<Vec<_>>()
+        };
+
+        let described = |axes: Option<&str>| {
+            let mut node = ViewNode::new(WidgetKind::Scroll)
+                .prop("width", PropValue::Int(120))
+                .prop("height", PropValue::Int(80))
+                .child(content.clone());
+            if let Some(axes) = axes {
+                node = node.prop("axes", PropValue::Text(axes.into()));
+            }
+            paint(realize(
+                &node,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            ))
+        };
+
+        let native = |axes: ScrollAxes| {
+            paint(Box::new(
+                ScrollRegion::new()
+                    .axes(axes)
+                    .width(Length::Px(120.0))
+                    .height(Length::Px(80.0))
+                    .child_boxed(realized_content()),
+            ))
+        };
+
+        assert_eq!(described(Some("both")), native(ScrollAxes::Both), "same widget, same scene");
+        assert_eq!(described(None), native(ScrollAxes::Vertical), "unset = the widget's default");
+        assert_ne!(
+            described(Some("both")),
+            described(None),
+            "the property is what adds the second axis (and its bar)",
+        );
+        assert_eq!(
+            described(Some("sideways")),
+            native(ScrollAxes::Vertical),
+            "an unknown axis name keeps the default, through the whole path",
+        );
+    }
+
+    /// And it **scrolls** both ways, not just paints a second bar: a described two-axis region
+    /// consumes a horizontal wheel delta, where a described default region leaves it for the host.
+    /// (The visible behaviour is confirmed in the running app; this pins the routing.)
+    #[test]
+    fn a_realized_two_axis_region_consumes_a_horizontal_wheel() {
+        use heca_core::layout::{Point, Size};
+        use heca_grid_ui::{Event, Handled, LayoutEngine};
+
+        let horizontal_wheel = |axes: Option<&str>| {
+            let mut node = ViewNode::new(WidgetKind::Scroll)
+                .prop("width", PropValue::Int(120))
+                .prop("height", PropValue::Int(80))
+                .child(
+                    ViewNode::new(WidgetKind::Column)
+                        .prop("width", PropValue::Int(400))
+                        .prop("height", PropValue::Int(300))
+                        .child(ViewNode::new(WidgetKind::Label).text("content")),
+                );
+            if let Some(axes) = axes {
+                node = node.prop("axes", PropValue::Text(axes.into()));
+            }
+            let mut region = realize(
+                &node,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            );
+            LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));
+            // The wheel is hover-gated (`Event::Scroll` carries no position), so hover it first.
+            heca_grid_ui::dispatch(region.as_mut(), &Event::PointerMoved { pos: Point::new(60.0, 40.0) });
+            heca_grid_ui::dispatch(region.as_mut(), &Event::Scroll { delta_x: -1.0, delta_y: 0.0 })
+        };
+
+        assert_eq!(
+            horizontal_wheel(Some("both")),
+            Handled::Yes,
+            "a described two-axis region scrolls horizontally",
+        );
+        assert_eq!(
+            horizontal_wheel(None),
+            Handled::No,
+            "a described default region still has no horizontal axis to scroll",
+        );
     }
 }

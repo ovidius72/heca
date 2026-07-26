@@ -55,10 +55,13 @@ pub enum ToastCorner {
     BottomLeft,
 }
 
+#[heca_grid_ui_macros::props]
 impl ToastCorner {
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn is_right(self) -> bool {
         matches!(self, ToastCorner::TopRight | ToastCorner::BottomRight)
     }
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn is_top(self) -> bool {
         matches!(self, ToastCorner::TopRight | ToastCorner::TopLeft)
     }
@@ -94,22 +97,27 @@ impl ToastSpec {
             dismissible: true,
         }
     }
+    #[heca_grid_ui_macros::prop]
     pub fn severity(mut self, s: ToastSeverity) -> Self {
         self.severity = s;
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, g: Glyph) -> Self {
         self.icon = Some(g);
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn body(mut self, b: impl Into<String>) -> Self {
         self.body = Some(b.into());
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn action(mut self, label: impl Into<String>) -> Self {
         self.action = Some(label.into());
         self
     }
+    #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self
@@ -156,18 +164,21 @@ impl ToastStack {
     }
 
     /// Which viewport corner to anchor to (default [`ToastCorner::TopRight`]).
+    #[heca_grid_ui_macros::prop]
     pub fn corner(mut self, corner: ToastCorner) -> Self {
         self.corner = corner;
         self
     }
 
     /// Gap between stacked toasts (logical px).
+    #[heca_grid_ui_macros::prop]
     pub fn gap(mut self, gap: f32) -> Self {
         self.gap = gap;
         self
     }
 
     /// Inset from the viewport edges (logical px).
+    #[heca_grid_ui_macros::prop]
     pub fn margin(mut self, margin: f32) -> Self {
         self.margin = margin;
         self
@@ -175,12 +186,14 @@ impl ToastStack {
 
     /// Called with the toast's id when its × is clicked. The host removes the id
     /// from its list (the stack reflows the rest).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn(u64) + 'static) -> Self {
         self.on_dismiss = Some(Rc::new(f));
         self
     }
 
     /// Called with the toast's id when its inline action is clicked.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_action(mut self, f: impl Fn(u64) + 'static) -> Self {
         self.on_action = Some(Rc::new(f));
         self
@@ -290,9 +303,9 @@ impl ToastStack {
             .iter_mut()
             .map(|e| {
                 e.toast.base_mut().font = font;
-                e.toast.base_mut().style.width = Length::Px(TOAST_W);
+                e.toast.base_mut().style.layout.width = Length::Px(TOAST_W);
                 e.toast.remeasure();
-                match e.toast.base().style.height {
+                match e.toast.base().style.layout.height {
                     Length::Px(h) => h,
                     _ => font,
                 }
@@ -360,7 +373,9 @@ impl Component for ToastStack {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture: the toasts are not `base.children` — they live in `entries`, reconciled by id — so
+    /// there is no framework walk that could reach them. This is the walk.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.entries.borrow().is_empty() {
             return Handled::No;
         }
@@ -371,7 +386,7 @@ impl Component for ToastStack {
                 let mut entries = self.entries.borrow_mut();
                 for e in entries.iter_mut() {
                     if e.toast.base().bounds.contains(*pos) {
-                        return e.toast.event(ev);
+                        return crate::component::dispatch(&mut e.toast, ev);
                     }
                 }
                 // Missed every toast — let it fall through to the UI behind.
@@ -380,7 +395,7 @@ impl Component for ToastStack {
             Event::PointerMoved { .. } => {
                 let mut entries = self.entries.borrow_mut();
                 for e in entries.iter_mut() {
-                    e.toast.event(ev);
+                    crate::component::dispatch(&mut e.toast, ev);
                 }
                 Handled::No
             }

@@ -64,7 +64,7 @@ const SECONDARY_FILL_ALPHA: u8 = 36;
 const DISABLED_CONTENT_ALPHA: f32 = 0.38;
 
 /// Visual variant of a [`Button`] (GridCN/shadcn set).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ButtonVariant {
     /// Accent border; fill sweeps in from the bottom on hover.
     #[default]
@@ -155,6 +155,7 @@ pub struct Button {
     on_click: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Button {
     /// An **empty** primary button — no content. Compose it with [`child`](Parent::child) /
     /// [`icon`](Self::icon) / [`content_boxed`](Self::content_boxed).
@@ -168,9 +169,9 @@ impl Button {
         base.focus_barrier = true;
         // Content is laid out as a centered row; padding/gap derive from the size variant in
         // `remeasure`, and the variant itself is set via `LayoutExt::size`.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
         let mut button = Self {
             base,
             variant: ButtonVariant::Primary,
@@ -193,6 +194,7 @@ impl Button {
 
     /// Prepend a leading [`Icon`] — sugar for a child, so `Button::new("Save").icon(Glyph::Check)`
     /// holds `[Icon, Label]`. The icon inherits the button's state color and size variant.
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.base.children.insert(0, Box::new(Icon::new(glyph)));
         self
@@ -201,6 +203,7 @@ impl Button {
     /// Append an already-boxed component — the seam for a subtree built by a mapper
     /// (`realize(&ViewNode)` returns `Box<dyn Component>`, which is not itself `Component` and so
     /// cannot go through [`Parent::child`]). Mirrors `Dialog::body_boxed`.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn content_boxed(mut self, content: Box<dyn Component>) -> Self {
         self.base.children.push(content);
         self
@@ -227,14 +230,16 @@ impl Button {
     }
 
     /// Set the variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = variant;
         self
     }
 
     /// Set an explicit font size — overrides the inherited theme font + size scale.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
@@ -242,18 +247,21 @@ impl Button {
 
     /// Enable or disable the glow — both the hover glow and the faint theme
     /// rest glow (`interaction.control_rest_glow`). Default: enabled.
+    #[heca_grid_ui_macros::prop]
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
         self
     }
 
     /// Show or hide the border (default: shown for bordered variants).
+    #[heca_grid_ui_macros::prop]
     pub fn bordered(mut self, enabled: bool) -> Self {
         self.show_border = enabled;
         self
     }
 
     /// Set the click callback.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self
@@ -313,7 +321,7 @@ impl Button {
     /// content whatever it is, instead of a width faked from a character count.
     fn content_box(&self) -> Rectangle {
         let b = self.base.bounds;
-        let pad = self.base.style.padding_x.unwrap_or(self.base.style.padding) as f64;
+        let pad = self.base.style.layout.padding_x.unwrap_or(self.base.style.layout.padding) as f64;
         Rectangle::new(
             Point::new(b.loc.x + pad, b.loc.y),
             Size::new((b.size.w - 2.0 * pad).max(0.0), b.size.h),
@@ -375,12 +383,12 @@ impl Component for Button {
     fn remeasure(&mut self) {
         let fs = self.base.font;
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.padding = pad;
-        self.base.style.padding_x = Some(pad + fs * MONO_ADVANCE_RATIO);
-        self.base.style.padding_y = Some(pad);
-        self.base.style.gap = fs * GAP_RATIO;
-        self.base.style.width = Length::Auto;
-        self.base.style.height = Length::Auto;
+        self.base.style.layout.padding = pad;
+        self.base.style.layout.padding_x = Some(pad + fs * MONO_ADVANCE_RATIO);
+        self.base.style.layout.padding_y = Some(pad);
+        self.base.style.layout.gap = fs * GAP_RATIO;
+        self.base.style.layout.width = Length::Auto;
+        self.base.style.layout.height = Length::Auto;
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -564,7 +572,10 @@ impl Component for Button {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

@@ -156,7 +156,8 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Surface, Tag, Tooltip,
+    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, ScrollRegion, Surface, Tag,
+    Tooltip,
     TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
@@ -959,9 +960,9 @@ pub(crate) fn sync_pane_viewport_widgets(
             continue;
         };
         if scrollbar_visible {
-            widgets.scrollbar.base_mut().style.width =
+            widgets.scrollbar.base_mut().style.layout.width =
                 heca_grid_ui::style::Length::Px(8.0);
-            widgets.scrollbar.base_mut().style.height =
+            widgets.scrollbar.base_mut().style.layout.height =
                 heca_grid_ui::style::Length::Px(content_rect.size.h as f32);
             LayoutEngine::new().base_font(font).compute(
                 &mut widgets.scrollbar,
@@ -1185,6 +1186,45 @@ fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
     }
 }
 
+/// Deliver a pointer event to the open modal layer — **the whole set, in one place**.
+///
+/// Returns `true` when a modal owns the pointer, so every caller stops there and nothing leaks to
+/// the page behind. There is deliberately **one** function rather than a branch per winit event:
+/// the input this tree needs is not a per-caller choice.
+///
+/// That choice is what kept breaking. A widget with a *gesture* needs the whole set or it fails in
+/// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives
+/// `PointerReleased` leaves its thumb welded to the cursor, and one that never receives `Scroll`
+/// simply does not scroll. Both are silent: it lays out, paints and hit-tests perfectly. The modal
+/// path used to forward `PointerMoved` and `PointerPressed` only, so both happened, and the fix
+/// had already been written twice elsewhere (`Dialog::event`, `dispatch_pane_viewport_release`)
+/// without the hole here being visible from either.
+///
+/// So: a caller says *a pointer event happened*, not *which kinds this surface deigns to forward*.
+pub(crate) fn dispatch_modal_pointer(
+    state: &mut crate::app_state::AppState,
+    ev: &Event,
+) -> bool {
+    debug_assert!(
+        matches!(
+            ev,
+            Event::PointerMoved { .. }
+                | Event::PointerPressed { .. }
+                | Event::PointerReleased { .. }
+                | Event::Scroll { .. }
+        ),
+        "dispatch_modal_pointer is the pointer path; keys go through the keymap",
+    );
+    if top_modal(state).is_none() {
+        return false;
+    }
+    if let Some(root) = state.layers.top_modal_root_mut() {
+        let _ = heca_grid_ui::dispatch(root, ev);
+    }
+    state.mark_full_redraw();
+    true
+}
+
 /// Dispatch a pointer press at `pos` into the retained pane headers. Returns
 /// `Some((pane_id, consumed))` when the press lands inside a header's bounds:
 /// `consumed = true` if an action button handled it (caller must not forward to
@@ -1203,7 +1243,8 @@ pub(crate) fn dispatch_pane_header_press(
         .map(|(id, _)| *id)?;
     let header = state.pane_headers.get_mut(&hit)?;
     let consumed =
-        header.root.event(&Event::PointerPressed { pos: point }) == heca_grid_ui::Handled::Yes;
+        heca_grid_ui::dispatch(&mut header.root, &Event::PointerPressed { pos: point })
+            == heca_grid_ui::Handled::Yes;
     Some((hit, consumed))
 }
 
@@ -1218,12 +1259,44 @@ pub(crate) fn dispatch_pane_header_move(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut over = false;
     for header in state.pane_headers.values_mut() {
-        let _ = header.root.event(&Event::PointerMoved { pos: point });
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerMoved { pos: point });
         if rect_contains(header.root.base().bounds, point) {
             over = true;
         }
     }
     over
+}
+
+/// Feed a pointer release into the retained pane headers, so a gesture that started on one can end.
+///
+/// The header seam had a press and a move and no release — the last of the four surfaces to be
+/// missing a kind. Nothing there grabs the pointer *today*, which is exactly why it went unnoticed:
+/// the first widget mounted here that does would have been broken on arrival, the same way a scroll
+/// region was in three other places. Not hit-tested, deliberately: a release ends the gesture
+/// wherever the cursor drifted to.
+pub(crate) fn dispatch_pane_header_release(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    for header in state.pane_headers.values_mut() {
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerReleased { pos: point });
+    }
+}
+
+/// Feed the wheel into the retained pane headers. Returns `true` when one consumed it.
+///
+/// Nothing in a header scrolls today. It is wired anyway, because "no widget here needs it yet" is
+/// the reasoning that produced every other missing kind.
+pub(crate) fn dispatch_pane_header_wheel(
+    state: &mut crate::app_state::AppState,
+    ev: &Event,
+) -> bool {
+    let mut handled = false;
+    for header in state.pane_headers.values_mut() {
+        handled |= heca_grid_ui::dispatch(&mut header.root, ev) == heca_grid_ui::Handled::Yes;
+    }
+    handled
 }
 
 /// Feed a pointer press into the retained terminal viewport widgets. Returns
@@ -1234,8 +1307,9 @@ pub(crate) fn dispatch_pane_viewport_press(
 ) -> bool {
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     for widgets in state.pane_viewport_widgets.values_mut() {
-        if widgets.badge.event(&Event::PointerPressed { pos: point }) == heca_grid_ui::Handled::Yes
-            || widgets.scrollbar.event(&Event::PointerPressed { pos: point })
+        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerPressed { pos: point })
+            == heca_grid_ui::Handled::Yes
+            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerPressed { pos: point })
                 == heca_grid_ui::Handled::Yes
         {
             return true;
@@ -1253,9 +1327,9 @@ pub(crate) fn dispatch_pane_viewport_move(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut over = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        let badge_handled = widgets.badge.event(&Event::PointerMoved { pos: point })
+        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerMoved { pos: point })
             == heca_grid_ui::Handled::Yes;
-        let scrollbar_handled = widgets.scrollbar.event(&Event::PointerMoved { pos: point })
+        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerMoved { pos: point })
             == heca_grid_ui::Handled::Yes;
         if badge_handled || scrollbar_handled {
             over = true;
@@ -1280,9 +1354,9 @@ pub(crate) fn dispatch_pane_viewport_release(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut handled = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        handled |= widgets.badge.event(&Event::PointerReleased { pos: point })
+        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerReleased { pos: point })
             == heca_grid_ui::Handled::Yes;
-        handled |= widgets.scrollbar.event(&Event::PointerReleased { pos: point })
+        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerReleased { pos: point })
             == heca_grid_ui::Handled::Yes;
     }
     handled
@@ -1324,9 +1398,9 @@ pub(crate) struct RepaintWatch {
 impl RepaintWatch {
     pub(crate) fn new(child: impl Component + 'static) -> (Self, Signal<u64>) {
         let mut base = heca_grid_ui::Base::new();
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
-        base.style.direction = heca_grid_ui::Direction::Column;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
+        base.style.layout.direction = heca_grid_ui::Direction::Column;
         base.children.push(Box::new(child));
         let request = signal(0_u64);
         (
@@ -1354,7 +1428,7 @@ impl Component for RepaintWatch {
             return;
         }
         for child in &self.base.children {
-            if child.base().style.hidden {
+            if child.base().style.layout.hidden {
                 continue;
             }
             child.paint(cx);
@@ -1437,6 +1511,7 @@ fn build_sidebar_shell(
     border_width: f32,
     border_radius: f32,
     content: Option<WidgetModel>,
+    scroll: Option<Signal<f32>>,
 ) -> Flex {
     let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1451,7 +1526,28 @@ fn build_sidebar_shell(
         .gap(8.0)
         .background(shell_bg);
     if let Some(content) = content {
-        body = body.child_boxed(content);
+        // The content sits in a real scroll viewport, so a workspace list longer than the sidebar
+        // scrolls instead of running off the bottom. The region drives itself — wheel, thumb, track
+        // click, click-and-hold — and needs nothing from the host but the pointer events every
+        // widget gets.
+        //
+        // **The offset lives in the store, not in the widget.** This tree is rebuilt whenever the
+        // chrome signature changes, and a pane's git status changing is enough to do it. A
+        // widget-local offset would snap the sidebar back to the top every time anything underneath
+        // it moved. `SharedChromeState` is where the design record puts scroll offsets, and the
+        // signal was already sitting there reserved for this.
+        let mut region = ScrollRegion::new();
+        if let Some(store) = scroll {
+            // Restore through `scroll_to`, which reports with `event: None` — so the listener below
+            // ignores it and a restore can never be mistaken for the user scrolling.
+            region.scroll_to(store.get_untracked());
+            region = region.on_scroll(move |s| {
+                if s.event.is_some() {
+                    store.set(s.offset_y);
+                }
+            });
+        }
+        body = body.child(region.child_boxed(content));
     }
     Flex::column()
         .width(Length::Px(region_w))
@@ -3022,6 +3118,8 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
+            // The workspaces container's own offset, which outlives the tree.
+            Some(state.chrome_state.workspaces.scroll),
         )
     });
     let right_w = chrome.right_sidebar_width;
@@ -3041,6 +3139,9 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
+            // No container state owns a right-sidebar offset yet; the region still works, it just
+            // starts at the top when the tree is rebuilt.
+            None,
         )
     });
 
@@ -3103,15 +3204,62 @@ pub(crate) fn build_chrome_root(
 }
 
 /// Feed a pointer-press into the retained chrome tree so widget callbacks can route
-/// sidebar intents through the app event loop. The tree is discarded afterwards so
-/// incidental local widget state cannot drift away from the canonical store.
-pub(crate) fn chrome_dispatch_press(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
+/// sidebar intents through the app event loop.
+///
+/// **The tree is kept.** It used to be dropped here (`chrome_tree = None`) to stop incidental
+/// widget-local state drifting from the canonical store — but that is a rebuild used as a reset,
+/// and it takes everything else with it. Nothing that spans two events can survive: a scrollbar
+/// grab, a scroll position, a hover. A scroll region in the sidebar was impossible for exactly this
+/// reason, not for any reason to do with scrolling.
+///
+/// The drift it guarded against is already handled properly, twice over: the tree is rebuilt
+/// whenever `chrome_signature` changes (which is what a press that alters canonical state does),
+/// and `sync_chrome_signals` pushes value-state into the tree's bound signals every frame. State
+/// that must not drift belongs in one of those — in the store, read through a signal — which is the
+/// read-via-signals/write-via-actions rule this codebase already runs on.
+/// Returns `true` when a widget consumed the press — the caller must then treat it as spoken for
+/// and not also resolve it by geometry. That gate is what stops a press on the sidebar's scrollbar
+/// thumb being read as a press on the pane card behind it.
+pub(crate) fn chrome_dispatch_press(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> bool {
+    state
+        .chrome_tree
+        .as_mut()
+        .map(|tree| {
+            heca_grid_ui::dispatch(
+                &mut tree.root,
+                &Event::PointerPressed { pos: Point::new(pos.0 as f64, pos.1 as f64) },
+            ) == heca_grid_ui::Handled::Yes
+        })
+        .unwrap_or(false)
+}
+
+/// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.
+///
+/// Without it a scrollbar thumb grabbed in the sidebar stays welded to the cursor — the widget is
+/// still waiting for the end of a gesture nobody told it about. Deliberately not hit-tested: a
+/// release ends the gesture wherever the cursor drifted to.
+pub(crate) fn chrome_dispatch_release(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
-        tree.root.event(&Event::PointerPressed {
+        heca_grid_ui::dispatch(&mut tree.root, &Event::PointerReleased {
             pos: Point::new(pos.0 as f64, pos.1 as f64),
         });
     }
-    state.chrome_tree = None;
+}
+
+/// Feed the wheel into the retained chrome tree. Returns `true` when it was consumed — a hovered
+/// scroll region took it — so the caller leaves the terminal alone.
+pub(crate) fn chrome_dispatch_wheel(
+    state: &mut crate::app_state::AppState,
+    ev: &Event,
+) -> bool {
+    state
+        .chrome_tree
+        .as_mut()
+        .map(|tree| heca_grid_ui::dispatch(&mut tree.root, ev) == heca_grid_ui::Handled::Yes)
+        .unwrap_or(false)
 }
 
 /// Feed a pointer-move into the retained chrome tree so its **hover affordances**
@@ -3122,7 +3270,7 @@ pub(crate) fn chrome_dispatch_press(state: &mut crate::app_state::AppState, pos:
 /// and must persist across moves; the caller already requests a repaint.
 pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
-        tree.root.event(&Event::PointerMoved {
+        heca_grid_ui::dispatch(&mut tree.root, &Event::PointerMoved {
             pos: Point::new(pos.0 as f64, pos.1 as f64),
         });
     }
@@ -3606,6 +3754,7 @@ mod tests {
             1.0,
             12.0,
             content,
+            None,
         );
         assert_eq!(
             shell.base().children.len(),
@@ -3665,6 +3814,7 @@ mod tests {
             border_w,
             12.0,
             content,
+            None,
         );
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);

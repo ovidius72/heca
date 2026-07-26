@@ -33,6 +33,7 @@ pub struct Command {
     on_run: Box<dyn Fn()>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Command {
     /// A command with `label` that runs `on_run` when selected.
     pub fn new(label: impl Into<String>, on_run: impl Fn() + 'static) -> Self {
@@ -45,12 +46,14 @@ impl Command {
     }
 
     /// An optional leading icon.
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.icon = Some(glyph);
         self
     }
 
     /// An optional right-aligned keybinding hint (e.g. `"⌘K"`).
+    #[heca_grid_ui_macros::prop]
     pub fn key(mut self, hint: impl Into<String>) -> Self {
         self.key = Some(hint.into());
         self
@@ -161,18 +164,21 @@ impl CommandPalette {
     }
 
     /// Add a command.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
         self.commands.push(c);
         self
     }
 
     /// Set the empty-query placeholder text.
+    #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
         self.placeholder = text.into();
         self
     }
 
     /// Set the initial open state.
+    #[heca_grid_ui_macros::prop]
     pub fn open(self, open: bool) -> Self {
         self.open.set(open);
         self
@@ -505,12 +511,18 @@ impl Component for CommandPalette {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. While open it grabs the viewport — typing, nav and outside-click dismissal —
+    /// and its command rows are drawn from data, not mounted as children.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even while closed; keep the query field's copy in sync
         // (it needs them for word/line delete). Observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {
             self.modifiers = *m;
-            self.query.borrow_mut().event(ev);
+            crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
             return Handled::No;
         }
         if !self.is_open() {
@@ -547,7 +559,7 @@ impl Component for CommandPalette {
                 // resolves them to a `WidgetIntent` (MenuUp/MenuDown/Activate). Modal capture is
                 // the host's job — do NOT hardcode `Handled::Yes` here.
                 let before = self.query_text();
-                let handled = self.query.borrow_mut().event(ev);
+                let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
                 if self.query_text() != before {
                     self.on_query_changed();
                 }
@@ -579,7 +591,7 @@ impl Component for CommandPalette {
                     let mut q = self.query.borrow_mut();
                     q.base_mut().bounds = query_rect;
                     q.base_mut().font = font;
-                    q.event(ev);
+                    crate::component::dispatch(&mut *q, ev);
                     return Handled::Yes;
                 }
                 let mut ran = false;

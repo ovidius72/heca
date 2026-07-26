@@ -61,13 +61,14 @@ pub struct Row {
     attention_color: Option<Color>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Row {
     /// A new (horizontal) row. Add content with `.child(...)`; make it
     /// clickable/selectable with [`on_activate`](Row::on_activate).
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
         Self {
             base,
             active: signal(false),
@@ -87,12 +88,14 @@ impl Row {
     /// from the row's background — a stronger tint of the **same hue** — so a
     /// state-tinted row highlights in its own color (not the accent); rows with no
     /// background fall back to the theme accent.
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn highlight(mut self, c: Color) -> Self {
         self.highlight = Some(c);
         self
     }
 
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
@@ -103,24 +106,28 @@ impl Row {
     /// it `true`, the row flashes [`ATTENTION_PULSES`] times (and the signal is
     /// consumed back to `false`). The matching **sound** is the host's job — it
     /// plays its beep when it sets this signal (grid-ui stays audio-free).
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn attention(mut self, req: Signal<bool>) -> Self {
         self.attention_req = Some(req);
         self
     }
 
     /// Color of the attention pulse (default: the theme `warning` hue).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn attention_color(mut self, c: Color) -> Self {
         self.attention_color = Some(c);
         self
     }
 
     /// Set the active (selected) state.
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
     }
 
     /// How the active state is indicated (default [`ActiveMarker::Bar`]).
+    #[heca_grid_ui_macros::prop]
     pub fn marker(mut self, marker: ActiveMarker) -> Self {
         self.marker = marker;
         self
@@ -134,6 +141,7 @@ impl Row {
     /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
     /// from the filled `active` pill (e.g. the workspaces sidebar highlights the
     /// nav cursor while the real focused pane keeps its pill).
+    #[heca_grid_ui_macros::prop]
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self
@@ -157,6 +165,12 @@ impl Row {
 }
 
 impl Component for Row {
+    /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
+    /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -181,8 +195,8 @@ impl Component for Row {
         // back to the theme rest glow (`PaintCx::rest_glow`), so cards honor the
         // `glow_size` setting at rest; an unfilled row stays surface-less and flat.
         let s = &self.base.style;
-        if let (Some(fill), None) = (s.fill, s.glow) {
-            cx.rect(b, fill, s.border, s.radius, cx.rest_glow(REST_GLOW_RADIUS));
+        if let (Some(fill), None) = (s.visual.fill, s.visual.glow) {
+            cx.rect(b, fill, s.visual.border, s.visual.radius, cx.rest_glow(REST_GLOW_RADIUS));
         } else {
             cx.paint_base(&self.base);
         }
@@ -200,7 +214,7 @@ impl Component for Row {
         // Without an explicit override, derive the highlight from the row's own fill
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the
         // lighter Item-style accent wash instead of a heavy same-hue tint.
-        let highlight_base = self.highlight.or(self.base.style.fill);
+        let highlight_base = self.highlight.or(self.base.style.visual.fill);
         if active {
             let fill = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_active_fill)
@@ -289,7 +303,7 @@ impl Component for Row {
             cx.flash(b, self.flash.amount() * 0.5, 0.0);
         }
         if disabled {
-            cx.dim(b, self.base.style.radius);
+            cx.dim(b, self.base.style.visual.radius);
         }
         if self.interactive()
             && !disabled
@@ -317,7 +331,9 @@ impl Component for Row {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }

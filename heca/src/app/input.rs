@@ -191,7 +191,7 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     keymap.dispatch(key, mods, |ev| {
         match state.active_search_mut() {
             Some(search) => {
-                let handled = search.input.borrow_mut().event(ev);
+                let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), ev);
                 edited |= handled == heca_grid_ui::Handled::Yes;
                 handled
             }

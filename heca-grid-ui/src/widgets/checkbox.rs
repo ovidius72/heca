@@ -38,7 +38,7 @@ const GLOW_RADIUS: f32 = 14.0;
 const GLOW_INTENSITY: f32 = 0.09;
 
 /// Which side of the box the [`Checkbox`] label sits on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum LabelSide {
     /// Label to the right of the box (default).
     #[default]
@@ -64,13 +64,14 @@ pub struct Checkbox {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Checkbox {
     /// A new checkbox, unchecked and label-less by default.
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.width = Length::Px(BOX_SIZE as f32);
-        base.style.height = Length::Px(BOX_SIZE as f32);
+        base.style.layout.width = Length::Px(BOX_SIZE as f32);
+        base.style.layout.height = Length::Px(BOX_SIZE as f32);
         Self {
             base,
             checked: signal(false),
@@ -84,6 +85,7 @@ impl Checkbox {
     }
 
     /// Set the initial checked state (no animation).
+    #[heca_grid_ui_macros::prop]
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked.set(checked);
         self.progress = if checked { 1.0 } else { 0.0 };
@@ -91,6 +93,7 @@ impl Checkbox {
     }
 
     /// Add a label next to the box. Clicking the label toggles the checkbox.
+    #[heca_grid_ui_macros::prop]
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self.remeasure();
@@ -98,6 +101,7 @@ impl Checkbox {
     }
 
     /// Choose which side the label sits on (default [`LabelSide::Right`]).
+    #[heca_grid_ui_macros::prop]
     pub fn label_side(mut self, side: LabelSide) -> Self {
         self.label_side = side;
         self
@@ -105,6 +109,7 @@ impl Checkbox {
 
     /// Set the change handler. Receives `Action::value("checkbox-change",
     /// SignalData::Bool(new_state))` each time the box is toggled.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self
@@ -130,7 +135,7 @@ impl Checkbox {
     }
     fn label_fs(&self) -> f32 {
         // Label is text → font scale (not the tighter padding scale).
-        LABEL_FS * self.base.style.size.font_scale()
+        LABEL_FS * self.base.style.layout.size.font_scale()
     }
 
     fn remeasure(&mut self) {
@@ -140,12 +145,12 @@ impl Checkbox {
                 let fs = self.label_fs();
                 let text_w = label.chars().count() as f32 * fs * MONO_ADVANCE_RATIO;
                 let line = fs * MONO_LINE_RATIO;
-                self.base.style.width = Length::Px(box_size + self.label_gap() as f32 + text_w);
-                self.base.style.height = Length::Px(box_size.max(line));
+                self.base.style.layout.width = Length::Px(box_size + self.label_gap() as f32 + text_w);
+                self.base.style.layout.height = Length::Px(box_size.max(line));
             }
             None => {
-                self.base.style.width = Length::Px(box_size);
-                self.base.style.height = Length::Px(box_size);
+                self.base.style.layout.width = Length::Px(box_size);
+                self.base.style.layout.height = Length::Px(box_size);
             }
         }
     }
@@ -280,7 +285,10 @@ impl Component for Checkbox {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

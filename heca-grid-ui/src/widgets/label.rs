@@ -59,6 +59,7 @@ pub struct Label {
     strikethrough: Signal<bool>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Label {
     /// A label showing `text`.
     pub fn new(text: impl Into<String>) -> Self {
@@ -81,6 +82,7 @@ impl Label {
     }
 
     /// Text horizontal alignment.
+    #[heca_grid_ui_macros::prop]
     pub fn align(mut self, align: TextAlign) -> Self {
         self.align = align;
         self
@@ -89,12 +91,14 @@ impl Label {
     /// Explicit text color. Unset ⇒ the enclosing control's
     /// [content color](crate::component::PaintCx::with_content_color), else the theme foreground.
     /// Setting it opts the label **out** of that inheritance.
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
         self
     }
 
     /// Render the label with bold weight.
+    #[heca_grid_ui_macros::prop]
     pub fn bold(self, bold: bool) -> Self {
         self.bold.set(bold);
         self
@@ -109,6 +113,7 @@ impl Label {
 
     /// Render the label slanted — a **synthesized oblique**, not a separate face (see the module
     /// docs): the glyphs are sheared, so the advances (and the monospace grid) are untouched.
+    #[heca_grid_ui_macros::prop]
     pub fn italic(self, italic: bool) -> Self {
         self.italic.set(italic);
         self
@@ -122,6 +127,7 @@ impl Label {
     /// Draw a rule **under** the text. A decoration, not a font attribute: the label paints it as a
     /// rect in its own resolved color, so it tints with the label (including a parent's inherited
     /// content color).
+    #[heca_grid_ui_macros::prop]
     pub fn underline(self, underline: bool) -> Self {
         self.underline.set(underline);
         self
@@ -133,6 +139,7 @@ impl Label {
     }
 
     /// Draw a rule **through** the text (a struck-out / completed item).
+    #[heca_grid_ui_macros::prop]
     pub fn strikethrough(self, strikethrough: bool) -> Self {
         self.strikethrough.set(strikethrough);
         self
@@ -163,8 +170,9 @@ impl Label {
     }
 
     /// Explicit font size in logical px — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, size: f32) -> Self {
-        self.base.style.font_size = size;
+        self.base.style.visual.font_size = size;
         self.base.font = size;
         self.remeasure();
         self
@@ -172,8 +180,9 @@ impl Label {
 
     /// Semantic font multiplier relative to the inherited base font (header ≈ 2.0,
     /// caption ≈ 0.8). Scales with a global font change.
+    #[heca_grid_ui_macros::prop]
     pub fn font_scale(mut self, scale: f32) -> Self {
-        self.base.style.font_scale = scale;
+        self.base.style.visual.font_scale = scale;
         self
     }
 
@@ -204,8 +213,8 @@ impl Component for Label {
         self.seen_text = text.clone();
         let chars = text.chars().count() as f32;
         let fs = self.base.font;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO);
+        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
+        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

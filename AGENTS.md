@@ -12,7 +12,7 @@ These are made over and over. **Violating either = redo.**
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
 - **Before building ANY UI**, look at what already exists:
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
-  - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive. **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
+  - **Layering / overlays / KeyHint visibility:** the planner (F003/P019) — see the planner (F003/P019) — the surface-tree model that decides which layers/buttons are interactive. **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
@@ -441,7 +441,7 @@ tip. This is the one pattern; follow it for any new button.
 > **Which hints are actually shown** is decided by the layered **surface compositor**, not
 > per-feature: a button inherits its layer from the surface it lives in, and one uniform
 > rule (context activation + geometric occlusion, no hardcoded z) picks the visible set.
-> **Read [`docs/surface-compositor.md`](docs/surface-compositor.md) before adding any new
+> **Read the planner (F003/P019) — see the planner (F003/P019) before adding any new
 > layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
 > visibility filter — model the surface instead.
 
@@ -718,7 +718,7 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
 
-- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling is NOT a prop** — a node carries only *semantic* `ViewVariant`/`ViewSize`/`ViewAlign` (+ `Glyph`/color *names*); the host resolves the actual pixels from `Theme`. **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop (changed 2026-07-26)** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
 - **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
@@ -749,7 +749,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
 | How does a **realized** subtree enter a widget? | Via a **`*_boxed` setter**: `realize` returns `Box<dyn Component>`, which is not itself `Component`, so it cannot go through `Parent::child`. `Dialog::body_boxed(Box<dyn Component>)` is the precedent. |
 | How does behaviour cross the plugin boundary? | As an **`Intent`** (action id + args), never a callback. Click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **NO.** Only semantic `ViewVariant` / `ViewSize` / `ViewAlign` + color/glyph **names**; the host resolves the pixels from `Theme`. |
+| Is styling a prop? | **YES — changed 2026-07-26.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
 
 **Both authoring paths converge on the same retained tree — that is the whole point:**
 
@@ -792,7 +792,7 @@ truncation/ellipsis + wrapping (a long label overflows its box today).
   `Scroll`); it also applies to individual builders, e.g. `DockFrame::rail(..)`.
 
 Background reading (the rules above are self-contained — you do **not** need these to avoid the
-mistakes): `docs/widget-architecture.md` (same content, with rationale); `pluggable-chrome-plugin-plan.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/plugin-authoring.md`.
+mistakes): `docs/widget-architecture.md` (same content, with rationale); `docs/chrome-and-ui.md` §2.6.2 + §2.7.2; `docs/widgets.md` → "Declarative UI model (`ViewNode`)"; `docs/chrome-and-ui.md`.
 
 ---
 
@@ -802,7 +802,7 @@ Any new visual or interactive element belongs in **`heca-grid-ui` as a proper wi
 
 A new widget **MUST**:
 
-- **Be domain-neutral / GENERIC.** `heca-grid-ui` widgets must **never** encode an app domain — never name or couple a widget to `workspace`/`column`/`pane` (nor `docker`/`agent`/`git`). They are generic primitives (frames, groups, rows, rails, marker bars, target hints, regions); the **domain meaning is applied app-side** by the mounted container/provider. The chrome regions (left/right/top/bottom) host *generic containers* — `WorkspacesContainer` today, but also Docker instances, AI agents, git status, notes, plugin-defined containers (see `pluggable-chrome-plugin-plan.md`). So a widget built to render the workspace "columns" must be a **generic grouping/marker primitive that ANY container can reuse** — e.g. not `ColumnGroup`, but a generic `MarkerGroup`/`RailGroup` whose left bar + target-hint mean nothing in particular until a container gives them meaning. The existing widgets model this: `DockFrame`/`ItemGroup`/`Row`/`RailCell`/`ChromeRegion`/`KeyHint` are all domain-free. **Read how they are built — and run the live showcase (`cargo run -p heca-renderer --example showcase`, `heca-renderer/examples/showcase.rs`) — before adding a new one** (it demonstrates the widgets + chrome recipes to take inspiration from).
+- **Be domain-neutral / GENERIC.** `heca-grid-ui` widgets must **never** encode an app domain — never name or couple a widget to `workspace`/`column`/`pane` (nor `docker`/`agent`/`git`). They are generic primitives (frames, groups, rows, rails, marker bars, target hints, regions); the **domain meaning is applied app-side** by the mounted container/provider. The chrome regions (left/right/top/bottom) host *generic containers* — `WorkspacesContainer` today, but also Docker instances, AI agents, git status, notes, plugin-defined containers (see `docs/chrome-and-ui.md`). So a widget built to render the workspace "columns" must be a **generic grouping/marker primitive that ANY container can reuse** — e.g. not `ColumnGroup`, but a generic `MarkerGroup`/`RailGroup` whose left bar + target-hint mean nothing in particular until a container gives them meaning. The existing widgets model this: `DockFrame`/`ItemGroup`/`Row`/`RailCell`/`ChromeRegion`/`KeyHint` are all domain-free. **Read how they are built — and run the live showcase (`cargo run -p heca-renderer --example showcase`, `heca-renderer/examples/showcase.rs`) — before adding a new one** (it demonstrates the widgets + chrome recipes to take inspiration from).
 - **Embed `Base` and implement `Component`** (+ builder traits `LayoutExt`/`StyleExt`/`Parent` as appropriate). This gives it — for free and uniformly with every other widget — `visible`/`disabled`/`focused`/`focus_visible`, `bounds` (so hit-testing + event dispatch work), `tab_index`, children, `mark_needs_paint`, and `tick(dt)` animation. Inline `Flex`+`Surface` blobs inherit **none** of this.
 - **Read ALL styling from the `Theme` (read at paint via `cx.theme()`) — hardcode nothing.** Colors, font family/size, border width, radius, glow, and transparency come from theme tokens, **not** literal `Color::new(...)` / `with_alpha(28)` / `Length::Px(3.0)` magic numbers in the app. Core project rule (see "No hardcoded color/style/theme" above): widgets must respond to `config.toml`, runtime theme reload (`prefix+Shift+r`), font changes, and the `[appearance]` transparency settings.
 - **Drive state styling from the theme**: active/inactive border + color, border width, radius, hover/press/focus — all from theme tokens, so behaviour is consistent across the library.
@@ -1110,7 +1110,7 @@ cargo watch -x check
 
 ## Planning
 
-Outstanding work lives in **`PLAN.md`** (single source of truth). See it for priorities and status.
+Outstanding work lives in **the planner** (single source of truth). See it for priorities and status.
 
 ---
 
@@ -1201,7 +1201,7 @@ Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactor
 
 The refactoring track (Phases 0–10) is **complete**. All checklist items are done.
 See `.planning/interaction-policy-plan.md` for remaining intent-routing work (Phase B/C).
-See `pluggable-chrome-plugin-plan.md` for the future chrome/plugin architecture.
+See `docs/chrome-and-ui.md` for the future chrome/plugin architecture.
 
 ## Session Addendum — 2026-06-05
 
@@ -1260,7 +1260,7 @@ These were clarified in detail with `/grill-me`; do not casually re-decide them:
 
 Planning / rules:
 
-- `pluggable-chrome-plugin-plan.md`
+- `docs/chrome-and-ui.md`
 - `session-resume-handoff.md`
 - `.planning/STATE.md`
 - `.planning/ROADMAP.md`
@@ -1325,7 +1325,7 @@ Immediate remaining 1.5 work:
 After that:
 
 - proceed to sidebar intent routing (Phase B/C in `.planning/interaction-policy-plan.md`)
-- future chrome/plugin architecture work is planned in `pluggable-chrome-plugin-plan.md`
+- future chrome/plugin architecture work is planned in `docs/chrome-and-ui.md`
 
 ## Workflow Rules for Future Phases
 

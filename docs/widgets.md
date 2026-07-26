@@ -3,7 +3,7 @@
 The canonical API reference for the **`heca-grid-ui`** component library: every
 foundation type and widget, its properties / methods / events, and runnable
 usage examples. (For the Tron/GridCN visual *vision* and component wishlist see
-[`the-grid-ui.md`](./the-grid-ui.md); this file documents what is **actually
+docs/widgets.md — see docs/widgets.md; this file documents what is **actually
 implemented**.)
 
 `heca-grid-ui` is **GPU-free**: a component tree emits a `Scene` (a display
@@ -178,12 +178,93 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `overlay_occludes(&self, pos: Point) -> bool` | `false` | Whether the widget's **overlay surface geometrically covers** `pos`. Distinct from `overlay_active` (input grab): a non-grabbing toast card still occludes the points it covers; a **modal** ([`Dialog`](#dialog) scrim, open [`CommandPalette`](#commandpalette)) occludes the whole viewport; an open [`Select`](#select) occludes its panel rect. A host checks it (via the free fn `heca_grid_ui::overlay_occluded_at(root, pos)`, which scans a tree) before synthesizing a page-level action from raw input — e.g. right-click → context menu must not fire under an overlay. `ContextMenu` deliberately keeps the default so a second right-click re-anchors it. |
 | `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
-| `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
+| `on_event_capture(&mut self, ev) -> Handled` | `No` | Handle an event **before** this widget's children see it. `Yes` stops the walk. See [the event model](#the-event-model--the-framework-walks-the-children). |
+| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. |
+| `routes_own_subtree(&self) -> bool` | `false` | `true` when this widget walks its own children because its subtree is not a plain tree walk. A declared exception, held to the same delivery test. |
+| `clips_children(&self) -> bool` | `false` | `true` when the widget clips its children, so a press or move **outside its bounds** must not reach them — content scrolled out of sight stops being clickable. |
+| `wants_visible(&self) -> bool` | `focused` | `true` when an enclosing [`ScrollRegion`](#scrollregion) should **keep this widget in view**. See [following the cursor](#following-the-cursor). |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
 | `on_layout(&mut self)` | no-op | Called post-order once this node's (and its descendants') bounds are freshly computed. Override to **place** children the engine could not put where they are drawn — a [`ScrollRegion`](#scrollregion) re-bakes its scroll offset, a [`Select`](#select) re-places its option rows into the overlay panel. Bounds are natural again on entry, so the widget re-derives its shift from scratch instead of compounding it. |
 | `on_focus(&mut self, visible: bool)` | set `focused`/`focus_visible` | Gained focus. |
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
+
+### The event model — the framework walks the children
+
+**A widget never routes events to its children.** `heca_grid_ui::dispatch` does that, always:
+
+```
+dispatch(node, ev):
+    node.on_event_capture(ev)   →  Yes stops here      (a modal swallowing, a thumb grab)
+    for child in children.rev() →  dispatch(child, ev)  ← the FRAMEWORK, not the widget
+    node.on_event(ev)                                   (what nobody below wanted)
+```
+
+A widget takes part by implementing at most two methods, and neither mentions its children:
+
+```rust
+impl Component for MyControl {
+    /// Capture: this control is one click target, so its composed content must not
+    /// take the press first.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
+        match ev {
+            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+                self.activate();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+}
+```
+
+**Why it is not a method you override.** It used to be: `Component::event` defaulted to routing, and
+a container that overrode it owned the forwarding. So each container decided, one `match` arm at a
+time, which kinds of event its children were allowed to see — and one that only cared about presses
+silently stranded anything below it needing the wheel or a release. Nothing fails when that happens:
+the child lays out, paints and hit-tests perfectly, and is dead. A `ScrollRegion` was found that way
+three times, in three different surfaces. Now there is no list to fall behind.
+
+**Choosing a hook.** Capture for something you take *away* from your subtree — a swallow, a gesture
+that must beat whatever sits under the cursor, or state that must be current before anything below
+is hit-tested. Bubble for what you do with what nobody below wanted. Capture returning `Handled::No`
+is normal: it means "I looked, carry on".
+
+**The exceptions.** Six widgets declare `routes_own_subtree`, each with the reason on the method:
+[`Select`](#select) (option rows are *placed* children, collapsed to zero size while closed),
+[`Dialog`](#dialog) (routes through an overlay-aware focus scan), [`Overlay`](#overlay) (a closed
+layer's panel must be inert), [`CommandPalette`](#commandpalette) and [`ContextMenu`](#contextmenu)
+(rows drawn from data), and [`ItemGroup`](#itemgroup)/[`DockFrame`](#dockframe) (they report what
+their own subtree did, which must happen even when a child consumed the click).
+
+It is an exception, not a loophole: `tests/pointer_delivery.rs` mounts a probe inside each one and
+fails if any pointer kind goes missing. Owning the walk costs you a proof, not just a comment.
+
+> **Hosts:** deliver the whole pointer set — move, press, release, wheel — to every tree you mount.
+> A release especially: it is what ends a gesture, and it must arrive *wherever the cursor drifted
+> to*. Gating one on position is how a scrollbar thumb ends up welded to the cursor.
+
+### Following the cursor
+
+A widget can say it is the current one, and **every `ScrollRegion` it is ever placed inside brings it
+into view** — no `ensure_visible` call at any host:
+
+```rust
+impl Component for MyRow {
+    /// The navigation cursor is "the current one" for this list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+}
+```
+
+The default is keyboard focus, which is what browsers do. [`Row`](#row),
+[`MarkerGroup`](#markergroup) and [`DockFrame`](#dockframe) add their nav cursor, which is what makes
+the app's keyboard-driven sidebar scroll to follow.
+
+It follows the selection **without fighting the wheel**: the region remembers the target's *natural*
+(unscrolled) position, which changes when the selection moves and stays put when you scroll by hand.
+So it comes to the cursor once, and then leaves you alone.
 
 ### Builder traits
 
@@ -202,6 +283,8 @@ return `Self` for chaining.
 | `.justify_items(Align)` | **Grid only** — how the items sit **horizontally inside their cells** (CSS `justify-items`). Not the same as `.justify()`, which on a grid distributes the whole *track set*. |
 | `.justify_self(Align)` | **Grid only** — horizontal placement of **this** item in its own cell, overriding the grid's `.justify_items()`. |
 | `.padding(f32)` | Inner padding (all sides). |
+| `.padding_xy(x, y)` | Per axis: `x` left+right, `y` top+bottom. |
+| `.padding_left/right/top/bottom(f32)` | **One side**, overriding the axis and the uniform value (side → axis → uniform, the same cascade as the per-side margins). Use it to reserve space along a single edge without moving the opposite one — a [`ScrollRegion`](#scrollregion) keeping content clear of its scrollbar is the case that asked for it. Also settable from a description, for free: the declarative property surface *is* `Layout`'s own fields. |
 | `.width(Length)` / `.height(Length)` | `Length::Auto` or `Length::Px(f32)`. |
 | `.grow(f32)` | Flex-grow factor. |
 | `.disabled(bool)` | Dim + make inert + drop from focus order. |
@@ -235,14 +318,39 @@ return `Self` for chaining.
 
 ### `Style` & layout enums
 
-`Style` fields: `direction`, `justify`, `align` (default `Stretch`), `align_self` (`Option<Align>`,
-default `None` ⇒ follow the parent), `gap`, `margin` (+ per-side overrides), `padding`,
-`width`/`height` (`Length`), `flex_grow`, `fill`, `border`, `glow`, `accent`, `fg`,
-`radius`, `font_size`, `font_scale`. Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
+`Style` is **two peer halves** — `style.layout` and `style.visual`. The split is the plugin
+boundary, and it is one the library already lived by: every widget must read colours, fonts and
+radii from the `Theme` and hardcode nothing, so "caller-owned" vs "theme-owned" was already a real
+distinction here. The declarative boundary just falls on the same line.
+
+**`Style.layout` — arrangement + the semantic `size` variant.** The half a declarative
+[`ViewNode`](#declarative-ui-model-viewnode) may set: `direction`, `justify`, `align` (default
+`Stretch`), `align_self` (`Option<Align>`, default `None` ⇒ follow the parent), `gap` (+
+`gap_spacing`), `margin` (+ per-side overrides), `padding` (+ per-axis + spacing tokens),
+`width`/`height` (`Length`), min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`,
+`size`. `to_taffy()` lives here, because these are the fields it reads.
+
+**`Style.visual` — appearance.** `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
+A description may **never** set these: it carries semantic intent (a variant, a `size`, a colour
+*name*) and the host resolves the pixels from the `Theme`
+(`chrome-and-ui.md` §2.6.1 rule C).
+
+Why two types rather than a naming convention: `Layout` is serializable and `Visual` is not, so a
+field added to `Visual` is unreachable from a description **by default** and a field added to
+`Layout` is reachable **by default**. Neither needs an attribute, a list, or anyone remembering —
+and there is no single line whose deletion would quietly open colours up to plugins.
+
+`size` sits in `layout`, not `visual`, because it is semantic (`Small`/`Normal`/`Big`) rather than
+a pixel value, and the layout pass both reads it and cascades it to children. `font_scale` is in
+`visual` because it is a raw multiplier — use `size` for hierarchy a plugin may express.
+
+Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
 `Align{Start,Center,End,Stretch}`, `Length{Auto,Px(f32)}`.
 
-> `font_size` defaults to `0.0` = **inherit the theme base font**; `font_scale` defaults
-> to `1.0`. See [Font sizing](#font-sizing).
+> `visual.font_size` defaults to `0.0` = **inherit the theme base font**; `visual.font_scale`
+> defaults to `1.0`. See [Font sizing](#font-sizing). **Builder calls are unchanged** —
+> `.gap(..)`, `.fill(..)`, `.font_size(..)` all work exactly as before; only the field path behind
+> them moved, and `LayoutExt`/`StyleExt` write to the correct half for you.
 
 ### Font sizing
 
@@ -845,6 +953,19 @@ content shifted past the edge with no scrollbar to bring it back.
   (nothing hardcoded). Each bar reserves a **gutter**: content is clipped short of
   the lane so no content sits under a thumb, and each bar's track stops short of
   the other's gutter so they never overlap in the corner.
+- **The bar takes layout space, it is not drawn over content.** When an axis overflows, the region
+  reserves the bar's lane as padding on that side, so a child is laid out **beside** the bar and
+  keeps its rounded corner. Clipping alone was not enough and looked wrong: a card laid out full
+  width and trimmed at the lane ends on a hard vertical cut, because it still *is* wider than the
+  space it has. The reservation takes `max(existing padding, gutter)` rather than the sum — where the
+  padding is already roomy the bar simply sits in it and both sides stay even. It is applied after
+  layout and lands on the next pass, like a classic scrollbar, and it cannot oscillate: narrowing
+  content only ever makes it taller. `SCROLLBAR_W` is the visible thickness and the number to turn if
+  the bar claims too much room; `THUMB_HIT_W` is the (much wider) grab target, so a slim bar stays
+  just as easy to hit.
+- **The lane belongs to the scrollbar.** A move over it is consumed, so the row *behind* the bar does
+  not light up as hovered. The whole lane, not just the thumb — a press in the track pages, so the
+  track is part of the control, not content.
 - **Click-in-track paging**: clicking the scrollbar track above/below (or left/
   right of) the thumb pages a screenful toward the click — the standard affordance.
   **Press-and-hold repeats**: after a short initial delay (0.35s) the held press
@@ -867,6 +988,57 @@ content shifted past the edge with no scrollbar to bring it back.
 - **Current scope**: two-axis, nested-region wheel composition. Future: a
   dedicated scrollbar color token and PageUp/PageDown as app actions.
 
+### Using one — the whole surface
+
+**A caller implements nothing.** The wheel, the thumb drag, the click in the track and the
+click-and-hold repeat are all inside the widget. Mount it, give it a size, put children in it:
+
+```rust
+let files = ScrollRegion::new()
+    .both()
+    .height(Length::Px(240.0))
+    .child(rows);
+```
+
+That is a working scroll area. Everything below is optional.
+
+**To watch it**, attach any of three listeners. They only report; none of them makes it scroll:
+
+```rust
+ScrollRegion::new()
+    .both()
+    .height(Length::Px(240.0))
+    .on_scroll_start(|_| status.set("scrolling…"))
+    .on_scroll(|s| gutter.set(s.offset_y / s.max_y))     // every movement — keep it cheap
+    .on_scroll_end(|s| {
+        // `event` is None when OUR OWN `scroll_to` moved it. Reacting to that is how a
+        // "follow the cursor" call ends up fighting the user's wheel.
+        if s.event.is_some() && s.offset_y == s.max_y {
+            load_more_rows();
+        }
+    })
+    .child(rows);
+```
+
+`ScrollInfo` answers everything without asking the region back:
+
+| Field | Is |
+|---|---|
+| `offset_x` / `offset_y` | where it is, in content px (`scrollLeft` / `scrollTop`) |
+| `max_x` / `max_y` | as far as it goes — `offset_y == max_y` is "at the bottom" |
+| `content` | the full size being scrolled (`scrollWidth` / `scrollHeight`) |
+| `viewport` | the visible window (`clientWidth` / `clientHeight`) |
+| `event` | the wheel or press that moved it — **`None` when the host's own `scroll_to` did** |
+
+**When each fires:** `scroll_start` on the first movement, `scroll` on every one, `scroll_end` on the
+release that ends a drag or a held track press. A wheel gesture has no release — nothing tells you
+the user stopped turning it — so its end is a short pause, the same way browsers settle `scrollend`.
+
+**The host's side is one line**, and it is the same line for every widget: deliver the pointer
+events it receives. A container never forwards anything by hand — `dispatch` walks the tree — and a
+host that hands over a subset is caught by `tests/pointer_delivery.rs` and `heca/tests/pointer_funnel.rs`
+rather than by someone eventually noticing a scroll area that doesn't scroll.
+
 **Native.**
 ```rust
 // A two-axis, framed scrollable surface driven from the host.
@@ -884,8 +1056,23 @@ grid.scroll_to_x(40.0);   // horizontal
 ```
 
 **Declarative (`ViewNode`).** `WidgetKind::Scroll` realizes to a `ScrollRegion`
-(children attached); axis/style are host-side today (the app builds the styled,
-two-axis region and mounts a realized subtree inside it).
+with its children attached, and **`axes` is a prop** — a described region can be
+horizontal or two-axis, not just vertical:
+
+```rust
+ViewNode::new(WidgetKind::Scroll)
+    .prop("axes", PropValue::Text("both".into()))   // vertical (default) | horizontal | both
+    .prop("width", PropValue::Int(300))
+    .prop("height", PropValue::Int(180))
+    .child(wide_and_tall_content);
+```
+
+The axis name is `ScrollAxes`' own variant, snake_cased, so adding a variant
+extends the accepted vocabulary with no list to update; an **unknown name keeps
+the widget's default** (vertical) rather than failing. `.horizontal()` /
+`.both()` stay host-only — they carry no value, and `axes` is the property form
+of the same setting. **Styling is still host-side**: the app builds the framed
+region and mounts a realized subtree inside it.
 
 > **Real-app integration (sidebar):** selection is container-owned, not widget
 > state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
@@ -1274,16 +1461,14 @@ let name = Input::new().placeholder("CALLSIGN")
     .on_change(|a| { if let SignalData::String(s) = a.data { store(s); } });
 ```
 
-**From a plugin (`ViewNode`).** A plugin never sends an `Edit*` intent itself — it declares an
-`Input`, and the host owns the keyboard model + shortcut resolution above. (See the plugin
-props/events under the `ViewNode` note below.)
-
 **From a plugin (`ViewNode`).** Declare an input in a modal / panel body; the host `realize`s it to
-this widget and owns styling + the whole keyboard model above. Supported props / events:
+this widget and owns styling + the whole keyboard model above — a plugin never sends an `Edit*`
+intent itself, it declares the field and the host resolves the shortcuts. Supported props / events:
 
 | Prop / event | Meaning |
 |---|---|
 | `.text(s)` (`"text"` prop) | initial value |
+| `.prop("placeholder", PropValue::Text("filter…".into()))` | the placeholder shown while the field is empty and unfocused. **Its own key** — `text` is the *value*, so the two are never confused |
 | `.prop("name", PropValue::Text("field".into()))` | opts the field into **form submission** — its live value is returned in `ModalResult::Action.data["field"]` when the overlay is submitted |
 | `.on("change", Intent)` | intent dispatched (with the new text) on every edit |
 
@@ -1293,6 +1478,10 @@ ViewNode::new(WidgetKind::Input)
     .text(current_name)
     .prop("name", PropValue::Text("name".into()))
     .on("change", Intent::new("plugin.rename.changed"));
+
+// An empty filter field that says what to type.
+ViewNode::new(WidgetKind::Input)
+    .prop("placeholder", PropValue::Text("filter containers…".into()));
 ```
 
 ### Tabs
@@ -2158,7 +2347,7 @@ ViewNode::new(WidgetKind::RailCell)
 > never creates a `KeyHint`; any plugin widget that exposes an `on_press` intent is
 > auto-hintable ("intent ⇒ hintable"). Likewise a **context menu** is a host-owned
 > dropdown the plugin *requests* (or declares via `.on_context`), not a nested widget.
-> See **[plugin-authoring.md](plugin-authoring.md)** → "Context menus & KeyHint".
+> See **[chrome-and-ui.md](chrome-and-ui.md)** → "Context menus & KeyHint".
 
 A **generic** transparent wrapper that overlays a glowing accent **keycap letter** on any
 actionable child while a host-owned `Signal<Option<String>>` is `Some` — the keyboard pick /
@@ -2825,7 +3014,7 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 > `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }`. On
 > right-click / keyboard-open the host opens the (merged) menu, owns z-order / focus / Esc /
 > click-outside, and returns the chosen entry as an **intent**. See
-> **[plugin-authoring.md](plugin-authoring.md) → "Context menus & KeyHint"**.
+> **[chrome-and-ui.md](chrome-and-ui.md) → "Context menus & KeyHint"**.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
 > `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
@@ -2886,9 +3075,65 @@ child is styled by putting props on *that child*. The builder chains for ergonom
 a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
 ≡ `Column().children([a,b])`.
 
-### Props & events by kind (what `realize` reads today)
+### Layout props — every kind, no list
 
-Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input.
+**Any field of [`Style.layout`](#style--layout-enums) is a prop on any kind**, spelled exactly as
+the field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+`justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
+`flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+
+`realize` never enumerates them — it merges by name against `Layout`'s own fields. Add a field to
+`Layout` and a description can set it with **no change to the mapper**. The counterpart is that
+`Visual` is not serializable, so appearance (fill, border, glow, radius, font sizes) is unreachable
+from a description by construction rather than by a rule someone has to enforce.
+
+Values read the way you would write them:
+
+```rust
+ViewNode::new(WidgetKind::Column)
+    .prop("padding", PropValue::Int(12))                     // px
+    .prop("width",   PropValue::Text("50%".into()))          // "auto" | 240 | "50%"
+    .prop("justify", PropValue::Text("space_between".into())) // enums by name, snake_case
+    .prop("gap_spacing", PropValue::Text("md".into()))        // theme token, scales with the font
+```
+
+The merge lands **on top of** the constructed widget, so a widget's own constructor settings survive
+any property the node doesn't mention — a `Scroll` keeps the zeroed min-sizes and shrink factor that
+let a viewport be smaller than its content.
+
+### Widget props — the builders decide, not a list
+
+`realize` names no widget property. Each widget **generates** its property surface from its own
+builders, so what a description can set is decided in one place — the widget:
+
+```rust
+#[props]
+impl Input {
+    #[prop] pub fn placeholder(mut self, s: impl Into<String>) -> Self { .. }
+    #[host_only("behaviour crosses as an Intent, never a callback")]
+    pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self { .. }
+}
+```
+
+Every builder must be one or the other. A builder that is neither **fails the build** — being left
+out silently is exactly how `Input::placeholder` and `ScrollRegion`'s second axis stayed unreachable
+for months. A drift guard additionally fails when a whole widget has no surface.
+
+**Order never matters.** Properties are applied after children are attached, so a builder that
+clamps against its children (`Select`/`Tabs` `selected`) sees the real ones. `#[prop]` rejects any
+argument, so a sequencing hint cannot be reintroduced widget by widget.
+
+Deliberately not properties, each with its reason recorded in the code: closures (behaviour crosses
+as an `Intent`), composed content (use `children`), and builders bound to live host signals.
+Appearance is in that group today and is moving out.
+
+### Props & events by kind
+
+The table below is a **reader's summary** — the widget's builders are the authority. These are the
+props a kind reads in addition to the layout set above.
+
+Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
+and a bad value costs only itself: the good props on the same node still apply.
 
 > **A `Button`'s children are its content, and they win.** A Button node *with* children is realized
 > as an empty button holding them (an arbitrary tree, any depth); a **childless** node falls back to
@@ -2900,15 +3145,16 @@ Missing/mistyped props are ignored (the widget keeps its default) — the model 
 
 | Kind | Props it reads | Events |
 |------|----------------|--------|
-| `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+| `Column` / `Row` | (layout only — see above) | — |
 | `Card` | `text` (title) + children | — |
-| `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+| `Surface` / `Panel` | (container — children only) | — |
+| `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |
 | `BadgeButton` | `text`, `variant`, `size` | `press` |
 | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
-| `Input` | `text` (value), `name` | `change` |
+| `Input` | `text` (the **value**), `placeholder`, `name` | `change` |
 | `Toggle` | `on` (Bool), `name` | `change` |
 | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 | `Gauge` | `value` (Float) | — |
@@ -3393,9 +3639,10 @@ impl Component for Reticle {
 impl LayoutExt for Reticle {}   // opt into .width/.height/.padding/… for free
 ```
 
-Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed, plus
-`remeasure` if the widget's size depends on the font — read `self.base.font`), and opt into
-builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
+Embed `Base`, implement `Component` (override `paint` and, for input,
+[`on_event_capture`/`on_event`](#the-event-model--the-framework-walks-the-children) — **never a
+child walk**, `dispatch` does that — plus `tick` for animation and `remeasure` if the widget's size
+depends on the font, read from `self.base.font`), and opt into builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
 
 If the widget is **interactive**, set `base.focusable = true` (in the constructor for an

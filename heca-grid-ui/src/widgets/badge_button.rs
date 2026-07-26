@@ -41,12 +41,13 @@ pub struct BadgeButton {
     on_click: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl BadgeButton {
     /// A new accent badge button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.font_scale = BADGE_FONT_SCALE;
+        base.style.visual.font_scale = BADGE_FONT_SCALE;
         let mut button = Self {
             base,
             label: signal(label.into()),
@@ -82,12 +83,14 @@ impl BadgeButton {
     }
 
     /// Set the visual variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: BadgeVariant) -> Self {
         self.variant = variant;
         self
     }
 
     /// Set the click callback.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self
@@ -128,8 +131,8 @@ impl Component for BadgeButton {
         let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
+        self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -212,7 +215,10 @@ impl Component for BadgeButton {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.base.visible.get_untracked() || self.base.disabled.get_untracked() {
             return Handled::No;
         }
@@ -274,7 +280,7 @@ mod tests {
             heca_core::layout::Size::new(80.0, 24.0),
         );
         assert_eq!(
-            b.event(&Event::PointerPressed {
+            crate::component::dispatch(&mut b, &Event::PointerPressed {
                 pos: heca_core::layout::Point::new(10.0, 10.0),
             }),
             Handled::Yes
@@ -285,9 +291,9 @@ mod tests {
     #[test]
     fn label_signal_remeasures_on_tick() {
         let mut b = BadgeButton::new("A");
-        let old = b.base().style.width;
+        let old = b.base().style.layout.width;
         b.label_signal().set("HELLO".to_string());
         let _ = b.tick(0.016);
-        assert_ne!(b.base().style.width, old);
+        assert_ne!(b.base().style.layout.width, old);
     }
 }

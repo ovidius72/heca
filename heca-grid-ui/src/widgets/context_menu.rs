@@ -39,6 +39,7 @@ pub struct MenuEntry {
     on_select: Box<dyn Fn()>,
 }
 
+#[heca_grid_ui_macros::props]
 impl MenuEntry {
     /// An entry with `label` that runs `on_select` when chosen.
     pub fn new(label: impl Into<String>, on_select: impl Fn() + 'static) -> Self {
@@ -54,6 +55,7 @@ impl MenuEntry {
     }
 
     /// An optional leading icon.
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.icon = Some(glyph);
         self
@@ -61,6 +63,7 @@ impl MenuEntry {
 
     /// A **quick-pick key** rendered as a [`KeyHint`](super::KeyHint)-style keycap on
     /// the right; pressing it (case-insensitive) activates the entry immediately.
+    #[heca_grid_ui_macros::host_only("unsupported argument type (char)")]
     pub fn key(mut self, key: char) -> Self {
         self.key = Some(key);
         self
@@ -68,18 +71,21 @@ impl MenuEntry {
 
     /// An optional textual shortcut hint (e.g. `"prefix+x"`), drawn left of the
     /// quick-pick keycap. Informational only — not pressable inside the menu.
+    #[heca_grid_ui_macros::prop]
     pub fn shortcut(mut self, hint: impl Into<String>) -> Self {
         self.shortcut = Some(hint.into());
         self
     }
 
     /// Mark this entry as **destructive** — its label renders in the `danger` hue.
+    #[heca_grid_ui_macros::prop]
     pub fn danger(mut self, danger: bool) -> Self {
         self.danger = danger;
         self
     }
 
     /// Enable/disable the entry. A disabled entry is dimmed and cannot be selected.
+    #[heca_grid_ui_macros::prop]
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -146,18 +152,21 @@ impl ContextMenu {
     }
 
     /// Add an entry.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn entry(mut self, e: MenuEntry) -> Self {
         self.entries.push(e);
         self
     }
 
     /// Set the initial open state.
+    #[heca_grid_ui_macros::prop]
     pub fn open(self, open: bool) -> Self {
         self.open.set(open);
         self
     }
 
     /// Set the initial anchor (top-left preferred position).
+    #[heca_grid_ui_macros::prop]
     pub fn anchor(self, at: Point) -> Self {
         self.anchor.set(at);
         self
@@ -165,6 +174,7 @@ impl ContextMenu {
 
     /// Center the panel on the anchor (anchor = desired center) instead of placing the
     /// top-left at the anchor. For keyboard/RPC-opened menus with no pointer target.
+    #[heca_grid_ui_macros::prop]
     pub fn centered(mut self, on: bool) -> Self {
         self.centered = on;
         self
@@ -258,6 +268,7 @@ impl ContextMenu {
 
     /// Set the callback fired when the menu is **dismissed** (Esc / outside-click). The host
     /// wires this to its overlay-close path (mirrors [`Dialog::on_dismiss`](super::Dialog)).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
         self.on_dismiss = Some(Box::new(f));
         self
@@ -453,7 +464,13 @@ impl Component for ContextMenu {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. Its entries are drawn from `MenuEntry` values rather than mounted as
+    /// children, and while open it captures input over its panel.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
@@ -567,14 +584,14 @@ mod tests {
 
         // WidgetIntent::Dismiss (host-resolved from `dismiss`) → dismiss (fires
         // callback, closes), no entry run.
-        m.event(&Event::Widget(WidgetIntent::Dismiss));
+        crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::Dismiss));
         assert_eq!(dismissed.get(), 1, "dismiss fired on_dismiss");
         assert_eq!(ran.get(), 0);
         assert!(!m.is_open(), "closed after dismiss");
 
         // Reopen; a quick-key selection runs the entry and does NOT fire dismiss.
         m.open.set(true);
-        m.event(&Event::Key { key: GridKey::Char('r'), pressed: true });
+        crate::component::dispatch(&mut m, &Event::Key { key: GridKey::Char('r'), pressed: true });
         assert_eq!(ran.get(), 1, "entry ran on quick-key");
         assert_eq!(dismissed.get(), 1, "a selection is not a dismissal");
     }
@@ -600,25 +617,25 @@ mod tests {
         assert_eq!(m.selected, 0, "starts on the first entry");
 
         // Down: skips the disabled middle entry.
-        assert_eq!(m.event(&Event::Widget(WidgetIntent::MenuDown)), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuDown)), Handled::Yes);
         assert_eq!(m.selected, 2, "MenuDown moved past the disabled entry");
 
         // Down again at the end: stays put (no wrap, no panic).
-        m.event(&Event::Widget(WidgetIntent::MenuDown));
+        crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuDown));
         assert_eq!(m.selected, 2, "no wrap past the last enabled entry");
 
         // Up: back to the first, skipping the disabled entry again.
-        assert_eq!(m.event(&Event::Widget(WidgetIntent::MenuUp)), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuUp)), Handled::Yes);
         assert_eq!(m.selected, 0, "MenuUp moved back past the disabled entry");
 
         // Up at the top: stays put.
-        m.event(&Event::Widget(WidgetIntent::MenuUp));
+        crate::component::dispatch(&mut m, &Event::Widget(WidgetIntent::MenuUp));
         assert_eq!(m.selected, 0);
 
         // A raw arrow is NOT swallowed: the widget reports it unhandled so the host can resolve
         // it into a `WidgetIntent` and re-deliver. Swallowing it here is what would break nav.
         assert_eq!(
-            m.event(&Event::Key {
+            crate::component::dispatch(&mut m, &Event::Key {
                 key: GridKey::ArrowDown,
                 pressed: true
             }),

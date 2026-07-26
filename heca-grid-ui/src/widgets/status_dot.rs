@@ -39,8 +39,8 @@ impl StatusDot {
     /// A new dot with the given `status`.
     pub fn new(status: DotStatus) -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(DOT_SIZE);
-        base.style.height = Length::Px(DOT_SIZE);
+        base.style.layout.width = Length::Px(DOT_SIZE);
+        base.style.layout.height = Length::Px(DOT_SIZE);
         Self { base, status }
     }
 

@@ -21,7 +21,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
-    Base, Component, Event, Handled, PaintCx, paint_child, route_event, soonest_redraw,
+    Base, Component, Event, Handled, PaintCx, paint_child, soonest_redraw,
 };
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
@@ -82,13 +82,14 @@ pub struct Tooltip {
     last_shown: Cell<bool>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Tooltip {
     /// Wrap `child`, showing `text` on hover.
     pub fn new(child: impl Component + 'static, text: impl Into<String>) -> Self {
         let mut base = Base::new();
         // Hug the child so the wrapper's bounds match it (hover + anchor use them).
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
         base.children.push(Box::new(child));
         let text = signal(text.into());
         Self {
@@ -106,8 +107,8 @@ impl Tooltip {
     /// Wrap `child`, showing reactive `text` on hover.
     pub fn new_signal(child: impl Component + 'static, text: Signal<String>) -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
+        base.style.layout.width = Length::Auto;
+        base.style.layout.height = Length::Auto;
         base.children.push(Box::new(child));
         Self {
             base,
@@ -122,12 +123,14 @@ impl Tooltip {
     }
 
     /// Which side of the target to anchor to (default [`TooltipSide::Top`]).
+    #[heca_grid_ui_macros::prop]
     pub fn side(mut self, side: TooltipSide) -> Self {
         self.side = side;
         self
     }
 
     /// Hover delay before the bubble appears, in seconds (default `0.5`).
+    #[heca_grid_ui_macros::prop]
     pub fn delay(mut self, seconds: f32) -> Self {
         self.delay = seconds.max(0.0);
         self
@@ -231,8 +234,10 @@ impl Component for Tooltip {
         });
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
-        // Track hover, then route to the child (transparent — never consumes).
+    /// Capture returning `No`: the wrapper is **transparent** — it observes the hover and lets
+    /// everything through, so the wrapped widget stays fully interactive. Capture rather than
+    /// bubble because the clock must start even when the child consumes the move.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if let Event::PointerMoved { pos } = ev {
             let inside = self.base.bounds.contains(*pos);
             if inside != self.hover_since.is_some() {
@@ -241,7 +246,7 @@ impl Component for Tooltip {
                 self.hover_since = inside.then(Instant::now);
             }
         }
-        route_event(&mut self.base.children, ev)
+        Handled::No
     }
 
     fn tick(&mut self, dt: f32) -> bool {

@@ -59,7 +59,7 @@ impl LayoutEngine {
         // child — which is not a difference a caller can see. That trap put a
         // correctly-built overlay a whole pane away from its target: no error, no
         // warning, it simply drew somewhere else.
-        let style = &root.base().style;
+        let style = &root.base().style.layout;
         let origin = Point::new(
             style.margin_left.unwrap_or(style.margin) as f64,
             style.margin_top.unwrap_or(style.margin) as f64,
@@ -78,29 +78,29 @@ impl LayoutEngine {
         // control instead of staying at the default. Written back into the style so the widget's
         // own `remeasure` / `Base::size_scale` see the effective variant without extra plumbing.
         let size = {
-            let s = &c.base().style;
+            let s = &c.base().style.layout;
             if s.size_explicit { s.size } else { inherited_size }
         };
-        c.base_mut().style.size = size;
+        c.base_mut().style.layout.size = size;
 
         // Resolve the inherited font (own `style.font_size` if set, else the base)
         // and let the widget re-measure from it before we read its taffy style.
         let resolved = {
             let s = &c.base().style;
-            if s.font_size > 0.0 {
-                s.font_size
+            if s.visual.font_size > 0.0 {
+                s.visual.font_size
             } else {
                 // The size variant scales the inherited font too, so text adapts for
                 // every widget without per-widget wiring (controls scale their own
                 // padding in `remeasure`).
-                self.base_font * s.font_scale * size.font_scale()
+                self.base_font * s.visual.font_scale * size.font_scale()
             }
         };
         c.base_mut().font = resolved;
         // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
         // container takes its padding from the theme instead of a hand-computed value.
         {
-            let s = &mut c.base_mut().style;
+            let s = &mut c.base_mut().style.layout;
             if let Some(sp) = s.pad_spacing_x {
                 s.padding_x = Some(resolved * sp.scale());
             }

@@ -1242,8 +1242,19 @@ version = "0.1.0"
 dependencies = [
  "floem_reactive",
  "heca-core",
+ "heca-grid-ui-macros",
  "heca-theme",
+ "serde",
  "taffy",
+]
+
+[[package]]
+name = "heca-grid-ui-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

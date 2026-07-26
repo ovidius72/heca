@@ -32,8 +32,8 @@ impl Spinner {
     /// A new spinner at the default size.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(SIZE);
-        base.style.height = Length::Px(SIZE);
+        base.style.layout.width = Length::Px(SIZE);
+        base.style.layout.height = Length::Px(SIZE);
         Self { base, phase: 0.0 }
     }
 }

@@ -39,7 +39,7 @@ const DEFAULT_RAIL: f32 = 48.0;
 /// Display mode of a [`ChromeRegion`]. Read via a signal so children/hosts can
 /// adapt (e.g. a Dock renders its [`DockFrame`](super::DockFrame) icon-only in
 /// the rail); written by the host's toggle action (input parity, P2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum RegionMode {
     /// Full extent — Docks shown normally.
     #[default]
@@ -62,12 +62,13 @@ pub struct ChromeRegion {
     rail_px: f32,
 }
 
+#[heca_grid_ui_macros::props]
 impl ChromeRegion {
     fn with(orientation: Orientation) -> Self {
         let mut base = Base::new();
         // Stack Docks along the region's long axis: a vertical sidebar stacks in
         // a column, a horizontal bar in a row.
-        base.style.direction = match orientation {
+        base.style.layout.direction = match orientation {
             Orientation::Vertical => Direction::Column,
             Orientation::Horizontal => Direction::Row,
         };
@@ -93,6 +94,7 @@ impl ChromeRegion {
     }
 
     /// Set the initial display mode.
+    #[heca_grid_ui_macros::prop]
     pub fn mode(self, mode: RegionMode) -> Self {
         self.mode.set(mode);
         self
@@ -102,24 +104,28 @@ impl ChromeRegion {
     /// internal one, so a host can drive collapse/expand from a central layout
     /// store and share the *same* signal with the region's rail-aware Docks via
     /// [`DockFrame::rail`](super::DockFrame::rail).
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn with_mode_signal(mut self, mode: Signal<RegionMode>) -> Self {
         self.mode = mode;
         self
     }
 
     /// Expanded extent along the collapsing axis (sidebar width / bar height, px).
+    #[heca_grid_ui_macros::prop]
     pub fn expanded_size(mut self, px: f32) -> Self {
         self.expanded_px = px;
         self
     }
 
     /// Collapsed icon-rail extent along the collapsing axis (px).
+    #[heca_grid_ui_macros::prop]
     pub fn rail_size(mut self, px: f32) -> Self {
         self.rail_px = px;
         self
     }
 
     /// Host a Dock (typically a [`DockFrame`](super::DockFrame)).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn dock(self, c: impl Component + 'static) -> Self {
         self.child(c)
     }
@@ -146,7 +152,7 @@ impl ChromeRegion {
     /// axis to the rail when collapsed, fold out of layout when hidden.
     fn sync(&mut self) {
         let mode = self.mode.get_untracked();
-        self.base.style.hidden = mode == RegionMode::Hidden;
+        self.base.style.layout.hidden = mode == RegionMode::Hidden;
         let extent = match mode {
             RegionMode::Expanded => self.expanded_px,
             // The rail extent also stands in while hidden (size is then moot).
@@ -155,8 +161,8 @@ impl ChromeRegion {
         // Only the collapsing (cross) axis is pinned; the long axis stretches to
         // fill the region's slot in the chrome.
         match self.orientation {
-            Orientation::Vertical => self.base.style.width = Length::Px(extent),
-            Orientation::Horizontal => self.base.style.height = Length::Px(extent),
+            Orientation::Vertical => self.base.style.layout.width = Length::Px(extent),
+            Orientation::Horizontal => self.base.style.layout.height = Length::Px(extent),
         }
     }
 }

@@ -25,6 +25,10 @@
 //!
 //! See `grid-ui-plan.md` for the full phase plan.
 
+// So the generated `impl ::heca_grid_ui::SetProp` from `#[props]` resolves inside this crate too,
+// not only in downstream ones. Without it the macro would need a different path when used here.
+extern crate self as heca_grid_ui;
+
 pub mod action;
 pub mod builders;
 pub mod color;
@@ -51,7 +55,7 @@ pub use builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
-    overlay_occluded_at,
+    dispatch, overlay_occluded_at,
     install_frame_request, request_frame,
 };
 pub use keymap::{KeyChord, Keymap};
@@ -61,13 +65,18 @@ pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
-pub use style::{Align, Direction, GridCell, Justify, Length, Spacing, Style, Track, WidgetSize};
+pub mod prop;
+pub use heca_grid_ui_macros::{prop, props, PropName};
+pub use prop::{PropInput, PropName, SetProp};
+pub use style::{
+    Align, Direction, GridCell, Justify, Layout, Length, Spacing, Style, Track, Visual, WidgetSize,
+};
 pub use theme::{FrameStyle, GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, MarkerGroup, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollRegion, Select, Separator, Spinner,
+    LabelSide, MarkerGroup, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeycapVariant, keycap_size, paint_keycap,
 };
 
@@ -89,7 +98,7 @@ pub mod prelude {
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, MarkerGroup, MenuEntry, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollRegion, Select, Separator, Spinner,
+        LabelSide, MarkerGroup, MenuEntry, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     };
 }

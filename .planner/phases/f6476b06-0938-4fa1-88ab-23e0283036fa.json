@@ -9,7 +9,7 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Estrarre geometry, terminal pass, selection, overlays e pane passes da `render.rs`.",
-  "description": "",
+  "description": "\n\n═══ DETAIL RESCUED FROM PLAN.md (2026-07-26, before that file was deleted) ═══\nDo this at the END of other work, in its own PR, never mid-feature.\n\nALREADY PARTLY DONE: the terminal pass was extracted to `heca/src/app/terminal_render.rs` by\nPR #121 — `PaneRenderState`, `paint_terminal_pane_shell`, `render_terminal_mount`,\n`selection_overlay_for_pane`. Re-scope the remainder against that before splitting further.\nTarget: `render_frame` shrinks toward ~250 lines.\n\nTARGET FILES\n- `mod.rs` — frame orchestrator + `update_session_viewport`\n- `geometry.rs` — pane / scissor / textbox math\n- `terminal.rs` — `TerminalRenderPassContext` + `render_terminal_mount`\n- `panes.rs` — tiled and floating passes: blur stamps, border scenes, content\n- `selection.rs` — `build_selection_overlay` / `selection_overlay_for_pane` / `status_mode_parts`\n  plus their tests\n- `overlays.rs` — collapsed rails, drag ghost, pane-select labels, `render_chrome` flush\n\nEASY: geometry, terminal, selection and `render_chrome` already take explicit parameters, so those\nare a mechanical move.\n\nTHE HAZARD: `panes.rs` plus the rail and ghost code live INSIDE `render_frame` and touch many\n`AppState` fields while `scene_view` borrows `state.compositor`. Extract them through a\ngranular-field context struct — the `TerminalRenderPassContext` pattern — and NEVER through\n`&mut AppState`. That borrow conflict is the whole reason this has not been done.\n\nVERIFY BY RUNNING THE APP. GPU ordering is not unit-tested.\n",
   "notes": "",
   "goals": [],
   "nonGoals": [],

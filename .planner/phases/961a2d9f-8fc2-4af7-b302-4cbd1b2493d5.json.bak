@@ -1,0 +1,234 @@
+{
+  "id": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+  "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
+  "number": 20,
+  "slug": "plugin-12-region-display-modes-the-collapsed-rail-render-per-mode-provider-contract",
+  "title": "plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract",
+  "status": "planned",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "A Provider describes its content once and the host renders it for the region's mode. Build only when a Provider needs an always-visible status rail.",
+  "description": "Transferred from docs/sidebar-provider-modes.md on 2026-07-26, before that file was deleted.\nAgreed design, 2026-07-11 (grill-me session). It was the authoritative record and won over any\nconflicting text elsewhere.\n\n⚠️ BUILD ONLY WHEN A PROVIDER GENUINELY NEEDS IT — e.g. Docker showing running containers, or AI\nagents showing activity. It is written down so the contract is designed before it is implemented,\nand so the Provider shape stays compatible with it.\n\n═══ ALREADY DONE — DO NOT REDO (verified in code 2026-07-26) ═══\nThe \"drop it\" work from §5 shipped: `SIDEBAR_EXPANDED_THRESHOLD`, `render_sidebar_collapsed` and\n`collapsed_pane_label` are all GONE from heca/src (0 hits each). The hand-drawn rail and its\nseparate hit-test are removed, which is what fixed `chrome-bug-collapsed-sidebar-picks` — by\ndeleting the broken code rather than patching it.\n\n═══ THE HEADLINE DECISION ═══\nThe collapsed icon rail is DROPPED for now. A region is **Expanded** or **Hidden**.\n`RegionMode::CollapsedRail` stays in the enum (heca-grid-ui/src/widgets/chrome_region.rs), unused;\nno region enters it and nothing renders it. `RailCell` stays a library widget, mounted nowhere.\n\n═══ THE THREE LAYERS — KEEP THEM SEPARATE, MOST CONFUSION COMES FROM BLURRING THEM ═══\n1. SIDEBAR SHELL (the region host) — a generic, domain-neutral `ChromeRegion`: framing, background,\n   border, width, visibility, display mode. It knows NOTHING about workspaces, Docker or agents.\n   One shell per region.\n2. PROVIDER (the hosted widget) — what is mounted inside: WorkspacesContainer today; Docker, AI\n   agents, git, notes, plugin-defined ones later. A region may host several and shows one at a time.\n3. A PROVIDER'S CONTENT — groups and items, nested to any depth. For WorkspacesContainer:\n   workspaces (groups) → columns → panes (items). Columns are structural; they are not rows.\n\n═══ RULE THAT PREVENTS THE BUG CLASS WE HIT: MODE IS STATE, NEVER WIDTH ═══\nThe renderer branches on `RegionMode`, never on a width threshold. Every input that changes the\nmode — the toggle button, a keybinding, RPC, and drag-resize — WRITES the mode state; the renderer\nonly READS it. Dragging the edge below the minimum DISPATCHES the action that sets Hidden; it does\nnot make the renderer inspect a width. Mode = which form, width = how wide when Expanded. One\nsource of truth each is what keeps mouse, keyboard and RPC in agreement.\n\n═══ §3 — THE RENDER-PER-MODE CONTRACT (generic for EVERY Provider) ═══\nWRITE ONCE — the author never writes two trees. A Provider describes its content once as a semantic\ntree of Groups and Items, each node carrying its meaning a single time:\n\n    Item {\n      icon:    <glyph>,          // e.g. the program icon\n      label:   <text>,           // e.g. the pane name\n      status:  Idle | Running | Success | Error,\n      intent:  <action>,         // e.g. FocusPane\n      actions: [ ... ],          // extra affordances (git, exit, buttons) — expanded only\n    }\n    Group {                      // e.g. a workspace\n      identity:  icon | name | number,\n      collapsed: bool,\n      children:  [ Group | Item ]   // nested to any depth\n    }\n\nDISPLAY MODE IS THE HOST'S CONCERN, NOT THE AUTHOR'S. The host renders that one tree for the\nregion's current mode:\n- Expanded → nested frames + full rows: Group → `DockFrame`, Item → `Row`, with all extras.\n- Collapsed → a `RailCell` per node, recursively: a Group cell, then (if expanded) its children\n  beneath it; an Item → a `RailCell`. Expanded-only extras (git, exit, action buttons) are omitted.\n\nThe mode-awareness lives in exactly ONE place: `realize()`. Not duplicated in the author's code,\nnot duplicated across widgets. Double authoring is exactly what this rejects — it would fall on\nevery plugin too.\n\nGROUP COLLAPSE IS GENERIC. \"A group shows or hides its children\" is one host behaviour available to\nevery Provider. A workspace showing or hiding its panes is just that behaviour applied to\nWorkspacesContainer. Nothing about it is workspace-specific.\n\nTWO COLLAPSE FLAVOURS, declared per Provider, applied by the host:\n- LIST provider (workspaces and similar) — ENUMERATES: one cell per item when collapsed.\n- TOOL provider (a Docker panel, say) — FOLDS: the whole Provider becomes a single icon.\n\nINTERACTION IS GENERIC. Status→colour, the letter/KeyHint picker over cells, active and cursor\nstates, and right-click menus are HOST capabilities applied to any Provider's items. The Provider\nsupplies only, per item: its intent, its status, and its context-menu entries.\n\n═══ §4 — THE COLLAPSED RAIL VISUAL SPEC (the reference implementation of the generic renderer) ═══\nWhen built it MUST be the generic host renderer above — never a workspace-only, hand-drawn rail.\n\nSTRUCTURE: a flat vertical list (inside a `ScrollRegion` for overflow) of `RailCell`s — workspace\ncell, then its pane cells when that workspace is expanded, then the next workspace cell. Columns are\nnot shown as cells; an expanded workspace lists its panes flattened across its columns.\n\nCELL IDENTITY — two config settings, both `[appearance]`, typed snake_case enums, default \"icon\",\nboth to be added to config.default.toml and the README:\n- `workspace_collapsed_style = \"icon\" | \"name\" | \"number\"` — icon = `Stack` glyph; name = initial\n  letter of the workspace name; number = 1-based workspace number.\n- `pane_collapsed_style = \"icon\" | \"name\" | \"number\"` — icon = the program icon from the catalog,\n  FALLING BACK TO `FolderSimple`; name = initial letter of the pane name; number = pane number.\n\nCOLOURS — theme tokens, never literals:\n- Workspace cell = accent; the active workspace (holding the focused pane) renders brighter\n  (`RailCell.active`).\n- Pane cell = status: Idle → muted, Running → accent, Success → success, Error → danger. The\n  focused pane renders brighter. Workspace and pane never read the same because the glyphs differ\n  (`Stack` vs the pane icon).\n\nCURSOR: the sidebar-nav cursor shows as a distinct hollow outline — add `nav_selected` to\n`RailCell`, mirroring `Row` / `MarkerGroup` / `DockFrame`.\nCLICKS: a workspace cell toggles its pane list and does NOT switch workspace; a pane cell focuses\nthat pane.\nRIGHT-CLICK: the SAME context menu as the expanded form — reuse the existing menu builders.\nKEYHINT: the universal picker stamps letters over the cells (wrap each `RailCell` in `KeyHint`),\nfed by the existing pick-candidate signals. Column-target picks are unavailable while collapsed\nbecause columns are not shown — an accepted limitation.\n\nWIDGET WORK REQUIRED (verified NOT built, 2026-07-26): extend `RailCell` to show a short text label\nfor the name/number styles; add its `nav_selected` state (grep finds 0 hits in rail_cell.rs); and\nadd `Glyph::Stack` to the icon set (`Glyph::FolderSimple` already exists).\n\n═══ VERIFICATION ═══\nThis is visible chrome. Green tests are not verification: build it and have the USER drive a\nregion through its modes.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+    "9417690f-e416-42e4-b4a2-8dce72068de3",
+    "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+    "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+    "89ba55be-c2d1-4406-a4fb-0888b58d98b7"
+  ],
+  "tasks": [
+    {
+      "id": "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 1,
+      "shortName": "provider-content-model",
+      "title": "The write-once Group/Item content model",
+      "status": "planned",
+      "description": "A Provider describes its content ONCE as a semantic tree of Groups and Items. Each node carries its meaning a single time: an Item has icon, label, status, intent and expanded-only actions; a Group has identity, collapsed, and children nested to any depth. The author NEVER writes an expanded tree and a collapsed tree — that double authoring is what this rejects, and it would fall on every plugin too.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "provider-content-model-c1",
+          "title": "Group/Item model defined",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c2",
+          "title": "Nesting to any depth",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c3",
+          "title": "No second tree anywhere in the author's code",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "9417690f-e416-42e4-b4a2-8dce72068de3",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 2,
+      "shortName": "realize-per-mode",
+      "title": "Mode-awareness lives in exactly one place: realize()",
+      "status": "planned",
+      "description": "The host renders the one tree for the region's current mode. Expanded → Group becomes a `DockFrame`, Item becomes a `Row` with all extras. Collapsed → a `RailCell` per node, recursively, with expanded-only extras omitted. This must NOT be duplicated across widgets or in the author's code.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "realize-per-mode-c1",
+          "title": "Both renderings come from one tree",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c2",
+          "title": "Mode branch exists only in realize()",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c3",
+          "title": "Group collapse is a generic host behaviour, not workspace-specific",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 3,
+      "shortName": "collapse-flavours",
+      "title": "Two collapse flavours, declared per Provider",
+      "status": "planned",
+      "description": "A LIST provider (workspaces and similar) ENUMERATES — one cell per item when collapsed. A TOOL provider (a Docker panel) FOLDS — the whole provider becomes a single icon. The Provider declares which it is; the host applies it. Still one description, still write once.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "collapse-flavours-c1",
+          "title": "Provider declares its flavour",
+          "checked": false
+        },
+        {
+          "id": "collapse-flavours-c2",
+          "title": "Host applies it",
+          "checked": false
+        },
+        {
+          "id": "collapse-flavours-c3",
+          "title": "Both flavours demonstrated",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 4,
+      "shortName": "railcell-widget-work",
+      "title": "RailCell text label + nav_selected, and Glyph::Stack",
+      "status": "planned",
+      "description": "Verified NOT built 2026-07-26: `RailCell` has no `nav_selected` (0 hits in rail_cell.rs) and `Glyph::Stack` does not exist — `Glyph::FolderSimple` already does. Extend RailCell to show a short text label for the name/number styles, add `nav_selected` mirroring Row / MarkerGroup / DockFrame, and add the Stack glyph. All styling from Theme — no literals.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "railcell-widget-work-c1",
+          "title": "RailCell shows a short text label",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c2",
+          "title": "nav_selected added, mirroring the other widgets",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c3",
+          "title": "Glyph::Stack added",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c4",
+          "title": "All colours from theme tokens",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c5",
+          "title": "docs/widgets.md + showcase updated",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 5,
+      "shortName": "rail-config-and-behaviour",
+      "title": "The two config settings + click, right-click and KeyHint behaviour",
+      "status": "planned",
+      "description": "`workspace_collapsed_style` and `pane_collapsed_style`, both `[appearance]`, typed snake_case enums defaulting to \"icon\", both added to config.default.toml and the README.\n\nBehaviour: a workspace cell click TOGGLES its pane list and does NOT switch workspace; a pane cell click focuses that pane. Right-click shows the SAME context menu as the expanded form — reuse the existing builders. The universal picker stamps letters over the cells. Column-target picks are unavailable while collapsed — an accepted limitation.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "rail-config-and-behaviour-c1",
+          "title": "Both config settings, documented in config.default.toml + README",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c2",
+          "title": "Workspace click toggles, pane click focuses",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c3",
+          "title": "Right-click reuses the expanded menu builders",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c4",
+          "title": "KeyHint over cells",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c5",
+          "title": "USER drives a region through its modes",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    }
+  ],
+  "createdAt": "2026-07-26T11:29:06.784Z",
+  "updatedAt": "2026-07-26T11:44:50.918444Z"
+}

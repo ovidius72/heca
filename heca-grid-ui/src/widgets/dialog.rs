@@ -79,6 +79,7 @@ pub struct Dialog {
     has_actions: bool,
 }
 
+#[heca_grid_ui_macros::props]
 impl Dialog {
     /// A new (closed) dialog titled `title`. Add content with [`body`](Dialog::body) and
     /// buttons with [`action`](Dialog::action), in that order.
@@ -97,8 +98,8 @@ impl Dialog {
 
         // Root: a full-size passthrough so the overlay child fills the viewport.
         let mut base = Base::new();
-        base.style.width = Length::Pct(1.0);
-        base.style.height = Length::Pct(1.0);
+        base.style.layout.width = Length::Pct(1.0);
+        base.style.layout.height = Length::Pct(1.0);
         base.children.push(Box::new(overlay));
 
         Self {
@@ -129,8 +130,9 @@ impl Dialog {
     ///
     /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
     /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
+    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
-        let style = &mut self.panel_mut().style;
+        let style = &mut self.panel_mut().style.layout;
         style.width = width;
         style.height = height;
         self
@@ -138,6 +140,7 @@ impl Dialog {
 
     /// Set the dialog **body** — an arbitrary component (a message label, a form, a table…),
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn body(mut self, body: impl Component + 'static) -> Self {
         self.panel_mut().children.push(Box::new(body));
         self.fit_body();
@@ -147,6 +150,7 @@ impl Dialog {
     /// Like [`body`](Dialog::body) but takes an already-boxed component — for a body produced
     /// by a mapper that returns `Box<dyn Component>` (e.g. `heca`'s `realize(ViewNode)`), which
     /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
         self.panel_mut().children.push(body);
         self.fit_body();
@@ -176,7 +180,7 @@ impl Dialog {
     /// is respected.
     fn fit_body(&mut self) {
         let idx = self.panel_mut().children.len() - 1;
-        let style = &mut self.panel_mut().children[idx].base_mut().style;
+        let style = &mut self.panel_mut().children[idx].base_mut().style.layout;
         if style.width == Length::Auto {
             style.width = Length::Pct(1.0);
         }
@@ -191,6 +195,7 @@ impl Dialog {
     /// Append an action **button** (a real [`Button`](super::Button) the caller has already
     /// wired with its `on_click` + hint target). Buttons live in a right-aligned row along
     /// the panel bottom, in call order.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn action(mut self, button: impl Component + 'static) -> Self {
         if !self.has_actions {
             // Lazily create the right-aligned action row on first use.
@@ -209,6 +214,7 @@ impl Dialog {
 
     /// `false` forces an explicit choice — Esc / scrim are swallowed without dismissing.
     /// Pair with a cancel button so there's always a non-destructive way out.
+    #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self
@@ -216,6 +222,7 @@ impl Dialog {
 
     /// Set the callback fired when Esc or a scrim click requests dismissal (respecting
     /// [`dismissible`](Dialog::dismissible)). The host wires this to its overlay-close path.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
         self.on_dismiss = Some(Box::new(f));
         self
@@ -223,6 +230,7 @@ impl Dialog {
 
     /// Set the initial open state (focusing the first focusable — the safe default when the
     /// caller orders `[Cancel, …, Confirm]`).
+    #[heca_grid_ui_macros::prop]
     pub fn open(mut self, open: bool) -> Self {
         self.open.set(open);
         if open {
@@ -273,7 +281,7 @@ impl Dialog {
         if let Some(row) = panel.children.last_mut()
             && let Some(primary) = row.base_mut().children.first_mut()
         {
-            let _ = primary.event(&Event::Key { key: GridKey::Enter, pressed: true });
+            let _ = crate::component::dispatch(primary.as_mut(), &Event::Key { key: GridKey::Enter, pressed: true });
         }
     }
 
@@ -336,7 +344,21 @@ impl Component for Dialog {
     // which owns the whole layer presentation (scrim, shadow, panel fill, bracket
     // reticle, and the panel's children) inside `with_overlay`.
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. A modal routes through an **overlay-aware focus scan**
+    /// (`dispatch_trapped` / `offer_to_overlay`), not a child walk: a nested open overlay — a
+    /// `Select` dropdown in the body — gets input first even when the pointer is outside the
+    /// panel, because its list can extend past the panel edge. Focus is also trapped, so a press
+    /// on empty panel space must keep the focused button's ring rather than clear it.
+    ///
+    /// The per-kind arms below are the reason this widget is held to
+    /// `tests/pointer_delivery.rs`: the release and the wheel arms exist because a `ScrollRegion`
+    /// in a dialog body was found stuck and unscrollable, and nothing but that test stops the next
+    /// kind going missing the same way.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
@@ -372,7 +394,7 @@ impl Component for Dialog {
                 // Only an unconsumed move reaches the ordinary children.
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
                 if self.focus.offer_to_overlay(panel, ev) == Handled::No {
-                    let _ = panel.event(ev); // button hover
+                    let _ = crate::component::dispatch(panel, ev); // button hover
                 }
                 Handled::Yes
             }
@@ -381,7 +403,7 @@ impl Component for Dialog {
             Event::ModifiersChanged(m) => {
                 self.mods = *m;
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
-                let _ = panel.event(ev);
+                let _ = crate::component::dispatch(panel, ev);
                 Handled::No
             }
             // Host-resolved intents (`[keys.widgets]` → `WidgetIntent`). A dialog's focus is a
@@ -452,7 +474,7 @@ impl Component for Dialog {
             // catch-all below and never reached the region.
             Event::PointerReleased { .. } => {
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
-                let _ = panel.event(ev);
+                let _ = crate::component::dispatch(panel, ev);
                 Handled::Yes
             }
             // Scroll: a nested open overlay (a Select's list) scrolls first; then the
@@ -463,7 +485,7 @@ impl Component for Dialog {
             Event::Scroll { .. } => {
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
                 if self.focus.offer_to_overlay(panel, ev) == Handled::No {
-                    let _ = panel.event(ev);
+                    let _ = crate::component::dispatch(panel, ev);
                 }
                 Handled::Yes
             }
@@ -518,7 +540,7 @@ mod tests {
         assert!(!d.overlay_active());
         assert!(!d.focusable());
         assert_eq!(
-            d.event(&Event::Key { key: GridKey::Escape, pressed: true }),
+            crate::component::dispatch(&mut d, &Event::Key { key: GridKey::Escape, pressed: true }),
             Handled::No,
             "a closed dialog handles nothing",
         );
@@ -530,7 +552,7 @@ mod tests {
         // default Esc, to it). The dialog no longer hardcodes the Esc key.
         let (mut d, flag) = open_dialog_with_flag();
         assert_eq!(
-            d.event(&Event::Widget(WidgetIntent::Dismiss)),
+            crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::Dismiss)),
             Handled::Yes,
         );
         assert!(flag.get(), "Dismiss fired the dismiss callback");
@@ -603,7 +625,7 @@ mod tests {
         let mut d = open_dialog();
         crate::LayoutEngine::new().compute(&mut d, Size::new(600.0, 400.0));
         // Move focus by nav so a button shows the focus ring.
-        let _ = d.event(&Event::Widget(WidgetIntent::ItemNext));
+        let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::ItemNext));
         let before = focused_buttons(&d);
         assert!(!before.is_empty(), "a button is focused after ItemNext");
 
@@ -611,7 +633,7 @@ mod tests {
         let panel = d.panel_bounds();
         let body = Point::new(panel.loc.x + panel.size.w * 0.5, panel.loc.y + 2.0);
         assert!(panel.contains(body), "test point is inside the panel body");
-        let _ = d.event(&Event::PointerPressed { pos: body });
+        let _ = crate::component::dispatch(&mut d, &Event::PointerPressed { pos: body });
 
         assert_eq!(
             focused_buttons(&d),
@@ -629,14 +651,14 @@ mod tests {
         let f = flag.clone();
         let mut d = open_dialog().dismissible(false).on_dismiss(move || f.set(true));
         assert_eq!(
-            d.event(&Event::Widget(WidgetIntent::Dismiss)),
+            crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::Dismiss)),
             Handled::Yes,
         );
         assert!(flag.get(), "Dismiss dismisses even a forced dialog");
 
         // A scrim click (press outside the panel) on a forced dialog must NOT dismiss.
         flag.set(false);
-        let _ = d.event(&Event::PointerPressed { pos: Point::new(-100.0, -100.0) });
+        let _ = crate::component::dispatch(&mut d, &Event::PointerPressed { pos: Point::new(-100.0, -100.0) });
         assert!(!flag.get(), "forced dialog ignores the scrim/outside click");
     }
 
@@ -646,7 +668,7 @@ mod tests {
         // configurable `item_next`/`item_previous` bindings). Each is consumed and lands focus.
         for intent in [WidgetIntent::ItemNext, WidgetIntent::ItemPrevious] {
             let mut d = open_dialog();
-            assert_eq!(d.event(&Event::Widget(intent)), Handled::Yes);
+            assert_eq!(crate::component::dispatch(&mut d, &Event::Widget(intent)), Handled::Yes);
             assert!(!focused_buttons(&d).is_empty(), "{intent:?} focuses a button");
         }
     }
@@ -664,13 +686,13 @@ mod tests {
             .open(true);
         // A typed character is delivered field-first to (and consumed by) the focused input.
         assert_eq!(
-            d.event(&Event::Key { key: GridKey::Char('x'), pressed: true }),
+            crate::component::dispatch(&mut d, &Event::Key { key: GridKey::Char('x'), pressed: true }),
             Handled::Yes,
             "the focused input receives typed characters",
         );
         // `WidgetIntent::Activate` (host maps `activate`, default Enter) fires the PRIMARY action.
         assert!(!fired.get());
-        let _ = d.event(&Event::Widget(WidgetIntent::Activate));
+        let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::Activate));
         assert!(fired.get(), "Activate fires the primary action (OK)");
     }
 
@@ -686,13 +708,13 @@ mod tests {
             .open(true);
         // Editing shortcut → forwarded to the input; it is consumed and focus stays on the field.
         assert_eq!(
-            d.event(&Event::Widget(WidgetIntent::EditDeleteBack)),
+            crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::EditDeleteBack)),
             Handled::Yes,
             "EditDeleteBack reaches the focused input",
         );
         assert!(focused_buttons(&d).is_empty(), "editing keeps focus in the input");
         // Nav moves focus off the input onto a button.
-        let _ = d.event(&Event::Widget(WidgetIntent::ItemNext));
+        let _ = crate::component::dispatch(&mut d, &Event::Widget(WidgetIntent::ItemNext));
         assert!(!focused_buttons(&d).is_empty(), "ItemNext navigates to a button");
     }
 }

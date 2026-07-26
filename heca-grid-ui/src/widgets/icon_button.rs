@@ -44,15 +44,16 @@ pub struct IconButton {
     on_click: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl IconButton {
     /// A new icon button wrapping `icon`, centered.
     pub fn new(icon: Icon) -> Self {
         let mut base = Base::new();
         // Center the single icon child; pad it so the hover frame has breathing room.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
-        base.style.padding = DEFAULT_PAD;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
+        base.style.layout.padding = DEFAULT_PAD;
         base.children.push(Box::new(icon));
         Self {
             base,
@@ -70,6 +71,7 @@ impl IconButton {
     /// Pin a square button of `px` (icon centered); otherwise it hugs the icon.
     /// Named `cell` (not `size`) so the shared [`LayoutExt::size`] size-variant
     /// builder stays available on `IconButton`.
+    #[heca_grid_ui_macros::prop]
     pub fn cell(mut self, px: f32) -> Self {
         self.cell = Some(px);
         self.remeasure();
@@ -77,12 +79,14 @@ impl IconButton {
     }
 
     /// Override the hover/press hue (default: theme accent).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn tone(mut self, c: Color) -> Self {
         self.tone = Some(c);
         self
     }
 
     /// Enable or disable the hover glow (default: enabled).
+    #[heca_grid_ui_macros::prop]
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
         self
@@ -92,12 +96,14 @@ impl IconButton {
     /// tone-tinted fill + firm border (the held version of its hover frame, matching
     /// the [`Toggle`](super::Toggle) on-state) so it reads as an active *status*
     /// rather than a passive icon. Hover/press still layer on top.
+    #[heca_grid_ui_macros::prop]
     pub fn active(mut self, on: bool) -> Self {
         self.active = on;
         self
     }
 
     /// Set the click callback (also makes it focusable).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self.base.focusable = true; // clickable icon buttons are focusable (Component::focusable)
@@ -130,11 +136,11 @@ impl Component for IconButton {
     /// (see [`Style::size_explicit`](crate::style::Style::size_explicit)), so the whole affordance
     /// grows/shrinks together without this widget copying the variant into its child.
     fn remeasure(&mut self) {
-        let size = self.base.style.size;
-        self.base.style.padding = DEFAULT_PAD * size.pad_scale();
+        let size = self.base.style.layout.size;
+        self.base.style.layout.padding = DEFAULT_PAD * size.pad_scale();
         let len = self.cell.map(Length::Px).unwrap_or(Length::Auto);
-        self.base.style.width = len;
-        self.base.style.height = len;
+        self.base.style.layout.width = len;
+        self.base.style.layout.height = len;
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -196,7 +202,10 @@ impl Component for IconButton {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.on_click.is_none() || self.base.disabled.get_untracked() {
             return Handled::No;
         }

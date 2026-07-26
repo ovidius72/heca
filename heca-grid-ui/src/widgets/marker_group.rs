@@ -27,7 +27,7 @@
 //! styling is read from the [`Theme`](crate::theme::Theme) at paint.
 
 use crate::builders::{LayoutExt, Parent};
-use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, route_event};
+use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::Glow;
 use crate::style::Direction;
@@ -67,11 +67,12 @@ pub struct MarkerGroup {
     hovered: Signal<bool>,
 }
 
+#[heca_grid_ui_macros::props]
 impl MarkerGroup {
     /// A new (empty) group. Add rows with `.child(...)`.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         Self {
             base,
             active: signal(false),
@@ -81,6 +82,7 @@ impl MarkerGroup {
     }
 
     /// Set the active state (brightens the bar).
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -93,6 +95,7 @@ impl MarkerGroup {
     }
 
     /// Set the sidebar-nav **cursor** state (full-opacity bar, no active glow).
+    #[heca_grid_ui_macros::prop]
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self
@@ -123,6 +126,12 @@ impl Default for MarkerGroup {
 }
 
 impl Component for MarkerGroup {
+    /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
+    /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -134,22 +143,21 @@ impl Component for MarkerGroup {
     /// the layout is the base column style.
     fn taffy_style(&self) -> taffy::Style {
         use taffy::prelude::length;
-        let mut s = self.base.style.to_taffy();
+        let mut s = self.base.style.layout.to_taffy();
         s.padding.left = length(GRIP_W as f32);
         s
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
-        // Route to children first (rows handle their own hover/click/drag).
-        let handled = route_event(&mut self.base.children, ev);
-        // Then track *gutter* hover only — the rows own the rest of the bounds.
+    /// Capture returning `No`: the grip's hover is tracked whatever the rows do with the move,
+    /// and the rows still receive it — they own everything outside the gutter.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if let Event::PointerMoved { pos } = ev {
             let in_grip = self.in_grip(*pos);
             if self.hovered.get_untracked() != in_grip {
                 self.hovered.set(in_grip);
             }
         }
-        handled
+        Handled::No
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -256,14 +264,14 @@ mod tests {
     #[test]
     fn hover_tracks_only_the_left_grip() {
         let mut g = sized(MarkerGroup::new(), 100.0, 40.0);
-        g.event(&Event::PointerMoved {
+        crate::component::dispatch(&mut g, &Event::PointerMoved {
             pos: Point::new(5.0, 20.0),
         }); // x < GRIP_W → gutter
         assert!(
             g.hovered().get_untracked(),
             "pointer in the grip gutter hovers the bar"
         );
-        g.event(&Event::PointerMoved {
+        crate::component::dispatch(&mut g, &Event::PointerMoved {
             pos: Point::new(60.0, 20.0),
         }); // over content
         assert!(

@@ -87,6 +87,7 @@ pub struct DockFrame {
     frameless: bool,
 }
 
+#[heca_grid_ui_macros::props]
 impl DockFrame {
     /// A new expanded frame titled `title`. Add body content with `.child(...)`
     /// and header controls with `.header(...)`.
@@ -120,10 +121,10 @@ impl DockFrame {
         let body = Flex::column().gap(BODY_GAP);
 
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         // Inset content from the brackets and space the title bar off the body.
-        base.style.padding = CONTENT_PAD;
-        base.style.gap = HEADER_BODY_GAP;
+        base.style.layout.padding = CONTENT_PAD;
+        base.style.layout.gap = HEADER_BODY_GAP;
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
         // Invariant relied on by `header`/`child`/`sync` index access below.
@@ -148,13 +149,15 @@ impl DockFrame {
     /// Drop the corner-bracket frame (and tighten the content inset). Use when the
     /// dock is hosted inside an already-framed container — e.g. a sidebar shell —
     /// so it reads as a flat section rather than a redundant nested border.
-    pub fn frameless(mut self) -> Self {
-        self.frameless = true;
+    #[heca_grid_ui_macros::prop]
+    pub fn frameless(mut self, frameless: bool) -> Self {
+        self.frameless = frameless;
         self.sync();
         self
     }
 
     /// Set the initial expanded state.
+    #[heca_grid_ui_macros::prop]
     pub fn expanded(self, open: bool) -> Self {
         self.expanded.set(open);
         self.chevron.set(chevron_for(open).to_string());
@@ -162,6 +165,7 @@ impl DockFrame {
     }
 
     /// Report toggles. Receives `Action::value("dock-toggle", Bool(expanded))`.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_toggle(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_toggle = Some(Box::new(f));
         self
@@ -169,6 +173,7 @@ impl DockFrame {
 
     /// Fill the header-controls slot — the Dock's own affordances (e.g. a search
     /// field). Interactive controls work: events reach the slot before the toggle.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn header(mut self, c: impl Component + 'static) -> Self {
         self.base.children[HEADER].base_mut().children[CONTROLS] = Box::new(c);
         self
@@ -176,6 +181,7 @@ impl DockFrame {
 
     /// Append body content (folds away when collapsed). This is also the seam G6
     /// uses to make the frame draggable via the shipped `drag/` framework.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl Component + 'static) -> Self {
         self.base.children[BODY]
             .base_mut()
@@ -188,6 +194,7 @@ impl DockFrame {
     /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
     /// go through the `impl Component` setters; same seam as
     /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn header_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[HEADER].base_mut().children[CONTROLS] = c;
         self
@@ -195,6 +202,7 @@ impl DockFrame {
 
     /// [`child`](DockFrame::child) for an already-boxed component — see
     /// [`header_boxed`](DockFrame::header_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[BODY].base_mut().children.push(c);
         self
@@ -207,6 +215,7 @@ impl DockFrame {
 
     /// Mark the frame **active** (the current one). An active frame paints a faint
     /// accent wash (`theme.colors.active_wash_alpha`) over itself. Defaults to inactive.
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -220,6 +229,7 @@ impl DockFrame {
 
     /// Mark the frame as the sidebar-nav **cursor** — a hollow accent border,
     /// shown distinctly from the active wash. Defaults to off.
+    #[heca_grid_ui_macros::prop]
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self
@@ -242,6 +252,7 @@ impl DockFrame {
     /// let files = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen);
     /// let sidebar = sidebar.dock(files);
     /// ```
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn rail(mut self, mode: Signal<RegionMode>, glyph: Glyph) -> Self {
         self.rail_mode = Some(mode);
         // Stretch the wrapper across the rail's width and center the glyph in it.
@@ -266,14 +277,14 @@ impl DockFrame {
         let rail = self
             .rail_mode
             .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
-        self.base.children[HEADER].base_mut().style.hidden = rail;
-        self.base.children[BODY].base_mut().style.hidden = rail || !open;
+        self.base.children[HEADER].base_mut().style.layout.hidden = rail;
+        self.base.children[BODY].base_mut().style.layout.hidden = rail || !open;
         if self.base.children.len() > RAIL {
-            self.base.children[RAIL].base_mut().style.hidden = !rail;
+            self.base.children[RAIL].base_mut().style.layout.hidden = !rail;
         }
         // Tighten the frame inset in the rail so the icon fits the thin column;
         // frameless docks tighten too since there are no brackets to clear.
-        self.base.style.padding = if rail {
+        self.base.style.layout.padding = if rail {
             RAIL_PAD
         } else if self.frameless {
             FRAMELESS_PAD
@@ -288,6 +299,12 @@ fn chevron_for(open: bool) -> &'static str {
 }
 
 impl Component for DockFrame {
+    /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
+    /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    fn wants_visible(&self) -> bool {
+        self.nav.get_untracked() || self.base.focused.get_untracked()
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -307,13 +324,13 @@ impl Component for DockFrame {
         }
         let radius = cx.theme().colors.border_radius;
         let b = self.base.bounds;
-        let fill = self.base.style.fill;
+        let fill = self.base.style.visual.fill;
 
         // Background fill — rounded by theme radius. An explicit `.glow(..)`
         // (StyleExt) wins; otherwise the theme rest glow gives the frame the
         // shared neon identity at rest, scaled by `glow_size` (T011).
         if let Some(f) = fill {
-            let glow = self.base.style.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
+            let glow = self.base.style.visual.glow.or_else(|| cx.rest_glow(GLOW_RADIUS));
             cx.rect(b, f, None, radius, glow);
         }
 
@@ -367,10 +384,17 @@ impl Component for DockFrame {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// This widget **watches what its own subtree did**: the header row flips `expanded`, and the
+    /// group reports that as a toggle. That has to happen even when the header consumed the click,
+    /// which is after-the-walk-always — not something either hook expresses. So it owns the walk,
+    /// and `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         let was = self.expanded.get_untracked();
-        // Default routing lets the header's toggle Item flip `expanded` on
-        // click/Enter (and lets the controls slot consume events first).
+        // The header Item flips `expanded` on click/Enter; the controls slot gets first refusal.
         let handled = route_event(&mut self.base.children, ev);
         let now = self.expanded.get_untracked();
         if now != was {

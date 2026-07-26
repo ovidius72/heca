@@ -23,7 +23,7 @@ impl Visibility {
             seen: visible.get_untracked(),
         };
         if let Some(child) = this.base.children.first_mut() {
-            child.base_mut().style.hidden = !this.seen;
+            child.base_mut().style.layout.hidden = !this.seen;
         }
         this
     }
@@ -47,7 +47,7 @@ impl Component for Visibility {
         let visible = self.visible.get_untracked();
         self.seen = visible;
         if let Some(child) = self.base.children.first_mut() {
-            child.base_mut().style.hidden = !visible;
+            child.base_mut().style.layout.hidden = !visible;
         }
     }
 
@@ -56,7 +56,7 @@ impl Component for Visibility {
             return;
         }
         if let Some(child) = self.base.children.first()
-            && !child.base().style.hidden
+            && !child.base().style.layout.hidden
         {
             child.paint(cx);
         }
@@ -67,7 +67,7 @@ impl Component for Visibility {
         if visible != self.seen {
             self.seen = visible;
             if let Some(child) = self.base.children.first_mut() {
-                child.base_mut().style.hidden = !visible;
+                child.base_mut().style.layout.hidden = !visible;
             }
             self.base.mark_needs_paint();
         }

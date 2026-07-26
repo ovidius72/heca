@@ -30,6 +30,7 @@ pub struct ItemGroup {
     on_toggle: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl ItemGroup {
     /// A new expanded group titled `label`. Add rows with `.child(...)`.
     pub fn new(label: impl Into<String>) -> Self {
@@ -43,7 +44,7 @@ impl ItemGroup {
             .on_activate(move || expanded.set(!expanded.get_untracked()));
 
         let mut base = Base::new();
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         base.children.push(Box::new(header));
         Self {
             base,
@@ -54,6 +55,7 @@ impl ItemGroup {
     }
 
     /// Set the initial expanded state.
+    #[heca_grid_ui_macros::prop]
     pub fn expanded(self, open: bool) -> Self {
         self.expanded.set(open);
         self.chevron.set(chevron_for(open).to_string());
@@ -61,12 +63,14 @@ impl ItemGroup {
     }
 
     /// Report toggles. Receives `Action::value("group-toggle", Bool(expanded))`.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_toggle(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_toggle = Some(Box::new(f));
         self
     }
 
     /// Append a group row (folds away when collapsed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl Component + 'static) -> Self {
         self.base.children.push(Box::new(c));
         self
@@ -82,7 +86,7 @@ impl ItemGroup {
         let open = self.expanded.get_untracked();
         self.chevron.set(chevron_for(open).to_string());
         for row in self.base.children.iter_mut().skip(HEADER + 1) {
-            row.base_mut().style.hidden = !open;
+            row.base_mut().style.layout.hidden = !open;
         }
     }
 }
@@ -105,9 +109,17 @@ impl Component for ItemGroup {
         self.sync();
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// This widget **watches what its own subtree did**: the header row flips `expanded`, and the
+    /// group reports that as a toggle. That has to happen even when the header consumed the click,
+    /// which is after-the-walk-always — not something either hook expresses. So it owns the walk,
+    /// and `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         let was = self.expanded.get_untracked();
-        // Default routing lets the header Item flip `expanded` on click/Enter.
+        // The header Item flips `expanded` on click/Enter; the controls slot gets first refusal.
         let handled = route_event(&mut self.base.children, ev);
         let now = self.expanded.get_untracked();
         if now != was {

@@ -28,17 +28,17 @@ pub trait LayoutExt: Component + Sized {
     /// ([`Style::size_explicit`](crate::style::Style::size_explicit)), which both pins this
     /// widget's variant and makes **it** the one its own children inherit.
     fn size(mut self, size: WidgetSize) -> Self {
-        self.base_mut().style.set_size(size);
+        self.base_mut().style.layout.set_size(size);
         self
     }
     /// Main-axis direction.
     fn direction(mut self, d: Direction) -> Self {
-        self.base_mut().style.direction = d;
+        self.base_mut().style.layout.direction = d;
         self
     }
     /// Gap between children.
     fn gap(mut self, v: f32) -> Self {
-        self.base_mut().style.gap = v;
+        self.base_mut().style.layout.gap = v;
         self
     }
     /// Gap between children from a theme [`Spacing`](crate::style::Spacing) token —
@@ -47,17 +47,17 @@ pub trait LayoutExt: Component + Sized {
     /// Use it to group form fields: a tight `Spacing::Xs` inside a label+control
     /// couple, a roomier `Spacing::Md` between couples — no new widget needed.
     fn gap_spacing(mut self, s: crate::style::Spacing) -> Self {
-        self.base_mut().style.gap_spacing = Some(s);
+        self.base_mut().style.layout.gap_spacing = Some(s);
         self
     }
     /// Outer margin on all sides.
     fn margin(mut self, m: f32) -> Self {
-        self.base_mut().style.margin = m;
+        self.base_mut().style.layout.margin = m;
         self
     }
     /// Outer margin split per axis: `x` left+right, `y` top+bottom.
     fn margin_xy(mut self, x: f32, y: f32) -> Self {
-        let s = &mut self.base_mut().style;
+        let s = &mut self.base_mut().style.layout;
         s.margin_left = Some(x);
         s.margin_right = Some(x);
         s.margin_top = Some(y);
@@ -66,32 +66,32 @@ pub trait LayoutExt: Component + Sized {
     }
     /// Left outer margin only.
     fn margin_left(mut self, v: f32) -> Self {
-        self.base_mut().style.margin_left = Some(v);
+        self.base_mut().style.layout.margin_left = Some(v);
         self
     }
     /// Right outer margin only.
     fn margin_right(mut self, v: f32) -> Self {
-        self.base_mut().style.margin_right = Some(v);
+        self.base_mut().style.layout.margin_right = Some(v);
         self
     }
     /// Top outer margin only.
     fn margin_top(mut self, v: f32) -> Self {
-        self.base_mut().style.margin_top = Some(v);
+        self.base_mut().style.layout.margin_top = Some(v);
         self
     }
     /// Bottom outer margin only.
     fn margin_bottom(mut self, v: f32) -> Self {
-        self.base_mut().style.margin_bottom = Some(v);
+        self.base_mut().style.layout.margin_bottom = Some(v);
         self
     }
     /// Main-axis distribution.
     fn justify(mut self, j: Justify) -> Self {
-        self.base_mut().style.justify = j;
+        self.base_mut().style.layout.justify = j;
         self
     }
     /// Cross-axis alignment of this component's **children**.
     fn align(mut self, a: Align) -> Self {
-        self.base_mut().style.align = a;
+        self.base_mut().style.layout.align = a;
         self
     }
     /// Cross-axis alignment of **this** component inside its parent (CSS `align-self`),
@@ -99,7 +99,7 @@ pub trait LayoutExt: Component + Sized {
     /// [`Align::Start`] to keep an `Auto`-sized widget hugging its content instead of
     /// stretching to fill the parent.
     fn align_self(mut self, a: Align) -> Self {
-        self.base_mut().style.align_self = Some(a);
+        self.base_mut().style.layout.align_self = Some(a);
         self
     }
     /// **Grid only** — how this grid's items sit **horizontally inside their cells**
@@ -109,58 +109,82 @@ pub trait LayoutExt: Component + Sized {
     /// which distributes the whole *track set* inside the container and leaves the items where
     /// they are. The vertical counterpart is [`align`](Self::align).
     fn justify_items(mut self, a: Align) -> Self {
-        self.base_mut().style.justify_items = Some(a);
+        self.base_mut().style.layout.justify_items = Some(a);
         self
     }
     /// **Grid only** — horizontal placement of **this** item inside its own cell (CSS
     /// `justify-self`), overriding the grid's [`justify_items`](Self::justify_items) for it alone.
     fn justify_self(mut self, a: Align) -> Self {
-        self.base_mut().style.justify_self = Some(a);
+        self.base_mut().style.layout.justify_self = Some(a);
         self
     }
     /// Inner padding on all sides.
     fn padding(mut self, p: f32) -> Self {
-        self.base_mut().style.padding = p;
+        self.base_mut().style.layout.padding = p;
         self
     }
     /// Inner padding split per axis: `x` left+right, `y` top+bottom.
     fn padding_xy(mut self, x: f32, y: f32) -> Self {
-        let s = &mut self.base_mut().style;
+        let s = &mut self.base_mut().style.layout;
         s.padding_x = Some(x);
         s.padding_y = Some(y);
+        self
+    }
+    /// Inner padding on one side, overriding the axis and the uniform value.
+    ///
+    /// Reserving space along a single edge is not the same as padding the axis: the opposite side
+    /// should not move because this one needed room. A `ScrollRegion` keeping its content clear of
+    /// its scrollbar is the case that asked for it.
+    fn padding_left(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_left = Some(p);
+        self
+    }
+    /// Inner padding on the right only — see [`padding_left`](Self::padding_left).
+    fn padding_right(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_right = Some(p);
+        self
+    }
+    /// Inner padding on the top only — see [`padding_left`](Self::padding_left).
+    fn padding_top(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_top = Some(p);
+        self
+    }
+    /// Inner padding on the bottom only — see [`padding_left`](Self::padding_left).
+    fn padding_bottom(mut self, p: f32) -> Self {
+        self.base_mut().style.layout.padding_bottom = Some(p);
         self
     }
     /// Inner padding (both axes) from a theme [`Spacing`](crate::style::Spacing) token —
     /// resolved to px from the font at layout. Prefer this over hand-computed px.
     fn pad_all(mut self, s: crate::style::Spacing) -> Self {
-        let st = &mut self.base_mut().style;
+        let st = &mut self.base_mut().style.layout;
         st.pad_spacing_x = Some(s);
         st.pad_spacing_y = Some(s);
         self
     }
     /// Horizontal (left+right) padding from a theme [`Spacing`](crate::style::Spacing) token.
     fn pad_x(mut self, s: crate::style::Spacing) -> Self {
-        self.base_mut().style.pad_spacing_x = Some(s);
+        self.base_mut().style.layout.pad_spacing_x = Some(s);
         self
     }
     /// Vertical (top+bottom) padding from a theme [`Spacing`](crate::style::Spacing) token.
     fn pad_y(mut self, s: crate::style::Spacing) -> Self {
-        self.base_mut().style.pad_spacing_y = Some(s);
+        self.base_mut().style.layout.pad_spacing_y = Some(s);
         self
     }
     /// Width along the main/cross axis.
     fn width(mut self, w: Length) -> Self {
-        self.base_mut().style.width = w;
+        self.base_mut().style.layout.width = w;
         self
     }
     /// Height along the main/cross axis.
     fn height(mut self, h: Length) -> Self {
-        self.base_mut().style.height = h;
+        self.base_mut().style.layout.height = h;
         self
     }
     /// Flex grow factor (share of remaining space).
     fn grow(mut self, g: f32) -> Self {
-        self.base_mut().style.flex_grow = g;
+        self.base_mut().style.layout.flex_grow = g;
         self
     }
     /// Disable the widget: dimmed, non-interactive, skipped by focus traversal.
@@ -180,17 +204,17 @@ pub trait LayoutExt: Component + Sized {
 pub trait StyleExt: Component + Sized {
     /// Background fill.
     fn background(mut self, c: Color) -> Self {
-        self.base_mut().style.fill = Some(c);
+        self.base_mut().style.visual.fill = Some(c);
         self
     }
     /// Border outline.
     fn border(mut self, c: Color, width: f32) -> Self {
-        self.base_mut().style.border = Some(Border { color: c, width });
+        self.base_mut().style.visual.border = Some(Border { color: c, width });
         self
     }
     /// Neon outer glow (default radius/intensity).
     fn glow(mut self, c: Color) -> Self {
-        self.base_mut().style.glow = Some(Glow {
+        self.base_mut().style.visual.glow = Some(Glow {
             color: c,
             radius: 8.0,
             intensity: 1.0,
@@ -199,7 +223,7 @@ pub trait StyleExt: Component + Sized {
     }
     /// Neon outer glow with explicit falloff radius and intensity.
     fn glow_with(mut self, c: Color, radius: f32, intensity: f32) -> Self {
-        self.base_mut().style.glow = Some(Glow {
+        self.base_mut().style.visual.glow = Some(Glow {
             color: c,
             radius,
             intensity,
@@ -208,14 +232,14 @@ pub trait StyleExt: Component + Sized {
     }
     /// Corner radius.
     fn radius(mut self, r: f32) -> Self {
-        self.base_mut().style.radius = r;
+        self.base_mut().style.visual.radius = r;
         self
     }
 
     /// Semantic font multiplier relative to the inherited base font (e.g. `2.0`
     /// for a header, `0.8` for a caption). Scales with a global font change.
     fn font_scale(mut self, scale: f32) -> Self {
-        self.base_mut().style.font_scale = scale;
+        self.base_mut().style.visual.font_scale = scale;
         self
     }
 }

@@ -77,6 +77,7 @@ pub struct Choice {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Choice {
     /// A new option standing for `value`, with **no content** — compose it with
     /// [`child`](Parent::child).
@@ -84,9 +85,9 @@ impl Choice {
         let mut base = Base::new();
         // Content is laid out as a centered row; padding/gap derive from the size variant in
         // `remeasure`, and the variant itself cascades to the content during layout.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Start;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Start;
         // One option = one Tab stop: focus never descends into the composed content.
         base.focus_barrier = true;
         let mut choice = Self {
@@ -115,6 +116,7 @@ impl Choice {
     }
 
     /// Set the selected (chosen) state.
+    #[heca_grid_ui_macros::prop]
     pub fn selected(self, selected: bool) -> Self {
         self.selected.set(selected);
         self
@@ -135,6 +137,7 @@ impl Choice {
     ///
     /// A container (`Select`, `Tabs`) wires this to record the pick; a standalone `Choice` can use
     /// it directly.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive options are focusable (Component::focusable)
@@ -166,10 +169,10 @@ impl Component for Choice {
     /// both derive from the resolved font + size variant, so the whole affordance scales together.
     fn remeasure(&mut self) {
         let pad = BASE_PAD * self.base.size_scale();
-        self.base.style.padding = pad;
-        self.base.style.gap = self.base.font * GAP_RATIO;
-        self.base.style.width = Length::Auto;
-        self.base.style.height = Length::Auto;
+        self.base.style.layout.padding = pad;
+        self.base.style.layout.gap = self.base.font * GAP_RATIO;
+        self.base.style.layout.width = Length::Auto;
+        self.base.style.layout.height = Length::Auto;
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -223,7 +226,9 @@ impl Component for Choice {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }

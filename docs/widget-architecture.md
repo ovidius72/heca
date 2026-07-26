@@ -144,7 +144,7 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | Can any component go inside a widget's slot? | **Yes.** | Slots are `impl Component`. Never narrow to a closed enum. |
 | How does a realized subtree get into a widget? | **`*_boxed` setter.** | `Dialog::body_boxed` is the precedent. |
 | Does behaviour cross the plugin boundary as a callback? | **No — an `Intent`** (action id + args). | Keeps the model serializable; click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **No.** | Only semantic `ViewVariant`/`ViewSize`/`ViewAlign` + color/glyph *names*. The host resolves pixels from `Theme`. |
+| Is styling a prop? | **Yes — changed 2026-07-26.** | The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name). The old "No" is dead — do not restore it. |
 
 ---
 
@@ -158,8 +158,8 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | The widgets | `heca-grid-ui/src/widgets/` |
 | `Base` / `Component` / `PaintCx` | `heca-grid-ui/src/component.rs` |
 | Widget catalog (human docs) | `docs/widgets.md` |
-| Long-arc plugin design | `pluggable-chrome-plugin-plan.md` §2.6.2, §2.7.2 |
-| Plugin authoring model | `docs/plugin-authoring.md` |
+| Long-arc plugin design | `chrome-and-ui.md` §2.6.2, §2.7.2 |
+| Plugin authoring model | `chrome-and-ui.md` |
 
 ---
 
@@ -167,10 +167,8 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 
 These are *not* settled, and are the live design work — everything above is.
 
-- **`realize` coverage** — `Select`, `Tabs`, `Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`,
-  `ScrollBar`, `Toast` still realize to an empty container (they need structured/list props).
-- **Composing the leaf widgets** — `Button` first (it hand-draws its label), then `Item`, `Tag`,
-  and the rest. Per-state content color for children (an unstyled child `Label`/`Icon` must tint
-  with the parent's hover/disabled state) is the open sub-problem.
-- **Typed builder SDK** over `ViewNode` (`Column::new().gap(8).child(…)`), so authors don't write
-  `ViewNode::new(kind).prop(…)` by hand.
+~~`realize` coverage~~ — **done.** Every kind maps to a live widget, guarded by a test.
+~~Composing the leaf widgets~~ — **done** (F003/P015, F003/P016).
+
+- **Typed builder SDK** over `ViewNode` (`Column::new().gap(8).child(…)`) — **F003/P011/T006**,
+  waiting on **F003/P017**.

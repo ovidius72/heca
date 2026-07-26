@@ -133,8 +133,10 @@ pub enum PanelElevation {
 /// so the shadow keeps its shape and only loses depth.
 const HOVER_SHADOW_SCALE: f32 = 0.25;
 
+#[heca_grid_ui_macros::props]
 impl PanelElevation {
     /// Multiplier applied to both the shadow's blur and its drop offset.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn shadow_scale(self) -> f32 {
         match self {
             Self::Panel => 1.0,
@@ -227,7 +229,7 @@ pub fn paint_panel_chrome(cx: &mut PaintCx, rect: Rectangle, chrome: PanelChrome
 /// the placement honours it instead of re-deciding: [`Select`](super::Select) does
 /// this because its flip decision and its visible-row count are computed together
 /// (the panel's height depends on the side), so the two must not disagree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum AnchorSide {
     /// Prefer below; flip above when there is no room below (and more above).
     #[default]
@@ -377,7 +379,7 @@ pub fn place_at_point(
 ///
 /// Re-exported as [`TooltipSide`](super::TooltipSide) — the same type under the
 /// name that reads better at a [`Tooltip`](super::Tooltip) call site.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum BesideSide {
     /// Above the anchor (flips to [`Bottom`](BesideSide::Bottom) when there is no room).
     #[default]
@@ -540,15 +542,15 @@ impl Overlay {
         let mut base = Base::new();
         // Fill the viewport and center the panel on both axes — real taffy
         // centering, so every descendant gets true bounds.
-        base.style.width = Length::Pct(1.0);
-        base.style.height = Length::Pct(1.0);
-        base.style.justify = Justify::Center;
-        base.style.align = Align::Center;
+        base.style.layout.width = Length::Pct(1.0);
+        base.style.layout.height = Length::Pct(1.0);
+        base.style.layout.justify = Justify::Center;
+        base.style.layout.align = Align::Center;
         // Breathing room between the panel and the window edge. It doubles as the
         // inset for the viewport cap in `apply_panel_size`: the panel's `Pct(1.0)`
         // max resolves against this padded content box, so even a huge panel keeps
         // this margin and its border/glow is never shaved by the window edge.
-        base.style.padding = VIEWPORT_MARGIN;
+        base.style.layout.padding = VIEWPORT_MARGIN;
         Self {
             base,
             open: signal(false),
@@ -563,6 +565,7 @@ impl Overlay {
     /// Set the **panel** — the single child this layer centers and decorates.
     /// The caller owns the panel's internal layout (padding, gaps, children);
     /// the overlay owns the chrome around it. Replaces any previous panel.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn panel(mut self, panel: impl Component + 'static) -> Self {
         self.base.children.clear();
         self.base.children.push(Box::new(panel));
@@ -573,6 +576,7 @@ impl Overlay {
     /// Like [`panel`](Overlay::panel) but takes an already-boxed component —
     /// for a panel produced by a mapper returning `Box<dyn Component>` (e.g.
     /// `heca`'s `realize(ViewNode)`).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn panel_boxed(mut self, panel: Box<dyn Component>) -> Self {
         self.base.children.clear();
         self.base.children.push(panel);
@@ -602,6 +606,7 @@ impl Overlay {
     ///     .panel_size(Length::Pct(0.6), Length::Pct(0.7))
     ///     .panel(Flex::column().child(ScrollRegion::new().child(long_content)))
     /// ```
+    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
         self.panel_size = Some((width, height));
         self.apply_panel_size();
@@ -620,7 +625,7 @@ impl Overlay {
         let Some(panel) = self.base.children.first_mut() else {
             return;
         };
-        let style = &mut panel.base_mut().style;
+        let style = &mut panel.base_mut().style.layout;
         style.max_width = Some(Length::Pct(1.0));
         style.max_height = Some(Length::Pct(1.0));
         if let Some((w, h)) = self.panel_size {
@@ -631,12 +636,14 @@ impl Overlay {
 
     /// Layer policy: `true` (default) = modal — dimming scrim + outside input
     /// swallowed; `false` = light layer — no scrim, outside input falls through.
+    #[heca_grid_ui_macros::prop]
     pub fn blocking(mut self, blocking: bool) -> Self {
         self.blocking = blocking;
         self
     }
 
     /// Set the panel placement (default [`OverlayPosition::Center`]).
+    #[heca_grid_ui_macros::prop]
     pub fn position(mut self, position: OverlayPosition) -> Self {
         self.position = position;
         self
@@ -646,6 +653,7 @@ impl Overlay {
     /// flipped above when no room, left-edge aligned, clamped into the viewport —
     /// see [`place_anchored`]. Uses [`DEFAULT_ANCHOR_GAP`]; pair with a
     /// non-[`blocking`](Overlay::blocking) layer for a light-dismiss popover.
+    #[heca_grid_ui_macros::host_only("a host-computed anchor rect, not authorable data")]
     pub fn anchored(mut self, rect: Rectangle) -> Self {
         self.position = OverlayPosition::Anchored {
             anchor: rect,
@@ -691,6 +699,7 @@ impl Overlay {
     }
 
     /// Set the initial open state.
+    #[heca_grid_ui_macros::prop]
     pub fn open(self, open: bool) -> Self {
         self.open.set(open);
         self
@@ -704,6 +713,7 @@ impl Overlay {
     /// Called when a press lands **outside** the panel (standalone use; a
     /// composing widget usually intercepts the press and applies its own
     /// dismissal policy instead).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_outside_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_outside_click = Some(Box::new(f));
         self
@@ -803,7 +813,15 @@ impl Component for Overlay {
     /// **Standalone** layer semantics (a composing widget intercepts events
     /// before this runs and applies its own policy — see the module docs):
     /// nested-overlay-first routing, outside-click callback, blocking swallow.
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. A **closed** overlay's panel is still in the tree but must be completely
+    /// inert, and an open one offers input to a nested overlay (a `Select` in the panel) before its
+    /// ordinary children — neither is a plain child walk. `tests/pointer_delivery.rs` holds it to
+    /// delivering every pointer kind to the panel.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
@@ -824,7 +842,7 @@ impl Component for Overlay {
             Event::PointerPressed { pos } => {
                 if panel.contains(*pos) {
                     let panel_root = self.base.children[0].as_mut();
-                    let _ = panel_root.event(ev);
+                    let _ = crate::component::dispatch(panel_root, ev);
                 } else if let Some(f) = &self.on_outside_click {
                     f();
                 }
@@ -832,7 +850,7 @@ impl Component for Overlay {
             }
             Event::PointerMoved { .. } => {
                 let panel_root = self.base.children[0].as_mut();
-                let _ = panel_root.event(ev);
+                let _ = crate::component::dispatch(panel_root, ev);
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
             // A press has to be matched by its RELEASE inside the panel, or a
@@ -841,7 +859,7 @@ impl Component for Overlay {
             // reached it (the overlay swallowed it as an unhandled event).
             Event::PointerReleased { .. } => {
                 let panel_root = self.base.children[0].as_mut();
-                let _ = panel_root.event(ev);
+                let _ = crate::component::dispatch(panel_root, ev);
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
             // The panel gets the wheel FIRST — a scrollable inside a modal (a long
@@ -852,7 +870,7 @@ impl Component for Overlay {
             // is what keeps the page behind a modal from scrolling.
             Event::Scroll { .. } => {
                 let panel_root = self.base.children[0].as_mut();
-                if panel_root.event(ev) == Handled::Yes {
+                if crate::component::dispatch(panel_root, ev) == Handled::Yes {
                     return Handled::Yes;
                 }
                 if self.blocking { Handled::Yes } else { Handled::No }
@@ -883,7 +901,7 @@ mod tests {
         assert!(!o.focusable());
         assert!(!o.overlay_occludes(Point::new(1.0, 1.0)));
         assert_eq!(
-            o.event(&Event::PointerPressed { pos: Point::new(1.0, 1.0) }),
+            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(1.0, 1.0) }),
             Handled::No
         );
     }
@@ -893,11 +911,11 @@ mod tests {
         let mut o = open_overlay();
         assert!(o.overlay_occludes(Point::new(-500.0, -500.0)), "scrim owns every point");
         assert_eq!(
-            o.event(&Event::PointerPressed { pos: Point::new(-500.0, -500.0) }),
+            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(-500.0, -500.0) }),
             Handled::Yes,
             "modal swallows the outside press"
         );
-        assert_eq!(o.event(&Event::Scroll { delta_x: 0.0, delta_y: 1.0 }), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut o, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }), Handled::Yes);
     }
 
     #[test]
@@ -917,7 +935,7 @@ mod tests {
         assert!(o.overlay_occludes(Point::new(110.0, 110.0)), "panel point occludes");
         assert!(!o.overlay_occludes(Point::new(0.0, 0.0)), "outside point does not");
         assert_eq!(
-            o.event(&Event::PointerPressed { pos: Point::new(0.0, 0.0) }),
+            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(0.0, 0.0) }),
             Handled::No,
             "light layer lets the outside press fall through"
         );
@@ -938,7 +956,7 @@ mod tests {
         let a = Overlay::new()
             .panel_size(want_w, want_h)
             .panel(Flex::column().child(Label::new("body")));
-        let style = &a.base.children[0].base().style;
+        let style = &a.base.children[0].base().style.layout;
         assert_eq!(style.width, want_w);
         assert_eq!(style.height, want_h);
 
@@ -946,7 +964,7 @@ mod tests {
         let b = Overlay::new()
             .panel(Flex::column().child(Label::new("body")))
             .panel_size(want_w, want_h);
-        let style = &b.base.children[0].base().style;
+        let style = &b.base.children[0].base().style.layout;
         assert_eq!(style.width, want_w);
         assert_eq!(style.height, want_h);
     }
@@ -975,7 +993,7 @@ mod tests {
     #[test]
     fn panel_size_is_opt_in() {
         let o = Overlay::new().panel(Flex::column().child(Label::new("body")));
-        let style = &o.base.children[0].base().style;
+        let style = &o.base.children[0].base().style.layout;
         assert_eq!(style.width, Length::Auto, "untouched by default");
         assert_eq!(style.height, Length::Auto);
     }

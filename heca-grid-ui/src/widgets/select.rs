@@ -132,6 +132,7 @@ pub struct Select {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Select {
     /// An empty select — add options with [`option`](Select::option).
     pub fn empty() -> Self {
@@ -141,10 +142,10 @@ impl Select {
         base.focus_barrier = true;
         // The options stack vertically. This is the flow taffy *measures* them in; `place_options`
         // then moves them into the overlay panel.
-        base.style.direction = Direction::Column;
+        base.style.layout.direction = Direction::Column;
         // Hug the widest option instead of stretching to fill a column parent (the width is
         // `Auto`, and the default cross-axis alignment is `Stretch`).
-        base.style.align_self = Some(Align::Start);
+        base.style.layout.align_self = Some(Align::Start);
         let mut select = Self {
             base,
             option_states: Vec::new(),
@@ -181,6 +182,7 @@ impl Select {
     /// Typed to [`Choice`] on purpose: the control keeps the row's selected-state
     /// [`Signal`](Choice::state) so it can drive the selection in place, and a `Box<dyn Component>`
     /// would have thrown that away. It is also the contract — the rows of a select **are** options.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn option(mut self, choice: Choice) -> Self {
         self.option_states.push(choice.state());
         self.base.children.push(Box::new(choice));
@@ -189,14 +191,16 @@ impl Select {
     }
 
     /// Explicit font size — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
     }
 
     /// Select an initial option (clamped to the option count). Call it **after** the options.
+    #[heca_grid_ui_macros::prop]
     pub fn selected(self, index: usize) -> Self {
         let i = index.min(self.count().saturating_sub(1));
         self.selected.set(i);
@@ -206,6 +210,7 @@ impl Select {
 
     /// Set the change handler. Receives `Action::value("select-change",
     /// SignalData::Usize(index))` when the selection changes.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self
@@ -528,8 +533,8 @@ impl Component for Select {
         // taller than one line settles on the next one; for text options the two agree exactly.
         let line_h = fs * MONO_LINE_RATIO + 2.0 * self.pad_v() as f32;
         let tallest = self.natural_h.iter().copied().fold(0.0_f64, f64::max) as f32;
-        self.base.style.height = Length::Px(line_h.max(tallest));
-        self.base.style.width = if self.base.children.is_empty() {
+        self.base.style.layout.height = Length::Px(line_h.max(tallest));
+        self.base.style.layout.width = if self.base.children.is_empty() {
             Length::Px(EMPTY_W * self.base.size_scale())
         } else {
             Length::Auto
@@ -538,7 +543,7 @@ impl Component for Select {
         let inset = (PAD_H as f32 - choice::BASE_PAD) * self.base.size_scale();
         let gutter = self.gutter() as f32;
         for child in self.base.children.iter_mut() {
-            let style = &mut child.base_mut().style;
+            let style = &mut child.base_mut().style.layout;
             style.margin_left = Some(inset);
             style.margin_right = Some(gutter);
         }
@@ -716,7 +721,15 @@ impl Component for Select {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Owns its walk. The option rows are **placed children**: collapsed to zero size while the
+    /// list is closed (so they must not be clickable at all) and hit-tested from baked bounds via
+    /// `choice_at` while open — `bounds === drawn === clickable`, which a plain tree walk in
+    /// z-order would break. `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
+    fn routes_own_subtree(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

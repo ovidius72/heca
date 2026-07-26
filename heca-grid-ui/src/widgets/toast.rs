@@ -48,7 +48,7 @@ const DISMISS_SCALE: f32 = 1.4;
 const DEFAULT_WIDTH: f32 = 320.0;
 
 /// Severity of a [`Toast`], mapped to theme tokens at paint time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum ToastSeverity {
     /// Informational (accent).
     #[default]
@@ -61,8 +61,10 @@ pub enum ToastSeverity {
     Danger,
 }
 
+#[heca_grid_ui_macros::props]
 impl ToastSeverity {
     /// The default leading glyph for this severity (overridable via [`Toast::icon`]).
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn default_glyph(self) -> Glyph {
         match self {
             ToastSeverity::Info => Glyph::Info,
@@ -114,13 +116,14 @@ pub struct Toast {
     flash_region: Region,
 }
 
+#[heca_grid_ui_macros::props]
 impl Toast {
     /// A new info toast showing `title`. Add body text with [`body`](Toast::body),
     /// an action with [`action`](Toast::action), severity via the convenience
     /// constructors, and wire dismissal with [`on_dismiss`](Toast::on_dismiss).
     pub fn new(title: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         let mut toast = Self {
             base,
             severity: ToastSeverity::Info,
@@ -156,12 +159,14 @@ impl Toast {
     }
 
     /// Set the severity (hue + default leading glyph).
+    #[heca_grid_ui_macros::prop]
     pub fn severity(mut self, severity: ToastSeverity) -> Self {
         self.severity = severity;
         self
     }
 
     /// Override the leading glyph (default: the severity glyph).
+    #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
         self.icon = Some(glyph);
         self.show_icon = true;
@@ -169,6 +174,7 @@ impl Toast {
     }
 
     /// Hide the leading icon entirely.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn no_icon(mut self) -> Self {
         self.show_icon = false;
         self.remeasure();
@@ -176,6 +182,8 @@ impl Toast {
     }
 
     /// Set the small body text (a second line under the title).
+    #[heca_grid_ui_macros::prop]
+    #[heca_grid_ui_macros::prop]
     pub fn body(mut self, body: impl Into<String>) -> Self {
         self.body = Some(body.into());
         self.remeasure();
@@ -183,6 +191,7 @@ impl Toast {
     }
 
     /// Add an inline action button with `label` + callback.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn action(mut self, label: impl Into<String>, f: impl Fn() + 'static) -> Self {
         self.action_label = Some(label.into());
         self.on_action = Some(Box::new(f));
@@ -191,12 +200,14 @@ impl Toast {
     }
 
     /// Whether the × dismiss affordance is shown (default `true`).
+    #[heca_grid_ui_macros::prop]
     pub fn dismissible(mut self, on: bool) -> Self {
         self.dismissible = on;
         self
     }
 
     /// Make the whole card clickable (fires before any dismiss/action hit-test miss).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self.base.focusable = true; // a clickable toast is focusable (Component::focusable)
@@ -204,6 +215,7 @@ impl Toast {
     }
 
     /// Set the callback fired when the × is clicked. The host removes the toast.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
         self.on_dismiss = Some(Box::new(f));
         self
@@ -303,7 +315,7 @@ impl Component for Toast {
             h += GAP + ACTION_H;
         }
         // The leading icon never exceeds the title line, so it doesn't grow height.
-        self.base.style.height = Length::Px((2.0 * PAD + h) as f32);
+        self.base.style.layout.height = Length::Px((2.0 * PAD + h) as f32);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -387,7 +399,9 @@ impl Component for Toast {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

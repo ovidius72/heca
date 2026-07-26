@@ -6,9 +6,11 @@
 
 use crate::color::Color;
 use crate::scene::{Border, Glow};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Main-axis direction of a flex container.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Direction {
     #[default]
     Row,
@@ -16,7 +18,8 @@ pub enum Direction {
 }
 
 /// Main-axis distribution of children.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Justify {
     #[default]
     Start,
@@ -28,7 +31,8 @@ pub enum Justify {
 }
 
 /// Cross-axis alignment of children.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Align {
     Start,
     Center,
@@ -48,7 +52,8 @@ pub enum Align {
 /// (`1.25×` the base font) with a tight cluster padding, for icon buttons that sit in a
 /// pane/info-bar header and must read a touch larger than the body text.
 /// Set per widget via [`LayoutExt::size`](crate::builders::LayoutExt::size).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WidgetSize {
     /// Compact controls (`0.8×`).
     Small,
@@ -93,7 +98,8 @@ impl WidgetSize {
 /// A theme-derived **spacing** token for container padding. Resolved to px from the
 /// inherited font at layout time (so it scales with the theme / font zoom) — callers
 /// pick a token instead of hand-computing px. Used via `LayoutExt::pad`/`pad_x`/`pad_y`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Spacing {
     None,
     Xs,
@@ -116,6 +122,11 @@ impl Spacing {
 }
 
 /// A size along one axis.
+///
+/// Serializes to the spelling an author would reach for rather than to its enum shape:
+/// [`Auto`](Self::Auto) is `"auto"`, [`Px`](Self::Px) is a bare number, and [`Pct`](Self::Pct) is a
+/// percentage string (`"50%"`). So a declarative description writes `"width": 240` or
+/// `"width": "50%"`, not `{"px": 240}`. Round-trips, which the layout merge relies on.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Length {
     /// Sized by content / flex rules.
@@ -125,6 +136,46 @@ pub enum Length {
     Px(f32),
     /// Fraction of the parent (`0.0..=1.0`).
     Pct(f32),
+}
+
+impl Serialize for Length {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match *self {
+            Length::Auto => s.serialize_str("auto"),
+            Length::Px(v) => s.serialize_f32(v),
+            Length::Pct(v) => s.serialize_str(&format!("{}%", v * 100.0)),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Length {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Num(f32),
+            Text(String),
+        }
+        match Repr::deserialize(d)? {
+            Repr::Num(v) => Ok(Length::Px(v)),
+            Repr::Text(t) => {
+                let t = t.trim();
+                if t.eq_ignore_ascii_case("auto") {
+                    Ok(Length::Auto)
+                } else if let Some(pct) = t.strip_suffix('%') {
+                    pct.trim()
+                        .parse::<f32>()
+                        .map(|v| Length::Pct(v / 100.0))
+                        .map_err(|_| D::Error::custom("percentage is not a number"))
+                } else {
+                    t.parse::<f32>()
+                        .map(Length::Px)
+                        .map_err(|_| D::Error::custom("expected a number, \"auto\", or a percentage"))
+                }
+            }
+        }
+    }
 }
 
 impl Length {
@@ -168,7 +219,7 @@ impl Track {
 
 /// Placement of a child within a [`Grid`](crate::widgets::Grid): a 1-based start
 /// column/row plus a span. `Copy`, so it lives on [`Style`] without breaking it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GridCell {
     /// 1-based start column.
     pub col: u16,
@@ -206,10 +257,83 @@ impl Align {
     }
 }
 
-/// Layout + visual style for a component.
+/// The **host-owned appearance** half of [`Style`] — the pixels.
+///
+/// Everything here resolves against the [`Theme`](crate::theme::Theme), so **none of it may be set
+/// from a declarative description**: a description carries semantic intent (a variant, a
+/// [`Layout::size`], a colour *name*) and the host decides what that looks like. See
+/// `pluggable-chrome-plugin-plan.md` §2.6.1 rule C.
+///
+/// This is a separate type rather than a naming convention because the boundary then costs nothing
+/// to maintain: [`Layout`] is serializable and `Visual` simply is not, so a field added here is
+/// unreachable from a description **by default**, and a field added to `Layout` is reachable **by
+/// default**. Neither requires an attribute, a list, or anyone remembering. There is nothing whose
+/// deletion would quietly open colours up to plugins.
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Visual {
+    pub fill: Option<Color>,
+    pub border: Option<Border>,
+    pub glow: Option<Glow>,
+    pub radius: f32,
+    /// Explicit font size in logical px. `0.0` = inherit the theme base font.
+    pub font_size: f32,
+    /// Multiplier applied to the inherited base font (header ≈ 2.0, caption ≈ 0.8,
+    /// body = 1.0). Ignored when [`font_size`](Self::font_size) is set explicitly.
+    ///
+    /// A raw multiplier, so it is host-only: the semantic route a description *can* take is
+    /// [`Style::size`] (`Small`/`Normal`/`Big`), which scales font and padding together and
+    /// cascades to children.
+    pub font_scale: f32,
+}
+
+impl Default for Visual {
+    fn default() -> Self {
+        Self {
+            fill: None,
+            border: None,
+            glow: None,
+            radius: 0.0,
+            // 0.0 = inherit the theme's `font_size`; a widget's `.font_size(x)`
+            // (x > 0) overrides it. Resolved centrally during layout.
+            font_size: 0.0,
+            font_scale: 1.0,
+        }
+    }
+}
+
+/// A component's style: two peer halves, [`layout`](Self::layout) and [`visual`](Self::visual).
+///
+/// The split is the **plugin boundary**, and it is a boundary the library already lived by before
+/// plugins existed — `AGENTS.md` requires every widget to read colours, fonts and radii from the
+/// [`Theme`](crate::theme::Theme) and hardcode nothing. "Caller-owned" versus "theme-owned" is a
+/// real distinction here on its own terms; the declarative boundary just falls on the same line.
+///
+/// - [`Layout`] — arrangement plus the semantic [`size`](Layout::size) variant. Serializable, and
+///   what a declarative description is allowed to set.
+/// - [`Visual`] — appearance. Not serializable, and never settable from a description.
+///
+/// Both are peers on purpose: neither half is privileged, and adding a field to either one gets
+/// the right reachability with no further action. Builder methods
+/// ([`LayoutExt`](crate::builders::LayoutExt) / [`StyleExt`](crate::builders::StyleExt)) write
+/// through to the correct half, so callers never name it.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Style {
-    // ── Layout ──
+    /// Arrangement + the semantic size variant — the caller-owned half.
+    pub layout: Layout,
+    /// Appearance — the theme-owned half.
+    pub visual: Visual,
+}
+
+/// The **caller-owned arrangement** half of [`Style`] — how a component sits and how big it is.
+///
+/// Serializable, so a declarative description may set any of it; see [`Visual`] for the half that
+/// is not. [`size`](Self::size) lives here rather than in `Visual` because it is *semantic*
+/// (`Small`/`Normal`/`Big`) rather than a pixel value, and because the layout pass both reads it
+/// and cascades it to children.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Layout {
+    // ── Arrangement ──
     pub direction: Direction,
     pub justify: Justify,
     pub align: Align,
@@ -252,6 +376,19 @@ pub struct Style {
     pub padding_x: Option<f32>,
     /// Vertical (top+bottom) padding override; `None` ⇒ use [`padding`](Self::padding).
     pub padding_y: Option<f32>,
+    /// Left padding override; `None` ⇒ use [`padding_x`](Self::padding_x), then
+    /// [`padding`](Self::padding). Mirrors the per-side margins.
+    pub padding_left: Option<f32>,
+    /// Right padding override; `None` ⇒ [`padding_x`](Self::padding_x), then [`padding`](Self::padding).
+    ///
+    /// This is what lets a widget reserve space along one edge without moving the opposite one — a
+    /// [`ScrollRegion`](crate::widgets::ScrollRegion) keeping its content clear of the scrollbar,
+    /// for instance, where padding the whole axis would inset the far side for no reason.
+    pub padding_right: Option<f32>,
+    /// Top padding override; `None` ⇒ [`padding_y`](Self::padding_y), then [`padding`](Self::padding).
+    pub padding_top: Option<f32>,
+    /// Bottom padding override; `None` ⇒ [`padding_y`](Self::padding_y), then [`padding`](Self::padding).
+    pub padding_bottom: Option<f32>,
     /// Horizontal padding as a theme [`Spacing`] token — resolved to px from the font at
     /// layout (sets `padding_x`). `None` ⇒ use the px padding fields.
     pub pad_spacing_x: Option<Spacing>,
@@ -286,20 +423,8 @@ pub struct Style {
     /// squeeze (again, a scroll viewport) opts in with `Some(1.0)`.
     pub flex_shrink: Option<f32>,
 
-    // ── Visual ──
-    pub fill: Option<Color>,
-    pub border: Option<Border>,
-    pub glow: Option<Glow>,
-    pub accent: Color,
-    pub fg: Color,
-    pub radius: f32,
-    /// Explicit font size in logical px. `0.0` = inherit the theme base font.
-    pub font_size: f32,
-    /// Semantic multiplier applied to the inherited base font (header ≈ 2.0,
-    /// caption ≈ 0.8, body = 1.0). Ignored when `font_size` is set explicitly.
-    pub font_scale: f32,
     /// Overall size variant — scales font + intrinsic padding together. Composes
-    /// with [`font_scale`](Self::font_scale) (both multiply the base font).
+    /// with [`Visual::font_scale`] (both multiply the base font).
     ///
     /// **Inherited down the tree** (like the base font): a node that never called
     /// [`LayoutExt::size`](crate::builders::LayoutExt::size) adopts its parent's variant during
@@ -324,7 +449,7 @@ pub struct Style {
     pub grid_cell: Option<GridCell>,
 }
 
-impl Style {
+impl Layout {
     /// Choose the [size variant](Self::size) **explicitly**, marking it as the caller's choice.
     ///
     /// This is the single place explicitness is recorded: layout then leaves this node's variant
@@ -340,7 +465,7 @@ impl Style {
     }
 }
 
-impl Default for Style {
+impl Default for Layout {
     fn default() -> Self {
         Self {
             direction: Direction::Row,
@@ -358,6 +483,10 @@ impl Default for Style {
             padding: 0.0,
             padding_x: None,
             padding_y: None,
+            padding_left: None,
+            padding_right: None,
+            padding_top: None,
+            padding_bottom: None,
             pad_spacing_x: None,
             pad_spacing_y: None,
             gap_spacing: None,
@@ -369,16 +498,6 @@ impl Default for Style {
             max_height: None,
             flex_grow: 0.0,
             flex_shrink: None,
-            fill: None,
-            border: None,
-            glow: None,
-            accent: Color::rgb(137, 180, 250),
-            fg: Color::rgb(205, 214, 244),
-            radius: 0.0,
-            // 0.0 = inherit the theme's `font_size`; a widget's `.font_size(x)`
-            // (x > 0) overrides it. Resolved centrally during layout.
-            font_size: 0.0,
-            font_scale: 1.0,
             size: WidgetSize::Normal,
             // Not explicitly chosen ⇒ the layout pass may replace it with the parent's variant.
             size_explicit: false,
@@ -388,7 +507,7 @@ impl Default for Style {
     }
 }
 
-impl Style {
+impl Layout {
     /// Map the layout fields onto a `taffy::Style` for the layout engine.
     pub fn to_taffy(&self) -> taffy::Style {
         use taffy::prelude::*;
@@ -424,13 +543,14 @@ impl Style {
                 }
             },
             padding: {
+                // Most specific wins: a side, else its axis, else the uniform value.
                 let px = self.padding_x.unwrap_or(self.padding);
                 let py = self.padding_y.unwrap_or(self.padding);
                 Rect {
-                    left: length(px),
-                    right: length(px),
-                    top: length(py),
-                    bottom: length(py),
+                    left: length(self.padding_left.unwrap_or(px)),
+                    right: length(self.padding_right.unwrap_or(px)),
+                    top: length(self.padding_top.unwrap_or(py)),
+                    bottom: length(self.padding_bottom.unwrap_or(py)),
                 }
             },
             size: Size {

@@ -42,15 +42,16 @@ pub struct RailCell {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl RailCell {
     /// A new cell wrapping `icon`, centered in a square. Make it
     /// clickable/keyboard-activatable with [`on_activate`](RailCell::on_activate).
     pub fn new(icon: Icon) -> Self {
         let mut base = Base::new();
         // Center the single icon child both ways within the square cell.
-        base.style.direction = Direction::Row;
-        base.style.align = Align::Center;
-        base.style.justify = Justify::Center;
+        base.style.layout.direction = Direction::Row;
+        base.style.layout.align = Align::Center;
+        base.style.layout.justify = Justify::Center;
         base.children.push(Box::new(icon));
         let mut cell = Self {
             base,
@@ -65,6 +66,7 @@ impl RailCell {
     }
 
     /// Square cell extent in logical px (default 40).
+    #[heca_grid_ui_macros::prop]
     pub fn cell_size(mut self, px: f32) -> Self {
         self.cell = px;
         self.remeasure();
@@ -72,6 +74,7 @@ impl RailCell {
     }
 
     /// Set the active (selected/current) state.
+    #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -84,6 +87,7 @@ impl RailCell {
 
     /// Make the cell clickable/keyboard-activatable (also makes it focusable). The
     /// host maps activation to its intent (focus the pane, pick the swap target…).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive cells are focusable (Component::focusable)
@@ -112,8 +116,8 @@ impl Component for RailCell {
 
     /// A fixed square along both axes.
     fn remeasure(&mut self) {
-        self.base.style.width = Length::Px(self.cell);
-        self.base.style.height = Length::Px(self.cell);
+        self.base.style.layout.width = Length::Px(self.cell);
+        self.base.style.layout.height = Length::Px(self.cell);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -178,7 +182,10 @@ impl Component for RailCell {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control is **one click target and one Tab stop**
+    /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
+    /// never see the press first. Handling it before the children is what keeps that true.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.interactive() || self.base.disabled.get_untracked() {
             return Handled::No;
         }

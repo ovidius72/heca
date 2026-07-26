@@ -1072,26 +1072,26 @@ This phase is interactive — cannot be done without the user running the app.
 
 ## Pluggable Chrome / Plugin
 
-> Source: `pluggable-chrome-plugin-plan.md`, `grid-ui-chrome-plan.md`
+> Source: `docs/chrome-and-ui.md`, `docs/chrome-and-ui.md`
 > Foundations landed: `SharedChromeState`, typed event bus, `app.on`/`app.state` host API (read/observe half),
 > grid-ui widget vocabulary, shell compositing primitives, modal/dropdown overlays.
 > Remaining: the architectural core — ChromeHost, providers, dynamic actions, WASM runtime.
 
 ### [ ] Phase: Formal architecture contracts · `plugin-01`
 Write and ratify the formal chrome-host + provider + plugin contracts before any implementation.
-Source: `pluggable-chrome-plugin-plan.md` Phase 1
+Source: `docs/chrome-and-ui.md` Phase 1
 
-- [x] **plugin-task-01** — Write the formal `ChromeHost` contract: what a region is, what it can host, allowed contribution types (container, toolbar group, status segment, panel, overlay request). Document in `pluggable-chrome-plugin-plan.md` §3.1. — **DONE 2026-07-02**, §3.1.1: `RegionId {LeftSidebar,RightSidebar,TopBar,BottomBar}` (widens the `Left/Right` event enum in `plugin-02`), 5-unit `Contribution` taxonomy + per-region allow-list, `ContainerContribution` metadata, `ChromeHost` responsibilities + skeleton, geometry (§5.7) + movement-as-action (§2.9) rules.
+- [x] **plugin-task-01** — Write the formal `ChromeHost` contract: what a region is, what it can host, allowed contribution types (container, toolbar group, status segment, panel, overlay request). Document in `docs/chrome-and-ui.md` §3.1. — **DONE 2026-07-02**, §3.1.1: `RegionId {LeftSidebar,RightSidebar,TopBar,BottomBar}` (widens the `Left/Right` event enum in `plugin-02`), 5-unit `Contribution` taxonomy + per-region allow-list, `ContainerContribution` metadata, `ChromeHost` responsibilities + skeleton, geometry (§5.7) + movement-as-action (§2.9) rules.
 
-- [x] **plugin-task-02** — Write the formal provider lifecycle model: `id()`, `supported_regions()`, `default_region()`, `movable`, `collapsible`, `build_contribution(ChromeCtx)`. Document in `pluggable-chrome-plugin-plan.md` §3.4. — **DONE 2026-07-02**, §3.4.1: `Provider` trait (adds `default_order`/`title`), 6-step lifecycle state machine, `ChromeCtx` = shipped `App` facade + deferred write/contribute halves.
+- [x] **plugin-task-02** — Write the formal provider lifecycle model: `id()`, `supported_regions()`, `default_region()`, `movable`, `collapsible`, `build_contribution(ChromeCtx)`. Document in `docs/chrome-and-ui.md` §3.4. — **DONE 2026-07-02**, §3.4.1: `Provider` trait (adds `default_order`/`title`), 6-step lifecycle state machine, `ChromeCtx` = shipped `App` facade + deferred write/contribute halves.
 
-- [x] **plugin-task-03** — Write the overlay ownership and result-returning API shape: modal/dropdown lifecycle, focus trap, ESC, async result contract. Document in `pluggable-chrome-plugin-plan.md` §2.7/Phase 8. — **DONE 2026-07-02**, §2.7.1: host-owned `OverlayHost` z-stack (closes the "no central stack / no result" gaps in the shipped grid-ui overlay widgets), `open_modal`/`open_dropdown` → typed `OverlayFuture` (single-threaded one-shot; WASM marshals as request-id + resolve event).
+- [x] **plugin-task-03** — Write the overlay ownership and result-returning API shape: modal/dropdown lifecycle, focus trap, ESC, async result contract. Document in `docs/chrome-and-ui.md` §2.7/Phase 8. — **DONE 2026-07-02**, §2.7.1: host-owned `OverlayHost` z-stack (closes the "no central stack / no result" gaps in the shipped grid-ui overlay widgets), `open_modal`/`open_dropdown` → typed `OverlayFuture` (single-threaded one-shot; WASM marshals as request-id + resolve event).
 
 - [x] **plugin-task-04** — Audit and fix geometry types in chrome-facing code. — **DONE (already satisfied) 2026-07-02**: verified there is no legacy `heca_core::types::Rect` — `heca-core` exposes only `backend`/`layout`/`runtime`, no `types` module and no `Rect` geometry type (only `Rectangle` in `layout::types`), and nothing in `heca/src` imports a bare `Rect`. Eliminated in an earlier refactor; §5.7/§7 of the plan were stale. New chrome/container APIs already use `Rectangle`/`Point`/`Size`.
 
 ### [x] Phase: ChromeHost and region hosts · `plugin-02` — **DONE 2026-07-02** (runtime core; no render, no app-side provider yet — those are plugin-03)
 The central runtime that mounts/orders/moves containers across all 4 regions.
-Source: `pluggable-chrome-plugin-plan.md` Phase 3
+Source: `docs/chrome-and-ui.md` Phase 3
 
 > **Scope landed:** pure runtime, no render change. The app still hand-paints its
 > chrome and wires no provider; `ChromeHost` is constructed empty in `AppState`
@@ -1109,7 +1109,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phase 3
 
 ### [ ] Phase: Built-in provider system and WorkspacesContainer migration · `plugin-03`
 Prove the provider model with the first real built-in provider before loading external plugins.
-Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
+Source: `docs/chrome-and-ui.md` Phases 4–5
 
 > **`plugin-task-10a` (sidebar-nav highlight) — DONE 2026-07-03** on branch
 > `feat/plugin-03-providers`. Cursor highlight (accent+glow, always-on, distinct from
@@ -1134,7 +1134,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 - [~] **sidebar-fu-2** — ~~KeyHint missing in the collapsed rail~~ **MOOT — the collapsed rail is
   dropped** (`app-task-21`, decided 2026-07-11; a region is Expanded ⇄ Hidden, no rail). There is no
   rail to put a KeyHint in. If a future Provider brings back an icon rail, KeyHint-over-cells is part
-  of that generic spec — see [`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md) §4.
+  of that generic spec — see the planner (F003/P020) — see the planner (F003/P020) §4.
 - [x] **sidebar-fu-3** — DONE (branch `feat/sidebar-followups`). New `[settings]` bools
   `show_left_sidebar` / `show_right_sidebar` / `show_top_bar` / `show_bottom_bar` (default
   `true`); `false` = fully hide that region (zero width/height, space reclaimed). NOTE: in
@@ -1279,7 +1279,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     against the `ViewNode` body, not against the 2-button dialog.
     - **UPDATE 2026-07-06 — approach superseded by the surface compositor.** The old plan
       "make `paint_hint_targets`/`collect_hint_targets` additionally walk the open dialog tree"
-      is **no longer how this is done**. With the surface compositor (`docs/surface-compositor.md`),
+      is **no longer how this is done**. With the surface compositor (the planner (F003/P019)),
       an open overlay is a **modal layer** in `active_hint_targets` — it already suppresses the
       chrome/pane hints and (b) render-order concern is moot. The remaining work is: migrate the
       confirm dialog to an `OverlayHost::open_modal` with a **realized `ViewNode` body + real
@@ -1298,7 +1298,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   the bottom bar).
   - **BUILD IT AS A VECTOR-OF-ITEMS CONTAINER:** not a fixed layout — a container over an ordered
     `Vec` of segments/buttons that plugins can append to / reorder, per the chrome-region principle
-    (`pluggable-chrome-plugin-plan.md` §2.8 chrome-wide + §3.2 region contributions + `plugin-task-16`).
+    (`docs/chrome-and-ui.md` §2.8 chrome-wide + §3.2 region contributions + `plugin-task-16`).
 
 - [x] **sidebar-fu-14 — DONE (branch `feat/sidebar-followups`): sidebar collapse toggles moved to
   the top bar.** The `ArrowLineLeft`/`ArrowLineRight` toggles now live at the top bar's left/right
@@ -1329,7 +1329,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   the Pluggable-Chrome **top-bar region**. Design/style **TBD — agree before building**.
   - **VECTOR-OF-ITEMS, PLUGIN-EXTENSIBLE:** each of the three sub-containers holds an ordered `Vec`
     of items that plugins can append to / reorder — same chrome-region principle as fu-9
-    (`pluggable-chrome-plugin-plan.md` §2.8 + §3.2 + `plugin-task-16`), NOT a hardcoded set of buttons.
+    (`docs/chrome-and-ui.md` §2.8 + §3.2 + `plugin-task-16`), NOT a hardcoded set of buttons.
 
 - [ ] **gridui-styling-foundation — widgets + containers must be fully theme-driven so callers
   (and plugins) NEVER hand-calc size/padding/alpha.** Surfaced 2026-07-04 doing fu-14/fu-15 (user:
@@ -1467,7 +1467,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   registered `plugin-ui` work.** CORRECTION (2026-07-03, after syncing `origin/main`): this
   is **already registered** — my earlier "no existing task" note was from a stale branch. The
   rich-body overlay is the planned **`plugin-task-ui-4`** ("Overlay `body` accepts a `ViewNode`
-  tree — rich modals: table/form/list", `pluggable-chrome-plugin-plan.md §2.7.1`, plan line
+  tree — rich modals: table/form/list", `docs/chrome-and-ui.md §2.7.1`, plan line
   ~1691), on top of the `ViewNode` model + host mapper `realize(&ViewNode) -> Box<dyn
   Component>` (§2.6.2, `plugin-ui`). Today `Modal` (`heca-grid-ui/src/widgets/modal.rs`) is
   fixed (title + message + ≤2 buttons, *"no child subtree to relocate"*, `docs/widgets.md`).
@@ -1486,7 +1486,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 
 - [ ] **sidebar-fu-12 — global KeyHint picker = implement the documented "intent ⇒ hintable"
   host capability, app-side first.** This is **not** a new invention: it's the model already
-  documented on main (`docs/plugin-authoring.md`, "KeyHint is the host's universal
+  documented on main (`docs/chrome-and-ui.md`, "KeyHint is the host's universal
   leader/vimium overlay… any widget that exposes an `on_press` intent is automatically hintable;
   the leader assigns letters to every clickable target (app + plugin) and emits the intent on
   keypress; opt out with `.hintable(false)`. One system covers app and plugin alike"). Status
@@ -1522,12 +1522,12 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     on the `HintExt`/`collect_hint_targets` primitive (mirrors the `DragExt` system).
 
 - [x] **plugin-doc-1 — DONE** (landed on `origin/main` via PR #222, now synced in). The
-  context-menu + KeyHint plugin model is documented in `docs/plugin-authoring.md` (+ README
-  Plugins section + `pluggable-chrome-plugin-plan.md`): overlays (context menu = host-owned
+  context-menu + KeyHint plugin model is documented in `docs/chrome-and-ui.md` (+ README
+  Plugins section + `docs/chrome-and-ui.md`): overlays (context menu = host-owned
   dropdown; `.on_context(items)` / `ctx.overlay.open_dropdown(...)`) and **KeyHint = "intent ⇒
   hintable"** (any widget with an `on_press` intent is auto-assigned a leader letter by the
   host; no plugin-side KeyHint). Follow-up still open: add the cross-ref note in
-  `docs/widgets.md` (`ContextMenu`/`KeyHint` sections) pointing at `plugin-authoring.md`.
+  `docs/widgets.md` (`ContextMenu`/`KeyHint` sections) pointing at `docs/chrome-and-ui.md`.
 
 - [~] **plugin-task-09** — Define the `Provider` trait: `id()`, `supported_regions()`, `default_region()`, `movable: bool`, `collapsible: bool`, `build_contribution(ChromeCtx) -> ContainerContribution`.
   Files: `heca/src/providers/mod.rs` (new)
@@ -1541,7 +1541,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   its content **once** as a semantic Group/Item tree (icon/label/status/intent/children), and the host
   renders it per region display mode — the author never writes an expanded and a collapsed tree. Today
   a region is Expanded ⇄ Hidden (rail dropped), so a Provider renders only its Expanded form and this
-  is not built yet. Keep this shape compatible. Design: **[`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md)** §3.
+  is not built yet. Keep this shape compatible. Design: **the planner (F003/P020) — see the planner (F003/P020)** §3.
 
 - [x] **plugin-task-10a** — **DONE 2026-07-03** (via `origin/main`; full note at the top of this `plugin-03` phase + `handoff-sidebar-nav-task10a.md`). Verified in-tree: `nav_selected` on `Row`/`MarkerGroup`/`DockFrame` + `SidebarSelectionChanged`/`nav_selection` in `heca/src/chrome/`. Original spec (now shipped) below. Bridge sidebar-nav selection into shared chrome/workspaces state.
   Today the expanded sidebar highlights only `active_pane`, while sidebar navigation mutates
@@ -1554,14 +1554,14 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   Preserve the settled contract: sidebar mode is **selection-driven**; main focus does **not**
   auto-follow `j/k`, but the selected workspace/column/pane must highlight visibly while in
   `InputMode::SidebarNav`.
-  Source: `pluggable-chrome-plugin-plan.md` §3.3 shared UI/chrome state (`selected row ids`,
+  Source: `docs/chrome-and-ui.md` §3.3 shared UI/chrome state (`selected row ids`,
   `focus/selection`) + `plugin-task-10` WorkspacesContainer migration.
   Files: `heca/src/chrome/state.rs`, `heca/src/chrome/mod.rs`, `heca/src/sidebar/model.rs`,
   future `heca/src/providers/workspaces.rs`
 
 ### [ ] Phase: Dynamic action registry · `plugin-04`
 Make the action system capable of hosting plugin actions and config-bindable dynamic actions.
-Source: `pluggable-chrome-plugin-plan.md` Phase 6
+Source: `docs/chrome-and-ui.md` Phase 6
 
 - [ ] **plugin-task-11** — Evolve `ActionRegistry` to support dynamic string-based registration alongside the existing `WmAction` enum dispatch.
   Add: stable string action IDs, action metadata descriptors, `register(id, metadata, handler)`, `dispatch(id, args)`, `unregister(id)`.
@@ -1575,7 +1575,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phase 6
 
 ### [ ] Phase: Write/contribute half of the host API · `plugin-05`
 Add `app.actions.*`, `app.overlay.*`, `app.regions.*` to `heca/src/host.rs`.
-Source: `pluggable-chrome-plugin-plan.md` §3.5 (rows 3–10)
+Source: `docs/chrome-and-ui.md` §3.5 (rows 3–10)
 
 - [ ] **plugin-task-14** — Add `app.actions.dispatch(id: &str, args: ActionArgs)` — routes through the dynamic action registry.
   Files: `heca/src/host.rs`
@@ -1651,11 +1651,11 @@ holds a vector of child widgets — plus the host mapper that realizes it into t
 `heca-grid-ui` tree. **Gate/consumers:** the rich overlay `body` (`plugin-task-15`),
 config-plugin render (`plugin-task-21`), and the WASM contribution description
 (`plugin-task-26`) all build on this. Do it before the overlay `body` and WASM work.
-Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
+Source: `docs/chrome-and-ui.md` §2.6.1–2.6.2
 
 - [x] **plugin-task-ui-1 — DONE (2026-07-06, `heca/src/chrome/view.rs`).** `ViewNode { kind, props, events, children }` (events `press`/`change`, aligned to plan §2.6.2) + `PropValue` (scalars + semantic enums `ViewSize`/`ViewVariant`/`ViewAlign`, colors/glyphs as names) + `Intent(action id + args)`, all serde-serializable (JSON round-trip test = WASM-ready). **Scope widened per the user (2026-07-06): the model is app-wide and `WidgetKind` covers the WHOLE grid-ui vocabulary** (containers + `ItemGroup`/`DockFrame`/`MarkerGroup`/`Tabs` + all leaves incl. `IconButton`/`Tag`/`Select`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`), not the original 13-widget subset. **Behaviour is Intent-only** (no closures) so it stays serializable for native AND plugin/WASM; a native escape is deferred until a widget proves inexpressible. This is the first task of executing plugin-ui as the conformant path for the confirm-dialog-as-layer / KeyHint-on-modal work (surface-compositor step 2/A). 3 tests green.
 
-- [x] **Surface compositor + `LayerRegistry` (step 1) — DONE (2026-07-06).** New `docs/surface-compositor.md` = the layered-surface architecture that decides KeyHint visibility (one rule: active-context + geometric occlusion, **no hardcoded z**). `active_hint_targets` (`chrome/mod.rs`) builds the on-screen surface stack (overlays → chrome → panes) and resolves it; replaced the three interim geometric filters. `LayerRegistry` (`chrome/layers.rs`) holds dynamically-added layers (band/kind/modal). Committed: `3809b3c` (compositor) + `14ac690` (registry + ViewNode). Referenced from AGENTS.md + README.md.
+- [x] **Surface compositor + `LayerRegistry` (step 1) — DONE (2026-07-06).** New the planner (F003/P019) = the layered-surface architecture that decides KeyHint visibility (one rule: active-context + geometric occlusion, **no hardcoded z**). `active_hint_targets` (`chrome/mod.rs`) builds the on-screen surface stack (overlays → chrome → panes) and resolves it; replaced the three interim geometric filters. `LayerRegistry` (`chrome/layers.rs`) holds dynamically-added layers (band/kind/modal). Committed: `3809b3c` (compositor) + `14ac690` (registry + ViewNode). Referenced from AGENTS.md + README.md.
 - [x] **plugin-ui execution — ✅ core DONE (2026-07-07).** Design §2.7.2 executed end to end: (1) `InteractionIntent::View` + router/dispatch arm + `dispatch_view_intent` (`interaction.rs`) — DONE `bebb141`; (2) `realize` (`chrome/realize.rs`, `plugin-task-ui-3`) — DONE; (3) `WmAction::SubmitOverlay`/`CloseOverlay` + `OverlayHost::open_modal`/`resolve` (`chrome/overlay.rs`, built on `LayerRegistry`) — DONE `5f80a10`; (4) confirm dialog migrated to a `Dialog` layer with hintable buttons — DONE, **closes `sidebar-fu-13` Stage 3**. Overlay-control actions carry `overlay: OverlayId` (=`LayerId`), injected by the host, intercepted in `dispatch_intent`. Follow-ups: `plugin-task-ui-2` (builder SDK), rich `ViewNode` bodies + data marshalling (`plugin-task-ui-4` remainder), `plugin-task-15` (plugin-facing async `open_modal`/`open_dropdown`), context-menu migration onto `OverlayHost`.
 
 - [ ] **plugin-task-ui-2** — Typed, SwiftUI-style **builder SDK** that emits `ViewNode` (`Column::new().gap(8).child(...)`). Ergonomic authoring layer over the uniform node; the WASM SDK re-exports it.
@@ -1669,7 +1669,7 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
 
 - [ ] **plugin-task-ui-5** — (on demand) Add a first-class `Table` widget to `heca-grid-ui` (columns/header/row-selection/sort) + showcase + `docs/widgets.md` + a mapper arm. Until a real consumer needs it, a table is composed from `Grid`/`Row`/`Label`.
 
-- [ ] **plugin-task-ui-6** — Author docs: a `docs/plugin-authoring.md` with detailed `ViewNode` examples (panel, complex table, modal with a form) + a short "Plugins (upcoming)" pointer in `README.md`. Must be clearly marked **design / target Phase 9 — not yet available** until the WASM runtime (`plugin-08`) ships.
+- [ ] **plugin-task-ui-6** — Author docs: a `docs/chrome-and-ui.md` with detailed `ViewNode` examples (panel, complex table, modal with a form) + a short "Plugins (upcoming)" pointer in `README.md`. Must be clearly marked **design / target Phase 9 — not yet available** until the WASM runtime (`plugin-08`) ships.
 
 - [ ] **plugin-task-ui-7 — Composition-first widgets: EVERY widget must be able to receive a
   `ViewNode` (arbitrary child subtree) as its content.** This is the real SwiftUI/Flutter model
@@ -1726,7 +1726,7 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
     generated table) so the enum and `glyph_from_name` can't diverge — a hand-maintained 1:1 match of
     hundreds of icons is a bug farm.
   - Document the available icon **names** for authors (`docs/widgets.md` icon table +
-    `docs/plugin-authoring.md`) and update the showcase icon gallery.
+    `docs/chrome-and-ui.md`) and update the showcase icon gallery.
   - Files: `heca-grid-ui/src/widgets/icon.rs`, `heca/src/chrome/realize.rs`, docs, showcase.
   - Run this **last** in the plugin arc — once the widget/`realize`/overlay surface is settled, so
     the iconset is filled against the final set of consumers.
@@ -2122,7 +2122,7 @@ UI/interaction bugs found during the pane-naming session. Not diagnosed yet — 
   rail entirely** rather than rebuild it — a region is now **Expanded ⇄ Hidden** (no rail). Deleting
   `render_sidebar_collapsed` + the collapsed branch of `sidebar_hit_test` removes the broken code and
   closes this bug by construction. Tracked as the "drop the collapsed rail" work under `app-task-21`.
-  Full design + rationale: **[`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md)**.
+  Full design + rationale: **the planner (F003/P020) — see the planner (F003/P020)**.
 - [ ] **chrome-bug-titlebar-doubleclick-fullscreen** — BUG (macOS): double-clicking the top-bar
   sidebar-toggle button enters OS full screen. No app fullscreen/titlebar code exists — the window uses
   `Window::default_attributes()` (native macOS titlebar) and the vibrancy path doesn't touch the style
@@ -2167,7 +2167,7 @@ TopBar container. Vision registered 2026-07-09 under Pluggable Chrome (where it 
 
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.
-Source: `pluggable-chrome-plugin-plan.md` Phase 8.1
+Source: `docs/chrome-and-ui.md` Phase 8.1
 
 - [ ] **plugin-task-17** — Define the token syntax (`${var}` form) and a token registry.
   Initial tokens: `${paneIndex}`, `${prevPaneIndex}`, `${paneTitle}`, `${prevPaneTitle}`, `${panesCount}`, `${paneProgram}`, `${paneCwd}`, `${columnIndex}`, `${columnTitle}`, `${columnsCount}`, `${workspaceTitle}`, `${workspaceIndex}`, `${workspacesCount}`, `${leftSidebarStatus}`, `${rightSidebarStatus}`, `${pid}`.
@@ -2181,7 +2181,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phase 8.1
 
 ### [ ] Phase: Simple config.toml plugins · `plugin-07`
 Let users define simple status/segment plugins directly in `config.toml` without Rust code.
-Source: `pluggable-chrome-plugin-plan.md` Phase 8.2
+Source: `docs/chrome-and-ui.md` Phase 8.2
 Gate: `plugin-06` (placeholder tokens)
 
 - [ ] **plugin-task-20** — Define and parse the `[[plugins]]` TOML schema:
@@ -2200,7 +2200,7 @@ Gate: `plugin-06` (placeholder tokens)
 
 ### [ ] Phase: WASM plugin runtime · `plugin-08`
 External code-based plugins using WASM as the plugin format.
-Source: `pluggable-chrome-plugin-plan.md` Phase 9
+Source: `docs/chrome-and-ui.md` Phase 9
 Gate: `plugin-02`, `plugin-03`, `plugin-04`, `plugin-05` must all be complete.
 
 - [ ] **plugin-task-23** — Design the WASM host API/facade — the same `app.on`/`app.state`/`app.actions`/`app.overlay`/`app.regions` surface marshalled across the WASM boundary via a defined ABI.
@@ -2215,7 +2215,7 @@ Gate: `plugin-02`, `plugin-03`, `plugin-04`, `plugin-05` must all be complete.
 
 ### [ ] Phase: Multi-region proof and config integration · `plugin-09`
 Prove the architecture is genuinely general-purpose with a second provider and config-bindable plugin actions.
-Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
+Source: `docs/chrome-and-ui.md` Phases 10–11
 
 - [ ] **plugin-task-28** — Add a second built-in provider (e.g. git status in the right sidebar or bottom bar) to prove multi-container coexistence, ordering, and collapse state.
 
@@ -2227,7 +2227,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
 
 ## Grid UI Widget Library
 
-> Source: `grid-ui-chrome-plan.md`, `PLAN.md` grid-ui backlog
+> Source: `docs/chrome-and-ui.md`, the planner grid-ui backlog
 > Core widget vocabulary is largely built. Remaining: scroll primitive, Pane shell header, more widgets, Nerd-Font icons, showcase coverage, bloom effects, crate debt.
 >
 > **PRUNING DECISIONS (2026-07-02) — verified against the code; these govern the tasks below.**
@@ -2372,7 +2372,7 @@ Fix all known code-quality issues from the two Rust crate reviews.
 
 ## App / Chrome
 
-> Source: `PLAN.md` (near-term active + deferred + foundation gaps)
+> Source: the planner (near-term active + deferred + foundation gaps)
 > App-level work: niri parity, render.rs refactor, appearance/zoom/font controls, sidebar wiring, pane numbering, damage-region optimization.
 
 ### [ ] Phase: niri layout parity audit · `app-01`
@@ -2477,7 +2477,7 @@ Complete sidebar DnD — workspaces can be dragged to reorder. Panes and columns
   it *right* (generic, write-once across all Providers) is a large build for a small convenience. So a
   region becomes **Expanded ⇄ Hidden** — no icon rail. This also closes
   `chrome-bug-collapsed-sidebar-picks` by deleting the broken code. **Full design + rationale:
-  [`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md).** Work:
+  the planner (F003/P020) — see the planner (F003/P020).** Work:
   (a) **collapse is decided by `RegionMode` state, not width** — `build_chrome_root` + `surface_left.rs`
     branch on `left_mode()`/`right_mode()`; delete `SIDEBAR_EXPANDED_THRESHOLD` (`80.0`); every input
     (toggle button, key, RPC, drag-below-min) **writes** the mode signal, the renderer only reads it;
@@ -2489,7 +2489,7 @@ Complete sidebar DnD — workspaces can be dragged to reorder. Panes and columns
     calls in `heca/src/app/render.rs`. `RegionMode::CollapsedRail` stays in the enum (unused, for a
     future rail); `RailCell` stays a library widget but is not mounted.
   The generic **icon-rail collapsed rendering** (styles, status colors, `RailCell` per item, KeyHint,
-  right-click) is **kept as a FUTURE item** in `docs/sidebar-provider-modes.md` §4 — build it only when
+  right-click) is **kept as a FUTURE item** in the planner (F003/P020) §4 — build it only when
   a Provider (Docker/AI-Agents) genuinely needs an always-visible status rail, and build it as the
   **generic host render-per-mode** path, never a workspace-only hand-drawn rail.
   - **HEADER/TOGGLE — DONE via `sidebar-fu-10` + `sidebar-fu-14` (2026-07-03):** the collapse toggle
@@ -2507,7 +2507,7 @@ Complete sidebar DnD — workspaces can be dragged to reorder. Panes and columns
   should **Expand** it (correct, not a regression); while already Expanded it must **not** resize/reset
   the user's width. Reduced scope: `handle_sidebar_focus` (`heca/src/handlers.rs` ~L1309) may set
   `Expanded` when Hidden but must **not** clobber `set_left_size(...)` when already Expanded (preserve
-  the resized width). See [`docs/sidebar-provider-modes.md`](docs/sidebar-provider-modes.md).
+  the resized width). See the planner (F003/P020) — see the planner (F003/P020).
 
 ### [ ] Phase: Damage-region render optimization · `app-07`
 Let the compositor's preserved scene texture actually preserve things — partial repaints instead of full-frame clears.

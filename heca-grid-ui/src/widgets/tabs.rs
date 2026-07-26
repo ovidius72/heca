@@ -72,6 +72,7 @@ pub struct Tabs {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Tabs {
     /// An empty tab strip — add tabs with [`tab`](Tabs::tab).
     pub fn empty() -> Self {
@@ -79,10 +80,10 @@ impl Tabs {
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
         // One control = one Tab stop: focus never descends into the tabs.
         base.focus_barrier = true;
-        base.style.gap = TAB_GAP;
+        base.style.layout.gap = TAB_GAP;
         // Hug the tabs instead of stretching to fill a column parent (the width is `Auto`, and the
         // default cross-axis alignment is `Stretch`).
-        base.style.align_self = Some(Align::Start);
+        base.style.layout.align_self = Some(Align::Start);
         let mut tabs = Self {
             base,
             tab_states: Vec::new(),
@@ -114,6 +115,7 @@ impl Tabs {
     /// Typed to [`Choice`] on purpose — the strip keeps the tab's selected/hover
     /// [signals](Choice::state) so it can drive them in place, and a `Box<dyn Component>` would have
     /// thrown them away. It is also the contract: the segments of a tab strip **are** options.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn tab(mut self, choice: Choice) -> Self {
         self.tab_states.push(choice.state());
         self.hover_states.push(choice.hovered());
@@ -123,14 +125,16 @@ impl Tabs {
     }
 
     /// Explicit font size — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
     }
 
     /// Select an initial tab (clamped to the tab count). Call it **after** the tabs.
+    #[heca_grid_ui_macros::prop]
     pub fn selected(self, index: usize) -> Self {
         let i = index.min(self.count().saturating_sub(1));
         self.selected.set(i);
@@ -140,6 +144,7 @@ impl Tabs {
 
     /// Set the change handler. Receives `Action::value("tab-change",
     /// SignalData::Usize(index))` when the active tab changes.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self
@@ -225,12 +230,12 @@ impl Component for Tabs {
     /// measure to "the tallest tab + the band" — a padding on the strip could not do that without
     /// also insetting the tabs, and the underline has to sit *under* them.
     fn remeasure(&mut self) {
-        self.base.style.width = Length::Auto;
-        self.base.style.height = Length::Auto;
-        self.base.style.gap = TAB_GAP * self.base.size_scale();
+        self.base.style.layout.width = Length::Auto;
+        self.base.style.layout.height = Length::Auto;
+        self.base.style.layout.gap = TAB_GAP * self.base.size_scale();
         let band = (UNDERLINE_H as f32 + UNDERLINE_GAP) * self.base.size_scale();
         for child in self.base.children.iter_mut() {
-            child.base_mut().style.margin_bottom = Some(band);
+            child.base_mut().style.layout.margin_bottom = Some(band);
         }
     }
 
@@ -283,7 +288,9 @@ impl Component for Tabs {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: the strip is **one Tab stop and one click target**, so a tab is picked
+    /// by `tab_at` here rather than by its `Choice` child consuming the press on its own.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

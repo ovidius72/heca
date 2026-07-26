@@ -24,7 +24,7 @@ const DEFAULT_WIDTH: f32 = 360.0;
 const GLOW_RADIUS: f32 = 10.0;
 
 /// Visual variant of an [`Alert`], mapped to theme tokens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
 pub enum AlertVariant {
     /// Informational (accent).
     #[default]
@@ -45,11 +45,12 @@ pub struct Alert {
     variant: AlertVariant,
 }
 
+#[heca_grid_ui_macros::props]
 impl Alert {
     /// A new info alert with `title`. Add body text with [`body`](Alert::body).
     pub fn new(title: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
         let mut alert = Self {
             base,
             title: signal(title.into()),
@@ -75,12 +76,14 @@ impl Alert {
     }
 
     /// Set the variant.
+    #[heca_grid_ui_macros::prop]
     pub fn variant(mut self, variant: AlertVariant) -> Self {
         self.variant = variant;
         self
     }
 
     /// Set the body text (shown on a second line).
+    #[heca_grid_ui_macros::prop]
     pub fn body(mut self, body: impl Into<String>) -> Self {
         self.body = Some(body.into());
         self.remeasure();
@@ -104,7 +107,7 @@ impl Component for Alert {
         } else {
             0.0
         };
-        self.base.style.height = Length::Px((2.0 * PAD + title_h + body_h) as f32);
+        self.base.style.layout.height = Length::Px((2.0 * PAD + title_h + body_h) as f32);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

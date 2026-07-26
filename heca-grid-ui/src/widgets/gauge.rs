@@ -25,12 +25,13 @@ pub struct Gauge {
     value: Signal<f32>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Gauge {
     /// A new gauge at 0.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.width = Length::Px(DEFAULT_WIDTH);
-        base.style.height = Length::Px(HEIGHT);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.height = Length::Px(HEIGHT);
         Self {
             base,
             value: signal(0.0),
@@ -38,6 +39,7 @@ impl Gauge {
     }
 
     /// Set the initial value (clamped to `0.0..=1.0`).
+    #[heca_grid_ui_macros::prop]
     pub fn value(self, value: f32) -> Self {
         self.value.set(value.clamp(0.0, 1.0));
         self

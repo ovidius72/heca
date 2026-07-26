@@ -72,13 +72,14 @@ pub struct Input {
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
+#[heca_grid_ui_macros::props]
 impl Input {
     /// A new empty input.
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
-        base.style.width = Length::Px(DEFAULT_WIDTH);
-        base.style.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
+        base.style.layout.width = Length::Px(DEFAULT_WIDTH);
+        base.style.layout.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
         Self {
             base,
             text: signal(String::new()),
@@ -95,14 +96,16 @@ impl Input {
     }
 
     /// Explicit font size — overrides the inherited theme font.
+    #[heca_grid_ui_macros::prop]
     pub fn font_size(mut self, fs: f32) -> Self {
-        self.base.style.font_size = fs;
+        self.base.style.visual.font_size = fs;
         self.base.font = fs;
         self.remeasure();
         self
     }
 
     /// Set the initial text (caret lands at the end).
+    #[heca_grid_ui_macros::prop]
     pub fn value(mut self, value: impl Into<String>) -> Self {
         self.set_value(value);
         self
@@ -118,7 +121,13 @@ impl Input {
         self.text.set(s);
     }
 
+    /// The placeholder text as set (empty when unset).
+    pub fn placeholder_str(&self) -> &str {
+        &self.placeholder
+    }
+
     /// Set the placeholder shown while empty and unfocused.
+    #[heca_grid_ui_macros::prop]
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
         self.placeholder = placeholder.into();
         self
@@ -126,6 +135,7 @@ impl Input {
 
     /// Set the change handler. Receives `Action::value("input-change",
     /// SignalData::String(new_text))` after every edit.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self
@@ -442,7 +452,7 @@ impl Component for Input {
     /// Field height tracks the resolved font + size-scaled padding.
     fn remeasure(&mut self) {
         let pad = self.pad() as f32;
-        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * pad);
+        self.base.style.layout.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * pad);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -540,7 +550,9 @@ impl Component for Input {
         }
     }
 
-    fn event(&mut self, ev: &Event) -> Handled {
+    /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
+    /// children, and they must never take the press first — the control is one click target.
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even when disabled is irrelevant; observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {
             self.mods = *m;

@@ -199,7 +199,7 @@ struct ThemeCtl {
 /// Recursively set the size variant on every widget, so a global control reflects
 /// across the whole showcase (in a real app you'd size widgets individually).
 fn apply_size(c: &mut dyn Component, size: WidgetSize) {
-    c.base_mut().style.size = size;
+    c.base_mut().style.layout.size = size;
     for child in c.base_mut().children.iter_mut() {
         apply_size(child.as_mut(), size);
     }
@@ -2471,12 +2471,12 @@ impl GpuState {
             // natural size and the region scrolls/clips it (T009 — replaces the old
             // manual `offset_tree` shift; the scroll offset survives relayout, the
             // region re-clamps + re-applies it in `on_layout`).
-            self.ui.base_mut().style.width = Length::Px(w);
-            self.ui.base_mut().style.height = Length::Px(h);
+            self.ui.base_mut().style.layout.width = Length::Px(w);
+            self.ui.base_mut().style.layout.height = Length::Px(h);
             // Pass 1 — page at NATURAL width, so content wider than the window makes
             // the page (the region's direct child) wider and horizontal scrolling
             // engages (the region measures overflow from its direct children).
-            self.ui.base_mut().children[0].base_mut().style.width = Length::Auto;
+            self.ui.base_mut().children[0].base_mut().style.layout.width = Length::Auto;
             LayoutEngine::new()
                 .base_font(self.theme.font_size)
                 .compute(&mut self.ui, Size::new(w as f64, h as f64));
@@ -2484,15 +2484,15 @@ impl GpuState {
             // page back to the window so its centered sections stay centered. (Natural
             // width only matters when the content actually overflows.)
             if self.ui.base().children[0].base().bounds.size.w < w as f64 {
-                self.ui.base_mut().children[0].base_mut().style.width = Length::Px(w);
+                self.ui.base_mut().children[0].base_mut().style.layout.width = Length::Px(w);
                 LayoutEngine::new()
                     .base_font(self.theme.font_size)
                     .compute(&mut self.ui, Size::new(w as f64, h as f64));
             }
             // The overlay layer lays out at the viewport size, independent of the
             // page scroll — a Dialog taffy-centers on the real window (BUG B).
-            self.overlays.base_mut().style.width = Length::Px(w);
-            self.overlays.base_mut().style.height = Length::Px(h);
+            self.overlays.base_mut().style.layout.width = Length::Px(w);
+            self.overlays.base_mut().style.layout.height = Length::Px(h);
             LayoutEngine::new()
                 .base_font(self.theme.font_size)
                 .compute(&mut self.overlays, Size::new(w as f64, h as f64));
@@ -2777,8 +2777,8 @@ impl ApplicationHandler for App {
                     shift: s.shift_key(),
                     meta: s.super_key(),
                 });
-                state.ui.event(&ev);
-                state.overlays.event(&ev);
+                heca_grid_ui::dispatch(&mut state.ui, &ev);
+                heca_grid_ui::dispatch(&mut state.overlays, &ev);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
