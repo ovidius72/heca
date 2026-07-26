@@ -1935,16 +1935,20 @@ Flex::row().gap(8.0).align(Align::Center)
 
 ### Separator
 
-Thin divider line (display-only), 1px in the theme's border colour. Spans the container cross-axis
-under the default `Align::Stretch`.
+Thin divider line (display-only), 1px in the theme's border colour. Spans its container — it asks
+to be stretched itself (`align_self`), so it spans whether or not the container stretches its
+children. A rule dropped into a centring row used to lay out one pixel by zero and simply not
+appear; nothing has to be passed to avoid that.
 
 - **Construct**: `Separator::horizontal()`, `Separator::vertical()`.
 - **Builders**: `.orientation(Orientation)` (`Horizontal` \| `Vertical`, default horizontal),
-  `.length(f32)` — force an explicit span when the parent centers instead of stretching.
+  `.length(f32)` — cut the line shorter than the container. An explicit length is a definite size,
+  so the container's own alignment then places it.
 
 ```rust
-Separator::horizontal().length(420.0);
-Separator::vertical();                  // stretches to the row's height
+Separator::horizontal();                // spans the column's width
+Separator::vertical();                  // spans the row's height
+Separator::vertical().length(24.0);     // a short rule, placed by the container
 ```
 
 **Declarative:**

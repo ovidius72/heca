@@ -1946,6 +1946,49 @@ fn a_separators_length_and_orientation_can_be_set_in_either_order() {
     assert!(bounds.size.w <= 1.0, "and stays thin");
 }
 
+/// A separator with no length spans its container **even when the container centres its children**.
+///
+/// Found by looking at it: the showcase row centres, like most rows do, so the rule was laid out
+/// one pixel by zero and simply did not appear. The widget's answer used to be a line in its docs
+/// telling the caller to pass a `length` — a workaround repeated at every call site for something
+/// the rule can say once about itself, and one that silently produces nothing when forgotten.
+#[test]
+fn a_separator_spans_a_container_that_centres_its_children() {
+    let mut row = Flex::row()
+        .align(Align::Center)
+        .width(Length::Px(200.0))
+        .height(Length::Px(40.0))
+        .child(Separator::vertical())
+        .child(Separator::vertical().length(24.0));
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
+
+    let stretched = row.base().children[0].base().bounds;
+    assert_eq!(
+        stretched.size.h, 40.0,
+        "with no length, the rule spans the row despite Align::Center",
+    );
+
+    let cut = row.base().children[1].base().bounds;
+    assert_eq!(cut.size.h, 24.0, "an explicit length still wins");
+    assert!(
+        cut.loc.y > stretched.loc.y,
+        "…and the container's own alignment centres the shorter one",
+    );
+
+    // Same story the other way round: a column that centres still gets a full-width rule.
+    let mut col = Flex::column()
+        .align(Align::Center)
+        .width(Length::Px(200.0))
+        .height(Length::Px(40.0))
+        .child(Separator::horizontal());
+    LayoutEngine::new().compute(&mut col, Size::new(200.0, 40.0));
+    assert_eq!(
+        col.base().children[0].base().bounds.size.w,
+        200.0,
+        "a horizontal rule spans a centring column too",
+    );
+}
+
 #[test]
 fn spinner_animates_and_paints_its_ring() {
     let theme = Theme::default();

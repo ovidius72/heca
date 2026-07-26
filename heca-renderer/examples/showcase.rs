@@ -776,13 +776,14 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(Separator::horizontal().length(440.0))
         // Both orientations, so the vertical rule is visible too — it is the one a described
         // separator reaches through `orientation`, and it had no showcase entry before.
-        // Left: stretched to the row's height. Right: an explicit 24px length.
+        // This row CENTRES its children, like most rows here: the full-height rule spans anyway,
+        // because the separator asks to be stretched rather than waiting to be.
         .child(
             Flex::row()
                 .gap(12.0)
                 .align(Align::Center)
                 .height(Length::Px(40.0))
-                .child(Label::new("stretched").color(theme.colors.muted))
+                .child(Label::new("full height").color(theme.colors.muted))
                 .child(Separator::vertical())
                 .child(Label::new("length(24)").color(theme.colors.muted))
                 .child(Separator::vertical().length(24.0))
