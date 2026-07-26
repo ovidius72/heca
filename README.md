@@ -1015,7 +1015,8 @@ registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 ```
 
 **6. Describe it** in `ActionRegistry::ALL` — `heca/src/actions.rs`. This is what gives the action its
-label, icon and category everywhere it is shown (context menu, tooltip, command palette):
+label, icon and category everywhere it is shown (context menu, tooltip, command palette), **and what
+says which arguments it takes**:
 ```rust
 ActionDescriptor {
     name: "my_custom_action",
@@ -1024,8 +1025,42 @@ ActionDescriptor {
     category: ActionCategory::Pane,
     default_binding: "y",
     icon: Some(Glyph::Gear),   // any Glyph; None if it has no icon yet
+    args: &[],                 // takes none — see below if it does
 },
 ```
+
+`args` has no default: a struct literal has to fill every field, so you cannot add an action without
+answering the question. **Empty means it takes none**, and every argument handed to it is then an
+argument nobody declared — which is reported, not ignored.
+
+An action that reads arguments in `build_action()` declares each one here, in the same order:
+```rust
+args: &[
+    ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to act on."),
+    ArgDescriptor::optional("focus_after", ArgKind::Bool, "Focus it afterwards. Default false."),
+    // A vocabulary argument points at the list beside its own parser, never a copy of it:
+    ArgDescriptor::required_enum("step", <FontZoomStep as EnumArg>::VALUES, "Which way to step."),
+],
+```
+
+This is what makes a mistake audible. heca compares every call against this list — a `config.toml`
+binding when config is read, an `Intent` when it is dispatched — and names what is wrong:
+
+```
+[heca] binding 'my_custom_action': unknown argument 'pane_di' — did you mean 'pane_id'?
+[heca] binding 'my_custom_action': missing required argument 'pane_id'
+[heca] binding 'my_custom_action' cannot be built and will do nothing when pressed
+```
+
+A missing required argument stops the action (nothing can build it). An unknown or malformed one
+costs only itself: the rest of the call still stands. Three tests keep the declaration and the arm
+that reads it in step, so a list that stops matching the code fails the build rather than misleading
+someone later.
+
+> **An action that requires an argument gets no default keybinding**, and cannot be reached from its
+> bare name at all. A key supplies no pane id, so a name that needs one would have to guess — which
+> heca used to do, answering `delete_workspace` with *workspace 0*. Bind such an action with an
+> explicit `args` table (see [`[keys.mode]`](#modes)) or dispatch it from a menu, a plugin or RPC.
 
 **7. Bind it by default** in **`keybindings.default.toml`** — *not* in Rust. The embedded default
 files are the single source of truth for defaults; a default that lives only in code is invisible to
@@ -1109,8 +1144,19 @@ args = { container = "web" }
 
 **A binding to an action that doesn't exist yet is not an error.** heca reads your config *before* any
 provider or plugin has registered, so a dynamic id simply cannot resolve at load; it resolves when the
-key is actually pressed. The flip side is that a **typo** in an action name is not an error either —
+key is actually pressed. The flip side is that a **typo in an action name** is not an error either —
 it just never fires. If a binding seems dead, check the name.
+
+A typo in an **argument** name is different: heca knows what each built-in action takes, so it says so
+at startup rather than leaving you to work it out from a key that does nothing.
+```
+[heca] binding 'delete_workspace': unknown argument 'ws_idxx' — did you mean 'ws_idx'?
+[heca] binding 'delete_workspace': missing required argument 'ws_idx'
+[heca] binding 'delete_workspace' cannot be built and will do nothing when pressed
+```
+The `describe-action <name>` introspection command lists an action's arguments, their types and which
+are required — including the ones a provider or plugin contributed. See
+**[docs/widgets.md → Discovering actions at runtime](docs/widgets.md#discovering-actions-at-runtime--introspection)**.
 
 **Passing `None` instead of a handler** registers a *declarative* action: it has an id, metadata and a
 policy, and it appears in menus and introspection, but the host cannot run it — it is forwarded to its

@@ -58,7 +58,8 @@ These are made over and over. **Violating either = redo.**
   `SubmitOverlay`) are the only exception to the keybinding file. When in doubt, **audit** that every
   `SettingsConfig` field appears in `config.default.toml` and every default binding is present.
 - Adding an action? Follow the **"Adding New Actions" checklist** (§ below) end to end — `WmAction`
-  variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor.
+  variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor
+  → **declared `args`**.
 - Rule: a capability must be reachable from **mouse + keybinding/action + RPC**, never one surface only.
 
 > If a change touches UI or input and you didn't open `docs/widgets.md`/the showcase, or didn't go
@@ -1039,13 +1040,24 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 ### Adding New Actions
 
 1. Add variant to `WmAction` in `heca/src/input.rs`
-2. Add string mapping in `action_from_name()`
+2. Add string mapping in `action_from_name()` — **only if the bare name says everything.** An action
+   that needs a target does *not* belong there: it is built from its arguments in `build_action()`.
+   Putting it in `action_from_name()` with placeholder fields means the name silently resolves to
+   index 0, which is how a bare `delete_workspace` used to delete workspace 0.
 3. Add builder support in `build_action()` when the action is parameterized
 4. Add priority in `action_priority()`
 5. Create handler in `heca/src/handlers.rs`
 6. Register in `build_registry()` in `heca/src/app/registry.rs`
-7. Add default binding in `keybindings.default.toml` (the embedded default keymap)
+7. Add default binding in `keybindings.default.toml` (the embedded default keymap). An action with a
+   **required argument gets none** — a key cannot supply a pane id.
 8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
+8b. **Declare its arguments** in that descriptor's `args` — name, kind, required, and for a
+   vocabulary argument the list from `EnumArg::VALUES` beside its own parser, never a copy. The field
+   has no default, so you cannot skip the question; `args: &[]` means it genuinely takes none.
+   This is what lets heca say *which* argument a caller got wrong instead of the call vanishing —
+   and the tests `every_declared_argument_is_read_by_the_action`,
+   `every_required_argument_is_actually_required` and `every_optional_argument_is_actually_optional`
+   fail if the declaration and the `build_action()` arm disagree.
 9. Add RPC parser support in `heca/src/rpc.rs`
 9b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
 9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` (may differ from the action name, as `close` → `delete_pane`); users toggle it under `[confirm]`.

@@ -3322,6 +3322,18 @@ move-container-to-region workspaces right-sidebar
 provider isn't mounted (config is even read *before* providers register). It logs a debug warning and
 does nothing.
 
+**A wrong argument is never silent.** Every action declares what it takes, so a call is compared
+against that declaration before it is built — from a widget, from config, from a plugin, from RPC:
+
+```
+[heca] action 'chrome.container.move_to_region': unknown argument 'contaner_id' — did you mean 'container_id'?
+[heca] action 'chrome.container.move_to_region': missing required argument 'container_id'
+```
+
+A missing required argument stops the action; there is nothing to build. An unknown or malformed one
+costs only itself and the rest of the call still stands — the same rule a widget property follows.
+`describe-action <name>` (below) is how you find out what an action takes without reading its source.
+
 ### Registering a custom (name-keyed) action
 
 `WmAction` is a **closed enum** — a provider or plugin cannot add a variant to it. An action of your
@@ -3335,7 +3347,9 @@ Metadata and handler live in two places for a borrow reason, not a design one: a
 `ActionRegistry`). One call registers both.
 
 ```rust
-use crate::actions::{register_dynamic, unregister_dynamic, ActionCategory, ActionMeta};
+use crate::actions::{
+    register_dynamic, unregister_dynamic, ActionCategory, ActionMeta, ArgKind, ArgSpec,
+};
 use crate::app::interaction::ActionPolicy;
 use crate::chrome::PropValue;
 use heca_grid_ui::Glyph;
@@ -3353,6 +3367,16 @@ let handle = register_dynamic(
         default_binding: String::new(),        // no default key; the user may bind it by name
         icon: Some(Glyph::Play),
         policy: ActionPolicy::Global,          // REQUIRED — see below
+        // REQUIRED too, and for the same reason: an omitted list would read as "takes nothing",
+        // and every argument the handler reads below would be one nobody declared. Declaring it
+        // is what lets heca tell a caller that `containr` is not `container`.
+        args: vec![ArgSpec {
+            name: "container".into(),
+            kind: ArgKind::Text,
+            required: true,
+            description: "Id of the container to restart.".into(),
+            values: Vec::new(),                // only an `ArgKind::Enum` fills this
+        }],
     },
     // The handler receives the Intent, so args arrive as DATA (never a closure across a plugin
     // boundary). `&mut AppState` is the sanctioned write path: a provider may not mutate state
@@ -3473,7 +3497,7 @@ The catalog is queryable, so a tool can ask a *running* heca (with whatever plug
 it can do. Two RPC commands, both returning JSON:
 
 ```
-list-actions              → [ {name,label,description,category,default_binding,policy,confirm}, … ]
+list-actions              → [ {name,label,description,category,default_binding,policy,args,confirm}, … ]
 describe-action <name>    → one such object, or an error if the name is unknown
 ```
 
@@ -3481,6 +3505,27 @@ describe-action <name>    → one such object, or an error if the name is unknow
 policy as a stable string (`global`, `tiled_only`, …). A native `Callback` outcome is never
 serialized — introspection reports only *that* a prompt exists. In Rust: `ActionCatalog::describe_all()`
 / `describe(name)` → `ActionInfo`.
+
+`args` is what the action takes, so a caller can learn how to *call* what it just discovered — not
+only that the name exists:
+
+```json
+{ "name": "resize",
+  "args": [
+    { "name": "target", "kind": "enum", "required": true,
+      "description": "What to resize.", "values": ["column", "col", "pane"] },
+    { "name": "axis",   "kind": "enum", "required": true,
+      "description": "Which axis to resize along.",
+      "values": ["x", "horizontal", "width", "y", "vertical", "height"] },
+    { "name": "amount", "kind": "float", "required": true,
+      "description": "How much to grow by; negative shrinks." }
+  ] }
+```
+
+`kind` is one of `int`, `float`, `bool`, `text`, `enum`; `values` appears only for `enum` and lists
+every spelling accepted, aliases included. An empty `args` means the action takes none — never "not
+stated": heca compares every call against this list and reports an argument that is unknown, missing
+or malformed, so a plugin or a script gets told what it got wrong.
 
 For the full **in-tree** built-in checklist (a `WmAction` variant, `action_policy` classification, a
 default binding, RPC parity), see **[README → Actions System](../README.md#actions-system)**.
