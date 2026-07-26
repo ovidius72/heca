@@ -262,11 +262,7 @@ fn realize_kind(
         WidgetKind::Alert => Box::new(Alert::new(text_of(node))),
         WidgetKind::StatusDot => Box::new(StatusDot::online()),
         WidgetKind::Gauge => {
-            let mut g = Gauge::new();
-            if let Some(v) = f32_prop(node, "value") {
-                g = g.value(v);
-            }
-            Box::new(g)
+            Box::new(with_props(Gauge::new(), node))
         }
         WidgetKind::Icon => match glyph_prop(node) {
             Some(glyph) => Box::new(Icon::new(glyph)),
@@ -299,9 +295,8 @@ fn realize_kind(
             Box::new(t)
         }
         WidgetKind::Checkbox => {
-            let mut c = Checkbox::new()
-                .checked(bool_prop(node, "checked").unwrap_or(false))
-                .label(text_of(node));
+            // `checked` arrives through the surface; the widget's own default is already false.
+            let mut c = with_props(Checkbox::new().label(text_of(node)), node);
             if let Some(name) = name_prop(node) {
                 let sig = c.state();
                 forms.bind(name, Box::new(move || PropValue::Bool(sig.get_untracked())));
@@ -380,9 +375,9 @@ fn realize_kind(
             for option in realize_options(node, emit, hints, forms) {
                 select = select.option(option);
             }
-            if let Some(i) = usize_prop(node, "selected") {
-                select = select.selected(i);
-            }
+            // After the options, so `selected` clamps against the real count. That ordering is a
+            // property of this arm's construction, not something a property author must know.
+            select = with_props(select, node);
             if let Some(on_change) = option_change(node, emit) {
                 select = select.on_change(on_change);
             }
@@ -406,9 +401,7 @@ fn realize_kind(
             for option in realize_options(node, emit, hints, forms) {
                 tabs = tabs.tab(option);
             }
-            if let Some(i) = usize_prop(node, "selected") {
-                tabs = tabs.selected(i);
-            }
+            tabs = with_props(tabs, node);
             if let Some(on_change) = option_change(node, emit) {
                 tabs = tabs.on_change(on_change);
             }
@@ -417,8 +410,8 @@ fn realize_kind(
 
         // ── Groups ──
         WidgetKind::ItemGroup => {
-            let mut group =
-                ItemGroup::new(text_of(node)).expanded(bool_prop(node, "expanded").unwrap_or(true));
+            // `expanded` arrives through the surface; the widget already defaults to expanded.
+            let mut group = with_props(ItemGroup::new(text_of(node)), node);
             if let Some(on_toggle) = toggle_change(node, emit) {
                 group = group.on_toggle(on_toggle);
             }
@@ -426,13 +419,7 @@ fn realize_kind(
             attach_children(Box::new(group), node, emit, hints, forms)
         }
         WidgetKind::MarkerGroup => {
-            let mut markers = MarkerGroup::new();
-            if let Some(active) = bool_prop(node, "active") {
-                markers = markers.active(active);
-            }
-            if let Some(nav) = bool_prop(node, "nav_selected") {
-                markers = markers.nav_selected(nav);
-            }
+            let markers = with_props(MarkerGroup::new(), node);
             // An indicator: no events of its own — the rows inside carry their own intents.
             attach_children(Box::new(markers), node, emit, hints, forms)
         }
@@ -441,13 +428,9 @@ fn realize_kind(
         WidgetKind::Grid => realize_grid(node, emit, hints, forms),
 
         WidgetKind::DockFrame => {
-            let mut dock = DockFrame::new(text_of(node))
-                .expanded(bool_prop(node, "expanded").unwrap_or(true))
-                .active(bool_prop(node, "active").unwrap_or(false))
-                .nav_selected(bool_prop(node, "nav_selected").unwrap_or(false));
-            if bool_prop(node, "frameless").unwrap_or(false) {
-                dock = dock.frameless();
-            }
+            // Everything DockFrame exposes arrives through the surface, at the widget's own
+            // defaults when unset.
+            let mut dock = with_props(DockFrame::new(text_of(node)), node);
             if let Some(on_toggle) = toggle_change(node, emit) {
                 dock = dock.on_toggle(on_toggle);
             }
@@ -476,9 +459,7 @@ fn realize_kind(
             if let Some(body) = node.props.get("body").and_then(PropValue::as_text) {
                 toast = toast.body(body);
             }
-            if let Some(dismissible) = bool_prop(node, "dismissible") {
-                toast = toast.dismissible(dismissible);
-            }
+            toast = with_props(toast, node);
             // The inline action is a **labelled button**, not arbitrary content — so it is a prop
             // (`action_text`) plus an `action` intent, not a slot. A slot would have promised
             // composition the widget doesn't offer.
@@ -901,20 +882,6 @@ fn text_of(node: &ViewNode) -> String {
         .to_string()
 }
 
-/// A numeric prop (`Int` or `Float`) as `f32` — e.g. `"gap"`, `"value"`.
-fn f32_prop(node: &ViewNode, key: &str) -> Option<f32> {
-    match node.props.get(key)? {
-        PropValue::Int(i) => Some(*i as f32),
-        PropValue::Float(f) => Some(*f as f32),
-        _ => None,
-    }
-}
-
-/// A `"bool"`-typed prop (`"on"`, `"checked"`).
-fn bool_prop(node: &ViewNode, key: &str) -> Option<bool> {
-    node.props.get(key).and_then(PropValue::as_bool)
-}
-
 /// An index prop (`"selected"`) as a `usize`. Negative values are ignored (the widget keeps its
 /// default) rather than wrapping — the model is untrusted input.
 fn usize_prop(node: &ViewNode, key: &str) -> Option<usize> {
@@ -1025,16 +992,6 @@ fn glyph_from_name(name: &str) -> Option<Glyph> {
         _ => return None,
     };
     Some(g)
-}
-
-/// An alignment prop mapped to the grid-ui [`Align`] — `"align"` (a container's cross-axis
-/// alignment of its children), `"align_self"` / `"justify_self"` (this node inside its parent), or
-/// `"justify_items"` (a grid's horizontal placement of its items).
-fn align_prop(node: &ViewNode, key: &str) -> Option<Align> {
-    match node.props.get(key)? {
-        PropValue::Align(a) => Some(map_align(*a)),
-        _ => None,
-    }
 }
 
 /// The `"variant"` prop mapped to the grid-ui [`ButtonVariant`].

@@ -149,8 +149,9 @@ impl DockFrame {
     /// Drop the corner-bracket frame (and tighten the content inset). Use when the
     /// dock is hosted inside an already-framed container — e.g. a sidebar shell —
     /// so it reads as a flat section rather than a redundant nested border.
-    pub fn frameless(mut self) -> Self {
-        self.frameless = true;
+    #[heca_grid_ui_macros::prop]
+    pub fn frameless(mut self, frameless: bool) -> Self {
+        self.frameless = frameless;
         self.sync();
         self
     }
