@@ -87,6 +87,7 @@ impl RailCell {
 
     /// Make the cell clickable/keyboard-activatable (also makes it focusable). The
     /// host maps activation to its intent (focus the pane, pick the swap target…).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive cells are focusable (Component::focusable)

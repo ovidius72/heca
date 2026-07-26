@@ -79,6 +79,7 @@ impl IconButton {
     }
 
     /// Override the hover/press hue (default: theme accent).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn tone(mut self, c: Color) -> Self {
         self.tone = Some(c);
         self
@@ -102,6 +103,7 @@ impl IconButton {
     }
 
     /// Set the click callback (also makes it focusable).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self.base.focusable = true; // clickable icon buttons are focusable (Component::focusable)

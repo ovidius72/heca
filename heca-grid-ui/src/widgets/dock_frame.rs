@@ -165,6 +165,7 @@ impl DockFrame {
     }
 
     /// Report toggles. Receives `Action::value("dock-toggle", Bool(expanded))`.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_toggle(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_toggle = Some(Box::new(f));
         self
@@ -172,6 +173,7 @@ impl DockFrame {
 
     /// Fill the header-controls slot — the Dock's own affordances (e.g. a search
     /// field). Interactive controls work: events reach the slot before the toggle.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn header(mut self, c: impl Component + 'static) -> Self {
         self.base.children[HEADER].base_mut().children[CONTROLS] = Box::new(c);
         self
@@ -179,6 +181,7 @@ impl DockFrame {
 
     /// Append body content (folds away when collapsed). This is also the seam G6
     /// uses to make the frame draggable via the shipped `drag/` framework.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl Component + 'static) -> Self {
         self.base.children[BODY]
             .base_mut()
@@ -191,6 +194,7 @@ impl DockFrame {
     /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
     /// go through the `impl Component` setters; same seam as
     /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn header_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[HEADER].base_mut().children[CONTROLS] = c;
         self
@@ -198,6 +202,7 @@ impl DockFrame {
 
     /// [`child`](DockFrame::child) for an already-boxed component — see
     /// [`header_boxed`](DockFrame::header_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[BODY].base_mut().children.push(c);
         self
@@ -247,6 +252,7 @@ impl DockFrame {
     /// let files = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen);
     /// let sidebar = sidebar.dock(files);
     /// ```
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn rail(mut self, mode: Signal<RegionMode>, glyph: Glyph) -> Self {
         self.rail_mode = Some(mode);
         // Stretch the wrapper across the rail's width and center the glyph in it.

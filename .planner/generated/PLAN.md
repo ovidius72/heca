@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-25T20:33:59.911Z
+**Last updated:** 2026-07-25T21:34:57.080Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -103,7 +103,7 @@ Status: 🚫 `blocked`
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P015 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
 - ✅ **1df9c36c-5c29-4288-9fe1-7a6e9c72179b** P016 — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (9/9 tasks)
-- ⏸️ **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (1/9 tasks)
+- 🚧 **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (2/9 tasks)
 
 ### ⏸️ cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -867,13 +867,13 @@ Status: ✅ `done`
 
 **Tasks:** 9/9
 
-### ⏸️ 4d4aa26b-6245-4c0f-8bdf-64573a7afbf5 — P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining
+### 🚧 4d4aa26b-6245-4c0f-8bdf-64573a7afbf5 — P017 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining
 
 Widgets can do things the ViewNode model cannot say. Close the gaps and remove the hand-written prop list in realize so they cannot come back.
 
-Status: ⏸️ `deferred`
+Status: 🚧 `in-progress`
 
-**Tasks:** 1/9
+**Tasks:** 2/9
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P001 — agents-01: Agent status tracking and sounds
 

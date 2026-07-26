@@ -136,6 +136,7 @@ const HOVER_SHADOW_SCALE: f32 = 0.25;
 #[heca_grid_ui_macros::props]
 impl PanelElevation {
     /// Multiplier applied to both the shadow's blur and its drop offset.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn shadow_scale(self) -> f32 {
         match self {
             Self::Panel => 1.0,
@@ -564,6 +565,7 @@ impl Overlay {
     /// Set the **panel** — the single child this layer centers and decorates.
     /// The caller owns the panel's internal layout (padding, gaps, children);
     /// the overlay owns the chrome around it. Replaces any previous panel.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn panel(mut self, panel: impl Component + 'static) -> Self {
         self.base.children.clear();
         self.base.children.push(Box::new(panel));
@@ -574,6 +576,7 @@ impl Overlay {
     /// Like [`panel`](Overlay::panel) but takes an already-boxed component —
     /// for a panel produced by a mapper returning `Box<dyn Component>` (e.g.
     /// `heca`'s `realize(ViewNode)`).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn panel_boxed(mut self, panel: Box<dyn Component>) -> Self {
         self.base.children.clear();
         self.base.children.push(panel);
@@ -603,6 +606,7 @@ impl Overlay {
     ///     .panel_size(Length::Pct(0.6), Length::Pct(0.7))
     ///     .panel(Flex::column().child(ScrollRegion::new().child(long_content)))
     /// ```
+    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
         self.panel_size = Some((width, height));
         self.apply_panel_size();
@@ -649,6 +653,7 @@ impl Overlay {
     /// flipped above when no room, left-edge aligned, clamped into the viewport —
     /// see [`place_anchored`]. Uses [`DEFAULT_ANCHOR_GAP`]; pair with a
     /// non-[`blocking`](Overlay::blocking) layer for a light-dismiss popover.
+    #[heca_grid_ui_macros::host_only("a host-computed anchor rect, not authorable data")]
     pub fn anchored(mut self, rect: Rectangle) -> Self {
         self.position = OverlayPosition::Anchored {
             anchor: rect,
@@ -708,6 +713,7 @@ impl Overlay {
     /// Called when a press lands **outside** the panel (standalone use; a
     /// composing widget usually intercepts the press and applies its own
     /// dismissal policy instead).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_outside_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_outside_click = Some(Box::new(f));
         self

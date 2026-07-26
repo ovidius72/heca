@@ -88,12 +88,14 @@ impl Row {
     /// from the row's background — a stronger tint of the **same hue** — so a
     /// state-tinted row highlights in its own color (not the accent); rows with no
     /// background fall back to the theme accent.
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn highlight(mut self, c: Color) -> Self {
         self.highlight = Some(c);
         self
     }
 
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
@@ -104,12 +106,14 @@ impl Row {
     /// it `true`, the row flashes [`ATTENTION_PULSES`] times (and the signal is
     /// consumed back to `false`). The matching **sound** is the host's job — it
     /// plays its beep when it sets this signal (grid-ui stays audio-free).
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn attention(mut self, req: Signal<bool>) -> Self {
         self.attention_req = Some(req);
         self
     }
 
     /// Color of the attention pulse (default: the theme `warning` hue).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn attention_color(mut self, c: Color) -> Self {
         self.attention_color = Some(c);
         self

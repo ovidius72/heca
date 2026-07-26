@@ -130,6 +130,7 @@ impl Dialog {
     ///
     /// `Length::Auto` on an axis keeps the hug-content behaviour. A [`Pct`](Length::Pct)
     /// resolves against the **viewport** (the composed [`Overlay`](super::Overlay) fills it).
+    #[heca_grid_ui_macros::host_only("takes more than one value, which a single property cannot carry")]
     pub fn panel_size(mut self, width: Length, height: Length) -> Self {
         let style = &mut self.panel_mut().style.layout;
         style.width = width;
@@ -139,6 +140,7 @@ impl Dialog {
 
     /// Set the dialog **body** — an arbitrary component (a message label, a form, a table…),
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn body(mut self, body: impl Component + 'static) -> Self {
         self.panel_mut().children.push(Box::new(body));
         self.fit_body();
@@ -148,6 +150,7 @@ impl Dialog {
     /// Like [`body`](Dialog::body) but takes an already-boxed component — for a body produced
     /// by a mapper that returns `Box<dyn Component>` (e.g. `heca`'s `realize(ViewNode)`), which
     /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
         self.panel_mut().children.push(body);
         self.fit_body();
@@ -192,6 +195,7 @@ impl Dialog {
     /// Append an action **button** (a real [`Button`](super::Button) the caller has already
     /// wired with its `on_click` + hint target). Buttons live in a right-aligned row along
     /// the panel bottom, in call order.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn action(mut self, button: impl Component + 'static) -> Self {
         if !self.has_actions {
             // Lazily create the right-aligned action row on first use.
@@ -218,6 +222,7 @@ impl Dialog {
 
     /// Set the callback fired when Esc or a scrim click requests dismissal (respecting
     /// [`dismissible`](Dialog::dismissible)). The host wires this to its overlay-close path.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
         self.on_dismiss = Some(Box::new(f));
         self

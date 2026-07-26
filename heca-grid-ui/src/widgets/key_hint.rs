@@ -198,6 +198,7 @@ impl KeyHint {
 
     /// Bind the **host-owned** hint signal. The app sets `Some(letter)` when a
     /// pick/jump mode opens (from key **or** RPC) and clears it on exit.
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn hint(mut self, hint: Signal<Option<String>>) -> Self {
         self.hint = hint;
         self
@@ -223,6 +224,7 @@ impl KeyHint {
     }
 
     /// Override the keycap color (default: theme `accent`). The glow follows it too.
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self

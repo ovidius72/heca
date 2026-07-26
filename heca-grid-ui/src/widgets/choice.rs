@@ -137,6 +137,7 @@ impl Choice {
     ///
     /// A container (`Select`, `Tabs`) wires this to record the pick; a standalone `Choice` can use
     /// it directly.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive options are focusable (Component::focusable)

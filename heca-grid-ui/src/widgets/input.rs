@@ -135,6 +135,7 @@ impl Input {
 
     /// Set the change handler. Receives `Action::value("input-change",
     /// SignalData::String(new_text))` after every edit.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self

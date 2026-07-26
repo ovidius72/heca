@@ -90,6 +90,7 @@ impl BadgeButton {
     }
 
     /// Set the click callback.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self

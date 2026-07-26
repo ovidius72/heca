@@ -182,6 +182,7 @@ impl Select {
     /// Typed to [`Choice`] on purpose: the control keeps the row's selected-state
     /// [`Signal`](Choice::state) so it can drive the selection in place, and a `Box<dyn Component>`
     /// would have thrown that away. It is also the contract — the rows of a select **are** options.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn option(mut self, choice: Choice) -> Self {
         self.option_states.push(choice.state());
         self.base.children.push(Box::new(choice));
@@ -209,6 +210,7 @@ impl Select {
 
     /// Set the change handler. Receives `Action::value("select-change",
     /// SignalData::Usize(index))` when the selection changes.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self

@@ -77,6 +77,7 @@ impl Toggle {
 
     /// Set the change handler. Receives `Action::value("toggle-change",
     /// SignalData::Bool(new_state))` each time the toggle flips.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self

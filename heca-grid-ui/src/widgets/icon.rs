@@ -114,6 +114,7 @@ impl Glyph {
     ];
 
     /// The secondary-layer (`:before`) codepoint; the primary layer is this `+ 1`.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     const fn secondary(self) -> u32 {
         match self {
             Glyph::Folder => 0xe24a,
@@ -176,6 +177,7 @@ impl Glyph {
     /// draw a single-layer icon manually via [`PaintCx::icon`](crate::component::PaintCx::icon)
     /// (e.g. command-palette rows). Duotone rendering uses both layers; this is the
     /// foreground one.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn primary_char(self) -> Option<char> {
         char::from_u32(self.secondary() + PRIMARY_OFFSET)
     }
@@ -242,6 +244,7 @@ impl Icon {
 
     /// Primary-layer color (default: theme foreground). The secondary layer
     /// follows it (dimmed) unless set via [`secondary_color`](Icon::secondary_color).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self
@@ -249,6 +252,7 @@ impl Icon {
 
     /// Explicit secondary-layer color (default: the primary color at the theme's
     /// [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha)).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn secondary_color(mut self, c: Color) -> Self {
         self.secondary = Some(c);
         self

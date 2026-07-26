@@ -63,6 +63,7 @@ impl MenuEntry {
 
     /// A **quick-pick key** rendered as a [`KeyHint`](super::KeyHint)-style keycap on
     /// the right; pressing it (case-insensitive) activates the entry immediately.
+    #[heca_grid_ui_macros::host_only("unsupported argument type (char)")]
     pub fn key(mut self, key: char) -> Self {
         self.key = Some(key);
         self
@@ -151,6 +152,7 @@ impl ContextMenu {
     }
 
     /// Add an entry.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn entry(mut self, e: MenuEntry) -> Self {
         self.entries.push(e);
         self
@@ -266,6 +268,7 @@ impl ContextMenu {
 
     /// Set the callback fired when the menu is **dismissed** (Esc / outside-click). The host
     /// wires this to its overlay-close path (mirrors [`Dialog::on_dismiss`](super::Dialog)).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
         self.on_dismiss = Some(Box::new(f));
         self

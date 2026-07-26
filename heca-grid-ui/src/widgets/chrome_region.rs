@@ -104,6 +104,7 @@ impl ChromeRegion {
     /// internal one, so a host can drive collapse/expand from a central layout
     /// store and share the *same* signal with the region's rail-aware Docks via
     /// [`DockFrame::rail`](super::DockFrame::rail).
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn with_mode_signal(mut self, mode: Signal<RegionMode>) -> Self {
         self.mode = mode;
         self
@@ -124,6 +125,7 @@ impl ChromeRegion {
     }
 
     /// Host a Dock (typically a [`DockFrame`](super::DockFrame)).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn dock(self, c: impl Component + 'static) -> Self {
         self.child(c)
     }

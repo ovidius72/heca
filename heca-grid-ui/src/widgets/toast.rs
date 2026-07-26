@@ -64,6 +64,7 @@ pub enum ToastSeverity {
 #[heca_grid_ui_macros::props]
 impl ToastSeverity {
     /// The default leading glyph for this severity (overridable via [`Toast::icon`]).
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn default_glyph(self) -> Glyph {
         match self {
             ToastSeverity::Info => Glyph::Info,
@@ -173,6 +174,7 @@ impl Toast {
     }
 
     /// Hide the leading icon entirely.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn no_icon(mut self) -> Self {
         self.show_icon = false;
         self.remeasure();
@@ -189,6 +191,7 @@ impl Toast {
     }
 
     /// Add an inline action button with `label` + callback.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn action(mut self, label: impl Into<String>, f: impl Fn() + 'static) -> Self {
         self.action_label = Some(label.into());
         self.on_action = Some(Box::new(f));
@@ -204,6 +207,7 @@ impl Toast {
     }
 
     /// Make the whole card clickable (fires before any dismiss/action hit-test miss).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self.base.focusable = true; // a clickable toast is focusable (Component::focusable)
@@ -211,6 +215,7 @@ impl Toast {
     }
 
     /// Set the callback fired when the × is clicked. The host removes the toast.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
         self.on_dismiss = Some(Box::new(f));
         self

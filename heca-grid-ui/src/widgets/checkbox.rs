@@ -109,6 +109,7 @@ impl Checkbox {
 
     /// Set the change handler. Receives `Action::value("checkbox-change",
     /// SignalData::Bool(new_state))` each time the box is toggled.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self

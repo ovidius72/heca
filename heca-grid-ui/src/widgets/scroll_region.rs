@@ -229,12 +229,14 @@ impl ScrollRegion {
     }
 
     /// Scroll horizontally only (children overflow left↔right).
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn horizontal(mut self) -> Self {
         self.axes = ScrollAxes::Horizontal;
         self
     }
 
     /// Scroll on both axes.
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn both(mut self) -> Self {
         self.axes = ScrollAxes::Both;
         self

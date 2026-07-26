@@ -154,12 +154,14 @@ impl Item {
     }
 
     /// Set the leading (left) slot — any component (icon, dot, badge…).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading(mut self, c: impl Component + 'static) -> Self {
         self.base.children[LEADING] = Box::new(c);
         self
     }
 
     /// Set the trailing (right) slot — any component (kbd hint, `>`, badge…).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn trailing(mut self, c: impl Component + 'static) -> Self {
         self.base.children[TRAILING] = Box::new(c);
         self
@@ -169,6 +171,7 @@ impl Item {
     /// realizing a declarative subtree. `Box<dyn Component>` is not itself `Component`, so it cannot
     /// go through the `impl Component` setters; same seam as
     /// [`Dialog::body_boxed`](super::Dialog::body_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[LEADING] = c;
         self
@@ -176,6 +179,7 @@ impl Item {
 
     /// [`trailing`](Item::trailing) for an already-boxed component — see
     /// [`leading_boxed`](Item::leading_boxed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn trailing_boxed(mut self, c: Box<dyn Component>) -> Self {
         self.base.children[TRAILING] = c;
         self
@@ -220,6 +224,7 @@ impl Item {
     }
 
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)

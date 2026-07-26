@@ -203,6 +203,7 @@ impl Button {
     /// Append an already-boxed component — the seam for a subtree built by a mapper
     /// (`realize(&ViewNode)` returns `Box<dyn Component>`, which is not itself `Component` and so
     /// cannot go through [`Parent::child`]). Mirrors `Dialog::body_boxed`.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn content_boxed(mut self, content: Box<dyn Component>) -> Self {
         self.base.children.push(content);
         self
@@ -260,6 +261,7 @@ impl Button {
     }
 
     /// Set the click callback.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self

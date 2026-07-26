@@ -90,18 +90,21 @@ impl Pane {
     }
 
     /// Shorthand: set frame to [`PaneFrame::Bordered`].
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn bordered(mut self) -> Self {
         self.frame = PaneFrame::Bordered;
         self
     }
 
     /// Shorthand: set frame to [`PaneFrame::Bracketed`].
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn bracketed(mut self) -> Self {
         self.frame = PaneFrame::Bracketed;
         self
     }
 
     /// Shorthand: set frame to [`PaneFrame::None`].
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     pub fn frameless(mut self) -> Self {
         self.frame = PaneFrame::None;
         self
@@ -113,6 +116,7 @@ impl Pane {
     /// (e.g. a sidebar shell that wants its own thickness). No effect on the
     /// `Bracketed`/`None` frames. The border color still comes from `.border(color, _)`
     /// when set, else the theme border color.
+    #[heca_grid_ui_macros::host_only("unsupported argument type (impl Into<Option<f32>>)")]
     pub fn border_width(mut self, width: impl Into<Option<f32>>) -> Self {
         self.border_width = width.into();
         self

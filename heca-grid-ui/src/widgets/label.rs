@@ -91,6 +91,7 @@ impl Label {
     /// Explicit text color. Unset ⇒ the enclosing control's
     /// [content color](crate::component::PaintCx::with_content_color), else the theme foreground.
     /// Setting it opts the label **out** of that inheritance.
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
         self

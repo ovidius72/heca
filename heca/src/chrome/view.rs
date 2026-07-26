@@ -324,10 +324,25 @@ pub type Events = BTreeMap<String, Intent>;
 /// The merge lands **on top of** the constructed widget, so a widget's own constructor settings
 /// survive any property it does not mention.
 ///
-/// # Props & events by kind (what `realize` reads today)
+/// # Widget props — the widget's own builders decide, not a list here
+/// `realize` names no widget property. Each widget generates its property surface from its own
+/// builders (`#[prop]` in `heca-grid-ui`), so a capability added to a widget is settable from a
+/// description the same day. Every builder must be classified `#[prop]` or `#[host_only("why")]`
+/// — the build fails otherwise, which is what stops a capability going quietly missing the way
+/// `Input::placeholder` and `ScrollRegion`'s second axis did.
+///
+/// **Properties are order-independent.** They are applied after children are attached, so a
+/// builder that clamps against its children (`Select`/`Tabs` `selected`) sees the real ones.
+/// Nothing an author, caller or agent has to think about.
+///
+/// Deliberately NOT properties, with the reason recorded on each builder: closures (behaviour
+/// crosses as an [`Intent`]), composed content (use `children`), and builders bound to live host
+/// signals. Appearance is currently in this group and is moving out — see F003/P017/T7.
+///
+/// # Props & events by kind
 /// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
 /// so `realize` is total, and a bad value costs only itself: its neighbours on the same node still
-/// apply. Below are the props a kind reads **in addition to** the layout set above:
+/// apply. The table below is a **reader's summary**; the widget's builders are the authority:
 ///
 /// | Kind | Props it reads | Events |
 /// |------|----------------|--------|

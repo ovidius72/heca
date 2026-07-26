@@ -57,9 +57,11 @@ pub enum ToastCorner {
 
 #[heca_grid_ui_macros::props]
 impl ToastCorner {
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn is_right(self) -> bool {
         matches!(self, ToastCorner::TopRight | ToastCorner::BottomRight)
     }
+    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
     fn is_top(self) -> bool {
         matches!(self, ToastCorner::TopRight | ToastCorner::TopLeft)
     }
@@ -184,12 +186,14 @@ impl ToastStack {
 
     /// Called with the toast's id when its × is clicked. The host removes the id
     /// from its list (the stack reflows the rest).
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_dismiss(mut self, f: impl Fn(u64) + 'static) -> Self {
         self.on_dismiss = Some(Rc::new(f));
         self
     }
 
     /// Called with the toast's id when its inline action is clicked.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_action(mut self, f: impl Fn(u64) + 'static) -> Self {
         self.on_action = Some(Rc::new(f));
         self

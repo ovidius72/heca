@@ -115,6 +115,7 @@ impl Tabs {
     /// Typed to [`Choice`] on purpose — the strip keeps the tab's selected/hover
     /// [signals](Choice::state) so it can drive them in place, and a `Box<dyn Component>` would have
     /// thrown them away. It is also the contract: the segments of a tab strip **are** options.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn tab(mut self, choice: Choice) -> Self {
         self.tab_states.push(choice.state());
         self.hover_states.push(choice.hovered());
@@ -143,6 +144,7 @@ impl Tabs {
 
     /// Set the change handler. Receives `Action::value("tab-change",
     /// SignalData::Usize(index))` when the active tab changes.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_change = Some(Box::new(f));
         self

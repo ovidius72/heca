@@ -63,12 +63,14 @@ impl ItemGroup {
     }
 
     /// Report toggles. Receives `Action::value("group-toggle", Bool(expanded))`.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_toggle(mut self, f: impl Fn(Action) + 'static) -> Self {
         self.on_toggle = Some(Box::new(f));
         self
     }
 
     /// Append a group row (folds away when collapsed).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl Component + 'static) -> Self {
         self.base.children.push(Box::new(c));
         self

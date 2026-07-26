@@ -61,11 +61,29 @@ pub fn props(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 .is_some_and(|seg| seg.ident == "prop")
         });
         let Some(idx) = marker else {
-            // Unmarked builder: host-only. Recorded by name so the drift guard can tell
-            // "deliberately not exposed" from "nobody noticed".
-            if takes_self_by_value(f) {
-                host_only.push(name.to_string());
+            if !takes_self_by_value(f) {
+                continue; // an accessor, not a builder
             }
+            // A builder must be CLASSIFIED, never classified by omission. Silence used to mean
+            // "host-only", which is how a capability goes missing: nobody decides, so nobody
+            // notices. Requiring the decision is the whole point of this phase, one level down.
+            let Some(idx) = f.attrs.iter().position(|a| {
+                a.path().segments.last().is_some_and(|s| s.ident == "host_only")
+            }) else {
+                return syn::Error::new_spanned(
+                    &f.sig,
+                    "this builder is neither `#[prop]` nor `#[host_only]`.\n\
+                     Every builder must say which it is, because being left out silently is \
+                     exactly how a widget capability becomes unreachable from a description.\n\
+                     · `#[prop]` — a description may set it (scalars and enums-by-name).\n\
+                     · `#[host_only(\"reason\")]` — it cannot come from static data: a closure \
+                     (behaviour crosses as an Intent), a child (use `children`), or a live signal.",
+                )
+                .to_compile_error()
+                .into();
+            };
+            f.attrs.remove(idx);
+            host_only.push(name.to_string());
             continue;
         };
         let attr = f.attrs.remove(idx);
@@ -204,5 +222,15 @@ fn to_snake_case(camel: &str) -> String {
 /// expands to nothing, so a marked builder is an ordinary method to every other caller.
 #[proc_macro_attribute]
 pub fn prop(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+/// Marks a builder as deliberately **not** reachable from a description, with the reason.
+///
+/// The reason is the point. "Unmarked" is not a decision; this is. Legitimate cases are a closure
+/// (behaviour crosses as an `Intent`), composed content (a description uses `children`), and a
+/// builder bound to a live host signal.
+#[proc_macro_attribute]
+pub fn host_only(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }

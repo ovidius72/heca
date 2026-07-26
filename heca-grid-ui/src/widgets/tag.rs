@@ -74,6 +74,7 @@ impl Tag {
 
     /// Set the leading slot of the **first** segment — typically an
     /// [`Icon`](super::Icon).
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn leading(mut self, c: impl Component + 'static) -> Self {
         self.base.children[0]
             .base_mut()
@@ -84,6 +85,7 @@ impl Tag {
 
     /// Append a segment (its own composed content, e.g. a row of `Icon`/`Label`).
     /// A thin divider is drawn before it.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn segment(mut self, c: impl Component + 'static) -> Self {
         self.base.children.push(Box::new(c));
         self
@@ -92,6 +94,7 @@ impl Tag {
     /// Append a component **inside** the segment at `idx` (no new segment, no divider), so it sits
     /// right next to that segment's existing content — e.g. a small dimmed suffix after a label.
     /// Out-of-range `idx` is a no-op.
+    #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn append_to_segment(mut self, idx: usize, c: impl Component + 'static) -> Self {
         if let Some(seg) = self.base.children.get_mut(idx) {
             seg.base_mut().children.push(Box::new(c));
@@ -101,6 +104,7 @@ impl Tag {
 
     /// Append a `label` segment with an optional leading icon — a convenience over
     /// [`segment`](Tag::segment) for the common icon-plus-text section.
+    #[heca_grid_ui_macros::host_only("not authorable as a single scalar property")]
     pub fn segment_text(
         self,
         label: impl Into<String>,
@@ -114,6 +118,7 @@ impl Tag {
     }
 
     /// Pill hue for the fill, border and dividers (default: the theme muted token).
+    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self

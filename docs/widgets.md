@@ -2937,9 +2937,36 @@ The merge lands **on top of** the constructed widget, so a widget's own construc
 any property the node doesn't mention — a `Scroll` keeps the zeroed min-sizes and shrink factor that
 let a viewport be smaller than its content.
 
-### Props & events by kind (what `realize` reads today)
+### Widget props — the builders decide, not a list
 
-These are the props a kind reads **in addition to** the layout set above.
+`realize` names no widget property. Each widget **generates** its property surface from its own
+builders, so what a description can set is decided in one place — the widget:
+
+```rust
+#[props]
+impl Input {
+    #[prop] pub fn placeholder(mut self, s: impl Into<String>) -> Self { .. }
+    #[host_only("behaviour crosses as an Intent, never a callback")]
+    pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self { .. }
+}
+```
+
+Every builder must be one or the other. A builder that is neither **fails the build** — being left
+out silently is exactly how `Input::placeholder` and `ScrollRegion`'s second axis stayed unreachable
+for months. A drift guard additionally fails when a whole widget has no surface.
+
+**Order never matters.** Properties are applied after children are attached, so a builder that
+clamps against its children (`Select`/`Tabs` `selected`) sees the real ones. `#[prop]` rejects any
+argument, so a sequencing hint cannot be reintroduced widget by widget.
+
+Deliberately not properties, each with its reason recorded in the code: closures (behaviour crosses
+as an `Intent`), composed content (use `children`), and builders bound to live host signals.
+Appearance is in that group today and is moving out.
+
+### Props & events by kind
+
+The table below is a **reader's summary** — the widget's builders are the authority. These are the
+props a kind reads in addition to the layout set above.
 
 Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
 and a bad value costs only itself: the good props on the same node still apply.

@@ -164,6 +164,7 @@ impl CommandPalette {
     }
 
     /// Add a command.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
         self.commands.push(c);
         self
