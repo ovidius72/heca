@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-26T20:41:32.105Z
+**Last updated:** 2026-07-26T21:17:49.394Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -125,7 +125,7 @@ Status: ⏸️ `deferred`
 - 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P008 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
 - 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P009 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/5 tasks)
 - 📋 **029ef1b3-822b-4151-b5b0-b296b042b350** P010 — gridui-09: One border-width control — three paths currently disagree (0/4 tasks)
-- 📋 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P011 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (3/4 tasks)
+- ⏸️ **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P011 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (3/4 tasks)
 
 ### 📋 b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -729,11 +729,11 @@ Status: 📋 `planned`
 
 **Tasks:** 0/4
 
-### 📋 0e4c21e5-1cf7-4c0a-a00e-76ffbef60703 — P011 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion
+### ⏸️ 0e4c21e5-1cf7-4c0a-a00e-76ffbef60703 — P011 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion
 
 The framework walks children, not the widget; ScrollRegion owns its whole gesture and reports position through scroll_start/scroll/scroll_end
 
-Status: 📋 `planned`
+Status: ⏸️ `deferred`
 
 **Tasks:** 3/4
 

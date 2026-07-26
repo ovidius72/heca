@@ -4,7 +4,7 @@
   "number": 11,
   "slug": "gridui-10-a-widget-cannot-drop-a-child-s-event-framework-owned-routing-a-self-contained-scrollregion",
   "title": "gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion",
-  "status": "planned",
+  "status": "deferred",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -206,10 +206,19 @@
       "number": 4,
       "shortName": "scrolling-is-observable-from-a",
       "title": "Scrolling is observable from a description too — plus the worked example a reader can copy",
-      "status": "planned",
-      "description": "Native code gets `on_scroll*` from T3. A plugin must be able to watch a region it declared, and a\nreader must be able to see what using one looks like end to end.\n\n## Decided with the user (2026-07-26)\n\n`app.on(\"scroll\", ctx)` — the plugin subscribes and the context carries the widget that scrolled and\nits event.\n\n## The tension to settle first (do not skip)\n\nThere are two models in the codebase and this straddles them:\n\n- **Node-level intents** — every other widget event is `.on(\"press\"/\"change\"/\"toggle\", Intent)`,\n  resolved by the host through `dispatch_view_intent`. The intent carries the author's own args, so\n  **identity comes for free**: whatever `arg` the author put on it says which region this is.\n- **The chrome event bus** — `app.on(event, handler)` (heca/src/host.rs) carries app/chrome STATE\n  changes: region resized, pane runtime changed. It is not a widget-input channel today.\n\nPutting widget input on the bus blurs a layer that has been kept clean, and it has an identity\nproblem: `ViewNode` has no node id — only `name`, which exists for form submission — so two scroll\nareas in one panel are indistinguishable to a bus subscriber. Node-level `.on(\"scroll_end\", Intent)`\nanswers identity for free and matches every other event.\n\nRecommended resolution: the node-level intent is the primitive; `app.on(\"scroll\", …)` is a\nconvenience the host can offer on top of it, forwarding to the bus with the node's `name` as the\nidentity. Confirm with the user before building.\n\n## Build\n\n1. Extend the declarative event vocabulary with `scroll_start` / `scroll` / `scroll_end` on\n   `WidgetKind::Scroll` (heca/src/chrome/realize.rs Scroll arm, heca/src/chrome/view.rs props table).\n   The intent args carry the metrics — `offset_y`, `max_y`, etc. — the same way the picker's `change`\n   already carries `value`.\n2. `scroll` fires at frame rate. Marshalling every one to a plugin (and later across the WASM\n   boundary) is not acceptable — either only `scroll_end` crosses, or `scroll` is throttled. Decide\n   and write down which.\n3. The event vocabulary is documented as three verbs (`press`, `change`, `toggle`) in\n   docs/widgets.md and view.rs. Update BOTH, and say why scrolling earns a verb.\n\n## The example (the user asked to see this explicitly)\n\nAdd to docs/widgets.md §ScrollRegion a worked example showing the whole surface in one place:\nmounting a region natively with the three listeners, the same thing as a `ViewNode`, and the one\nline a host needs. It must make obvious that a caller implements NOTHING — no wheel, no thumb, no\nrelease, no track-hold.\n\n## Done when\n\n- A described region can be watched, with an identity its author chose.\n- The rate question has a written answer.\n- docs/widgets.md §ScrollRegion, its declarative note, the props-by-kind tables in both\n  docs/widgets.md and view.rs, and the event-vocabulary paragraph all agree.\n- The USER reads the example and confirms it shows what they asked to see.",
+      "status": "deferred",
+      "description": "Rust code can already listen to scrolling: `ScrollRegion::on_scroll_start` / `on_scroll` /\n`on_scroll_end`, shipped in F004/P011/T3. This task is only about plugins.\n\n## Decision (with the user, 2026-07-26): wait for the WASM runtime\n\nDo not build this before the plugin runtime exists (F003/P001, plugin-08). Reasons, in order:\n\n1. **Nothing would receive it.** No plugin is running today. The only consumers of a declarative\n   scroll event would be RPC and the app's own screens, and neither needs one.\n2. **We would build the wrong half.** Sending the event out is the awkward part (a name on the wire,\n   arguments, routing it back to the right node). The pleasant part — the author writing a plain\n   function — belongs to the plugin toolkit, which does not exist yet either.\n3. **Nothing in today's work blocks it.** The listeners, the metrics payload and the single\n   chokepoint they fire from are all in place.\n\n## What it should look like when the runtime lands\n\nThe plugin author attaches a function to the scroll area, and that is the whole API. No id, no name,\nno arguments — attaching to the region IS how you know which region fired:\n\n```ts\nScroll({ axes: \"both\", onScrollEnd: (s) => { if (s.offsetY === s.maxY) loadMore() } })\n```\n\nThe user pushed back on an earlier design where the author supplied an identifying argument, and was\nright to: that was machinery from underneath the API surfacing in it. If the API ever makes an author\nname their own scroll area, that is a bug in the API.\n\nUnderneath, the toolkit keeps the function on the plugin's side and gives heca a name for it. heca\nsends that name back when the region scrolls. This is R4 in `docs/chrome-and-ui.md` and is the same\npath `press` and `change` already take — no new mechanism.\n\n## Which of the three events should cross\n\n`scroll_start` and `scroll_end` only. The continuous `scroll` fires on every movement (each wheel\nnotch, each pointer move during a drag), and one message per movement to another program is too many.\n`scroll_end` carries the full position, so anything that needs to know where it stopped gets it. If a\nplugin ever genuinely needs live tracking, decide on a rate limit then rather than guessing one now.\n\n## Still to settle when built\n\n- An action does not describe the arguments it takes (`ActionMeta` has label, icon, policy, confirm —\n  no argument list). So a wrong or misspelled argument is ignored in silence. That is the same shape\n  of defect this phase fixed twice, and it is worth fixing before adding more argument-carrying\n  events.\n- The declarative event vocabulary is documented as three words (`press`, `change`, `toggle`) in both\n  `docs/widgets.md` and `heca/src/chrome/view.rs`. Update both, and say why scrolling earns its own:\n  it is the only widget event with a beginning and an end rather than a single moment.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-001-planned-deferred",
+          "date": "2026-07-26T21:17:49.064Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Waits on the WASM plugin runtime (F003/P001). There are no plugins running, so there is nothing to send a scroll event to. Building only the sending half now would add an awkward API with no user, and it would be replaced by the toolkit anyway. Decided with the user 2026-07-26.",
+          "description": "Waits on the WASM plugin runtime (F003/P001). There are no plugins running, so there is nothing to send a scroll event to. Building only the sending half now would add an awkward API with no user, and it would be replaced by the toolkit anyway. Decided with the user 2026-07-26."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -249,9 +258,9 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T16:51:00.329Z",
-      "updatedAt": "2026-07-26T16:51:00.329Z"
+      "updatedAt": "2026-07-26T21:17:49.064Z"
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-07-26T20:41:31.740Z"
+  "updatedAt": "2026-07-26T21:17:49.064Z"
 }
