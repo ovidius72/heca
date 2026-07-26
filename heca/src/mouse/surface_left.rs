@@ -87,7 +87,7 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
         // dispatch the press into the retained grid-ui chrome tree so widget callbacks
         // route their own intents through the app event loop.
         if state.chrome_state.left_visible() {
-            crate::chrome::chrome_dispatch_press(state, pos);
+            let _ = crate::chrome::chrome_dispatch_press(state, pos);
         }
     }
 
