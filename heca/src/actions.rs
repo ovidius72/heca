@@ -2652,6 +2652,52 @@ mod tests {
         );
     }
 
+    /// The sentence a user actually reads. It is written by the `Display` impl and printed by the
+    /// two doors, so pin it here — the printing itself is skipped under `cfg(test)`, exactly as
+    /// keybinding-conflict logging is.
+    #[test]
+    fn a_problem_reads_as_a_sentence() {
+        assert_eq!(
+            ArgProblem::Unknown {
+                name: "ws_idxx".to_string(),
+                did_you_mean: Some("ws_idx".to_string()),
+            }
+            .to_string(),
+            "unknown argument 'ws_idxx' — did you mean 'ws_idx'?",
+        );
+        assert_eq!(
+            ArgProblem::Unknown { name: "colour".to_string(), did_you_mean: None }.to_string(),
+            "unknown argument 'colour'",
+        );
+        assert_eq!(
+            ArgProblem::Missing { name: "ws_idx".to_string() }.to_string(),
+            "missing required argument 'ws_idx'",
+        );
+        assert_eq!(
+            ArgProblem::BadValue {
+                name: "focus".to_string(),
+                value: "yes".to_string(),
+                expected: "true or false".to_string(),
+            }
+            .to_string(),
+            "argument 'focus' expected true or false, got 'yes'",
+        );
+
+        // An enum lists what it will accept, so the reader does not have to go looking.
+        let specs = builtin_args("resize").unwrap();
+        let mut bad = sample_args(&specs);
+        bad.insert("axis".to_string(), "sideways".to_string());
+        let message = check_args(&specs, &bad)
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        assert_eq!(
+            message,
+            "argument 'axis' expected one of x, horizontal, width, y, vertical, height, got 'sideways'",
+        );
+    }
+
     /// Every action that takes arguments says so where a caller can read it — `list-actions` and
     /// `describe-action` carry the list, not just the name.
     #[test]
