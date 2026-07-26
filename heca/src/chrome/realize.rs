@@ -38,8 +38,8 @@ use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Base, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
     Item, ItemGroup, Label, Layout, LayoutExt, MarkerGroup, PropInput, RailCell, ScrollRegion,
-    Select, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Track,
-    WidgetSize,
+    Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity,
+    Toggle, Track, WidgetSize,
 };
 
 use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
@@ -261,6 +261,9 @@ fn realize_kind(
         WidgetKind::Tag => Box::new(Tag::new(text_of(node))),
         WidgetKind::Alert => Box::new(Alert::new(text_of(node))),
         WidgetKind::StatusDot => Box::new(StatusDot::online()),
+        // `orientation` and `length` both arrive through the generated surface, and the widget
+        // recomputes both axes from the pair, so neither has to come first.
+        WidgetKind::Separator => Box::new(with_props(Separator::horizontal(), node)),
         WidgetKind::Gauge => {
             Box::new(with_props(Gauge::new(), node))
         }
@@ -1738,6 +1741,13 @@ mod tests {
             WidgetKind::Toggle => node.prop("on", PropValue::Bool(true)),
             WidgetKind::Gauge => node.prop("value", PropValue::Float(0.5)),
             WidgetKind::StatusDot => node,
+
+            // A rule normally stretches to its container; as a root it has none, so give it a
+            // span — and take the chance to drive both of its properties, in the order that would
+            // have been wrong before the widget started recomputing from the pair.
+            WidgetKind::Separator => node
+                .prop("length", PropValue::Float(120.0))
+                .prop("orientation", PropValue::Text("vertical".into())),
 
             // Host-only — see the coverage test.
             WidgetKind::ScrollBar => node,

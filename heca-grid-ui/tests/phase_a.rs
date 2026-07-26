@@ -1899,6 +1899,53 @@ fn horizontal_separator_spans_container_width() {
     assert!(sep.base().bounds.size.h <= 1.0, "separator is thin");
 }
 
+/// A separator's two properties do not depend on each other, in either order.
+///
+/// `length` used to write straight onto `width`, assuming the rule was horizontal. Set the
+/// orientation afterwards — which a described separator does, since properties arrive sorted by
+/// name and `length` sorts before `orientation` — and the length landed on the axis the rule runs
+/// *across*, leaving the span unset. The widget now recomputes both axes from the pair, so this
+/// passes whichever way round it is written.
+#[test]
+fn a_separators_length_and_orientation_can_be_set_in_either_order() {
+    use heca_grid_ui::{PropInput, SetProp};
+
+    for (first, second) in [("length", "orientation"), ("orientation", "length")] {
+        let apply = |sep: Separator, key: &str| match key {
+            "length" => sep.set_prop("length", &PropInput::Number(60.0)),
+            _ => sep.set_prop("orientation", &PropInput::Text("vertical".into())),
+        };
+        let sep = apply(apply(Separator::horizontal(), first), second);
+
+        let mut row = Flex::row()
+            .width(Length::Px(200.0))
+            .height(Length::Px(200.0))
+            .child(sep);
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 200.0));
+        let bounds = row.base().children[0].base().bounds;
+
+        assert_eq!(
+            bounds.size.h, 60.0,
+            "setting {first} then {second}: a vertical rule runs 60px down",
+        );
+        assert!(
+            bounds.size.w <= 1.0,
+            "setting {first} then {second}: a vertical rule stays thin ({}px wide)",
+            bounds.size.w,
+        );
+    }
+
+    // And `vertical()` still means what it always meant, without any property being set.
+    let mut row = Flex::row()
+        .width(Length::Px(200.0))
+        .height(Length::Px(80.0))
+        .child(Separator::vertical());
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 80.0));
+    let bounds = row.base().children[0].base().bounds;
+    assert_eq!(bounds.size.h, 80.0, "a vertical rule stretches to the container height");
+    assert!(bounds.size.w <= 1.0, "and stays thin");
+}
+
 #[test]
 fn spinner_animates_and_paints_its_ring() {
     let theme = Theme::default();

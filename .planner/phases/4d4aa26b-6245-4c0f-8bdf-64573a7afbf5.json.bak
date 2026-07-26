@@ -4,7 +4,7 @@
   "number": 17,
   "slug": "plugin-ui-gaps-close-the-declarative-model-s-capability-gaps-make-the-translator-self-maintaining",
   "title": "plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining",
-  "status": "deferred",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -257,7 +257,7 @@
       "number": 5,
       "shortName": "add-separator-to-the-widget-vo",
       "title": "Add Separator to the widget vocabulary",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Closes gap 5 of the phase description.\n\nCURRENT STATE\n- The widget EXISTS: heca-grid-ui/src/widgets/separator.rs — `Orientation` enum (line 17),\n  `horizontal()` (line 42), `vertical()` (line 47), `length(f32)` (line 53, documented as \"force an\n  explicit span when the parent centers instead of stretching\"). Catalogued in docs/widgets.md:1753.\n- The vocabulary has NO entry for it. `WidgetKind` (heca/src/chrome/view.rs:30-69) lists 30\n  variants; `Separator` is not among them, and it is absent from `WidgetKind::ALL` (view.rs:78-110).\n- docs/chrome-and-ui.md example 2 uses `Separator::new()` between a table header and its body —\n  a description cannot produce it today. A plugin has to fake a rule with a thin sized Surface,\n  which will not follow the theme.\n\nWORK — follow the \"adding a WidgetKind\" path exactly; the guards make most of it mechanical:\n1. Add the variant to `WidgetKind` (view.rs:30).\n2. Add it to `WidgetKind::ALL` (view.rs:78). Note the built-in protection: `ordinal()` (view.rs:113)\n   is an EXHAUSTIVE match, so forgetting it there is a COMPILE error, and the\n   `all_lists_every_widget_kind` test then catches the reverse omission. Do not fight these — they\n   are why a new kind cannot silently render an empty box.\n3. Add a `realize` arm (realize.rs:114+) mapping to the widget.\n4. Properties: orientation (an enum by NAME — horizontal / vertical, default horizontal) and\n   `length`. If T3 has landed, this should come from the generator rather than a hand-written read.\n5. The existing coverage test\n   `every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones` must pass — it walks ALL\n   and fails on a kind that does not produce a live widget.\n6. Check the fixture that builds a sample node per kind (realize.rs:1660-1680 gives leaves text or a\n   glyph) and give `Separator` whatever it needs there.\n\nWHY IT IS NOT \"just compose it\"\nA separator is themed: colour, thickness and inset come from the Theme. A hand-rolled sized Surface\nin a plugin would hardcode them, which is precisely what AGENTS.md forbids (\"Read ALL styling from\nthe Theme — hardcode nothing\"). The widget exists so nobody has to.\n\nACCEPTANCE\n- `Separator` is in the vocabulary and realizes to the real widget with orientation + length.\n- Both existing guards (`ordinal` exhaustive match, `all_lists_every_widget_kind`) pass unchanged.\n- Coverage test passes with the new kind included.\n- Update view.rs's props-by-kind table + docs/widgets.md, and add it to the showcase.\n- Visible output: build it and have the USER look before closing.",
       "notes": "",
       "statusLog": [],
@@ -302,10 +302,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-26T21:50:14.904Z",
       "completedAt": "",
       "createdAt": "2026-07-25T19:14:32.975Z",
-      "updatedAt": "2026-07-25T19:14:32.975Z"
+      "updatedAt": "2026-07-26T21:50:14.904Z"
     },
     {
       "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152",
@@ -537,5 +537,5 @@
     }
   ],
   "createdAt": "2026-07-25T19:12:29.404Z",
-  "updatedAt": "2026-07-26T18:04:34.103Z"
+  "updatedAt": "2026-07-26T21:50:14.904Z"
 }

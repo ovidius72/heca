@@ -68,6 +68,8 @@ pub enum WidgetKind {
     RailCell,
     /// A single selectable list row.
     Item,
+    /// A thin themed divider line.
+    Separator,
 }
 
 impl WidgetKind {
@@ -108,6 +110,7 @@ impl WidgetKind {
         WidgetKind::Toast,
         WidgetKind::RailCell,
         WidgetKind::Item,
+        WidgetKind::Separator,
     ];
 
     /// This kind's position in [`ALL`](Self::ALL).
@@ -149,6 +152,7 @@ impl WidgetKind {
             WidgetKind::Toast => 27,
             WidgetKind::RailCell => 28,
             WidgetKind::Item => 29,
+            WidgetKind::Separator => 30,
         }
     }
 }
@@ -359,6 +363,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |
 /// | `StatusDot` | — | — |
+/// | `Separator` | `orientation` (`horizontal` \| `vertical`, default horizontal), `length` (Float px; omit to stretch) | — |
 /// | `Item` | `text` (label); **slots**: `leading` / `trailing` (no default slot) | `press` |
 /// | `DockFrame` | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slot**: `header`, else body (default) | `toggle` |
 /// | `Toast` | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |

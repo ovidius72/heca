@@ -233,9 +233,14 @@ Scroll::new().axes(ScrollAxes::Both).child(
             .child(Label::new("Name"))
             .child(Label::new("Status"))
             .child(Label::new("CPU")))
-        .child(Separator::new())
+        .child(Separator::horizontal())
         .child(rows))
 ```
+
+The rule between the header and the body is a real widget, so it takes its colour and thickness
+from the theme. It reached the description vocabulary in F003/P017/T5; until then this example could
+not be written as a description at all, and a plugin had to fake the line with a thin sized
+`Surface` that hardcoded both.
 
 ### A modal with a form
 

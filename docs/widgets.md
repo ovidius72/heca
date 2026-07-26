@@ -1935,15 +1935,37 @@ Flex::row().gap(8.0).align(Align::Center)
 
 ### Separator
 
-Thin divider line (display-only). Spans the container cross-axis under the default
-`Align::Stretch`.
+Thin divider line (display-only), 1px in the theme's border colour. Spans the container cross-axis
+under the default `Align::Stretch`.
 
 - **Construct**: `Separator::horizontal()`, `Separator::vertical()`.
-- **Builder**: `.length(f32)` — force an explicit span when the parent centers instead of stretching.
+- **Builders**: `.orientation(Orientation)` (`Horizontal` \| `Vertical`, default horizontal),
+  `.length(f32)` — force an explicit span when the parent centers instead of stretching.
 
 ```rust
 Separator::horizontal().length(420.0);
+Separator::vertical();                  // stretches to the row's height
 ```
+
+**Declarative:**
+
+```rust
+// A rule between a table header and its body.
+ViewNode::new(WidgetKind::Separator);
+
+// A vertical rule of a fixed length. Either property may be set first: the widget recomputes
+// both axes from the pair, so `length` never lands on the axis the rule runs across.
+ViewNode::new(WidgetKind::Separator)
+    .prop("orientation", PropValue::Text("vertical".into()))
+    .prop("length", PropValue::Float(24.0));
+```
+
+Props `realize` reads: `orientation`, `length`. Both come from the widget's own builders through the
+generated surface — there is no list of names in `realize`.
+
+> A separator is **themed**: its colour and thickness come from the `Theme`. Faking one with a thin
+> sized `Surface` hardcodes both and stops following a theme reload, which is why this is a widget
+> and not something to compose.
 
 ### Spinner
 
