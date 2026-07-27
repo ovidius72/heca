@@ -1506,6 +1506,81 @@ mod tests {
         assert_eq!(glow.color, heca_grid_ui::Color::rgb(0x00, 0xcc, 0xff));
     }
 
+    /// A described node stretches to its parent, the way CSS flexbox does.
+    ///
+    /// Set no width and a node fills its parent's cross axis; set `width_pct(0.5)` and it takes
+    /// half; set `width(px)` and it takes exactly that. Authors rely on the first without asking
+    /// for it — the showcase's panels are only a fixed size because they say so — and it is
+    /// currently true because a container's default `align` is `Stretch`, which is taffy agreeing
+    /// with CSS.
+    ///
+    /// **Nothing pinned that until this test.** Changing a container's default alignment would
+    /// silently turn every full-width described panel into a content-width one, with no test
+    /// failing and nothing to read in a diff. It is a contract now.
+    #[test]
+    fn a_described_node_stretches_to_its_parent_like_css() {
+        use heca_view::build::{self, Parent as _, Style as _};
+
+        // Mount a described tree in a plain column of a known width, as a page lays sections out,
+        // and report the node's width plus its first child's.
+        let mounted = |node: ViewNode| {
+            let realized = realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            );
+            let mut parent = Flex::column().width(heca_grid_ui::Length::Px(600.0));
+            parent.base_mut().children.push(realized);
+            heca_grid_ui::LayoutEngine::new()
+                .compute(&mut parent, heca_core::layout::Size::new(600.0, 400.0));
+            let child = &parent.base().children[0];
+            let inner = child
+                .base()
+                .children
+                .last()
+                .map(|c| c.base().bounds.size.w)
+                .unwrap_or_default();
+            (child.base().bounds.size.w, inner)
+        };
+
+        let panel = |b: build::Panel| {
+            b.child(build::Row::new().child(build::Label::new("nginx")))
+                .into_node()
+        };
+
+        // No width: full parent width, and the row inside fills the panel's content box (600 less
+        // the panel's 10px padding a side).
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P"))),
+            (600.0, 580.0),
+            "an unsized node fills its parent, and its child fills it in turn",
+        );
+
+        // The same result asked for explicitly.
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P").width_pct(1.0))).0,
+            600.0,
+            "width_pct(1.0) is the full parent width",
+        );
+
+        // A fraction, which is the case a percentage is actually needed for.
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P").width_pct(0.5))).0,
+            300.0,
+            "width_pct(0.5) is half the parent",
+        );
+
+        // And a fixed size wins over the stretch — this is what keeps the showcase's two demo
+        // panels side by side instead of splitting the row.
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P").width(240.0))),
+            (240.0, 220.0),
+            "an explicit width is honoured, padding still taken off the child",
+        );
+    }
+
     /// Every widget property is reachable from the typed SDK.
     ///
     /// `heca-view::build` is hand-written — that was the choice, over generating it — so the thing

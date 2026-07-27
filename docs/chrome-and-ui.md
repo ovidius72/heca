@@ -205,7 +205,28 @@ Two peers. Layout can be read and written as data; appearance is heading the sam
 Grouping them separately keeps "what the caller asked for" apart from "what the theme decided",
 which stays useful even now that both are settable.
 
-### R8. A widget driven by live values is host-only
+### R8. Sizing follows CSS flexbox — unset means stretch
+
+Set no width and a node **fills its parent across the cross axis**, exactly as CSS
+`align-items: stretch` does. A panel with no width in a 600px column is 600px wide, and the row
+inside it fills the panel's content box in turn.
+
+```rust
+build::Panel::new()                    // fills the parent
+build::Panel::new().width_pct(1.0)     // the same thing, said out loud
+build::Panel::new().width_pct(0.5)     // half — what a percentage is actually for
+build::Panel::new().width(240.0)       // fixed; this is what keeps two panels side by side
+```
+
+A percentage travels as `"100%"` / `"50%"`, which is one of the three spellings `Length` accepts
+(a number is px, `"auto"` is content-sized).
+
+Authors depend on the stretch without asking for it, so it is pinned by
+`a_described_node_stretches_to_its_parent_like_css`. Changing a container's default `align` would
+otherwise turn every full-width described panel into a content-width one with no test failing and
+nothing to see in the diff.
+
+### R9. A widget driven by live values is host-only
 
 `ScrollBar` reads values the app rewrites every frame. A description is static data — it cannot
 carry a live value, so a described scrollbar would be a thumb that never moves. The host refuses it
@@ -228,7 +249,7 @@ Counted from the reasons written on each builder — 168 builders, 93 settable, 
 | 19 | composed content; use `children` | no — that is what `children` is for |
 | 12 | the builder carries no value at all | no |
 | 8 | colour | **yes — R2 changed; being fixed** |
-| 4 | bound to a live value (R8) | no |
+| 4 | bound to a live value (R9) | no |
 | 2 | takes two values, and a property carries one | **yes — split the builder or extend the generator** |
 | 1 | an argument type the generator does not map yet | **yes — small** |
 
