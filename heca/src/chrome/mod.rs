@@ -1471,7 +1471,26 @@ impl Component for RepaintWatch {
 /// Set by the region rather than by the container, because a share only means anything relative to
 /// its siblings — which a container cannot see and should not have to.
 fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
-    body.base_mut().style.layout.flex_grow = grow;
+    let layout = &mut body.base_mut().style.layout;
+    layout.flex_grow = grow;
+    if grow > 0.0 {
+        // A share has to be **of the region**, not of what is left over after the content.
+        //
+        // `flex_grow` alone distributes only *positive* free space, and a container's content is
+        // routinely taller than the sidebar — so two containers measured 1214px each inside a 600px
+        // body, overflowed the frame, and got no share at all. In CSS this is `flex: 1 1 0`; there
+        // is no `flex_basis` in this vocabulary, so the equivalent is a **zero base size** plus
+        // permission to shrink. Then the free space is the whole region and the shares divide it:
+        // 296px each, measured.
+        //
+        // Safe because a shared container is expected to scroll its own content — it nests its own
+        // scroll area, so being handed less height than its content is the normal case, not a
+        // squeeze. A container that asked for `0.0` is saying "size me to my content" and keeps its
+        // natural height.
+        layout.height = heca_grid_ui::Length::Px(0.0);
+        layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+        layout.flex_shrink = Some(1.0);
+    }
     body
 }
 
@@ -1504,11 +1523,22 @@ fn build_region_content(
         // there is nothing to wrap it in.
         1 => bodies.pop(),
         // Several containers share a region: stack them in the host's order (the order
-        // `reorder`/`move_container` maintain), each keeping its own body.
-        _ => Some(Box::new(bodies.into_iter().fold(
-            Flex::column().gap(8.0).grow(1.0),
-            |col, body| col.child_boxed(body),
-        ))),
+        // `reorder`/`move_container` maintain), each keeping its own body and its own share. The
+        // stack itself must be allowed to shrink to the region, or it takes its content's height
+        // and overflows before the shares are ever divided.
+        _ => {
+            let mut stack = Flex::column().gap(8.0).grow(1.0);
+            {
+                let layout = &mut stack.base_mut().style.layout;
+                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+                layout.flex_shrink = Some(1.0);
+            }
+            Some(Box::new(
+                bodies
+                    .into_iter()
+                    .fold(stack, |col, body| col.child_boxed(body)),
+            ))
+        }
     }
 }
 
@@ -3502,6 +3532,65 @@ mod tests {
     use heca_core::layout::{LayoutOptions, Session, SessionId};
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::path::PathBuf;
+
+    /// Shares divide the region even when the content is taller than it.
+    ///
+    /// This is the part that looked done and was not. `flex_grow` distributes only *positive* free
+    /// space, and a container's content is routinely taller than a sidebar — so two containers
+    /// measured 1214px each inside a 600px body, overflowed the frame, and divided nothing. The fix
+    /// is a zero base size plus permission to shrink (CSS `flex: 1 1 0`; this vocabulary has no
+    /// `flex_basis`), which makes the free space the whole region.
+    ///
+    /// The numbers are asserted rather than the flags, because the flags were "right" while the
+    /// layout was wrong.
+    #[test]
+    fn shares_divide_the_region_even_with_content_taller_than_it() {
+        use heca_grid_ui::LayoutEngine;
+        use heca_core::layout::Size as CoreSize;
+
+        // A body far shorter than the content it holds, as a sidebar is.
+        let tall = || -> WidgetModel {
+            let mut inner = Flex::column();
+            for _ in 0..20 {
+                inner = inner.child(Flex::column().height(Length::Px(60.0)));
+            }
+            Box::new(heca_grid_ui::ScrollRegion::new().child(inner))
+        };
+
+        let mut stack = Flex::column().gap(8.0).grow(1.0);
+        {
+            let layout = &mut stack.base_mut().style.layout;
+            layout.min_height = Some(Length::Px(0.0));
+            layout.flex_shrink = Some(1.0);
+        }
+        for _ in 0..2 {
+            stack.base_mut().children.push(with_share(tall(), 1.0));
+        }
+        let mut body = Flex::column().height(Length::Px(600.0)).child(stack);
+        LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
+
+        let stack = &body.base().children[0];
+        assert!(
+            stack.base().bounds.size.h <= 600.0,
+            "the stack fits the region instead of overflowing it: {:?}",
+            stack.base().bounds.size.h,
+        );
+        let heights: Vec<f64> = stack
+            .base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        assert_eq!(heights.len(), 2);
+        assert!(
+            (heights[0] - heights[1]).abs() < 1.0,
+            "equal shares are equal: {heights:?}",
+        );
+        assert!(
+            heights[0] > 250.0 && heights[0] < 300.0,
+            "each takes about half the 600px region, less the gap: {heights:?}",
+        );
+    }
 
     /// A container's declared share reaches the widget, and saying nothing means an equal share.
     ///
