@@ -184,6 +184,21 @@ pub struct ContainerContribution {
     pub movable: bool,
     /// Collapsible within its region shell?
     pub collapsible: bool,
+    /// This container's share of its region, as a **flex grow factor** (F003/P011/T021).
+    ///
+    /// Fractional, never fixed: `1.0` is one share, `2.0` is twice as much as a `1.0`
+    /// beside it, and `0.0` means "as big as my content" (no share of the leftover). The
+    /// default is `1.0`, which gives the rule without a special case — one container takes
+    /// the whole region, two take half each, `2.0` against `1.0` takes two thirds.
+    ///
+    /// **Share of the region's MAIN AXIS, not of its height.** `flex_grow` is main-axis
+    /// relative, so this one number is the height in a sidebar (a column) and the width in
+    /// a bar (a row), with nothing to add when bar regions arrive. Calling it `height_grow`
+    /// would have baked "regions are vertical" into the contract.
+    ///
+    /// It is `flex_grow` because that is exactly what it is, and the widget library has had
+    /// it all along — no new sizing language to learn or to parse.
+    pub grow: f32,
     /// Builds the container body — **the render seam**. Called by the region host on
     /// (re)mount / invalidation, which for the retained chrome tree means once per
     /// structural change (`chrome_signature`), not once per frame.

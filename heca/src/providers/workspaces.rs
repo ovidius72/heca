@@ -33,7 +33,7 @@ use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
-    Row, StatusDot, Tooltip, TooltipSide, Visibility,
+    Row, ScrollRegion, StatusDot, Tooltip, TooltipSide, Visibility,
 };
 
 /// The built-in workspace-tree sidebar container.
@@ -96,6 +96,7 @@ impl Provider for WorkspacesContainerProvider {
             default_order: self.default_order(),
             movable: self.movable(),
             collapsible: self.collapsible(),
+            grow: self.grow(),
             build: Box::new(build_body),
         })
     }
@@ -493,7 +494,7 @@ fn build_workspaces_container(
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
     hints: &mut HintTargetRegistry,
-) -> Flex {
+) -> ScrollRegion {
     // Selection is sourced from the container's shared state (the Phase-2 boundary),
     // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
     // active pane.
@@ -607,7 +608,30 @@ fn build_workspaces_container(
                 .offset_y((theme.font_size * 0.45) as f64),
         );
     }
-    col
+    // The container nests its **own** scroll area, so its workspace list scrolls inside the slot
+    // the region gave it (F003/P011/T021). A scroll area is just a container, so this is
+    // composition rather than a capability the shell has to hand down: the shell scrolls its dock
+    // list, this scrolls its content, and nesting decides which one a wheel or a keyboard page
+    // reaches — the innermost that can move on that axis wins, and the outer one only sees what
+    // the inner declines.
+    //
+    // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
+    // changing is enough to do that) and is untouched by the dock list scrolling around it.
+    let mut region = ScrollRegion::new().grow(1.0);
+    // Restore through `scroll_to`, which reports with `event: None`, so the listener below can tell
+    // a restore from the user actually scrolling and never writes one back as the other.
+    region.scroll_to(ws_state.scroll());
+    let store = ws_state.clone();
+    region
+        .on_scroll(move |s| {
+            if s.event.is_some() {
+                // Through the state's setter, not the signal, so `WorkspacesScrollChanged` still
+                // fires for anything observing the container — and its epsilon guard keeps a
+                // no-op scroll from emitting.
+                store.set_scroll(s.offset_y);
+            }
+        })
+        .child(col)
 }
 
 #[cfg(test)]

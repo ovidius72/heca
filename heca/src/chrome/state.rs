@@ -237,13 +237,9 @@ impl WorkspacesContainerState {
     pub fn pane_show_cwd(&self) -> bool {
         self.pane_show_cwd.get_untracked()
     }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "reserved for future widget-owned container scrolling; covered by state tests today"
-        )
-    )]
+    /// This container's own scroll offset. Read when its nested scroll area is built, to restore
+    /// the position across a tree rebuild (F003/P011/T021 — the "future" the reservation on this
+    /// accessor was waiting for).
     pub fn scroll(&self) -> f32 {
         self.scroll.get()
     }
@@ -363,13 +359,7 @@ impl WorkspacesContainerState {
         }
         self.pane_show_cwd.set(on);
     }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "reserved for future widget-owned container scrolling; covered by state tests today"
-        )
-    )]
+    /// Record this container's scroll offset, emitting `WorkspacesScrollChanged`.
     pub fn set_scroll(&self, offset: f32) {
         if (self.scroll.get_untracked() - offset).abs() <= f32::EPSILON {
             return;

@@ -1461,6 +1461,20 @@ impl Component for RepaintWatch {
 ///
 /// `None` — not an empty widget — when nothing is mounted, so the shell can tell "no
 /// provider here" from "a provider that built an empty body".
+/// Give a container body its declared share of the region's **main axis**, as a flex grow factor
+/// (F003/P011/T021) — height in a sidebar, width in a bar, one number either way.
+///
+/// Applied to every container however many are seated, so the rule needs no special case: alone it
+/// takes the whole region, two equal shares take half each, `2.0` beside `1.0` takes two thirds,
+/// and `0.0` is content-sized.
+///
+/// Set by the region rather than by the container, because a share only means anything relative to
+/// its siblings — which a container cannot see and should not have to.
+fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
+    body.base_mut().style.layout.flex_grow = grow;
+    body
+}
+
 fn build_region_content(
     host: &ChromeHost,
     region: RegionId,
@@ -1472,14 +1486,15 @@ fn build_region_content(
         .iter()
         .filter_map(
             |mounted| match mounted.provider().build_contribution(ctx) {
-                Contribution::Container(c) => Some((c.build)(ctx, bx)),
+                Contribution::Container(c) => Some(with_share((c.build)(ctx, bx), c.grow)),
                 _ => None,
             },
         )
         .collect::<Vec<_>>();
     match bodies.len() {
         0 => None,
-        // The common case today: one container owns the region.
+        // One container owns the region: its own share already makes it fill the region, so
+        // there is nothing to wrap it in.
         1 => bodies.pop(),
         // Several containers share a region: stack them in the host's order (the order
         // `reorder`/`move_container` maintain), each keeping its own body.
@@ -3495,6 +3510,39 @@ mod tests {
     use heca_core::layout::{LayoutOptions, Session, SessionId};
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::path::PathBuf;
+
+    /// A container's declared share reaches the widget, and saying nothing means an equal share.
+    ///
+    /// The share is a flex grow factor, so it is the region's **main axis** — height in a sidebar,
+    /// width in a bar — and one number covers both. What this pins is the wiring: the number on the
+    /// contribution has to land on the body that gets laid out, and it would be silently dropped if
+    /// anything rebuilt or rewrapped the body afterwards (F003/P011/T021).
+    ///
+    /// Whether two containers then *look* right side by side is layout, and the user judges that in
+    /// the app — a test asserting taffy divides 200px into 100 and 100 would be testing taffy.
+    #[test]
+    fn a_containers_declared_share_reaches_its_body() {
+        let body = || -> WidgetModel { Box::new(Flex::column()) };
+
+        // The trait default, which is what a provider that says nothing gets.
+        assert_eq!(
+            crate::providers::Provider::grow(&crate::providers::WorkspacesContainerProvider::new()),
+            1.0,
+            "saying nothing means one equal share",
+        );
+
+        assert_eq!(with_share(body(), 1.0).base().style.layout.flex_grow, 1.0);
+        assert_eq!(
+            with_share(body(), 2.0).base().style.layout.flex_grow,
+            2.0,
+            "twice the share of a 1.0 beside it",
+        );
+        assert_eq!(
+            with_share(body(), 0.0).base().style.layout.flex_grow,
+            0.0,
+            "content-sized: no share of the leftover",
+        );
+    }
 
     #[test]
     fn pick_keycap_projects_candidates() {
