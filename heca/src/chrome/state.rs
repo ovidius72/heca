@@ -110,6 +110,19 @@ impl PaneRuntimeSignals {
 pub(crate) struct RegionState {
     pub(crate) mode: Signal<RegionMode>,
     pub(crate) size: Signal<f32>,
+    /// This region's **shell** scroll offset (logical px) — the dock list, when more
+    /// containers are seated here than fit.
+    ///
+    /// It belongs to the region because the shell is what nests that scroll area. A
+    /// container that nests its *own* keeps its own offset (see
+    /// [`WorkspacesContainerState::scroll`]), and the two are independent: scrolling the
+    /// dock list must not move a dock's content, nor the other way round.
+    ///
+    /// Every region has one, which is what makes left and right independent. Before
+    /// F003/P011/T021 the left shell was handed the workspaces *container's* offset and
+    /// the right shell was handed `None` — so one borrowed state that was not its own and
+    /// the other forgot its position on every tree rebuild.
+    pub(crate) scroll: Signal<f32>,
 }
 
 impl RegionState {
@@ -117,6 +130,7 @@ impl RegionState {
         Self {
             mode: signal(mode),
             size: signal(size),
+            scroll: signal(0.0),
         }
     }
 }
@@ -948,6 +962,32 @@ mod tests {
         assert_eq!(s.workspaces.scroll(), 0.0);
         s.workspaces.set_scroll(42.5);
         assert_eq!(s.workspaces.scroll(), 42.5);
+    }
+
+    /// Each scroll area owns its own offset: the two shells, and a container's content.
+    ///
+    /// All three used to be tangled. The left shell was handed the **workspaces container's**
+    /// offset, so the dock list and the dock's content shared one number; the right shell was
+    /// handed `None`, so it forgot its position whenever the tree was rebuilt. Both followed from
+    /// offsets being owned by a container rather than by whatever nests the scroll area
+    /// (F003/P011/T021).
+    #[test]
+    fn every_scroll_area_owns_its_own_offset() {
+        let s = state();
+
+        s.left.scroll.set(10.0);
+        assert_eq!(s.right.scroll.get_untracked(), 0.0, "the regions are independent");
+        assert_eq!(
+            s.workspaces.scroll(),
+            0.0,
+            "a shell's dock list does not move a container's content",
+        );
+
+        s.right.scroll.set(20.0);
+        s.workspaces.set_scroll(30.0);
+        assert_eq!(s.left.scroll.get_untracked(), 10.0, "and nothing overwrote the first");
+        assert_eq!(s.right.scroll.get_untracked(), 20.0);
+        assert_eq!(s.workspaces.scroll(), 30.0);
     }
 
     #[test]

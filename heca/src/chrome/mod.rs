@@ -3135,8 +3135,10 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
-            // The workspaces container's own offset, which outlives the tree.
-            Some(state.chrome_state.workspaces.scroll),
+            // This region's own shell offset, which outlives the tree. Not the workspaces
+            // container's — that one is the container's content, and a container nesting its own
+            // scroll area must not have the dock list moving it (F003/P011/T021).
+            Some(state.chrome_state.left.scroll),
         )
     });
     let right_w = chrome.right_sidebar_width;
@@ -3156,9 +3158,10 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
-            // No container state owns a right-sidebar offset yet; the region still works, it just
-            // starts at the top when the tree is rebuilt.
-            None,
+            // The right region's own offset. It used to be `None` — the region worked but forgot
+            // its position on every rebuild, because offsets were owned by a container instead of
+            // by whatever nests the scroll area (F003/P011/T021).
+            Some(state.chrome_state.right.scroll),
         )
     });
 
