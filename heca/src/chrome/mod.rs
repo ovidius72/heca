@@ -1475,21 +1475,28 @@ fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
     body
 }
 
+/// Takes the three registries rather than a ready-made [`BuildCx`] because the context is **per
+/// container**, not per region: each build hook is told which mount it is building, so it can ask
+/// for state that is per mount (its own scroll offset). One `BuildCx` for a whole region could not
+/// carry that (F003/P011/T021).
 fn build_region_content(
     host: &ChromeHost,
     region: RegionId,
     ctx: &crate::providers::ChromeCtx<'_>,
-    bx: &mut BuildCx<'_>,
+    signals: &mut ChromeSignals,
+    drag: &mut DragItemRegistry,
+    hints: &mut HintTargetRegistry,
 ) -> Option<WidgetModel> {
     let mut bodies = host
         .contributions(region)
         .iter()
-        .filter_map(
-            |mounted| match mounted.provider().build_contribution(ctx) {
-                Contribution::Container(c) => Some(with_share((c.build)(ctx, bx), c.grow)),
-                _ => None,
-            },
-        )
+        .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
+            Contribution::Container(c) => {
+                let mut bx = BuildCx::new(&c.id, signals, drag, hints);
+                Some(with_share((c.build)(ctx, &mut bx), c.grow))
+            }
+            _ => None,
+        })
         .collect::<Vec<_>>();
     match bodies.len() {
         0 => None,
@@ -3139,7 +3146,9 @@ pub(crate) fn build_chrome_root(
             &state.chrome_host,
             RegionId::LeftSidebar,
             &ctx,
-            &mut BuildCx::new(&mut signals, &mut drag_items, hint_targets),
+            &mut signals,
+            &mut drag_items,
+            hint_targets,
         );
         build_sidebar_shell(
             left_w,
@@ -3162,7 +3171,9 @@ pub(crate) fn build_chrome_root(
             &state.chrome_host,
             RegionId::RightSidebar,
             &ctx,
-            &mut BuildCx::new(&mut signals, &mut drag_items, hint_targets),
+            &mut signals,
+            &mut drag_items,
+            hint_targets,
         );
         build_sidebar_shell(
             right_w,
@@ -3780,12 +3791,7 @@ mod tests {
             theme,
             &emit,
         );
-        super::build_region_content(
-            &host,
-            super::RegionId::LeftSidebar,
-            &ctx,
-            &mut super::BuildCx::new(signals, drag, hints),
-        )
+        super::build_region_content(&host, super::RegionId::LeftSidebar, &ctx, signals, drag, hints)
     }
 
     #[test]

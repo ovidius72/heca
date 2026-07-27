@@ -49,6 +49,13 @@ pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel
 /// facade, turns a double-borrow into a compile error instead of a runtime panic, and
 /// matches how [`realize`](crate::chrome::realize) already threads the same registries.
 pub struct BuildCx<'a> {
+    /// The **mount id** of the container being built (F003/P011/T021).
+    ///
+    /// A container needs it to ask for state that is per mount rather than per kind — its own
+    /// scroll offset, above all. The same container can be seated twice, and each mount scrolls
+    /// its own content, so "which mount am I" is a question the build hook has to be able to
+    /// answer. It cannot read it off itself: one plain `fn` serves every mount.
+    pub(crate) container_id: &'a str,
     /// Value signals the host pushes each frame without rebuilding the tree
     /// (selection, status, per-pane info).
     pub(crate) signals: &'a mut ChromeSignals,
@@ -61,15 +68,22 @@ pub struct BuildCx<'a> {
 impl<'a> BuildCx<'a> {
     /// Borrow the host's per-build registries for one container build.
     pub(crate) fn new(
+        container_id: &'a str,
         signals: &'a mut ChromeSignals,
         drag: &'a mut DragItemRegistry,
         hints: &'a mut HintTargetRegistry,
     ) -> Self {
         Self {
+            container_id,
             signals,
             drag,
             hints,
         }
+    }
+
+    /// The mount id of the container being built.
+    pub fn container_id(&self) -> &str {
+        self.container_id
     }
 }
 

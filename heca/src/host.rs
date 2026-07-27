@@ -84,6 +84,21 @@ pub struct StateView<'a> {
 }
 
 impl StateView<'_> {
+    /// This mount's own scroll offset signal, for a container that nests its own scroll area
+    /// (F003/P011/T021).
+    ///
+    /// Keyed by **mount id** — `BuildCx::container_id` — so placing the same container twice gives
+    /// each placement its own scroll position, the way rendering a component twice does. The
+    /// *content* still comes from the shared store; only this instance-local position is per mount.
+    pub fn container_scroll(&self, container: &str) -> heca_grid_ui::reactive::Signal<f32> {
+        self.state.container_scroll(container)
+    }
+
+    /// Record this mount's scroll offset, emitting `ContainerScrollChanged`.
+    pub fn set_container_scroll(&self, container: &str, offset: f32) {
+        self.state.set_container_scroll(container, offset);
+    }
+
     /// The currently active (focused) pane, if any.
     pub fn active_pane(&self) -> Option<PaneId> {
         self.state.workspaces.active_pane()

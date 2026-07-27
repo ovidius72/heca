@@ -331,6 +331,25 @@ pub(crate) async fn init_state(
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
     chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
+    // ── TEMPORARY TEST BED (F003/P011/T021) — REMOVE once verified ──
+    //
+    // Two placements of the same container in the right sidebar, so independent scrolling and the
+    // fractional split can actually be seen. Both take the default share (`1.0`), so they get half
+    // the height each; both show the same workspaces, because the content comes from the shared
+    // store; and each scrolls on its own offset, because that is keyed by mount id.
+    //
+    // This is also the proof that placing a widget is *placing* it: two calls, no second provider
+    // implementation, no special case in the host or the shell.
+    //
+    // The right sidebar goes back to empty when this is done with — its real features come later.
+    chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::placed(
+        "workspaces.testbed.top",
+        crate::chrome::RegionId::RightSidebar,
+    )));
+    chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::placed(
+        "workspaces.testbed.bottom",
+        crate::chrome::RegionId::RightSidebar,
+    )));
 
     Box::new(AppState {
         window,

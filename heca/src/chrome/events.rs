@@ -137,7 +137,10 @@ pub enum ChromeEvent {
         ws_idx: usize,
         collapsed: bool,
     },
-    WorkspacesScrollChanged {
+    /// A **container's** nested scroll area moved. Carries which one, because several can be
+    /// mounted at once — including two of the same kind in different regions (F003/P011/T021).
+    ContainerScrollChanged {
+        container: String,
         offset: f32,
     },
     RegionModeChanged {
@@ -185,7 +188,7 @@ impl ChromeEvent {
             ChromeEvent::PendingPickChanged { .. } => "pick.pending.changed",
             ChromeEvent::PaneExited { .. } => "pane.exited",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
-            ChromeEvent::WorkspacesScrollChanged { .. } => "workspaces.scroll.changed",
+            ChromeEvent::ContainerScrollChanged { .. } => "container.scroll.changed",
             ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
             ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
