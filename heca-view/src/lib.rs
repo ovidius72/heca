@@ -25,6 +25,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub mod build;
+
 /// The closed widget vocabulary. Covers the whole grid-ui set: **containers** hold
 /// children, **leaves** are terminal. `realize` maps each to its grid-ui widget (arms are
 /// filled in incrementally, starting with what the confirm dialog needs).
@@ -267,6 +269,21 @@ pub enum ViewMarker {
     Check,
 }
 
+/// How children are distributed along the main axis — mirrors grid-ui `Justify`.
+///
+/// Missed by F003/P011/T019, which took its list from the widgets' own properties: this one is a
+/// `Layout` field, so it never appeared there. Found while building the authoring layer on top.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewJustify {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+
 /// How text sits in its box — mirrors grid-ui `TextAlign` (`Label`).
 ///
 /// Distinct from [`ViewAlign`], which is where a *widget* sits in its parent. The two read alike
@@ -319,6 +336,90 @@ value_set! {
     ViewLabelSide { Right => "right", Left => "left" }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
     ViewTextAlign { Start => "start", Center => "center", End => "end" }
+    ViewJustify {
+        Start => "start",
+        Center => "center",
+        End => "end",
+        SpaceBetween => "space_between",
+        SpaceAround => "space_around",
+        SpaceEvenly => "space_evenly",
+    }
+}
+
+// ── Scalars into property values ──────────────────────────────────────────────────────────
+//
+// So the authoring layer can write `.gap(8)` and `.bordered(true)` without naming a variant at
+// every call. A string becomes `Text`; a colour is NOT inferred from one, because a colour has to
+// say it is one — `.fill("accent")` goes through a setter that wraps it, so a theme token is never
+// mistaken for a caption.
+
+// The three older sets keep their own variants — that is how they already travel, and changing it
+// would be a wire-format break. New sets do not get one; see the note above `ViewOrientation`.
+
+impl From<ViewAlign> for PropValue {
+    fn from(v: ViewAlign) -> Self {
+        PropValue::Align(v)
+    }
+}
+
+impl From<ViewVariant> for PropValue {
+    fn from(v: ViewVariant) -> Self {
+        PropValue::Variant(v)
+    }
+}
+
+impl From<ViewSize> for PropValue {
+    fn from(v: ViewSize) -> Self {
+        PropValue::Size(v)
+    }
+}
+
+impl From<f32> for PropValue {
+    fn from(v: f32) -> Self {
+        PropValue::Float(v as f64)
+    }
+}
+
+impl From<f64> for PropValue {
+    fn from(v: f64) -> Self {
+        PropValue::Float(v)
+    }
+}
+
+impl From<i32> for PropValue {
+    fn from(v: i32) -> Self {
+        PropValue::Int(v as i64)
+    }
+}
+
+impl From<i64> for PropValue {
+    fn from(v: i64) -> Self {
+        PropValue::Int(v)
+    }
+}
+
+impl From<usize> for PropValue {
+    fn from(v: usize) -> Self {
+        PropValue::Int(v as i64)
+    }
+}
+
+impl From<bool> for PropValue {
+    fn from(v: bool) -> Self {
+        PropValue::Bool(v)
+    }
+}
+
+impl From<&str> for PropValue {
+    fn from(v: &str) -> Self {
+        PropValue::Text(v.to_string())
+    }
+}
+
+impl From<String> for PropValue {
+    fn from(v: String) -> Self {
+        PropValue::Text(v)
+    }
 }
 
 // ── GENERATED — do not edit by hand ────────────────────────────────────────────────────────
