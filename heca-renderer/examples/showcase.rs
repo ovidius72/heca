@@ -244,6 +244,10 @@ fn described_tree() -> ViewNode {
         .prop("width", PropValue::Int(240))
         .child(
             ViewNode::new(WidgetKind::Row)
+                // Padding, like every other Row on this page. A row whose content reaches its own
+                // edges leaves the badge's glow halo (which paints outside its box, by design)
+                // crossing the hover pill's edge, and it reads as the badge overflowing.
+                .prop("padding", PropValue::Float(6.0))
                 .on_press(Intent::new("showcase.select").arg("id", PropValue::Text("nginx".into())))
                 .child(ViewNode::new(WidgetKind::Label).text("nginx"))
                 .child(ViewNode::new(WidgetKind::Badge).text("UP")),
@@ -262,6 +266,7 @@ fn native_twin(theme: &Theme) -> Panel {
         .width(Length::Px(240.0))
         .child(
             Row::new()
+                .padding(6.0)
                 .on_activate(|| println!("[showcase] native row activated"))
                 .child(Label::new("nginx"))
                 .child(Badge::new("UP")),
