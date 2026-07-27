@@ -668,8 +668,11 @@ plugin's section of a sidebar), so it is quiet by default: no frame of its own a
 Give it a fill or a border through `StyleExt` when it should stand out.
 
 - **Construct**: `Panel::new()` (untitled) or `Panel::titled(title)`.
-- **Builders**: `.title(impl Into<String>)` — an empty title hides the header rather than leaving a
-  blank line.
+- **Builders**: `.title(impl Into<String>)` — an empty title hides the header **and its rule**,
+  rather than leaving a blank line or a bare rule across the top of the content.
+- **Shape**: heading, a [`Separator`](#separator) under it, then the body. The rule is what makes
+  the title read as a header band rather than the first line of content; it takes the theme's
+  border colour like any other separator.
 - **Accessor**: `.title_signal() -> Signal<String>` — retitle a mounted panel with no rebuild.
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
 

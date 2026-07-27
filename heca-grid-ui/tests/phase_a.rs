@@ -1970,10 +1970,10 @@ fn a_panel_titles_itself_whichever_order_it_is_built_in() {
 
     for (which, panel) in [("title first", &a), ("children first", &b)] {
         let kids = &panel.base().children;
-        assert_eq!(kids.len(), 3, "{which}: header + two content children");
+        assert_eq!(kids.len(), 4, "{which}: header + rule + two content children");
         assert!(
-            !kids[0].base().style.layout.hidden,
-            "{which}: the header shows once titled",
+            !kids[0].base().style.layout.hidden && !kids[1].base().style.layout.hidden,
+            "{which}: the header AND its rule show once titled",
         );
     }
     assert_eq!(a.title_signal().get_untracked(), "Containers");
@@ -1981,11 +1981,18 @@ fn a_panel_titles_itself_whichever_order_it_is_built_in() {
 
     // An untitled panel keeps the header out of the layout rather than leaving a blank line.
     let plain = Panel::new().child(Label::new("body"));
-    assert!(plain.base().children[0].base().style.layout.hidden);
+    assert!(
+        plain.base().children[0].base().style.layout.hidden
+            && plain.base().children[1].base().style.layout.hidden,
+        "no title means no heading and no bare rule across the top of the content",
+    );
 
     // And a title can be cleared back to nothing.
     let cleared = Panel::titled("Gone").title("");
-    assert!(cleared.base().children[0].base().style.layout.hidden);
+    assert!(
+        cleared.base().children[0].base().style.layout.hidden
+            && cleared.base().children[1].base().style.layout.hidden,
+    );
 }
 
 /// A separator with no length spans its container **even when the container centres its children**.

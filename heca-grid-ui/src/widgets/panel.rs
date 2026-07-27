@@ -16,12 +16,15 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component};
 use crate::reactive::{Signal, SignalUpdate};
 use crate::style::Direction;
-use crate::widgets::Label;
+use crate::widgets::{Label, Separator};
 
 /// Title size relative to the inherited base font — a heading, a touch larger than body text.
 const TITLE_SCALE: f32 = 1.05;
 /// Space between the header and the body.
 const GAP: f32 = 8.0;
+/// How many leading children make up the header: the label and the rule under it. Content is
+/// everything after them.
+const HEADER_PARTS: usize = 2;
 /// Breathing room inside the panel. Lighter than [`Card`](super::Card)'s 18: a panel usually sits
 /// inside a region that already has its own padding.
 const PADDING: f32 = 10.0;
@@ -43,12 +46,21 @@ impl Panel {
         base.style.layout.direction = Direction::Column;
         base.style.layout.padding = PADDING;
         base.style.layout.gap = GAP;
-        // The header exists from the start and hides itself until there is a title, so setting a
-        // title never has to splice a child in at index 0 after children have been attached.
+        // The header and its rule exist from the start and hide themselves until there is a
+        // title, so setting a title never has to splice children in at the front after content
+        // has been attached.
         let mut header = Label::new(String::new()).font_scale(TITLE_SCALE).bold(true);
         let title = header.text_signal();
         header.base_mut().style.layout.hidden = true;
         base.children.push(Box::new(header));
+
+        // The rule under the heading is what makes the title read as a header band rather than
+        // the first line of the content. It takes the theme's border colour, like every other
+        // separator, so it follows a theme change without the panel knowing anything about it.
+        let mut rule = Separator::horizontal();
+        rule.base_mut().style.layout.hidden = true;
+        base.children.push(Box::new(rule));
+
         Self { base, title }
     }
 
@@ -61,8 +73,11 @@ impl Panel {
     #[heca_grid_ui_macros::prop]
     pub fn title(mut self, title: impl Into<String>) -> Self {
         let title = title.into();
-        if let Some(header) = self.base.children.first_mut() {
-            header.base_mut().style.layout.hidden = title.is_empty();
+        // The heading and its rule appear and disappear together: an untitled panel draws neither,
+        // rather than a bare rule across the top of its content.
+        let hidden = title.is_empty();
+        for part in self.base.children.iter_mut().take(HEADER_PARTS) {
+            part.base_mut().style.layout.hidden = hidden;
         }
         self.title.set(title);
         self
