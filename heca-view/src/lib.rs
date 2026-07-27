@@ -210,6 +210,267 @@ pub enum ViewAlign {
     Stretch,
 }
 
+// ── The remaining fixed value sets ────────────────────────────────────────────────────────
+//
+// A property that accepts only a fixed set of words gets a type here, so a misspelling cannot
+// compile. Written as free text, `orientation: "vertcal"` is accepted, ignored, and never
+// reported — the same silent failure F003/P010/T006 removed from actions, which was still live in
+// this vocabulary until F003/P011/T019.
+//
+// **None of these gets a `PropValue` variant, and neither should the next one.** A fixed set
+// travels as its NAME, so `PropValue::Text` already carries every one of them; the type belongs in
+// the authoring layer, not in the wire format. `Size`/`Variant`/`Align` above predate that rule and
+// are the closed shape `PropValue::Map` was added to escape — do not extend it.
+
+/// Which way a rule runs — mirrors grid-ui `Orientation` (`Separator`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewOrientation {
+    Horizontal,
+    Vertical,
+}
+
+/// Which way a scroll region scrolls — mirrors grid-ui `ScrollAxes`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewScrollAxes {
+    Vertical,
+    Horizontal,
+    Both,
+}
+
+/// How serious a message is — mirrors both grid-ui `ToastSeverity` **and** `AlertVariant`, which
+/// carry the same four values. One mirror, because two would be the same list written twice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewSeverity {
+    Info,
+    Success,
+    Warning,
+    Danger,
+}
+
+/// Which side a control's label sits on — mirrors grid-ui `LabelSide` (`Checkbox`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewLabelSide {
+    Right,
+    Left,
+}
+
+/// How a selected row shows it — mirrors grid-ui `ActiveMarker` (`Row`, `Item`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewMarker {
+    None,
+    Bar,
+    Check,
+}
+
+/// How text sits in its box — mirrors grid-ui `TextAlign` (`Label`).
+///
+/// Distinct from [`ViewAlign`], which is where a *widget* sits in its parent. The two read alike
+/// and mean different things, which is why both names say what they align.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewTextAlign {
+    Start,
+    Center,
+    End,
+}
+
+/// The snake_case name a fixed value set travels under, and the conversion into a property value.
+///
+/// One macro rather than six copies: the name is what crosses to the widget, and every mirror
+/// converts the same way, so `.prop("orientation", ViewOrientation::Vertical)` works for all of
+/// them without `PropValue` growing a variant per set.
+macro_rules! value_set {
+    ($($ty:ident { $($variant:ident => $name:literal),* $(,)? })*) => {
+        $(
+            impl $ty {
+                /// Every value in this set, in declaration order.
+                ///
+                /// Emitted from the same list as [`name`](Self::name), so it cannot fall behind:
+                /// adding a variant to the enum without adding it here fails to compile at the
+                /// `name` match, which is exhaustive.
+                pub const ALL: &'static [$ty] = &[$($ty::$variant),*];
+
+                /// The name this value travels under — what the widget's own enum parses.
+                pub fn name(self) -> &'static str {
+                    match self {
+                        $($ty::$variant => $name,)*
+                    }
+                }
+            }
+
+            impl From<$ty> for PropValue {
+                fn from(v: $ty) -> Self {
+                    PropValue::Text(v.name().to_string())
+                }
+            }
+        )*
+    };
+}
+
+value_set! {
+    ViewOrientation { Horizontal => "horizontal", Vertical => "vertical" }
+    ViewScrollAxes { Vertical => "vertical", Horizontal => "horizontal", Both => "both" }
+    ViewSeverity { Info => "info", Success => "success", Warning => "warning", Danger => "danger" }
+    ViewLabelSide { Right => "right", Left => "left" }
+    ViewMarker { None => "none", Bar => "bar", Check => "check" }
+    ViewTextAlign { Start => "start", Center => "center", End => "end" }
+}
+
+// ── GENERATED — do not edit by hand ────────────────────────────────────────────────────────
+//
+// The icon names, mirrored from `heca_grid_ui::Glyph`. This crate cannot depend on the widget
+// library (that is the point of it), so the list is copied — and a copy of 52 names that grows is
+// exactly the kind of hand-kept list this codebase keeps being bitten by. So it is **generated and
+// guarded**: `every_glyph_name_has_a_mirror` in `heca-view-realize` compares this against
+// `Glyph::VARIANT_NAMES` and fails, naming what is missing, the moment an icon is added there
+// (F003/P011/T019).
+//
+// To regenerate: add the variant here with its snake_case name in the `value_set!` block below.
+
+/// A Phosphor icon, by name — mirrors `heca_grid_ui::Glyph`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewGlyph {
+    Folder,
+    FolderOpen,
+    File,
+    FileCode,
+    GitBranch,
+    GitCommit,
+    GitMerge,
+    GitPullRequest,
+    Terminal,
+    Gear,
+    Search,
+    Close,
+    Check,
+    CaretRight,
+    CaretDown,
+    CaretUp,
+    Play,
+    Pause,
+    Stop,
+    Warning,
+    WarningCircle,
+    Info,
+    Circle,
+    Lightning,
+    List,
+    Sidebar,
+    DotsThreeVertical,
+    ArrowRight,
+    ArrowLineLeft,
+    ArrowLineRight,
+    Plus,
+    Minus,
+    SquareSplitVertical,
+    XSquare,
+    FrameCorners,
+    Cards,
+    Pencil,
+    NotePencil,
+    Backspace,
+    Trash,
+    XCircle,
+    PlusCircle,
+    FolderSimpleMinus,
+    FolderSimplePlus,
+    PlusSquare,
+    StackPlus,
+    StackMinus,
+    ColumnsPlusLeft,
+    ColumnsPlusRight,
+    SquareHalf,
+    SquareSplitHorizontal,
+    SquareHalfBottom,
+}
+
+/// Names and the conversion into a property value, from the same list as the enum.
+///
+/// A glyph becomes [`PropValue::Glyph`], not `Text`: that variant already exists and says what the
+/// string is, so `realize` resolves it against the icon font rather than guessing.
+macro_rules! glyph_set {
+    ($($variant:ident => $name:literal),* $(,)?) => {
+        impl ViewGlyph {
+            /// Every glyph, in enum order.
+            pub const ALL: &'static [ViewGlyph] = &[$(ViewGlyph::$variant),*];
+
+            /// The name this glyph travels under.
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(ViewGlyph::$variant => $name,)*
+                }
+            }
+        }
+
+        impl From<ViewGlyph> for PropValue {
+            fn from(g: ViewGlyph) -> Self {
+                PropValue::Glyph(g.name().to_string())
+            }
+        }
+    };
+}
+
+glyph_set! {
+    Folder => "folder",
+    FolderOpen => "folder_open",
+    File => "file",
+    FileCode => "file_code",
+    GitBranch => "git_branch",
+    GitCommit => "git_commit",
+    GitMerge => "git_merge",
+    GitPullRequest => "git_pull_request",
+    Terminal => "terminal",
+    Gear => "gear",
+    Search => "search",
+    Close => "close",
+    Check => "check",
+    CaretRight => "caret_right",
+    CaretDown => "caret_down",
+    CaretUp => "caret_up",
+    Play => "play",
+    Pause => "pause",
+    Stop => "stop",
+    Warning => "warning",
+    WarningCircle => "warning_circle",
+    Info => "info",
+    Circle => "circle",
+    Lightning => "lightning",
+    List => "list",
+    Sidebar => "sidebar",
+    DotsThreeVertical => "dots_three_vertical",
+    ArrowRight => "arrow_right",
+    ArrowLineLeft => "arrow_line_left",
+    ArrowLineRight => "arrow_line_right",
+    Plus => "plus",
+    Minus => "minus",
+    SquareSplitVertical => "square_split_vertical",
+    XSquare => "x_square",
+    FrameCorners => "frame_corners",
+    Cards => "cards",
+    Pencil => "pencil",
+    NotePencil => "note_pencil",
+    Backspace => "backspace",
+    Trash => "trash",
+    XCircle => "x_circle",
+    PlusCircle => "plus_circle",
+    FolderSimpleMinus => "folder_simple_minus",
+    FolderSimplePlus => "folder_simple_plus",
+    PlusSquare => "plus_square",
+    StackPlus => "stack_plus",
+    StackMinus => "stack_minus",
+    ColumnsPlusLeft => "columns_plus_left",
+    ColumnsPlusRight => "columns_plus_right",
+    SquareHalf => "square_half",
+    SquareSplitHorizontal => "square_split_horizontal",
+    SquareHalfBottom => "square_half_bottom",
+}
+
 /// A serializable property value: scalars plus the semantic enums. Colors and glyphs are
 /// carried as names/strings and resolved against the `Theme`/icon font at realize time, so
 /// the model never embeds resolved pixels or theme state.
@@ -656,5 +917,48 @@ mod tests {
         let json = serde_json::to_string(&ViewNode::new(WidgetKind::Label).text("x")).unwrap();
         assert!(!json.contains("events"), "empty events omitted: {json}");
         assert!(!json.contains("children"), "empty children omitted: {json}");
+    }
+    /// A value set's `name()` and its serde spelling are the same word.
+    ///
+    /// Two things have to agree for a fixed value to survive the trip: `name()`, which the
+    /// authoring layer writes into a property, and the serde `rename_all` spelling, which is what a
+    /// serialized description carries. If they ever differed, a value written through the type
+    /// would arrive as a word the widget does not know — silently, which is the failure these types
+    /// exist to remove. `ALL` comes from the same list as `name`, so this cannot miss a variant.
+    #[test]
+    fn a_value_sets_name_matches_how_it_serializes() {
+        fn check<T: Copy + Serialize + std::fmt::Debug>(all: &[T], name: impl Fn(T) -> &'static str) {
+            for &v in all {
+                let json = serde_json::to_value(v).unwrap();
+                assert_eq!(json.as_str(), Some(name(v)), "{v:?}: name() and serde disagree");
+            }
+        }
+        check(ViewOrientation::ALL, ViewOrientation::name);
+        check(ViewScrollAxes::ALL, ViewScrollAxes::name);
+        check(ViewSeverity::ALL, ViewSeverity::name);
+        check(ViewLabelSide::ALL, ViewLabelSide::name);
+        check(ViewMarker::ALL, ViewMarker::name);
+        check(ViewTextAlign::ALL, ViewTextAlign::name);
+        check(ViewGlyph::ALL, ViewGlyph::name);
+    }
+
+    /// A fixed value converts into a property as its name, and **not** as a new `PropValue`
+    /// variant.
+    ///
+    /// The wire format stays open on purpose: a fixed set travels as text, so the next one added
+    /// needs no change to `PropValue` at all. `Size`/`Variant`/`Align` predate that rule. A glyph
+    /// is the exception that proves it — it uses the `Glyph` variant, which already existed and
+    /// says what the string is.
+    #[test]
+    fn a_value_set_travels_as_text() {
+        assert_eq!(
+            PropValue::from(ViewOrientation::Vertical),
+            PropValue::Text("vertical".into()),
+        );
+        assert_eq!(PropValue::from(ViewSeverity::Danger), PropValue::Text("danger".into()));
+        assert_eq!(
+            PropValue::from(ViewGlyph::GitBranch),
+            PropValue::Glyph("git_branch".into()),
+        );
     }
 }

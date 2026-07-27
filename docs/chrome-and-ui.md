@@ -125,6 +125,20 @@ A property whose type has fields is written as a named group of values:
 ])))
 ```
 
+A property that accepts only a fixed set of words has a **type**, so a misspelling does not compile:
+
+```rust
+.prop("orientation", ViewOrientation::Vertical.into())   // not "vertcal"
+.prop("severity", ViewSeverity::Danger.into())
+```
+
+`ViewOrientation`, `ViewScrollAxes`, `ViewSeverity` (which serves both toast severity and alert
+variant), `ViewLabelSide`, `ViewMarker`, `ViewTextAlign`, and `ViewGlyph` for the 52 icon names.
+They **do not** get a `PropValue` variant and neither should the next one — a fixed set travels as
+its name, so `Text` already carries it and the type belongs in the authoring layer. `Size`,
+`Variant` and `Align` predate that rule. `ViewGlyph` is generated from `heca_grid_ui::Glyph` and
+guarded by a test that fails when an icon is added on one side only (F003/P011/T019).
+
 **This did not work until 2026-07-27 (F003/P011/T018), and the doc said it did.** `border` and
 `glow` are structs; a property value could only be a scalar, so neither could be written from a
 description — whatever serde derives the types carried. Adding serde to a type is not the same as

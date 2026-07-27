@@ -1103,7 +1103,7 @@ horizontal or two-axis, not just vertical:
 
 ```rust
 ViewNode::new(WidgetKind::Scroll)
-    .prop("axes", PropValue::Text("both".into()))   // vertical (default) | horizontal | both
+    .prop("axes", ViewScrollAxes::Both.into())   // Vertical (default) | Horizontal | Both
     .prop("width", PropValue::Int(300))
     .prop("height", PropValue::Int(180))
     .child(wide_and_tall_content);
@@ -2021,7 +2021,7 @@ ViewNode::new(WidgetKind::Separator);
 // A vertical rule of a fixed length. Either property may be set first: the widget recomputes
 // both axes from the pair, so `length` never lands on the axis the rule runs across.
 ViewNode::new(WidgetKind::Separator)
-    .prop("orientation", PropValue::Text("vertical".into()))
+    .prop("orientation", ViewOrientation::Vertical.into())
     .prop("length", PropValue::Float(24.0));
 ```
 
@@ -2081,7 +2081,7 @@ Toast::danger("Connection lost")
 ```rust
 ViewNode::new(WidgetKind::Toast)
     .text("Build failed")                                         // the title
-    .prop("severity", PropValue::Text("danger".into()))           // info | success | warning | danger
+    .prop("severity", ViewSeverity::Danger.into())           // Info | Success | Warning | Danger
     .prop("icon", PropValue::Glyph("warning".into()))             // optional; severity picks a default
     .prop("body", PropValue::Text("3 errors in heca-grid-ui".into()))
     .prop("action_text", PropValue::Text("RETRY".into()))         // the inline action's label

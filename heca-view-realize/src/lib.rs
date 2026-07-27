@@ -1167,6 +1167,11 @@ fn map_size(s: ViewSize) -> WidgetSize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The fixed value sets are used by the tests, not by the mapper: a widget's own enum parses the
+    // name, so `realize` never names these types.
+    use heca_view::{
+        ViewLabelSide, ViewMarker, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewTextAlign,
+    };
     use heca_grid_ui::{Justify, Length};
     use std::rc::Rc;
 
@@ -1500,6 +1505,177 @@ mod tests {
         assert_eq!(glow.intensity, 0.4);
         assert_eq!(glow.color, heca_grid_ui::Color::rgb(0x00, 0xcc, 0xff));
     }
+
+    /// The mirrored glyph list cannot fall behind the real one.
+    ///
+    /// `heca-view` must not depend on `heca-grid-ui` — that independence is why a plugin can depend
+    /// on the vocabulary at all — so the 52 icon names are copied into it. A copy of a list that
+    /// grows is the failure this codebase keeps repeating, so this crate, which sees both, is where
+    /// the copy is held to account. It compares **both ways** and names what is wrong: a glyph
+    /// added to the library and not mirrored, or a mirror naming something that no longer exists.
+    #[test]
+    fn every_glyph_name_has_a_mirror() {
+        use std::collections::BTreeSet;
+        let library: BTreeSet<&str> = <Glyph as heca_grid_ui::PropName>::VARIANT_NAMES
+            .iter()
+            .copied()
+            .collect();
+        let mirrored: BTreeSet<&str> = heca_view::ViewGlyph::ALL.iter().map(|g| g.name()).collect();
+
+        let missing: Vec<_> = library.difference(&mirrored).collect();
+        assert!(
+            missing.is_empty(),
+            "these glyphs exist in heca-grid-ui but not in ViewGlyph, so a description cannot name \
+             them: {missing:?} — add them to the generated block in heca-view/src/lib.rs",
+        );
+        let stale: Vec<_> = mirrored.difference(&library).collect();
+        assert!(
+            stale.is_empty(),
+            "ViewGlyph names glyphs the library no longer has: {stale:?}",
+        );
+    }
+
+    /// A mirrored glyph actually resolves to the icon it names.
+    ///
+    /// Matching names is not the same as the name being understood: this takes one through
+    /// `PropValue` into a realized widget and asserts a different glyph paints differently.
+    #[test]
+    fn a_mirrored_glyph_reaches_the_icon() {
+        let painted = |g: heca_view::ViewGlyph| {
+            let node = ViewNode::new(WidgetKind::Icon).prop("glyph", g.into());
+            let w = realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            );
+            let mut scene = heca_grid_ui::Scene::new();
+            let theme = Theme::default();
+            {
+                let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+                w.paint(&mut cx);
+            }
+            format!("{:?}", scene.iter().collect::<Vec<_>>())
+        };
+        let folder = painted(heca_view::ViewGlyph::Folder);
+        assert!(!folder.is_empty(), "a named glyph painted something");
+        assert_ne!(
+            folder,
+            painted(heca_view::ViewGlyph::Terminal),
+            "the name picked the icon, rather than every name giving the same one",
+        );
+    }
+
+    /// Every fixed value set reaches the widget it belongs to.
+    ///
+    /// The types added by F003/P011/T019 stop a misspelling from compiling, but nothing about them
+    /// guarantees the *name* they travel under is one the widget parses — that agreement runs
+    /// across two crates and a serde attribute. So each is checked against a real realized widget
+    /// rather than against a parse: written through the type, it must change the widget.
+    ///
+    /// `PropValue::from` is what the authoring layer calls, so this exercises the whole path.
+    #[test]
+    fn every_fixed_value_set_reaches_its_widget() {
+        let realize_one = |node: &ViewNode| {
+            realize(
+                node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            )
+        };
+        let theme = Theme::default();
+        let painted = |node: &ViewNode| {
+            let mut w = realize_one(node);
+            heca_grid_ui::LayoutEngine::new()
+                .compute(w.as_mut(), heca_core::layout::Size::new(300.0, 80.0));
+            let mut scene = heca_grid_ui::Scene::new();
+            {
+                let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+                w.paint(&mut cx);
+            }
+            format!("{:?}", scene.iter().collect::<Vec<_>>())
+        };
+
+        // Orientation shows up in layout: a vertical rule is tall and thin, a horizontal one wide
+        // and thin, so the property is visible in the box rather than merely stored.
+        let rule = |o: ViewOrientation| {
+            let n = ViewNode::new(WidgetKind::Separator)
+                .prop("orientation", o.into())
+                .prop("length", PropValue::Float(40.0));
+            let w = realize_one(&n);
+            format!("{:?}", w.base().style.layout)
+        };
+        assert_ne!(
+            rule(ViewOrientation::Vertical),
+            rule(ViewOrientation::Horizontal),
+            "orientation reached the separator",
+        );
+
+        // Axes are the region's own state, not a `Layout` field, so ask the widget — the same way
+        // `a_scroll_regions_axes_are_authorable` does.
+        let region = |a: ViewScrollAxes| {
+            let node = ViewNode::new(WidgetKind::Scroll).prop("axes", a.into());
+            with_props(ScrollRegion::new(), &node, &Theme::default()).clone_axes()
+        };
+        assert_ne!(
+            region(ViewScrollAxes::Both),
+            region(ViewScrollAxes::Vertical),
+            "axes reached the scroll region",
+        );
+
+        let toast = |s: ViewSeverity| {
+            painted(
+                &ViewNode::new(WidgetKind::Toast)
+                    .text("Build failed")
+                    .prop("severity", s.into()),
+            )
+        };
+        assert_ne!(
+            toast(ViewSeverity::Danger),
+            toast(ViewSeverity::Info),
+            "severity reached the toast",
+        );
+
+        let row = |m: ViewMarker| {
+            painted(
+                &ViewNode::new(WidgetKind::Row)
+                    .prop("active", PropValue::Bool(true))
+                    .prop("marker", m.into())
+                    .child(ViewNode::new(WidgetKind::Label).text("x")),
+            )
+        };
+        assert_ne!(row(ViewMarker::Check), row(ViewMarker::Bar), "marker reached the row");
+
+        let label = |a: ViewTextAlign| {
+            painted(
+                &ViewNode::new(WidgetKind::Label)
+                    .text("STATUS")
+                    .prop("align", a.into()),
+            )
+        };
+        assert_ne!(
+            label(ViewTextAlign::Center),
+            label(ViewTextAlign::Start),
+            "text align reached the label",
+        );
+
+        let checkbox = |side: ViewLabelSide| {
+            painted(
+                &ViewNode::new(WidgetKind::Checkbox)
+                    .prop("label", PropValue::Text("Enable".into()))
+                    .prop("label_side", side.into()),
+            )
+        };
+        assert_ne!(
+            checkbox(ViewLabelSide::Left),
+            checkbox(ViewLabelSide::Right),
+            "label side reached the checkbox",
+        );
+    }
+
 
     /// A theme token **nested inside** an object is still a token.
     ///
