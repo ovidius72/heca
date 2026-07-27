@@ -244,6 +244,37 @@ impl Base {
     pub fn shows_focus_ring(&self) -> bool {
         self.focused.get_untracked() && self.focus_visible.get_untracked()
     }
+
+    /// The rect an **inset state highlight** should cover — a hover tint, an active pill:
+    /// [`bounds`](Self::bounds) pulled in by `inset` on each side, but **never further than this
+    /// widget's own padding** on that side.
+    ///
+    /// The inset exists so a pill's rounded corners never contend with a rounded container's, and
+    /// the space padding already reserves is enough for that. Past the padding it would be cutting
+    /// into the content box, which is a highlight crossing the very thing it highlights: a row with
+    /// no padding used to draw a pill *shorter than its own content*, leaving a badge sticking out
+    /// above and below it.
+    ///
+    /// Every widget that draws an inset highlight asks here, so the rule holds for the next one too.
+    pub fn highlight_rect(&self, inset: f64) -> Rectangle {
+        let b = self.bounds;
+        let l = &self.style.layout;
+        let (left, right) = (
+            inset.min(l.pad_left() as f64),
+            inset.min(l.pad_right() as f64),
+        );
+        let (top, bottom) = (
+            inset.min(l.pad_top() as f64),
+            inset.min(l.pad_bottom() as f64),
+        );
+        Rectangle::new(
+            Point::new(b.loc.x + left, b.loc.y + top),
+            Size::new(
+                (b.size.w - left - right).max(0.0),
+                (b.size.h - top - bottom).max(0.0),
+            ),
+        )
+    }
 }
 
 impl Default for Base {

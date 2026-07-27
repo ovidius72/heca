@@ -2,7 +2,7 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-07-03T22:50:20.126Z
-**Updated:** 2026-07-03T22:52:10.352Z
+**Updated:** 2026-07-27T11:40:15.531Z
 
 Azioni toast dispatchate tramite ActionRegistry/policy path.
 

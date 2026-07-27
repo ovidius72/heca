@@ -2,7 +2,7 @@
 
 **Status:** ✅ `done`
 **Created:** 2026-07-01T18:09:07.246Z
-**Updated:** 2026-07-01T20:28:37.634Z
+**Updated:** 2026-07-27T11:40:15.485Z
 
 Supporto inline images completato: Sixel, iTerm2 OSC 1337, Kitty graphics, renderer GPU, Yazi preview, row-range damage, animated GIF/APNG e toggle config.
 

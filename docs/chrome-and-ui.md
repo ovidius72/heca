@@ -213,13 +213,18 @@ That table is not written by hand. It is the reasons in the source, counted.
 
 ```rust
 Panel::new()
-    .padding(12)
-    .child(Column::new().gap(8)
-        .child(Label::new("Containers"))
+    .title("Containers")                 // a real heading; omit it and no header row is drawn
+    .child(VStack::new().gap(8)
         .child(Button::new("Refresh")
             .variant(Variant::Accent)
             .on_press(intent("docker.refresh", {}))))
 ```
+
+`Panel` is a **titled section container** — a plugin's slice of a region. It is quiet by default
+(no frame of its own, lighter padding than a `Card`); give it a `fill` or a `border` when it should
+stand apart. The heading used to be fiction: `WidgetKind::Panel` realized to a plain `Surface`,
+which has no title, so this example described something that could not be built. F003/P017/T008
+made `Panel` a real widget.
 
 ### A table
 
@@ -228,21 +233,40 @@ composing is the model:
 
 ```rust
 Scroll::new().axes(ScrollAxes::Both).child(
-    Column::new().gap(6)
-        .child(Row::new().gap(12)
+    VStack::new().gap(6)
+        // A plain box for the header — it is not clickable.
+        .child(HStack::new().gap(12)
             .child(Label::new("Name"))
             .child(Label::new("Status"))
             .child(Label::new("CPU")))
-        .child(Separator::new())
-        .child(rows))
+        .child(Separator::horizontal())
+        // Each body row IS clickable and selectable, so it is a `Row`.
+        .child(Row::new().gap(12)
+            .active(selected == id)
+            .on_press(intent("plugin.docker.select", { "id": id }))
+            .child(Label::new(name))
+            .child(Badge::new(status))
+            .child(Label::new(cpu))))
 ```
+
+Two things in this example only became writable as a description recently, and both were wrong here
+for a while:
+
+- **The rule** between the header and the body is a real widget, so it takes its colour and
+  thickness from the theme. It reached the vocabulary in F003/P017/T5; before that a plugin had to
+  fake the line with a thin sized `Surface` that hardcoded both.
+- **The clickable row.** `Row` used to name the plain horizontal box, so this example described
+  behaviour — press, selection, hover — against a kind that had none of it, and no reader could
+  tell. F003/P017/T6 renamed the boxes to `VStack` / `HStack` and gave `Row` to the interactive
+  widget it always meant in `heca-grid-ui`. A `Row` with a press intent is focusable, activates on
+  click and on Enter/Space, and is reachable by `prefix+/` like any other actionable node.
 
 ### A modal with a form
 
 ```rust
 let result = ctx.overlay.open_modal(ModalSpec {
     title: "Restart a container".into(),
-    body: Column::new().gap(10)
+    body: VStack::new().gap(10)
         .child(Label::new("Pick a container:"))
         .child(containers_table(rows))
         .child(Input::new()
@@ -316,8 +340,15 @@ untrusted input and is treated that way.
 
 # Part II — Architecture, transferred verbatim
 
-Everything from here down is the original text of the two plan files, unedited. Where it
+Everything from here down is the original **prose** of the two plan files, unedited. Where it
 contradicts Part I, **Part I wins** — the contradictions are listed in §21.
+
+**One exception, 2026-07-27 (F003/P017/T008): the code examples were corrected in place.** The
+verbatim rule exists so no design *reasoning* is summarised away; it was never meant to preserve
+identifiers that no longer compile. A reader copies an example — leaving `Column::new()` in one
+would teach a name the vocabulary does not have, and `Label::new(..).variant(Variant::Heading)`
+names a builder `Label` has never had. The prose around them is untouched, and every claim that is
+now wrong is still listed in §21 rather than quietly rewritten.
 
 
 ---
@@ -535,15 +566,15 @@ a plugin building a panel with a button:
 
 ```
 // plugin code (compiles to WASM), using the host SDK builder:
-Panel::new("docker.containers")
+Panel::new()
     .title("Containers")
-    .child(Row::new()
+    .child(HStack::new()
         .child(Label::new(state.name))
         .child(Button::new("Restart")
-            .variant(Variant::Danger)          // semantic variant, not a raw color
+            .variant(Variant::Destructive)     // semantic variant; a raw colour is also allowed now
             .size(WidgetSize::Small)
             .on_press(intent("plugin.docker.restart", { "id": state.id }))))
-// → serializes to a ViewModel: { kind:"Panel", props:{title}, children:[ { kind:"Row", … } ] }
+// → serializes to: { kind:"panel", props:{text:"Containers"}, children:[ { kind:"h_stack", … } ] }
 // → host maps each node to the grid-ui widget, themes it, mounts it.
 ```
 
@@ -620,17 +651,17 @@ struct ViewNode {
 }
 ```
 
-Containers (`Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`, and the modal `body` in
+Containers (`VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`, and the modal `body` in
 §2.7.1) carry `children`; leaves don't. A typed, SwiftUI-like **builder SDK** sits
 on top for ergonomics and emits this uniform node (just as Flutter's typed
 `Widget` classes lower to `Element`/`RenderObject`):
 
 ```
-Column::new().gap(8).padding(12)
-    .child(Label::new(title).variant(Variant::Heading))
-    .child(Row::new()
+VStack::new().gap(8).padding(12)
+    .child(Label::new(title).size(WidgetSize::Header))
+    .child(HStack::new()
         .child(Badge::new(status).variant(Variant::Accent))
-        .child(Button::new("Restart").variant(Variant::Danger)
+        .child(Button::new("Restart").variant(Variant::Destructive)
             .on_press(intent("plugin.docker.restart", { "id": id }))))
 ```
 
@@ -1711,8 +1742,9 @@ Planner phases the old plan never knew about, because it stopped being updated:
 
 ## 21. Where Part II is out of date
 
-Part II is transferred verbatim, so it still contains statements that are no longer true. Each is
-listed here rather than edited, so the original wording stays readable.
+Part II's prose is transferred verbatim, so it still contains statements that are no longer true.
+Each is listed here rather than edited, so the original wording stays readable. (Its *code examples*
+are the one exception — see the note at the top of Part II.)
 
 | In Part II | Why it is wrong now |
 |---|---|
@@ -1723,6 +1755,10 @@ listed here rather than edited, so the original wording stays readable.
 | Collapsed icon rail, `RailCell` per item, rail flavours (§15) | **Dropped 2026-07-11.** A region is Expanded or Hidden. `RailCell` and `KeyHint` still ship; nothing mounts a rail. See the planner (F003/P020). |
 | "G1–G8" task ids (§19 references them) | **Removed 2026-07-26.** All eight were built. Only G7 ever had a planner id (F004/P001). |
 | Open questions: icon font, `Grid` surface detail (§19) | Both shipped. `Icon` and `Grid` are live widgets. |
+| `Column::new()` / `Row::new()` as the layout boxes | **Renamed 2026-07-27 (F003/P017/T006).** The vocabulary's boxes are `VStack` / `HStack`; `Row` is now the **clickable, selectable** widget it always was in `heca-grid-ui`. Examples in both parts use the new names. |
+| `Label::new(..).variant(Variant::Heading)` (§3 SDK sketch) | **Never existed.** `Label` has no `variant` builder. A heading is `size: header` (`ViewSize::Header`). Corrected in place 2026-07-27. |
+| `Variant::Danger` on a `Button` (§3 SDK sketches) | **Never existed.** The button vocabulary is `Primary`/`Secondary`/`Destructive`/`Outline`/`Ghost`/`Link`; the destructive one is `Destructive`. Corrected in place 2026-07-27. |
+| "No dedicated `Panel` widget — a bare panel is a plain `Surface`" | **Built 2026-07-27 (F003/P017/T008).** `Panel` is its own widget with a real title. It was the reason the published panel example described something unbuildable. |
 | Any "Status:" line anywhere in Part II | The planner is the record. Ignore them. |
 
 ## 22. Work that is designed here but was tracked nowhere

@@ -402,8 +402,10 @@ caller.
 
 ### `Theme`, `GlowLevel` & `Intensity`
 
-Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
-default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
+Token struct consumed by `PaintCx`. The bundled themes are **`grid_tron`** (cyan, dark — the
+default), **`mocha`** and **`latte`**, loaded by name with `heca_theme::load_theme(name)`; it falls
+back through `~/.config/heca/themes/{name}.toml` → bundled → `grid_tron`, so it never fails.
+`Theme::grid_tron()` is the one preset built in code. Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
 `font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`, `focus_ring`,
 `glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
@@ -655,6 +657,46 @@ A titled, padded column surface (header label + body).
 Card::new("POWER").background(theme.surface).border(theme.accent, 1.5)
     .child(Label::new("98%").font_scale(2.0));
 ```
+
+### Panel
+
+A titled **section** container: an optional heading over body content.
+
+The difference from [`Card`](#card) is presentation, not structure. A `Card` is a card — padded 18,
+framed with the theme border and radius, meant to stand apart. A `Panel` is a slice of a region (a
+plugin's section of a sidebar), so it is quiet by default: no frame of its own and lighter padding.
+Give it a fill or a border through `StyleExt` when it should stand out.
+
+- **Construct**: `Panel::new()` (untitled) or `Panel::titled(title)`.
+- **Builders**: `.title(impl Into<String>)` — an empty title hides the header **and its rule**,
+  rather than leaving a blank line or a bare rule across the top of the content.
+- **Shape**: heading, a [`Separator`](#separator) under it, then the body. The rule is what makes
+  the title read as a header band rather than the first line of content; it takes the theme's
+  border colour like any other separator.
+- **Accessor**: `.title_signal() -> Signal<String>` — retitle a mounted panel with no rebuild.
+- **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+
+```rust
+Panel::titled("Containers")
+    .child(Label::new("nginx"))
+    .child(Label::new("postgres"));
+```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Panel)
+    .text("Containers")                       // `text` is the heading, as it is for Card/DockFrame
+    .child(ViewNode::new(WidgetKind::Label).text("nginx"));
+```
+
+The heading is a real `Label` child, created up front and hidden until a title is set — so `title`
+works whether it is applied before or after the children, which is what a description needs since
+properties are applied after children are attached.
+
+> Until F003/P017/T008 there was **no** `Panel` widget: `WidgetKind::Panel` realized to a bare
+> `Surface`, which has no title. The published plugin examples showed `Panel::new().title("Hello")`
+> against it, and nothing in the docs let a reader tell that the title did not exist.
 
 ### Pane
 
@@ -1242,8 +1284,8 @@ Button::empty()
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Column).prop("gap", PropValue::Int(4))
-        .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::VStack).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetKind::HStack)
             .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
             .child(ViewNode::new(WidgetKind::Label).text("Delete")))
         .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
@@ -1329,8 +1371,8 @@ ViewNode::new(WidgetKind::Button)
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Column).prop("gap", PropValue::Int(4))
-        .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::VStack).prop("gap", PropValue::Int(4))
+        .child(ViewNode::new(WidgetKind::HStack)
             .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
             .child(ViewNode::new(WidgetKind::Label).text("Delete")))
         .child(ViewNode::new(WidgetKind::Label).text("Ctrl+D")));
@@ -1842,10 +1884,29 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
   background under the selection overlay.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
-- **Accessors**: `.state() -> Signal<bool>` (active).
 - **Attention**: when the host sets the bound `attention` signal `true`, the row flashes a few
   times (see [`Attention`](#attention)) and consumes the signal. The host plays any **sound** —
   the library is audio-free.
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Row)
+    .prop("active", PropValue::Bool(selected))
+    .on_press(Intent::new("docker.select").arg("id", PropValue::Text(id)))
+    .child(ViewNode::new(WidgetKind::Label).text(name))
+    .child(ViewNode::new(WidgetKind::Badge).text(status));
+```
+
+Props `realize` reads: `active`, `nav_selected`, `marker`. Events: `press` — wired to a click, to
+Enter/Space, **and** to a KeyHint target, so `prefix+/` reaches the row like any other actionable
+node. With no `press` intent the row is deliberately inert: not focusable, no hover — a described
+row that nothing can activate should not look like a control.
+
+> **`Row` is not `HStack`.** Until F003/P017/T6, `WidgetKind::Row` meant the plain horizontal box
+> and this widget had no declarative spelling at all. The boxes are now `HStack` / `VStack`, and
+> `Row` means the same thing in the model as it does in `heca-grid-ui`. `.highlight(Color)` and
+> `.attention_color(Color)` are still host-only; they become props with F003/P017/T7.
 
 ```rust
 let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radius())
@@ -1935,15 +1996,41 @@ Flex::row().gap(8.0).align(Align::Center)
 
 ### Separator
 
-Thin divider line (display-only). Spans the container cross-axis under the default
-`Align::Stretch`.
+Thin divider line (display-only), 1px in the theme's border colour. Spans its container — it asks
+to be stretched itself (`align_self`), so it spans whether or not the container stretches its
+children. A rule dropped into a centring row used to lay out one pixel by zero and simply not
+appear; nothing has to be passed to avoid that.
 
 - **Construct**: `Separator::horizontal()`, `Separator::vertical()`.
-- **Builder**: `.length(f32)` — force an explicit span when the parent centers instead of stretching.
+- **Builders**: `.orientation(Orientation)` (`Horizontal` \| `Vertical`, default horizontal),
+  `.length(f32)` — cut the line shorter than the container. An explicit length is a definite size,
+  so the container's own alignment then places it.
 
 ```rust
-Separator::horizontal().length(420.0);
+Separator::horizontal();                // spans the column's width
+Separator::vertical();                  // spans the row's height
+Separator::vertical().length(24.0);     // a short rule, placed by the container
 ```
+
+**Declarative:**
+
+```rust
+// A rule between a table header and its body.
+ViewNode::new(WidgetKind::Separator);
+
+// A vertical rule of a fixed length. Either property may be set first: the widget recomputes
+// both axes from the pair, so `length` never lands on the axis the rule runs across.
+ViewNode::new(WidgetKind::Separator)
+    .prop("orientation", PropValue::Text("vertical".into()))
+    .prop("length", PropValue::Float(24.0));
+```
+
+Props `realize` reads: `orientation`, `length`. Both come from the widget's own builders through the
+generated surface — there is no list of names in `realize`.
+
+> A separator is **themed**: its colour and thickness come from the `Theme`. Faking one with a thin
+> sized `Surface` hardcodes both and stops following a theme reload, which is why this is a widget
+> and not something to compose.
 
 ### Spinner
 
@@ -2851,7 +2938,7 @@ open_modal(
     state,
     ModalSpec {
         title: "Rename pane".into(),
-        body: ViewNode::new(WidgetKind::Column)
+        body: ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .child(ViewNode::new(WidgetKind::Label).text("New name"))
             .child(
@@ -2899,7 +2986,7 @@ open_modal(
 no Rust closures. Behaviour is carried by `Intent`s and the plugin receives the `ModalResult`
 (`id` + the named-field `data`) back over the boundary. Because it's the identical model, a modal
 authored by a plugin is realized, hinted (`prefix+/`), keyboard-driven, and confirm-gated exactly
-like a native one. (A first-class typed builder — `Column::new().gap(8).child(…)` — is
+like a native one. (A first-class typed builder — `VStack::new().gap(8).child(…)` — is
 `plugin-task-ui-2`; today author the nodes with `ViewNode::new(kind).prop(…).child(…)`.)
 
 ### CommandPalette
@@ -3064,7 +3151,7 @@ is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic nati
 
 | Part | What it is |
 |------|-----------|
-| `kind` | which widget (`WidgetKind`: `Column`/`Row`/`Label`/`Button`/`Input`/…) |
+| `kind` | which widget (`WidgetKind`: `VStack`/`HStack`/`Row`/`Label`/`Button`/`Input`/…) |
 | `props` | this node's **own** values (`name → PropValue`) — **per node, not inherited** |
 | `events` | this node's **own** `event → Intent` bindings (`press` / `change`) — an action **id**, never a closure (keeps it serializable) |
 | `children` | a **`Vec<ViewNode>`**, each a full node with its *own* props/events/children |
@@ -3075,22 +3162,61 @@ child is styled by putting props on *that child*. The builder chains for ergonom
 a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
 ≡ `Column().children([a,b])`.
 
-### Layout props — every kind, no list
+### Style props — every kind, no list
 
-**Any field of [`Style.layout`](#style--layout-enums) is a prop on any kind**, spelled exactly as
-the field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
-`justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
-`flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+**Any field of [`Style`](#style--layout-enums) is a prop on any kind**, spelled exactly as the
+field is — both halves:
 
-`realize` never enumerates them — it merges by name against `Layout`'s own fields. Add a field to
-`Layout` and a description can set it with **no change to the mapper**. The counterpart is that
-`Visual` is not serializable, so appearance (fill, border, glow, radius, font sizes) is unreachable
-from a description by construction rather than by a rule someone has to enforce.
+- **Layout**: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
+  `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
+  `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+- **Appearance**: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
+
+`realize` never enumerates them — it merges by name against each half's own fields. Add a field to
+either and a description can set it with **no change to the mapper**.
+
+#### Appearance: the theme is the default, not a wall
+
+Changed 2026-07-27. `Visual` used to be deliberately unserializable, so appearance was unreachable
+from a description by construction. It is now an ordinary property, on every widget.
+
+**Set nothing and you follow the theme** — which is what most widgets should do. That is not a new
+behaviour bolted on: `fill` / `border` / `glow` are `Option`, and `radius` / `font_size` use a
+`0.0 = inherit` sentinel, so "unset" already meant "ask the theme" at paint time. A widget that
+overrides nothing is unaffected by any of this.
+
+A **colour** is written two ways, and the difference matters:
+
+```rust
+.prop("fill", PropValue::Color("accent".into()))     // a theme token — PREFER THIS
+.prop("fill", PropValue::Color("#ff8800".into()))    // a literal (also "#ff8800cc")
+```
+
+A **token name** is one of the theme's own colour fields (`accent`, `foreground`, `muted`,
+`border`, `danger`, `warning`, `success`, …). The accepted vocabulary *is* that field list — add a
+colour to the theme and a description can name it, with no table to update anywhere. It resolves
+against the theme the tree is built with, and a theme reload rebuilds every tree, so a token-named
+override **follows the new theme**.
+
+A **hex literal** is exactly the colour it says and does not track the theme. That is the trade you
+make by writing one.
+
+A colour that is neither — a misspelled token — is dropped like any other bad value: that one
+property is skipped and its neighbours on the same node still apply.
+
+This reaches a **widget's own colour builders** too, not only the style halves: `Label::color`,
+`Icon::color`, `Tag`'s hue, `Row::highlight` and `Row::attention_color` are all ordinary props now.
+The host resolves a token to hex before the value crosses into the library, so `heca-grid-ui` still
+knows nothing about themes and `Color::from_str` still only knows hex.
+
+**The first override in heca** is the destructive confirm prompt: its message ("This action cannot
+be undone.") is written with `color: "danger"` — the token, not a literal — so it follows the active
+theme. See `open_confirm` in `heca/src/handlers.rs`.
 
 Values read the way you would write them:
 
 ```rust
-ViewNode::new(WidgetKind::Column)
+ViewNode::new(WidgetKind::VStack)
     .prop("padding", PropValue::Int(12))                     // px
     .prop("width",   PropValue::Text("50%".into()))          // "auto" | 240 | "50%"
     .prop("justify", PropValue::Text("space_between".into())) // enums by name, snake_case
@@ -3145,9 +3271,11 @@ and a bad value costs only itself: the good props on the same node still apply.
 
 | Kind | Props it reads | Events |
 |------|----------------|--------|
-| `Column` / `Row` | (layout only — see above) | — |
+| `VStack` / `HStack` | (layout only — see above) — the plain boxes | — |
+| `Row` | `active`, `nav_selected`, `marker` (`bar` \| `check` \| `none`) + children | `press` |
 | `Card` | `text` (title) + children | — |
-| `Surface` / `Panel` | (container — children only) | — |
+| `Surface` | (container — children only) | — |
+| `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
@@ -3255,7 +3383,7 @@ that is **not** a `Choice` is ignored rather than realized into a broken option.
 
 ```rust
 // A labelled input + a primary button. Each node carries ITS OWN props/events.
-ViewNode::new(WidgetKind::Column)
+ViewNode::new(WidgetKind::VStack)
     .prop("gap", PropValue::Int(8))                                  // ← the COLUMN's prop
     .child(ViewNode::new(WidgetKind::Label).text("New name"))
     .child(
@@ -3274,7 +3402,7 @@ ViewNode::new(WidgetKind::Column)
 - **Internal code** authors this directly (as above) and hands it to `realize` / `open_modal`.
 - **Plugins** author the *same* nodes and ship them serialized (JSON); behaviour is the `Intent`
   action ids, so no closures cross the boundary. A typed SwiftUI-style builder
-  (`Column::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
+  (`VStack::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
 - **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
   `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
 
@@ -3322,6 +3450,18 @@ move-container-to-region workspaces right-sidebar
 provider isn't mounted (config is even read *before* providers register). It logs a debug warning and
 does nothing.
 
+**A wrong argument is never silent.** Every action declares what it takes, so a call is compared
+against that declaration before it is built — from a widget, from config, from a plugin, from RPC:
+
+```
+[heca] action 'chrome.container.move_to_region': unknown argument 'contaner_id' — did you mean 'container_id'?
+[heca] action 'chrome.container.move_to_region': missing required argument 'container_id'
+```
+
+A missing required argument stops the action; there is nothing to build. An unknown or malformed one
+costs only itself and the rest of the call still stands — the same rule a widget property follows.
+`describe-action <name>` (below) is how you find out what an action takes without reading its source.
+
 ### Registering a custom (name-keyed) action
 
 `WmAction` is a **closed enum** — a provider or plugin cannot add a variant to it. An action of your
@@ -3335,7 +3475,9 @@ Metadata and handler live in two places for a borrow reason, not a design one: a
 `ActionRegistry`). One call registers both.
 
 ```rust
-use crate::actions::{register_dynamic, unregister_dynamic, ActionCategory, ActionMeta};
+use crate::actions::{
+    register_dynamic, unregister_dynamic, ActionCategory, ActionMeta, ArgKind, ArgSpec,
+};
 use crate::app::interaction::ActionPolicy;
 use crate::chrome::PropValue;
 use heca_grid_ui::Glyph;
@@ -3353,6 +3495,16 @@ let handle = register_dynamic(
         default_binding: String::new(),        // no default key; the user may bind it by name
         icon: Some(Glyph::Play),
         policy: ActionPolicy::Global,          // REQUIRED — see below
+        // REQUIRED too, and for the same reason: an omitted list would read as "takes nothing",
+        // and every argument the handler reads below would be one nobody declared. Declaring it
+        // is what lets heca tell a caller that `containr` is not `container`.
+        args: vec![ArgSpec {
+            name: "container".into(),
+            kind: ArgKind::Text,
+            required: true,
+            description: "Id of the container to restart.".into(),
+            values: Vec::new(),                // only an `ArgKind::Enum` fills this
+        }],
     },
     // The handler receives the Intent, so args arrive as DATA (never a closure across a plugin
     // boundary). `&mut AppState` is the sanctioned write path: a provider may not mutate state
@@ -3473,7 +3625,7 @@ The catalog is queryable, so a tool can ask a *running* heca (with whatever plug
 it can do. Two RPC commands, both returning JSON:
 
 ```
-list-actions              → [ {name,label,description,category,default_binding,policy,confirm}, … ]
+list-actions              → [ {name,label,description,category,default_binding,policy,args,confirm}, … ]
 describe-action <name>    → one such object, or an error if the name is unknown
 ```
 
@@ -3481,6 +3633,27 @@ describe-action <name>    → one such object, or an error if the name is unknow
 policy as a stable string (`global`, `tiled_only`, …). A native `Callback` outcome is never
 serialized — introspection reports only *that* a prompt exists. In Rust: `ActionCatalog::describe_all()`
 / `describe(name)` → `ActionInfo`.
+
+`args` is what the action takes, so a caller can learn how to *call* what it just discovered — not
+only that the name exists:
+
+```json
+{ "name": "resize",
+  "args": [
+    { "name": "target", "kind": "enum", "required": true,
+      "description": "What to resize.", "values": ["column", "col", "pane"] },
+    { "name": "axis",   "kind": "enum", "required": true,
+      "description": "Which axis to resize along.",
+      "values": ["x", "horizontal", "width", "y", "vertical", "height"] },
+    { "name": "amount", "kind": "float", "required": true,
+      "description": "How much to grow by; negative shrinks." }
+  ] }
+```
+
+`kind` is one of `int`, `float`, `bool`, `text`, `enum`; `values` appears only for `enum` and lists
+every spelling accepted, aliases included. An empty `args` means the action takes none — never "not
+stated": heca compares every call against this list and reports an argument that is unknown, missing
+or malformed, so a plugin or a script gets told what it got wrong.
 
 For the full **in-tree** built-in checklist (a `WmAction` variant, `action_policy` classification, a
 default binding, RPC parity), see **[README → Actions System](../README.md#actions-system)**.

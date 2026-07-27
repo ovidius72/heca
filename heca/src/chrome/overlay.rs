@@ -21,12 +21,12 @@ use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
 use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
 
-use super::view::{PropMap, ViewNode, WidgetKind};
+use heca_view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
 use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
-use crate::chrome::view::Intent;
+use heca_view::Intent;
 use crate::app_state::AppState;
 use crate::input::WmAction;
 
@@ -176,6 +176,9 @@ pub(crate) fn open_modal(
     let root = build_modal_root(
         &spec,
         id,
+        // The theme this tree is built with: a `PropValue::Color` naming a token resolves against
+        // it now. A theme reload rebuilds every overlay, so the token follows (F003/P017/T7).
+        &super::chrome_gui_theme(state),
         &emit,
         &mut state.hint_targets,
         &state.action_shortcuts,
@@ -359,12 +362,23 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
 fn build_modal_root(
     spec: &ModalSpec,
     id: OverlayId,
+    theme: &heca_grid_ui::Theme,
     emit: &ChromeIntentEmitter,
     hints: &mut super::HintTargetRegistry,
     shortcuts: &super::ActionShortcuts,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let body = super::realize(&spec.body, emit, hints, forms);
+    // `realize` speaks the model's own `Intent` and knows nothing of `InteractionIntent` or the
+    // registry (F003/P017/T009). The carrier is put on here, at the boundary — for the click sink
+    // by a wrapping closure, for the pick registry by `ViewHintTargets`.
+    let body = {
+        let view_emit: super::IntentEmitter = {
+            let emit = emit.clone();
+            Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+        };
+        let mut targets = super::ViewHintTargets(hints);
+        super::realize(&spec.body, theme, &view_emit, &mut targets, forms)
+    };
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
         let variant = if action.danger {
@@ -438,7 +452,7 @@ pub(crate) fn resolve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::view::PropValue;
+    use heca_view::PropValue;
 
     fn noop_emit() -> ChromeIntentEmitter {
         Rc::new(|_| {})
@@ -493,7 +507,7 @@ mod tests {
         let mut hints = super::super::HintTargetRegistry::default();
         let shortcuts = super::super::ActionShortcuts::default();
         let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
+        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
 
         // Two actions → two hint targets, each a SubmitOverlay for this overlay.
         assert_eq!(hints.checkpoint() - before, 2);

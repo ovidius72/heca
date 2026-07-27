@@ -244,7 +244,7 @@ impl Icon {
 
     /// Primary-layer color (default: theme foreground). The secondary layer
     /// follows it (dimmed) unless set via [`secondary_color`](Icon::secondary_color).
-    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
+    #[heca_grid_ui_macros::prop]
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self
@@ -252,7 +252,7 @@ impl Icon {
 
     /// Explicit secondary-layer color (default: the primary color at the theme's
     /// [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha)).
-    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
+    #[heca_grid_ui_macros::prop]
     pub fn secondary_color(mut self, c: Color) -> Self {
         self.secondary = Some(c);
         self

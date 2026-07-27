@@ -1899,6 +1899,145 @@ fn horizontal_separator_spans_container_width() {
     assert!(sep.base().bounds.size.h <= 1.0, "separator is thin");
 }
 
+/// A separator's two properties do not depend on each other, in either order.
+///
+/// `length` used to write straight onto `width`, assuming the rule was horizontal. Set the
+/// orientation afterwards — which a described separator does, since properties arrive sorted by
+/// name and `length` sorts before `orientation` — and the length landed on the axis the rule runs
+/// *across*, leaving the span unset. The widget now recomputes both axes from the pair, so this
+/// passes whichever way round it is written.
+#[test]
+fn a_separators_length_and_orientation_can_be_set_in_either_order() {
+    use heca_grid_ui::{PropInput, SetProp};
+
+    for (first, second) in [("length", "orientation"), ("orientation", "length")] {
+        let apply = |sep: Separator, key: &str| match key {
+            "length" => sep.set_prop("length", &PropInput::Number(60.0)),
+            _ => sep.set_prop("orientation", &PropInput::Text("vertical".into())),
+        };
+        let sep = apply(apply(Separator::horizontal(), first), second);
+
+        let mut row = Flex::row()
+            .width(Length::Px(200.0))
+            .height(Length::Px(200.0))
+            .child(sep);
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 200.0));
+        let bounds = row.base().children[0].base().bounds;
+
+        assert_eq!(
+            bounds.size.h, 60.0,
+            "setting {first} then {second}: a vertical rule runs 60px down",
+        );
+        assert!(
+            bounds.size.w <= 1.0,
+            "setting {first} then {second}: a vertical rule stays thin ({}px wide)",
+            bounds.size.w,
+        );
+    }
+
+    // And `vertical()` still means what it always meant, without any property being set.
+    let mut row = Flex::row()
+        .width(Length::Px(200.0))
+        .height(Length::Px(80.0))
+        .child(Separator::vertical());
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 80.0));
+    let bounds = row.base().children[0].base().bounds;
+    assert_eq!(bounds.size.h, 80.0, "a vertical rule stretches to the container height");
+    assert!(bounds.size.w <= 1.0, "and stays thin");
+}
+
+/// A `Panel`'s heading is a real composed child, and setting it works **whichever side of the
+/// children it happens on** — which is what a description needs, since properties are applied after
+/// children are attached.
+///
+/// Before F003/P017/T008 there was no `Panel` widget at all: `WidgetKind::Panel` realized to a bare
+/// `Surface`, so the published examples showed `Panel::new().title("…")` against something with no
+/// title, and no reader could tell.
+#[test]
+fn a_panel_titles_itself_whichever_order_it_is_built_in() {
+    use heca_grid_ui::Panel;
+
+    // Title first, then content.
+    let a = Panel::new()
+        .title("Containers")
+        .child(Label::new("nginx"))
+        .child(Label::new("redis"));
+    // Content first, then title — the order `realize` uses.
+    let b = Panel::new()
+        .child(Label::new("nginx"))
+        .child(Label::new("redis"))
+        .title("Containers");
+
+    for (which, panel) in [("title first", &a), ("children first", &b)] {
+        let kids = &panel.base().children;
+        assert_eq!(kids.len(), 4, "{which}: header + rule + two content children");
+        assert!(
+            !kids[0].base().style.layout.hidden && !kids[1].base().style.layout.hidden,
+            "{which}: the header AND its rule show once titled",
+        );
+    }
+    assert_eq!(a.title_signal().get_untracked(), "Containers");
+    assert_eq!(b.title_signal().get_untracked(), "Containers");
+
+    // An untitled panel keeps the header out of the layout rather than leaving a blank line.
+    let plain = Panel::new().child(Label::new("body"));
+    assert!(
+        plain.base().children[0].base().style.layout.hidden
+            && plain.base().children[1].base().style.layout.hidden,
+        "no title means no heading and no bare rule across the top of the content",
+    );
+
+    // And a title can be cleared back to nothing.
+    let cleared = Panel::titled("Gone").title("");
+    assert!(
+        cleared.base().children[0].base().style.layout.hidden
+            && cleared.base().children[1].base().style.layout.hidden,
+    );
+}
+
+/// A separator with no length spans its container **even when the container centres its children**.
+///
+/// Found by looking at it: the showcase row centres, like most rows do, so the rule was laid out
+/// one pixel by zero and simply did not appear. The widget's answer used to be a line in its docs
+/// telling the caller to pass a `length` — a workaround repeated at every call site for something
+/// the rule can say once about itself, and one that silently produces nothing when forgotten.
+#[test]
+fn a_separator_spans_a_container_that_centres_its_children() {
+    let mut row = Flex::row()
+        .align(Align::Center)
+        .width(Length::Px(200.0))
+        .height(Length::Px(40.0))
+        .child(Separator::vertical())
+        .child(Separator::vertical().length(24.0));
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
+
+    let stretched = row.base().children[0].base().bounds;
+    assert_eq!(
+        stretched.size.h, 40.0,
+        "with no length, the rule spans the row despite Align::Center",
+    );
+
+    let cut = row.base().children[1].base().bounds;
+    assert_eq!(cut.size.h, 24.0, "an explicit length still wins");
+    assert!(
+        cut.loc.y > stretched.loc.y,
+        "…and the container's own alignment centres the shorter one",
+    );
+
+    // Same story the other way round: a column that centres still gets a full-width rule.
+    let mut col = Flex::column()
+        .align(Align::Center)
+        .width(Length::Px(200.0))
+        .height(Length::Px(40.0))
+        .child(Separator::horizontal());
+    LayoutEngine::new().compute(&mut col, Size::new(200.0, 40.0));
+    assert_eq!(
+        col.base().children[0].base().bounds.size.w,
+        200.0,
+        "a horizontal rule spans a centring column too",
+    );
+}
+
 #[test]
 fn spinner_animates_and_paints_its_ring() {
     let theme = Theme::default();
@@ -4021,5 +4160,67 @@ fn focus_ring_shows_on_keyboard_focus_not_on_mouse_click() {
     assert!(
         ui.base().children.iter().any(|c| c.base().shows_focus_ring()),
         "keyboard focus (advance) shows the ring"
+    );
+}
+
+/// A state highlight must never be smaller than the content it highlights.
+///
+/// The hover/active pill is drawn inset so its rounded corners never contend with a rounded
+/// container's, but the inset may only spend space the widget's own padding already reserves. An
+/// unpadded row's content reaches its edges, so there is nothing to give: taking the inset anyway
+/// drew a pill *shorter than its own content*, and a badge inside it stuck out above and below.
+#[test]
+fn a_state_highlight_never_crops_the_content_it_covers() {
+    let theme = Theme::default();
+    // The pill only paints for a hovered (or active) row, so hover it before painting. An unfilled
+    // row draws no surface of its own, which makes the pill the only rect in the scene.
+    let hovered_pill = |padding: f32| {
+        let mut row = Row::new()
+            .padding(padding)
+            .on_activate(|| {})
+            .child(fixed_box(60.0, 24.0));
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 60.0));
+        let b = row.base().bounds;
+        heca_grid_ui::dispatch(
+            &mut row,
+            &Event::PointerMoved {
+                pos: Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
+            },
+        );
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            row.paint(&mut cx);
+        }
+        let rects: Vec<Rectangle> = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rects.len(), 1, "the hover pill is the only rect: {rects:?}");
+        (rects[0], row.base().children[0].base().bounds, b)
+    };
+
+    // No padding: the content reaches the row's edges, so the pill covers the row exactly.
+    let (sel, content, bounds) = hovered_pill(0.0);
+    assert_eq!(sel.loc.y, bounds.loc.y, "unpadded: no vertical inset to take");
+    assert_eq!(sel.size.h, bounds.size.h, "unpadded: the pill is the full row height");
+    assert!(
+        sel.loc.y <= content.loc.y && sel.loc.y + sel.size.h >= content.loc.y + content.size.h,
+        "pill {sel:?} crops content {content:?}",
+    );
+
+    // With padding the inset costs nothing, so it still happens: the pill stays off the edges and
+    // still clears the content.
+    let (sel, content, bounds) = hovered_pill(10.0);
+    assert!(
+        sel.loc.y > bounds.loc.y && sel.size.h < bounds.size.h,
+        "padded: the pill stays inset from the row's edges ({sel:?} vs {bounds:?})",
+    );
+    assert!(
+        sel.loc.y <= content.loc.y && sel.loc.y + sel.size.h >= content.loc.y + content.size.h,
+        "pill {sel:?} crops content {content:?}",
     );
 }

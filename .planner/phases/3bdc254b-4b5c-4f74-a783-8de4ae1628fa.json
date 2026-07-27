@@ -2,9 +2,10 @@
   "id": "3bdc254b-4b5c-4f74-a783-8de4ae1628fa",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 11,
+  "shortId": "CU9CD",
+  "priority": 11,
   "slug": "app-12-keyboard-move-to-target-picks-rename-override-plugin-observable-state",
   "title": "app-12: Keyboard move-to-target picks + rename override + plugin-observable state",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -30,6 +31,8 @@
       "id": "8c1e454d-b778-4489-bd94-c238b04c74ab",
       "phaseId": "3bdc254b-4b5c-4f74-a783-8de4ae1628fa",
       "number": 1,
+      "shortId": "KN2SA",
+      "priority": 1,
       "shortName": "keyboard-move-picks",
       "title": "Keyboard move-to-target picks via universal KeyHint",
       "status": "done",
@@ -50,6 +53,8 @@
       "id": "848845ba-0865-4e05-8abc-86f19491c9a0",
       "phaseId": "3bdc254b-4b5c-4f74-a783-8de4ae1628fa",
       "number": 2,
+      "shortId": "3ALS9",
+      "priority": 2,
       "shortName": "rename-custom-override",
       "title": "Rename custom-name override",
       "status": "done",
@@ -70,6 +75,8 @@
       "id": "4cb6c73f-6025-49d2-8236-aa49903fc0bf",
       "phaseId": "3bdc254b-4b5c-4f74-a783-8de4ae1628fa",
       "number": 3,
+      "shortId": "WTMRT",
+      "priority": 3,
       "shortName": "plugin-observable-state",
       "title": "Plugin-observable state",
       "status": "done",
@@ -88,5 +95,7 @@
     }
   ],
   "createdAt": "2026-07-01T20:27:40.669Z",
-  "updatedAt": "2026-07-01T20:28:04.624Z"
+  "updatedAt": "2026-07-27T11:40:15.471Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

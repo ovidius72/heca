@@ -14,7 +14,9 @@ use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
-use heca_grid_ui::{Component, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size};
+use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, Rectangle, Scene, Size};
+use heca_view::{Intent, PropValue, ViewNode, WidgetKind};
+use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
@@ -212,6 +214,91 @@ fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
     Choice::new(value)
         .child(Icon::new(glyph))
         .child(Label::new(label))
+}
+
+/// The showcase's pick registry for a described tree. `realize` registers every actionable node so
+/// a host's picker can reach it by letter; this example has no picker, so the ids are handed out in
+/// order and nothing further is done with them.
+#[derive(Default)]
+struct ShowcaseHints {
+    next: usize,
+}
+
+impl HintTargets for ShowcaseHints {
+    fn register(&mut self, _intent: Intent) -> HintTargetId {
+        let id = HintTargetId::new(self.next);
+        self.next += 1;
+        id
+    }
+}
+
+/// The tree the **described** column renders: a titled `Panel` holding a clickable `Row`, a rule,
+/// and a line whose colour is overridden by **token name** (not a hex literal, so it follows the
+/// theme — press `1`/`2`/`3` and watch it change with everything else).
+///
+/// Pure data. No builder, no closure: the `Row`'s click carries an `Intent`, which is exactly what
+/// a plugin would ship over the boundary.
+fn described_tree() -> ViewNode {
+    ViewNode::new(WidgetKind::Panel)
+        .text("DESCRIBED")
+        .prop("width", PropValue::Int(240))
+        .child(
+            ViewNode::new(WidgetKind::Row)
+                // Padding, like every other Row on this page. A row whose content reaches its own
+                // edges leaves the badge's glow halo (which paints outside its box, by design)
+                // crossing the hover pill's edge, and it reads as the badge overflowing.
+                .prop("padding", PropValue::Float(6.0))
+                .on_press(Intent::new("showcase.select").arg("id", PropValue::Text("nginx".into())))
+                .child(ViewNode::new(WidgetKind::Label).text("nginx"))
+                .child(ViewNode::new(WidgetKind::Badge).text("UP")),
+        )
+        .child(ViewNode::new(WidgetKind::Separator))
+        .child(
+            ViewNode::new(WidgetKind::Label)
+                .text("colour by token name")
+                .prop("color", PropValue::Color("danger".into())),
+        )
+}
+
+/// The same four widgets built by hand, to compare against [`described_tree`] with the eye.
+fn native_twin(theme: &Theme) -> Panel {
+    Panel::titled("NATIVE")
+        .width(Length::Px(240.0))
+        .child(
+            Row::new()
+                .padding(6.0)
+                .on_activate(|| println!("[showcase] native row activated"))
+                .child(Label::new("nginx"))
+                .child(Badge::new("UP")),
+        )
+        .child(Separator::horizontal())
+        .child(Label::new("colour by token name").color(theme.colors.danger))
+}
+
+/// A described tree beside its hand-built twin. They should be indistinguishable.
+///
+/// This section is the point of F003/P017/T009: `realize` lives in `heca-view-realize`, **below**
+/// this example, so a `ViewNode` can be rendered here at all. While it sat inside the `heca` binary
+/// the showcase could not call it, the only described tree in the whole app was one modal body, and
+/// every widget added to the vocabulary had to be taken on trust from a test.
+fn described_vs_native(theme: &Theme) -> Flex {
+    // What a click means is the host's business — `realize` only hands back the node's own intent.
+    let emit: IntentEmitter = Rc::new(|intent: Intent| {
+        println!(
+            "[showcase] described intent: {} {:?}",
+            intent.action, intent.args
+        );
+    });
+    let mut hints = ShowcaseHints::default();
+    let mut forms = FormBindings::default();
+    let described = realize(&described_tree(), theme, &emit, &mut hints, &mut forms);
+
+    // `Box<dyn Component>` is not `Component`, so it cannot go through `child()` — push it the way
+    // the mapper itself does.
+    let mut row = Flex::row().gap(28.0).align(Align::Start);
+    row.base_mut().children.push(described);
+    row.base_mut().children.push(Box::new(native_twin(theme)));
+    row
 }
 
 /// Handles the host keeps after building the UI, to drive chrome interactions
@@ -772,8 +859,48 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .gap(3.0)
                 .width(Length::Px(320.0)),
         )
+        // Panel: a titled section container. Quiet by default (no frame of its own), which is what
+        // distinguishes it from a Card — a Card stands apart, a Panel is a slice of a region. The
+        // second one is untitled, to show the header taking no room rather than leaving a blank
+        // line. Both are what `WidgetKind::Panel` realizes to now that Panel is a real widget.
+        .child(caption("Panel"))
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Start)
+                .child(
+                    Panel::titled("Containers")
+                        .width(Length::Px(220.0))
+                        .background(theme.colors.foreground.with_alpha(6))
+                        .radius(theme.colors.control_radius())
+                        .child(Label::new("nginx").color(theme.colors.muted))
+                        .child(Label::new("postgres").color(theme.colors.muted)),
+                )
+                .child(
+                    Panel::new()
+                        .width(Length::Px(220.0))
+                        .background(theme.colors.foreground.with_alpha(6))
+                        .radius(theme.colors.control_radius())
+                        .child(Label::new("untitled — no header row").color(theme.colors.muted)),
+                ),
+        )
         .child(caption("Separator"))
         .child(Separator::horizontal().length(440.0))
+        // Both orientations, so the vertical rule is visible too — it is the one a described
+        // separator reaches through `orientation`, and it had no showcase entry before.
+        // This row CENTRES its children, like most rows here: the full-height rule spans anyway,
+        // because the separator asks to be stretched rather than waiting to be.
+        .child(
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .height(Length::Px(40.0))
+                .child(Label::new("full height").color(theme.colors.muted))
+                .child(Separator::vertical())
+                .child(Label::new("length(24)").color(theme.colors.muted))
+                .child(Separator::vertical().length(24.0))
+                .child(Label::new("end").color(theme.colors.muted)),
+        )
         // Display widgets: status dot + badges across variants.
         .child(caption("StatusDot · Badge"))
         .child(
@@ -1884,6 +2011,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(sidebar)
                 .child(panes_col)
         })
+        .child(caption(
+            "Described tree — left is data (heca-view), right is the same widgets by hand",
+        ))
+        .child(described_vs_native(theme))
         // The command palette overlays everything when open (Ctrl+K) — the widget
         // itself lives in the overlay layer; this caption just documents the key.
         .child(caption("CommandPalette — press Ctrl+K"));

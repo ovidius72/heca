@@ -257,19 +257,22 @@ impl Align {
     }
 }
 
-/// The **host-owned appearance** half of [`Style`] — the pixels.
+/// The **appearance** half of [`Style`] — the pixels. The [`Theme`](crate::theme::Theme) supplies
+/// every default; a description may override any of it.
 ///
-/// Everything here resolves against the [`Theme`](crate::theme::Theme), so **none of it may be set
-/// from a declarative description**: a description carries semantic intent (a variant, a
-/// [`Layout::size`], a colour *name*) and the host decides what that looks like. See
-/// `pluggable-chrome-plugin-plan.md` §2.6.1 rule C.
+/// **Changed 2026-07-27 (F003/P017/T7).** This type used to be deliberately *not* serializable, so
+/// that appearance was unreachable from a description by construction — "a description carries
+/// semantic intent and the host decides what that looks like". That rule is dead: the theme is the
+/// default, not a wall. Unset still means "ask the theme", which is already how the fields behave —
+/// [`fill`](Self::fill), [`border`](Self::border) and [`glow`](Self::glow) are `Option`, and
+/// [`radius`](Self::radius) / [`font_size`](Self::font_size) use a `0.0 = inherit` sentinel — so a
+/// widget that overrides nothing follows a theme reload exactly as before.
 ///
-/// This is a separate type rather than a naming convention because the boundary then costs nothing
-/// to maintain: [`Layout`] is serializable and `Visual` simply is not, so a field added here is
-/// unreachable from a description **by default**, and a field added to `Layout` is reachable **by
-/// default**. Neither requires an attribute, a list, or anyone remembering. There is nothing whose
-/// deletion would quietly open colours up to plugins.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// **The split with [`Layout`] keeps its value and is not undone.** It stopped being a barrier; it
+/// remains the honest grouping of *what the caller asked for* versus *what the theme decided*, and
+/// it is how a reader tells arrangement from appearance at a glance.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Visual {
     pub fill: Option<Color>,
     pub border: Option<Border>,
@@ -303,17 +306,22 @@ impl Default for Visual {
 
 /// A component's style: two peer halves, [`layout`](Self::layout) and [`visual`](Self::visual).
 ///
-/// The split is the **plugin boundary**, and it is a boundary the library already lived by before
-/// plugins existed — `AGENTS.md` requires every widget to read colours, fonts and radii from the
-/// [`Theme`](crate::theme::Theme) and hardcode nothing. "Caller-owned" versus "theme-owned" is a
-/// real distinction here on its own terms; the declarative boundary just falls on the same line.
+/// The split says what a value **means**, not what may set it — a distinction the library lived by
+/// before plugins existed, since `AGENTS.md` requires every widget to read colours, fonts and radii
+/// from the [`Theme`](crate::theme::Theme) and hardcode nothing.
 ///
-/// - [`Layout`] — arrangement plus the semantic [`size`](Layout::size) variant. Serializable, and
-///   what a declarative description is allowed to set.
-/// - [`Visual`] — appearance. Not serializable, and never settable from a description.
+/// - [`Layout`] — arrangement plus the semantic [`size`](Layout::size) variant.
+/// - [`Visual`] — appearance: what the theme decides unless someone says otherwise.
 ///
-/// Both are peers on purpose: neither half is privileged, and adding a field to either one gets
-/// the right reachability with no further action. Builder methods
+/// **Both halves are serializable, and a description may set either (changed 2026-07-27,
+/// F003/P017/T7).** The split used to *be* the plugin boundary: `Visual` was deliberately not
+/// serializable, so appearance was unreachable from a description by construction. The theme is
+/// the default now, not a wall — unset still means "ask the theme", which is what the `Option`
+/// fields and the `0.0 = inherit` sentinels already meant. The grouping was kept because it is
+/// worth having on its own terms, not because it was a barrier.
+///
+/// Both are peers on purpose: neither half is privileged, and a field added to either one is
+/// reachable with no further action. Builder methods
 /// ([`LayoutExt`](crate::builders::LayoutExt) / [`StyleExt`](crate::builders::StyleExt)) write
 /// through to the correct half, so callers never name it.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -508,6 +516,36 @@ impl Default for Layout {
 }
 
 impl Layout {
+    /// Effective left padding in px. **Most specific wins:** the side, else its axis, else the
+    /// uniform value — the same cascade the layout pass applies.
+    ///
+    /// These four exist so paint code can ask the question layout already answered, instead of
+    /// re-deriving the cascade and drifting from it. A widget that insets a highlight or a marker
+    /// needs to know where its content box starts, and by paint time the `pad_spacing_*` tokens
+    /// have already been resolved into the px fields these read.
+    pub fn pad_left(&self) -> f32 {
+        self.padding_left
+            .unwrap_or_else(|| self.padding_x.unwrap_or(self.padding))
+    }
+
+    /// Effective right padding in px — see [`pad_left`](Self::pad_left).
+    pub fn pad_right(&self) -> f32 {
+        self.padding_right
+            .unwrap_or_else(|| self.padding_x.unwrap_or(self.padding))
+    }
+
+    /// Effective top padding in px — see [`pad_left`](Self::pad_left).
+    pub fn pad_top(&self) -> f32 {
+        self.padding_top
+            .unwrap_or_else(|| self.padding_y.unwrap_or(self.padding))
+    }
+
+    /// Effective bottom padding in px — see [`pad_left`](Self::pad_left).
+    pub fn pad_bottom(&self) -> f32 {
+        self.padding_bottom
+            .unwrap_or_else(|| self.padding_y.unwrap_or(self.padding))
+    }
+
     /// Map the layout fields onto a `taffy::Style` for the layout engine.
     pub fn to_taffy(&self) -> taffy::Style {
         use taffy::prelude::*;
@@ -542,16 +580,14 @@ impl Layout {
                     bottom: length(self.margin_bottom.unwrap_or(m)),
                 }
             },
-            padding: {
-                // Most specific wins: a side, else its axis, else the uniform value.
-                let px = self.padding_x.unwrap_or(self.padding);
-                let py = self.padding_y.unwrap_or(self.padding);
-                Rect {
-                    left: length(self.padding_left.unwrap_or(px)),
-                    right: length(self.padding_right.unwrap_or(px)),
-                    top: length(self.padding_top.unwrap_or(py)),
-                    bottom: length(self.padding_bottom.unwrap_or(py)),
-                }
+            // Most specific wins: a side, else its axis, else the uniform value — the cascade
+            // lives in `pad_left`/`pad_right`/`pad_top`/`pad_bottom` so paint can read the same
+            // numbers layout does.
+            padding: Rect {
+                left: length(self.pad_left()),
+                right: length(self.pad_right()),
+                top: length(self.pad_top()),
+                bottom: length(self.pad_bottom()),
             },
             size: Size {
                 width: self.width.to_taffy(),

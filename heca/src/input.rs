@@ -1,11 +1,27 @@
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 
+/// A type used as an action argument that accepts a **fixed vocabulary** of spellings.
+///
+/// [`VALUES`](EnumArg::VALUES) lists every spelling the type's `FromStr` accepts, aliases included,
+/// and lives next to that `FromStr` so the two are read and changed together. An
+/// [`ArgDescriptor`](crate::actions::ArgDescriptor) points at it rather than restating the list, so
+/// an action's declared vocabulary is the parser's vocabulary by construction. The test
+/// `every_enum_arg_value_parses` walks each list through its own parser.
+pub trait EnumArg: std::str::FromStr {
+    /// Every accepted spelling, canonical form first.
+    const VALUES: &'static [&'static str];
+}
+
 /// Target for resize actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResizeTarget {
     Column,
     Pane,
+}
+
+impl EnumArg for ResizeTarget {
+    const VALUES: &'static [&'static str] = &["column", "col", "pane"];
 }
 
 impl std::str::FromStr for ResizeTarget {
@@ -24,6 +40,11 @@ impl std::str::FromStr for ResizeTarget {
 pub enum ResizeAxis {
     X,
     Y,
+}
+
+impl EnumArg for ResizeAxis {
+    const VALUES: &'static [&'static str] =
+        &["x", "horizontal", "width", "y", "vertical", "height"];
 }
 
 impl std::str::FromStr for ResizeAxis {
@@ -48,6 +69,11 @@ pub enum FontZoomStep {
     Reset,
 }
 
+impl EnumArg for FontZoomStep {
+    const VALUES: &'static [&'static str] =
+        &["in", "increase", "+", "out", "decrease", "-", "reset", "0"];
+}
+
 impl std::str::FromStr for FontZoomStep {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -65,6 +91,10 @@ pub enum SpawnKind {
     Terminal,
     App,
     Plugin,
+}
+
+impl EnumArg for SpawnKind {
+    const VALUES: &'static [&'static str] = &["terminal", "app", "plugin"];
 }
 
 impl std::str::FromStr for SpawnKind {
@@ -515,9 +545,13 @@ pub fn action_discriminant(action: &WmAction) -> std::mem::Discriminant<WmAction
 }
 
 /**
-Map a config key name to its unit `WmAction` variant.
-Parameterized variants are not reachable from config — they are
-constructed programmatically (RPC, mouse handlers, command palette).
+Map an action name to a `WmAction` that needs **no arguments** to be meaningful.
+
+A variant appears here only when the bare name says everything: a unit variant, or one whose
+fields all have a real default (`move_pane_left`'s `pane_id: None` means "the focused pane";
+`app_font_increase` carries its own step; `scrollback_line_up`'s one notch is the documented
+default). An action that needs a target is built from its declared arguments through
+[`build_action`] instead — see the note at the placeholder arms that used to live here.
 */
 pub fn action_from_name(name: &str) -> Option<WmAction> {
     match name {
@@ -589,33 +623,14 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "move_pane_right" => Some(WmAction::MovePaneRight { pane_id: None }),
         "move_column_up" => Some(WmAction::MoveColumnUp),
         "move_column_down" => Some(WmAction::MoveColumnDown),
-        "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
-            pane_id: PaneId(0),
-            ws_idx: 0,
-        }),
-        "move_pane_to_column" => Some(WmAction::MovePaneToColumn {
-            pane_id: PaneId(0),
-            ws_idx: 0,
-            col_idx: 0,
-        }),
-        "move_column_to_workspace" => Some(WmAction::MoveColumnToWorkspace {
-            col_idx: 0,
-            ws_idx: 0,
-            focus: true,
-        }),
-        "move_column" => Some(WmAction::MoveColumn {
-            src_ws: 0,
-            src_col: 0,
-            dst_ws: 0,
-            dst_idx: 0,
-            focus: true,
-        }),
-        "swap_columns" => Some(WmAction::SwapColumns {
-            a_ws: 0,
-            a_col: 0,
-            b_ws: 0,
-            b_col: 0,
-        }),
+        // NOTE: the actions that *need* a target — `move_pane_to_workspace`, `move_pane_to_column`,
+        // `move_column_to_workspace`, `move_column`, `swap_columns`, `add_pane_to_column`,
+        // `delete_column`, `delete_workspace` — are deliberately NOT here. They used to be, each
+        // returning a variant with every index filled with 0, so binding a bare `delete_workspace`
+        // to a key deleted **workspace 0** rather than doing nothing. They are built from their
+        // declared arguments through `build_action`, and a call that omits one is now reported
+        // instead of quietly becoming a call on index 0
+        // (`every_action_that_needs_a_target_refuses_to_default_it` holds the line).
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
         // Font zoom — global (app-wide terminal) branch, the `app-03` base.
@@ -652,15 +667,6 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "reset_pane_name" => Some(WmAction::ResetPaneName),
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
         "command_palette" => Some(WmAction::CommandPalette),
-        "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
-            ws_idx: 0,
-            col_idx: 0,
-        }),
-        "delete_column" => Some(WmAction::DeleteColumn {
-            ws_idx: 0,
-            col_idx: 0,
-        }),
-        "delete_workspace" => Some(WmAction::DeleteWorkspace { ws_idx: 0 }),
         "reload_config" => Some(WmAction::ReloadConfig),
         // Scrollback
         "scrollback_page_up" => Some(WmAction::ScrollbackPageUp),
@@ -728,21 +734,18 @@ fn get_enum<T: std::str::FromStr>(
     args.get(key)?.parse().ok()
 }
 
-/// Build a parameterized `WmAction` from a name and string args.
-/// Returns `None` if the action name is unknown or args are missing/invalid.
+/// Build a `WmAction` from a name and its arguments as text — the one constructor a `config.toml`
+/// binding, a menu entry's `Intent`, a plugin and RPC all reach.
 ///
-/// Supported names and required args:
-///   "focus_pane"          → pane_id: PaneId
-///   "focus_workspace"     → ws_idx: usize
-///   "swap"                → a_id: PaneId, b_id: PaneId
-///   "move"                → pane_id: PaneId, target_col: usize
-///   "resize"              → target: "column"|"pane", axis: "x"|"y", amount: f64
-///   "resize_to"           → target: "column"|"pane", width: f64, height: f64
-///   "float_at"            → pane_id: PaneId, x: f64, y: f64, width: f64, height: f64
-///   "close_pane_by_id"    → pane_id: PaneId
-///   "rename_target"       → pane_id: PaneId, name: String
-///   "scroll_to_offset"    → rows: usize
-///   "spawn_command"       → command: String
+/// `None` when the name is unknown, or when a required argument is missing or does not parse.
+///
+/// **Each arm's arguments are declared** in that action's
+/// [`ActionDescriptor::args`](crate::actions::ActionDescriptor::args), which is what lets a caller
+/// discover them (`describe-action`) and what lets
+/// [`check_args`](crate::actions::check_args) say *which* argument was wrong instead of the whole
+/// call quietly evaporating. The list that used to sit here in a doc comment named eleven of the
+/// thirty-five and had not been updated in a long time; the declarations replaced it, and
+/// `every_declared_argument_is_read_by_the_action` keeps them and these arms in step.
 pub fn build_action(
     name: &str,
     args: &std::collections::HashMap<String, String>,
@@ -786,6 +789,32 @@ pub fn build_action(
             a_col: get_usize(args, "a_col")?,
             b_ws: get_usize(args, "b_ws")?,
             b_col: get_usize(args, "b_col")?,
+        }),
+        "move_column_to_workspace" => Some(WmAction::MoveColumnToWorkspace {
+            col_idx: get_usize(args, "col_idx")?,
+            ws_idx: get_usize(args, "ws_idx")?,
+            focus: args
+                .get("focus")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
+        }),
+        // `pane_id` is OPTIONAL: omitting it moves the FOCUSED pane, which is what a keybinding
+        // means. Declaring it keeps the named path level with the RPC command, which has always
+        // accepted an explicit pane.
+        "move_pane_left" => Some(WmAction::MovePaneLeft {
+            pane_id: get_u64(args, "pane_id").map(PaneId),
+        }),
+        "move_pane_right" => Some(WmAction::MovePaneRight {
+            pane_id: get_u64(args, "pane_id").map(PaneId),
+        }),
+        "resize_column_by" => Some(WmAction::ResizeColumnBy {
+            col_idx: get_usize(args, "col_idx")?,
+            delta: get_f64(args, "delta")?,
+        }),
+        "resize_pane_height_by" => Some(WmAction::ResizePaneHeightBy {
+            col_idx: get_usize(args, "col_idx")?,
+            pane_idx: get_usize(args, "pane_idx")?,
+            delta: get_f64(args, "delta")?,
         }),
         "resize" => Some(WmAction::Resize {
             target: get_enum(args, "target")?,
@@ -1291,214 +1320,278 @@ mod tests {
         );
     }
 
+    /// Every `WmAction` variant, once, with a representative value.
+    ///
+    /// Exhaustiveness is enforced from outside: `action_priority`'s `match` has no catch-all arm,
+    /// so a new variant stops the build until it is classified, and both users of this list —
+    /// `test_action_priority_exhaustive` and `every_wm_action_variant_is_reachable_by_name` — call
+    /// the real production code, so a divergence surfaces instead of hiding in a shadow copy.
+    fn each_variant() -> Vec<WmAction> {
+        vec![
+            // Navigation
+            WmAction::FocusLeft,
+            WmAction::FocusRight,
+            WmAction::FocusUp,
+            WmAction::FocusDown,
+            WmAction::NextPane,
+            WmAction::PrevPane,
+            // Swap
+            WmAction::SwapLeft,
+            WmAction::SwapRight,
+            WmAction::SwapUp,
+            WmAction::SwapDown,
+            WmAction::MovePaneLeft { pane_id: None },
+            WmAction::MovePaneRight { pane_id: None },
+            WmAction::MoveColumnUp,
+            WmAction::MoveColumnDown,
+            // Resize
+            WmAction::ResizeIncrease,
+            WmAction::ResizeDecrease,
+            WmAction::PaneHeightIncrease,
+            WmAction::PaneHeightDecrease,
+            // Pane management
+            WmAction::SplitHorizontal,
+            WmAction::SplitVertical,
+            WmAction::ZoomColumn,
+            WmAction::Float,
+            WmAction::ClosePane,
+            WmAction::PaneSelect,
+            WmAction::FollowLink,
+            WmAction::SwapPane,
+            WmAction::SwapAndFocusPane,
+            WmAction::MoveColumnToWorkspacePick,
+            WmAction::MovePaneToWorkspacePick,
+            WmAction::MovePaneToColumnPick,
+            WmAction::FocusToggleLocal,
+            WmAction::FocusToggleGlobal,
+            WmAction::CreateWorkspace,
+            WmAction::RenameWorkspace,
+            WmAction::RenamePane,
+            WmAction::RenameColumn,
+            WmAction::WorkspaceNext,
+            WmAction::WorkspacePrev,
+            // Sidebar (mode-internal + global toggles)
+            WmAction::SidebarFocus,
+            WmAction::SidebarUp,
+            WmAction::SidebarDown,
+            WmAction::SidebarLeftNav,
+            WmAction::SidebarRightNav,
+            WmAction::SidebarExpandToggle,
+            WmAction::SidebarCreateWorkspace,
+            WmAction::SidebarCreateColumn,
+            WmAction::SidebarSplitInColumn,
+            WmAction::SidebarZoomSelectedColumn,
+            WmAction::SidebarDeleteSelected,
+            WmAction::CollapseCurrentWorkspace,
+            WmAction::ExpandCurrentWorkspace,
+            WmAction::ToggleCurrentWorkspaceCollapsed,
+            WmAction::CollapseCurrentColumn,
+            WmAction::ExpandCurrentColumn,
+            WmAction::ToggleCurrentColumnCollapsed,
+            WmAction::SidebarLeft,
+            WmAction::SidebarRight,
+            // System
+            WmAction::CommandPalette,
+            // Scrollback
+            WmAction::ScrollbackPageUp,
+            WmAction::ScrollbackPageDown,
+            WmAction::ScrollbackLineUp { amount: 1 },
+            WmAction::ScrollbackLineDown { amount: 1 },
+            WmAction::ScrollbackToTop,
+            WmAction::ScrollbackToBottom,
+            WmAction::ExitScrollback,
+            // Selection (host capability, Task 02)
+            WmAction::EnterSelectionMode,
+            WmAction::SelectionLeft,
+            WmAction::SelectionRight,
+            WmAction::SelectionUp,
+            WmAction::SelectionDown,
+            WmAction::ClearSelection,
+            WmAction::CopySelection,
+            WmAction::PasteClipboard,
+            WmAction::BeginSelection,
+            WmAction::ToggleSelectionEndpoint,
+            WmAction::OpenLinkAtCaret,
+            WmAction::SearchScrollback,
+            WmAction::SearchNextMatch,
+            WmAction::SearchPrevMatch,
+            // Take (panes + quick-take)
+            WmAction::PaneTake,
+            WmAction::PaneTakeAndFocus,
+            // Parameterized variants
+            WmAction::FocusPane { pane_id: PaneId(0) },
+            WmAction::FocusWorkspace { ws_idx: 0 },
+            WmAction::Swap {
+                a_id: PaneId(0),
+                b_id: PaneId(0),
+            },
+            WmAction::Move {
+                pane_id: PaneId(0),
+                target_col: 0,
+            },
+            WmAction::MovePaneToWorkspace {
+                pane_id: PaneId(0),
+                ws_idx: 0,
+            },
+            WmAction::MovePaneToColumn {
+                pane_id: PaneId(0),
+                ws_idx: 0,
+                col_idx: 0,
+            },
+            WmAction::MoveColumnToWorkspace {
+                col_idx: 0,
+                ws_idx: 0,
+                focus: false,
+            },
+            WmAction::MoveColumn {
+                src_ws: 0,
+                src_col: 0,
+                dst_ws: 0,
+                dst_idx: 0,
+                focus: false,
+            },
+            WmAction::SwapColumns {
+                a_ws: 0,
+                a_col: 0,
+                b_ws: 0,
+                b_col: 0,
+            },
+            WmAction::Resize {
+                target: ResizeTarget::Column,
+                axis: ResizeAxis::X,
+                amount: 0.0,
+            },
+            WmAction::ResizeColumnBy {
+                col_idx: 0,
+                delta: 0.0,
+            },
+            WmAction::ResizePaneHeightBy {
+                col_idx: 0,
+                pane_idx: 0,
+                delta: 0.0,
+            },
+            WmAction::ResizeTo {
+                target: ResizeTarget::Column,
+                width: 0.0,
+                height: 0.0,
+            },
+            WmAction::AppFontZoom {
+                step: FontZoomStep::In,
+            },
+            WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::In,
+            },
+            WmAction::FloatAt {
+                pane_id: PaneId(0),
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            WmAction::ClosePaneById { pane_id: PaneId(0) },
+            WmAction::RenameTarget {
+                pane_id: PaneId(0),
+                name: String::new(),
+            },
+            WmAction::SpawnCommand {
+                command: String::new(),
+                kind: SpawnKind::Terminal,
+                float: false,
+                close_policy: PaneClosePolicy::default(),
+            },
+            WmAction::EnterMode {
+                name: String::new(),
+            },
+            WmAction::AddPaneToColumn {
+                ws_idx: 0,
+                col_idx: 0,
+            },
+            WmAction::DeleteColumn {
+                ws_idx: 0,
+                col_idx: 0,
+            },
+            WmAction::DeleteWorkspace { ws_idx: 0 },
+            WmAction::TakePane {
+                pane_id: PaneId(0),
+                focus_after: false,
+            },
+            WmAction::ReloadConfig,
+        ]
+    }
+
     #[test]
     fn test_action_priority_exhaustive() {
-        // Exhaustiveness is enforced by listing every variant here: if a new
-        // `WmAction` variant is added, this function will fail to compile
-        // until a representative value is appended. The real `action_priority`
-        // is then called, so any divergence between the production body and
-        // this test (e.g. a catch-all arm in production) surfaces immediately
-        // as a compile error.
-        fn each_variant() -> Vec<WmAction> {
-            vec![
-                // Navigation
-                WmAction::FocusLeft,
-                WmAction::FocusRight,
-                WmAction::FocusUp,
-                WmAction::FocusDown,
-                WmAction::NextPane,
-                WmAction::PrevPane,
-                // Swap
-                WmAction::SwapLeft,
-                WmAction::SwapRight,
-                WmAction::SwapUp,
-                WmAction::SwapDown,
-                WmAction::MovePaneLeft { pane_id: None },
-                WmAction::MovePaneRight { pane_id: None },
-                WmAction::MoveColumnUp,
-                WmAction::MoveColumnDown,
-                // Resize
-                WmAction::ResizeIncrease,
-                WmAction::ResizeDecrease,
-                WmAction::PaneHeightIncrease,
-                WmAction::PaneHeightDecrease,
-                // Pane management
-                WmAction::SplitHorizontal,
-                WmAction::SplitVertical,
-                WmAction::ZoomColumn,
-                WmAction::Float,
-                WmAction::ClosePane,
-                WmAction::PaneSelect,
-                WmAction::FollowLink,
-                WmAction::SwapPane,
-                WmAction::SwapAndFocusPane,
-                WmAction::MoveColumnToWorkspacePick,
-                WmAction::MovePaneToWorkspacePick,
-                WmAction::MovePaneToColumnPick,
-                WmAction::FocusToggleLocal,
-                WmAction::FocusToggleGlobal,
-                WmAction::CreateWorkspace,
-                WmAction::RenameWorkspace,
-                WmAction::RenamePane,
-                WmAction::RenameColumn,
-                WmAction::WorkspaceNext,
-                WmAction::WorkspacePrev,
-                // Sidebar (mode-internal + global toggles)
-                WmAction::SidebarFocus,
-                WmAction::SidebarUp,
-                WmAction::SidebarDown,
-                WmAction::SidebarLeftNav,
-                WmAction::SidebarRightNav,
-                WmAction::SidebarExpandToggle,
-                WmAction::SidebarCreateWorkspace,
-                WmAction::SidebarCreateColumn,
-                WmAction::SidebarSplitInColumn,
-                WmAction::SidebarZoomSelectedColumn,
-                WmAction::SidebarDeleteSelected,
-                WmAction::CollapseCurrentWorkspace,
-                WmAction::ExpandCurrentWorkspace,
-                WmAction::ToggleCurrentWorkspaceCollapsed,
-                WmAction::CollapseCurrentColumn,
-                WmAction::ExpandCurrentColumn,
-                WmAction::ToggleCurrentColumnCollapsed,
-                WmAction::SidebarLeft,
-                WmAction::SidebarRight,
-                // System
-                WmAction::CommandPalette,
-                // Scrollback
-                WmAction::ScrollbackPageUp,
-                WmAction::ScrollbackPageDown,
-                WmAction::ScrollbackLineUp { amount: 1 },
-                WmAction::ScrollbackLineDown { amount: 1 },
-                WmAction::ScrollbackToTop,
-                WmAction::ScrollbackToBottom,
-                WmAction::ExitScrollback,
-                // Selection (host capability, Task 02)
-                WmAction::EnterSelectionMode,
-                WmAction::SelectionLeft,
-                WmAction::SelectionRight,
-                WmAction::SelectionUp,
-                WmAction::SelectionDown,
-                WmAction::ClearSelection,
-                WmAction::CopySelection,
-                WmAction::PasteClipboard,
-                WmAction::BeginSelection,
-                WmAction::ToggleSelectionEndpoint,
-                WmAction::OpenLinkAtCaret,
-                WmAction::SearchScrollback,
-                WmAction::SearchNextMatch,
-                WmAction::SearchPrevMatch,
-                // Take (panes + quick-take)
-                WmAction::PaneTake,
-                WmAction::PaneTakeAndFocus,
-                // Parameterized variants
-                WmAction::FocusPane { pane_id: PaneId(0) },
-                WmAction::FocusWorkspace { ws_idx: 0 },
-                WmAction::Swap {
-                    a_id: PaneId(0),
-                    b_id: PaneId(0),
-                },
-                WmAction::Move {
-                    pane_id: PaneId(0),
-                    target_col: 0,
-                },
-                WmAction::MovePaneToWorkspace {
-                    pane_id: PaneId(0),
-                    ws_idx: 0,
-                },
-                WmAction::MovePaneToColumn {
-                    pane_id: PaneId(0),
-                    ws_idx: 0,
-                    col_idx: 0,
-                },
-                WmAction::MoveColumnToWorkspace {
-                    col_idx: 0,
-                    ws_idx: 0,
-                    focus: false,
-                },
-                WmAction::MoveColumn {
-                    src_ws: 0,
-                    src_col: 0,
-                    dst_ws: 0,
-                    dst_idx: 0,
-                    focus: false,
-                },
-                WmAction::SwapColumns {
-                    a_ws: 0,
-                    a_col: 0,
-                    b_ws: 0,
-                    b_col: 0,
-                },
-                WmAction::Resize {
-                    target: ResizeTarget::Column,
-                    axis: ResizeAxis::X,
-                    amount: 0.0,
-                },
-                WmAction::ResizeColumnBy {
-                    col_idx: 0,
-                    delta: 0.0,
-                },
-                WmAction::ResizePaneHeightBy {
-                    col_idx: 0,
-                    pane_idx: 0,
-                    delta: 0.0,
-                },
-                WmAction::ResizeTo {
-                    target: ResizeTarget::Column,
-                    width: 0.0,
-                    height: 0.0,
-                },
-                WmAction::AppFontZoom {
-                    step: FontZoomStep::In,
-                },
-                WmAction::PaneTerminalFontZoom {
-                    pane_id: None,
-                    step: FontZoomStep::In,
-                },
-                WmAction::FloatAt {
-                    pane_id: PaneId(0),
-                    x: 0.0,
-                    y: 0.0,
-                    width: 0.0,
-                    height: 0.0,
-                },
-                WmAction::ClosePaneById { pane_id: PaneId(0) },
-                WmAction::RenameTarget {
-                    pane_id: PaneId(0),
-                    name: String::new(),
-                },
-                WmAction::SpawnCommand {
-                    command: String::new(),
-                    kind: SpawnKind::Terminal,
-                    float: false,
-                    close_policy: PaneClosePolicy::default(),
-                },
-                WmAction::EnterMode {
-                    name: String::new(),
-                },
-                WmAction::AddPaneToColumn {
-                    ws_idx: 0,
-                    col_idx: 0,
-                },
-                WmAction::DeleteColumn {
-                    ws_idx: 0,
-                    col_idx: 0,
-                },
-                WmAction::DeleteWorkspace { ws_idx: 0 },
-                WmAction::TakePane {
-                    pane_id: PaneId(0),
-                    focus_after: false,
-                },
-                WmAction::ReloadConfig,
-            ]
-        }
-
-        // Parameterized scrollback variants need explicit inclusion
-        // since the unit list above uses `amount: 3` which is a unit-like
-        // pattern for the variant.
         for action in each_variant() {
             let _ = action_priority(&action);
         }
+    }
+
+    /// Every spelling an [`EnumArg`] advertises is one its own parser accepts.
+    ///
+    /// The vocabulary an action declares comes from `VALUES`, and `VALUES` sits beside the
+    /// `FromStr` it describes — but "beside" is a habit, not a guarantee. This is the guarantee.
+    #[test]
+    fn every_enum_arg_value_parses() {
+        fn check<T: EnumArg>(what: &str) {
+            for value in T::VALUES {
+                assert!(
+                    value.parse::<T>().is_ok(),
+                    "{what} advertises {value:?}, which its own FromStr rejects",
+                );
+            }
+        }
+        check::<ResizeTarget>("ResizeTarget");
+        check::<ResizeAxis>("ResizeAxis");
+        check::<FontZoomStep>("FontZoomStep");
+        check::<SpawnKind>("SpawnKind");
+        check::<crate::chrome::RegionId>("RegionId");
+    }
+
+    /// Every `WmAction` is reachable by **name** — a unit variant through `action_from_name`, a
+    /// parameterized one through `build_action` fed from the arguments its descriptor **declares**.
+    ///
+    /// This is the direction the round-trip tests in `actions.rs` cannot cover. They walk the
+    /// declarations and check the code agrees; this walks the variants and checks a declaration
+    /// exists. Add a parameterized arm to `build_action` and forget its `ActionDescriptor` and the
+    /// new variant lands here with nothing to build it — which is how twenty-three argument-taking
+    /// actions went uncatalogued for months.
+    #[test]
+    fn every_wm_action_variant_is_reachable_by_name() {
+        use crate::actions::{ActionRegistry, ArgSpec, sample_args};
+
+        let mut reachable: std::collections::HashSet<std::mem::Discriminant<WmAction>> =
+            std::collections::HashSet::new();
+        for descriptor in ActionRegistry::ALL {
+            let args: Vec<ArgSpec> = descriptor.args.iter().map(ArgSpec::from_descriptor).collect();
+            let built = action_from_name(descriptor.name)
+                .or_else(|| build_action(descriptor.name, &sample_args(&args)));
+            let built = built.unwrap_or_else(|| {
+                panic!(
+                    "action {:?} builds from neither its name nor its declared arguments",
+                    descriptor.name
+                )
+            });
+            reachable.insert(action_discriminant(&built));
+        }
+
+        // `EnterMode` is the one variant with no descriptor: it is not an action a user names, it
+        // is how a mode trigger is represented internally once `[keys.mode]` has been read.
+        let internal = [action_discriminant(&WmAction::EnterMode { name: String::new() })];
+
+        let missing: Vec<String> = each_variant()
+            .iter()
+            .filter(|a| {
+                !reachable.contains(&action_discriminant(a))
+                    && !internal.contains(&action_discriminant(a))
+            })
+            .map(|a| format!("{a:?}"))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "these actions cannot be reached by name — each needs an `ActionDescriptor` (with its \
+             `args` declared, if it takes any): {missing:#?}"
+        );
     }
 
     #[test]

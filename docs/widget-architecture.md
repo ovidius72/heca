@@ -17,7 +17,7 @@ use (`Widget` → `Element`/`RenderObject`).
    ViewNode                     the DESCRIPTION   (heca/src/chrome/view.rs — the APP crate)
    { kind, props, events, children }              pure data · serde · no closures · no signals
         │
-        │   realize(&ViewNode, emit, hints, forms) -> Box<dyn Component>
+        │   realize(&ViewNode, theme, emit, hints, forms) -> Box<dyn Component>
         │   the ONE bridge     (heca/src/chrome/realize.rs — the APP crate)
         ▼
    Component tree               the LIVE WIDGETS  (heca-grid-ui — the LIBRARY crate)
@@ -28,7 +28,8 @@ use (`Widget` → `Element`/`RenderObject`).
 ```
 
 **Layer 1 — `ViewNode` (description).** A serializable node: `kind` (the closed `WidgetKind`
-vocabulary), `props` (scalars + semantic enums — *never* raw colors/pixels), `events`
+vocabulary), `props` (scalars, semantic enums, and appearance — a colour is a hex literal or a
+theme token **name**, resolved by `realize` against the theme the tree is built with), `events`
 (`press`/`change` → an `Intent` = action id + args, **never a closure**), and `children`
 (`Vec<ViewNode>`, recursive). This is what a WASM plugin ships over the boundary, what RPC can
 send, and what native code authors when it wants a declarative body (modals, menus, panels).
@@ -112,7 +113,7 @@ boxed setter — `Dialog::body_boxed(Box<dyn Component>)` is the precedent; new 
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::HStack)
         .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
         .child(ViewNode::new(WidgetKind::Label).text("Delete")))
 ```
@@ -144,7 +145,7 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 | Can any component go inside a widget's slot? | **Yes.** | Slots are `impl Component`. Never narrow to a closed enum. |
 | How does a realized subtree get into a widget? | **`*_boxed` setter.** | `Dialog::body_boxed` is the precedent. |
 | Does behaviour cross the plugin boundary as a callback? | **No — an `Intent`** (action id + args). | Keeps the model serializable; click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **Yes — changed 2026-07-26.** | The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name). The old "No" is dead — do not restore it. |
+| Is styling a prop? | **Yes — changed 2026-07-26, built 2026-07-27.** | The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name). The old "No" is dead — do not restore it. All of `Visual` is settable; a token name resolves against the theme the tree is built with. |
 
 ---
 
@@ -170,5 +171,5 @@ These are *not* settled, and are the live design work — everything above is.
 ~~`realize` coverage~~ — **done.** Every kind maps to a live widget, guarded by a test.
 ~~Composing the leaf widgets~~ — **done** (F003/P015, F003/P016).
 
-- **Typed builder SDK** over `ViewNode` (`Column::new().gap(8).child(…)`) — **F003/P011/T006**,
+- **Typed builder SDK** over `ViewNode` (`VStack::new().gap(8).child(…)`) — **F003/P011/T006**,
   waiting on **F003/P017**.

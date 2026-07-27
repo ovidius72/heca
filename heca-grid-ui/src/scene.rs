@@ -263,14 +263,20 @@ pub struct Shadow {
 }
 
 /// A rectangle outline.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// Serializable so a description can override it (F003/P017/T7). Its `color` is a
+/// [`Color`], whose serde form is a hex string, so a border crosses as
+/// `{"color": "#rrggbbaa", "width": 1.0}`.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Border {
     pub color: Color,
     pub width: f32,
 }
 
 /// An additive neon glow halo around a shape.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// Serializable for the same reason as [`Border`] — see F003/P017/T7.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Glow {
     pub color: Color,
     /// Falloff radius in logical pixels.

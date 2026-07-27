@@ -2,10 +2,14 @@
 //!
 //! This is the **app-wide** UI description: any UI — native chrome, overlays, and plugin
 //! panels — can be expressed as a tree of `ViewNode`s and turned into retained grid-ui
-//! [`Component`](heca_grid_ui::Component)s by the host mapper `realize()` (plugin-task-ui-3).
+//! `Component`s by the mapper `realize()` in `heca-view-realize` (plugin-task-ui-3).
 //! It is **generic** (its [`WidgetKind`] covers the whole grid-ui vocabulary) and fully
 //! **serializable** (serde), so the exact same model authored in Rust is what a WASM plugin
 //! ships over the boundary.
+//!
+//! This crate carries **no dependency but serde** — no widget library, no renderer, no taffy.
+//! That is the point of it living apart from the app (F003/P017/T009): a plugin can depend on
+//! the vocabulary without compiling the thing that draws it.
 //!
 //! Behaviour is expressed **only** through [`Intent`]s (an action id + args), never Rust
 //! closures — so the model stays serializable and uniform for native and plugin UI alike.
@@ -15,9 +19,8 @@
 //! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
 //! layout or paint logic — this is pure description.
 //!
-//! Seam module: consumed by `realize` (plugin-task-ui-3), the Modal `body` (ui-4) and
-//! plugins — carries `#![allow(dead_code)]` like the other chrome seam modules until then.
-#![allow(dead_code)]
+//! Consumed by `realize` (plugin-task-ui-3), the Modal `body` (ui-4) and plugins. Everything
+//! here is `pub`: it is the published vocabulary, so there is nothing to mark dead.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -29,7 +32,18 @@ use std::collections::BTreeMap;
 #[serde(rename_all = "snake_case")]
 pub enum WidgetKind {
     // ── Containers ──
-    Column,
+    /// A vertical box. Plain arrangement — no focus, no hover, no activation.
+    VStack,
+    /// A horizontal box. Plain arrangement — see [`Row`](WidgetKind::Row) for the interactive one.
+    HStack,
+    /// A **clickable, selectable** container for arbitrary content: hover tint, active state with
+    /// a marker, press flash, focus ring, activation by mouse and by Enter/Space.
+    ///
+    /// This is `heca_grid_ui::Row`. The name used to belong to the plain horizontal box, which is
+    /// now [`HStack`](WidgetKind::HStack) — so the library's `Row` and this one finally mean the
+    /// same thing. Before that rename the interactive row had no declarative spelling at all, and
+    /// `docs/chrome-and-ui.md` shipped an example writing this widget's behaviour against the box
+    /// that cannot do it.
     Row,
     Grid,
     Card,
@@ -68,6 +82,8 @@ pub enum WidgetKind {
     RailCell,
     /// A single selectable list row.
     Item,
+    /// A thin themed divider line.
+    Separator,
 }
 
 impl WidgetKind {
@@ -78,7 +94,8 @@ impl WidgetKind {
     /// rendering an empty container. Keep it in sync with the enum — [`ordinal`](Self::ordinal)
     /// makes that mechanical rather than a matter of discipline (see its docs).
     pub const ALL: &'static [WidgetKind] = &[
-        WidgetKind::Column,
+        WidgetKind::VStack,
+        WidgetKind::HStack,
         WidgetKind::Row,
         WidgetKind::Grid,
         WidgetKind::Card,
@@ -108,6 +125,7 @@ impl WidgetKind {
         WidgetKind::Toast,
         WidgetKind::RailCell,
         WidgetKind::Item,
+        WidgetKind::Separator,
     ];
 
     /// This kind's position in [`ALL`](Self::ALL).
@@ -117,38 +135,45 @@ impl WidgetKind {
     /// here without adding it to [`ALL`](Self::ALL) is a *test failure*. Between them, the list
     /// cannot silently fall behind the vocabulary — which is the whole point, since the coverage
     /// guard is only as good as the list it walks.
+    ///
+    /// Only the coverage test reads it, but it is compiled in **every** build on purpose: an
+    /// uncompiled match cannot be the compile error described above. (The app crate hid this
+    /// behind a module-wide `allow(dead_code)`; here the allow is narrowed to the one item.)
+    #[allow(dead_code)]
     fn ordinal(self) -> usize {
         match self {
-            WidgetKind::Column => 0,
-            WidgetKind::Row => 1,
-            WidgetKind::Grid => 2,
-            WidgetKind::Card => 3,
-            WidgetKind::Scroll => 4,
-            WidgetKind::Panel => 5,
-            WidgetKind::Surface => 6,
-            WidgetKind::ItemGroup => 7,
-            WidgetKind::DockFrame => 8,
-            WidgetKind::MarkerGroup => 9,
-            WidgetKind::Tabs => 10,
-            WidgetKind::Choice => 11,
-            WidgetKind::Label => 12,
-            WidgetKind::Button => 13,
-            WidgetKind::IconButton => 14,
-            WidgetKind::Badge => 15,
-            WidgetKind::BadgeButton => 16,
-            WidgetKind::Tag => 17,
-            WidgetKind::Icon => 18,
-            WidgetKind::Input => 19,
-            WidgetKind::Select => 20,
-            WidgetKind::Toggle => 21,
-            WidgetKind::Checkbox => 22,
-            WidgetKind::StatusDot => 23,
-            WidgetKind::Gauge => 24,
-            WidgetKind::ScrollBar => 25,
-            WidgetKind::Alert => 26,
-            WidgetKind::Toast => 27,
-            WidgetKind::RailCell => 28,
-            WidgetKind::Item => 29,
+            WidgetKind::VStack => 0,
+            WidgetKind::HStack => 1,
+            WidgetKind::Row => 2,
+            WidgetKind::Grid => 3,
+            WidgetKind::Card => 4,
+            WidgetKind::Scroll => 5,
+            WidgetKind::Panel => 6,
+            WidgetKind::Surface => 7,
+            WidgetKind::ItemGroup => 8,
+            WidgetKind::DockFrame => 9,
+            WidgetKind::MarkerGroup => 10,
+            WidgetKind::Tabs => 11,
+            WidgetKind::Choice => 12,
+            WidgetKind::Label => 13,
+            WidgetKind::Button => 14,
+            WidgetKind::IconButton => 15,
+            WidgetKind::Badge => 16,
+            WidgetKind::BadgeButton => 17,
+            WidgetKind::Tag => 18,
+            WidgetKind::Icon => 19,
+            WidgetKind::Input => 20,
+            WidgetKind::Select => 21,
+            WidgetKind::Toggle => 22,
+            WidgetKind::Checkbox => 23,
+            WidgetKind::StatusDot => 24,
+            WidgetKind::Gauge => 25,
+            WidgetKind::ScrollBar => 26,
+            WidgetKind::Alert => 27,
+            WidgetKind::Toast => 28,
+            WidgetKind::RailCell => 29,
+            WidgetKind::Item => 30,
+            WidgetKind::Separator => 31,
         }
     }
 }
@@ -292,7 +317,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// one, `.children([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().children([a,b])`.
 ///
 /// ```ignore
-/// ViewNode::new(WidgetKind::Column)
+/// ViewNode::new(WidgetKind::VStack)
 ///     .prop("gap", PropValue::Int(8))                       // ← the COLUMN's prop
 ///     .child(ViewNode::new(WidgetKind::Label).text("New name"))
 ///     .child(
@@ -308,16 +333,25 @@ pub type Events = BTreeMap<String, Intent>;
 ///     );
 /// ```
 ///
-/// # Layout props — every kind, no list
-/// **Any field of [`Layout`](heca_grid_ui::Layout) is a prop on any kind**, named exactly as the
-/// field is: `padding`, `margin` (+ per-side), `gap`, `gap_spacing`, `align`, `align_self`,
-/// `justify`, `justify_items`, `justify_self`, `direction`, `width`, `height`, min/max sizes,
-/// `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+/// # Style props — every kind, no list
+/// **Any field of [`Layout`](heca_grid_ui::Layout) or [`Visual`](heca_grid_ui::Visual) is a prop on
+/// any kind**, named exactly as the field is. Layout: `padding`, `margin` (+ per-side), `gap`,
+/// `gap_spacing`, `align`, `align_self`, `justify`, `justify_items`, `justify_self`, `direction`,
+/// `width`, `height`, min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`, `size`.
+/// Appearance: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 ///
-/// `realize` does **not** enumerate them — it merges by name against `Layout`'s own fields, so a
-/// field added there is settable from a description with no change to the mapper. The counterpart
-/// is that `Visual` (fill, border, glow, radius, font_size, font_scale) is not serializable, so
-/// appearance is unreachable from a description by construction, not by a rule someone enforces.
+/// `realize` does **not** enumerate them — it merges by name against each half's own fields, so a
+/// field added to either is settable from a description with no change to the mapper.
+///
+/// **Appearance became settable 2026-07-27 (F003/P017/T7).** `Visual` used to be unserializable on
+/// purpose, so appearance was unreachable by construction. The theme is the default now, not a
+/// wall: set nothing and you follow the theme, which is what most widgets should do.
+///
+/// A **colour** is a hex literal (`"#ff8800"`, `"#ff8800cc"`) or a **theme token name**
+/// (`"accent"`, `"muted"`, `"danger"` — the theme's own colour fields, so the vocabulary is not a
+/// list anyone maintains). A token resolves against the theme the tree is built with, and a theme
+/// reload rebuilds the trees, so a token-named override follows the new theme. A hex literal does
+/// not — it is exactly the colour it says. **Prefer a token name.**
 ///
 /// Values read the way an author would write them: enums by **name** (`"center"`,
 /// `"space_between"`, `"small"`), and a `Length` as a bare number (px), `"auto"`, or `"50%"`.
@@ -337,7 +371,7 @@ pub type Events = BTreeMap<String, Intent>;
 ///
 /// Deliberately NOT properties, with the reason recorded on each builder: closures (behaviour
 /// crosses as an [`Intent`]), composed content (use `children`), and builders bound to live host
-/// signals. Appearance is currently in this group and is moving out — see F003/P017/T7.
+/// signals. Appearance **used to be** in this group; it left on 2026-07-27 (F003/P017/T7).
 ///
 /// # Props & events by kind
 /// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
@@ -348,7 +382,8 @@ pub type Events = BTreeMap<String, Intent>;
 /// |------|----------------|--------|
 /// | `Column` / `Row` | (layout only — see above) | — |
 /// | `Card` | `text` (title) + children | — |
-/// | `Surface` / `Panel` | (container — children only) | — |
+/// | `Surface` | (container — children only) | — |
+/// | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 /// | `Scroll` | `axes` (`vertical` \| `horizontal` \| `both`, default vertical) + children | — |
 /// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 /// | `Badge` / `Tag` / `Alert` | `text` | — |
@@ -359,6 +394,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
 /// | `Gauge` | `value` (Float) | — |
 /// | `StatusDot` | — | — |
+/// | `Separator` | `orientation` (`horizontal` \| `vertical`, default horizontal), `length` (Float px; omit to stretch) | — |
 /// | `Item` | `text` (label); **slots**: `leading` / `trailing` (no default slot) | `press` |
 /// | `DockFrame` | `text` (title), `expanded` / `frameless` / `active` / `nav_selected` (Bool); **slot**: `header`, else body (default) | `toggle` |
 /// | `Toast` | `text` (title), `severity`, `icon`, `body`, `action_text`, `dismissible` | `press` · `dismiss` · `action` |
@@ -493,11 +529,11 @@ mod tests {
 
     /// A small confirm-dialog-shaped tree: a column with a message + two action buttons.
     fn confirm_tree() -> ViewNode {
-        ViewNode::new(WidgetKind::Column)
+        ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
             .child(
-                ViewNode::new(WidgetKind::Row)
+                ViewNode::new(WidgetKind::HStack)
                     .child(
                         ViewNode::new(WidgetKind::Button)
                             .text("Cancel")
@@ -556,7 +592,7 @@ mod tests {
         let back: ViewNode = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(tree, back, "ViewNode must round-trip through JSON (WASM boundary)");
         // Spot-check the shape survived.
-        assert_eq!(back.kind, WidgetKind::Column);
+        assert_eq!(back.kind, WidgetKind::VStack);
         assert_eq!(back.children.len(), 2);
         assert!(back.children[1].children[1].is_actionable());
     }

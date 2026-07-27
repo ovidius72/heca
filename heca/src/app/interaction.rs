@@ -812,9 +812,16 @@ fn dispatch_view_intent(
     source: InteractionSource,
     intent: &ViewIntent,
 ) {
+    // 0. Judge the args against what the action DECLARES it takes, and say what is wrong. Without
+    //    this the two failures below are indistinguishable and both silent: a misspelled required
+    //    argument makes `build_action` return `None` (so the intent looks like an unknown action),
+    //    and a misspelled optional one is simply dropped, leaving the action to run with a default
+    //    nobody asked for.
+    let args = intent_args_as_strings(intent);
+    report_arg_problems(&state.action_catalog, &intent.action, &args);
+
     // 1. Built-in. Parameterized variants are built from the intent's args (`build_action`, the same
     //    constructor a config binding uses); unit variants come straight from the name.
-    let args = intent_args_as_strings(intent);
     let builtin = crate::input::build_action(&intent.action, &args)
         .or_else(|| crate::input::action_from_name(&intent.action));
     if let Some(action) = builtin {
@@ -852,6 +859,29 @@ fn dispatch_view_intent(
             "[heca] interaction: action '{}' is declared but has no host handler",
             intent.action
         );
+    }
+}
+
+/// Report a dispatched intent's argument mistakes against the action's declared
+/// [`args`](crate::actions::ActionMeta::args).
+///
+/// Built-in and name-keyed actions alike — they share one catalog, so they are judged by one rule,
+/// the same way [`policy_allows`] judges them by one rule. An action the catalog does not know is
+/// not this function's business: the caller already reports an unresolved name.
+///
+/// This reports and does not decide. A missing required argument stops the action anyway (nothing
+/// can build it); an unknown or malformed one costs only itself and the rest of the call still
+/// stands — the rule the declarative UI model already applies to a widget property.
+fn report_arg_problems(
+    catalog: &crate::actions::ActionCatalog,
+    name: &str,
+    args: &std::collections::HashMap<String, String>,
+) {
+    let Some(meta) = catalog.find(name) else {
+        return;
+    };
+    for problem in crate::actions::check_args(&meta.args, args) {
+        eprintln!("[heca] action '{name}': {problem}");
     }
 }
 

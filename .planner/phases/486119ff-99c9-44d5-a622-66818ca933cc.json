@@ -2,9 +2,10 @@
   "id": "486119ff-99c9-44d5-a622-66818ca933cc",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
   "number": 4,
+  "shortId": "K9JJM",
+  "priority": 4,
   "slug": "terminal-00-damage-preservation-foundation",
   "title": "terminal-00: Damage-preservation foundation",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -29,6 +30,8 @@
       "id": "fc4c9d6e-0266-472d-a496-e1dd9ea70f8a",
       "phaseId": "486119ff-99c9-44d5-a622-66818ca933cc",
       "number": 1,
+      "shortId": "QJA7N",
+      "priority": 1,
       "shortName": "preserve-terminal-damage",
       "title": "Preserve terminal damage through app path",
       "status": "done",
@@ -49,6 +52,8 @@
       "id": "53f86b9c-1b99-4a12-9680-3cc764c69828",
       "phaseId": "486119ff-99c9-44d5-a622-66818ca933cc",
       "number": 2,
+      "shortId": "ZGQR8",
+      "priority": 2,
       "shortName": "row-range-damage",
       "title": "Produce row-range damage in terminal backend",
       "status": "done",
@@ -67,5 +72,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:11:32.026Z"
+  "updatedAt": "2026-07-27T11:40:15.480Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

@@ -2,9 +2,10 @@
   "id": "1af771d1-e22b-43ce-94d3-b9f228e926db",
   "featureId": "b5d04826-7fd8-4094-ace5-96dc93b825a0",
   "number": 3,
+  "shortId": "NKR27",
+  "priority": 3,
   "slug": "compositor-06-ship-review-finale",
   "title": "compositor-06: Ship review finale",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -28,6 +29,8 @@
       "id": "7f84d13e-2cfc-49cb-9187-c1174d68f45a",
       "phaseId": "1af771d1-e22b-43ce-94d3-b9f228e926db",
       "number": 1,
+      "shortId": "N4RCJ",
+      "priority": 1,
       "shortName": "final-review-compositor",
       "title": "Final review rust-skill clippy and tests",
       "status": "done",
@@ -46,5 +49,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-03T11:11:34.092Z"
+  "updatedAt": "2026-07-27T11:40:15.477Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

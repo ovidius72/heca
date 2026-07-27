@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-07-26T21:17:49.382Z",
-  "currentPhaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+  "updatedAt": "2026-07-27T12:28:19.840Z",
+  "currentPhaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
   "inProgressTaskIds": [],
   "nextSteps": [
-    "Continue with plugin-03: Built-in provider system and WorkspacesContainer migration"
+    "F003/P017 has T008 and T009 left. F003/P017/T009 (where the pure-data model lives) gained a SECOND motivation on 2026-07-27 beyond plugin editor help: the showcase sits below `heca` in the crate graph, so it cannot call `realize`, and no described tree is visible anywhere in the app except a modal body. That is a verification gap on every future vocabulary task. The user has been shown the trade-off and has NOT chosen it yet — do not start it."
   ],
   "blockers": [
-    "126d0855-658d-471f-86a6-27eb144fc591: ScrollRegion keyboard-scroll actions (prefix+Home/End/PgUp/PgDown; horizontal trigger TBD)"
+    "126d0855-658d-471f-86a6-27eb144fc591: ScrollRegion keyboard-scroll actions (vertical prefix+Home/End/PgUp/PgDown; horizontal prefix+Shift+ the same four — settled 2026-07-27)"
   ],
-  "notes": "Planner synchronized with BACKLOG.md. plugin-01 and plugin-02 now marked done. plugin-03 in progress.",
-  "lastSessionSummary": "Synced planner with origin/main backlog. Updated feature/phase statuses for pluggable chrome and compositor frost.",
+  "notes": "plugin-03 (F003/P004) is DONE — the phase and all six tasks, and the code backs it: heca/src/providers/workspaces.rs exists and WorkspacesContainerProvider is registered at heca/src/app/startup.rs:333. This file said otherwise until 2026-07-27: the nextSteps string was written during a BACKLOG.md sync and never updated, so every /planner load recap repeated it. Task operations refresh updatedAt but leave nextSteps and notes untouched — they are free text, so a session that changes direction has to correct them by hand.",
+  "lastSessionSummary": "F003/P010/T6 (an action declares the arguments it takes) and F003/P017/T5 (Separator joins the vocabulary) both shipped on branch feat/action-arg-declaration. P017's T6 and T7 unblocked: the Row naming and the appearance scope were decided with the user.",
   "guardBypassUntil": "2026-07-26T21:31:25.036Z"
 }

@@ -2,9 +2,10 @@
   "id": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 9,
+  "shortId": "P6FFW",
+  "priority": 9,
   "slug": "plugin-07-simple-config-toml-plugins",
   "title": "plugin-07: Simple config.toml plugins",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -30,6 +31,8 @@
       "id": "b4dd45d2-b67d-4887-8598-2aba54034212",
       "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
       "number": 1,
+      "shortId": "GZPTA",
+      "priority": 1,
       "shortName": "plugins-toml-schema",
       "title": "Define and parse plugins TOML schema",
       "status": "planned",
@@ -50,6 +53,8 @@
       "id": "7c81d40b-5ff1-4f95-9069-9325577f0083",
       "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
       "number": 2,
+      "shortId": "V7BL2",
+      "priority": 2,
       "shortName": "document-config-plugins",
       "title": "Document config plugins in README",
       "status": "planned",
@@ -70,6 +75,8 @@
       "id": "9b3e7f08-4786-4570-98d9-c925a75aed8c",
       "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
       "number": 3,
+      "shortId": "GF5GZ",
+      "priority": 3,
       "shortName": "config-plugin-renderer",
       "title": "Implement config plugin renderer",
       "status": "planned",
@@ -88,5 +95,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.862Z",
-  "updatedAt": "2026-07-01T18:12:56.212Z"
+  "updatedAt": "2026-07-27T11:40:15.505Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

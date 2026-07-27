@@ -58,7 +58,8 @@ These are made over and over. **Violating either = redo.**
   `SubmitOverlay`) are the only exception to the keybinding file. When in doubt, **audit** that every
   `SettingsConfig` field appears in `config.default.toml` and every default binding is present.
 - Adding an action? Follow the **"Adding New Actions" checklist** (§ below) end to end — `WmAction`
-  variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor.
+  variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor
+  → **declared `args`**.
 - Rule: a capability must be reachable from **mouse + keybinding/action + RPC**, never one surface only.
 
 > If a change touches UI or input and you didn't open `docs/widgets.md`/the showcase, or didn't go
@@ -718,7 +719,7 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
 
-- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop (changed 2026-07-26)** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop (changed 2026-07-26)** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
 - **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
@@ -749,7 +750,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
 | How does a **realized** subtree enter a widget? | Via a **`*_boxed` setter**: `realize` returns `Box<dyn Component>`, which is not itself `Component`, so it cannot go through `Parent::child`. `Dialog::body_boxed(Box<dyn Component>)` is the precedent. |
 | How does behaviour cross the plugin boundary? | As an **`Intent`** (action id + args), never a callback. Click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **YES — changed 2026-07-26.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
+| Is styling a prop? | **YES — changed 2026-07-26.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** **Built 2026-07-27 (F003/P017/T7):** the whole of `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
 
 **Both authoring paths converge on the same retained tree — that is the whole point:**
 
@@ -758,7 +759,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 ViewNode::new(WidgetKind::Button)
     .prop("variant", PropValue::Variant(ViewVariant::Destructive))
     .on_press(Intent::new("confirm_ok"))
-    .child(ViewNode::new(WidgetKind::Row)
+    .child(ViewNode::new(WidgetKind::HStack)
         .child(ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("trash".into())))
         .child(ViewNode::new(WidgetKind::Label).text("Delete")))
 
@@ -846,7 +847,7 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 - **Change widgets report via callbacks**, not return values: `.on_change(|action: Action| …)` carrying `Action::value("<name>-change", SignalData::…)` (`toggle-change`/Bool, `checkbox-change`/Bool, `input-change`/String, `tab-change`/Usize). Buttons use `.on_click(|| …)`.
 - **`Base.disabled`** (dim+inert+unfocusable) and **`Base.tab_index`** are common to all widgets. Focus via one `FocusManager` (Tab/Shift+Tab, click-focus, `deliver_key`). Animations via `tick(dt) -> bool`.
 
-**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `ScrollRegion`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
+**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `Panel` (titled section), `Row` (clickable/selectable), `Item`, `ItemGroup`, `Grid`, `DockFrame`, `ChromeRegion`, `ScrollRegion`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `Tag`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
 
 ### Gotchas
 
@@ -1039,13 +1040,24 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 ### Adding New Actions
 
 1. Add variant to `WmAction` in `heca/src/input.rs`
-2. Add string mapping in `action_from_name()`
+2. Add string mapping in `action_from_name()` — **only if the bare name says everything.** An action
+   that needs a target does *not* belong there: it is built from its arguments in `build_action()`.
+   Putting it in `action_from_name()` with placeholder fields means the name silently resolves to
+   index 0, which is how a bare `delete_workspace` used to delete workspace 0.
 3. Add builder support in `build_action()` when the action is parameterized
 4. Add priority in `action_priority()`
 5. Create handler in `heca/src/handlers.rs`
 6. Register in `build_registry()` in `heca/src/app/registry.rs`
-7. Add default binding in `keybindings.default.toml` (the embedded default keymap)
+7. Add default binding in `keybindings.default.toml` (the embedded default keymap). An action with a
+   **required argument gets none** — a key cannot supply a pane id.
 8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
+8b. **Declare its arguments** in that descriptor's `args` — name, kind, required, and for a
+   vocabulary argument the list from `EnumArg::VALUES` beside its own parser, never a copy. The field
+   has no default, so you cannot skip the question; `args: &[]` means it genuinely takes none.
+   This is what lets heca say *which* argument a caller got wrong instead of the call vanishing —
+   and the tests `every_declared_argument_is_read_by_the_action`,
+   `every_required_argument_is_actually_required` and `every_optional_argument_is_actually_optional`
+   fail if the declaration and the `build_action()` arm disagree.
 9. Add RPC parser support in `heca/src/rpc.rs`
 9b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
 9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` (may differ from the action name, as `close` → `delete_pane`); users toggle it under `[confirm]`.

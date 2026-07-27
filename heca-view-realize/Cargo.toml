@@ -1,0 +1,18 @@
+[package]
+name = "heca-view-realize"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Turns heca-view's declarative widget tree into live heca-grid-ui components"
+
+# This is the half of the declarative path that needs the widget library, which is exactly why it
+# is not in `heca-view`: that crate stays dependency-free so a plugin can describe UI without
+# compiling anything that draws it (F003/P017/T009).
+[dependencies]
+heca-view = { path = "../heca-view" }
+heca-grid-ui = { path = "../heca-grid-ui" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+heca-core = { path = "../heca-core" }

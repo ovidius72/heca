@@ -1839,6 +1839,19 @@ fn open_confirm(
     let mut modal = crate::chrome::ModalSpec::message(title, spec.message.clone())
         .dismissible(spec.dismissible)
         .danger(danger_panel);
+    // A destructive prompt says its consequence in the theme's danger colour — the sentence that
+    // matters ("This action cannot be undone.") should not read as ordinary body text under a
+    // title that is already a question.
+    //
+    // Written as the token NAME, not a hex value, so it follows the active theme and a reload
+    // (F003/P017/T007). This is the first thing in heca to override an appearance property, and
+    // it is deliberately a token rather than a literal — the spelling the docs steer authors to.
+    if danger_panel {
+        modal.body = modal.body.prop(
+            "color",
+            crate::chrome::PropValue::Color("danger".to_string()),
+        );
+    }
     for b in &spec.buttons {
         modal = modal.action(
             crate::chrome::ModalAction::new(b.id.clone(), b.label.clone())
