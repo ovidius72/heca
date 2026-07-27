@@ -158,7 +158,7 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, ScrollRegion, Surface, Tag,
+    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Surface, Tag,
     Tooltip,
     TooltipSide,
 };
@@ -1535,7 +1535,6 @@ fn build_sidebar_shell(
     border_width: f32,
     border_radius: f32,
     content: Option<WidgetModel>,
-    scroll: Option<Signal<f32>>,
 ) -> Flex {
     let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1550,28 +1549,18 @@ fn build_sidebar_shell(
         .gap(8.0)
         .background(shell_bg);
     if let Some(content) = content {
-        // The content sits in a real scroll viewport, so a workspace list longer than the sidebar
-        // scrolls instead of running off the bottom. The region drives itself — wheel, thumb, track
-        // click, click-and-hold — and needs nothing from the host but the pointer events every
-        // widget gets.
+        // Mounted directly: **the shell does not scroll** (F003/P011/T021).
         //
-        // **The offset lives in the store, not in the widget.** This tree is rebuilt whenever the
-        // chrome signature changes, and a pane's git status changing is enough to do it. A
-        // widget-local offset would snap the sidebar back to the top every time anything underneath
-        // it moved. `SharedChromeState` is where the design record puts scroll offsets, and the
-        // signal was already sitting there reserved for this.
-        let mut region = ScrollRegion::new();
-        if let Some(store) = scroll {
-            // Restore through `scroll_to`, which reports with `event: None` — so the listener below
-            // ignores it and a restore can never be mistaken for the user scrolling.
-            region.scroll_to(store.get_untracked());
-            region = region.on_scroll(move |s| {
-                if s.event.is_some() {
-                    store.set(s.offset_y);
-                }
-            });
-        }
-        body = body.child(region.child_boxed(content));
+        // Scrolling is per container. Each one nests its own scroll area and scrolls its own
+        // content, which is what makes two of them in a sidebar independent. A scroll viewport
+        // around the whole stack would defeat that twice over: it takes the wheel for the sidebar
+        // instead of the container under the cursor, and — because a viewport measures its content
+        // at its natural height, which is the whole point of one — it leaves the containers
+        // content-sized, so a fractional share has no height to divide and they bunch at the top.
+        //
+        // The shell's job is to give containers bounds. It hands them the region's height, they
+        // take their shares of it, and each scrolls inside what it got.
+        body = body.child_boxed(content);
     }
     Flex::column()
         .width(Length::Px(region_w))
@@ -3159,10 +3148,6 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
-            // This region's own shell offset, which outlives the tree. Not the workspaces
-            // container's — that one is the container's content, and a container nesting its own
-            // scroll area must not have the dock list moving it (F003/P011/T021).
-            Some(state.chrome_state.left.scroll),
         )
     });
     let right_w = chrome.right_sidebar_width;
@@ -3184,10 +3169,6 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
-            // The right region's own offset. It used to be `None` — the region worked but forgot
-            // its position on every rebuild, because offsets were owned by a container instead of
-            // by whatever nests the scroll area (F003/P011/T021).
-            Some(state.chrome_state.right.scroll),
         )
     });
 
@@ -3828,7 +3809,6 @@ mod tests {
             1.0,
             12.0,
             content,
-            None,
         );
         assert_eq!(
             shell.base().children.len(),
@@ -3888,7 +3868,6 @@ mod tests {
             border_w,
             12.0,
             content,
-            None,
         );
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);

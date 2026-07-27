@@ -110,19 +110,6 @@ impl PaneRuntimeSignals {
 pub(crate) struct RegionState {
     pub(crate) mode: Signal<RegionMode>,
     pub(crate) size: Signal<f32>,
-    /// This region's **shell** scroll offset (logical px) — the dock list, when more
-    /// containers are seated here than fit.
-    ///
-    /// It belongs to the region because the shell is what nests that scroll area. A
-    /// container that nests its *own* keeps its own offset (see
-    /// [`WorkspacesContainerState::scroll`]), and the two are independent: scrolling the
-    /// dock list must not move a dock's content, nor the other way round.
-    ///
-    /// Every region has one, which is what makes left and right independent. Before
-    /// F003/P011/T021 the left shell was handed the workspaces *container's* offset and
-    /// the right shell was handed `None` — so one borrowed state that was not its own and
-    /// the other forgot its position on every tree rebuild.
-    pub(crate) scroll: Signal<f32>,
 }
 
 impl RegionState {
@@ -130,7 +117,6 @@ impl RegionState {
         Self {
             mode: signal(mode),
             size: signal(size),
-            scroll: signal(0.0),
         }
     }
 }
@@ -981,39 +967,30 @@ mod tests {
         assert_eq!(s.container_scroll("workspaces").get_untracked(), 42.5);
     }
 
-    /// Every scroll area owns its own offset: each shell, and **each placement** of a container.
+    /// Every **placement** owns its own scroll offset.
     ///
-    /// All of these used to be one number. The left shell was handed the workspaces container's
-    /// offset, so the dock list and the dock's content shared it; the right shell was handed
-    /// `None`, so it forgot its position on every rebuild; and the container's own offset was
-    /// scoped to the container *kind*, so placing it twice would have scrolled both placements
-    /// together — invisible until there were two (F003/P011/T021).
+    /// Scrolling is per container: each nests its own scroll area, and the shell does not scroll at
+    /// all — it gives containers bounds and they take their shares of them (F003/P011/T021). So the
+    /// offsets that exist are per placement, and placing one container twice must not make the two
+    /// move together, which is invisible until there are two of something.
     ///
-    /// The content of two placements is the same, because it comes from the shared store. The
-    /// scroll position is not, because it belongs to the placement.
+    /// Two placements show the same content, because that comes from the shared store. Their scroll
+    /// positions are their own, because those belong to the placement.
     #[test]
-    fn every_scroll_area_owns_its_own_offset() {
+    fn every_placement_owns_its_own_scroll_offset() {
         let s = state();
 
-        s.left.scroll.set(10.0);
-        assert_eq!(s.right.scroll.get_untracked(), 0.0, "the regions are independent");
-        assert_eq!(
-            s.container_scroll("workspaces").get_untracked(),
-            0.0,
-            "a shell's dock list does not move a container's content",
-        );
-
-        // Two placements of the same container: separate positions.
         s.set_container_scroll("workspaces.testbed.top", 30.0);
         assert_eq!(
             s.container_scroll("workspaces.testbed.bottom").get_untracked(),
             0.0,
             "two placements of one container scroll independently",
         );
-
-        s.right.scroll.set(20.0);
-        assert_eq!(s.left.scroll.get_untracked(), 10.0, "and nothing overwrote the others");
-        assert_eq!(s.right.scroll.get_untracked(), 20.0);
+        assert_eq!(
+            s.container_scroll("workspaces").get_untracked(),
+            0.0,
+            "and a third placement elsewhere is untouched",
+        );
         assert_eq!(s.container_scroll("workspaces.testbed.top").get_untracked(), 30.0);
     }
 
