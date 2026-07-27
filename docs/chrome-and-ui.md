@@ -213,13 +213,18 @@ That table is not written by hand. It is the reasons in the source, counted.
 
 ```rust
 Panel::new()
-    .padding(12)
-    .child(Column::new().gap(8)
-        .child(Label::new("Containers"))
+    .title("Containers")                 // a real heading; omit it and no header row is drawn
+    .child(VStack::new().gap(8)
         .child(Button::new("Refresh")
             .variant(Variant::Accent)
             .on_press(intent("docker.refresh", {}))))
 ```
+
+`Panel` is a **titled section container** — a plugin's slice of a region. It is quiet by default
+(no frame of its own, lighter padding than a `Card`); give it a `fill` or a `border` when it should
+stand apart. The heading used to be fiction: `WidgetKind::Panel` realized to a plain `Surface`,
+which has no title, so this example described something that could not be built. F003/P017/T008
+made `Panel` a real widget.
 
 ### A table
 
@@ -261,7 +266,7 @@ for a while:
 ```rust
 let result = ctx.overlay.open_modal(ModalSpec {
     title: "Restart a container".into(),
-    body: Column::new().gap(10)
+    body: VStack::new().gap(10)
         .child(Label::new("Pick a container:"))
         .child(containers_table(rows))
         .child(Input::new()
@@ -1742,6 +1747,8 @@ listed here rather than edited, so the original wording stays readable.
 | Collapsed icon rail, `RailCell` per item, rail flavours (§15) | **Dropped 2026-07-11.** A region is Expanded or Hidden. `RailCell` and `KeyHint` still ship; nothing mounts a rail. See the planner (F003/P020). |
 | "G1–G8" task ids (§19 references them) | **Removed 2026-07-26.** All eight were built. Only G7 ever had a planner id (F004/P001). |
 | Open questions: icon font, `Grid` surface detail (§19) | Both shipped. `Icon` and `Grid` are live widgets. |
+| `Column::new()` / `Row::new()` as the layout boxes (§14, §15) | **Renamed 2026-07-27 (F003/P017/T006).** The vocabulary's boxes are `VStack` / `HStack`; `Row` is now the **clickable, selectable** widget it always was in `heca-grid-ui`. Part I's examples use the new names. |
+| "No dedicated `Panel` widget — a bare panel is a plain `Surface`" | **Built 2026-07-27 (F003/P017/T008).** `Panel` is its own widget with a real title. It was the reason the published panel example described something unbuildable. |
 | Any "Status:" line anywhere in Part II | The planner is the record. Ignore them. |
 
 ## 22. Work that is designed here but was tracked nowhere

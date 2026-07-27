@@ -37,7 +37,7 @@ use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, LayoutExt, MarkerGroup, PropInput, RailCell,
+    Item, ItemGroup, Label, LayoutExt, MarkerGroup, Panel, PropInput, RailCell,
     Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs,
     Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
@@ -308,9 +308,15 @@ fn realize_kind(
         WidgetKind::Card => {
             attach_children(Box::new(Card::new(text_of(node))), node, theme, emit, hints, forms)
         }
-        // No dedicated `Panel` widget — a bare panel is a plain `Surface`.
-        WidgetKind::Surface | WidgetKind::Panel => {
+        WidgetKind::Surface => {
             attach_children(Box::new(Surface::new()), node, theme, emit, hints, forms)
+        }
+        // `Panel` used to be an alias for `Surface`, which is why the published examples showed
+        // `Panel::new().title(..)` against a widget that had no title (F003/P017/T008). It is its
+        // own widget now; `text` is the heading, as it is for `Card` and `DockFrame`.
+        WidgetKind::Panel => {
+            let panel = with_props(Panel::new().title(text_of(node)), node, theme);
+            attach_children(Box::new(panel), node, theme, emit, hints, forms)
         }
         WidgetKind::Scroll => {
             // `axes` reaches the widget through its own builder, so a declarative region can be

@@ -1600,7 +1600,7 @@ tree to real `heca-grid-ui` widgets, themes them, and owns focus/clipping/overla
 ```rust
 // A container is just a ViewNode with children — compose arbitrarily:
 Panel::new().title("Hello")
-    .child(Column::new().gap(6).padding(10)
+    .child(VStack::new().gap(6).padding(10)
         .child(Label::new(format!("Active pane: {name}")))
         .child(Button::new("Refresh")
             .variant(Variant::Accent)                 // semantic, themed by the host

@@ -1946,6 +1946,48 @@ fn a_separators_length_and_orientation_can_be_set_in_either_order() {
     assert!(bounds.size.w <= 1.0, "and stays thin");
 }
 
+/// A `Panel`'s heading is a real composed child, and setting it works **whichever side of the
+/// children it happens on** — which is what a description needs, since properties are applied after
+/// children are attached.
+///
+/// Before F003/P017/T008 there was no `Panel` widget at all: `WidgetKind::Panel` realized to a bare
+/// `Surface`, so the published examples showed `Panel::new().title("…")` against something with no
+/// title, and no reader could tell.
+#[test]
+fn a_panel_titles_itself_whichever_order_it_is_built_in() {
+    use heca_grid_ui::Panel;
+
+    // Title first, then content.
+    let a = Panel::new()
+        .title("Containers")
+        .child(Label::new("nginx"))
+        .child(Label::new("redis"));
+    // Content first, then title — the order `realize` uses.
+    let b = Panel::new()
+        .child(Label::new("nginx"))
+        .child(Label::new("redis"))
+        .title("Containers");
+
+    for (which, panel) in [("title first", &a), ("children first", &b)] {
+        let kids = &panel.base().children;
+        assert_eq!(kids.len(), 3, "{which}: header + two content children");
+        assert!(
+            !kids[0].base().style.layout.hidden,
+            "{which}: the header shows once titled",
+        );
+    }
+    assert_eq!(a.title_signal().get_untracked(), "Containers");
+    assert_eq!(b.title_signal().get_untracked(), "Containers");
+
+    // An untitled panel keeps the header out of the layout rather than leaving a blank line.
+    let plain = Panel::new().child(Label::new("body"));
+    assert!(plain.base().children[0].base().style.layout.hidden);
+
+    // And a title can be cleared back to nothing.
+    let cleared = Panel::titled("Gone").title("");
+    assert!(cleared.base().children[0].base().style.layout.hidden);
+}
+
 /// A separator with no length spans its container **even when the container centres its children**.
 ///
 /// Found by looking at it: the showcase row centres, like most rows do, so the rule was laid out

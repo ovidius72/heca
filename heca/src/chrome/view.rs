@@ -374,7 +374,8 @@ pub type Events = BTreeMap<String, Intent>;
 /// |------|----------------|--------|
 /// | `Column` / `Row` | (layout only — see above) | — |
 /// | `Card` | `text` (title) + children | — |
-/// | `Surface` / `Panel` | (container — children only) | — |
+/// | `Surface` | (container — children only) | — |
+/// | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 /// | `Scroll` | `axes` (`vertical` \| `horizontal` \| `both`, default vertical) + children | — |
 /// | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 /// | `Badge` / `Tag` / `Alert` | `text` | — |

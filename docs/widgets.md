@@ -656,6 +656,43 @@ Card::new("POWER").background(theme.surface).border(theme.accent, 1.5)
     .child(Label::new("98%").font_scale(2.0));
 ```
 
+### Panel
+
+A titled **section** container: an optional heading over body content.
+
+The difference from [`Card`](#card) is presentation, not structure. A `Card` is a card — padded 18,
+framed with the theme border and radius, meant to stand apart. A `Panel` is a slice of a region (a
+plugin's section of a sidebar), so it is quiet by default: no frame of its own and lighter padding.
+Give it a fill or a border through `StyleExt` when it should stand out.
+
+- **Construct**: `Panel::new()` (untitled) or `Panel::titled(title)`.
+- **Builders**: `.title(impl Into<String>)` — an empty title hides the header rather than leaving a
+  blank line.
+- **Accessor**: `.title_signal() -> Signal<String>` — retitle a mounted panel with no rebuild.
+- **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+
+```rust
+Panel::titled("Containers")
+    .child(Label::new("nginx"))
+    .child(Label::new("postgres"));
+```
+
+**Declarative:**
+
+```rust
+ViewNode::new(WidgetKind::Panel)
+    .text("Containers")                       // `text` is the heading, as it is for Card/DockFrame
+    .child(ViewNode::new(WidgetKind::Label).text("nginx"));
+```
+
+The heading is a real `Label` child, created up front and hidden until a title is set — so `title`
+works whether it is applied before or after the children, which is what a description needs since
+properties are applied after children are attached.
+
+> Until F003/P017/T008 there was **no** `Panel` widget: `WidgetKind::Panel` realized to a bare
+> `Surface`, which has no title. The published plugin examples showed `Panel::new().title("Hello")`
+> against it, and nothing in the docs let a reader tell that the title did not exist.
+
 ### Pane
 
 A generic container for sidebars/panels with three **frame modes** (`PaneFrame`),
@@ -3232,7 +3269,8 @@ and a bad value costs only itself: the good props on the same node still apply.
 | `VStack` / `HStack` | (layout only — see above) — the plain boxes | — |
 | `Row` | `active`, `nav_selected`, `marker` (`bar` \| `check` \| `none`) + children | `press` |
 | `Card` | `text` (title) + children | — |
-| `Surface` / `Panel` | (container — children only) | — |
+| `Surface` | (container — children only) | — |
+| `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |

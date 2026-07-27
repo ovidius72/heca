@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
-use heca_grid_ui::{Component, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size};
+use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, Rectangle, Scene, Size};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
@@ -771,6 +771,31 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 )
                 .gap(3.0)
                 .width(Length::Px(320.0)),
+        )
+        // Panel: a titled section container. Quiet by default (no frame of its own), which is what
+        // distinguishes it from a Card — a Card stands apart, a Panel is a slice of a region. The
+        // second one is untitled, to show the header taking no room rather than leaving a blank
+        // line. Both are what `WidgetKind::Panel` realizes to now that Panel is a real widget.
+        .child(caption("Panel"))
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Start)
+                .child(
+                    Panel::titled("Containers")
+                        .width(Length::Px(220.0))
+                        .background(theme.colors.foreground.with_alpha(6))
+                        .radius(theme.colors.control_radius())
+                        .child(Label::new("nginx").color(theme.colors.muted))
+                        .child(Label::new("postgres").color(theme.colors.muted)),
+                )
+                .child(
+                    Panel::new()
+                        .width(Length::Px(220.0))
+                        .background(theme.colors.foreground.with_alpha(6))
+                        .radius(theme.colors.control_radius())
+                        .child(Label::new("untitled — no header row").color(theme.colors.muted)),
+                ),
         )
         .child(caption("Separator"))
         .child(Separator::horizontal().length(440.0))

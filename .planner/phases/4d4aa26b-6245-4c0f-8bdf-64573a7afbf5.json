@@ -4,7 +4,7 @@
   "number": 17,
   "slug": "plugin-ui-gaps-close-the-declarative-model-s-capability-gaps-make-the-translator-self-maintaining",
   "title": "plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining",
-  "status": "deferred",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -430,7 +430,7 @@
       "number": 8,
       "shortName": "correct-the-published-document",
       "title": "Correct the published documents so the examples match what the model can actually do",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Closes gaps 7 and 8, and reconciles the docs with whatever T1-T7 changed. DO THIS LAST — the\ncorrections depend on the decisions taken in T6 (Row naming) and T7 (colour).\n\nWHY THIS IS NOT COSMETIC\ndocs/chrome-and-ui.md is the file a plugin author reads first. Its examples are currently\nunbuildable in spirit: they use settings and widgets the model does not have. A reader cannot tell\nwhich lines are real. The document does carry a \"STATUS: DESIGN — target Phase 9, NOT yet available\"\nbanner (docs/chrome-and-ui.md:3-8), which excuses the SDK types not existing — it does not excuse\nexamples that will still be wrong after the SDK ships.\n\nTHE TWO OUTRIGHT ERRORS (no native equivalent exists — these are doc bugs, not gaps)\n1. `Panel::new().title(\"Hello\")` — docs/chrome-and-ui.md example 1 and README.md's Plugins section.\n   There is no Panel widget. `WidgetKind::Panel` realizes to a plain `Surface` (realize.rs:129-131,\n   whose comment states \"No dedicated `Panel` widget — a bare panel is a plain `Surface`\"), and\n   `Surface` has no title (surface.rs — only `new`/`row`/`column`). `Card::new(title)` is the titled\n   container. Either rewrite the example onto `Card`, or add a title to Panel — but do not leave a\n   title on a thing that has none.\n2. `Label::new(..).variant(Variant::Muted)` — docs/chrome-and-ui.md example 2. No `Label` variant\n   exists natively and `ViewVariant` has no Muted (view.rs:169-176). Resolution depends on T7: if\n   colour tokens are wired, rewrite as a token colour; if T7 removes the colour value, drop the\n   muted styling from the example entirely.\n\nALSO RECONCILE (settings that WILL exist once this phase lands, so the examples become true)\n- `Column::new().padding(10)` — real after T2.\n- `Input::new(..).placeholder(\"filter…\")` — real after T4. Note the example writes\n  `Input::new(\"filter\")`, which reads like a name but is positioned as a value; make the example\n  unambiguous about which is which, since `text` is the value and `name` is the form key.\n- `Scroll::vertical()` — real after T4, and worth showing the two-axis form too, since that was the\n  capability nobody could reach.\n- `Separator::new()` — real after T5.\n- `Row::new()…on_press(..)` for a clickable table row — real after T6, spelled however T6 decided.\n\nFILES TO UPDATE — all of them, in one pass\n- docs/chrome-and-ui.md (examples 1, 2, 3 + the \"What's shipped vs planned\" section at line 268).\n- README.md — the \"Plugins (Planned)\" section (README.md:30 in the contents, the section itself\n  further down) carries the same Panel/title example.\n- docs/chrome-and-ui.md §2.6.1 (line ~252) and §2.6.2 (line ~340) — both sketch the SDK\n  with `.padding(12)` and a titled Panel.\n- docs/widgets.md + the props-by-kind table in view.rs's rustdoc, if any earlier task left them\n  behind.\n\nONE MORE FIX — A STALE POINTER\ndocs/chrome-and-ui.md:7 tells the reader to \"Track progress under the `plugin-ui` and `plugin-08`\nphases in `BACKLOG.md`\". BACKLOG.md is stale and is NOT the source of truth — the planner is. Point\nreaders at the planner instead. (This is the correction that was owed to F003/P011/T008, whose docs\nare otherwise complete.)\n\nACCEPTANCE\n- Every code example in the three documents uses only settings and widgets that exist after this\n  phase.\n- No document promises a titled Panel or a Label variant unless one was actually built.\n- The BACKLOG pointer is gone.\n- Re-read each example as a newcomer would and confirm nothing left in them is aspirational without\n  saying so.",
       "notes": "",
       "statusLog": [],
@@ -485,10 +485,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-27T07:11:34.689Z",
       "completedAt": "",
       "createdAt": "2026-07-25T19:15:48.735Z",
-      "updatedAt": "2026-07-25T19:15:48.735Z"
+      "updatedAt": "2026-07-27T07:11:34.689Z"
     },
     {
       "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822",
@@ -537,5 +537,5 @@
     }
   ],
   "createdAt": "2026-07-25T19:12:29.404Z",
-  "updatedAt": "2026-07-27T06:41:59.906Z"
+  "updatedAt": "2026-07-27T07:11:34.689Z"
 }
