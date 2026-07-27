@@ -10,6 +10,7 @@ heca-renderer = { path = "../heca-renderer" }
 heca-config = { path = "../heca-config" }
 heca-grid-ui = { path = "../heca-grid-ui" }
 heca-view = { path = "../heca-view" }
+heca-view-realize = { path = "../heca-view-realize" }
 winit.workspace = true
 wgpu = { workspace = true }
 pollster = { workspace = true }

@@ -9,7 +9,6 @@ mod events;
 mod host;
 mod layers;
 mod overlay;
-mod realize;
 mod state;
 // Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
@@ -22,10 +21,12 @@ pub(crate) use layers::{DynamicLayer, LayerBand, LayerId, LayerKind, LayerRegist
 pub(crate) use heca_view::{
     Intent, PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind,
 };
-// Host mapper (plugin-task-ui-3): `ViewNode` → retained grid-ui `Component`. Consumed by the
-// OverlayHost/Modal body (ui-4) and plugin panels — not yet referenced in-binary.
+// The mapper (plugin-task-ui-3): `ViewNode` → retained grid-ui `Component`. It lives in
+// `heca-view-realize` since F003/P017/T009 — below this crate, so anything that can build widgets
+// can render a described tree, the showcase included. The app supplies the two seams it takes:
+// `ViewHintTargets` for pick registration, a wrapping closure for the click sink.
 #[allow(unused_imports)]
-pub(crate) use realize::{realize, FormBindings, HintTargets, IntentEmitter};
+pub(crate) use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
 // Host-owned overlay stack (plugin-task-ui-4, §2.7.1/§2.7.2), built on `LayerRegistry`.
 // `OverlayId` is pub (carried by `WmAction`); the rest is crate-internal.
 pub use overlay::OverlayId;

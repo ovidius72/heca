@@ -1203,6 +1203,7 @@ dependencies = [
  "heca-grid-ui",
  "heca-renderer",
  "heca-view",
+ "heca-view-realize",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
@@ -1288,6 +1289,17 @@ dependencies = [
 name = "heca-view"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "heca-view-realize"
+version = "0.1.0"
+dependencies = [
+ "heca-core",
+ "heca-grid-ui",
+ "heca-view",
  "serde",
  "serde_json",
 ]

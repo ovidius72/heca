@@ -1,10 +1,15 @@
-//! `realize` — the host mapper from the declarative [`ViewNode`] model to a retained
-//! grid-ui [`Component`] tree (plugin-task-ui-3).
+//! `realize` — the mapper from the declarative [`ViewNode`] model to a retained grid-ui
+//! [`Component`] tree (plugin-task-ui-3).
 //!
-//! [`ViewNode`](super::ViewNode) is the pure, serializable UI *description* (same model
-//! authored in Rust or shipped by a WASM plugin). `realize` is the **host-side** binding
-//! that turns it into live widgets: it owns the grid-ui dependency and the theme/registry
-//! wiring, so the model stays free of both.
+//! [`ViewNode`] is the pure, serializable UI *description* (same model authored in Rust or
+//! shipped by a WASM plugin), and it lives in `heca-view` with no dependencies at all. This
+//! crate is the other half: it owns the grid-ui dependency and the theme wiring, so the model
+//! stays free of both.
+//!
+//! It sits **below the app** on purpose (F003/P017/T009). Everything it needs from a host
+//! arrives as an argument, so anything that can build widgets can render a described tree —
+//! including `heca-renderer`'s showcase, which is below `heca` and could not call this at all
+//! while it lived in the app crate.
 //!
 //! Two host services are threaded in. Both are **narrow seams** over the model's own
 //! [`Intent`], not app types, so this mapper can live and be called below `heca`
@@ -17,7 +22,7 @@
 //!   "every clickable widget is also hintable" rule, for free (plan §2.7.2, "everything is an
 //!   action"). The host keeps the real registry; realize only needs to put an intent into it.
 //!
-//! Adding a widget = one [`WidgetKind`](super::WidgetKind) arm here (+ its variant in the model).
+//! Adding a widget = one [`WidgetKind`] arm here (+ its variant in the model).
 //!
 //! # Coverage
 //! **Every `WidgetKind` realizes to a live widget.** The one exception is `ScrollBar`, which is
@@ -28,18 +33,15 @@
 //! signal (e.g. `DockFrame::rail`): **a widget whose state is a live host signal is host-only.**
 //!
 //! This is enforced, not merely stated: `every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones`
-//! walks [`WidgetKind::ALL`](super::WidgetKind::ALL) and fails if a kind produces neither children
+//! walks [`WidgetKind::ALL`] and fails if a kind produces neither children
 //! nor paint — so a new kind added without an arm cannot silently render an empty container.
 //!
-//! Seam module (consumed by the OverlayHost/Modal body in ui-4 and plugin panels) — carries
-//! `#![allow(dead_code)]` like the sibling chrome seam modules until those consumers land.
-#![allow(dead_code)]
 
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
-    Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
+    Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
     Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
     Item, ItemGroup, Label, LayoutExt, MarkerGroup, Panel, PropInput, RailCell,
     Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs,
@@ -47,14 +49,14 @@ use heca_grid_ui::{
 };
 
 use heca_view::{
-    Intent, PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind,
+    Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
 };
 
 /// Where a realized tree's intents go: a widget fires the node's own [`Intent`], and the host
 /// wraps it in whatever it dispatches (the app wraps it as `InteractionIntent::View`).
 ///
 /// `Rc` because every actionable widget clones the sink into its own callback.
-pub(crate) type IntentEmitter = Rc<dyn Fn(Intent)>;
+pub type IntentEmitter = Rc<dyn Fn(Intent)>;
 
 /// The host's KeyHint pick registry, narrowed to the one thing `realize` does with it: put an
 /// intent in, get its id back.
@@ -62,7 +64,7 @@ pub(crate) type IntentEmitter = Rc<dyn Fn(Intent)>;
 /// A seam rather than the concrete registry because the real one is **shared** — the overlay
 /// registers modal buttons carrying intents that are not view intents at all — so it has to keep
 /// storing the app's own carrier type. This is the part realize needs, and nothing more.
-pub(crate) trait HintTargets {
+pub trait HintTargets {
     /// Register an actionable node's intent as a pick target and return its freshly-allocated id.
     fn register(&mut self, intent: Intent) -> HintTargetId;
 }
@@ -72,11 +74,11 @@ pub(crate) trait HintTargets {
 type FieldReader = Box<dyn Fn() -> PropValue>;
 
 /// The named value fields a realized tree exposes, collected into a [`PropMap`] when the overlay
-/// is submitted (→ [`ModalResult::Action`](super::ModalResult)'s `data`). A value node opts in by
+/// is submitted (→ the host's `ModalResult::Action` `data`). A value node opts in by
 /// carrying a `"name"` prop; `realize` binds a reader over its live value signal. Order is
 /// registration order (deterministic).
 #[derive(Default)]
-pub(crate) struct FormBindings {
+pub struct FormBindings {
     fields: Vec<(String, FieldReader)>,
     /// Live value signals of named **text** fields (`Input`s), for reactive validation — e.g.
     /// disabling a submit button while a required field is empty. Populated alongside `fields`.
@@ -96,7 +98,7 @@ impl FormBindings {
 
     /// The live value signal of a named text field, if it is an `Input`. `None` for non-text
     /// fields or unknown names.
-    pub(crate) fn text_signal(&self, name: &str) -> Option<Signal<String>> {
+    pub fn text_signal(&self, name: &str) -> Option<Signal<String>> {
         self.text_signals
             .iter()
             .find(|(n, _)| n == name)
@@ -104,7 +106,7 @@ impl FormBindings {
     }
 
     /// Read every bound field's current value into a name→value map.
-    pub(crate) fn collect(&self) -> PropMap {
+    pub fn collect(&self) -> PropMap {
         self.fields.iter().map(|(k, r)| (k.clone(), r())).collect()
     }
 }
@@ -115,7 +117,7 @@ impl FormBindings {
 /// [`kind`](WidgetKind). NB: `Box<dyn Component>` is **not** itself `Component`, so a
 /// container can't take it via `Parent::child` (which boxes an `impl Component`); realized
 /// children are pushed straight onto `base_mut().children` (the `Vec<Box<dyn Component>>`).
-pub(crate) fn realize(
+pub fn realize(
     node: &ViewNode,
     theme: &Theme,
     emit: &IntentEmitter,
@@ -1118,14 +1120,12 @@ fn size_prop(node: &ViewNode) -> Option<WidgetSize> {
 // The model carries semantic mirrors of the grid-ui enums (so it never depends on grid-ui);
 // realize is the single place that binds them across.
 
-fn map_align(a: ViewAlign) -> Align {
-    match a {
-        ViewAlign::Start => Align::Start,
-        ViewAlign::Center => Align::Center,
-        ViewAlign::End => Align::End,
-        ViewAlign::Stretch => Align::Stretch,
-    }
-}
+// There is no `ViewAlign` → `Align` mapper here on purpose. Alignment is an ordinary property:
+// it travels through `prop_to_json` and lands on the widget's own `Layout` by name, on both axes
+// and on children (`align_self` / `justify_self`) — see
+// `grid_alignment_is_authorable_on_both_axes`. A hand-written mapper existed until the
+// generic property surface landed and was dead from that day; the app's module-wide
+// `allow(dead_code)` is what kept it invisible.
 
 fn map_variant(v: ViewVariant) -> ButtonVariant {
     match v {
@@ -1845,6 +1845,7 @@ mod tests {
     #[test]
     fn grid_alignment_is_authorable_on_both_axes() {
         use heca_grid_ui::Align;
+        use heca_view::ViewAlign;
 
         let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Grid)
