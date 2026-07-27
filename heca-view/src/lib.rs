@@ -236,6 +236,26 @@ pub enum PropValue {
     /// `"1fr"`, `"22px"`, `"auto"`) and `areas` (one string per grid row). That is what this exists
     /// for.
     List(Vec<PropValue>),
+    /// A **named group of values** — the shape a struct-valued property needs.
+    ///
+    /// This is the extension point for anything that is not a scalar. A widget property whose type
+    /// has fields (`border`, `glow`) is written as a map of its field names, and the realize side
+    /// hands it to the field's own deserializer:
+    ///
+    /// ```text
+    /// border = { color: "accent", width: 2 }
+    /// glow   = { color: "accent", radius: 12, intensity: 0.4 }
+    /// ```
+    ///
+    /// It exists because the alternative was a new variant per struct. `border` and `glow` were
+    /// **unreachable from a description for as long as this was missing** — F003/P017/T007 gave both
+    /// types serde derives and its commit claimed "the whole of `Visual`", but serde on the type is
+    /// not a value that can carry it, and nothing tested the two, so nothing failed. A future
+    /// struct-shaped property needs no change here (F003/P011/T018).
+    ///
+    /// Values nest: a [`Color`](PropValue::Color) inside a map is still a theme token name and is
+    /// still resolved against the live theme.
+    Map(PropMap),
 }
 
 impl PropValue {

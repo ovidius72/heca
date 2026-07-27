@@ -226,6 +226,18 @@ fn prop_to_json(value: &PropValue, theme: &Theme) -> Option<serde_json::Value> {
         PropValue::List(items) => serde_json::Value::Array(
             items.iter().filter_map(|i| prop_to_json(i, theme)).collect(),
         ),
+        // A struct-shaped property (`border`, `glow`) — handed to the field's own deserializer as
+        // an object. Recursive, so a colour nested inside is a theme token like any other and is
+        // resolved here against the same theme: without that a nested `"accent"` would reach serde
+        // as the literal word and the whole field would be dropped. A member that cannot be
+        // converted is skipped, leaving the rest — the same totality rule as everywhere else, and
+        // it means a half-written object degrades to its usable fields rather than vanishing.
+        PropValue::Map(fields) => serde_json::Value::Object(
+            fields
+                .iter()
+                .filter_map(|(k, v)| Some((k.clone(), prop_to_json(v, theme)?)))
+                .collect(),
+        ),
     })
 }
 
@@ -288,7 +300,12 @@ fn prop_to_input(value: &PropValue, theme: &Theme) -> Option<PropInput> {
         PropValue::Size(s) => PropInput::Text(prop_enum_name(s)?),
         PropValue::Variant(v) => PropInput::Text(prop_enum_name(v)?),
         PropValue::Align(a) => PropInput::Text(prop_enum_name(a)?),
-        PropValue::List(_) => return None,
+        // Neither shape fits a widget builder: `PropInput` is a scalar channel (Bool | Number |
+        // Text) because no `#[prop]` builder takes a list or a struct. A `Map` is for the
+        // struct-shaped fields of `Layout`/`Visual`, which reach the widget through
+        // `merge_style_half` and serde instead — see `prop_to_json`. If a widget builder ever does
+        // take one, `PropInput` grows a variant then, deliberately, and not before.
+        PropValue::List(_) | PropValue::Map(_) => return None,
     })
 }
 
@@ -1440,6 +1457,114 @@ mod tests {
             a,
             format!("{:?}", painted(&tinted, &other)),
             "a token follows the theme it was built with",
+        );
+    }
+
+    /// A **struct-shaped** appearance property reaches the widget.
+    ///
+    /// `border` and `glow` were unreachable from a description for as long as a property value was
+    /// a closed list of scalars: `Border` is `{color, width}` and nothing could carry it.
+    /// F003/P017/T007's commit claimed "the whole of `Visual`" on the strength of adding serde to
+    /// the two types, which is not the same thing, and no test looked — so nothing failed.
+    /// `PropValue::Map` is what makes the claim true (F003/P011/T018).
+    #[test]
+    fn a_struct_shaped_appearance_property_reaches_the_widget() {
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop(
+                "border",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("#ff8800".into())),
+                    ("width".into(), PropValue::Float(2.0)),
+                ])),
+            )
+            .prop(
+                "glow",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("#00ccff".into())),
+                    ("radius".into(), PropValue::Float(12.0)),
+                    ("intensity".into(), PropValue::Float(0.4)),
+                ])),
+            );
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut TestHints::default(),
+            &mut FormBindings::default(),
+        );
+        let border = w.base().style.visual.border.expect("a described border reaches the widget");
+        assert_eq!(border.width, 2.0);
+        assert_eq!(border.color, heca_grid_ui::Color::rgb(0xff, 0x88, 0x00));
+        let glow = w.base().style.visual.glow.expect("a described glow reaches the widget");
+        assert_eq!(glow.radius, 12.0);
+        assert_eq!(glow.intensity, 0.4);
+        assert_eq!(glow.color, heca_grid_ui::Color::rgb(0x00, 0xcc, 0xff));
+    }
+
+    /// A theme token **nested inside** an object is still a token.
+    ///
+    /// This is the part that had to be got right: resolution happens per value, at any depth, so a
+    /// nested `"accent"` becomes the live theme's accent rather than reaching serde as the literal
+    /// word — which would drop the whole field, and drop it silently.
+    #[test]
+    fn a_token_nested_in_an_object_resolves_against_the_theme() {
+        let bordered = |theme: &Theme| {
+            let node = ViewNode::new(WidgetKind::Surface).prop(
+                "border",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("accent".into())),
+                    ("width".into(), PropValue::Float(1.0)),
+                ])),
+            );
+            realize(
+                &node,
+                theme,
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            )
+            .base()
+            .style
+            .visual
+            .border
+            .expect("the token resolved")
+            .color
+        };
+
+        let theme = Theme::default();
+        assert_eq!(bordered(&theme), theme.colors.accent, "the token is the theme's accent");
+
+        let mut other = Theme::default();
+        other.colors.accent = heca_grid_ui::Color::rgb(0x10, 0xc0, 0x20);
+        assert_eq!(bordered(&other), other.colors.accent, "and it follows the theme");
+    }
+
+    /// A malformed member costs only itself, at depth too.
+    ///
+    /// The object keeps its usable fields and the node keeps its other properties — the same
+    /// totality rule the flat case has, now that values nest.
+    #[test]
+    fn a_bad_member_of_an_object_does_not_discard_the_rest() {
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop(
+                "border",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("not-a-colour".into())),
+                    ("width".into(), PropValue::Float(3.0)),
+                ])),
+            )
+            .prop("radius", PropValue::Float(5.0));
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut TestHints::default(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(w.base().style.visual.radius, 5.0, "the neighbouring property still applied");
+        assert!(
+            w.base().style.visual.border.is_none(),
+            "a border with no usable colour is dropped, not fatal",
         );
     }
 

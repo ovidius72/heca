@@ -116,6 +116,21 @@ Set nothing and you get the theme, which is what almost everything should do —
 not override follows a theme reload. A literal colour does not follow a theme reload; that is the
 trade for control, and it is the author's choice to make.
 
+A property whose type has fields is written as a named group of values:
+
+```rust
+.prop("border", PropValue::Map(PropMap::from([
+    ("color".into(), PropValue::Color("accent".into())),   // still a theme token, at any depth
+    ("width".into(), PropValue::Float(2.0)),
+])))
+```
+
+**This did not work until 2026-07-27 (F003/P011/T018), and the doc said it did.** `border` and
+`glow` are structs; a property value could only be a scalar, so neither could be written from a
+description — whatever serde derives the types carried. Adding serde to a type is not the same as
+having a value that can carry it, and because nothing tested the two, nothing failed. `Map` is the
+extension point: a future struct-shaped property needs no new variant.
+
 ### R3. Order never matters
 
 Properties are applied after children are attached. That removes the only real dependency there
