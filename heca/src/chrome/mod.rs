@@ -158,7 +158,7 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Surface, Tag,
+    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Separator, Surface, Tag,
     Tooltip,
     TooltipSide,
 };
@@ -1533,11 +1533,22 @@ fn build_region_content(
                 layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
                 layout.flex_shrink = Some(1.0);
             }
-            Some(Box::new(
-                bodies
-                    .into_iter()
-                    .fold(stack, |col, body| col.child_boxed(body)),
-            ))
+            // A rule between containers, so two of them read as two things rather than one long
+            // list. It takes no share: a `Separator` is a leaf with its own height, and `with_share`
+            // only touches the containers, so the rule keeps its natural 1px and the shares divide
+            // what is left. Its colour comes from the theme's border token, so it follows a reload.
+            let count = bodies.len();
+            Some(Box::new(bodies.into_iter().enumerate().fold(
+                stack,
+                |col, (i, body)| {
+                    let col = if i > 0 && i < count {
+                        col.child(Separator::horizontal())
+                    } else {
+                        col
+                    };
+                    col.child_boxed(body)
+                },
+            )))
         }
     }
 }
@@ -3532,6 +3543,47 @@ mod tests {
     use heca_core::layout::{LayoutOptions, Session, SessionId};
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::path::PathBuf;
+
+    /// A rule sits between containers, and takes no share of the height.
+    ///
+    /// It has to be a leaf with its natural height, or it would be handed a share of its own and the
+    /// containers would each lose height to a 1px line.
+    #[test]
+    fn a_rule_separates_containers_without_taking_a_share() {
+        use heca_grid_ui::LayoutEngine;
+        use heca_core::layout::Size as CoreSize;
+
+        let body = || -> WidgetModel { Box::new(Flex::column().height(Length::Px(40.0))) };
+        let mut stack = Flex::column().gap(8.0).grow(1.0);
+        {
+            let layout = &mut stack.base_mut().style.layout;
+            layout.min_height = Some(Length::Px(0.0));
+            layout.flex_shrink = Some(1.0);
+        }
+        // Two containers with a rule between them, as `build_region_content` assembles them.
+        stack.base_mut().children.push(with_share(body(), 1.0));
+        stack = stack.child(Separator::horizontal());
+        stack.base_mut().children.push(with_share(body(), 1.0));
+
+        let mut root = Flex::column().height(Length::Px(600.0)).child(stack);
+        LayoutEngine::new().compute(&mut root, CoreSize::new(300.0, 600.0));
+
+        let kids = &root.base().children[0].base().children;
+        assert_eq!(kids.len(), 3, "container, rule, container");
+        assert_eq!(kids[1].base().style.layout.flex_grow, 0.0, "the rule takes no share");
+        assert!(
+            kids[1].base().bounds.size.h < 10.0,
+            "the rule keeps its own thin height: {:?}",
+            kids[1].base().bounds.size.h,
+        );
+        // Within a pixel: an odd leftover after the rule and the gaps has to land somewhere, so
+        // equal shares of an odd number of pixels differ by one. Measured 292 / 1 / 291.
+        assert!(
+            (kids[0].base().bounds.size.h - kids[2].base().bounds.size.h).abs() <= 1.0,
+            "and the containers still share equally around it: {:?}",
+            kids.iter().map(|k| k.base().bounds.size.h).collect::<Vec<_>>(),
+        );
+    }
 
     /// Shares divide the region even when the content is taller than it.
     ///
