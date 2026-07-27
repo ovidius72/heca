@@ -4,7 +4,7 @@
   "number": 10,
   "slug": "action-interaction-declarative-action-interaction-confirm-response-buttons",
   "title": "action-interaction: Declarative action interaction (confirm + response buttons)",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -115,7 +115,7 @@
       "number": 5,
       "shortName": "action-task-d-migrate-built-in",
       "title": "action-task-D — Migrate built-ins onto register(ActionSpec)",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Follow-up MECCANICO di action-task-C (2026-07-15). Puramente opzionale: nessun cambiamento funzionale, nessun bug — è cleanup/unificazione. NON è debito \"for now\" (il path esistente funziona); registrare qui perché la nota non resti sepolta in un task chiuso.\n\n## STATO ATTUALE\nI ~115 built-in prendono i metadata da `ActionRegistry::ALL` (const array in `heca/src/actions.rs`), seedati nel catalogo da `ActionCatalog::with_builtins()`, e gli handler da `build_registry()` (`heca/src/app/registry.rs`). Sono DUE punti separati che possono divergere (un descriptor in ALL senza handler, o viceversa).\n\naction-task-C ha aggiunto l'API nativa a una chiamata: `register(registry, catalog, ActionSpec { action, handler, meta })` (`heca/src/actions.rs`) che cabla handler (per discriminante) + meta insieme. Ma i built-in NON sono stati migrati — l'API esiste e i built-in usano ancora il vecchio doppio path.\n\n## LAVORO (se/quando si vuole fare)\n1. Sostituire il seeding `const ALL` + `build_registry()` con una serie di `register(ActionSpec { ... })`, una per azione, così handler e metadata stanno in UN posto per azione e non possono divergere.\n2. `ActionRegistry::ALL` può poi essere ritirato (o ridotto), come previsto da action-interaction-plan §5.1 (\"i dati escono da const ALL e finiscono in register_builtins()\").\n3. Attaccare i 3 confirm spec (close/delete_column/delete_workspace) direttamente nel loro `ActionSpec.meta.confirm`, eliminando il fixup post-seed in `with_builtins`.\n4. Gate invariato: `cargo clippy --workspace --all-targets --all-features` 0 warning; `cargo test -p heca` (parità del catalogo: il test `builtin_metadata_survives_the_owned_ripple_unchanged` deve restare verde); niente `cargo fmt`.\n\n## PERCHÉ È A BASSA PRIORITÀ\nZero guadagno funzionale: il catalogo prodotto è identico. Il solo vantaggio è togliere la possibilità di drift ALL↔handler e avere un solo modo di registrare un'azione (nativo = dinamico). Farlo quando conviene toccare comunque quella zona.",
       "notes": "",
       "statusLog": [],
@@ -124,10 +124,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-27T06:48:41.113Z",
       "completedAt": "",
       "createdAt": "2026-07-15T16:54:35.432Z",
-      "updatedAt": "2026-07-15T16:54:35.432Z"
+      "updatedAt": "2026-07-27T06:48:41.113Z"
     },
     {
       "id": "bad7fd3a-0a82-4fc1-b113-f075c0627e9c",
@@ -151,5 +151,5 @@
     }
   ],
   "createdAt": "2026-07-08T11:47:16.065Z",
-  "updatedAt": "2026-07-26T21:46:58.686Z"
+  "updatedAt": "2026-07-27T06:48:41.113Z"
 }

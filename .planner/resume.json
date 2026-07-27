@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-07-26T22:54:33.941Z",
-  "currentPhaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
+  "updatedAt": "2026-07-27T06:48:41.463Z",
+  "currentPhaseId": "3e04a8f5-3c51-4f2d-8fab-d51b392e80bc",
   "inProgressTaskIds": [
-    "6e2a7db7-0092-471a-9db3-ff1fbb685152"
+    "4ef355c8-5b85-4be7-a94f-6d02286ed3ae"
   ],
   "nextSteps": [
-    "F003/P017/T6 + T7, together — both decided with the user 2026-07-27, and both touch view.rs, realize.rs and the same documents. T6: WidgetKind::Row -> HStack, Column -> VStack, and the freed name Row goes to the real interactive widget. T7: the whole of Visual becomes overridable, theme as the default."
+    "F003/P017 has T008 and T009 left. F003/P017/T009 (where the pure-data model lives) gained a SECOND motivation on 2026-07-27 beyond plugin editor help: the showcase sits below `heca` in the crate graph, so it cannot call `realize`, and no described tree is visible anywhere in the app except a modal body. That is a verification gap on every future vocabulary task. The user has been shown the trade-off and has NOT chosen it yet — do not start it."
   ],
   "blockers": [
-    "126d0855-658d-471f-86a6-27eb144fc591: ScrollRegion keyboard-scroll actions (prefix+Home/End/PgUp/PgDown; horizontal trigger TBD)"
+    "126d0855-658d-471f-86a6-27eb144fc591: ScrollRegion keyboard-scroll actions (vertical prefix+Home/End/PgUp/PgDown; horizontal prefix+Shift+ the same four — settled 2026-07-27)"
   ],
   "notes": "plugin-03 (F003/P004) is DONE — the phase and all six tasks, and the code backs it: heca/src/providers/workspaces.rs exists and WorkspacesContainerProvider is registered at heca/src/app/startup.rs:333. This file said otherwise until 2026-07-27: the nextSteps string was written during a BACKLOG.md sync and never updated, so every /planner load recap repeated it. Task operations refresh updatedAt but leave nextSteps and notes untouched — they are free text, so a session that changes direction has to correct them by hand.",
   "lastSessionSummary": "F003/P010/T6 (an action declares the arguments it takes) and F003/P017/T5 (Separator joins the vocabulary) both shipped on branch feat/action-arg-declaration. P017's T6 and T7 unblocked: the Row naming and the appearance scope were decided with the user.",

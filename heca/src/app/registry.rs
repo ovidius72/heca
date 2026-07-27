@@ -972,6 +972,42 @@ mod tests {
         ));
     }
 
+    /// **Every catalogued action can actually run.** Metadata lives in `ActionRegistry::ALL` and
+    /// handlers in `build_registry()`, two places that could drift; this closes the direction that
+    /// matters — a descriptor whose action has no handler is an entry the whole UI advertises
+    /// (icon, label, command palette, `list-actions`) and that panics in debug when pressed.
+    ///
+    /// The other direction — a handler with no descriptor — is already held by
+    /// `every_wm_action_variant_is_reachable_by_name` in `input.rs`, which walks the variants
+    /// rather than the names. Between them the two lists cannot fall out of step, which is the
+    /// property F003/P010/T005 exists to guarantee.
+    #[test]
+    fn every_catalogued_action_has_a_handler() {
+        use crate::actions::{ActionRegistry, ArgSpec, sample_args};
+        use crate::input::{action_from_name, build_action};
+
+        let registry = build_registry();
+        let mut missing = Vec::new();
+        for descriptor in ActionRegistry::ALL {
+            let args: Vec<ArgSpec> = descriptor.args.iter().map(ArgSpec::from_descriptor).collect();
+            let Some(action) = action_from_name(descriptor.name)
+                .or_else(|| build_action(descriptor.name, &sample_args(&args)))
+            else {
+                // Not this test's business: `every_wm_action_variant_is_reachable_by_name` owns it.
+                continue;
+            };
+            if !registry.has_handler(&action) {
+                missing.push(descriptor.name);
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "these actions are catalogued — they have a label, an icon and a place in the command \
+             palette — but no handler is registered for them, so pressing one panics in debug and \
+             does nothing in release: {missing:#?}",
+        );
+    }
+
     /// A binding whose `args` do not match what the action declares is **named** at load, instead
     /// of being left for the user to discover by pressing a key that does nothing.
     #[test]
