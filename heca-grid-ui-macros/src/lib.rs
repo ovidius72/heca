@@ -158,6 +158,10 @@ fn arg_conversion(arg: &syn::FnArg) -> Option<proc_macro2::TokenStream> {
             quote!(value.as_text().map(::std::string::ToString::to_string))
         }
         t if t.starts_with('&') || t.contains("dyn") || t.contains("implFn") => return None,
+        // A colour arrives as text and parses through `Color`'s own `FromStr` (`#rgb`, `#rrggbb`,
+        // `#rrggbbaa`). A THEME TOKEN NAME never reaches here: the host resolves it to hex first,
+        // where it has the theme — the library stays free of any notion of a token.
+        "Color" => quote!(value.as_text().and_then(|s| s.parse::<::heca_theme::Color>().ok())),
         // Anything else is an enum carried by NAME, the same way glyphs and colours already
         // travel. `PropName` supplies the lookup, so the enum's variants are the vocabulary and
         // nobody maintains a parallel list of strings.

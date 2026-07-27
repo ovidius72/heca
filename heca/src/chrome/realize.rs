@@ -244,8 +244,8 @@ fn resolve_color(spec: &str, theme: &Theme) -> Option<String> {
 ///
 /// Call it **after** children are attached — properties are order-independent on that condition,
 /// which is what lets a builder that clamps against its children (`Select::selected`) see them.
-fn with_props<W: SetProp>(widget: W, node: &ViewNode) -> W {
-    widget.apply_props(|key| node.props.get(key).and_then(prop_to_input))
+fn with_props<W: SetProp>(widget: W, node: &ViewNode, theme: &Theme) -> W {
+    widget.apply_props(|key| node.props.get(key).and_then(|v| prop_to_input(v, theme)))
 }
 
 /// A [`PropValue`] as the library's neutral scalar. The library never sees the app's model; this
@@ -253,14 +253,15 @@ fn with_props<W: SetProp>(widget: W, node: &ViewNode) -> W {
 ///
 /// Enums cross as their **names**, which is how glyphs and colours already travel, so the widget's
 /// own variants are the accepted vocabulary and there is no table of strings on either side.
-fn prop_to_input(value: &PropValue) -> Option<PropInput> {
+fn prop_to_input(value: &PropValue, theme: &Theme) -> Option<PropInput> {
     Some(match value {
         PropValue::Bool(b) => PropInput::Bool(*b),
         PropValue::Int(i) => PropInput::Number(*i as f64),
         PropValue::Float(f) => PropInput::Number(*f),
-        PropValue::Text(t) | PropValue::Color(t) | PropValue::Glyph(t) => {
-            PropInput::Text(t.clone())
-        }
+        // A colour token is resolved to hex HERE, on the host side, before it reaches the widget:
+        // the library has no notion of a theme token, and `Color::from_str` only knows hex.
+        PropValue::Color(c) => PropInput::Text(resolve_color(c, theme)?),
+        PropValue::Text(t) | PropValue::Glyph(t) => PropInput::Text(t.clone()),
         PropValue::Size(s) => PropInput::Text(prop_enum_name(s)?),
         PropValue::Variant(v) => PropInput::Text(prop_enum_name(v)?),
         PropValue::Align(a) => PropInput::Text(prop_enum_name(a)?),
@@ -295,7 +296,7 @@ fn realize_kind(
         // stays non-focusable and paints no hover, which is the right answer for a row with no
         // press intent — a described row that nothing can activate should not pretend otherwise.
         WidgetKind::Row => {
-            let mut row = with_props(GridRow::new(), node);
+            let mut row = with_props(GridRow::new(), node, theme);
             if let Some((id, carrier)) = press_intent(node, hints) {
                 let emit = emit.clone();
                 row = row
@@ -315,7 +316,7 @@ fn realize_kind(
             // `axes` reaches the widget through its own builder, so a declarative region can be
             // horizontal or two-axis — it was vertical-only for as long as this arm named its
             // properties by hand.
-            let region = with_props(ScrollRegion::new(), node);
+            let region = with_props(ScrollRegion::new(), node, theme);
             attach_children(Box::new(region), node, theme, emit, hints, forms)
         }
 
@@ -323,7 +324,7 @@ fn realize_kind(
         WidgetKind::Label => {
             // bold / italic / underline / strikethrough / align / font_size all arrive through
             // the generated surface — `Label`'s builders decide which, not a list here.
-            Box::new(with_props(Label::new(text_of(node)), node))
+            Box::new(with_props(Label::new(text_of(node)), node, theme))
         }
         WidgetKind::Button => realize_button(node, theme, emit, hints, forms),
         WidgetKind::Badge => Box::new(Badge::new(text_of(node))),
@@ -332,16 +333,16 @@ fn realize_kind(
         WidgetKind::StatusDot => Box::new(StatusDot::online()),
         // `orientation` and `length` both arrive through the generated surface, and the widget
         // recomputes both axes from the pair, so neither has to come first.
-        WidgetKind::Separator => Box::new(with_props(Separator::horizontal(), node)),
+        WidgetKind::Separator => Box::new(with_props(Separator::horizontal(), node, theme)),
         WidgetKind::Gauge => {
-            Box::new(with_props(Gauge::new(), node))
+            Box::new(with_props(Gauge::new(), node, theme))
         }
         WidgetKind::Icon => match glyph_prop(node) {
             Some(glyph) => Box::new(Icon::new(glyph)),
             None => Box::new(Flex::empty()),
         },
         WidgetKind::Input => {
-            let mut input = with_props(Input::new().value(text_of(node)), node);
+            let mut input = with_props(Input::new().value(text_of(node)), node, theme);
             if let Some(name) = name_prop(node) {
                 let sig = input.text();
                 forms.bind(name.clone(), Box::new(move || PropValue::Text(sig.get_untracked())));
@@ -355,7 +356,7 @@ fn realize_kind(
             Box::new(input)
         }
         WidgetKind::Toggle => {
-            let mut t = with_props(Toggle::new(), node);
+            let mut t = with_props(Toggle::new(), node, theme);
             if let Some(name) = name_prop(node) {
                 let sig = t.state();
                 forms.bind(name, Box::new(move || PropValue::Bool(sig.get_untracked())));
@@ -368,7 +369,7 @@ fn realize_kind(
         }
         WidgetKind::Checkbox => {
             // `checked` arrives through the surface; the widget's own default is already false.
-            let mut c = with_props(Checkbox::new().label(text_of(node)), node);
+            let mut c = with_props(Checkbox::new().label(text_of(node)), node, theme);
             if let Some(name) = name_prop(node) {
                 let sig = c.state();
                 forms.bind(name, Box::new(move || PropValue::Bool(sig.get_untracked())));
@@ -449,7 +450,7 @@ fn realize_kind(
             }
             // After the options, so `selected` clamps against the real count. That ordering is a
             // property of this arm's construction, not something a property author must know.
-            select = with_props(select, node);
+            select = with_props(select, node, theme);
             if let Some(on_change) = option_change(node, emit) {
                 select = select.on_change(on_change);
             }
@@ -473,7 +474,7 @@ fn realize_kind(
             for option in realize_options(node, theme, emit, hints, forms) {
                 tabs = tabs.tab(option);
             }
-            tabs = with_props(tabs, node);
+            tabs = with_props(tabs, node, theme);
             if let Some(on_change) = option_change(node, emit) {
                 tabs = tabs.on_change(on_change);
             }
@@ -483,7 +484,7 @@ fn realize_kind(
         // ── Groups ──
         WidgetKind::ItemGroup => {
             // `expanded` arrives through the surface; the widget already defaults to expanded.
-            let mut group = with_props(ItemGroup::new(text_of(node)), node);
+            let mut group = with_props(ItemGroup::new(text_of(node)), node, theme);
             if let Some(on_toggle) = toggle_change(node, emit) {
                 group = group.on_toggle(on_toggle);
             }
@@ -491,7 +492,7 @@ fn realize_kind(
             attach_children(Box::new(group), node, theme, emit, hints, forms)
         }
         WidgetKind::MarkerGroup => {
-            let markers = with_props(MarkerGroup::new(), node);
+            let markers = with_props(MarkerGroup::new(), node, theme);
             // An indicator: no events of its own — the rows inside carry their own intents.
             attach_children(Box::new(markers), node, theme, emit, hints, forms)
         }
@@ -502,7 +503,7 @@ fn realize_kind(
         WidgetKind::DockFrame => {
             // Everything DockFrame exposes arrives through the surface, at the widget's own
             // defaults when unset.
-            let mut dock = with_props(DockFrame::new(text_of(node)), node);
+            let mut dock = with_props(DockFrame::new(text_of(node)), node, theme);
             if let Some(on_toggle) = toggle_change(node, emit) {
                 dock = dock.on_toggle(on_toggle);
             }
@@ -531,7 +532,7 @@ fn realize_kind(
             if let Some(body) = node.props.get("body").and_then(PropValue::as_text) {
                 toast = toast.body(body);
             }
-            toast = with_props(toast, node);
+            toast = with_props(toast, node, theme);
             // The inline action is a **labelled button**, not arbitrary content — so it is a prop
             // (`action_text`) plus an `action` intent, not a slot. A slot would have promised
             // composition the widget doesn't offer.
@@ -1344,6 +1345,56 @@ mod tests {
         assert!(resolve_color("chartreuse", &theme).is_none(), "not a theme colour");
         // A non-colour theme field cannot be named by accident.
         assert!(resolve_color("name", &theme).is_none(), "the theme's NAME is not a colour");
+    }
+
+    /// A token reaches a **widget's own colour builder**, not just `Visual`.
+    ///
+    /// `Label::color`, `Icon::color`, `Tag`'s hue, `Row::highlight` and the rest were all marked
+    /// `host_only("colour — reachable once F003/P017/T7 makes appearance overridable")`. This is
+    /// that promise being kept: the host resolves the token to hex before the value crosses, so the
+    /// library still knows nothing about themes and `Color::from_str` still only knows hex.
+    #[test]
+    fn a_token_reaches_a_widgets_own_colour_builder() {
+        let mut theme = Theme::default();
+        theme.colors.danger = heca_grid_ui::Color::rgb(0xc0, 0x10, 0x20);
+
+        let painted = |node: &ViewNode, theme: &Theme| {
+            use heca_grid_ui::{LayoutEngine, PaintCx, Scene};
+            use heca_core::layout::Size;
+            let mut w = realize(
+                node,
+                theme,
+                &noop_emitter(),
+                &mut HintTargetRegistry::default(),
+                &mut FormBindings::default(),
+            );
+            LayoutEngine::new().compute(w.as_mut(), Size::new(300.0, 40.0));
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, theme);
+                w.paint(&mut cx);
+            }
+            scene
+        };
+
+        let tinted = ViewNode::new(WidgetKind::Label)
+            .text("This action cannot be undone.")
+            .prop("color", PropValue::Color("danger".into()));
+        let plain = ViewNode::new(WidgetKind::Label).text("This action cannot be undone.");
+
+        // The label paints; the tinted one does not paint the same thing as the untinted one.
+        let a = format!("{:?}", painted(&tinted, &theme));
+        let b = format!("{:?}", painted(&plain, &theme));
+        assert!(!a.is_empty(), "the label painted something");
+        assert_ne!(a, b, "the token override changed what was drawn");
+        // And the colour it used is the THEME's danger, so a different theme paints differently.
+        let mut other = Theme::default();
+        other.colors.danger = heca_grid_ui::Color::rgb(0x10, 0xc0, 0x20);
+        assert_ne!(
+            a,
+            format!("{:?}", painted(&tinted, &other)),
+            "a token follows the theme it was built with",
+        );
     }
 
     /// A bad colour costs only itself — `realize` stays total for untrusted input, so the good
@@ -2361,7 +2412,7 @@ mod tests {
             .text("current")
             .prop("placeholder", PropValue::Text("type to filter…".into()));
 
-        let input = with_props(Input::new().value(text_of(&node)), &node);
+        let input = with_props(Input::new().value(text_of(&node)), &node, &Theme::default());
         assert_eq!(input.placeholder_str(), "type to filter…");
         assert_eq!(input.value_str(), "current", "the value still lands alongside it");
     }
@@ -2372,11 +2423,11 @@ mod tests {
     fn a_description_can_now_ask_for_a_two_axis_scroll_region() {
         let both = ViewNode::new(WidgetKind::Scroll).prop("axes", PropValue::Text("both".into()));
         assert_eq!(
-            with_props(ScrollRegion::new(), &both).clone_axes(),
+            with_props(ScrollRegion::new(), &both, &Theme::default()).clone_axes(),
             heca_grid_ui::ScrollAxes::Both,
         );
         assert_eq!(
-            with_props(ScrollRegion::new(), &ViewNode::new(WidgetKind::Scroll)).clone_axes(),
+            with_props(ScrollRegion::new(), &ViewNode::new(WidgetKind::Scroll), &Theme::default()).clone_axes(),
             heca_grid_ui::ScrollAxes::Vertical,
             "unset still means the widget's own default",
         );
@@ -2393,7 +2444,7 @@ mod tests {
             .prop("gap", PropValue::Int(6));
 
         assert_eq!(
-            with_props(ScrollRegion::new(), &node).clone_axes(),
+            with_props(ScrollRegion::new(), &node, &Theme::default()).clone_axes(),
             heca_grid_ui::ScrollAxes::Vertical,
             "unknown variant name keeps the default",
         );

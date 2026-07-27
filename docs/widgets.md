@@ -3162,6 +3162,15 @@ make by writing one.
 A colour that is neither — a misspelled token — is dropped like any other bad value: that one
 property is skipped and its neighbours on the same node still apply.
 
+This reaches a **widget's own colour builders** too, not only the style halves: `Label::color`,
+`Icon::color`, `Tag`'s hue, `Row::highlight` and `Row::attention_color` are all ordinary props now.
+The host resolves a token to hex before the value crosses into the library, so `heca-grid-ui` still
+knows nothing about themes and `Color::from_str` still only knows hex.
+
+**The first override in heca** is the destructive confirm prompt: its message ("This action cannot
+be undone.") is written with `color: "danger"` — the token, not a literal — so it follows the active
+theme. See `open_confirm` in `heca/src/handlers.rs`.
+
 Values read the way you would write them:
 
 ```rust

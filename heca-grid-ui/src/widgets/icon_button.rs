@@ -79,7 +79,7 @@ impl IconButton {
     }
 
     /// Override the hover/press hue (default: theme accent).
-    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
+    #[heca_grid_ui_macros::prop]
     pub fn tone(mut self, c: Color) -> Self {
         self.tone = Some(c);
         self

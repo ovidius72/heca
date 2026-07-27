@@ -224,7 +224,7 @@ impl KeyHint {
     }
 
     /// Override the keycap color (default: theme `accent`). The glow follows it too.
-    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
+    #[heca_grid_ui_macros::prop]
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self

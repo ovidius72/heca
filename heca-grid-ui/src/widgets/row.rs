@@ -88,7 +88,7 @@ impl Row {
     /// from the row's background — a stronger tint of the **same hue** — so a
     /// state-tinted row highlights in its own color (not the accent); rows with no
     /// background fall back to the theme accent.
-    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
+    #[heca_grid_ui_macros::prop]
     pub fn highlight(mut self, c: Color) -> Self {
         self.highlight = Some(c);
         self
@@ -113,7 +113,7 @@ impl Row {
     }
 
     /// Color of the attention pulse (default: the theme `warning` hue).
-    #[heca_grid_ui_macros::host_only("colour — reachable once F003/P017/T7 makes appearance overridable")]
+    #[heca_grid_ui_macros::prop]
     pub fn attention_color(mut self, c: Color) -> Self {
         self.attention_color = Some(c);
         self
