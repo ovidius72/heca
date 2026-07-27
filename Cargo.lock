@@ -1270,6 +1270,8 @@ dependencies = [
  "heca-core",
  "heca-grid-ui",
  "heca-theme",
+ "heca-view",
+ "heca-view-realize",
  "naga",
  "pollster",
  "wgpu",

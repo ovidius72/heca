@@ -14,6 +14,11 @@ bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 heca-theme = { path = "../heca-theme" }
+# The showcase renders a described tree beside its hand-built twin. Both crates sit below this one,
+# which is the point of F003/P017/T009 — while `realize` was inside the `heca` binary no example
+# could call it, so nothing declarative could be looked at outside the app.
+heca-view = { path = "../heca-view" }
+heca-view-realize = { path = "../heca-view-realize" }
 csscolorparser = "0.6"
 naga = { version = "25", features = ["wgsl-in"] }
 winit = { workspace = true }
