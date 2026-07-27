@@ -42,7 +42,7 @@ use heca_grid_ui::{
     Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
 
-use super::view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
+use heca_view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
 use super::{ChromeIntentEmitter, HintTargetRegistry};
 use crate::app::interaction::InteractionIntent;
 

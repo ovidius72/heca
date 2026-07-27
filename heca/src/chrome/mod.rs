@@ -11,14 +11,15 @@ mod layers;
 mod overlay;
 mod realize;
 mod state;
-mod view;
 // Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
 pub(crate) use layers::{DynamicLayer, LayerBand, LayerId, LayerKind, LayerRegistry};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
+// It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
+// cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
 #[allow(unused_imports)]
-pub(crate) use view::{
+pub(crate) use heca_view::{
     Intent, PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind,
 };
 // Host mapper (plugin-task-ui-3): `ViewNode` → retained grid-ui `Component`. Consumed by the

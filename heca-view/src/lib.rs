@@ -2,10 +2,14 @@
 //!
 //! This is the **app-wide** UI description: any UI — native chrome, overlays, and plugin
 //! panels — can be expressed as a tree of `ViewNode`s and turned into retained grid-ui
-//! [`Component`](heca_grid_ui::Component)s by the host mapper `realize()` (plugin-task-ui-3).
+//! `Component`s by the mapper `realize()` in `heca-view-realize` (plugin-task-ui-3).
 //! It is **generic** (its [`WidgetKind`] covers the whole grid-ui vocabulary) and fully
 //! **serializable** (serde), so the exact same model authored in Rust is what a WASM plugin
 //! ships over the boundary.
+//!
+//! This crate carries **no dependency but serde** — no widget library, no renderer, no taffy.
+//! That is the point of it living apart from the app (F003/P017/T009): a plugin can depend on
+//! the vocabulary without compiling the thing that draws it.
 //!
 //! Behaviour is expressed **only** through [`Intent`]s (an action id + args), never Rust
 //! closures — so the model stays serializable and uniform for native and plugin UI alike.
@@ -15,9 +19,8 @@
 //! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
 //! layout or paint logic — this is pure description.
 //!
-//! Seam module: consumed by `realize` (plugin-task-ui-3), the Modal `body` (ui-4) and
-//! plugins — carries `#![allow(dead_code)]` like the other chrome seam modules until then.
-#![allow(dead_code)]
+//! Consumed by `realize` (plugin-task-ui-3), the Modal `body` (ui-4) and plugins. Everything
+//! here is `pub`: it is the published vocabulary, so there is nothing to mark dead.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -132,6 +135,11 @@ impl WidgetKind {
     /// here without adding it to [`ALL`](Self::ALL) is a *test failure*. Between them, the list
     /// cannot silently fall behind the vocabulary — which is the whole point, since the coverage
     /// guard is only as good as the list it walks.
+    ///
+    /// Only the coverage test reads it, but it is compiled in **every** build on purpose: an
+    /// uncompiled match cannot be the compile error described above. (The app crate hid this
+    /// behind a module-wide `allow(dead_code)`; here the allow is narrowed to the one item.)
+    #[allow(dead_code)]
     fn ordinal(self) -> usize {
         match self {
             WidgetKind::VStack => 0,

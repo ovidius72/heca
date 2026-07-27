@@ -21,12 +21,12 @@ use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
 use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
 
-use super::view::{PropMap, ViewNode, WidgetKind};
+use heca_view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
 use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
-use crate::chrome::view::Intent;
+use heca_view::Intent;
 use crate::app_state::AppState;
 use crate::input::WmAction;
 
@@ -442,7 +442,7 @@ pub(crate) fn resolve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::view::PropValue;
+    use heca_view::PropValue;
 
     fn noop_emit() -> ChromeIntentEmitter {
         Rc::new(|_| {})
