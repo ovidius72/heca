@@ -115,6 +115,14 @@ pub trait Style: Sized {
     fn margin(self, px: f32) -> Self {
         self.prop("margin", px)
     }
+    /// Horizontal margin (left + right), in px.
+    fn margin_x(self, px: f32) -> Self {
+        self.prop("margin_x", px)
+    }
+    /// Vertical margin (top + bottom), in px — a rule breathing away from what it separates.
+    fn margin_y(self, px: f32) -> Self {
+        self.prop("margin_y", px)
+    }
     /// Left margin, in px.
     fn margin_left(self, px: f32) -> Self {
         self.prop("margin_left", px)

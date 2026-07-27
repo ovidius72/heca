@@ -4224,3 +4224,46 @@ fn a_state_highlight_never_crops_the_content_it_covers() {
         "pill {sel:?} crops content {content:?}",
     );
 }
+
+
+/// A margin can be set per **axis**, not only per side.
+///
+/// `padding_x` / `padding_y` existed and the margins had no counterpart, so a described tree could
+/// say "padding on the y axis" but had to name both sides for a margin. A rule between two
+/// containers wanting to breathe on one axis is the case that found it. The cascade matches
+/// padding's: a side wins over its axis, which wins over the uniform value.
+#[test]
+fn a_margin_can_be_set_per_axis() {
+    let mut root = Flex::column()
+        .width(Length::Px(200.0))
+        .height(Length::Px(200.0))
+        .child(
+            Flex::column()
+                .height(Length::Px(20.0))
+                .margin_y(10.0)
+                .margin_x(4.0),
+        )
+        .child(Flex::column().height(Length::Px(20.0)));
+
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 200.0));
+
+    let first = root.base().children[0].base().bounds;
+    let second = root.base().children[1].base().bounds;
+    assert_eq!(first.loc.y, 10.0, "the y margin pushed it down from the top");
+    assert_eq!(first.loc.x, 4.0, "and the x margin in from the left");
+    assert_eq!(
+        second.loc.y, 40.0,
+        "the next child clears the first's 20px height plus 10px of margin either side",
+    );
+
+    // A side still wins over its axis.
+    let mut root = Flex::column()
+        .height(Length::Px(200.0))
+        .child(Flex::column().height(Length::Px(20.0)).margin_y(10.0).margin_top(2.0));
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 200.0));
+    assert_eq!(
+        root.base().children[0].base().bounds.loc.y,
+        2.0,
+        "margin_top overrides margin_y",
+    );
+}
