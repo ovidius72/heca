@@ -2981,7 +2981,7 @@ open_modal(
 no Rust closures. Behaviour is carried by `Intent`s and the plugin receives the `ModalResult`
 (`id` + the named-field `data`) back over the boundary. Because it's the identical model, a modal
 authored by a plugin is realized, hinted (`prefix+/`), keyboard-driven, and confirm-gated exactly
-like a native one. (A first-class typed builder — `Column::new().gap(8).child(…)` — is
+like a native one. (A first-class typed builder — `VStack::new().gap(8).child(…)` — is
 `plugin-task-ui-2`; today author the nodes with `ViewNode::new(kind).prop(…).child(…)`.)
 
 ### CommandPalette
@@ -3397,7 +3397,7 @@ ViewNode::new(WidgetKind::VStack)
 - **Internal code** authors this directly (as above) and hands it to `realize` / `open_modal`.
 - **Plugins** author the *same* nodes and ship them serialized (JSON); behaviour is the `Intent`
   action ids, so no closures cross the boundary. A typed SwiftUI-style builder
-  (`Column::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
+  (`VStack::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
 - **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
   `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
 
