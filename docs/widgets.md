@@ -402,8 +402,10 @@ caller.
 
 ### `Theme`, `GlowLevel` & `Intensity`
 
-Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
-default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
+Token struct consumed by `PaintCx`. The bundled themes are **`grid_tron`** (cyan, dark — the
+default), **`mocha`** and **`latte`**, loaded by name with `heca_theme::load_theme(name)`; it falls
+back through `~/.config/heca/themes/{name}.toml` → bundled → `grid_tron`, so it never fails.
+`Theme::grid_tron()` is the one preset built in code. Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
 `font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`, `focus_ring`,
 `glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
