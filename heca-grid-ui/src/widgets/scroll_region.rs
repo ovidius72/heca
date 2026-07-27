@@ -40,7 +40,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
-    paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx,
+    paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx, WidgetIntent,
 };
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::{Direction, Length, Spacing};
@@ -81,6 +81,11 @@ const SCROLLBAR_GUTTER: f64 = SCROLLBAR_W + SCROLLBAR_PAD + SCROLLBAR_EDGE_INSET
 /// previous build multiplied by a fixed line count × font, which made each notch
 /// jump ~75% of a small viewport and overshoot.)
 const WHEEL_STEP_FRAC: f64 = 0.1;
+/// How far one **keyboard page** moves, as a fraction of the viewport (F003/P011/T012).
+///
+/// Not a whole viewport: a sliver of overlap means the line you were reading is still on screen
+/// after the jump, which is what every pager does and what makes paging through a list readable.
+const PAGE_STEP_FRAC: f64 = 0.9;
 /// Rest-glow spread radius (px) for a STYLED region (a scrollable panel) — its
 /// share of the theme rest halo; a frameless region has no surface and no glow.
 const SURFACE_GLOW_RADIUS: f32 = 12.0;
@@ -453,6 +458,56 @@ impl ScrollRegion {
     }
 
     /// Declare the gesture over and report it once. No-op when nothing was in flight.
+    /// Act on a keyboard scroll intent, or decline it.
+    ///
+    /// Declines (`Handled::No`) when the intent is not a scroll one, or when this region cannot
+    /// scroll that axis at all — either the axis is disabled or the content fits. Declining is what
+    /// lets a nested region, or the host, get a turn instead of the key dying here.
+    fn scroll_intent(&mut self, intent: WidgetIntent, cause: &Event) -> Handled {
+        let vp = self.base.bounds;
+        let (vertical, target) = match intent {
+            WidgetIntent::ScrollPageUp => (
+                true,
+                self.scroll_offset.get_untracked() as f64 - PAGE_STEP_FRAC * vp.size.h,
+            ),
+            WidgetIntent::ScrollPageDown => (
+                true,
+                self.scroll_offset.get_untracked() as f64 + PAGE_STEP_FRAC * vp.size.h,
+            ),
+            WidgetIntent::ScrollToTop => (true, 0.0),
+            // Past the end on purpose: `set_offset_y` clamps, so this lands exactly on the last
+            // scrollable pixel without this code having to know where that is.
+            WidgetIntent::ScrollToBottom => (true, f64::MAX),
+            WidgetIntent::ScrollPageLeft => (
+                false,
+                self.scroll_offset_x.get_untracked() as f64 - PAGE_STEP_FRAC * vp.size.w,
+            ),
+            WidgetIntent::ScrollPageRight => (
+                false,
+                self.scroll_offset_x.get_untracked() as f64 + PAGE_STEP_FRAC * vp.size.w,
+            ),
+            WidgetIntent::ScrollToLeftEdge => (false, 0.0),
+            WidgetIntent::ScrollToRightEdge => (false, f64::MAX),
+            _ => return Handled::No,
+        };
+        let room = if vertical {
+            self.max_offset()
+        } else {
+            self.max_offset_x()
+        };
+        if room <= 0.0 {
+            return Handled::No;
+        }
+        let target = target.clamp(0.0, room) as f32;
+        if vertical {
+            self.set_offset_y(target, Some(cause));
+        } else {
+            self.set_offset_x(target, Some(cause));
+        }
+        self.end_scroll(Some(cause));
+        Handled::Yes
+    }
+
     fn end_scroll(&mut self, cause: Option<&Event>) {
         if !self.scrolling {
             return;
@@ -918,6 +973,13 @@ impl Component for ScrollRegion {
                 }
                 if handled { Handled::Yes } else { Handled::No }
             }
+            // Keyboard scrolling (F003/P011/T012). Semantic, so the arithmetic lives here rather
+            // than in the app: the widget is what knows its viewport and its content.
+            //
+            // After the children, like the wheel, so the innermost scrollable region wins when
+            // regions nest. A region that cannot scroll the axis asked for returns `No` and the
+            // event carries on — a vertical-only region must not swallow a horizontal page.
+            Event::Widget(intent) => self.scroll_intent(*intent, ev),
             Event::PointerReleased { .. } => {
                 // No bounds check: a drag that started here ends here, wherever the cursor drifted
                 // to. Gating a release on position is exactly how a thumb gets stuck.
@@ -1207,6 +1269,79 @@ mod tests {
             y += h;
         }
         r
+    }
+
+    /// A keyboard page moves by most of a viewport, and the region clamps its own ends.
+    ///
+    /// The intents are semantic on purpose (F003/P011/T012): the host says "one page on" and the
+    /// widget decides what that means, because it is the only thing that knows its viewport and
+    /// content. `ScrollToBottom` asks for `f64::MAX` and lands on the last scrollable pixel without
+    /// the caller knowing where that is.
+    #[test]
+    fn a_keyboard_page_scrolls_by_most_of_a_viewport_and_clamps() {
+        let mut r = region_with_children(&[100.0, 100.0, 100.0]); // 300 of content in a 100 viewport
+        let page = PAGE_STEP_FRAC * 100.0; // 90
+
+        assert_eq!(r.scroll_intent(WidgetIntent::ScrollPageDown, &Event::Widget(WidgetIntent::ScrollPageDown)), Handled::Yes);
+        assert!((r.scroll_offset.get_untracked() as f64 - page).abs() < 0.01, "one page down");
+
+        r.scroll_intent(WidgetIntent::ScrollPageUp, &Event::Widget(WidgetIntent::ScrollPageUp));
+        assert_eq!(r.scroll_offset.get_untracked(), 0.0, "back to the top, not past it");
+
+        r.scroll_intent(WidgetIntent::ScrollToBottom, &Event::Widget(WidgetIntent::ScrollToBottom));
+        assert_eq!(
+            r.scroll_offset.get_untracked() as f64,
+            r.max_offset(),
+            "the bottom is the last scrollable pixel, clamped by the widget",
+        );
+
+        r.scroll_intent(WidgetIntent::ScrollToTop, &Event::Widget(WidgetIntent::ScrollToTop));
+        assert_eq!(r.scroll_offset.get_untracked(), 0.0);
+    }
+
+    /// A region declines an axis it cannot scroll, so the event carries on.
+    ///
+    /// This is what makes nesting and the host fallback work: a vertical-only region must not
+    /// swallow a horizontal page, and a region whose content fits must not swallow anything. If it
+    /// consumed them, an outer region would never see the key and the user would press it to no
+    /// effect — silently.
+    #[test]
+    fn a_region_declines_an_axis_it_cannot_scroll() {
+        // Vertical-only (the default), so horizontal intents are not ours.
+        let mut r = region_with_children(&[100.0, 100.0, 100.0]);
+        assert_eq!(
+            r.scroll_intent(WidgetIntent::ScrollPageRight, &Event::Widget(WidgetIntent::ScrollPageRight)),
+            Handled::No,
+            "a vertical-only region declines a horizontal page",
+        );
+        assert_eq!(r.scroll_offset_x.get_untracked(), 0.0, "and moves nothing");
+
+        // Content that fits: nothing to scroll on either axis.
+        let mut fits = region_with_children(&[40.0]);
+        assert_eq!(
+            fits.scroll_intent(WidgetIntent::ScrollPageDown, &Event::Widget(WidgetIntent::ScrollPageDown)),
+            Handled::No,
+            "content that fits declines, so an outer region gets its turn",
+        );
+
+        // A non-scroll intent is never ours.
+        assert_eq!(
+            r.scroll_intent(WidgetIntent::Activate, &Event::Widget(WidgetIntent::Activate)),
+            Handled::No,
+        );
+    }
+
+    /// The intents reach the region through normal dispatch, after the children.
+    ///
+    /// The unit tests above call the handler directly; this one goes through `dispatch` to prove the
+    /// wiring, since `on_event` (not `on_event_capture`) is what gives the innermost region the
+    /// first refusal — the same order the wheel uses.
+    #[test]
+    fn a_scroll_intent_arrives_through_dispatch() {
+        let mut r = region_with_children(&[100.0, 100.0, 100.0]);
+        let handled = crate::component::dispatch(&mut r, &Event::Widget(WidgetIntent::ScrollPageDown));
+        assert_eq!(handled, Handled::Yes);
+        assert!(r.scroll_offset.get_untracked() > 0.0, "it scrolled");
     }
 
     #[test]
