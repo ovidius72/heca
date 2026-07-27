@@ -6,14 +6,16 @@
 //! that turns it into live widgets: it owns the grid-ui dependency and the theme/registry
 //! wiring, so the model stays free of both.
 //!
-//! Two host services are threaded in:
-//! - `emit` — the chrome intent sink ([`ChromeIntentEmitter`](super::ChromeIntentEmitter)):
-//!   a realized actionable widget fires its [`view::Intent`](super::Intent) wrapped as
-//!   [`InteractionIntent::View`] on **click**.
-//! - `hints` — the shared [`HintTargetRegistry`](super::HintTargetRegistry): every
-//!   actionable node is registered so the universal picker (`prefix+/`) reaches it by
-//!   letter, firing the *same* intent as a click. This is the "every clickable widget is
-//!   also hintable" rule, for free (plan §2.7.2, "everything is an action").
+//! Two host services are threaded in. Both are **narrow seams** over the model's own
+//! [`Intent`], not app types, so this mapper can live and be called below `heca`
+//! (F003/P017/T009):
+//! - `emit` — an [`IntentEmitter`]: a realized actionable widget fires the node's `Intent` on
+//!   **click**. What it means is the host's business; the app wraps it as
+//!   `InteractionIntent::View`.
+//! - `hints` — a [`HintTargets`] sink: every actionable node is registered so the universal
+//!   picker (`prefix+/`) reaches it by letter, firing the *same* intent as a click. This is the
+//!   "every clickable widget is also hintable" rule, for free (plan §2.7.2, "everything is an
+//!   action"). The host keeps the real registry; realize only needs to put an intent into it.
 //!
 //! Adding a widget = one [`WidgetKind`](super::WidgetKind) arm here (+ its variant in the model).
 //!
@@ -33,6 +35,8 @@
 //! `#![allow(dead_code)]` like the sibling chrome seam modules until those consumers land.
 #![allow(dead_code)]
 
+use std::rc::Rc;
+
 use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
@@ -42,9 +46,26 @@ use heca_grid_ui::{
     Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize,
 };
 
-use heca_view::{PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind};
-use super::{ChromeIntentEmitter, HintTargetRegistry};
-use crate::app::interaction::InteractionIntent;
+use heca_view::{
+    Intent, PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind,
+};
+
+/// Where a realized tree's intents go: a widget fires the node's own [`Intent`], and the host
+/// wraps it in whatever it dispatches (the app wraps it as `InteractionIntent::View`).
+///
+/// `Rc` because every actionable widget clones the sink into its own callback.
+pub(crate) type IntentEmitter = Rc<dyn Fn(Intent)>;
+
+/// The host's KeyHint pick registry, narrowed to the one thing `realize` does with it: put an
+/// intent in, get its id back.
+///
+/// A seam rather than the concrete registry because the real one is **shared** — the overlay
+/// registers modal buttons carrying intents that are not view intents at all — so it has to keep
+/// storing the app's own carrier type. This is the part realize needs, and nothing more.
+pub(crate) trait HintTargets {
+    /// Register an actionable node's intent as a pick target and return its freshly-allocated id.
+    fn register(&mut self, intent: Intent) -> HintTargetId;
+}
 
 /// Reads a form field's current value at submit time. Boxed because the concrete widget signal
 /// type varies (String / bool / …). Native-side only (never crosses the plugin boundary).
@@ -97,8 +118,8 @@ impl FormBindings {
 pub(crate) fn realize(
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     let mut realized = realize_kind(node, theme, emit, hints, forms);
@@ -282,8 +303,8 @@ fn prop_enum_name<T: serde::Serialize>(value: &T) -> Option<String> {
 fn realize_kind(
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     match node.kind {
@@ -581,8 +602,8 @@ fn attach_children(
     mut container: Box<dyn Component>,
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     for child in &node.children {
@@ -593,9 +614,9 @@ fn attach_children(
 
 /// Register the node's `"press"` (activation) intent as a hint target, returning the id + the
 /// carrier intent to fire on click. `None` when the node isn't actionable.
-fn press_intent(node: &ViewNode, hints: &mut HintTargetRegistry) -> Option<(HintTargetId, InteractionIntent)> {
+fn press_intent(node: &ViewNode, hints: &mut dyn HintTargets) -> Option<(HintTargetId, Intent)> {
     let intent = node.intent("press")?;
-    let carrier = InteractionIntent::View(intent.clone());
+    let carrier = intent.clone();
     let id = hints.register(carrier.clone());
     Some((id, carrier))
 }
@@ -603,9 +624,8 @@ fn press_intent(node: &ViewNode, hints: &mut HintTargetRegistry) -> Option<(Hint
 /// The node's `"change"` intent as a carrier (value widgets — input/toggle/checkbox). No hint
 /// target: a value change isn't a pick target. Data marshalling into the intent is a later step
 /// (plugin-task-ui-4 remainder); today the change simply fires the bound intent.
-fn change_intent(node: &ViewNode) -> Option<InteractionIntent> {
-    let intent = node.intent("change")?;
-    Some(InteractionIntent::View(intent.clone()))
+fn change_intent(node: &ViewNode) -> Option<Intent> {
+    Some(node.intent("change")?.clone())
 }
 
 /// Realize a container node onto a base [`Flex`] (row or column), applying layout props and
@@ -614,8 +634,8 @@ fn realize_flex(
     node: &ViewNode,
     theme: &Theme,
     mut flex: Flex,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     // `gap`, `align` and every other layout property are applied generically by
@@ -643,8 +663,8 @@ fn realize_flex(
 fn realize_button(
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     let mut button = if node.children.is_empty() {
@@ -666,7 +686,7 @@ fn realize_button(
     }
     if let Some(intent) = node.intent("press") {
         // One intent, two input paths: register it for the picker, emit the same on click.
-        let carrier = InteractionIntent::View(intent.clone());
+        let carrier = intent.clone();
         let id = hints.register(carrier.clone());
         let emit = emit.clone();
         button = button
@@ -698,8 +718,8 @@ fn realize_button(
 fn realize_choice(
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Choice {
     let value = value_prop(node)
@@ -727,8 +747,8 @@ fn realize_choice(
 fn realize_options(
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Vec<Choice> {
     node.children
@@ -759,7 +779,7 @@ fn realize_options(
 ///
 /// An option with no `value` falls back to `args["index"]`, so a value-less picker still reports
 /// *something* rather than dispatching a bare intent.
-fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(Action) + 'static> {
+fn option_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action) + 'static> {
     let intent = node.intent("change")?.clone();
     let values: Vec<Option<PropValue>> = node
         .children
@@ -777,7 +797,7 @@ fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(
             Some(value) => intent.args.insert("value".into(), value),
             None => intent.args.insert("index".into(), PropValue::Int(i as i64)),
         };
-        emit(InteractionIntent::View(intent));
+        emit(intent);
     })
 }
 
@@ -795,8 +815,8 @@ fn option_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(
 fn realize_grid(
     node: &ViewNode,
     theme: &Theme,
-    emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
+    emit: &IntentEmitter,
+    hints: &mut dyn HintTargets,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
     let mut grid = Grid::new();
@@ -917,9 +937,8 @@ fn warn_unknown_slot(parent: &ViewNode, child: &ViewNode, slot: Option<&str>, kn
 /// A node's intent for `event`, wrapped as the carrier a widget callback fires. (`press_intent` also
 /// registers a hint target; this is for events that aren't pick targets — `change`, `dismiss`, a
 /// toast's inline `action`.)
-fn intent_carrier(node: &ViewNode, event: &str) -> Option<InteractionIntent> {
-    node.intent(event)
-        .map(|i| InteractionIntent::View(i.clone()))
+fn intent_carrier(node: &ViewNode, event: &str) -> Option<Intent> {
+    node.intent(event).cloned()
 }
 
 /// A `Toast`'s `"severity"` prop, by name. Unknown / absent → `Info` (the widget's own default).
@@ -938,7 +957,7 @@ fn severity_prop(node: &ViewNode) -> ToastSeverity {
 /// A toggle is only meaningful with its **new state**, so the bound intent is dispatched with
 /// `args["expanded"]` set: an author binds one action and learns which way it went, instead of
 /// having to track the group's state on their side.
-fn toggle_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(Action) + 'static> {
+fn toggle_change(node: &ViewNode, emit: &IntentEmitter) -> Option<impl Fn(Action) + 'static> {
     let intent = node.intent("toggle")?.clone();
     let emit = emit.clone();
     Some(move |action: Action| {
@@ -949,7 +968,7 @@ fn toggle_change(node: &ViewNode, emit: &ChromeIntentEmitter) -> Option<impl Fn(
         intent
             .args
             .insert("expanded".into(), PropValue::Bool(expanded));
-        emit(InteractionIntent::View(intent));
+        emit(intent);
     })
 }
 
@@ -1131,9 +1150,36 @@ fn map_size(s: ViewSize) -> WidgetSize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chrome::Intent;
     use heca_grid_ui::{Justify, Length};
     use std::rc::Rc;
+
+    /// The tests' own pick registry. `realize` no longer knows the app's, so the assertions run
+    /// against a sink of the same shape: ids are handed out by position, in registration order.
+    #[derive(Default)]
+    struct TestHints {
+        registered: Vec<Intent>,
+    }
+
+    impl HintTargets for TestHints {
+        fn register(&mut self, intent: Intent) -> HintTargetId {
+            let id = HintTargetId::new(self.registered.len());
+            self.registered.push(intent);
+            id
+        }
+    }
+
+    impl TestHints {
+        /// The id the next `register` will hand out — same contract as the host registry's, so a
+        /// test can take a checkpoint either side of a build and count what it registered.
+        fn checkpoint(&self) -> usize {
+            self.registered.len()
+        }
+
+        /// The intent registered under `id`.
+        fn get(&self, id: HintTargetId) -> Option<&Intent> {
+            self.registered.get(id.raw())
+        }
+    }
 
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
     /// buttons (Cancel / Delete), each carrying a `"press"` intent.
@@ -1158,7 +1204,7 @@ mod tests {
             )
     }
 
-    fn noop_emitter() -> ChromeIntentEmitter {
+    fn noop_emitter() -> IntentEmitter {
         Rc::new(|_| {})
     }
 
@@ -1167,19 +1213,19 @@ mod tests {
     /// through `base_mut().children` (the `Box<dyn Component>` push path).
     #[test]
     fn realizes_nested_structure() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let root = realize(&confirm_tree(), &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(root.base().children.len(), 2, "column: label + row");
         let row = &root.base().children[1];
         assert_eq!(row.base().children.len(), 2, "row: two buttons");
     }
 
-    /// Every actionable node (a `"press"` binding) registers exactly one hint target, and
-    /// each carries `InteractionIntent::View` wrapping the node's own intent — so the picker
-    /// fires the identical action a click would. Non-actionable nodes register nothing.
+    /// Every actionable node (a `"press"` binding) registers exactly one hint target carrying the
+    /// node's own intent — so the picker fires the identical action a click would. Non-actionable
+    /// nodes register nothing.
     #[test]
     fn actionable_nodes_register_view_intents() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let before = hints.checkpoint();
         let _ = realize(&confirm_tree(), &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(
@@ -1190,14 +1236,8 @@ mod tests {
         // Realize order is depth-first: Cancel registers first, then Delete.
         let cancel = hints.get(heca_grid_ui::HintTargetId::new(before)).unwrap();
         let delete = hints.get(heca_grid_ui::HintTargetId::new(before + 1)).unwrap();
-        assert!(
-            matches!(cancel, InteractionIntent::View(i) if i.action == "confirm_cancel"),
-            "first target = Cancel's View intent, got {cancel:?}",
-        );
-        assert!(
-            matches!(delete, InteractionIntent::View(i) if i.action == "confirm_ok"),
-            "second target = Delete's View intent, got {delete:?}",
-        );
+        assert_eq!(cancel.action, "confirm_cancel", "first target = Cancel's intent");
+        assert_eq!(delete.action, "confirm_ok", "second target = Delete's intent");
     }
 
     /// A `Button` node's **children are its content**: an arbitrary subtree is realized and mounted
@@ -1205,7 +1245,7 @@ mod tests {
     /// and dropped them silently — a declarative `Button(Icon + Label)` rendered as a bare button.
     #[test]
     fn button_children_are_realized_as_its_content() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Button)
             .prop("variant", PropValue::Variant(ViewVariant::Destructive))
             .on_press(Intent::new("confirm_ok"))
@@ -1239,7 +1279,7 @@ mod tests {
     /// two spellings.
     #[test]
     fn childless_button_node_uses_the_scalar_sugar() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Button)
             .text("Delete")
             .prop("icon", PropValue::Glyph("trash".into()));
@@ -1265,7 +1305,7 @@ mod tests {
             &node,
             &Theme::default(),
             &noop_emitter(),
-            &mut HintTargetRegistry::default(),
+            &mut TestHints::default(),
             &mut FormBindings::default(),
         );
         let visual = w.base().style.visual;
@@ -1282,14 +1322,14 @@ mod tests {
             &ViewNode::new(WidgetKind::Surface),
             &Theme::default(),
             &noop_emitter(),
-            &mut HintTargetRegistry::default(),
+            &mut TestHints::default(),
             &mut FormBindings::default(),
         );
         let one_field = realize(
             &ViewNode::new(WidgetKind::Surface).prop("radius", PropValue::Float(9.0)),
             &Theme::default(),
             &noop_emitter(),
-            &mut HintTargetRegistry::default(),
+            &mut TestHints::default(),
             &mut FormBindings::default(),
         );
         assert_eq!(one_field.base().style.visual.radius, 9.0, "the one it set");
@@ -1318,7 +1358,7 @@ mod tests {
                 node,
                 theme,
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             )
             .base()
@@ -1371,7 +1411,7 @@ mod tests {
                 node,
                 theme,
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             );
             LayoutEngine::new().compute(w.as_mut(), Size::new(300.0, 40.0));
@@ -1414,7 +1454,7 @@ mod tests {
             &node,
             &Theme::default(),
             &noop_emitter(),
-            &mut HintTargetRegistry::default(),
+            &mut TestHints::default(),
             &mut FormBindings::default(),
         );
         assert_eq!(w.base().style.visual.radius, 7.0, "the good one still applied");
@@ -1434,10 +1474,10 @@ mod tests {
         use heca_core::layout::{Point, Size};
         use std::cell::RefCell;
 
-        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
         let sink = fired.clone();
-        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
-        let mut hints = HintTargetRegistry::default();
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+        let mut hints = TestHints::default();
 
         let node = ViewNode::new(WidgetKind::Row)
             .prop("active", PropValue::Bool(true))
@@ -1460,10 +1500,7 @@ mod tests {
 
         let fired = fired.borrow();
         assert_eq!(fired.len(), 2, "a click and an Enter each fire it: {fired:?}");
-        for carrier in fired.iter() {
-            let InteractionIntent::View(intent) = carrier else {
-                panic!("expected a View intent, got {carrier:?}");
-            };
+        for intent in fired.iter() {
             assert_eq!(intent.action, "docker.select");
             assert_eq!(intent.args.get("id"), Some(&PropValue::Text("web".into())));
         }
@@ -1473,7 +1510,7 @@ mod tests {
     /// that nothing can activate should not pretend to be a control.
     #[test]
     fn a_described_row_without_a_press_intent_is_inert() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Row)
             .child(ViewNode::new(WidgetKind::Label).text("just content"));
         let row = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
@@ -1487,7 +1524,7 @@ mod tests {
     /// plugin/RPC input.
     #[test]
     fn deferred_kind_is_empty_not_panic() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Grid);
         let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
         assert_eq!(realized.base().children.len(), 0);
@@ -1508,7 +1545,7 @@ mod tests {
     /// composes its own content (here an icon + a label), exactly like a native `Choice`.
     #[test]
     fn select_node_realizes_its_choice_children_as_options() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Select)
             .prop("selected", PropValue::Int(1))
             .child(option_node("low", "LOW"))
@@ -1539,15 +1576,15 @@ mod tests {
         use heca_core::layout::{Point, Size};
         use std::cell::RefCell;
 
-        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
         let sink = fired.clone();
-        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
         let node = ViewNode::new(WidgetKind::Select)
             .on("change", Intent::new("set_level"))
             .child(option_node("low", "LOW"))
             .child(option_node("high", "HIGH"));
-        let mut select = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let mut select = realize(&node, &Theme::default(), &emit, &mut TestHints::default(), &mut FormBindings::default());
         LayoutEngine::new().compute(select.as_mut(), Size::new(400.0, 300.0));
 
         // Open the dropdown, then click the second option where it actually is (its real bounds).
@@ -1561,8 +1598,8 @@ mod tests {
         });
 
         let fired = fired.borrow();
-        let [InteractionIntent::View(intent)] = fired.as_slice() else {
-            panic!("expected exactly one View intent, got {fired:?}");
+        let [intent] = fired.as_slice() else {
+            panic!("expected exactly one intent, got {fired:?}");
         };
         assert_eq!(intent.action, "set_level");
         assert_eq!(
@@ -1580,22 +1617,22 @@ mod tests {
         use heca_core::layout::Size;
         use std::cell::RefCell;
 
-        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
         let sink = fired.clone();
-        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
         let node = ViewNode::new(WidgetKind::Tabs)
             .on("change", Intent::new("show_tab"))
             .child(option_node("files", "FILES"))
             .child(option_node("issues", "ISSUES"));
-        let mut tabs = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let mut tabs = realize(&node, &Theme::default(), &emit, &mut TestHints::default(), &mut FormBindings::default());
         LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
         assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
         heca_grid_ui::dispatch(tabs.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
         let fired = fired.borrow();
-        let [InteractionIntent::View(intent)] = fired.as_slice() else {
-            panic!("expected exactly one View intent, got {fired:?}");
+        let [intent] = fired.as_slice() else {
+            panic!("expected exactly one intent, got {fired:?}");
         };
         assert_eq!(intent.action, "show_tab");
         assert_eq!(intent.args.get("value"), Some(&PropValue::Text("issues".into())));
@@ -1605,7 +1642,7 @@ mod tests {
     /// child the composed form would build. Same precedence rule as `Button`: children win.
     #[test]
     fn childless_choice_node_desugars_its_text_to_a_label_child() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Choice)
             .prop("value", PropValue::Text("high".into()))
             .text("HIGH");
@@ -1618,7 +1655,7 @@ mod tests {
     /// option and not a panic: `realize` is total for untrusted plugin/RPC input.
     #[test]
     fn a_non_choice_child_of_a_select_is_ignored() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Select)
             .child(option_node("low", "LOW"))
             .child(ViewNode::new(WidgetKind::Button).text("I am not an option"))
@@ -1640,7 +1677,7 @@ mod tests {
         use heca_grid_ui::LayoutEngine;
         use heca_core::layout::Size;
 
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::ItemGroup)
             .text("EXPLORER")
             .prop("expanded", PropValue::Bool(false))
@@ -1674,15 +1711,15 @@ mod tests {
         use heca_core::layout::{Point, Size};
         use std::cell::RefCell;
 
-        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
         let sink = fired.clone();
-        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
         let node = ViewNode::new(WidgetKind::ItemGroup)
             .text("EXPLORER")
             .on("toggle", Intent::new("fold_group"))
             .child(ViewNode::new(WidgetKind::Item).text("src"));
-        let mut group = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let mut group = realize(&node, &Theme::default(), &emit, &mut TestHints::default(), &mut FormBindings::default());
         LayoutEngine::new().compute(group.as_mut(), Size::new(300.0, 200.0));
 
         // Click the header (it starts expanded) → it collapses.
@@ -1692,8 +1729,8 @@ mod tests {
         });
 
         let fired = fired.borrow();
-        let [InteractionIntent::View(intent)] = fired.as_slice() else {
-            panic!("expected exactly one View intent, got {fired:?}");
+        let [intent] = fired.as_slice() else {
+            panic!("expected exactly one intent, got {fired:?}");
         };
         assert_eq!(intent.action, "fold_group");
         assert_eq!(
@@ -1707,7 +1744,7 @@ mod tests {
     /// their own intents).
     #[test]
     fn marker_group_node_realizes_its_rows_and_flags() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::MarkerGroup)
             .prop("active", PropValue::Bool(true))
             .prop("nav_selected", PropValue::Bool(true))
@@ -1749,7 +1786,7 @@ mod tests {
     /// child** — `area` by name, or `col`/`row` (+ spans). A child with neither auto-places.
     #[test]
     fn grid_node_realizes_tracks_areas_and_per_child_placement() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let tracks = |t: [&str; 3]| {
             PropValue::List(t.iter().map(|s| PropValue::Text((*s).into())).collect())
         };
@@ -1809,7 +1846,7 @@ mod tests {
     fn grid_alignment_is_authorable_on_both_axes() {
         use heca_grid_ui::Align;
 
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Grid)
             .prop("align", PropValue::Align(ViewAlign::Center))
             .prop("justify_items", PropValue::Align(ViewAlign::Center))
@@ -1836,7 +1873,7 @@ mod tests {
     /// An unknown area name is not an error — the child simply auto-places (realize stays total).
     #[test]
     fn grid_child_in_an_unknown_area_auto_places() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Grid)
             .prop("areas", PropValue::List(vec![PropValue::Text("a b".into())]))
             .child(
@@ -1852,7 +1889,7 @@ mod tests {
     /// strikethrough (decorations the widget draws). Absent props keep the widget's default.
     #[test]
     fn label_text_attributes_are_authorable() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Label)
             .text("DONE")
             .prop("bold", PropValue::Bool(true))
@@ -1895,7 +1932,7 @@ mod tests {
     /// `DockFrame` has a **default** slot (the body), so an unslotted child lands there.
     #[test]
     fn dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::DockFrame)
             .text("EXPLORER")
             .prop("frameless", PropValue::Bool(true))
@@ -1927,7 +1964,7 @@ mod tests {
     /// Either way: no panic. Realize stays total for untrusted input.
     #[test]
     fn item_routes_leading_and_trailing_slots_and_ignores_the_rest() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Item)
             .text("main.rs")
             .child(
@@ -1969,9 +2006,9 @@ mod tests {
     fn toast_node_realizes_its_props_and_three_intents() {
         use std::cell::RefCell;
 
-        let fired: Rc<RefCell<Vec<InteractionIntent>>> = Rc::new(RefCell::new(Vec::new()));
+        let fired: Rc<RefCell<Vec<Intent>>> = Rc::new(RefCell::new(Vec::new()));
         let sink = fired.clone();
-        let emit: ChromeIntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
+        let emit: IntentEmitter = Rc::new(move |i| sink.borrow_mut().push(i));
 
         let node = ViewNode::new(WidgetKind::Toast)
             .text("Build failed")
@@ -1981,7 +2018,7 @@ mod tests {
             .on("action", Intent::new("rebuild"))
             .on("dismiss", Intent::new("close_toast"));
 
-        let toast = realize(&node, &Theme::default(), &emit, &mut HintTargetRegistry::default(), &mut FormBindings::default());
+        let toast = realize(&node, &Theme::default(), &emit, &mut TestHints::default(), &mut FormBindings::default());
         assert!(
             toast.base().children.is_empty(),
             "the Toast draws its own card — it takes no children",
@@ -2094,7 +2131,7 @@ mod tests {
                 &sample_node(kind),
                 &Theme::default(),
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             );
             LayoutEngine::new().compute(widget.as_mut(), Size::new(400.0, 200.0));
@@ -2135,7 +2172,7 @@ mod tests {
     /// a title child first).
     #[test]
     fn container_kind_attaches_children() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Surface)
             .child(ViewNode::new(WidgetKind::Label).text("a"))
             .child(ViewNode::new(WidgetKind::Label).text("b"));
@@ -2159,7 +2196,7 @@ mod tests {
     /// (a value change isn't a pick target); a `"press"` binding (Item) does register one.
     #[test]
     fn change_binding_adds_no_hint_but_press_does() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let before = hints.checkpoint();
         let _ = realize(
             &ViewNode::new(WidgetKind::Input).on("change", Intent::new("q_changed")),
@@ -2186,7 +2223,7 @@ mod tests {
     /// value under that name. An unnamed value widget is not collected.
     #[test]
     fn named_value_widgets_are_collected() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let mut forms = FormBindings::default();
         let node = ViewNode::new(WidgetKind::VStack)
             .child(
@@ -2218,7 +2255,7 @@ mod tests {
                 .prop("value", PropValue::Text(value.into()))
                 .text(label)
         };
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let mut forms = FormBindings::default();
         let node = ViewNode::new(WidgetKind::Select)
             .prop("name", PropValue::Text("priority".into()))
@@ -2239,7 +2276,7 @@ mod tests {
     /// `collect()` under its own name — the end-to-end shape `ModalResult::Action.data` returns.
     #[test]
     fn rich_modal_body_marshals_every_named_field() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let mut forms = FormBindings::default();
         let node = ViewNode::new(WidgetKind::VStack)
             .child(
@@ -2288,7 +2325,7 @@ mod tests {
     #[test]
     fn named_input_exposes_live_text_signal() {
         use heca_grid_ui::reactive::SignalUpdate;
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let mut forms = FormBindings::default();
         let node = ViewNode::new(WidgetKind::Input)
             .text("term")
@@ -2316,7 +2353,7 @@ mod tests {
     /// a hand-written property list that happens to omit one of these.
     #[test]
     fn layout_properties_never_named_in_realize_still_reach_the_widget() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::VStack)
             .prop("padding", PropValue::Int(12))
             .prop("width", PropValue::Int(240))
@@ -2337,7 +2374,7 @@ mod tests {
     /// and a percentage string is a fraction — not the enum's `{"px": 240}` shape.
     #[test]
     fn length_accepts_the_spelling_an_author_would_reach_for() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let mut case = |p: PropValue| {
             let node = ViewNode::new(WidgetKind::Surface).prop("width", p);
             realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default())
@@ -2357,7 +2394,7 @@ mod tests {
     /// good properties on the same node still land.
     #[test]
     fn a_bad_property_never_takes_the_good_ones_with_it() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::VStack)
             .prop("gap", PropValue::Int(8))
             .prop("padding", PropValue::Text("not a number".into()))
@@ -2380,7 +2417,7 @@ mod tests {
     /// from `Layout::default()` would undo that and the region would silently stop scrolling.
     #[test]
     fn merging_preserves_layout_the_widget_set_in_its_constructor() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Scroll).prop("padding", PropValue::Int(4));
 
         let w = realize(&node, &Theme::default(), &noop_emitter(), &mut hints, &mut FormBindings::default());
@@ -2395,7 +2432,7 @@ mod tests {
     /// A node with no properties leaves the widget exactly as its constructor built it.
     #[test]
     fn a_node_with_no_properties_changes_nothing() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let bare = realize(
             &ViewNode::new(WidgetKind::Scroll),
             &Theme::default(),
@@ -2443,7 +2480,7 @@ mod tests {
     /// widget both leave the widget alone, and the good property on the same node still lands.
     #[test]
     fn the_generated_surface_ignores_what_it_cannot_use() {
-        let mut hints = HintTargetRegistry::default();
+        let mut hints = TestHints::default();
         let node = ViewNode::new(WidgetKind::Scroll)
             .prop("axes", PropValue::Text("sideways".into()))
             .prop("placeholder", PropValue::Text("not a scroll property".into()))
@@ -2475,7 +2512,7 @@ mod tests {
                 node,
                 &Theme::default(),
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             );
             LayoutEngine::new().compute(widget.as_mut(), Size::new(240.0, 40.0));
@@ -2525,7 +2562,7 @@ mod tests {
                 &content,
                 &Theme::default(),
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             )
         };
@@ -2553,7 +2590,7 @@ mod tests {
                 &node,
                 &Theme::default(),
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             ))
         };
@@ -2607,7 +2644,7 @@ mod tests {
                 &node,
                 &Theme::default(),
                 &noop_emitter(),
-                &mut HintTargetRegistry::default(),
+                &mut TestHints::default(),
                 &mut FormBindings::default(),
             );
             LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));

@@ -368,7 +368,17 @@ fn build_modal_root(
     shortcuts: &super::ActionShortcuts,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let body = super::realize(&spec.body, theme, emit, hints, forms);
+    // `realize` speaks the model's own `Intent` and knows nothing of `InteractionIntent` or the
+    // registry (F003/P017/T009). The carrier is put on here, at the boundary — for the click sink
+    // by a wrapping closure, for the pick registry by `ViewHintTargets`.
+    let body = {
+        let view_emit: super::IntentEmitter = {
+            let emit = emit.clone();
+            Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+        };
+        let mut targets = super::ViewHintTargets(hints);
+        super::realize(&spec.body, theme, &view_emit, &mut targets, forms)
+    };
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
         let variant = if action.danger {
