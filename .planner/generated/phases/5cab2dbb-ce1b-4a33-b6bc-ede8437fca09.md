@@ -1,8 +1,8 @@
 # 5cab2dbb-ce1b-4a33-b6bc-ede8437fca09 — P006 — app-11: Right-click context menu
 
-**Status:** 📋 `planned`
+**Status:** 🚧 `in-progress`
 **Created:** 2026-07-01T18:09:59.861Z
-**Updated:** 2026-07-13T15:32:06.296Z
+**Updated:** 2026-07-27T11:40:15.467Z
 
 Context menu keyboard-navigable con azioni chrome e terminal pane.
 

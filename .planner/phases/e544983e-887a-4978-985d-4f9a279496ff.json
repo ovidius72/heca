@@ -2,9 +2,10 @@
   "id": "e544983e-887a-4978-985d-4f9a279496ff",
   "featureId": "...",
   "number": 1,
+  "shortId": "3AB69",
+  "priority": 1,
   "slug": "notification-06",
   "title": "notification-06",
-  "status": "draft",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -23,5 +24,7 @@
   "taskIds": [],
   "tasks": [],
   "createdAt": "2026-07-04T07:05:14.792Z",
-  "updatedAt": "2026-07-04T07:05:14.792Z"
+  "updatedAt": "2026-07-27T11:40:15.456Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

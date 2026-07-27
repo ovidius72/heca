@@ -2,9 +2,10 @@
   "id": "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
   "featureId": "2272d270-40ae-47fe-bc64-a173b51a097c",
   "number": 1,
+  "shortId": "QGSKH",
+  "priority": 1,
   "slug": "notification",
   "title": "Notification",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -29,6 +30,8 @@
       "id": "ede93e46-85f2-403a-b49a-677775dd7cc4",
       "phaseId": "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
       "number": 1,
+      "shortId": "8FSPU",
+      "priority": 1,
       "shortName": "notify-blocked-keybinding",
       "title": "notify-blocked-keybinding: Notification when an action is blocked by policy",
       "status": "planned",
@@ -49,6 +52,8 @@
       "id": "eb1cd685-873e-4ed5-a047-8a92b147e211",
       "phaseId": "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
       "number": 2,
+      "shortId": "5B9X6",
+      "priority": 2,
       "shortName": "notify-config-reload",
       "title": "notify-config-reload: Success/warning notification on config reload outcome",
       "status": "planned",
@@ -67,5 +72,7 @@
     }
   ],
   "createdAt": "2026-07-09T13:08:26.141Z",
-  "updatedAt": "2026-07-09T13:08:39.843Z"
+  "updatedAt": "2026-07-27T11:40:15.461Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

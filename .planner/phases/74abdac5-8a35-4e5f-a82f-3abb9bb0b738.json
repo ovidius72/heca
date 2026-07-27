@@ -2,9 +2,10 @@
   "id": "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 8,
+  "shortId": "CX9HQ",
+  "priority": 8,
   "slug": "plugin-05-host-api-actions-overlay-region",
   "title": "plugin-05: Host API actions/overlay/region",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -30,6 +31,8 @@
       "id": "51341729-d992-4d6b-bce2-63645b48847e",
       "phaseId": "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
       "number": 1,
+      "shortId": "7FQLF",
+      "priority": 1,
       "shortName": "host-actions-dispatch",
       "title": "Add app.actions.dispatch to host",
       "status": "planned",
@@ -50,6 +53,8 @@
       "id": "e74dca51-0219-4881-929c-53d94682ffa2",
       "phaseId": "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
       "number": 2,
+      "shortId": "GKVDS",
+      "priority": 2,
       "shortName": "host-overlay-open",
       "title": "Add app.overlay open modal and dropdown",
       "status": "planned",
@@ -70,6 +75,8 @@
       "id": "7b0dbfb8-3b85-4622-ab7d-80878166e953",
       "phaseId": "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
       "number": 3,
+      "shortId": "7QTPY",
+      "priority": 3,
       "shortName": "host-regions-container",
       "title": "Add app.regions add and move container",
       "status": "planned",
@@ -88,5 +95,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:12:25.316Z"
+  "updatedAt": "2026-07-27T11:40:15.504Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

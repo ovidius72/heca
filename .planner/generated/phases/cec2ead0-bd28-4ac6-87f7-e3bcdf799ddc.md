@@ -2,7 +2,7 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-07-01T18:09:59.862Z
-**Updated:** 2026-07-01T18:12:56.212Z
+**Updated:** 2026-07-27T11:40:15.505Z
 
 Plugin semplici definiti in `config.toml` con rendering testuale nelle regioni chrome.
 

@@ -2,7 +2,7 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-07-03T22:50:20.126Z
-**Updated:** 2026-07-03T22:51:04.232Z
+**Updated:** 2026-07-27T11:40:15.531Z
 
 Tipi core delle notifiche, mapping ToastSpec e schema config `notification_system`.
 

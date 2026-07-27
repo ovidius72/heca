@@ -2,9 +2,10 @@
   "id": "e9b3402f-fb1f-45b7-ab95-c939736a3dab",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
   "number": 12,
+  "shortId": "G8SFZ",
+  "priority": 12,
   "slug": "terminal-10-per-pane-font-zoom",
   "title": "terminal-10: Per-pane font zoom",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -30,6 +31,8 @@
       "id": "edec04a7-a88a-4b80-9011-4ed36a90ca1a",
       "phaseId": "e9b3402f-fb1f-45b7-ab95-c939736a3dab",
       "number": 1,
+      "shortId": "HNFP3",
+      "priority": 1,
       "shortName": "per-pane-font-size",
       "title": "Per-pane font-size state",
       "status": "done",
@@ -50,6 +53,8 @@
       "id": "4f95c85e-5465-4eb6-9ef2-b6979e785800",
       "phaseId": "e9b3402f-fb1f-45b7-ab95-c939736a3dab",
       "number": 2,
+      "shortId": "73W2R",
+      "priority": 2,
       "shortName": "terminalstyle-per-pane",
       "title": "Build TerminalStyle font-size per pane",
       "status": "done",
@@ -70,6 +75,8 @@
       "id": "89ed2e66-623a-4863-9765-ea5460ba9022",
       "phaseId": "e9b3402f-fb1f-45b7-ab95-c939736a3dab",
       "number": 3,
+      "shortId": "XY8EN",
+      "priority": 3,
       "shortName": "font-zoom-actions",
       "title": "Actions and input bindings for font zoom",
       "status": "done",
@@ -88,5 +95,7 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T20:27:55.974Z"
+  "updatedAt": "2026-07-27T11:40:15.488Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }

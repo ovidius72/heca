@@ -2,9 +2,10 @@
   "id": "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 13,
+  "shortId": "5BCC8",
+  "priority": 13,
   "slug": "menu-nav-shared-list-menu-navigation-keybindings",
   "title": "menu-nav: Shared list/menu navigation keybindings",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -28,6 +29,8 @@
       "id": "4b545e7a-ff08-47dd-82ac-2f2660373e27",
       "phaseId": "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
       "number": 1,
+      "shortId": "B8Q99",
+      "priority": 1,
       "shortName": "menu-nav-1",
       "title": "menu-nav-1: shared nav binding set + config surface",
       "status": "planned",
@@ -46,5 +49,7 @@
     }
   ],
   "createdAt": "2026-07-09T09:24:46.826Z",
-  "updatedAt": "2026-07-09T09:25:14.679Z"
+  "updatedAt": "2026-07-27T11:40:15.512Z",
+  "handoff": "",
+  "handoffUpdatedAt": ""
 }
