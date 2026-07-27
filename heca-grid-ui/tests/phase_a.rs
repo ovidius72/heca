@@ -4162,3 +4162,65 @@ fn focus_ring_shows_on_keyboard_focus_not_on_mouse_click() {
         "keyboard focus (advance) shows the ring"
     );
 }
+
+/// A state highlight must never be smaller than the content it highlights.
+///
+/// The hover/active pill is drawn inset so its rounded corners never contend with a rounded
+/// container's, but the inset may only spend space the widget's own padding already reserves. An
+/// unpadded row's content reaches its edges, so there is nothing to give: taking the inset anyway
+/// drew a pill *shorter than its own content*, and a badge inside it stuck out above and below.
+#[test]
+fn a_state_highlight_never_crops_the_content_it_covers() {
+    let theme = Theme::default();
+    // The pill only paints for a hovered (or active) row, so hover it before painting. An unfilled
+    // row draws no surface of its own, which makes the pill the only rect in the scene.
+    let hovered_pill = |padding: f32| {
+        let mut row = Row::new()
+            .padding(padding)
+            .on_activate(|| {})
+            .child(fixed_box(60.0, 24.0));
+        LayoutEngine::new().compute(&mut row, Size::new(200.0, 60.0));
+        let b = row.base().bounds;
+        heca_grid_ui::dispatch(
+            &mut row,
+            &Event::PointerMoved {
+                pos: Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
+            },
+        );
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            row.paint(&mut cx);
+        }
+        let rects: Vec<Rectangle> = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rects.len(), 1, "the hover pill is the only rect: {rects:?}");
+        (rects[0], row.base().children[0].base().bounds, b)
+    };
+
+    // No padding: the content reaches the row's edges, so the pill covers the row exactly.
+    let (sel, content, bounds) = hovered_pill(0.0);
+    assert_eq!(sel.loc.y, bounds.loc.y, "unpadded: no vertical inset to take");
+    assert_eq!(sel.size.h, bounds.size.h, "unpadded: the pill is the full row height");
+    assert!(
+        sel.loc.y <= content.loc.y && sel.loc.y + sel.size.h >= content.loc.y + content.size.h,
+        "pill {sel:?} crops content {content:?}",
+    );
+
+    // With padding the inset costs nothing, so it still happens: the pill stays off the edges and
+    // still clears the content.
+    let (sel, content, bounds) = hovered_pill(10.0);
+    assert!(
+        sel.loc.y > bounds.loc.y && sel.size.h < bounds.size.h,
+        "padded: the pill stays inset from the row's edges ({sel:?} vs {bounds:?})",
+    );
+    assert!(
+        sel.loc.y <= content.loc.y && sel.loc.y + sel.size.h >= content.loc.y + content.size.h,
+        "pill {sel:?} crops content {content:?}",
+    );
+}

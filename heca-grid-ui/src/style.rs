@@ -516,6 +516,36 @@ impl Default for Layout {
 }
 
 impl Layout {
+    /// Effective left padding in px. **Most specific wins:** the side, else its axis, else the
+    /// uniform value — the same cascade the layout pass applies.
+    ///
+    /// These four exist so paint code can ask the question layout already answered, instead of
+    /// re-deriving the cascade and drifting from it. A widget that insets a highlight or a marker
+    /// needs to know where its content box starts, and by paint time the `pad_spacing_*` tokens
+    /// have already been resolved into the px fields these read.
+    pub fn pad_left(&self) -> f32 {
+        self.padding_left
+            .unwrap_or_else(|| self.padding_x.unwrap_or(self.padding))
+    }
+
+    /// Effective right padding in px — see [`pad_left`](Self::pad_left).
+    pub fn pad_right(&self) -> f32 {
+        self.padding_right
+            .unwrap_or_else(|| self.padding_x.unwrap_or(self.padding))
+    }
+
+    /// Effective top padding in px — see [`pad_left`](Self::pad_left).
+    pub fn pad_top(&self) -> f32 {
+        self.padding_top
+            .unwrap_or_else(|| self.padding_y.unwrap_or(self.padding))
+    }
+
+    /// Effective bottom padding in px — see [`pad_left`](Self::pad_left).
+    pub fn pad_bottom(&self) -> f32 {
+        self.padding_bottom
+            .unwrap_or_else(|| self.padding_y.unwrap_or(self.padding))
+    }
+
     /// Map the layout fields onto a `taffy::Style` for the layout engine.
     pub fn to_taffy(&self) -> taffy::Style {
         use taffy::prelude::*;
@@ -550,16 +580,14 @@ impl Layout {
                     bottom: length(self.margin_bottom.unwrap_or(m)),
                 }
             },
-            padding: {
-                // Most specific wins: a side, else its axis, else the uniform value.
-                let px = self.padding_x.unwrap_or(self.padding);
-                let py = self.padding_y.unwrap_or(self.padding);
-                Rect {
-                    left: length(self.padding_left.unwrap_or(px)),
-                    right: length(self.padding_right.unwrap_or(px)),
-                    top: length(self.padding_top.unwrap_or(py)),
-                    bottom: length(self.padding_bottom.unwrap_or(py)),
-                }
+            // Most specific wins: a side, else its axis, else the uniform value — the cascade
+            // lives in `pad_left`/`pad_right`/`pad_top`/`pad_bottom` so paint can read the same
+            // numbers layout does.
+            padding: Rect {
+                left: length(self.pad_left()),
+                right: length(self.pad_right()),
+                top: length(self.pad_top()),
+                bottom: length(self.pad_bottom()),
             },
             size: Size {
                 width: self.width.to_taffy(),

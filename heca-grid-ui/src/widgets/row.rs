@@ -201,15 +201,10 @@ impl Component for Row {
             cx.paint_base(&self.base);
         }
 
-        // Selection pill: tinted when active, faint on hover. Inset so its rounded
-        // corners never contend with a rounded container's corners.
-        let sel = Rectangle::new(
-            Point::new(b.loc.x + SEL_INSET, b.loc.y + SEL_INSET),
-            Size::new(
-                (b.size.w - 2.0 * SEL_INSET).max(0.0),
-                (b.size.h - 2.0 * SEL_INSET).max(0.0),
-            ),
-        );
+        // Selection pill: tinted when active, faint on hover. Inset so its rounded corners never
+        // contend with a rounded container's — but never past this row's own padding, or the pill
+        // would be shorter than the content it is highlighting (`Base::highlight_rect`).
+        let sel = self.base.highlight_rect(SEL_INSET);
         let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
         // Without an explicit override, derive the highlight from the row's own fill
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the

@@ -290,17 +290,12 @@ impl Component for Item {
         };
         let b = self.base.bounds;
 
-        // Row background: tinted when active, faint on hover. Drawn as an *inset*
-        // selection pill (not full-bleed) so its rounded corners never contend
-        // with a rounded container's corners at any radius — a full-bleed fill in
-        // a heavily-rounded Pane leaves notches at the corners.
-        let sel = Rectangle::new(
-            Point::new(b.loc.x + SEL_INSET, b.loc.y + SEL_INSET),
-            Size::new(
-                (b.size.w - 2.0 * SEL_INSET).max(0.0),
-                (b.size.h - 2.0 * SEL_INSET).max(0.0),
-            ),
-        );
+        // Row background: tinted when active, faint on hover. Drawn as an *inset* selection pill
+        // (not full-bleed) so its rounded corners never contend with a rounded container's corners
+        // at any radius — a full-bleed fill in a heavily-rounded Pane leaves notches at the corners.
+        // Clamped to this item's own padding so the pill never crops its content
+        // (`Base::highlight_rect`).
+        let sel = self.base.highlight_rect(SEL_INSET);
         let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
         if active {
             cx.rect(
