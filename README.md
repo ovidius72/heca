@@ -222,11 +222,24 @@ mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0
 | Rename pane | `$` | Rename active pane |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
-| Sidebar focus | `e` | Enter sidebar navigation mode |
+| Sidebar focus | `e` | Focus the navigable dock and enter sidebar navigation mode |
+| Focus dock | `Shift+E` | Letters over every dock; press one to give it keyboard focus |
 | Collapse current workspace | `<` | Collapse the active workspace tree row (UI only) |
 | Collapse current column | `(` | Collapse the focused tiled column tree row (UI only) |
 
-Today, sidebar navigation operates on the built-in workspace tree shown in the left sidebar. Long-term, the sidebar is expected to evolve into a shell/host for pluggable containers, with the current workspace tree becoming a built-in `WorkspacesContainer`.
+Today, sidebar navigation operates on the built-in workspace tree, which is a **container** (dock) mounted in a sidebar shell. Long-term the sidebar hosts several pluggable containers side by side.
+
+**Chrome keyboard focus is a dock, not a side.** `focus_dock` (`Shift+E`) lights a letter over every
+dock on screen and focuses the one you pick; the focused dock shows a focus ring, and keyboard
+scrolling acts on it. Because focus is held by *container id*, moving a dock from one sidebar to the
+other takes its focus with it — nothing in this path names left or right. `sidebar_focus` (`e`) is the
+same idea aimed at navigation: it focuses the dock that has keyboard navigation of its own, reveals
+whichever region that dock is seated in, and enters nav mode. With no navigable dock mounted it does
+nothing (it will not expand an empty sidebar to show you a blank frame).
+
+The dock can also be named, which skips the pick: `focus-dock workspaces` over RPC, or a mode binding
+carrying `args = { dock = "workspaces" }` (no flat binding form takes args yet). It is one action
+either way — the pick is only how a keyboard supplies an argument it cannot type.
 
 The default sidebar-mode bindings are defined via `[[keys.mode]] name = "sidebar"` and can be overridden in `config.toml`. The trigger field is ignored for this built-in mode because `SidebarNav` is entered via `SidebarFocus` or mouse interaction.
 

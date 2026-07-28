@@ -67,6 +67,19 @@ pub trait Provider {
         true
     }
 
+    /// Does this container do anything with chrome keyboard focus **beyond scrolling**?
+    ///
+    /// Every container can be focused and scrolled — that needs nothing from the provider. This
+    /// answers the further question of whether the dock has its own keyboard navigation once it holds
+    /// focus (the workspaces tree's cursor, a list's selection), which only the provider knows.
+    ///
+    /// It is what `sidebar_focus` looks for: with no navigable dock mounted there is nothing to
+    /// navigate, so the action does nothing instead of expanding an empty container (F003/P011/T020).
+    /// Default `false` — a container that merely displays and scrolls says nothing.
+    fn keyboard_navigable(&self) -> bool {
+        false
+    }
+
     /// Build the contribution model. Called on mount and on each invalidation —
     /// the **render seam**.
     fn build_contribution(&self, ctx: &ChromeCtx<'_>) -> Contribution;

@@ -118,6 +118,13 @@ pub enum InputMode {
     /// matches (so `n`/`N` navigate in selection mode), Esc cancels. The query +
     /// matches live in [`SearchState`], not here.
     Search,
+    /// Dock (chrome container) letter pick, entered with a bare `focus_dock`: every dock on
+    /// screen gets a letter (a `KeyHint` keycap over its body) and the next keypress gives it
+    /// chrome **keyboard focus**. Candidates carry a **container id**, so the pick is
+    /// position-agnostic — a dock is picked wherever it is seated (F003/P011/T020).
+    DockPick {
+        candidates: Vec<(char, crate::chrome::ContainerId)>,
+    },
     /// Universal leader/vimium **hint picker** (entered with `prefix+/`): every
     /// actionable chrome target gets a letter (a keycap stamped over its bounds);
     /// the next keypress fires that target's intent. Each candidate carries the
@@ -201,6 +208,14 @@ impl InputMode {
         }
     }
 
+    /// Dock pick candidates (letter → container id) while a `DockPick` is active.
+    pub fn dock_candidates(&self) -> Option<&[(char, crate::chrome::ContainerId)]> {
+        match self {
+            InputMode::DockPick { candidates } => Some(candidates),
+            _ => None,
+        }
+    }
+
     /// The keyboard pick currently in progress (move / select / swap / take), if any —
     /// a structured description of the pending action. Mirrored into the reactive chrome
     /// store (and emitted as `PendingPickChanged`) so any component or plugin can react
@@ -237,6 +252,7 @@ impl InputMode {
             InputMode::ColumnPick { .. } => {
                 (PickKind::MovePaneToColumn, "move_pane_to_column_pick")
             }
+            InputMode::DockPick { .. } => (PickKind::FocusDock, "focus_dock"),
             _ => return None,
         };
         let meta = catalog.find(action_name)?;
@@ -277,6 +293,8 @@ pub enum PickKind {
     MovePaneToWorkspace,
     MoveColumnToWorkspace,
     MovePaneToColumn,
+    /// Pick a chrome container to give keyboard focus to.
+    FocusDock,
 }
 
 /// What a surface drag carries — the app payload `P` for

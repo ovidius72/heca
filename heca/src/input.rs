@@ -497,6 +497,18 @@ pub enum WmAction {
         visible: bool,
     },
 
+    /// Give chrome **keyboard focus** to a mounted dock — one action, two ways in (F003/P011/T020).
+    ///
+    /// - `dock: None` (a bare `focus_dock` binding) opens the **pick**: every dock on screen lights
+    ///   a letter and the next keypress focuses that one.
+    /// - `dock: Some(id)` focuses it directly, no pick — the RPC and scripting case, which falls out
+    ///   of the optional argument rather than needing a second action.
+    ///
+    /// The target is a **container id**, never a side: a dock is focused wherever it is seated.
+    FocusDock {
+        dock: Option<crate::chrome::ContainerId>,
+    },
+
     // ── Overlay control (parameterized) — plugin-ui, §2.7.2 ──
     // "Everything is an action": an overlay (modal/dropdown) is confirmed or dismissed by
     // dispatching an action carrying the overlay's id. The `OverlayHost` injects the id into
@@ -574,6 +586,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_left" => Some(WmAction::SidebarLeft),
         "sidebar_right" => Some(WmAction::SidebarRight),
         "sidebar_focus" => Some(WmAction::SidebarFocus),
+        // Bare: no dock named ⇒ pick one by letter. `dock = "…"` goes through `build_action`.
+        "focus_dock" => Some(WmAction::FocusDock { dock: None }),
         "sidebar_up" => Some(WmAction::SidebarUp),
         "sidebar_down" => Some(WmAction::SidebarDown),
         "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
@@ -934,6 +948,13 @@ pub fn build_action(
             container_id: get_string(args, "container_id")?,
             after_id: get_string(args, "after_id")?,
         }),
+        // `dock` is OPTIONAL, which is what makes one action serve both doors: a keybinding cannot
+        // name a container, so a bare binding picks one by letter; a caller that knows which dock it
+        // wants says so and skips the pick. An action with a *required* argument could not be bound
+        // bare at all (F003/P010/T006).
+        "focus_dock" => Some(WmAction::FocusDock {
+            dock: get_string(args, "dock"),
+        }),
 
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
@@ -979,7 +1000,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::PrevPane => 0,
         // Sidebar navigation (only used in sidebar mode via resolve_mode)
         // Low priority so they don't override focus bindings in normal/prefix mode.
-        WmAction::SidebarFocus => 0,
+        // Chrome focus: the dock pick and sidebar nav are the same kind of navigation.
+        WmAction::SidebarFocus | WmAction::FocusDock { .. } => 0,
         WmAction::SidebarUp
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
@@ -1372,6 +1394,7 @@ mod tests {
             WmAction::WorkspacePrev,
             // Sidebar (mode-internal + global toggles)
             WmAction::SidebarFocus,
+            WmAction::FocusDock { dock: None },
             WmAction::SidebarUp,
             WmAction::SidebarDown,
             WmAction::SidebarLeftNav,
@@ -1591,6 +1614,35 @@ mod tests {
             missing.is_empty(),
             "these actions cannot be reached by name — each needs an `ActionDescriptor` (with its \
              `args` declared, if it takes any): {missing:#?}"
+        );
+    }
+
+    /// `focus_dock` is **one** action with two doors: a bare name for the keybinding (which opens the
+    /// pick) and a `dock` argument for a caller that already knows the answer (F003/P011/T020).
+    ///
+    /// The bare form is only legal because the argument is **optional** — an action with a required
+    /// argument must not resolve from its name alone (`every_action_that_needs_a_target_refuses_to_
+    /// default_it`), and that is exactly the rule this action is shaped around.
+    #[test]
+    fn focus_dock_resolves_bare_and_with_a_dock() {
+        assert_eq!(
+            action_from_name("focus_dock"),
+            Some(WmAction::FocusDock { dock: None }),
+            "bare: nothing named ⇒ pick one by letter",
+        );
+        let mut args = std::collections::HashMap::new();
+        args.insert("dock".to_string(), "workspaces".to_string());
+        assert_eq!(
+            build_action("focus_dock", &args),
+            Some(WmAction::FocusDock {
+                dock: Some("workspaces".to_string())
+            }),
+            "named: focus it directly, no pick",
+        );
+        assert_eq!(
+            build_action("focus_dock", &std::collections::HashMap::new()),
+            Some(WmAction::FocusDock { dock: None }),
+            "and omitting it through the argument path means the same as the bare name",
         );
     }
 

@@ -1947,6 +1947,34 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 ),
                         ),
                 );
+            // FocusRing: the generic **keyboard-focus outline** for a whole subtree, not a control.
+            // A control draws its own ring because it owns its focus; an *area* the keyboard is aimed
+            // at (a sidebar dock the scroll keys act on) has no such owner, so the host wraps it and
+            // flips one signal. Transparent like KeyHint: it hugs the child and routes everything
+            // through, adding only the theme's focus outline while its signal is on. heca uses it for
+            // the focused dock (`focus_dock`).
+            let focus_ring_demo = Flex::column()
+                .gap(8.0)
+                .child(
+                    Label::new("FOCUS RING — a focused AREA, not a control")
+                        .color(theme.colors.muted)
+                        .font_scale(0.82),
+                )
+                .child(
+                    Flex::row()
+                        .gap(24.0)
+                        .align(Align::Center)
+                        .child(
+                            FocusRing::new(
+                                Card::new("dock A").child(Label::new("has keyboard focus")),
+                            )
+                            .focus(signal(true)),
+                        )
+                        .child(
+                            FocusRing::new(Card::new("dock B").child(Label::new("does not")))
+                                .focus(signal(false)),
+                        ),
+                );
             // Prefix-as-symbol: the keybinding "prefix" is *displayed* as λ (a plain
             // Geist Mono glyph — no icon/Nerd font needed). The config/parse token
             // stays "prefix+…"; only the rendered shortcut uses λ.
@@ -1971,6 +1999,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .gap(16.0)
                 .child(panes)
                 .child(marker_demo)
+                .child(focus_ring_demo)
                 .child(prefix_demo);
 
             // Workspaces rail (enumerate flavor): one icon cell PER pane, so every

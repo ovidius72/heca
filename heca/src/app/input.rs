@@ -129,6 +129,9 @@ pub(crate) fn handle_keyboard_input(
         } => {
             handle_column_pick_mode(registry, state, &candidates, pane_id, ctx);
         }
+        InputMode::DockPick { candidates } => {
+            handle_dock_pick_mode(registry, state, &candidates, ctx);
+        }
         InputMode::SidebarNav => {
             handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
         }
@@ -575,6 +578,37 @@ fn handle_column_pick_mode(
                 pane_id,
                 ws_idx: *ws_idx,
                 col_idx: *col_idx,
+            },
+        );
+    }
+    state.needs_redraw = true;
+}
+
+/// Resolve a [`InputMode::DockPick`] keypress: a matching candidate letter gives that **dock**
+/// chrome keyboard focus; any other key (e.g. Esc) exits the mode.
+///
+/// It goes back out through the same `focus_dock` action, carrying the picked id — so the letter, an
+/// RPC call and a script all take one path, and the pick is only how a keyboard supplies an argument
+/// it cannot type (F003/P011/T020).
+fn handle_dock_pick_mode(
+    registry: &ActionRegistry,
+    state: &mut AppState,
+    candidates: &[(char, crate::chrome::ContainerId)],
+    ctx: KeyInputContext<'_>,
+) {
+    let candidates = candidates.to_vec();
+    state.input_mode = InputMode::Normal;
+
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    if let Some(ch) = typed
+        && let Some((_, dock)) = candidates.iter().find(|(c, _)| *c == ch)
+    {
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::FocusDock {
+                dock: Some(dock.clone()),
             },
         );
     }

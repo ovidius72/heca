@@ -429,6 +429,11 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
         "sidebar-focus" => Ok(WmAction::SidebarFocus),
+        // Chrome keyboard focus by dock id. The id is OPTIONAL here too: omitted, it opens the same
+        // letter pick a bare keybinding does, so a script can drive the pick as well as skip it.
+        "focus-dock" => Ok(WmAction::FocusDock {
+            dock: parts.next().map(|s| s.to_string()),
+        }),
         "sidebar-up" => Ok(WmAction::SidebarUp),
         "sidebar-down" => Ok(WmAction::SidebarDown),
         "sidebar-left-nav" => Ok(WmAction::SidebarLeftNav),
@@ -968,6 +973,23 @@ mod tests {
         assert_eq!(
             parse_rpc_command("rename-workspace"),
             Ok(WmAction::RenameWorkspace)
+        );
+    }
+
+    /// `focus-dock` with and without an id — one command, both doors (F003/P011/T020).
+    #[test]
+    fn focus_dock_takes_an_optional_dock_id() {
+        assert_eq!(
+            parse_rpc_command("focus-dock workspaces"),
+            Ok(WmAction::FocusDock {
+                dock: Some("workspaces".to_string())
+            }),
+            "named ⇒ focus it directly, no pick",
+        );
+        assert_eq!(
+            parse_rpc_command("focus-dock"),
+            Ok(WmAction::FocusDock { dock: None }),
+            "bare ⇒ the same letter pick a bare keybinding opens",
         );
     }
 

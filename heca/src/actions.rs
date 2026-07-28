@@ -626,6 +626,22 @@ impl ActionRegistry {
             args: &[],
         },
         ActionDescriptor {
+            name: "focus_dock",
+            label: "Focus Dock",
+            description: "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.",
+            category: ActionCategory::Chrome,
+            default_binding: "Shift+e",
+            icon: None,
+            // OPTIONAL, deliberately: the bare binding opens the pick, and a caller that already
+            // knows which dock it wants (RPC, a menu entry, a script) names it and skips the pick.
+            // A *required* argument would make the bare binding illegal (F003/P010/T006).
+            args: &[ArgDescriptor::optional(
+                "dock",
+                ArgKind::Text,
+                "Id of the dock to focus; omit to pick one by letter.",
+            )],
+        },
+        ActionDescriptor {
             name: "sidebar_up",
             label: "Sidebar Cursor Up",
             description: "Move the sidebar selection up.",

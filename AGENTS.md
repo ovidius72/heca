@@ -16,7 +16,7 @@ These are made over and over. **Violating either = redo.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
-    `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
+    `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `FocusRing`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
     `Label`, `Input`, `Select`, `Choice`, `Overlay`, `Dialog`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
     (There is **no `Modal` widget** — it was deleted; `Overlay` is the base overlay layer
     (blocking = a layer property) and `Dialog` — which composes it — is the confirm/modal widget;
@@ -847,7 +847,7 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 - **Change widgets report via callbacks**, not return values: `.on_change(|action: Action| …)` carrying `Action::value("<name>-change", SignalData::…)` (`toggle-change`/Bool, `checkbox-change`/Bool, `input-change`/String, `tab-change`/Usize). Buttons use `.on_click(|| …)`.
 - **`Base.disabled`** (dim+inert+unfocusable) and **`Base.tab_index`** are common to all widgets. Focus via one `FocusManager` (Tab/Shift+Tab, click-focus, `deliver_key`). Animations via `tick(dt) -> bool`.
 
-**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `Panel` (titled section), `Row` (clickable/selectable), `Item`, `ItemGroup`, `Grid`, `DockFrame`, `ChromeRegion`, `ScrollRegion`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `Tag`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
+**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `Panel` (titled section), `Row` (clickable/selectable), `Item`, `ItemGroup`, `Grid`, `DockFrame`, `ChromeRegion`, `ScrollRegion`; wrappers `KeyHint` (pick keycap), `FocusRing` (keyboard focus on a whole area), `Visibility`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `Tag`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
 
 ### Gotchas
 

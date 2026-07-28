@@ -348,6 +348,10 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::ReorderContainerAfter { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
+        // Chrome keyboard focus is chrome state too: it decides which dock the scroll keys reach and
+        // has no effect on the pane layout, so — unlike `SidebarFocus`, which enters a nav mode that
+        // moves pane focus — it stays reachable while a floating pane is active.
+        WmAction::FocusDock { .. } => ActionPolicy::Global,
         // Overlay control (§2.7.2): classified Global for match completeness, but never
         // actually consulted — `dispatch_intent` intercepts these before routing (they carry
         // an overlay id and resolve the `OverlayHost`, not a focus-domain-sensitive action).
@@ -1353,6 +1357,23 @@ mod tests {
             ActionPolicy::AlwaysAllowed
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
+        // Chrome keyboard focus is chrome state, not pane layout: it stays reachable while a floating
+        // pane is active. `SidebarFocus` differs deliberately — it enters a nav mode that moves pane
+        // focus, so it is TiledOnly.
+        assert_eq!(
+            action_policy(&WmAction::FocusDock { dock: None }),
+            ActionPolicy::Global
+        );
+        assert_eq!(
+            action_policy(&WmAction::FocusDock {
+                dock: Some("workspaces".into())
+            }),
+            ActionPolicy::Global
+        );
+        assert_eq!(
+            action_policy(&WmAction::SidebarFocus),
+            ActionPolicy::TiledOnly
+        );
         assert_eq!(
             action_policy(&WmAction::OpenLink {
                 url: "https://example.com".into()

@@ -98,6 +98,7 @@ pub(crate) fn status_mode_parts(
             (label, pick_suffix())
         }
         InputMode::ColumnPick { .. } => ("MOVE PANE", pick_suffix()),
+        InputMode::DockPick { .. } => ("FOCUS DOCK", pick_suffix()),
         InputMode::Selection => ("SELECTION", String::new()),
     }
 }

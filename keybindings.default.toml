@@ -89,7 +89,13 @@ prev_pane = "prefix+["
 # ── Sidebars ──
 sidebar_left          = "prefix+b"    # Toggle left sidebar
 sidebar_right         = "prefix+."    # Toggle right sidebar
-sidebar_focus         = "prefix+e"    # Focus sidebar (enter nav mode)
+sidebar_focus         = "prefix+e"    # Focus the navigable dock + enter nav mode (whichever side it sits on)
+# Chrome keyboard focus is a DOCK, not a side: the letters go over every dock on screen and the
+# one you pick takes focus (a focus ring shows where the keyboard is). `focus_dock` also accepts a
+# `dock` id, which skips the pick — that is how RPC and menu entries focus a specific dock. No flat
+# binding form carries args yet, so to aim a key at one dock, use a mode block (as with
+# `scroll_to_offset` further down).
+focus_dock            = "prefix+Shift+e"  # Letters on every dock, pick one to focus
 sidebar_expand_toggle = "prefix+Tab"  # Expand/collapse selected sidebar node
 # Sidebar-tree UI collapse state (works even when the sidebar is hidden):
 toggle_current_workspace_collapsed = "prefix+<"

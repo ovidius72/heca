@@ -6,6 +6,7 @@
 mod contribution;
 mod context_menu;
 mod events;
+mod focus;
 mod host;
 mod layers;
 mod overlay;
@@ -46,6 +47,8 @@ pub(crate) use context_menu::{
 pub use context_menu::MenuBuild;
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
+// Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
+pub(crate) use focus::{dock_candidates, navigable_dock, region_on_screen};
 pub use host::ChromeHost;
 pub use state::{SharedChromeState, WorkspacesContainerState};
 // Contribution/placement API surface for the render + provider phases (plugin-03).
@@ -158,7 +161,8 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Separator, Surface, Tag,
+    BadgeButton, Flex, FocusRing, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
+    ScrollBar, Separator, Surface, Tag,
     Tooltip,
     TooltipSide,
 };
@@ -1451,16 +1455,26 @@ impl Component for RepaintWatch {
     }
 }
 
-/// Build the body of a chrome **region** from whatever the [`ChromeHost`] has seated in
-/// it — the render half of the pluggable-chrome contract.
+/// Make a node take the box its parent gives it instead of the size of its own content.
 ///
-/// For each mounted container, in the host's order: ask its provider for a
-/// [`Contribution`] and call the container's `build` seam. The other contribution kinds
-/// belong to other hosts (bars take `ToolbarGroup`/`StatusSegment`, overlays go to the
-/// overlay host, §3.1.1), so a region ignores them rather than guessing.
+/// A wrapper that hugs its child measures the child's *content*, and a flex item's automatic minimum
+/// size then stops it shrinking back — so a dock 1214px tall keeps all 1214px inside the 296px slot
+/// its share won and overflows the frame. The fix is CSS's `flex: 1 1 0`: a zero base size plus
+/// permission to shrink, so the parent's box is what there is to divide.
 ///
-/// `None` — not an empty widget — when nothing is mounted, so the shell can tell "no
-/// provider here" from "a provider that built an empty body".
+/// **Do not copy this trio into new code.** It is the same debt [`with_share`] carries and for the
+/// same reason — `Layout` has no `flex_basis`, so a zero base size has to be written as a height,
+/// which is a fixed measure standing in for a proportion. F004/P006/T010 replaces both with one
+/// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
+/// then, rather than each caller rediscovering the combination.
+fn pass_box_down(node: &mut dyn Component) {
+    let layout = &mut node.base_mut().style.layout;
+    layout.flex_grow = 1.0;
+    layout.height = heca_grid_ui::Length::Px(0.0);
+    layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+    layout.flex_shrink = Some(1.0);
+}
+
 /// Give a container body its declared share of the region's **main axis**, as a flex grow factor
 /// (F003/P011/T021) — height in a sidebar, width in a bar, one number either way.
 ///
@@ -1494,6 +1508,63 @@ fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
     body
 }
 
+/// Wrap a container body in the two things the **host** owns about it: whether it holds chrome
+/// keyboard focus, and its letter while a dock pick is open (F003/P011/T020).
+///
+/// Both are host state, not container state — a container cannot know that it is the focused one, or
+/// which letter it was given among its siblings — so they are applied here rather than left to each
+/// provider to remember. Both wrappers are transparent: they hug the body and route events, focus and
+/// drag straight through, so the container behaves exactly as it does unwrapped.
+///
+/// The focus signal is the **same one** the container's own scroll area binds as its keyboard target
+/// (`StateView::container_keyboard_target`), so the ring and the keys can never disagree about which
+/// dock has focus.
+fn focus_and_pick(
+    mut body: WidgetModel,
+    container: &str,
+    share: f32,
+    ctx: &crate::providers::ChromeCtx<'_>,
+    signals: &mut ChromeSignals,
+) -> WidgetModel {
+    let hint = signal::<Option<String>>(None);
+    signals.dock_hint.push((container.to_string(), hint));
+    // The share lands on the outermost node, so every level below it has to pass the box down or the
+    // dock keeps its content height inside the slot its share won — measured 1214px inside 296px, the
+    // same failure F003/P011/T021 fixed one level up.
+    //
+    // Only when there *is* a share to pass: a container that asked for `0.0` is saying "size me to my
+    // content", and a zero base size inside a content-sized parent would collapse it to nothing.
+    if share > 0.0 {
+        pass_box_down(body.as_mut());
+    }
+    let mut picked = KeyHint::new_boxed(body)
+        .hint(hint)
+        // Top-centre over a tall dock. Outside a render pass there is no theme to tint it with, and
+        // there is no keycap to draw either (no pick is open while a host reads metadata), so the
+        // default accent stands.
+        .placement(HintPlacement::TopCenter);
+    if let Some(theme) = ctx.theme() {
+        // The theme's `warning` tone, so a dock letter reads distinctly from a pane pick (accent)
+        // and a column pick (success).
+        picked = picked.color(theme.colors.warning);
+    }
+    if share > 0.0 {
+        pass_box_down(&mut picked);
+    }
+    Box::new(FocusRing::new(picked).focus(ctx.state().container_keyboard_target(container)))
+}
+
+/// Build the body of a chrome **region** from whatever the [`ChromeHost`] has seated in
+/// it — the render half of the pluggable-chrome contract.
+///
+/// For each mounted container, in the host's order: ask its provider for a
+/// [`Contribution`] and call the container's `build` seam. The other contribution kinds
+/// belong to other hosts (bars take `ToolbarGroup`/`StatusSegment`, overlays go to the
+/// overlay host, §3.1.1), so a region ignores them rather than guessing.
+///
+/// `None` — not an empty widget — when nothing is mounted, so the shell can tell "no
+/// provider here" from "a provider that built an empty body".
+///
 /// Takes the three registries rather than a ready-made [`BuildCx`] because the context is **per
 /// container**, not per region: each build hook is told which mount it is building, so it can ask
 /// for state that is per mount (its own scroll offset). One `BuildCx` for a whole region could not
@@ -1512,7 +1583,14 @@ fn build_region_content(
         .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
             Contribution::Container(c) => {
                 let mut bx = BuildCx::new(&c.id, signals, drag, hints);
-                Some(with_share((c.build)(ctx, &mut bx), c.grow))
+                let body = (c.build)(ctx, &mut bx);
+                // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
+                // a share set on the body would leave the wrapper content-sized and divide nothing
+                // (F003/P011/T021's lesson, one level up).
+                Some(with_share(
+                    focus_and_pick(body, &c.id, c.grow, ctx, signals),
+                    c.grow,
+                ))
             }
             _ => None,
         })
@@ -2728,6 +2806,11 @@ pub(crate) struct ChromeSignals {
     /// (only the active workspace's columns light up); tinted `success` to read distinctly
     /// from pane (accent) and workspace (warning) picks.
     pub(crate) col_hint: Vec<(usize, usize, Signal<Option<String>>)>,
+    /// Each mounted container's [`KeyHint`] pick-letter signal, keyed by its **mount id**. Driven
+    /// from the active dock pick (`focus_dock` with no dock named), so the letters that appear over
+    /// the docks are a projection of the same candidates the keypress is resolved against
+    /// (F003/P011/T020).
+    pub(crate) dock_hint: Vec<(String, Signal<Option<String>>)>,
     /// Per-pane runtime display signals for the fixed pane-info rows.
     pub(crate) pane_info: Vec<(PaneId, PaneInfoSignals)>,
     /// The status-bar label's text signal.
@@ -2749,6 +2832,17 @@ fn pick_keycap(
     candidates?
         .iter()
         .find(|(_, p)| *p == pane)
+        .map(|(ch, _)| ch.to_string())
+}
+
+/// The dock pick keycap for `container` — `Some(letter)` while it is a candidate, else `None`.
+///
+/// Pure projection of the active dock-pick candidates, keyed by **mount id**: two placements of one
+/// container are two candidates with two letters, so this cannot match on the container's kind.
+fn dock_keycap(container: &str, candidates: &[(char, String)]) -> Option<String> {
+    candidates
+        .iter()
+        .find(|(_, id)| id == container)
         .map(|(ch, _)| ch.to_string())
 }
 
@@ -2888,6 +2982,18 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
             .workspaces
             .set_col_pick_candidates(next_col_candidates);
     }
+    let next_dock_candidates = state
+        .input_mode
+        .dock_candidates()
+        .map(|c| c.to_vec())
+        .unwrap_or_default();
+    if next_dock_candidates.is_empty() {
+        state.chrome_state.clear_dock_pick_candidates();
+    } else {
+        state
+            .chrome_state
+            .set_dock_pick_candidates(next_dock_candidates);
+    }
     // Mirror the in-progress pick (its kind + prompt) into the store so components and
     // plugins can react to the pending action (e.g. a custom prompt overlay).
     let pending_pick = state.input_mode.pending_pick(&state.action_catalog);
@@ -2992,6 +3098,19 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             .iter()
             .find(|(_, w, c)| w == ws_idx && c == col_idx)
             .map(|(ch, _, _)| ch.to_string());
+        if sig.get_untracked() != next {
+            sig.set(next);
+            changed = true;
+        }
+    }
+    // Project the active dock pick onto each mounted container's KeyHint (letter → container id).
+    // Same mechanism as the pane/workspace/column hints above, one level up: these targets are the
+    // shell's containers rather than anything inside one.
+    let dock_candidates = state
+        .chrome_state
+        .with_dock_pick_candidates(|c| c.to_vec());
+    for (container, sig) in &retained.signals.dock_hint {
+        let next = dock_keycap(container, &dock_candidates);
         if sig.get_untracked() != next {
             sig.set(next);
             changed = true;
@@ -3677,6 +3796,117 @@ mod tests {
         );
     }
 
+    /// Wrapping a container in the focus ring + pick keycap must not disturb the shares.
+    ///
+    /// The wrappers are transparent, so the share has to be applied to the **outermost** node: on the
+    /// body it would leave the wrapper content-sized, and two containers would divide nothing —
+    /// exactly the failure F003/P011/T021 measured (1214px each inside a 600px body). Pixels are
+    /// asserted, not flags, because the flags were right while the layout was broken.
+    #[test]
+    fn the_focus_wrappers_do_not_disturb_the_shares() {
+        use heca_core::layout::Size as CoreSize;
+        use heca_grid_ui::LayoutEngine;
+        use heca_grid_ui::widgets::{FocusRing, KeyHint};
+
+        // A body far taller than the region it is given, as a real dock is.
+        let tall = || -> WidgetModel {
+            let mut inner = Flex::column();
+            for _ in 0..20 {
+                inner = inner.child(Flex::column().height(Length::Px(60.0)));
+            }
+            Box::new(heca_grid_ui::ScrollRegion::new().grow(1.0).child(inner))
+        };
+        // The wrapping `focus_and_pick` applies, without needing a render context for it.
+        let wrapped = || -> WidgetModel {
+            let mut body = tall();
+            pass_box_down(body.as_mut());
+            let mut picked = KeyHint::new_boxed(body);
+            pass_box_down(&mut picked);
+            Box::new(FocusRing::new(picked).focus(signal(true)))
+        };
+
+        let mut stack = Flex::column().gap(8.0).grow(1.0);
+        {
+            let layout = &mut stack.base_mut().style.layout;
+            layout.min_height = Some(Length::Px(0.0));
+            layout.flex_shrink = Some(1.0);
+        }
+        for _ in 0..2 {
+            stack.base_mut().children.push(with_share(wrapped(), 1.0));
+        }
+        let mut body = Flex::column().height(Length::Px(600.0)).child(stack);
+        LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
+
+        let stack = &body.base().children[0];
+        let heights: Vec<f64> = stack
+            .base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        assert_eq!(heights.len(), 2);
+        assert!(
+            (heights[0] - heights[1]).abs() < 1.0,
+            "equal shares are still equal through the wrappers: {heights:?}",
+        );
+        assert!(
+            heights[0] > 250.0 && heights[0] < 300.0,
+            "each still takes about half the 600px region, less the gap: {heights:?}",
+        );
+        // And the wrappers pass the height straight down — a ring around a box half the size of the
+        // box would be worse than no ring.
+        let ring = &stack.base().children[0];
+        let hinted = &ring.base().children[0];
+        let dock = &hinted.base().children[0];
+        assert_eq!(
+            (ring.base().bounds.size.h, dock.base().bounds.size.h),
+            (heights[0], heights[0]),
+            "ring, keycap wrapper and dock all measure the same box",
+        );
+    }
+
+    /// A container that asked for **no** share keeps its content height through the wrappers.
+    ///
+    /// `grow = 0.0` means "size me to my content", and a zero base size inside a content-sized parent
+    /// would collapse the whole thing to nothing — which is why the pass-down is conditional.
+    #[test]
+    fn a_content_sized_container_keeps_its_height_through_the_wrappers() {
+        use heca_core::layout::Size as CoreSize;
+        use heca_grid_ui::LayoutEngine;
+        use heca_grid_ui::widgets::{FocusRing, KeyHint};
+
+        let body: WidgetModel = Box::new(Flex::column().height(Length::Px(120.0)));
+        // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
+        let wrapped: WidgetModel =
+            Box::new(FocusRing::new(KeyHint::new_boxed(body)).focus(signal(false)));
+        let mut region = Flex::column()
+            .height(Length::Px(600.0))
+            .child_boxed(with_share(wrapped, 0.0));
+        LayoutEngine::new().compute(&mut region, CoreSize::new(300.0, 600.0));
+
+        let ring = &region.base().children[0];
+        assert_eq!(
+            ring.base().bounds.size.h, 120.0,
+            "content-sized means the content's height, not zero and not the region's",
+        );
+    }
+
+    #[test]
+    fn dock_keycap_projects_the_pick_by_mount_id() {
+        let candidates = [
+            ('a', "workspaces".to_string()),
+            ('b', "workspaces.2".to_string()),
+        ];
+        assert_eq!(dock_keycap("workspaces", &candidates), Some("a".to_string()));
+        assert_eq!(
+            dock_keycap("workspaces.2", &candidates),
+            Some("b".to_string()),
+            "a second placement of the same container is its own candidate",
+        );
+        assert_eq!(dock_keycap("docker", &candidates), None);
+        assert_eq!(dock_keycap("workspaces", &[]), None, "no pick, no keycap");
+    }
+
     #[test]
     fn pick_keycap_projects_candidates() {
         let p1 = PaneId(1);
@@ -4021,6 +4251,117 @@ mod tests {
         assert!(
             found,
             "bordered sidebar must paint a {border_w}px frame in the configured border color",
+        );
+    }
+
+    /// The focused dock is **outlined**, and an unfocused one is not (F003/P011/T020).
+    ///
+    /// Focus with nothing to show for it tells the user nothing, so this asserts the drawn ring
+    /// rather than a flag — and asserts that it follows the store *without a rebuild*, because the
+    /// host flips a signal rather than rebuilding the chrome tree.
+    ///
+    /// Whether the ring reads well at that width and colour is a visual judgement, and the user makes
+    /// it in the app. What is pinned here is that it is drawn at all, on the right dock.
+    #[test]
+    fn the_focused_dock_is_outlined_and_follows_the_store() {
+        use heca_grid_ui::DrawCommand;
+
+        let tree = one_pane_tree(1);
+        let theme = GuiTheme::default();
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let content = region_body(
+            &tree,
+            &theme,
+            &chrome,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+            &mut super::HintTargetRegistry::default(),
+        );
+        let mut shell = super::build_sidebar_shell(
+            280.0,
+            600.0,
+            theme.colors.background,
+            8.0,
+            heca_config::appearance::BorderStyle::Bracketed,
+            1.0,
+            12.0,
+            content,
+        );
+
+        let ring = theme.colors.effective_focus_ring();
+        let outlined = |shell: &mut Flex| {
+            super::paint_chrome_root(shell, 280.0, 600.0, &theme)
+                .iter()
+                .any(|c| match c {
+                    DrawCommand::Rect(r) => r.border.is_some_and(|b| b.color == ring),
+                    _ => false,
+                })
+        };
+
+        assert!(
+            !outlined(&mut shell),
+            "no dock has focus yet, so nothing is outlined",
+        );
+        chrome.set_focused_container(Some("workspaces".into()));
+        assert!(
+            outlined(&mut shell),
+            "the focused dock is outlined in the theme's focus colour — same tree, one signal",
+        );
+        chrome.set_focused_container(Some("something-else".into()));
+        assert!(
+            !outlined(&mut shell),
+            "and focus elsewhere takes the outline away",
+        );
+    }
+
+    /// A dock's pick letter reaches the tree: the host registers the signal, and setting it stamps a
+    /// keycap over that dock. The letters themselves come from the pick candidates
+    /// (`dock_keycap`), projected each frame by `sync_chrome_signals`.
+    #[test]
+    fn a_docks_pick_letter_is_stamped_over_it() {
+        use heca_grid_ui::DrawCommand;
+
+        let tree = one_pane_tree(1);
+        let theme = GuiTheme::default();
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let mut signals = super::ChromeSignals::default();
+        let content = region_body(
+            &tree,
+            &theme,
+            &chrome,
+            &mut signals,
+            &mut super::DragItemRegistry::default(),
+            &mut super::HintTargetRegistry::default(),
+        );
+        let mut shell = super::build_sidebar_shell(
+            280.0,
+            600.0,
+            theme.colors.background,
+            8.0,
+            heca_config::appearance::BorderStyle::Bracketed,
+            1.0,
+            12.0,
+            content,
+        );
+
+        assert_eq!(
+            signals.dock_hint.len(),
+            1,
+            "one mounted container ⇒ one dock-letter signal, keyed by its mount id",
+        );
+        let (container, hint) = &signals.dock_hint[0];
+        assert_eq!(container, "workspaces");
+
+        let letter_drawn = |shell: &mut Flex| {
+            super::paint_chrome_root(shell, 280.0, 600.0, &theme)
+                .iter()
+                .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "a"))
+        };
+        assert!(!letter_drawn(&mut shell), "no pick open, no keycap");
+        hint.set(Some("a".to_string()));
+        assert!(
+            letter_drawn(&mut shell),
+            "the dock's letter is stamped over it while the pick is open",
         );
     }
 

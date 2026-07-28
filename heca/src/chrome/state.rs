@@ -712,6 +712,26 @@ pub struct SharedChromeState {
     /// (triggered by something as small as a pane's git status changing) restores rather than
     /// resets. Shared, so a clone of this store aliases the same signals.
     container_scroll: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<f32>>>>,
+    /// Which mounted container holds **chrome keyboard focus** (F003/P011/T020).
+    ///
+    /// A **container id**, not a side and not a region: a dock is focused wherever it is seated, so
+    /// moving it from one sidebar to the other keeps the focus with it. Sticky, as focus is; `None`
+    /// until something takes it.
+    focused_container: Signal<Option<String>>,
+    /// Per-mount "is this placement the keyboard target" signals, created on first ask.
+    ///
+    /// The derived half of [`focused_container`](Self::focused_container): exactly one is `true`,
+    /// and [`set_focused_container`](Self::set_focused_container) is the only writer, so a container
+    /// cannot be its own authority on whether it has focus. A container binds its own — a scroll
+    /// area takes [`ScrollRegion::keyboard_target`](heca_grid_ui::ScrollRegion::keyboard_target) —
+    /// and the signal outlives the retained tree, like the scroll offsets beside it.
+    keyboard_target: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<bool>>>>,
+    /// Letter → container id while a **dock pick** is open; empty means no pick.
+    ///
+    /// Shell-level, unlike the pane/workspace/column picks on
+    /// [`WorkspacesContainerState`]: the things being picked are the shell's mounted containers, and
+    /// no container knows about its siblings.
+    dock_pick_candidates: Signal<Vec<(char, String)>>,
 }
 
 impl SharedChromeState {
@@ -746,6 +766,74 @@ impl SharedChromeState {
         });
     }
 
+    /// The container holding chrome keyboard focus, if any (F003/P011/T020).
+    pub fn focused_container(&self) -> Option<String> {
+        self.focused_container.get()
+    }
+
+    /// Move chrome keyboard focus to `container` (`None` clears it).
+    ///
+    /// Guarded — emits [`ChromeEvent::ContainerFocusChanged`] only on a real change. Every
+    /// per-placement keyboard-target signal is republished here, which is what keeps "exactly one
+    /// container is the keyboard target" true by construction rather than by everyone remembering.
+    pub fn set_focused_container(&self, container: Option<String>) {
+        if self.focused_container.get_untracked() == container {
+            return;
+        }
+        self.focused_container.set(container.clone());
+        for (id, sig) in self.keyboard_target.borrow().iter() {
+            let mine = container.as_deref() == Some(id.as_str());
+            if sig.get_untracked() != mine {
+                sig.set(mine);
+            }
+        }
+        self.events
+            .emit(ChromeEvent::ContainerFocusChanged { container });
+    }
+
+    /// This placement's "am I the keyboard target" signal, created on first ask.
+    ///
+    /// Keyed by **mount id** for the same reason the scroll offsets are: the same container can be
+    /// seated twice, and only one of the two can hold focus.
+    pub fn container_keyboard_target(&self, container: &str) -> Signal<bool> {
+        if let Some(existing) = self.keyboard_target.borrow().get(container) {
+            return *existing;
+        }
+        let created = signal(self.focused_container.get_untracked().as_deref() == Some(container));
+        self.keyboard_target
+            .borrow_mut()
+            .insert(container.to_string(), created);
+        created
+    }
+
+    /// Borrow the dock pick candidates without cloning the Vec.
+    pub fn with_dock_pick_candidates<R>(&self, f: impl FnOnce(&[(char, String)]) -> R) -> R {
+        self.dock_pick_candidates.with(|c| f(c))
+    }
+
+    /// Open (or move on) the dock pick. Guarded; emits
+    /// [`ChromeEvent::DockPickCandidatesChanged`] on a real change.
+    pub fn set_dock_pick_candidates(&self, candidates: Vec<(char, String)>) {
+        if self.dock_pick_candidates.get_untracked() == candidates {
+            return;
+        }
+        self.dock_pick_candidates.set(candidates);
+        self.events.emit(ChromeEvent::DockPickCandidatesChanged {
+            candidates: self.dock_pick_candidates.get_untracked(),
+        });
+    }
+
+    /// Close the dock pick.
+    pub fn clear_dock_pick_candidates(&self) {
+        if self.dock_pick_candidates.get_untracked().is_empty() {
+            return;
+        }
+        self.dock_pick_candidates.update(|c| c.clear());
+        self.events.emit(ChromeEvent::DockPickCandidatesChanged {
+            candidates: Vec::new(),
+        });
+    }
+
     /// Construct the store with initial region modes + widths (mirroring the
     /// `SidebarState` defaults during migration). Signals are created here — requires
     /// the reactive runtime, available on the UI thread at `AppState` construction.
@@ -764,6 +852,9 @@ impl SharedChromeState {
             right: RegionState::new(mode(right_visible), right_width),
             workspaces: WorkspacesContainerState::new(events),
             container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
+            focused_container: signal(None),
+            keyboard_target: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
+            dock_pick_candidates: signal(Vec::new()),
         }
     }
 
@@ -992,6 +1083,101 @@ mod tests {
             "and a third placement elsewhere is untouched",
         );
         assert_eq!(s.container_scroll("dock.a").get_untracked(), 30.0);
+    }
+
+    /// Chrome focus is a **container id**, so it does not name a side and does not move when the
+    /// dock does. Nothing here mentions a region — that is the point (F003/P011/T020).
+    #[test]
+    fn chrome_focus_is_a_container_id() {
+        let s = state();
+        assert_eq!(s.focused_container(), None, "nothing has focus at startup");
+        s.set_focused_container(Some("workspaces".into()));
+        assert_eq!(s.focused_container(), Some("workspaces".to_string()));
+        s.set_focused_container(None);
+        assert_eq!(s.focused_container(), None);
+    }
+
+    /// Exactly one placement is the keyboard target, whichever order the signals were asked for.
+    ///
+    /// Two placements of one container are two targets, so this cannot be keyed by container kind —
+    /// the same mistake the scroll offsets had, and just as invisible until there are two.
+    #[test]
+    fn exactly_one_placement_is_the_keyboard_target() {
+        let s = state();
+        let a = s.container_keyboard_target("dock.a");
+        let b = s.container_keyboard_target("dock.b");
+        assert!(!a.get_untracked() && !b.get_untracked(), "no focus, no target");
+
+        s.set_focused_container(Some("dock.a".into()));
+        assert!(a.get_untracked());
+        assert!(!b.get_untracked());
+
+        s.set_focused_container(Some("dock.b".into()));
+        assert!(!a.get_untracked(), "the previous target gives it up");
+        assert!(b.get_untracked());
+
+        // A signal asked for *after* focus moved still knows where focus is.
+        s.set_focused_container(Some("dock.c".into()));
+        let c = s.container_keyboard_target("dock.c");
+        assert!(c.get_untracked(), "created knowing it holds focus");
+        assert!(!b.get_untracked());
+
+        s.set_focused_container(None);
+        for (id, sig) in [("dock.a", a), ("dock.b", b), ("dock.c", c)] {
+            assert!(!sig.get_untracked(), "{id} keeps no target once focus is cleared");
+        }
+    }
+
+    /// The same signal comes back on a second ask, so a tree rebuild does not orphan the binding.
+    #[test]
+    fn a_keyboard_target_signal_outlives_the_tree() {
+        let s = state();
+        s.set_focused_container(Some("workspaces".into()));
+        let first = s.container_keyboard_target("workspaces");
+        let again = s.container_keyboard_target("workspaces");
+        assert!(first.get_untracked() && again.get_untracked());
+        s.set_focused_container(None);
+        assert!(!again.get_untracked(), "and it is the same signal, not a copy");
+    }
+
+    #[test]
+    fn the_dock_pick_opens_and_closes() {
+        let s = state();
+        assert_eq!(s.with_dock_pick_candidates(|c| c.len()), 0);
+        s.set_dock_pick_candidates(vec![('a', "workspaces".into()), ('s', "docker".into())]);
+        assert_eq!(
+            s.with_dock_pick_candidates(|c| c.to_vec()),
+            vec![('a', "workspaces".to_string()), ('s', "docker".to_string())],
+        );
+        s.clear_dock_pick_candidates();
+        assert_eq!(s.with_dock_pick_candidates(|c| c.len()), 0);
+    }
+
+    /// Focus and the pick each emit once per real change, and never for a repeat.
+    #[test]
+    fn focus_and_dock_pick_emit_only_on_real_change() {
+        let s = state();
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let log = seen.clone();
+        let _sub = s.events().subscribe("*", move |event| {
+            log.borrow_mut().push(event.name().to_string());
+        });
+
+        s.set_focused_container(Some("workspaces".into()));
+        s.set_focused_container(Some("workspaces".into()));
+        s.set_dock_pick_candidates(vec![('a', "workspaces".into())]);
+        s.set_dock_pick_candidates(vec![('a', "workspaces".into())]);
+        s.clear_dock_pick_candidates();
+        s.clear_dock_pick_candidates();
+
+        assert_eq!(
+            seen.borrow().as_slice(),
+            [
+                "chrome.container.focus.changed",
+                "dock.pick.changed",
+                "dock.pick.changed",
+            ],
+        );
     }
 
     #[test]

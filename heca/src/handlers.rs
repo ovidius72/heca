@@ -1525,16 +1525,43 @@ pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
-pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
-    // Enter sidebar-nav. A region is Expanded ⇄ Hidden (no icon rail — see
-    // `docs/sidebar-provider-modes.md`); you cannot navigate a Hidden sidebar, so
-    // Expand it if it is currently Hidden. If already Expanded, leave the (possibly
-    // user-resized) width untouched — selection-driven, no width reset.
-    if !state.chrome_state.left_visible() {
-        state
-            .chrome_state
-            .set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
+/// Make `region` visible if it is currently hidden, so something seated in it can be seen.
+///
+/// A region is Expanded ⇄ Hidden (no icon rail — see `docs/sidebar-provider-modes.md`). An already
+/// expanded region keeps its (possibly user-resized) width — no reset; the setters are
+/// change-guarded, so revealing an already visible region is free.
+///
+/// Only the two sidebars have shell mode/size state today (`SharedChromeState.left`/`right`); the
+/// bars have none, so there is nothing to reveal for them and this says so rather than guessing.
+fn reveal_region(state: &mut AppState, region: crate::chrome::RegionId) {
+    use crate::chrome::RegionId;
+    use heca_grid_ui::widgets::RegionMode;
+    match region {
+        RegionId::LeftSidebar => state.chrome_state.set_left_mode(RegionMode::Expanded),
+        RegionId::RightSidebar => state.chrome_state.set_right_mode(RegionMode::Expanded),
+        RegionId::TopBar | RegionId::BottomBar => {}
     }
+}
+
+/// Enter sidebar-nav on the dock that has keyboard navigation — **whichever region it sits in**.
+///
+/// This used to read `left_visible()` and expand the *left* container, which is wrong the moment the
+/// dock is seated elsewhere: the workspaces container declares `RegionSet::sidebars()`, so the focus
+/// key expanded an empty left sidebar and navigated a tree drawn on the right (F003/P011/T020).
+///
+/// With no navigable dock mounted there is nothing to navigate, so this is a **no-op** — it does not
+/// expand a region to show an empty frame.
+pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
+    let focused = state.chrome_state.focused_container();
+    let Some((dock, region)) = crate::chrome::navigable_dock(&state.chrome_host, focused.as_deref())
+    else {
+        return;
+    };
+    // You cannot navigate a hidden sidebar, so show the one the dock is actually in.
+    reveal_region(state, region);
+    // Chrome focus and sidebar nav are the same intent from the user's side: the keys are aimed at
+    // this dock now, so the ring follows the cursor rather than living in a second place.
+    state.chrome_state.set_focused_container(Some(dock));
     state.input_mode = InputMode::SidebarNav;
     // Seed the store with the row the cursor is already on, so entering nav mode publishes
     // a selection (and emits `SidebarSelectionChanged`) instead of waiting for the first
@@ -1542,6 +1569,43 @@ pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
     publish_sidebar_selection(state);
     update_session_viewport(state);
     after_layout_change(state);
+}
+
+/// Give chrome keyboard focus to a dock — by id, or by letter.
+///
+/// `dock = Some(id)` focuses that container directly (RPC, a menu entry, a script). A bare
+/// `focus_dock` opens the pick: every dock on screen lights a letter and the next keypress focuses
+/// the one chosen ([`InputMode::DockPick`], resolved in `app/input.rs`).
+///
+/// The pick is uniform — it is offered even when there is only one dock — because "sometimes a letter
+/// appears and sometimes the key acts immediately" is a rule a user has to learn from surprise.
+/// Nothing mounted, or nothing on screen, means nothing to focus: a no-op.
+pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
+    let WmAction::FocusDock { dock } = action else {
+        return;
+    };
+    if let Some(dock) = dock {
+        // Only a container the host actually has: focus is a promise that something is there to
+        // receive the keys. Say so rather than letting the call vanish — a typo in an RPC call or a
+        // binding's `dock` argument is otherwise indistinguishable from success.
+        if state.chrome_host.placement(dock).is_none() {
+            eprintln!("[heca] focus_dock: no container mounted under id '{dock}'");
+            return;
+        }
+        state
+            .chrome_state
+            .set_focused_container(Some(dock.clone()));
+        state.needs_redraw = true;
+        return;
+    }
+    let candidates = crate::chrome::dock_candidates(&state.chrome_host, |region| {
+        crate::chrome::region_on_screen(state, region)
+    });
+    if candidates.is_empty() {
+        return;
+    }
+    state.input_mode = InputMode::DockPick { candidates };
+    state.needs_redraw = true;
 }
 
 /// Publish the cursor's row into the chrome store, which **owns** the sidebar selection.

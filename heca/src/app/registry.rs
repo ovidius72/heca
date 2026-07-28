@@ -656,6 +656,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
     registry.register(&WmAction::SidebarFocus, handle_sidebar_focus);
+    registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
     registry.register(&WmAction::SidebarUp, handle_sidebar_up);
     registry.register(&WmAction::SidebarDown, handle_sidebar_down);
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);

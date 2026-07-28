@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusRing`](#focusring)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
@@ -492,6 +492,7 @@ a run's vertex count.
 | Can I turn it off? | Yes — `[appearance] show_focus_border = false` (config override → theme `show_focus_border` token, default `true`); live-reloads with `prefix+Shift+r`. |
 | How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
 | What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
+| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusRing`](#focusring) and drive it from a host signal. A control owns its focus so it draws its own ring; an area the keyboard is *aimed* at (a sidebar dock the scroll keys act on) has no owner in the tree — only the host knows which subtree holds it. Same outline, same theme tokens. |
 
 ### `Color`
 
@@ -1048,6 +1049,11 @@ target. Unset means yes, so a single-region app needs no wiring; a host with
 several regions in one tree binds it on each and depends on no default. That is how
 "scroll the focused surface" works without the host knowing where any region sits
 in the tree.
+
+**In heca that signal *is* chrome keyboard focus.** Every mounted container binds it to
+"am I the focused dock" (`StateView::container_keyboard_target`, keyed by mount id), and
+the same signal drives the [`FocusRing`](#focusring) the host wraps the container in — so
+what the ring shows and what the scroll keys reach cannot disagree. `focus_dock` moves it.
 
 ### Scrolling is composed — nest a scroll area where the scrolling belongs
 
@@ -2513,7 +2519,9 @@ jump prefix (move/swap/select, command palettes, content panes). It is transpare
 events (the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so
 mouse, keyboard, and RPC all light it up identically.
 
-- **Construct**: `KeyHint::new(child)`.
+- **Construct**: `KeyHint::new(child)`, or `KeyHint::new_boxed(Box<dyn Component>)` for a subtree built
+  dynamically — a `realize`d `ViewNode` tree, or a chrome provider's render seam — where the concrete
+  widget type is not known at the call site (mirrors [`Parent::child_boxed`](#builder-traits)).
 - **Builders**: `.hint(Signal<Option<String>>)`, `.placement(HintPlacement)`
   (`TopCenter` for compact square targets | `Center` for large panes | `CenterRight`
   for wide list rows — keycap pinned to the right edge | `TopRight` for tall targets like a
@@ -2562,6 +2570,51 @@ paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a
 
 **Plugins** never call this directly — a plugin widget with an `on_press` intent is
 auto-hintable and the host stamps the keycap for it.
+
+### FocusRing
+
+A **generic** transparent wrapper that draws the theme's keyboard-focus outline around its child
+while a host-owned `Signal<bool>` is `true`.
+
+Every focusable *control* already rings itself, because it owns its focus. `FocusRing` is for the
+other case: when the thing holding keyboard focus is **a whole area** — a sidebar dock the scroll
+keys act on, a panel a mode is aimed at — no single widget in the tree owns that focus, so no widget
+can draw it. The host does, by flipping one signal (read-via-signals / write-via-actions), exactly as
+it drives [`KeyHint`](#keyhint).
+
+Transparent like `KeyHint`: not focusable itself, hugs its child, routes events / focus / drag /
+ticks straight through, and only *adds paint*. The outline appears and disappears **in place** — no
+tree rebuild.
+
+- **Construct**: `FocusRing::new(child)`, or `FocusRing::new_boxed(Box<dyn Component>)` for a
+  dynamically built subtree (a `realize`d tree, a provider's render seam).
+- **Builders**:
+  - `.focus(Signal<bool>)` — the host-owned focus state. **Host-only** (a live signal, which static
+    data cannot drive). Default: an internal signal that is `false`, i.e. no outline.
+  - `.radius(px)` — corner radius of the outline. Default: the theme's `control_radius()`.
+  - `.color(Color)` — outline colour. Default: `effective_focus_ring()` (the `focus_ring` token, or
+    the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
+    `KeyHint::color` distinguishes kinds of pick target.
+- **Accessors**: `.focus_signal() -> Signal<bool>`.
+- **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
+  at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
+  `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
+  decision, uniformly, not each caller's.
+
+```rust
+// The host owns the signal; an action moves focus and the ring follows, with no rebuild.
+let focused = signal(false);
+let framed = FocusRing::new(my_container).focus(focused);
+// …later, from an action:
+focused.set(true);
+```
+
+Declaratively there is nothing to author: the whole widget is a live host signal, so a described
+`FocusRing` would be a dead frame (the same reason [`ScrollBar`](#scrollbar) is host-only). A plugin
+that wants its container to show focus gets it for free — **heca wraps every mounted container
+itself**, together with its dock-pick keycap, and drives the ring from the same signal the
+container's scroll area binds as its keyboard target. See
+[chrome-and-ui.md](chrome-and-ui.md) → chrome keyboard focus.
 
 ### Tooltip
 

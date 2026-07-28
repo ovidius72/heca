@@ -49,6 +49,12 @@ impl MountedContribution {
         self.provider.movable()
     }
 
+    /// Does this container do anything with keyboard focus beyond scrolling?
+    /// (`Provider::keyboard_navigable`, F003/P011/T020.)
+    pub fn keyboard_navigable(&self) -> bool {
+        self.provider.keyboard_navigable()
+    }
+
     /// The underlying provider (for the render path to build its contribution).
     pub fn provider(&self) -> &dyn Provider {
         self.provider.as_ref()

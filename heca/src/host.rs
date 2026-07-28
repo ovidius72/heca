@@ -99,6 +99,25 @@ impl StateView<'_> {
         self.state.set_container_scroll(container, offset);
     }
 
+    /// Whether this mount currently holds chrome **keyboard focus** (F003/P011/T020).
+    ///
+    /// Keyed by **mount id**, like the scroll offset beside it: only one placement can hold focus,
+    /// so two placements of one container are two different answers. A container binds this to
+    /// whatever it wants gated on focus — its scroll area's
+    /// [`keyboard_target`](heca_grid_ui::ScrollRegion::keyboard_target), a cursor, a mode — and the
+    /// host writes it (`focus_dock`), so nothing has to decide for itself that it has focus.
+    pub fn container_keyboard_target(
+        &self,
+        container: &str,
+    ) -> heca_grid_ui::reactive::Signal<bool> {
+        self.state.container_keyboard_target(container)
+    }
+
+    /// The container holding chrome keyboard focus, if any.
+    pub fn focused_container(&self) -> Option<String> {
+        self.state.focused_container()
+    }
+
     /// The currently active (focused) pane, if any.
     pub fn active_pane(&self) -> Option<PaneId> {
         self.state.workspaces.active_pane()

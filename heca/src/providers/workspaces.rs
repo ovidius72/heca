@@ -109,6 +109,12 @@ impl Provider for WorkspacesContainerProvider {
         true
     }
 
+    /// The workspace tree has its own keyboard navigation once it holds focus — the `j`/`k` cursor
+    /// over workspaces, columns and panes — so it is more than a scrollable list.
+    fn keyboard_navigable(&self) -> bool {
+        true
+    }
+
     fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
         Contribution::Container(ContainerContribution {
             id: self.id().to_string(),
@@ -146,6 +152,9 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // This placement's own scroll offset, keyed by mount id: place the container twice and each
     // keeps its own position, while the workspaces it shows come from the shared store either way.
     let scroll = state.container_scroll(bx.container_id());
+    // …and whether this placement is the one the keyboard is aimed at (F003/P011/T020). Per mount for
+    // the same reason: only one of two placements can hold focus.
+    let focused = state.container_keyboard_target(bx.container_id());
     Box::new(build_workspaces_container(
         tree,
         programs,
@@ -153,6 +162,7 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
         emit,
         state.workspaces(),
         scroll,
+        focused,
         bx.signals,
         bx.drag,
         bx.hints,
@@ -520,6 +530,8 @@ fn build_workspaces_container(
     // This placement's own scroll offset (see `build_body`): per mount, so the same container
     // placed twice keeps two positions.
     scroll: Signal<f32>,
+    // Whether this placement holds chrome keyboard focus (see `build_body`).
+    focused: Signal<bool>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
     hints: &mut HintTargetRegistry,
@@ -651,6 +663,11 @@ fn build_workspaces_container(
     // a restore from the user actually scrolling and never writes one back as the other.
     region.scroll_to(scroll.get_untracked());
     region
+        // Keyboard scroll intents act on the area the keyboard is aimed at, and every other area
+        // declines them — which is what makes the semantic `WidgetIntent::Scroll*` a *broadcast* the
+        // focused container answers rather than something the host has to route by hand
+        // (F003/P011/T012 consumes this; the gate itself belongs here, per placement).
+        .keyboard_target(focused)
         .on_scroll(move |s| {
             if s.event.is_some() {
                 scroll.set(s.offset_y);
