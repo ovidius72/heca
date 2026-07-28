@@ -49,6 +49,13 @@ pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel
 /// facade, turns a double-borrow into a compile error instead of a runtime panic, and
 /// matches how [`realize`](crate::chrome::realize) already threads the same registries.
 pub struct BuildCx<'a> {
+    /// The **mount id** of the container being built (F003/P011/T021).
+    ///
+    /// A container needs it to ask for state that is per mount rather than per kind — its own
+    /// scroll offset, above all. The same container can be seated twice, and each mount scrolls
+    /// its own content, so "which mount am I" is a question the build hook has to be able to
+    /// answer. It cannot read it off itself: one plain `fn` serves every mount.
+    pub(crate) container_id: &'a str,
     /// Value signals the host pushes each frame without rebuilding the tree
     /// (selection, status, per-pane info).
     pub(crate) signals: &'a mut ChromeSignals,
@@ -61,15 +68,22 @@ pub struct BuildCx<'a> {
 impl<'a> BuildCx<'a> {
     /// Borrow the host's per-build registries for one container build.
     pub(crate) fn new(
+        container_id: &'a str,
         signals: &'a mut ChromeSignals,
         drag: &'a mut DragItemRegistry,
         hints: &'a mut HintTargetRegistry,
     ) -> Self {
         Self {
+            container_id,
             signals,
             drag,
             hints,
         }
+    }
+
+    /// The mount id of the container being built.
+    pub fn container_id(&self) -> &str {
+        self.container_id
     }
 }
 
@@ -184,6 +198,21 @@ pub struct ContainerContribution {
     pub movable: bool,
     /// Collapsible within its region shell?
     pub collapsible: bool,
+    /// This container's share of its region, as a **flex grow factor** (F003/P011/T021).
+    ///
+    /// Fractional, never fixed: `1.0` is one share, `2.0` is twice as much as a `1.0`
+    /// beside it, and `0.0` means "as big as my content" (no share of the leftover). The
+    /// default is `1.0`, which gives the rule without a special case — one container takes
+    /// the whole region, two take half each, `2.0` against `1.0` takes two thirds.
+    ///
+    /// **Share of the region's MAIN AXIS, not of its height.** `flex_grow` is main-axis
+    /// relative, so this one number is the height in a sidebar (a column) and the width in
+    /// a bar (a row), with nothing to add when bar regions arrive. Calling it `height_grow`
+    /// would have baked "regions are vertical" into the contract.
+    ///
+    /// It is `flex_grow` because that is exactly what it is, and the widget library has had
+    /// it all along — no new sizing language to learn or to parse.
+    pub grow: f32,
     /// Builds the container body — **the render seam**. Called by the region host on
     /// (re)mount / invalidation, which for the retained chrome tree means once per
     /// structural change (`chrome_signature`), not once per frame.

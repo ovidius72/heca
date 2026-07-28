@@ -15,7 +15,8 @@ use std::time::{Duration, Instant};
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
 use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, Rectangle, Scene, Size};
-use heca_view::{Intent, PropValue, ViewNode, WidgetKind};
+use heca_view::build::{self, Parent as _, Style as _};
+use heca_view::{Intent, PropValue, ViewNode};
 use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
@@ -239,25 +240,28 @@ impl HintTargets for ShowcaseHints {
 /// Pure data. No builder, no closure: the `Row`'s click carries an `Intent`, which is exactly what
 /// a plugin would ship over the boundary.
 fn described_tree() -> ViewNode {
-    ViewNode::new(WidgetKind::Panel)
-        .text("DESCRIBED")
-        .prop("width", PropValue::Int(240))
+    // Written through the typed builders (F003/P011/T006) rather than as a bag of properties. The
+    // difference is what does not compile: `Label::new(..).title(..)` is an error because a label
+    // has no title, and `Separator::new().orientation(..)` will not take a misspelt word.
+    //
+    // They are namespaced because they deliberately share their names with the widgets they
+    // describe — `build::Row` is the description, `Row` is the thing on screen.
+    build::Panel::new()
+        .title("DESCRIBED")
+        .width(240.0)
         .child(
-            ViewNode::new(WidgetKind::Row)
+            build::Row::new()
                 // Padding, like every other Row on this page. A row whose content reaches its own
                 // edges leaves the badge's glow halo (which paints outside its box, by design)
                 // crossing the hover pill's edge, and it reads as the badge overflowing.
-                .prop("padding", PropValue::Float(6.0))
+                .padding(6.0)
                 .on_press(Intent::new("showcase.select").arg("id", PropValue::Text("nginx".into())))
-                .child(ViewNode::new(WidgetKind::Label).text("nginx"))
-                .child(ViewNode::new(WidgetKind::Badge).text("UP")),
+                .child(build::Label::new("nginx"))
+                .child(build::Badge::new("UP")),
         )
-        .child(ViewNode::new(WidgetKind::Separator))
-        .child(
-            ViewNode::new(WidgetKind::Label)
-                .text("colour by token name")
-                .prop("color", PropValue::Color("danger".into())),
-        )
+        .child(build::Separator::new())
+        .child(build::Label::new("colour by token name").color("danger"))
+        .into_node()
 }
 
 /// The same four widgets built by hand, to compare against [`described_tree`] with the eye.

@@ -226,6 +226,18 @@ fn prop_to_json(value: &PropValue, theme: &Theme) -> Option<serde_json::Value> {
         PropValue::List(items) => serde_json::Value::Array(
             items.iter().filter_map(|i| prop_to_json(i, theme)).collect(),
         ),
+        // A struct-shaped property (`border`, `glow`) — handed to the field's own deserializer as
+        // an object. Recursive, so a colour nested inside is a theme token like any other and is
+        // resolved here against the same theme: without that a nested `"accent"` would reach serde
+        // as the literal word and the whole field would be dropped. A member that cannot be
+        // converted is skipped, leaving the rest — the same totality rule as everywhere else, and
+        // it means a half-written object degrades to its usable fields rather than vanishing.
+        PropValue::Map(fields) => serde_json::Value::Object(
+            fields
+                .iter()
+                .filter_map(|(k, v)| Some((k.clone(), prop_to_json(v, theme)?)))
+                .collect(),
+        ),
     })
 }
 
@@ -288,7 +300,12 @@ fn prop_to_input(value: &PropValue, theme: &Theme) -> Option<PropInput> {
         PropValue::Size(s) => PropInput::Text(prop_enum_name(s)?),
         PropValue::Variant(v) => PropInput::Text(prop_enum_name(v)?),
         PropValue::Align(a) => PropInput::Text(prop_enum_name(a)?),
-        PropValue::List(_) => return None,
+        // Neither shape fits a widget builder: `PropInput` is a scalar channel (Bool | Number |
+        // Text) because no `#[prop]` builder takes a list or a struct. A `Map` is for the
+        // struct-shaped fields of `Layout`/`Visual`, which reach the widget through
+        // `merge_style_half` and serde instead — see `prop_to_json`. If a widget builder ever does
+        // take one, `PropInput` grows a variant then, deliberately, and not before.
+        PropValue::List(_) | PropValue::Map(_) => return None,
     })
 }
 
@@ -1150,6 +1167,11 @@ fn map_size(s: ViewSize) -> WidgetSize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The fixed value sets are used by the tests, not by the mapper: a widget's own enum parses the
+    // name, so `realize` never names these types.
+    use heca_view::{
+        ViewLabelSide, ViewMarker, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewTextAlign,
+    };
     use heca_grid_ui::{Justify, Length};
     use std::rc::Rc;
 
@@ -1440,6 +1462,487 @@ mod tests {
             a,
             format!("{:?}", painted(&tinted, &other)),
             "a token follows the theme it was built with",
+        );
+    }
+
+    /// A **struct-shaped** appearance property reaches the widget.
+    ///
+    /// `border` and `glow` were unreachable from a description for as long as a property value was
+    /// a closed list of scalars: `Border` is `{color, width}` and nothing could carry it.
+    /// F003/P017/T007's commit claimed "the whole of `Visual`" on the strength of adding serde to
+    /// the two types, which is not the same thing, and no test looked — so nothing failed.
+    /// `PropValue::Map` is what makes the claim true (F003/P011/T018).
+    #[test]
+    fn a_struct_shaped_appearance_property_reaches_the_widget() {
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop(
+                "border",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("#ff8800".into())),
+                    ("width".into(), PropValue::Float(2.0)),
+                ])),
+            )
+            .prop(
+                "glow",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("#00ccff".into())),
+                    ("radius".into(), PropValue::Float(12.0)),
+                    ("intensity".into(), PropValue::Float(0.4)),
+                ])),
+            );
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut TestHints::default(),
+            &mut FormBindings::default(),
+        );
+        let border = w.base().style.visual.border.expect("a described border reaches the widget");
+        assert_eq!(border.width, 2.0);
+        assert_eq!(border.color, heca_grid_ui::Color::rgb(0xff, 0x88, 0x00));
+        let glow = w.base().style.visual.glow.expect("a described glow reaches the widget");
+        assert_eq!(glow.radius, 12.0);
+        assert_eq!(glow.intensity, 0.4);
+        assert_eq!(glow.color, heca_grid_ui::Color::rgb(0x00, 0xcc, 0xff));
+    }
+
+    /// A described node stretches to its parent, the way CSS flexbox does.
+    ///
+    /// Set no width and a node fills its parent's cross axis; set `width_pct(0.5)` and it takes
+    /// half; set `width(px)` and it takes exactly that. Authors rely on the first without asking
+    /// for it — the showcase's panels are only a fixed size because they say so — and it is
+    /// currently true because a container's default `align` is `Stretch`, which is taffy agreeing
+    /// with CSS.
+    ///
+    /// **Nothing pinned that until this test.** Changing a container's default alignment would
+    /// silently turn every full-width described panel into a content-width one, with no test
+    /// failing and nothing to read in a diff. It is a contract now.
+    #[test]
+    fn a_described_node_stretches_to_its_parent_like_css() {
+        use heca_view::build::{self, Parent as _, Style as _};
+
+        // Mount a described tree in a plain column of a known width, as a page lays sections out,
+        // and report the node's width plus its first child's.
+        let mounted = |node: ViewNode| {
+            let realized = realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            );
+            let mut parent = Flex::column().width(heca_grid_ui::Length::Px(600.0));
+            parent.base_mut().children.push(realized);
+            heca_grid_ui::LayoutEngine::new()
+                .compute(&mut parent, heca_core::layout::Size::new(600.0, 400.0));
+            let child = &parent.base().children[0];
+            let inner = child
+                .base()
+                .children
+                .last()
+                .map(|c| c.base().bounds.size.w)
+                .unwrap_or_default();
+            (child.base().bounds.size.w, inner)
+        };
+
+        let panel = |b: build::Panel| {
+            b.child(build::Row::new().child(build::Label::new("nginx")))
+                .into_node()
+        };
+
+        // No width: full parent width, and the row inside fills the panel's content box (600 less
+        // the panel's 10px padding a side).
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P"))),
+            (600.0, 580.0),
+            "an unsized node fills its parent, and its child fills it in turn",
+        );
+
+        // The same result asked for explicitly.
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P").width_pct(1.0))).0,
+            600.0,
+            "width_pct(1.0) is the full parent width",
+        );
+
+        // A fraction, which is the case a percentage is actually needed for.
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P").width_pct(0.5))).0,
+            300.0,
+            "width_pct(0.5) is half the parent",
+        );
+
+        // And a fixed size wins over the stretch — this is what keeps the showcase's two demo
+        // panels side by side instead of splitting the row.
+        assert_eq!(
+            mounted(panel(build::Panel::new().title("P").width(240.0))),
+            (240.0, 220.0),
+            "an explicit width is honoured, padding still taken off the child",
+        );
+    }
+
+    /// Every widget property is reachable from the typed SDK.
+    ///
+    /// `heca-view::build` is hand-written — that was the choice, over generating it — so the thing
+    /// that keeps it honest is this. It walks each widget's generated `PROP_NAMES` and fails when a
+    /// property has no named setter on that kind's builder, which is how a capability added to the
+    /// library reaches the authoring layer instead of quietly not existing.
+    ///
+    /// It **fails closed**: a property must be reachable unless it is named below with a reason.
+    /// The opposite arrangement — a list you must remember to add to — is what let `placeholder`
+    /// and the scroll axes go unreachable for months (F003/P017).
+    ///
+    /// The check reads the SDK's source rather than calling it, because "does a method exist" is
+    /// not a question a running test can ask. That is the same technique `prop_drift.rs` uses, and
+    /// for the same reason.
+    #[test]
+    fn every_widget_property_is_reachable_from_the_sdk() {
+        /// Properties with no setter, each with the reason. Keep it short — an entry here is a
+        /// capability an author cannot reach.
+        const NOT_IN_SDK: &[(&str, &str, &str)] = &[
+            (
+                "Button",
+                "font_size",
+                "on Style already — every kind takes font_size, so a per-kind copy would be a \
+                 second way to say the same thing",
+            ),
+            (
+                "Input",
+                "font_size",
+                "on Style already",
+            ),
+            (
+                "Select",
+                "font_size",
+                "on Style already",
+            ),
+            (
+                "Tabs",
+                "font_size",
+                "on Style already",
+            ),
+            (
+                "Item",
+                "font_size",
+                "on Style already",
+            ),
+            (
+                "Label",
+                "font_size",
+                "on Style already",
+            ),
+            (
+                "Label",
+                "font_scale",
+                "on Style already",
+            ),
+        ];
+
+        let sdk = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../heca-view/src/build.rs"),
+        )
+        .expect("the SDK source is where it is expected");
+
+        // Which builder impl a method sits in: the guard is per-kind, so a setter on the wrong
+        // builder must not satisfy another's property.
+        let block_for = |widget: &str| -> Option<String> {
+            let head = format!("\nimpl {widget} {{\n");
+            let start = sdk.find(&head)? + head.len();
+            let rest = &sdk[start..];
+            let end = rest.find("\n}\n").unwrap_or(rest.len());
+            Some(rest[..end].to_string())
+        };
+
+        let mut missing: Vec<String> = Vec::new();
+        let mut check = |widget: &str, props: &[&str], sdk_name: &str| {
+            let block = block_for(sdk_name).unwrap_or_default();
+            for prop in props {
+                let excused = NOT_IN_SDK
+                    .iter()
+                    .any(|(w, p, _)| *w == sdk_name && p == prop);
+                if excused {
+                    continue;
+                }
+                // A setter reaches the property if it writes that key, whatever the method is
+                // called: `Button::glowing` sets "glow", because `glow` on Style means the halo.
+                let writes_key = block.contains(&format!("self.prop(\"{prop}\"")) 
+                    || block.contains(&format!("props.insert(\"{prop}\""));
+                if !writes_key {
+                    missing.push(format!("{widget}::{prop} (builder {sdk_name})"));
+                }
+            }
+        };
+
+        check("Alert", <Alert as SetProp>::PROP_NAMES, "Alert");
+        check("Badge", <Badge as SetProp>::PROP_NAMES, "Badge");
+        check("BadgeButton", <BadgeButton as SetProp>::PROP_NAMES, "BadgeButton");
+        check("Button", <Button as SetProp>::PROP_NAMES, "Button");
+        check("Checkbox", <Checkbox as SetProp>::PROP_NAMES, "Checkbox");
+        check("Choice", <Choice as SetProp>::PROP_NAMES, "Choice");
+        check("DockFrame", <DockFrame as SetProp>::PROP_NAMES, "DockFrame");
+        check("Gauge", <Gauge as SetProp>::PROP_NAMES, "Gauge");
+        check("Icon", <Icon as SetProp>::PROP_NAMES, "Icon");
+        check("IconButton", <IconButton as SetProp>::PROP_NAMES, "IconButton");
+        check("Input", <Input as SetProp>::PROP_NAMES, "Input");
+        check("Item", <Item as SetProp>::PROP_NAMES, "Item");
+        check("ItemGroup", <ItemGroup as SetProp>::PROP_NAMES, "ItemGroup");
+        check("Label", <Label as SetProp>::PROP_NAMES, "Label");
+        check("MarkerGroup", <MarkerGroup as SetProp>::PROP_NAMES, "MarkerGroup");
+        check("Panel", <Panel as SetProp>::PROP_NAMES, "Panel");
+        check("RailCell", <RailCell as SetProp>::PROP_NAMES, "RailCell");
+        check("Row", <GridRow as SetProp>::PROP_NAMES, "Row");
+        check("ScrollRegion", <ScrollRegion as SetProp>::PROP_NAMES, "Scroll");
+        check("Select", <Select as SetProp>::PROP_NAMES, "Select");
+        check("Separator", <Separator as SetProp>::PROP_NAMES, "Separator");
+        check("Tabs", <Tabs as SetProp>::PROP_NAMES, "Tabs");
+        check("Tag", <Tag as SetProp>::PROP_NAMES, "Tag");
+        check("Toast", <Toast as SetProp>::PROP_NAMES, "Toast");
+        check("Toggle", <Toggle as SetProp>::PROP_NAMES, "Toggle");
+
+        assert!(
+            missing.is_empty(),
+            "these widget properties have no setter in heca-view/src/build.rs, so a description \
+             cannot reach them through the SDK: {missing:#?}\n\nAdd a setter, or add the property \
+             to NOT_IN_SDK with the reason.",
+        );
+    }
+
+    /// The mirrored glyph list cannot fall behind the real one.
+    ///
+    /// `heca-view` must not depend on `heca-grid-ui` — that independence is why a plugin can depend
+    /// on the vocabulary at all — so the 52 icon names are copied into it. A copy of a list that
+    /// grows is the failure this codebase keeps repeating, so this crate, which sees both, is where
+    /// the copy is held to account. It compares **both ways** and names what is wrong: a glyph
+    /// added to the library and not mirrored, or a mirror naming something that no longer exists.
+    #[test]
+    fn every_glyph_name_has_a_mirror() {
+        use std::collections::BTreeSet;
+        let library: BTreeSet<&str> = <Glyph as heca_grid_ui::PropName>::VARIANT_NAMES
+            .iter()
+            .copied()
+            .collect();
+        let mirrored: BTreeSet<&str> = heca_view::ViewGlyph::ALL.iter().map(|g| g.name()).collect();
+
+        let missing: Vec<_> = library.difference(&mirrored).collect();
+        assert!(
+            missing.is_empty(),
+            "these glyphs exist in heca-grid-ui but not in ViewGlyph, so a description cannot name \
+             them: {missing:?} — add them to the generated block in heca-view/src/lib.rs",
+        );
+        let stale: Vec<_> = mirrored.difference(&library).collect();
+        assert!(
+            stale.is_empty(),
+            "ViewGlyph names glyphs the library no longer has: {stale:?}",
+        );
+    }
+
+    /// A mirrored glyph actually resolves to the icon it names.
+    ///
+    /// Matching names is not the same as the name being understood: this takes one through
+    /// `PropValue` into a realized widget and asserts a different glyph paints differently.
+    #[test]
+    fn a_mirrored_glyph_reaches_the_icon() {
+        let painted = |g: heca_view::ViewGlyph| {
+            let node = ViewNode::new(WidgetKind::Icon).prop("glyph", g.into());
+            let w = realize(
+                &node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            );
+            let mut scene = heca_grid_ui::Scene::new();
+            let theme = Theme::default();
+            {
+                let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+                w.paint(&mut cx);
+            }
+            format!("{:?}", scene.iter().collect::<Vec<_>>())
+        };
+        let folder = painted(heca_view::ViewGlyph::Folder);
+        assert!(!folder.is_empty(), "a named glyph painted something");
+        assert_ne!(
+            folder,
+            painted(heca_view::ViewGlyph::Terminal),
+            "the name picked the icon, rather than every name giving the same one",
+        );
+    }
+
+    /// Every fixed value set reaches the widget it belongs to.
+    ///
+    /// The types added by F003/P011/T019 stop a misspelling from compiling, but nothing about them
+    /// guarantees the *name* they travel under is one the widget parses — that agreement runs
+    /// across two crates and a serde attribute. So each is checked against a real realized widget
+    /// rather than against a parse: written through the type, it must change the widget.
+    ///
+    /// `PropValue::from` is what the authoring layer calls, so this exercises the whole path.
+    #[test]
+    fn every_fixed_value_set_reaches_its_widget() {
+        let realize_one = |node: &ViewNode| {
+            realize(
+                node,
+                &Theme::default(),
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            )
+        };
+        let theme = Theme::default();
+        let painted = |node: &ViewNode| {
+            let mut w = realize_one(node);
+            heca_grid_ui::LayoutEngine::new()
+                .compute(w.as_mut(), heca_core::layout::Size::new(300.0, 80.0));
+            let mut scene = heca_grid_ui::Scene::new();
+            {
+                let mut cx = heca_grid_ui::PaintCx::new(&mut scene, &theme);
+                w.paint(&mut cx);
+            }
+            format!("{:?}", scene.iter().collect::<Vec<_>>())
+        };
+
+        // Orientation shows up in layout: a vertical rule is tall and thin, a horizontal one wide
+        // and thin, so the property is visible in the box rather than merely stored.
+        let rule = |o: ViewOrientation| {
+            let n = ViewNode::new(WidgetKind::Separator)
+                .prop("orientation", o.into())
+                .prop("length", PropValue::Float(40.0));
+            let w = realize_one(&n);
+            format!("{:?}", w.base().style.layout)
+        };
+        assert_ne!(
+            rule(ViewOrientation::Vertical),
+            rule(ViewOrientation::Horizontal),
+            "orientation reached the separator",
+        );
+
+        // Axes are the region's own state, not a `Layout` field, so ask the widget — the same way
+        // `a_scroll_regions_axes_are_authorable` does.
+        let region = |a: ViewScrollAxes| {
+            let node = ViewNode::new(WidgetKind::Scroll).prop("axes", a.into());
+            with_props(ScrollRegion::new(), &node, &Theme::default()).clone_axes()
+        };
+        assert_ne!(
+            region(ViewScrollAxes::Both),
+            region(ViewScrollAxes::Vertical),
+            "axes reached the scroll region",
+        );
+
+        let toast = |s: ViewSeverity| {
+            painted(
+                &ViewNode::new(WidgetKind::Toast)
+                    .text("Build failed")
+                    .prop("severity", s.into()),
+            )
+        };
+        assert_ne!(
+            toast(ViewSeverity::Danger),
+            toast(ViewSeverity::Info),
+            "severity reached the toast",
+        );
+
+        let row = |m: ViewMarker| {
+            painted(
+                &ViewNode::new(WidgetKind::Row)
+                    .prop("active", PropValue::Bool(true))
+                    .prop("marker", m.into())
+                    .child(ViewNode::new(WidgetKind::Label).text("x")),
+            )
+        };
+        assert_ne!(row(ViewMarker::Check), row(ViewMarker::Bar), "marker reached the row");
+
+        let label = |a: ViewTextAlign| {
+            painted(
+                &ViewNode::new(WidgetKind::Label)
+                    .text("STATUS")
+                    .prop("align", a.into()),
+            )
+        };
+        assert_ne!(
+            label(ViewTextAlign::Center),
+            label(ViewTextAlign::Start),
+            "text align reached the label",
+        );
+
+        let checkbox = |side: ViewLabelSide| {
+            painted(
+                &ViewNode::new(WidgetKind::Checkbox)
+                    .prop("label", PropValue::Text("Enable".into()))
+                    .prop("label_side", side.into()),
+            )
+        };
+        assert_ne!(
+            checkbox(ViewLabelSide::Left),
+            checkbox(ViewLabelSide::Right),
+            "label side reached the checkbox",
+        );
+    }
+
+
+    /// A theme token **nested inside** an object is still a token.
+    ///
+    /// This is the part that had to be got right: resolution happens per value, at any depth, so a
+    /// nested `"accent"` becomes the live theme's accent rather than reaching serde as the literal
+    /// word — which would drop the whole field, and drop it silently.
+    #[test]
+    fn a_token_nested_in_an_object_resolves_against_the_theme() {
+        let bordered = |theme: &Theme| {
+            let node = ViewNode::new(WidgetKind::Surface).prop(
+                "border",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("accent".into())),
+                    ("width".into(), PropValue::Float(1.0)),
+                ])),
+            );
+            realize(
+                &node,
+                theme,
+                &noop_emitter(),
+                &mut TestHints::default(),
+                &mut FormBindings::default(),
+            )
+            .base()
+            .style
+            .visual
+            .border
+            .expect("the token resolved")
+            .color
+        };
+
+        let theme = Theme::default();
+        assert_eq!(bordered(&theme), theme.colors.accent, "the token is the theme's accent");
+
+        let mut other = Theme::default();
+        other.colors.accent = heca_grid_ui::Color::rgb(0x10, 0xc0, 0x20);
+        assert_eq!(bordered(&other), other.colors.accent, "and it follows the theme");
+    }
+
+    /// A malformed member costs only itself, at depth too.
+    ///
+    /// The object keeps its usable fields and the node keeps its other properties — the same
+    /// totality rule the flat case has, now that values nest.
+    #[test]
+    fn a_bad_member_of_an_object_does_not_discard_the_rest() {
+        let node = ViewNode::new(WidgetKind::Surface)
+            .prop(
+                "border",
+                PropValue::Map(PropMap::from([
+                    ("color".into(), PropValue::Color("not-a-colour".into())),
+                    ("width".into(), PropValue::Float(3.0)),
+                ])),
+            )
+            .prop("radius", PropValue::Float(5.0));
+        let w = realize(
+            &node,
+            &Theme::default(),
+            &noop_emitter(),
+            &mut TestHints::default(),
+            &mut FormBindings::default(),
+        );
+        assert_eq!(w.base().style.visual.radius, 5.0, "the neighbouring property still applied");
+        assert!(
+            w.base().style.visual.border.is_none(),
+            "a border with no usable colour is dropped, not fatal",
         );
     }
 

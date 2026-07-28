@@ -64,6 +64,16 @@ pub trait LayoutExt: Component + Sized {
         s.margin_bottom = Some(y);
         self
     }
+    /// Horizontal outer margin (left+right) only.
+    fn margin_x(mut self, v: f32) -> Self {
+        self.base_mut().style.layout.margin_x = Some(v);
+        self
+    }
+    /// Vertical outer margin (top+bottom) only — a rule breathing away from what it separates.
+    fn margin_y(mut self, v: f32) -> Self {
+        self.base_mut().style.layout.margin_y = Some(v);
+        self
+    }
     /// Left outer margin only.
     fn margin_left(mut self, v: f32) -> Self {
         self.base_mut().style.layout.margin_left = Some(v);

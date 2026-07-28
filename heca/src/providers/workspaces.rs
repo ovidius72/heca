@@ -28,12 +28,12 @@ use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::reactive::signal;
+use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
-    Row, StatusDot, Tooltip, TooltipSide, Visibility,
+    Row, ScrollRegion, StatusDot, Tooltip, TooltipSide, Visibility,
 };
 
 /// The built-in workspace-tree sidebar container.
@@ -43,12 +43,34 @@ use heca_grid_ui::widgets::{
 /// in [`ChromeHost`](crate::chrome::ChromeHost) (plugin-03), proving the
 /// pluggable-chrome runtime hosts a domain container — not just the
 /// `TestProvider` stand-in in `host.rs` tests.
-pub struct WorkspacesContainerProvider;
+pub struct WorkspacesContainerProvider {
+    /// This placement's **mount id** — what distinguishes one placement from another.
+    id: String,
+    /// Where this placement is seated on first run.
+    region: RegionId,
+}
 
 impl WorkspacesContainerProvider {
-    /// A default instance ready to register.
+    /// The default placement: id `workspaces`, seated in the left sidebar.
     pub fn new() -> Self {
-        Self
+        Self::placed("workspaces", RegionId::LeftSidebar)
+    }
+
+    /// **Place this container**, with its own mount id, in `region`.
+    ///
+    /// A widget is a component and placing one is placing it — so a second placement is this call,
+    /// not a second implementation of the provider. The build hook is one plain `fn` that reads
+    /// everything off the contexts, so it already serves every placement; what a placement needs of
+    /// its own is an id (state that is per mount, like its scroll position, is keyed by it) and
+    /// somewhere to sit.
+    ///
+    /// The **content is the same either way**: the workspaces come from the shared store, exactly as
+    /// two renders of one component show the same data.
+    pub fn placed(id: impl Into<String>, region: RegionId) -> Self {
+        Self {
+            id: id.into(),
+            region,
+        }
     }
 }
 
@@ -60,7 +82,7 @@ impl Default for WorkspacesContainerProvider {
 
 impl Provider for WorkspacesContainerProvider {
     fn id(&self) -> &str {
-        "workspaces"
+        &self.id
     }
 
     fn supported_regions(&self) -> RegionSet {
@@ -68,7 +90,7 @@ impl Provider for WorkspacesContainerProvider {
     }
 
     fn default_region(&self) -> RegionId {
-        RegionId::LeftSidebar
+        self.region
     }
 
     fn default_order(&self) -> i32 {
@@ -96,6 +118,7 @@ impl Provider for WorkspacesContainerProvider {
             default_order: self.default_order(),
             movable: self.movable(),
             collapsible: self.collapsible(),
+            grow: self.grow(),
             build: Box::new(build_body),
         })
     }
@@ -120,12 +143,16 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // The three registries are borrowed as *disjoint* fields, which is exactly why they
     // are plain fields on `BuildCx` and not accessor methods: `bx.signals()` three times
     // in one call would be three overlapping `&mut *bx` borrows.
+    // This placement's own scroll offset, keyed by mount id: place the container twice and each
+    // keeps its own position, while the workspaces it shows come from the shared store either way.
+    let scroll = state.container_scroll(bx.container_id());
     Box::new(build_workspaces_container(
         tree,
         programs,
         theme,
         emit,
         state.workspaces(),
+        scroll,
         bx.signals,
         bx.drag,
         bx.hints,
@@ -490,10 +517,13 @@ fn build_workspaces_container(
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
+    // This placement's own scroll offset (see `build_body`): per mount, so the same container
+    // placed twice keeps two positions.
+    scroll: Signal<f32>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
     hints: &mut HintTargetRegistry,
-) -> Flex {
+) -> ScrollRegion {
     // Selection is sourced from the container's shared state (the Phase-2 boundary),
     // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
     // active pane.
@@ -607,7 +637,26 @@ fn build_workspaces_container(
                 .offset_y((theme.font_size * 0.45) as f64),
         );
     }
-    col
+    // The container nests its **own** scroll area, so its workspace list scrolls inside the slot
+    // the region gave it (F003/P011/T021). A scroll area is just a container, so this is
+    // composition rather than a capability the shell has to hand down: the shell scrolls its dock
+    // list, this scrolls its content, and nesting decides which one a wheel or a keyboard page
+    // reaches — the innermost that can move on that axis wins, and the outer one only sees what
+    // the inner declines.
+    //
+    // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
+    // changing is enough to do that) and is untouched by the dock list scrolling around it.
+    let mut region = ScrollRegion::new().grow(1.0);
+    // Restore through `scroll_to`, which reports with `event: None`, so the listener below can tell
+    // a restore from the user actually scrolling and never writes one back as the other.
+    region.scroll_to(scroll.get_untracked());
+    region
+        .on_scroll(move |s| {
+            if s.event.is_some() {
+                scroll.set(s.offset_y);
+            }
+        })
+        .child(col)
 }
 
 #[cfg(test)]
@@ -726,7 +775,7 @@ mod tests {
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
         let mut hints = HintTargetRegistry::default();
-        let mut bx = BuildCx::new(&mut signals, &mut drag, &mut hints);
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag, &mut hints);
         let body = (c.build)(&ctx, &mut bx);
 
         assert_eq!(
@@ -756,7 +805,7 @@ mod tests {
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
         let mut hints = HintTargetRegistry::default();
-        let mut bx = BuildCx::new(&mut signals, &mut drag, &mut hints);
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag, &mut hints);
         let body = (c.build)(&ctx, &mut bx);
 
         assert!(body.base().children.is_empty());

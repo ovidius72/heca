@@ -388,6 +388,33 @@ pub enum WidgetIntent {
     EditDeleteToLineStart,
     /// [`Input`](crate::widgets::Input): select the whole field. `edit_select_all`.
     EditSelectAll,
+
+    // ── Scrolling a scroll area from the keyboard (F003/P011/T012) ──
+    //
+    // These are **semantic**, not keys: the host says "one page back", the widget decides what a
+    // page is and clamps the result, because it is the only thing that knows its viewport and its
+    // content. Delivering `PageUp` as a key instead would have needed `GridKey` to grow variants
+    // and would have put paging arithmetic in the app.
+    //
+    // Both axes, because a region can be horizontal or two-axis. A region that cannot scroll the
+    // axis asked for declines, so a nested one still gets its turn — the same rule the wheel
+    // follows.
+    /// Scroll a scroll area one page back, vertically.
+    ScrollPageUp,
+    /// Scroll a scroll area one page on, vertically.
+    ScrollPageDown,
+    /// Jump a scroll area to the top.
+    ScrollToTop,
+    /// Jump a scroll area to the bottom.
+    ScrollToBottom,
+    /// Scroll a scroll area one page back, horizontally.
+    ScrollPageLeft,
+    /// Scroll a scroll area one page on, horizontally.
+    ScrollPageRight,
+    /// Jump a scroll area to its left edge.
+    ScrollToLeftEdge,
+    /// Jump a scroll area to its right edge.
+    ScrollToRightEdge,
 }
 
 /// Behavior shared by all components. Implementors provide access to their

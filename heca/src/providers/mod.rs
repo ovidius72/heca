@@ -56,6 +56,13 @@ pub trait Provider {
     }
 
     /// Collapsible within its region shell?
+    /// This container's share of its region's **main axis** — height in a sidebar, width in a
+    /// bar — as a flex grow factor. Default `1.0` (an equal share); `0.0` is content-sized. See
+    /// [`ContainerContribution::grow`](crate::chrome::ContainerContribution::grow).
+    fn grow(&self) -> f32 {
+        1.0
+    }
+
     fn collapsible(&self) -> bool {
         true
     }

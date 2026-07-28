@@ -1,10 +1,13 @@
 {
-  "updatedAt": "2026-07-27T12:37:16.541Z",
+  "updatedAt": "2026-07-27T23:42:19.428Z",
   "currentPhaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
-  "inProgressTaskIds": [],
+  "inProgressTaskIds": [
+    "6c81c18b-1b80-4128-ba2a-276791879edb",
+    "42fc5b3c-1724-4b51-9a5e-cc4370da653b"
+  ],
   "nextSteps": [
     "F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.",
-    "Branch `feat/action-arg-declaration` carries 19 commits, NOT pushed, no PR. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Ask before pushing.",
+    "Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.",
     "F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.",
     "Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions."
   ],

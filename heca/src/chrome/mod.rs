@@ -158,7 +158,7 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, ScrollRegion, Surface, Tag,
+    BadgeButton, Flex, Glyph, Icon, IconButton, Label, Pane, ScrollBar, Separator, Surface, Tag,
     Tooltip,
     TooltipSide,
 };
@@ -1461,32 +1461,95 @@ impl Component for RepaintWatch {
 ///
 /// `None` — not an empty widget — when nothing is mounted, so the shell can tell "no
 /// provider here" from "a provider that built an empty body".
+/// Give a container body its declared share of the region's **main axis**, as a flex grow factor
+/// (F003/P011/T021) — height in a sidebar, width in a bar, one number either way.
+///
+/// Applied to every container however many are seated, so the rule needs no special case: alone it
+/// takes the whole region, two equal shares take half each, `2.0` beside `1.0` takes two thirds,
+/// and `0.0` is content-sized.
+///
+/// Set by the region rather than by the container, because a share only means anything relative to
+/// its siblings — which a container cannot see and should not have to.
+fn with_share(mut body: WidgetModel, grow: f32) -> WidgetModel {
+    let layout = &mut body.base_mut().style.layout;
+    layout.flex_grow = grow;
+    if grow > 0.0 {
+        // A share has to be **of the region**, not of what is left over after the content.
+        //
+        // `flex_grow` alone distributes only *positive* free space, and a container's content is
+        // routinely taller than the sidebar — so two containers measured 1214px each inside a 600px
+        // body, overflowed the frame, and got no share at all. In CSS this is `flex: 1 1 0`; there
+        // is no `flex_basis` in this vocabulary, so the equivalent is a **zero base size** plus
+        // permission to shrink. Then the free space is the whole region and the shares divide it:
+        // 296px each, measured.
+        //
+        // Safe because a shared container is expected to scroll its own content — it nests its own
+        // scroll area, so being handed less height than its content is the normal case, not a
+        // squeeze. A container that asked for `0.0` is saying "size me to my content" and keeps its
+        // natural height.
+        layout.height = heca_grid_ui::Length::Px(0.0);
+        layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+        layout.flex_shrink = Some(1.0);
+    }
+    body
+}
+
+/// Takes the three registries rather than a ready-made [`BuildCx`] because the context is **per
+/// container**, not per region: each build hook is told which mount it is building, so it can ask
+/// for state that is per mount (its own scroll offset). One `BuildCx` for a whole region could not
+/// carry that (F003/P011/T021).
 fn build_region_content(
     host: &ChromeHost,
     region: RegionId,
     ctx: &crate::providers::ChromeCtx<'_>,
-    bx: &mut BuildCx<'_>,
+    signals: &mut ChromeSignals,
+    drag: &mut DragItemRegistry,
+    hints: &mut HintTargetRegistry,
 ) -> Option<WidgetModel> {
     let mut bodies = host
         .contributions(region)
         .iter()
-        .filter_map(
-            |mounted| match mounted.provider().build_contribution(ctx) {
-                Contribution::Container(c) => Some((c.build)(ctx, bx)),
-                _ => None,
-            },
-        )
+        .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
+            Contribution::Container(c) => {
+                let mut bx = BuildCx::new(&c.id, signals, drag, hints);
+                Some(with_share((c.build)(ctx, &mut bx), c.grow))
+            }
+            _ => None,
+        })
         .collect::<Vec<_>>();
     match bodies.len() {
         0 => None,
-        // The common case today: one container owns the region.
+        // One container owns the region: its own share already makes it fill the region, so
+        // there is nothing to wrap it in.
         1 => bodies.pop(),
         // Several containers share a region: stack them in the host's order (the order
-        // `reorder`/`move_container` maintain), each keeping its own body.
-        _ => Some(Box::new(bodies.into_iter().fold(
-            Flex::column().gap(8.0).grow(1.0),
-            |col, body| col.child_boxed(body),
-        ))),
+        // `reorder`/`move_container` maintain), each keeping its own body and its own share. The
+        // stack itself must be allowed to shrink to the region, or it takes its content's height
+        // and overflows before the shares are ever divided.
+        _ => {
+            let mut stack = Flex::column().gap(8.0).grow(1.0);
+            {
+                let layout = &mut stack.base_mut().style.layout;
+                layout.min_height = Some(heca_grid_ui::Length::Px(0.0));
+                layout.flex_shrink = Some(1.0);
+            }
+            // A rule between containers, so two of them read as two things rather than one long
+            // list. It takes no share: a `Separator` is a leaf with its own height, and `with_share`
+            // only touches the containers, so the rule keeps its natural 1px and the shares divide
+            // what is left. Its colour comes from the theme's border token, so it follows a reload.
+            let count = bodies.len();
+            Some(Box::new(bodies.into_iter().enumerate().fold(
+                stack,
+                |col, (i, body)| {
+                    let col = if i > 0 && i < count {
+                        col.child(Separator::horizontal())
+                    } else {
+                        col
+                    };
+                    col.child_boxed(body)
+                },
+            )))
+        }
     }
 }
 
@@ -1513,7 +1576,6 @@ fn build_sidebar_shell(
     border_width: f32,
     border_radius: f32,
     content: Option<WidgetModel>,
-    scroll: Option<Signal<f32>>,
 ) -> Flex {
     let inner_w = (region_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1528,28 +1590,18 @@ fn build_sidebar_shell(
         .gap(8.0)
         .background(shell_bg);
     if let Some(content) = content {
-        // The content sits in a real scroll viewport, so a workspace list longer than the sidebar
-        // scrolls instead of running off the bottom. The region drives itself — wheel, thumb, track
-        // click, click-and-hold — and needs nothing from the host but the pointer events every
-        // widget gets.
+        // Mounted directly: **the shell does not scroll** (F003/P011/T021).
         //
-        // **The offset lives in the store, not in the widget.** This tree is rebuilt whenever the
-        // chrome signature changes, and a pane's git status changing is enough to do it. A
-        // widget-local offset would snap the sidebar back to the top every time anything underneath
-        // it moved. `SharedChromeState` is where the design record puts scroll offsets, and the
-        // signal was already sitting there reserved for this.
-        let mut region = ScrollRegion::new();
-        if let Some(store) = scroll {
-            // Restore through `scroll_to`, which reports with `event: None` — so the listener below
-            // ignores it and a restore can never be mistaken for the user scrolling.
-            region.scroll_to(store.get_untracked());
-            region = region.on_scroll(move |s| {
-                if s.event.is_some() {
-                    store.set(s.offset_y);
-                }
-            });
-        }
-        body = body.child(region.child_boxed(content));
+        // Scrolling is per container. Each one nests its own scroll area and scrolls its own
+        // content, which is what makes two of them in a sidebar independent. A scroll viewport
+        // around the whole stack would defeat that twice over: it takes the wheel for the sidebar
+        // instead of the container under the cursor, and — because a viewport measures its content
+        // at its natural height, which is the whole point of one — it leaves the containers
+        // content-sized, so a fractional share has no height to divide and they bunch at the top.
+        //
+        // The shell's job is to give containers bounds. It hands them the region's height, they
+        // take their shares of it, and each scrolls inside what it got.
+        body = body.child_boxed(content);
     }
     Flex::column()
         .width(Length::Px(region_w))
@@ -3124,7 +3176,9 @@ pub(crate) fn build_chrome_root(
             &state.chrome_host,
             RegionId::LeftSidebar,
             &ctx,
-            &mut BuildCx::new(&mut signals, &mut drag_items, hint_targets),
+            &mut signals,
+            &mut drag_items,
+            hint_targets,
         );
         build_sidebar_shell(
             left_w,
@@ -3135,8 +3189,6 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
-            // The workspaces container's own offset, which outlives the tree.
-            Some(state.chrome_state.workspaces.scroll),
         )
     });
     let right_w = chrome.right_sidebar_width;
@@ -3145,7 +3197,9 @@ pub(crate) fn build_chrome_root(
             &state.chrome_host,
             RegionId::RightSidebar,
             &ctx,
-            &mut BuildCx::new(&mut signals, &mut drag_items, hint_targets),
+            &mut signals,
+            &mut drag_items,
+            hint_targets,
         );
         build_sidebar_shell(
             right_w,
@@ -3156,9 +3210,6 @@ pub(crate) fn build_chrome_root(
             border_width,
             border_radius,
             content,
-            // No container state owns a right-sidebar offset yet; the region still works, it just
-            // starts at the top when the tree is rebuilt.
-            None,
         )
     });
 
@@ -3493,6 +3544,139 @@ mod tests {
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::path::PathBuf;
 
+    /// A rule sits between containers, and takes no share of the height.
+    ///
+    /// It has to be a leaf with its natural height, or it would be handed a share of its own and the
+    /// containers would each lose height to a 1px line.
+    #[test]
+    fn a_rule_separates_containers_without_taking_a_share() {
+        use heca_grid_ui::LayoutEngine;
+        use heca_core::layout::Size as CoreSize;
+
+        let body = || -> WidgetModel { Box::new(Flex::column().height(Length::Px(40.0))) };
+        let mut stack = Flex::column().gap(8.0).grow(1.0);
+        {
+            let layout = &mut stack.base_mut().style.layout;
+            layout.min_height = Some(Length::Px(0.0));
+            layout.flex_shrink = Some(1.0);
+        }
+        // Two containers with a rule between them, as `build_region_content` assembles them.
+        stack.base_mut().children.push(with_share(body(), 1.0));
+        stack = stack.child(Separator::horizontal());
+        stack.base_mut().children.push(with_share(body(), 1.0));
+
+        let mut root = Flex::column().height(Length::Px(600.0)).child(stack);
+        LayoutEngine::new().compute(&mut root, CoreSize::new(300.0, 600.0));
+
+        let kids = &root.base().children[0].base().children;
+        assert_eq!(kids.len(), 3, "container, rule, container");
+        assert_eq!(kids[1].base().style.layout.flex_grow, 0.0, "the rule takes no share");
+        assert!(
+            kids[1].base().bounds.size.h < 10.0,
+            "the rule keeps its own thin height: {:?}",
+            kids[1].base().bounds.size.h,
+        );
+        // Within a pixel: an odd leftover after the rule and the gaps has to land somewhere, so
+        // equal shares of an odd number of pixels differ by one. Measured 292 / 1 / 291.
+        assert!(
+            (kids[0].base().bounds.size.h - kids[2].base().bounds.size.h).abs() <= 1.0,
+            "and the containers still share equally around it: {:?}",
+            kids.iter().map(|k| k.base().bounds.size.h).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Shares divide the region even when the content is taller than it.
+    ///
+    /// This is the part that looked done and was not. `flex_grow` distributes only *positive* free
+    /// space, and a container's content is routinely taller than a sidebar — so two containers
+    /// measured 1214px each inside a 600px body, overflowed the frame, and divided nothing. The fix
+    /// is a zero base size plus permission to shrink (CSS `flex: 1 1 0`; this vocabulary has no
+    /// `flex_basis`), which makes the free space the whole region.
+    ///
+    /// The numbers are asserted rather than the flags, because the flags were "right" while the
+    /// layout was wrong.
+    #[test]
+    fn shares_divide_the_region_even_with_content_taller_than_it() {
+        use heca_grid_ui::LayoutEngine;
+        use heca_core::layout::Size as CoreSize;
+
+        // A body far shorter than the content it holds, as a sidebar is.
+        let tall = || -> WidgetModel {
+            let mut inner = Flex::column();
+            for _ in 0..20 {
+                inner = inner.child(Flex::column().height(Length::Px(60.0)));
+            }
+            Box::new(heca_grid_ui::ScrollRegion::new().child(inner))
+        };
+
+        let mut stack = Flex::column().gap(8.0).grow(1.0);
+        {
+            let layout = &mut stack.base_mut().style.layout;
+            layout.min_height = Some(Length::Px(0.0));
+            layout.flex_shrink = Some(1.0);
+        }
+        for _ in 0..2 {
+            stack.base_mut().children.push(with_share(tall(), 1.0));
+        }
+        let mut body = Flex::column().height(Length::Px(600.0)).child(stack);
+        LayoutEngine::new().compute(&mut body, CoreSize::new(300.0, 600.0));
+
+        let stack = &body.base().children[0];
+        assert!(
+            stack.base().bounds.size.h <= 600.0,
+            "the stack fits the region instead of overflowing it: {:?}",
+            stack.base().bounds.size.h,
+        );
+        let heights: Vec<f64> = stack
+            .base()
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        assert_eq!(heights.len(), 2);
+        assert!(
+            (heights[0] - heights[1]).abs() < 1.0,
+            "equal shares are equal: {heights:?}",
+        );
+        assert!(
+            heights[0] > 250.0 && heights[0] < 300.0,
+            "each takes about half the 600px region, less the gap: {heights:?}",
+        );
+    }
+
+    /// A container's declared share reaches the widget, and saying nothing means an equal share.
+    ///
+    /// The share is a flex grow factor, so it is the region's **main axis** — height in a sidebar,
+    /// width in a bar — and one number covers both. What this pins is the wiring: the number on the
+    /// contribution has to land on the body that gets laid out, and it would be silently dropped if
+    /// anything rebuilt or rewrapped the body afterwards (F003/P011/T021).
+    ///
+    /// Whether two containers then *look* right side by side is layout, and the user judges that in
+    /// the app — a test asserting taffy divides 200px into 100 and 100 would be testing taffy.
+    #[test]
+    fn a_containers_declared_share_reaches_its_body() {
+        let body = || -> WidgetModel { Box::new(Flex::column()) };
+
+        // The trait default, which is what a provider that says nothing gets.
+        assert_eq!(
+            crate::providers::Provider::grow(&crate::providers::WorkspacesContainerProvider::new()),
+            1.0,
+            "saying nothing means one equal share",
+        );
+
+        assert_eq!(with_share(body(), 1.0).base().style.layout.flex_grow, 1.0);
+        assert_eq!(
+            with_share(body(), 2.0).base().style.layout.flex_grow,
+            2.0,
+            "twice the share of a 1.0 beside it",
+        );
+        assert_eq!(
+            with_share(body(), 0.0).base().style.layout.flex_grow,
+            0.0,
+            "content-sized: no share of the leftover",
+        );
+    }
+
     #[test]
     fn pick_keycap_projects_candidates() {
         let p1 = PaneId(1);
@@ -3729,12 +3913,7 @@ mod tests {
             theme,
             &emit,
         );
-        super::build_region_content(
-            &host,
-            super::RegionId::LeftSidebar,
-            &ctx,
-            &mut super::BuildCx::new(signals, drag, hints),
-        )
+        super::build_region_content(&host, super::RegionId::LeftSidebar, &ctx, signals, drag, hints)
     }
 
     #[test]
@@ -3771,7 +3950,6 @@ mod tests {
             1.0,
             12.0,
             content,
-            None,
         );
         assert_eq!(
             shell.base().children.len(),
@@ -3831,7 +4009,6 @@ mod tests {
             border_w,
             12.0,
             content,
-            None,
         );
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);

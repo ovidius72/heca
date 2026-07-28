@@ -163,9 +163,7 @@ pub struct WorkspacesContainerState {
     pub(crate) pending_pick: Signal<Option<PendingPick>>,
     /// Per-pane reactive mirror of canonical runtime metadata.
     pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
-    /// This container's **content** scroll offset (logical px) — scrolls when the
-    /// container has too many items. (The shell's dock-list scroll is separate.)
-    pub(crate) scroll: Signal<f32>,
+
     /// The sidebar-nav cursor selection while in `InputMode::SidebarNav`, projected
     /// from `AppState.sidebar_tree.current_item()`. `None` = not navigating. Drives
     /// the expanded sidebar's nav-cursor highlight, kept **distinct** from
@@ -194,7 +192,6 @@ impl WorkspacesContainerState {
             col_pick_candidates: signal(Vec::new()),
             pending_pick: signal(None),
             panes: signal(HashMap::new()),
-            scroll: signal(0.0),
             nav_selection: signal(None),
             // Matches the `[settings] pane_renamed_add_process_name` default (`true`);
             // `sync_chrome_state` sets the real value each sync.
@@ -223,17 +220,6 @@ impl WorkspacesContainerState {
     pub fn pane_show_cwd(&self) -> bool {
         self.pane_show_cwd.get_untracked()
     }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "reserved for future widget-owned container scrolling; covered by state tests today"
-        )
-    )]
-    pub fn scroll(&self) -> f32 {
-        self.scroll.get()
-    }
-
     /// Is workspace `ws_idx` collapsed? (Borrows — no clone.)
     pub fn is_ws_collapsed(&self, ws_idx: usize) -> bool {
         self.collapsed_ws.with(|s| s.contains(&ws_idx))
@@ -348,21 +334,6 @@ impl WorkspacesContainerState {
             return;
         }
         self.pane_show_cwd.set(on);
-    }
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "reserved for future widget-owned container scrolling; covered by state tests today"
-        )
-    )]
-    pub fn set_scroll(&self, offset: f32) {
-        if (self.scroll.get_untracked() - offset).abs() <= f32::EPSILON {
-            return;
-        }
-        self.scroll.set(offset);
-        self.events
-            .emit(ChromeEvent::WorkspacesScrollChanged { offset });
     }
     pub fn set_pick_candidates(&self, candidates: Vec<(char, PaneId)>) {
         if self.pick_candidates.get_untracked() == candidates {
@@ -730,9 +701,51 @@ pub struct SharedChromeState {
     /// The (currently sole) mounted container's state. Becomes a container-id-keyed
     /// registry when a second container (Docker/agents/…) is added.
     pub workspaces: WorkspacesContainerState,
+    /// Scroll offsets for containers' **own** nested scroll areas, keyed by the **mount id**
+    /// (F003/P011/T021).
+    ///
+    /// Per mount, not per container kind: the same container can be seated twice — two of them in
+    /// one region, or one in each — and each mount scrolls its own content. Keying this by kind is
+    /// what made two mounts scroll together, which is invisible until there are two.
+    ///
+    /// Created on first ask and kept here so an offset outlives the retained tree; a rebuild
+    /// (triggered by something as small as a pane's git status changing) restores rather than
+    /// resets. Shared, so a clone of this store aliases the same signals.
+    container_scroll: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<f32>>>>,
 }
 
 impl SharedChromeState {
+    /// This mount's own scroll offset signal, created on first ask.
+    ///
+    /// Keyed by **mount id**, so two mounts of the same container each get their own and scroll
+    /// independently. The signal outlives the retained tree, so a rebuild restores the position
+    /// instead of snapping to the top.
+    pub fn container_scroll(&self, container: &str) -> Signal<f32> {
+        if let Some(existing) = self.container_scroll.borrow().get(container) {
+            return *existing;
+        }
+        let created = signal(0.0);
+        self.container_scroll
+            .borrow_mut()
+            .insert(container.to_string(), created);
+        created
+    }
+
+    /// Record a mount's scroll offset, emitting [`ChromeEvent::ContainerScrollChanged`] when it
+    /// really moved. The epsilon guard is what stops a restore, or a wheel notch that changed
+    /// nothing, from emitting.
+    pub fn set_container_scroll(&self, container: &str, offset: f32) {
+        let sig = self.container_scroll(container);
+        if (sig.get_untracked() - offset).abs() <= f32::EPSILON {
+            return;
+        }
+        sig.set(offset);
+        self.events.emit(ChromeEvent::ContainerScrollChanged {
+            container: container.to_string(),
+            offset,
+        });
+    }
+
     /// Construct the store with initial region modes + widths (mirroring the
     /// `SidebarState` defaults during migration). Signals are created here — requires
     /// the reactive runtime, available on the UI thread at `AppState` construction.
@@ -750,6 +763,7 @@ impl SharedChromeState {
             left: RegionState::new(mode(left_visible), left_width),
             right: RegionState::new(mode(right_visible), right_width),
             workspaces: WorkspacesContainerState::new(events),
+            container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
         }
     }
 
@@ -942,23 +956,53 @@ mod tests {
         );
     }
 
+    /// A mount's scroll offset round-trips and emits, keyed by its mount id.
     #[test]
-    fn scroll_round_trips() {
+    fn a_mounts_scroll_round_trips() {
         let s = state();
-        assert_eq!(s.workspaces.scroll(), 0.0);
-        s.workspaces.set_scroll(42.5);
-        assert_eq!(s.workspaces.scroll(), 42.5);
+        assert_eq!(s.container_scroll("workspaces").get_untracked(), 0.0);
+        s.set_container_scroll("workspaces", 42.5);
+        assert_eq!(s.container_scroll("workspaces").get_untracked(), 42.5);
+        // Asking again is the same signal, not a fresh one — otherwise a rebuild would reset it.
+        assert_eq!(s.container_scroll("workspaces").get_untracked(), 42.5);
+    }
+
+    /// Every **placement** owns its own scroll offset.
+    ///
+    /// Scrolling is per container: each nests its own scroll area, and the shell does not scroll at
+    /// all — it gives containers bounds and they take their shares of them (F003/P011/T021). So the
+    /// offsets that exist are per placement, and placing one container twice must not make the two
+    /// move together, which is invisible until there are two of something.
+    ///
+    /// Two placements show the same content, because that comes from the shared store. Their scroll
+    /// positions are their own, because those belong to the placement.
+    #[test]
+    fn every_placement_owns_its_own_scroll_offset() {
+        let s = state();
+
+        s.set_container_scroll("workspaces.testbed.top", 30.0);
+        assert_eq!(
+            s.container_scroll("workspaces.testbed.bottom").get_untracked(),
+            0.0,
+            "two placements of one container scroll independently",
+        );
+        assert_eq!(
+            s.container_scroll("workspaces").get_untracked(),
+            0.0,
+            "and a third placement elsewhere is untouched",
+        );
+        assert_eq!(s.container_scroll("workspaces.testbed.top").get_untracked(), 30.0);
     }
 
     #[test]
     fn clone_is_a_shallow_alias_not_a_snapshot() {
         let a = state();
         let b = a.clone();
-        a.workspaces.set_scroll(99.0);
+        a.set_container_scroll("workspaces", 99.0);
         assert_eq!(
-            b.workspaces.scroll(),
+            b.container_scroll("workspaces").get_untracked(),
             99.0,
-            "clone must alias the same signal store"
+            "clone must alias the same signal store — including the per-mount offsets"
         );
         b.workspaces.toggle_ws_collapsed(3);
         assert!(

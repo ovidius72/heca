@@ -369,13 +369,22 @@ pub struct Layout {
     /// [`margin_left`](Self::margin_left) / [`margin_right`](Self::margin_right)
     /// / [`margin_top`](Self::margin_top) / [`margin_bottom`](Self::margin_bottom).
     pub margin: f32,
-    /// Left margin override; `None` ⇒ use [`margin`](Self::margin).
+    /// Horizontal (left+right) margin override; `None` ⇒ use [`margin`](Self::margin).
+    ///
+    /// The axis shorthands exist for parity with [`padding_x`](Self::padding_x) /
+    /// [`padding_y`](Self::padding_y): without them a **described** tree could set padding by axis
+    /// but had to name both sides for a margin. A `Separator` wanting to breathe on one axis is the
+    /// case that found it.
+    pub margin_x: Option<f32>,
+    /// Vertical (top+bottom) margin override; `None` ⇒ use [`margin`](Self::margin).
+    pub margin_y: Option<f32>,
+    /// Left margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
     pub margin_left: Option<f32>,
-    /// Right margin override; `None` ⇒ use [`margin`](Self::margin).
+    /// Right margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
     pub margin_right: Option<f32>,
-    /// Top margin override; `None` ⇒ use [`margin`](Self::margin).
+    /// Top margin override; `None` ⇒ [`margin_y`](Self::margin_y), then [`margin`](Self::margin).
     pub margin_top: Option<f32>,
-    /// Bottom margin override; `None` ⇒ use [`margin`](Self::margin).
+    /// Bottom margin override; `None` ⇒ [`margin_y`](Self::margin_y), then [`margin`](Self::margin).
     pub margin_bottom: Option<f32>,
     /// Uniform inner padding (all sides), unless overridden per axis by
     /// [`padding_x`](Self::padding_x) / [`padding_y`](Self::padding_y).
@@ -484,6 +493,8 @@ impl Default for Layout {
             justify_self: None,
             gap: 0.0,
             margin: 0.0,
+            margin_x: None,
+            margin_y: None,
             margin_left: None,
             margin_right: None,
             margin_top: None,
@@ -572,12 +583,15 @@ impl Layout {
                 height: length(self.gap),
             },
             margin: {
-                let m = self.margin;
+                // Most specific wins: a side, else its axis, else the uniform value — the same
+                // cascade padding has.
+                let mx = self.margin_x.unwrap_or(self.margin);
+                let my = self.margin_y.unwrap_or(self.margin);
                 Rect {
-                    left: length(self.margin_left.unwrap_or(m)),
-                    right: length(self.margin_right.unwrap_or(m)),
-                    top: length(self.margin_top.unwrap_or(m)),
-                    bottom: length(self.margin_bottom.unwrap_or(m)),
+                    left: length(self.margin_left.unwrap_or(mx)),
+                    right: length(self.margin_right.unwrap_or(mx)),
+                    top: length(self.margin_top.unwrap_or(my)),
+                    bottom: length(self.margin_bottom.unwrap_or(my)),
                 }
             },
             // Most specific wins: a side, else its axis, else the uniform value — the cascade
