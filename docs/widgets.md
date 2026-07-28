@@ -1030,6 +1030,77 @@ content shifted past the edge with no scrollbar to bring it back.
 - **Current scope**: two-axis, nested-region wheel composition. Future: a
   dedicated scrollbar color token and PageUp/PageDown as app actions.
 
+**Keyboard scrolling — semantic, not keys.** `ScrollRegion` acts on eight
+`WidgetIntent` variants: `ScrollPageUp` / `ScrollPageDown` / `ScrollToTop` /
+`ScrollToBottom` and the four horizontal ones. The host says *one page on*; the
+region decides what a page is (0.9 of its viewport, so the line you were reading
+stays on screen) and where the end is, because it is the only thing that knows its
+viewport and its content. Delivering `PageUp` as a *key* instead would need
+`GridKey` variants and would put paging arithmetic in the app.
+
+A region **declines** (`Handled::No`) any axis it cannot scroll — the axis is off,
+or the content fits — so a nested region or the host still gets a turn. Consuming
+instead would make the key do nothing at all, silently. Handled after the children,
+like the wheel, so the innermost scrollable region wins.
+
+`keyboard_target(Signal<bool>)` says whether *this* region is the keyboard's
+target. Unset means yes, so a single-region app needs no wiring; a host with
+several regions in one tree binds it on each and depends on no default. That is how
+"scroll the focused surface" works without the host knowing where any region sits
+in the tree.
+
+### Scrolling is composed — nest a scroll area where the scrolling belongs
+
+A scroll area **is a container**. Nest one wherever content should scroll, including
+inside another container. Nothing hands the capability down and no layer owns it:
+
+- A container that needs its own scrolling nests its own `ScrollRegion`, with its
+  own offset. Two containers in one sidebar scroll independently because each has
+  one — not because anything relocated a shared viewport.
+- A shell that holds containers **does not** wrap them in a viewport. A viewport
+  measures its content at natural height — that is the point of one — so wrapping
+  the stack leaves the containers content-sized, and a fractional share then has no
+  height to divide. The shell's job is to give containers bounds.
+- Nesting resolves which one acts: the innermost that *can* move on that axis, for
+  the wheel and the keyboard alike.
+
+**An offset belongs to whatever nests the scroll area, per placement.** Keyed by the
+container's mount id, so the same container placed twice keeps two positions while
+both show the same content — the split a component reused twice has. Keying an
+offset by container *kind* makes two placements scroll together, which is invisible
+until there are two.
+
+### A container's share of its region
+
+A container declares its share as a **flex grow factor**, defaulting to `1.0`:
+
+| Declared | Result |
+|---|---|
+| nothing | an equal share — alone it takes the whole region, two take half each |
+| `2.0` beside `1.0` | two thirds |
+| `0.0` | content-sized: no share of the leftover |
+
+**Fractional, never fixed.** A share survives a window resize; a pixel height does
+not. It is `flex_grow` because that is exactly what it is — the widget library has
+had it all along, so there is no second sizing language to learn.
+
+**Share of the region's MAIN AXIS, not of its height.** `flex_grow` is main-axis
+relative, so one number is the height in a sidebar (a column) and the width in a bar
+(a row), with nothing to add when bar regions arrive.
+
+The *region* applies the share, not the container: a share only means something
+relative to siblings, which a container cannot see and should not have to.
+
+> **Implementation note, and a debt.** `flex_grow` distributes only *positive* free
+> space, and container content is routinely taller than a sidebar — measured, two
+> containers took **1214px each inside a 600px body** and divided nothing. A share
+> therefore also needs a **zero base size and permission to shrink** (CSS
+> `flex: 1 1 0`); then the free space is the whole region, and the two measure 296px
+> each. `Layout` has no `flex_basis`, so that zero is written as a height today.
+> **Do not copy that into new code** — expressing a proportion by writing a fixed
+> measure is wrong, and F004/P006/T010 exists to give the library one `share(n)`
+> setter with the trio behind it.
+
 ### Using one — the whole surface
 
 **A caller implements nothing.** The wheel, the thumb drag, the click in the track and the
