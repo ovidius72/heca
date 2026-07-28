@@ -20,7 +20,7 @@
 //! container that forwards a subset fails here rather than in the app, months later.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::widgets::{Dialog, Overlay, ScrollRegion};
+use heca_grid_ui::widgets::{Dialog, FocusScope, Overlay, ScrollRegion};
 use heca_grid_ui::{Base, Component, Event, Handled, LayoutEngine, Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -144,6 +144,25 @@ fn an_overlay_delivers_the_whole_pointer_set_to_its_panel() {
     let (probe, seen, bounds) = Probe::new();
     let overlay = Overlay::new().panel(probe).open(true);
     assert_full_set("Overlay", Box::new(overlay), &seen, &bounds);
+}
+
+/// A [`FocusScope`] claims `routes_own_subtree` so it can gate **keys** on focus — which puts it
+/// on the hook for the pointer, and the case that matters is the **unfocused** one: a click on a
+/// dock that does not have focus is exactly how you give it focus, and a scroll region inside it
+/// must still get its wheel and its release.
+#[test]
+fn an_unfocused_focus_scope_delivers_the_whole_pointer_set() {
+    let (probe, seen, bounds) = Probe::new();
+    let scope = FocusScope::new(probe).focus(signal(false));
+    assert_full_set("FocusScope (unfocused)", Box::new(scope), &seen, &bounds);
+}
+
+/// And focused, obviously — same wrapper, same duty.
+#[test]
+fn a_focused_focus_scope_delivers_the_whole_pointer_set() {
+    let (probe, seen, bounds) = Probe::new();
+    let scope = FocusScope::new(probe).focus(signal(true));
+    assert_full_set("FocusScope (focused)", Box::new(scope), &seen, &bounds);
 }
 
 /// A region inside a region: the outer one must not eat what the inner one needs.

@@ -983,10 +983,12 @@ argument is what makes the bare binding legal — an action with a *required* ar
 to a key at all.
 
 **Focus is visible, and the ring is the same one every control draws.** The host wraps each mounted
-container in a `FocusRing` (the generic grid-ui wrapper) bound to that placement's
-`keyboard_target` signal — the **same signal** the container's own `ScrollRegion` binds as its
-keyboard target. So the ring and the keys cannot disagree about which dock has focus, and neither has
-to be told where the container sits in the tree.
+container in a `FocusScope` (the generic grid-ui wrapper) bound to that placement's
+`keyboard_target` signal — which is also the **gate**: keys and widget intents enter a container's
+subtree only while it holds focus, and an unfocused one declines rather than consuming, so the host
+broadcasts one intent and the focused container answers. It is the **same signal** the container's own
+`ScrollRegion` binds as its keyboard target, so the ring and the keys cannot disagree about which dock
+has focus, and neither has to be told where the container sits in the tree.
 
 **What a provider says about it.** `Provider::keyboard_navigable()` (default `false`) declares whether
 a dock does anything with focus *beyond scrolling* — its own cursor, its own selection.

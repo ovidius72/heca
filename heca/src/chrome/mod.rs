@@ -161,7 +161,7 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    BadgeButton, Flex, FocusRing, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
+    BadgeButton, Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
     ScrollBar, Separator, Surface, Tag,
     Tooltip,
     TooltipSide,
@@ -1551,7 +1551,7 @@ fn focus_and_pick(
     if share > 0.0 {
         pass_box_down(&mut picked);
     }
-    Box::new(FocusRing::new(picked).focus(ctx.state().container_keyboard_target(container)))
+    Box::new(FocusScope::new(picked).focus(ctx.state().container_keyboard_target(container)))
 }
 
 /// Build the body of a chrome **region** from whatever the [`ChromeHost`] has seated in
@@ -3806,7 +3806,7 @@ mod tests {
     fn the_focus_wrappers_do_not_disturb_the_shares() {
         use heca_core::layout::Size as CoreSize;
         use heca_grid_ui::LayoutEngine;
-        use heca_grid_ui::widgets::{FocusRing, KeyHint};
+        use heca_grid_ui::widgets::{FocusScope, KeyHint};
 
         // A body far taller than the region it is given, as a real dock is.
         let tall = || -> WidgetModel {
@@ -3822,7 +3822,7 @@ mod tests {
             pass_box_down(body.as_mut());
             let mut picked = KeyHint::new_boxed(body);
             pass_box_down(&mut picked);
-            Box::new(FocusRing::new(picked).focus(signal(true)))
+            Box::new(FocusScope::new(picked).focus(signal(true)))
         };
 
         let mut stack = Flex::column().gap(8.0).grow(1.0);
@@ -3873,12 +3873,12 @@ mod tests {
     fn a_content_sized_container_keeps_its_height_through_the_wrappers() {
         use heca_core::layout::Size as CoreSize;
         use heca_grid_ui::LayoutEngine;
-        use heca_grid_ui::widgets::{FocusRing, KeyHint};
+        use heca_grid_ui::widgets::{FocusScope, KeyHint};
 
         let body: WidgetModel = Box::new(Flex::column().height(Length::Px(120.0)));
         // What `focus_and_pick` does with `share = 0.0`: wrap, and touch no layout.
         let wrapped: WidgetModel =
-            Box::new(FocusRing::new(KeyHint::new_boxed(body)).focus(signal(false)));
+            Box::new(FocusScope::new(KeyHint::new_boxed(body)).focus(signal(false)));
         let mut region = Flex::column()
             .height(Length::Px(600.0))
             .child_boxed(with_share(wrapped, 0.0));

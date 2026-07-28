@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-28T14:13:47.635Z
+**Last updated:** 2026-07-28T14:31:20.499Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -107,7 +107,7 @@ Status: 🚧 `in-progress`
 - 📋 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (0/5 tasks)
 - 📋 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
-- 📋 **5de43f15-8304-4f64-870f-8514d534d5a5** P085 — Components declare their actions; chrome focus is the mode (0/9 tasks)
+- 🚧 **5de43f15-8304-4f64-870f-8514d534d5a5** P085 — Components declare their actions; chrome focus is the mode (0/9 tasks)
 
 ### 🚧 cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -930,11 +930,11 @@ Status: 📋 `planned`
 
 **Tasks:** 0/5
 
-### 📋 5de43f15-8304-4f64-870f-8514d534d5a5 — P085 — Components declare their actions; chrome focus is the mode
+### 🚧 5de43f15-8304-4f64-870f-8514d534d5a5 — P085 — Components declare their actions; chrome focus is the mode
 
 A focused container receives the keyboard directly and runs actions IT declared — no generic verb set, no bespoke sidebar mode. Provider grows kind()/actions()/perform(); a row's nav_key is its one identity (cursor + right-click + drag); bindings live in [keys.<kind>], live only while focused. Retires InputMode::SidebarNav and the 11 sidebar_* built-ins.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Tasks:** 0/9
 

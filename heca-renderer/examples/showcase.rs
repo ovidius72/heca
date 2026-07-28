@@ -1947,7 +1947,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 ),
                         ),
                 );
-            // FocusRing: the generic **keyboard-focus outline** for a whole subtree, not a control.
+            // FocusScope: the generic **keyboard-focus outline** for a whole subtree, not a control.
             // A control draws its own ring because it owns its focus; an *area* the keyboard is aimed
             // at (a sidebar dock the scroll keys act on) has no such owner, so the host wraps it and
             // flips one signal. Transparent like KeyHint: it hugs the child and routes everything
@@ -1965,13 +1965,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .gap(24.0)
                         .align(Align::Center)
                         .child(
-                            FocusRing::new(
+                            FocusScope::new(
                                 Card::new("dock A").child(Label::new("has keyboard focus")),
                             )
                             .focus(signal(true)),
                         )
                         .child(
-                            FocusRing::new(Card::new("dock B").child(Label::new("does not")))
+                            FocusScope::new(Card::new("dock B").child(Label::new("does not")))
                                 .focus(signal(false)),
                         ),
                 );

@@ -41,7 +41,7 @@
       "priority": 1,
       "shortName": "focusscope-a-container-s-subtr",
       "title": "FocusScope: a container's subtree takes keyboard events only while focused",
-      "status": "planned",
+      "status": "in-progress",
       "description": "# What\n\nMake the wrapper the host already puts around every mounted container the **keyboard gate**: pointer\nevents always enter; `Event::Key` and `Event::Widget` enter only while that container holds chrome\nfocus. This is what makes \"the keys go to the focused component\" implementable at all — without it the\nhost would have to know where each container sits in the retained tree.\n\n# Current state\n\n`FocusRing` (`heca-grid-ui/src/widgets/focus_ring.rs`, landed F003/P011/T020) wraps every container in\n`focus_and_pick` (`heca/src/chrome/mod.rs`) and is bound to that mount's `keyboard_target` signal\n(`SharedChromeState::container_keyboard_target`). It only **paints** — it does not gate anything.\n\n`ScrollRegion::keyboard_target` (`heca-grid-ui/src/widgets/scroll_region.rs:476`) gates scroll intents\nper region and stays useful for several scroll areas *inside* one container, but it is the wrong place\nfor the container-level gate (every future widget would need its own copy).\n\n# The shape\n\nThe routing contract is in `heca-grid-ui/src/component.rs:682` (`dispatch`): `on_event_capture` first,\nthen the child walk unless `routes_own_subtree()`, then `on_event`. A gate that returns\n`Handled::Yes` would stop the **sibling** walk, so the focused container would never be reached. The\nexpressible form is to own the walk:\n\n```rust\nfn routes_own_subtree(&self) -> bool { true }\nfn on_event_capture(&mut self, ev: &Event) -> Handled {\n    if matches!(ev, Event::Key { .. } | Event::Widget(..)) && !self.focused.get_untracked() {\n        return Handled::No;              // not mine — my siblings still get their turn\n    }\n    route_event(&mut self.base.children, ev)\n}\n```\n\n`route_event` is `pub(crate)`, which is another reason the gate belongs in the library beside the\nwrapper rather than app-side.\n\n# Steps\n\n1. Add the gate to `FocusRing` (renaming it — `FocusScope`? — is a judgement call: the ring is the\n   visible half of the same fact, so one widget with two jobs is honest, but the name should say\n   scope). Update the rustdoc, `docs/widgets.md` and the showcase entry.\n2. `tests/pointer_delivery.rs` **requires** anything claiming `routes_own_subtree` to still deliver\n   every pointer kind (press/move/release/wheel) to its children — add the case, and make it pass for\n   both focused and unfocused, because a click on an unfocused dock must still work (and should focus\n   it: see the mouse task).\n3. Tests: a widget intent reaches the focused scope's child and not an unfocused sibling's; an\n   unfocused scope does not consume it (the sibling after it still gets it); pointer events enter\n   regardless of focus.\n\n# Acceptance\n\n- One gate, in the library, beside the ring it shares a signal with.\n- An unfocused container is inert to keys and fully alive to the mouse.\n- Whole workspace green, clippy 0 warnings.",
       "notes": "",
       "statusLog": [],
@@ -50,10 +50,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-28T14:31:20.485Z",
       "completedAt": "",
       "createdAt": "2026-07-28T12:21:49.248Z",
-      "updatedAt": "2026-07-28T12:21:49.248Z"
+      "updatedAt": "2026-07-28T14:31:20.485Z"
     },
     {
       "id": "3752b13d-8b2f-48a1-98c9-95408f78c0f7",
@@ -233,7 +233,7 @@
     }
   ],
   "createdAt": "2026-07-28T12:21:31.986Z",
-  "updatedAt": "2026-07-28T12:32:34.023Z",
+  "updatedAt": "2026-07-28T14:31:20.485Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

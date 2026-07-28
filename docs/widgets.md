@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusRing`](#focusring)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
@@ -492,7 +492,7 @@ a run's vertex count.
 | Can I turn it off? | Yes — `[appearance] show_focus_border = false` (config override → theme `show_focus_border` token, default `true`); live-reloads with `prefix+Shift+r`. |
 | How thick / what color? | `focus_border_width` (`[appearance]`, default 1.5 — independent of `border_width` so the ring survives borders-off) and the `focus_ring` theme token (unset ⇒ per-tone derivation via `effective_focus_ring()` / `focus_ring_tone()`). |
 | What does it wrap? | The **control**, not its label: `Checkbox` rings its box only; `Toggle` its track; list rows (`Row`/`Item`/`Choice`) ring their row as the selectable unit. |
-| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusRing`](#focusring) and drive it from a host signal. A control owns its focus so it draws its own ring; an area the keyboard is *aimed* at (a sidebar dock the scroll keys act on) has no owner in the tree — only the host knows which subtree holds it. Same outline, same theme tokens. |
+| What if the focused thing is an **area**, not a control? | Wrap it in [`FocusScope`](#focusscope) and drive it from a host signal — it gates the subtree's keys on that focus as well as drawing the ring. A control owns its focus so it draws its own ring; an area the keyboard is *aimed* at (a sidebar dock the scroll keys act on) has no owner in the tree — only the host knows which subtree holds it. Same outline, same theme tokens. |
 
 ### `Color`
 
@@ -1052,7 +1052,7 @@ in the tree.
 
 **In heca that signal *is* chrome keyboard focus.** Every mounted container binds it to
 "am I the focused dock" (`StateView::container_keyboard_target`, keyed by mount id), and
-the same signal drives the [`FocusRing`](#focusring) the host wraps the container in — so
+the same signal drives the [`FocusScope`](#focusscope) the host wraps the container in — so
 what the ring shows and what the scroll keys reach cannot disagree. `focus_dock` moves it.
 
 ### Scrolling is composed — nest a scroll area where the scrolling belongs
@@ -2571,22 +2571,37 @@ paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a
 **Plugins** never call this directly — a plugin widget with an `on_press` intent is
 auto-hintable and the host stamps the keycap for it.
 
-### FocusRing
+### FocusScope
 
-A **generic** transparent wrapper that draws the theme's keyboard-focus outline around its child
-while a host-owned `Signal<bool>` is `true`.
+A **generic** transparent wrapper that makes its child subtree a **keyboard focus scope**: keys enter
+only while it holds focus, and it outlines itself while it does. Both from one host-owned
+`Signal<bool>`.
 
-Every focusable *control* already rings itself, because it owns its focus. `FocusRing` is for the
-other case: when the thing holding keyboard focus is **a whole area** — a sidebar dock the scroll
-keys act on, a panel a mode is aimed at — no single widget in the tree owns that focus, so no widget
-can draw it. The host does, by flipping one signal (read-via-signals / write-via-actions), exactly as
-it drives [`KeyHint`](#keyhint).
+Every focusable *control* already rings itself and answers for its own keys, because it owns its
+focus. `FocusScope` is for the other case: when the thing holding keyboard focus is **a whole area** —
+a sidebar dock the scroll keys act on, a panel a mode is aimed at — no single widget in the tree owns
+that focus, so none can answer for it. The host does, by flipping one signal (read-via-signals /
+write-via-actions), exactly as it drives [`KeyHint`](#keyhint).
 
-Transparent like `KeyHint`: not focusable itself, hugs its child, routes events / focus / drag /
-ticks straight through, and only *adds paint*. The outline appears and disappears **in place** — no
-tree rebuild.
+It adds exactly two things:
 
-- **Construct**: `FocusRing::new(child)`, or `FocusRing::new_boxed(Box<dyn Component>)` for a
+1. **The gate.** `Event::Key` and `Event::Widget` enter the subtree only while the scope holds focus.
+   An unfocused scope neither reacts nor **consumes**: it declines, so the next sibling — the scope
+   that does hold focus — still gets its turn. That is what lets a host broadcast one semantic intent
+   (say `WidgetIntent::ScrollPageDown`) into a tree of scopes and have the right one answer, without
+   knowing where any of them sits. Consuming instead would mean the first scope in a region silently
+   ate everything.
+2. **The outline**, in place — no tree rebuild.
+
+**The pointer is never gated.** Click, drag, hover and wheel reach an unfocused scope exactly as
+before: the mouse carries its own target, so it needs no focus to say where it meant — and a click on
+an unfocused dock is how you focus it. (`tests/pointer_delivery.rs` holds this to the whole pointer
+set, focused and unfocused.)
+
+The two halves share the signal on purpose: a ring that says "the keys come here" while the keys go
+elsewhere is worse than no ring.
+
+- **Construct**: `FocusScope::new(child)`, or `FocusScope::new_boxed(Box<dyn Component>)` for a
   dynamically built subtree (a `realize`d tree, a provider's render seam).
 - **Builders**:
   - `.focus(Signal<bool>)` — the host-owned focus state. **Host-only** (a live signal, which static
@@ -2596,6 +2611,9 @@ tree rebuild.
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
 - **Accessors**: `.focus_signal() -> Signal<bool>`.
+- **Routing**: it claims `routes_own_subtree` — the gate is per event *kind*, which the routing hooks
+  cannot express otherwise (swallowing would stop the walk at this node and strand the focused
+  sibling). That puts it on the hook for delivering the whole pointer set to its child, which it does.
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -2604,13 +2622,13 @@ tree rebuild.
 ```rust
 // The host owns the signal; an action moves focus and the ring follows, with no rebuild.
 let focused = signal(false);
-let framed = FocusRing::new(my_container).focus(focused);
+let framed = FocusScope::new(my_container).focus(focused);
 // …later, from an action:
 focused.set(true);
 ```
 
 Declaratively there is nothing to author: the whole widget is a live host signal, so a described
-`FocusRing` would be a dead frame (the same reason [`ScrollBar`](#scrollbar) is host-only). A plugin
+`FocusScope` would be a dead frame (the same reason [`ScrollBar`](#scrollbar) is host-only). A plugin
 that wants its container to show focus gets it for free — **heca wraps every mounted container
 itself**, together with its dock-pick keycap, and drives the ring from the same signal the
 container's scroll area binds as its keyboard target. See
