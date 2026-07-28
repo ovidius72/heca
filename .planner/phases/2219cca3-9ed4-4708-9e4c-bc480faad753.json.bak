@@ -1,10 +1,11 @@
 {
   "id": "2219cca3-9ed4-4708-9e4c-bc480faad753",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 18,
+  "number": 80,
+  "shortId": "6TMUZ",
+  "priority": 18,
   "slug": "plugin-10-keybinding-command-palette-integration-for-contributed-actions",
   "title": "plugin-10: Keybinding + command-palette integration for contributed actions",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,194 +22,137 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "dcda3d13-0225-42e5-b5bf-d39d4896d580",
-    "2d578290-8e14-4e6b-ad88-7dc398790859",
-    "58a4843a-f15c-4313-86a4-e694f82f8921",
-    "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
-    "fcefde68-ac0e-425d-9ac8-53f3ffa17e49"
+    "c9937902-a2bd-4ed3-8115-551bf87a7396",
+    "3d8841ae-3adc-4016-a83d-dec93a4c942b",
+    "760365ea-80cb-4b5c-99de-ffe1b63f8eb3",
+    "23d2e8b8-e251-4ae5-9f74-cd28ae96ff4b",
+    "d19bdbe7-a355-4c64-923e-d3f48af6db19"
   ],
   "tasks": [
     {
-      "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 1,
-      "shortName": "read-default-binding",
-      "title": "Offer ActionMeta.default_binding to the keymap on registration",
-      "status": "planned",
-      "description": "`ActionMeta` already carries `default_binding` (heca/src/actions.rs) and nothing reads it, so registering an action never makes a key work. Read it at `register_dynamic` time and offer it to the keymap. Never hardcode — it goes through `KeymapRegistry` like everything else.",
+      "id": "c9937902-a2bd-4ed3-8115-551bf87a7396",
+      "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
+      "number": 274,
+      "shortId": "MV7N5",
+      "priority": 1,
+      "shortName": "realize-coverage",
+      "title": "viewnode-task-1: Complete realize coverage",
+      "status": "canceled",
+      "description": "Complete `realize` coverage in `heca/src/chrome/realize.rs`. Missing `WidgetKind` arms: `Select`, `Tabs`, `Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast` (was `plugin-task-ui-9`). Each arm: build the heca-grid-ui widget from `ViewNode` props resolved against `Theme`, wire events to `Intent`s, recurse children, attach via `.child(...)` (or `*_boxed` setters for body subtrees).\n\nCurrent state: `realize.rs` covers the basic containers + leaf widgets but these structured-prop widgets still lack a `realize` arm — they cannot be authored declaratively via `ViewNode` (plugins/RPC/modal bodies) yet.\n\nBehaviors to preserve: existing arms unchanged; `WidgetKind` closed vocabulary; props are semantic (`ViewVariant`/`ViewSize`/`ViewAlign` + Glyph/color names) resolved by the host; `Intent`-based events stay serializable. Add showcase coverage + `docs/widgets.md` + rustdoc for each new arm.",
       "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
+      "statusLog": [
         {
-          "id": "read-default-binding-c1",
-          "title": "Read default_binding at registration",
-          "checked": false
-        },
-        {
-          "id": "read-default-binding-c2",
-          "title": "Route through KeymapRegistry, never hardcoded",
-          "checked": false
-        },
-        {
-          "id": "read-default-binding-c3",
-          "title": "Test: a registered action's default key fires it",
-          "checked": false
+          "id": "c9937902-a2bd-4ed3-8115-551bf87a7396-check-001-in-progress-canceled",
+          "date": "2026-07-13T20:48:19.980Z",
+          "fromStatus": "in-progress",
+          "toStatus": "canceled",
+          "title": "SUPERSEDED by phase `viewnode-choice` (1df9c36c, 8 tasks: choice-1..8) — created 2026-07-13 with the user.",
+          "description": "SUPERSEDED by phase `viewnode-choice` (1df9c36c, 8 tasks: choice-1..8) — created 2026-07-13 with the user.\n\nThis task assumed the 8 missing kinds only needed *structured props*. Investigation showed that is wrong: they split into three different gaps, and the option-shaped ones need a **widget refactor**, not a prop. `Select` (`select.rs:77`) and `Tabs` (`tabs.rs:51`) are **self-contained** — they hand-draw their options/segments and hit-test by arithmetic, with no child components — so they violate the standing composition rule and must be refactored the way `Button` was (`07d4c1a`, PR #237).\n\nThe user also chose a better model than a `props[\"options\"]` string list: an option is a **node with a value and arbitrary content**, and options are **children** — a new `Choice` primitive (`<option value=…>` / SwiftUI `.tag()`), reused by `Select`, `Tabs`, and later `ContextMenu`/`CommandPalette`. `Choice` and `Item` coexist (documented guidance in choice-8).\n\nAll of this task's scope is carried by the new phase: `Select`/`Tabs` (choice-2/3/4), `ItemGroup`/`MarkerGroup` (choice-5), `Grid` + `PropValue::List` (choice-6), `DockFrame`/`Toast` + named slots (choice-7), `ScrollBar` documented host-only + a coverage guard test (choice-8)."
         }
       ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-13T20:34:57.403Z",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-13T15:30:01.843Z",
+      "updatedAt": "2026-07-13T20:48:19.980Z"
     },
     {
-      "id": "2d578290-8e14-4e6b-ad88-7dc398790859",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 2,
-      "shortName": "bind-any-action-by-name",
-      "title": "Let config bind ANY action by name, contributed ones included",
-      "status": "planned",
-      "description": "keybindings.default.toml and the user's keybindings only speak to built-in `WmAction`s today. The registry is already keyed by name, so this is a lookup, not a new mechanism. Same syntax as a built-in — a user should not need to know whether an action is built in or contributed.",
+      "id": "3d8841ae-3adc-4016-a83d-dec93a4c942b",
+      "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
+      "number": 275,
+      "shortId": "HET4A",
+      "priority": 2,
+      "shortName": "compose-leaf-widgets",
+      "title": "viewnode-task-2: Compose leaf widgets (Button first)",
+      "status": "done",
+      "description": "Compose the leaf widgets so content = child `Component`s, not hand-drawn in `paint`. `Button` + `Item`. Unblocks `button-shortcut`.\n\n## STATUS: code complete on branch `feat/viewnode-button-composition` (off `feat/base-focusable`). AWAITING USER TEST → then rust-skill review → commit/PR.\n\n## DESIGN LOCKED (grill-me 2026-07-13 with user — do NOT re-derive)\n- **Children, not slots.** `Button` holds `children: Vec<Box<dyn Component>>` — arbitrary tree, any depth. `Parent` (`.child`), plus `.content_boxed(Box<dyn Component>)` for a `realize`d subtree (`Dialog::body_boxed` precedent). The `label` field is GONE.\n- **Sugar desugars into children at build time** (no second paint path): `Button::new(\"X\")` -> `[Label bold]`; `.icon(g)` -> prepends `[Icon, Label]`; `Button::empty()` -> compose freely. ViewNode precedence: **children win**; `text`/`icon` props build the sugar only when childless.\n- **Widget stops computing size; taffy measures.** `width`/`height` = `Auto`; `padding_x = BASE_PAD*pad_scale + fs*MONO_ADVANCE_RATIO` (one char/side), `padding_y = BASE_PAD*pad_scale`, `gap = fs*0.5`. Exact parity with the old `(chars+2)*fs*ratio + pad*2`.\n- **Per-state content color = ONE inherited `Color`** via `PaintCx::with_content_color`. Parent can't set child colors (children are `impl Component`; `Theme` only exists in `paint`), so it publishes one value per frame and unstyled `Label`/`Icon` pull it -> content animates with hover / fades when disabled, zero per-child wiring. Explicit `.color()` and intrinsic-color widgets (`Badge::danger`) win.\n- **One control = one Tab stop**: `Base.focus_barrier` stops focus descent (`focus.rs` `for_each_focusable`). Set by `Button` + `Item`.\n- **Size variant now INHERITS down the tree** (approved library change) — the missing piece that made composition actually work.\n\n## IMPLEMENTED (all gates green)\n**Foundations (heca-grid-ui):**\n- `style.rs`: `Style.size_explicit: bool` + `Style::set_size()` (the single place explicitness is recorded).\n- `builders.rs`: `LayoutExt::size` -> `set_size`.\n- `layout.rs`: `build(c, inherited_size)` — a node without an explicit variant adopts its parent's; effective variant written back to `style.size` and passed to children. `compute()` seeds `WidgetSize::default()`.\n- `component.rs`: `Base.focus_barrier`; `PaintCx.content_color` + `with_content_color()` + `content_color()`.\n- `focus.rs`: `for_each_focusable` does not descend past a `focus_barrier`.\n- `label.rs`: color falls back to `cx.content_color()`; **`bold` is now `Signal<bool>`** + `bold_signal()` (Item's bold is state-driven; the inherited context carries only color).\n- `icon.rs`: primary color falls back to `cx.content_color()`.\n- `icon_button.rs`: dropped its manual size-cascade hack (the engine inherits it now).\n\n**Button (`widgets/button.rs`)**: `empty()` / `new(label)` / `.icon(Glyph)` / `.content_boxed()` / `Parent`; `remeasure` hugs content; `paint_content()` publishes the state color and paints children; `Link` underline now spans the real content box (no char-count fake); `tick` recurses into children; `focus_barrier`.\n\n**Item (`widgets/item.rs`)**: label is a real `Label` child (`grow(1)`, `TextAlign::Start`) at index `LABEL=1` between the slots; `justify: Start` + `gap`; state color published via `with_content_color`; active-bold driven through the label's `bold_signal()` in `tick` (only on real change); `font_size` cascades to the label child; `focus_barrier`; `label_rect()` deleted.\n\n**realize (`heca/src/chrome/realize.rs`)**: `realize_button` **attaches `node.children`** (it silently DROPPED them before — a declarative `Button(Icon+Label)` rendered bare) + children-win precedence + `icon` prop sugar; added `\"trash\"` to `glyph_from_name` (curated map was missing it).\n\n**Docs**: `AGENTS.md` — new rule: widget docs must be EXHAUSTIVE with runnable examples for BOTH audiences (native builder + `ViewNode`), incl. precedence rules. `docs/widgets.md` — Button rewritten (both audiences), Item, `Base.focus_barrier`, `PaintCx::with_content_color`/`content_color`, size-variant cascade. Showcase — new \"Button — composed content\" row (icon sugar, disabled cluster, arbitrary tree, size cascade).\n\n**Tests (+8)**: grid-ui `phase_a.rs` — sugar-desugars-to-children; hugs-content-at-historical-size (width/height parity); grows-to-fit-composed-content; size-variant-cascades-to-content (+ explicit child wins); composed-content-inherits-state-color (+ explicit color wins, disabled fades); a-button-is-one-tab-stop-whatever-it-contains. heca `realize.rs` — button-children-are-realized; childless-button-uses-sugar.\n\n## GATES (2026-07-13)\n`cargo test`: heca-grid-ui 130 + 71 + 1, heca 335, workspace 759 passed / 0 failed. `cargo clippy --workspace --all-targets --all-features`: clean (only the pre-existing transitive `block v0.1.6` future-incompat note). Showcase builds. NOTE: `heca-core::terminal_backend_nvim_tui_produces_non_default_background_cells` flaked once under workspace-parallel load — passes 3/3 in isolation and the diff touches ZERO heca-core files (known PTY-timing flakiness, same class as the ones BACKLOG documents).\n\n## REMAINING\n1. **User runtime test** (AGENTS.md gate: no commit until the user has tested): `cargo run -p heca-renderer --example showcase` (hover/disable the composed buttons; check the size cascade) and `cargo run -p heca` (confirm dialog buttons, sidebar rows).\n2. Load `~/.agents/skills/rust/SKILL.md` and run the formal review over the diff.\n3. Commit + PR to `main`.\n4. Follow-on (separate task): `Item`'s `ViewNode` children/slots are still unmodelled (needs structured/named children — `viewnode-task-1` territory); `realize` coverage for `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` remains open.\n\n---\n**Completion summary:**\nDONE 2026-07-13 — commit `07d4c1a` on `feat/viewnode-button-composition`, **PR #237 → main** (open). User tested showcase + app and ran the review; one review nit applied (GAP_RATIO rationale) before push.\n\n## Shipped\n**Button is a container** (`heca-grid-ui/src/widgets/button.rs`): `label` field removed; content = `children` (arbitrary tree, any depth). `Button::empty()` / `new(label)` / `.icon(Glyph)` / `.content_boxed(Box<dyn Component>)` / `impl Parent`. Sugar desugars into children at build time — one content model, one paint path. `remeasure` hugs content (`width`/`height` = Auto; `padding_x = BASE_PAD*pad_scale + fs*MONO_ADVANCE_RATIO`, `padding_y = BASE_PAD*pad_scale`, `gap = fs*0.5`) at **exact parity** with the old `(chars+2)*fs*ratio + pad*2`. `paint_content()` publishes the state color; `Link` underline spans the real content box; `tick` recurses into children; `focus_barrier`.\n\n**Item** (`widgets/item.rs`): label is a real `Label` child (`grow(1)`, `TextAlign::Start`) at index `LABEL=1`; `justify: Start` + gap; state color via `with_content_color`; active-bold via the label's `bold_signal()` in `tick`; `font_size` cascades to the child; `focus_barrier`; `label_rect()` deleted.\n\n**Foundations (heca-grid-ui):**\n- `component.rs`: `Base.focus_barrier`; `PaintCx::with_content_color()` / `content_color()` (CSS-style color inheritance — the parent can't set child colors: children are `impl Component` and `Theme` only exists in `paint`).\n- `focus.rs`: `for_each_focusable` does not descend past a `focus_barrier` → a control is exactly one Tab stop (was: focusable-but-click-dead children).\n- `layout.rs`: `build(c, inherited_size)` — **size variant now inherits down the tree** like the base font; effective variant written back to `style.size` and passed to children.\n- `style.rs`: `Style.size_explicit` + `Style::set_size()` (single place explicitness is recorded — a raw `style.size = ..` is NOT explicit).\n- `builders.rs`: `LayoutExt::size` → `set_size`.\n- `label.rs`: color falls back to `cx.content_color()`; **`bold` is now `Signal<bool>`** + `bold_signal()`.\n- `icon.rs`: primary color falls back to `cx.content_color()`.\n- `icon_button.rs`: manual size-cascade hack **deleted** (engine inherits it now).\n\n**realize** (`heca/src/chrome/realize.rs`): `realize_button` **attaches `node.children`** (it silently DROPPED them before — the declarative path was a no-op for composed content); children-win precedence; `icon` prop sugar; `\"trash\"` added to `glyph_from_name`.\n\n**Docs**: AGENTS.md — widget docs must be EXHAUSTIVE with runnable examples for BOTH audiences (native builder + `ViewNode`) incl. precedence rules. `docs/widgets.md` — Button (both audiences), Item, `Base.focus_barrier`, `PaintCx::with_content_color`, size cascade. Showcase — \"Button — composed content\" row.\n\n**Tests +8** (grid-ui `phase_a.rs` ×6, heca `realize.rs` ×2): size parity; growth with composed content; size cascade + explicit child wins; inherited state color + explicit color wins + disabled fades; one Tab stop with an interactive child inside; sugar-desugars-to-children; realize attaches Button children; childless node uses sugar.\n\n**Gates**: heca-grid-ui 130+71+1, heca 335, workspace 759 passed / 0 failed, clippy clean (only pre-existing transitive `block v0.1.6` note).\n\n## Follow-ons (not in this task)\n- `Item`'s `ViewNode` children/slots are still unmodelled (needs structured/named children — belongs with `viewnode-task-1`).\n- `realize` coverage for `Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast` remains open (`viewnode-task-1`).\n- Button accelerator (`button-shortcut` phase) is now UNBLOCKED on the Button side; still needs NerdFont embedding (`gridui-03`).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "bind-any-action-by-name-c1",
-          "title": "Bind by name in config for contributed actions",
-          "checked": false
-        },
-        {
-          "id": "bind-any-action-by-name-c2",
-          "title": "Same syntax as built-ins",
-          "checked": false
-        },
-        {
-          "id": "bind-any-action-by-name-c3",
-          "title": "Unknown name is reported, not silently ignored",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "startedAt": "2026-07-13T18:11:29.946Z",
+      "completedAt": "2026-07-13T20:28:42.888Z",
+      "createdAt": "2026-07-13T15:30:01.845Z",
+      "updatedAt": "2026-07-13T20:28:42.888Z"
     },
     {
-      "id": "58a4843a-f15c-4313-86a4-e694f82f8921",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 3,
-      "shortName": "palette-lists-contributed",
-      "title": "Command palette lists contributed actions",
+      "id": "760365ea-80cb-4b5c-99de-ffe1b63f8eb3",
+      "phaseId": "402d22d4-a658-47d7-8481-fb074ce43a00",
+      "number": 276,
+      "shortId": "RP42W",
+      "priority": 2,
+      "shortName": "modal-shortcut-prop",
+      "title": "button-shortcut-2: ModalAction.shortcut prop in confirm builder",
       "status": "planned",
-      "description": "`ActionCatalog::describe_all()` already returns `ActionInfo` (serde) with label, icon and category — everything a palette needs. The palette does not read it. Feed it from there so contributed actions are listed, searchable and runnable.",
+      "description": "`ModalAction.shortcut` prop set by the confirm builder: `n` = cancel, `y` = proceed (so confirm dialogs get in-button accelerator letters for free once `button-shortcut-1` lands).\n\nFiles: confirm-dialog builder (`heca/src/chrome/...`), `ModalAction`/`ViewNode` prop wiring.\n\nBehaviors to preserve: confirm dialog semantics (Delete Pane? / Delete &lt;custom&gt?; verb \"Delete\"; disabled-OK-when-empty guard stays); the shortcut is additive metadata the Button reads to render its trailing accelerator slot. Update `docs/widgets.md`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "palette-lists-contributed-c1",
-          "title": "Palette reads describe_all()",
-          "checked": false
-        },
-        {
-          "id": "palette-lists-contributed-c2",
-          "title": "Label, icon and category shown",
-          "checked": false
-        },
-        {
-          "id": "palette-lists-contributed-c3",
-          "title": "Running one dispatches it",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-13T15:30:01.845Z",
+      "updatedAt": "2026-07-13T15:30:01.845Z"
     },
     {
-      "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 4,
-      "shortName": "collision-and-policy",
-      "title": "Binding collisions + ActionPolicy at dispatch (NEEDS A DECISION)",
-      "status": "planned",
-      "description": "⛔ Ask the user first: does a contributed default binding LOSE to an existing one, or WIN? Either way the user must be TOLD when a binding is refused — never silently dropped. F010 (Improvements) already covers notifying about blocked keybindings; reuse it.\n\nAlso: a contributed action must honour `ActionPolicy` at dispatch exactly as a built-in does. It must not bypass the policy system.",
+      "id": "23d2e8b8-e251-4ae5-9f74-cd28ae96ff4b",
+      "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
+      "number": 277,
+      "shortId": "AUFAE",
+      "priority": 3,
+      "shortName": "viewnode-task-3-exhaustive-wid",
+      "title": "viewnode-task-3: Exhaustive widget docs for the composition changes (both audiences)",
+      "status": "done",
+      "description": "Complete `docs/widgets.md` for everything `viewnode-task-2` (commit `07d4c1a`, PR #237) introduced, to the standard AGENTS.md now mandates: **every** builder/prop/event/signal documented, with **runnable code examples for BOTH audiences** — the native builder API *and* the declarative `ViewNode` form — including precedence rules.\n\n## Current state (what `viewnode-task-2` already documented)\n- `### Button` — rewritten: content-is-children, sugar vs composed, size hugging, inherited content color, one-Tab-stop; native + `ViewNode` examples incl. the children-win precedence.\n- `### Item` — composition note (label is a `Label` child; state color inherited; active-bold via signal; `focus_barrier`).\n- `#### Base` table — new `focus_barrier` row.\n- `PaintCx` table — `with_content_color` / `content_color` rows.\n- `### Size variants` — the variant now cascades down the tree (`Style::size_explicit` / `Style::set_size`).\n\n## Gaps to close (this task)\n1. **`### Label`** (`docs/widgets.md:611`) — document the new `bold_signal()` accessor and that **color is inherited when unset** (falls back to `cx.content_color()`, then theme foreground; an explicit `.color()` opts out). Add the `ViewNode` form (`WidgetKind::Label`, prop `text`).\n2. **`### Icon`** — same inheritance note (primary layer falls back to the inherited content color), plus its `ViewNode` form (`WidgetKind::Icon`, prop `icon` = Glyph **name**).\n3. **`### Item`** — add the declarative example (`WidgetKind::Item`: prop `text`, event `press`) and state plainly that its slots/children are **not** yet modelled in `ViewNode` (needs structured/named children — belongs to `viewnode-task-1`).\n4. **Declarative UI model table** (`docs/widgets.md:1710`) — the `Button` row must now read `text`, `icon`, `variant`, `size` **+ children**, and the section must state the **precedence: children win; the scalar props are the childless sugar**.\n5. **A single side-by-side \"both ways\" Button example** near the Button entry, so the two spellings and their identical outcome are visible at a glance (the user asked for this explicitly).\n\n## Files\n`docs/widgets.md` only (rustdoc already landed in `07d4c1a`). Cross-check against `heca-grid-ui/src/widgets/{button,item,label,icon}.rs`, `heca-grid-ui/src/component.rs` (`Base.focus_barrier`, `PaintCx::with_content_color`), `heca-grid-ui/src/style.rs` (`size_explicit`/`set_size`), `heca/src/chrome/realize.rs` (`realize_button` precedence + `glyph_from_name`).\n\n## Edge cases\n- Do not document props `realize` does not actually read (the model is untrusted input; realize is total and ignores unknown/mistyped props).\n- Keep the `Not realized yet` list accurate (`Select`/`Tabs`/`Grid`/`ItemGroup`/`DockFrame`/`MarkerGroup`/`ScrollBar`/`Toast`).\n- Ships on the existing PR branch `feat/viewnode-button-composition` (PR #237) as a follow-up commit.\n\n---\n**Completion summary:**\nDONE 2026-07-13 — commit `cbada04`, pushed to `feat/viewnode-button-composition` (PR #237).\n\n## Shipped in `docs/widgets.md`\n1. **`### Button` → new subsection \"The two ways to build a Button — same widget, same retained tree\"**: a 3-row matrix (simple / simple+icon / composed × native builder vs declarative `ViewNode`) plus four runnable, commented examples — simple native, simple declarative (childless sugar), composed native (arbitrary tree), composed declarative (identical tree as data). Ends with the **precedence rule: children win; the scalar props are the childless sugar** — one content model, two spellings, never two paint paths.\n2. **`### Label`**: added `bold_signal()` accessor (re-weight in place; how `Item` bolds while active, since the inherited paint context carries a color but not a weight) + **color is inherited when unset** (`cx.content_color()` → `theme.foreground`; explicit `.color()` opts out) + `ViewNode` form.\n3. **`### Icon`**: same inheritance for the primary layer (secondary follows it); clarified `.size(px)` is **glyph pixels**, NOT the `WidgetSize` variant (use `Style::set_size`, since `size` is taken) + `ViewNode` form + glyph-name resolution (unknown name → no icon, never a panic).\n4. **`### Item`**: `ViewNode` form (prop `text`, event `press`) + an explicit statement that its **slots are not modelled declaratively yet** (needs *named* children in the model → `viewnode-task-1`); native code composes them freely today.\n5. **Declarative model table**: `Button` row split out — now reads `variant`, `size`, **+ children (the content)**, with `text`/`icon` as the childless sugar; added a callout above the table pointing at the Button section.\n\n(The Base `focus_barrier` row, the `PaintCx::with_content_color`/`content_color` rows and the size-variant cascade were already documented in `07d4c1a`.)\n\n## Gates\nDocs-only change; no code touched. Workspace unaffected (last full run: 759 passed / 0 failed, clippy clean).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "collision-and-policy-c1",
-          "title": "BLOCKING: settle collision behaviour with the user",
-          "checked": false
-        },
-        {
-          "id": "collision-and-policy-c2",
-          "title": "Refused bindings are reported to the user",
-          "checked": false
-        },
-        {
-          "id": "collision-and-policy-c3",
-          "title": "ActionPolicy honoured at dispatch",
-          "checked": false
-        },
-        {
-          "id": "collision-and-policy-c4",
-          "title": "Policy spot-check tests",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "startedAt": "2026-07-13T20:30:44.043Z",
+      "completedAt": "2026-07-13T20:32:16.544Z",
+      "createdAt": "2026-07-13T20:30:39.956Z",
+      "updatedAt": "2026-07-13T20:32:16.544Z"
     },
     {
-      "id": "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 5,
-      "shortName": "unbind-on-unmount",
-      "title": "Bindings disappear when their provider does",
-      "status": "planned",
-      "description": "`register_dynamic` returns an RAII `ActionHandle` and `unregister_dynamic` withdraws handler + meta. The binding must go the same way, or a dead action keeps a key hostage.",
+      "id": "d19bdbe7-a355-4c64-923e-d3f48af6db19",
+      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
+      "number": 278,
+      "shortId": "SNEKU",
+      "priority": 1,
+      "shortName": "choice-1-choice-widget-value-c",
+      "title": "choice-1: `Choice` widget — value-carrying, content-composable option primitive",
+      "status": "done",
+      "description": "Build the **`Choice`** widget: a selectable container that carries a value and composes arbitrary content as children. The option primitive `Select`/`Tabs` (later `ContextMenu`/`CommandPalette`) mount.\n\n## STATUS: code complete on `feat/viewnode-button-composition` (uncommitted). AWAITING USER TEST → then commit.\n\n## IMPLEMENTED\n**`heca-grid-ui/src/widgets/choice.rs` (new)**\n- `Choice::new(value)` (no content) / `Choice::labeled(value, label)` (sugar → one `Label` child — the same child a caller would compose; one content model, no \"simple mode\").\n- `impl Parent` (`.child(any Component)`), `impl LayoutExt`, embeds `Base`.\n- `.selected(bool)` / `.state() -> Signal<bool>` / `.hovered()` / `.value() -> &str` / `.on_activate(f)` (click / Enter / Space; sets `base.focusable`).\n- **Chrome only**: selected pill (`accent` @ `interaction.row_active_fill`), hover tint (`foreground` @ `row_hover_fill`), press `Flash`, focus ring — the SAME interaction tokens as `Item`, so an option and a list row read as one family.\n- **State color published** via `cx.with_content_color(selected ? accent : foreground)` around the children paint → unstyled `Label`/`Icon` children tint with the selection; a child with its own color keeps it.\n- `base.focus_barrier = true` — one option = one Tab stop.\n- `remeasure` **hugs content**: `width`/`height` = `Auto`, `padding = BASE_PAD(8.0) * pad_scale`, `gap = font * 0.5` (same half-character rhythm as `Button`). No char-count arithmetic; the size variant cascades into the content automatically.\n- `tick` recurses into children.\n- **`pub fn choice_at(&[Box<dyn Component>], Point) -> Option<usize>`** — resolves a pick from the children's **real bounds**. Exported so `Select`/`Tabs` (choice-2/3) resolve picks from bounds, never row arithmetic: what is drawn and what is clickable can never disagree.\n\n## DECISION RECORDED — the value type is a plain `String`\n`heca-grid-ui` must never depend on `heca` (AGENTS.md ⛔ SETTLED), so the widget cannot store the app's `PropValue`. A plain `String` is the one shape both sides speak; the host converts to/from richer types at its boundary (choice-4 maps the node's `value` prop → this string, and back when dispatching the change intent). Rejected the grid-ui-local `ChoiceValue{Text,Int}` enum — no consumer needs numeric fidelity, and it would duplicate `PropValue` in the library.\n\n## Exports / docs / demo\n- `widgets/mod.rs` (`mod choice;` + `pub use choice::{choice_at, Choice}`), `lib.rs` root export + prelude.\n- Showcase: new \"Choice — a value + composed content (the option primitive)\" row — a text option, a selected icon+label option, and a two-line option with a sub-label.\n- `docs/widgets.md`: full `Choice` entry (every builder/accessor, the chrome, the bounds-picking rule) + **the `Choice` vs `Item` comparison table + rule of thumb** (the guidance the user asked for; choice-8 will cross-link it), + TOC. Declarative form noted as landing in choice-4.\n- Rustdoc: exhaustive, incl. the `Choice` vs `Item` table.\n\n## Tests (+4, `heca-grid-ui/tests/phase_a.rs`)\n`choice_carries_a_value_and_composes_its_content` (value independent of content; sugar == composed; empty is legal) · `choice_content_inherits_the_selected_state_color` (selected → accent, unselected → foreground, explicit child color wins) · `a_choice_is_one_tab_stop_whatever_it_contains` (with an interactive child inside) · `choice_at_resolves_a_pick_from_real_bounds`.\n\n## GATES (2026-07-13)\nheca-grid-ui 134 + 71 + 1 green (was 130); workspace builds; `cargo clippy --workspace --all-targets --all-features` clean (only the pre-existing transitive `block v0.1.6` note); showcase builds.\n\n## NEXT\nUser tests the showcase (hover/select the Choice row; the selected one's icon+label should tint together) → commit → **choice-2** (`Select` onto `Choice` children — the fiddly overlay/bounds one).\n\n---\n**Completion summary:**\nDONE 2026-07-13 — commit `e7af2c9`, pushed to `feat/viewnode-button-composition` (PR #237 → main). User approved.\n\n## Shipped\n**`heca-grid-ui/src/widgets/choice.rs` (NEW)** — the option primitive: a selectable container carrying a **value** and composing **arbitrary content** as children.\n- `Choice::new(value)` (no content) / `Choice::labeled(value, label)` (sugar → one `Label` child — the same child a caller composes by hand; one content model, no \"simple mode\").\n- `impl Parent` (`.child(any Component)`) + `impl LayoutExt`; `.selected(bool)` / `.state() -> Signal<bool>` / `.hovered()` / `.value() -> &str` / `.on_activate(f)` (click / Enter / Space; sets `base.focusable`).\n- **Chrome only**: selected pill (`accent` @ `interaction.row_active_fill`), hover tint (`foreground` @ `row_hover_fill`), press `Flash`, focus ring — the **same interaction tokens as `Item`**, so an option and a list row read as one family.\n- **State color published** via `cx.with_content_color(selected ? accent : foreground)` around the children paint → a selected option's `Icon` + `Label` tint **together**, with neither knowing about selection. A child with its own color (e.g. `Badge::danger`) keeps it.\n- `base.focus_barrier = true` — one option = one Tab stop, whatever it composes.\n- `remeasure` **hugs content**: `width`/`height` = `Auto`, `padding = BASE_PAD(8.0) * pad_scale`, `gap = font * 0.5` (the same half-character rhythm as `Button`). No char-count arithmetic; the size variant cascades into the content automatically.\n- `tick` recurses into children.\n- **`pub fn choice_at(&[Box<dyn Component>], Point) -> Option<usize>`** — resolves a pick from the children's **REAL BOUNDS**. Exported specifically so choice-2/3 cannot fall back to row arithmetic; the invariant is **bounds === what is drawn === what is clickable**.\n\n## DECISION RECORDED — the value is a plain `String`\n`heca-grid-ui` never depends on `heca` (AGENTS.md ⛔ SETTLED), so the widget cannot store the app's `PropValue`. A `String` is the one shape both sides speak; `realize` converts at the boundary (choice-4 maps the node's `value` prop → this string, and back when dispatching the change intent). A grid-ui-local `ChoiceValue{Text,Int}` enum was **rejected** — no consumer needs numeric fidelity, and it would duplicate `PropValue` inside the library.\n\n## Also\n- Exports: `widgets/mod.rs` (`mod choice;` + `pub use choice::{choice_at, Choice}`), `lib.rs` root + prelude.\n- Showcase: \"Choice — a value + composed content (the option primitive)\" row — a text option, a **selected** icon+label option, and a two-line option with a sub-label.\n- `docs/widgets.md`: full `Choice` entry (every builder/accessor, the chrome, the bounds-picking rule) **+ the `Choice` vs `Item` comparison table and rule of thumb** — the guidance the user asked for (rows that look like rows → `Item`; picking one of several → `Choice`). choice-8 will cross-link it. TOC updated. Declarative form (`WidgetKind::Choice`) noted as landing in choice-4.\n- Rustdoc: exhaustive, including the `Choice` vs `Item` table.\n\n## Tests (+4, `heca-grid-ui/tests/phase_a.rs`)\n`choice_carries_a_value_and_composes_its_content` · `choice_content_inherits_the_selected_state_color` (selected → accent, unselected → foreground, explicit child color wins) · `a_choice_is_one_tab_stop_whatever_it_contains` (with an interactive child inside) · `choice_at_resolves_a_pick_from_real_bounds`.\n\n## Gates\nheca-grid-ui **134** + 71 + 1 green (was 130); workspace builds; `cargo clippy --workspace --all-targets --all-features` clean (only the pre-existing transitive `block v0.1.6` note); showcase builds.\n\n## NEXT\n**choice-2** (`6ec99b20`) — refactor `Select` onto `Choice` children. The fiddly one: its dropdown paints on the overlay layer but hit-tests rows by arithmetic; the options must become children whose bounds are real *inside the overlay panel* (fallback documented in that task: bake the panel offset into the children's bounds, as `ScrollRegion` does with its scroll offset).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "unbind-on-unmount-c1",
-          "title": "Binding withdrawn on unmount via the existing handle",
-          "checked": false
-        },
-        {
-          "id": "unbind-on-unmount-c2",
-          "title": "Test: unmount frees the key",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "startedAt": "2026-07-13T20:50:43.682Z",
+      "completedAt": "2026-07-13T21:16:57.316Z",
+      "createdAt": "2026-07-13T20:45:29.618Z",
+      "updatedAt": "2026-07-13T21:16:57.316Z"
     }
   ],
   "createdAt": "2026-07-26T08:38:21.132Z",
-  "updatedAt": "2026-07-26T11:44:50.918444Z"
+  "updatedAt": "2026-07-27T11:40:15.518Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

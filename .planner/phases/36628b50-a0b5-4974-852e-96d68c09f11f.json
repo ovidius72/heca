@@ -1,7 +1,7 @@
 {
   "id": "36628b50-a0b5-4974-852e-96d68c09f11f",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 7,
+  "number": 29,
   "shortId": "BANTT",
   "priority": 7,
   "slug": "gridui-03-nerd-font-icon-widget",
@@ -23,15 +23,15 @@
   "completionCriteria": [],
   "taskIds": [
     "2ee3156d-4dea-4801-8292-529e65b60821",
-    "eff958f7-1129-4b46-8730-92b0aaf385ef",
+    "00a749da-995d-4012-8ab4-787b5f330987",
     "adce30df-62ce-4a23-900a-097fec336df5",
-    "00a749da-995d-4012-8ab4-787b5f330987"
+    "eff958f7-1129-4b46-8730-92b0aaf385ef"
   ],
   "tasks": [
     {
       "id": "2ee3156d-4dea-4801-8292-529e65b60821",
       "phaseId": "36628b50-a0b5-4974-852e-96d68c09f11f",
-      "number": 1,
+      "number": 87,
       "shortId": "RF8FR",
       "priority": 1,
       "shortName": "verify-nerdfont-license",
@@ -51,15 +51,15 @@
       "updatedAt": "2026-07-01T18:13:27.646Z"
     },
     {
-      "id": "eff958f7-1129-4b46-8730-92b0aaf385ef",
+      "id": "00a749da-995d-4012-8ab4-787b5f330987",
       "phaseId": "36628b50-a0b5-4974-852e-96d68c09f11f",
-      "number": 2,
-      "shortId": "QYALW",
-      "priority": 2,
-      "shortName": "wire-nficon-catalog",
-      "title": "Wire NfIcon into program catalog",
+      "number": 90,
+      "shortId": "VJ7K5",
+      "priority": 4,
+      "shortName": "build-nficon",
+      "title": "Build NfIcon widget with NfGlyph enum",
       "status": "planned",
-      "description": "Usare NfIcon nel catalogo programmi e nel chrome.",
+      "description": "Widget icon con enum di glyph semanticamente nominati.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -75,7 +75,7 @@
     {
       "id": "adce30df-62ce-4a23-900a-097fec336df5",
       "phaseId": "36628b50-a0b5-4974-852e-96d68c09f11f",
-      "number": 3,
+      "number": 98,
       "shortId": "EJMNW",
       "priority": 3,
       "shortName": "embed-nerdfont-ranges",
@@ -95,15 +95,15 @@
       "updatedAt": "2026-07-01T18:13:27.647Z"
     },
     {
-      "id": "00a749da-995d-4012-8ab4-787b5f330987",
+      "id": "eff958f7-1129-4b46-8730-92b0aaf385ef",
       "phaseId": "36628b50-a0b5-4974-852e-96d68c09f11f",
-      "number": 4,
-      "shortId": "VJ7K5",
-      "priority": 4,
-      "shortName": "build-nficon",
-      "title": "Build NfIcon widget with NfGlyph enum",
+      "number": 103,
+      "shortId": "QYALW",
+      "priority": 2,
+      "shortName": "wire-nficon-catalog",
+      "title": "Wire NfIcon into program catalog",
       "status": "planned",
-      "description": "Widget icon con enum di glyph semanticamente nominati.",
+      "description": "Usare NfIcon nel catalogo programmi e nel chrome.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -120,5 +120,7 @@
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.494Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

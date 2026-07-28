@@ -1,10 +1,11 @@
 {
   "id": "40ca7813-1fa0-4a94-b0e0-cd00f48dca0e",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 3,
+  "number": 7,
+  "shortId": "J7VMT",
+  "priority": 3,
   "slug": "terminal-02-ligature-policy",
   "title": "terminal-02: Ligature policy",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,18 +22,20 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "2ab183ea-eece-4b0c-b9ec-aa66d3810029",
-    "e5fd97ad-d080-4503-8b00-0328ee80ec8c"
+    "9d05d3f7-4b99-4e1d-ad41-31e4298a0ce1",
+    "adce30df-62ce-4a23-900a-097fec336df5"
   ],
   "tasks": [
     {
-      "id": "2ab183ea-eece-4b0c-b9ec-aa66d3810029",
-      "phaseId": "40ca7813-1fa0-4a94-b0e0-cd00f48dca0e",
-      "number": 1,
-      "shortName": "upgrade-shaping-ligatures",
-      "title": "Upgrade shaping stack for ligatures",
-      "status": "done",
-      "description": "Aggiornare lo stack di shaping/ligature nel terminale.",
+      "id": "9d05d3f7-4b99-4e1d-ad41-31e4298a0ce1",
+      "phaseId": "35d74cc9-a3df-49c9-a5bb-59e12a88b49c",
+      "number": 97,
+      "shortId": "A9L9Q",
+      "priority": 3,
+      "shortName": "accordion-widget",
+      "title": "Accordion widget with animated transitions",
+      "status": "planned",
+      "description": "Accordion con transizioni animate.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -40,19 +43,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-01T18:11:32.026Z",
-      "completedAt": "2026-07-01T18:11:32.026Z",
-      "createdAt": "2026-07-01T18:11:32.026Z",
-      "updatedAt": "2026-07-01T18:11:32.026Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:13:27.647Z",
+      "updatedAt": "2026-07-01T18:13:27.647Z"
     },
     {
-      "id": "e5fd97ad-d080-4503-8b00-0328ee80ec8c",
-      "phaseId": "40ca7813-1fa0-4a94-b0e0-cd00f48dca0e",
-      "number": 2,
-      "shortName": "terminal-ligatures-toggle",
-      "title": "Add configurable terminal_ligatures toggle",
-      "status": "done",
-      "description": "Toggle config per attivare/disattivare le ligature nel terminale.",
+      "id": "adce30df-62ce-4a23-900a-097fec336df5",
+      "phaseId": "36628b50-a0b5-4974-852e-96d68c09f11f",
+      "number": 98,
+      "shortId": "EJMNW",
+      "priority": 3,
+      "shortName": "embed-nerdfont-ranges",
+      "title": "Embed Nerd Font glyph ranges",
+      "status": "planned",
+      "description": "Embedding dei range di glyph usati.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -60,12 +65,16 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-01T18:11:32.026Z",
-      "completedAt": "2026-07-01T18:11:32.026Z",
-      "createdAt": "2026-07-01T18:11:32.026Z",
-      "updatedAt": "2026-07-01T18:11:32.026Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:13:27.647Z",
+      "updatedAt": "2026-07-01T18:13:27.647Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:11:32.026Z"
+  "updatedAt": "2026-07-27T11:40:15.479Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

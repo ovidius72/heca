@@ -1,7 +1,7 @@
 {
   "id": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 10,
+  "number": 9,
   "shortId": "6UNT2",
   "priority": 10,
   "slug": "terminal-07-clipboard-and-paste",
@@ -22,37 +22,15 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "dd739da5-65f0-4c87-b2d9-d2ca1b7d1931",
     "61e79a33-90d1-43c2-8e40-d67c6a098b73",
-    "73118e33-542e-4e89-bf89-37cc77ab684a"
+    "73118e33-542e-4e89-bf89-37cc77ab684a",
+    "dd739da5-65f0-4c87-b2d9-d2ca1b7d1931"
   ],
   "tasks": [
     {
-      "id": "dd739da5-65f0-4c87-b2d9-d2ca1b7d1931",
-      "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
-      "number": 1,
-      "shortId": "4V47N",
-      "priority": 1,
-      "shortName": "copy-system-clipboard",
-      "title": "Copy to system clipboard",
-      "status": "done",
-      "description": "Copia del testo selezionato al clipboard di sistema.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-01T18:11:32.026Z",
-      "completedAt": "2026-07-01T18:11:32.026Z",
-      "createdAt": "2026-07-01T18:11:32.026Z",
-      "updatedAt": "2026-07-01T18:11:32.026Z"
-    },
-    {
       "id": "61e79a33-90d1-43c2-8e40-d67c6a098b73",
       "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
-      "number": 2,
+      "number": 23,
       "shortId": "STTWG",
       "priority": 2,
       "shortName": "bracketed-paste",
@@ -74,7 +52,7 @@
     {
       "id": "73118e33-542e-4e89-bf89-37cc77ab684a",
       "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
-      "number": 3,
+      "number": 25,
       "shortId": "7WWQS",
       "priority": 3,
       "shortName": "osc52-clipboard-write",
@@ -92,10 +70,34 @@
       "completedAt": "2026-07-01T18:11:32.026Z",
       "createdAt": "2026-07-01T18:11:32.026Z",
       "updatedAt": "2026-07-01T18:11:32.026Z"
+    },
+    {
+      "id": "dd739da5-65f0-4c87-b2d9-d2ca1b7d1931",
+      "phaseId": "57862b41-e5d9-4a82-8248-2ce6f8c7579b",
+      "number": 32,
+      "shortId": "4V47N",
+      "priority": 1,
+      "shortName": "copy-system-clipboard",
+      "title": "Copy to system clipboard",
+      "status": "done",
+      "description": "Copia del testo selezionato al clipboard di sistema.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-01T18:11:32.026Z",
+      "completedAt": "2026-07-01T18:11:32.026Z",
+      "createdAt": "2026-07-01T18:11:32.026Z",
+      "updatedAt": "2026-07-01T18:11:32.026Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
   "updatedAt": "2026-07-27T11:40:15.486Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

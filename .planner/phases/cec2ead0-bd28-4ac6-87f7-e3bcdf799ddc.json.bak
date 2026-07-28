@@ -1,10 +1,11 @@
 {
   "id": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 9,
+  "number": 53,
+  "shortId": "P6FFW",
+  "priority": 9,
   "slug": "plugin-07-simple-config-toml-plugins",
   "title": "plugin-07: Simple config.toml plugins",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,19 +22,21 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "b4dd45d2-b67d-4887-8598-2aba54034212",
-    "7c81d40b-5ff1-4f95-9069-9325577f0083",
-    "9b3e7f08-4786-4570-98d9-c925a75aed8c"
+    "78be366f-b9f1-4be9-8029-a15e96dced0e",
+    "797eea9b-a15c-4a7b-a5f7-30135fc4cd80",
+    "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9"
   ],
   "tasks": [
     {
-      "id": "b4dd45d2-b67d-4887-8598-2aba54034212",
-      "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
-      "number": 1,
-      "shortName": "plugins-toml-schema",
-      "title": "Define and parse plugins TOML schema",
+      "id": "78be366f-b9f1-4be9-8029-a15e96dced0e",
+      "phaseId": "ccefbac4-b29e-45d8-bd1d-e7199afa4907",
+      "number": 212,
+      "shortId": "QKUC5",
+      "priority": 5,
+      "shortName": "toast-action-source",
+      "title": "Decide and wire InteractionSource for toast actions",
       "status": "planned",
-      "description": "Schema `[[plugins]]` con placement, weight e text.",
+      "description": "Decidere se aggiungere `InteractionSource::ChromeOverlay` o riusare una sorgente esistente; evitare blocchi errati in floating domain.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -43,17 +46,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "createdAt": "2026-07-03T22:52:10.352Z",
+      "updatedAt": "2026-07-03T22:52:10.352Z"
     },
     {
-      "id": "7c81d40b-5ff1-4f95-9069-9325577f0083",
-      "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
-      "number": 2,
-      "shortName": "document-config-plugins",
-      "title": "Document config plugins in README",
+      "id": "797eea9b-a15c-4a7b-a5f7-30135fc4cd80",
+      "phaseId": "ccefbac4-b29e-45d8-bd1d-e7199afa4907",
+      "number": 213,
+      "shortId": "6VCDJ",
+      "priority": 4,
+      "shortName": "action-policy-validation",
+      "title": "Validate notification action policies",
       "status": "planned",
-      "description": "Documentazione utente ed esempi per i plugin semplici.",
+      "description": "Verificare che azioni usate dalle notifiche abbiano `ActionPolicy` corretta, es. ReloadConfig Global e FocusPane coerente.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -63,17 +68,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "createdAt": "2026-07-03T22:52:10.352Z",
+      "updatedAt": "2026-07-03T22:52:10.352Z"
     },
     {
-      "id": "9b3e7f08-4786-4570-98d9-c925a75aed8c",
-      "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
-      "number": 3,
-      "shortName": "config-plugin-renderer",
-      "title": "Implement config plugin renderer",
+      "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9",
+      "phaseId": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+      "number": 214,
+      "shortId": "X27ET",
+      "priority": 5,
+      "shortName": "reload-notification-mode",
+      "title": "Ensure runtime reload applies notification_system",
       "status": "planned",
-      "description": "Renderizzare contribution testuali da config nelle regioni.",
+      "description": "`prefix+Shift+r` deve aggiornare `notification_system` runtime senza restart e senza cache divergenti.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -83,10 +90,14 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.212Z",
-      "updatedAt": "2026-07-01T18:12:56.212Z"
+      "createdAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-07-03T22:52:28.341Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.862Z",
-  "updatedAt": "2026-07-01T18:12:56.212Z"
+  "updatedAt": "2026-07-27T11:40:15.505Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

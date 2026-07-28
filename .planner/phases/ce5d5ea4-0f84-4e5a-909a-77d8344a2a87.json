@@ -1,7 +1,7 @@
 {
   "id": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 4,
+  "number": 46,
   "shortId": "C8KVB",
   "priority": 4,
   "slug": "gridui-04-showcase-coverage-and-visual-regression",
@@ -29,7 +29,7 @@
     {
       "id": "d7b4523a-c813-4cfd-bee5-e9726906e036",
       "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
-      "number": 1,
+      "number": 101,
       "shortId": "ZSDTP",
       "priority": 1,
       "shortName": "visual-regression-snapshots",
@@ -51,7 +51,7 @@
     {
       "id": "e4f328e7-0ef8-45ac-b261-dc7959ec0a0e",
       "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
-      "number": 2,
+      "number": 102,
       "shortId": "ZNJYX",
       "priority": 2,
       "shortName": "audit-showcase-demos",
@@ -74,5 +74,7 @@
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.491Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

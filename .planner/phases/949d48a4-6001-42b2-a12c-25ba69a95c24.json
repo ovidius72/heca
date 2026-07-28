@@ -1,7 +1,7 @@
 {
   "id": "949d48a4-6001-42b2-a12c-25ba69a95c24",
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
-  "number": 9,
+  "number": 58,
   "shortId": "9N7V3",
   "priority": 9,
   "slug": "notification-08-keyboard-hint",
@@ -22,38 +22,16 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "ba7b9582-f445-4e8c-a585-709b8471ea47",
     "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3",
-    "ef72c9de-8dbe-4948-a2e5-9cd374175ae3",
-    "80f9eec0-65cf-4929-a81c-d29491985168"
+    "ba7b9582-f445-4e8c-a585-709b8471ea47",
+    "80f9eec0-65cf-4929-a81c-d29491985168",
+    "ef72c9de-8dbe-4948-a2e5-9cd374175ae3"
   ],
   "tasks": [
     {
-      "id": "ba7b9582-f445-4e8c-a585-709b8471ea47",
-      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
-      "number": 1,
-      "shortId": "2PDDR",
-      "priority": 1,
-      "shortName": "toast-hint-fields",
-      "title": "Extend ToastSpec with hint fields",
-      "status": "planned",
-      "description": "Dopo global hint mode, aggiungere `action_hint`/`dismiss_hint` opzionali a ToastSpec senza hardcodare lettere; deferred.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
-    },
-    {
       "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
-      "number": 2,
+      "number": 228,
       "shortId": "S54BN",
       "priority": 2,
       "shortName": "toast-keycap-paint",
@@ -73,15 +51,15 @@
       "updatedAt": "2026-07-03T22:53:21.680Z"
     },
     {
-      "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3",
+      "id": "ba7b9582-f445-4e8c-a585-709b8471ea47",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
-      "number": 3,
-      "shortId": "M74U6",
-      "priority": 3,
-      "shortName": "keyboard-first-contract",
-      "title": "Preserve keyboard-first toast action contract",
+      "number": 231,
+      "shortId": "2PDDR",
+      "priority": 1,
+      "shortName": "toast-hint-fields",
+      "title": "Extend ToastSpec with hint fields",
       "status": "planned",
-      "description": "Dopo global hint mode, ogni azione toast deve essere keyboard-reachable via hint o altro action/keybinding path registrato; deferred.",
+      "description": "Dopo global hint mode, aggiungere `action_hint`/`dismiss_hint` opzionali a ToastSpec senza hardcodare lettere; deferred.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -91,13 +69,13 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.681Z",
-      "updatedAt": "2026-07-03T22:53:21.681Z"
+      "createdAt": "2026-07-03T22:53:21.680Z",
+      "updatedAt": "2026-07-03T22:53:21.680Z"
     },
     {
       "id": "80f9eec0-65cf-4929-a81c-d29491985168",
       "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
-      "number": 4,
+      "number": 233,
       "shortId": "5XK2E",
       "priority": 4,
       "shortName": "toast-hint-activation",
@@ -115,10 +93,34 @@
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.681Z",
       "updatedAt": "2026-07-03T22:53:21.681Z"
+    },
+    {
+      "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3",
+      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+      "number": 234,
+      "shortId": "M74U6",
+      "priority": 3,
+      "shortName": "keyboard-first-contract",
+      "title": "Preserve keyboard-first toast action contract",
+      "status": "planned",
+      "description": "Dopo global hint mode, ogni azione toast deve essere keyboard-reachable via hint o altro action/keybinding path registrato; deferred.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:53:21.681Z",
+      "updatedAt": "2026-07-03T22:53:21.681Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.534Z",
+  "updatedAt": "2026-07-28T12:31:56.792Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

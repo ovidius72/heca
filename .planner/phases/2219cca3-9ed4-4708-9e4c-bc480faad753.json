@@ -1,7 +1,7 @@
 {
   "id": "2219cca3-9ed4-4708-9e4c-bc480faad753",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 18,
+  "number": 80,
   "shortId": "6TMUZ",
   "priority": 18,
   "slug": "plugin-10-keybinding-command-palette-integration-for-contributed-actions",
@@ -22,55 +22,17 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "dcda3d13-0225-42e5-b5bf-d39d4896d580",
     "2d578290-8e14-4e6b-ad88-7dc398790859",
     "58a4843a-f15c-4313-86a4-e694f82f8921",
+    "dcda3d13-0225-42e5-b5bf-d39d4896d580",
     "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
     "fcefde68-ac0e-425d-9ac8-53f3ffa17e49"
   ],
   "tasks": [
     {
-      "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 1,
-      "shortId": "4LDUG",
-      "priority": 1,
-      "shortName": "read-default-binding",
-      "title": "Offer ActionMeta.default_binding to the keymap on registration",
-      "status": "planned",
-      "description": "`ActionMeta` already carries `default_binding` (heca/src/actions.rs) and nothing reads it, so registering an action never makes a key work. Read it at `register_dynamic` time and offer it to the keymap. Never hardcode — it goes through `KeymapRegistry` like everything else.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "read-default-binding-c1",
-          "title": "Read default_binding at registration",
-          "checked": false
-        },
-        {
-          "id": "read-default-binding-c2",
-          "title": "Route through KeymapRegistry, never hardcoded",
-          "checked": false
-        },
-        {
-          "id": "read-default-binding-c3",
-          "title": "Test: a registered action's default key fires it",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
       "id": "2d578290-8e14-4e6b-ad88-7dc398790859",
       "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 2,
+      "number": 321,
       "shortId": "A7JKV",
       "priority": 2,
       "shortName": "bind-any-action-by-name",
@@ -108,7 +70,7 @@
     {
       "id": "58a4843a-f15c-4313-86a4-e694f82f8921",
       "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 3,
+      "number": 324,
       "shortId": "NEETL",
       "priority": 3,
       "shortName": "palette-lists-contributed",
@@ -144,9 +106,47 @@
       "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
+      "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 334,
+      "shortId": "4LDUG",
+      "priority": 1,
+      "shortName": "read-default-binding",
+      "title": "Offer ActionMeta.default_binding to the keymap on registration",
+      "status": "planned",
+      "description": "`ActionMeta` already carries `default_binding` (heca/src/actions.rs) and nothing reads it, so registering an action never makes a key work. Read it at `register_dynamic` time and offer it to the keymap. Never hardcode — it goes through `KeymapRegistry` like everything else.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "read-default-binding-c1",
+          "title": "Read default_binding at registration",
+          "checked": false
+        },
+        {
+          "id": "read-default-binding-c2",
+          "title": "Route through KeymapRegistry, never hardcoded",
+          "checked": false
+        },
+        {
+          "id": "read-default-binding-c3",
+          "title": "Test: a registered action's default key fires it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
       "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
       "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 4,
+      "number": 335,
       "shortId": "TS69U",
       "priority": 4,
       "shortName": "collision-and-policy",
@@ -189,7 +189,7 @@
     {
       "id": "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
       "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 5,
+      "number": 338,
       "shortId": "KXD2Z",
       "priority": 5,
       "shortName": "unbind-on-unmount",
@@ -223,5 +223,7 @@
   "createdAt": "2026-07-26T08:38:21.132Z",
   "updatedAt": "2026-07-27T11:40:15.518Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

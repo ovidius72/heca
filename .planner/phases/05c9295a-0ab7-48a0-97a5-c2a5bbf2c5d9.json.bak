@@ -1,10 +1,11 @@
 {
   "id": "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 13,
+  "number": 69,
+  "shortId": "5BCC8",
+  "priority": 13,
   "slug": "menu-nav-shared-list-menu-navigation-keybindings",
   "title": "menu-nav: Shared list/menu navigation keybindings",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,17 +22,19 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "4b545e7a-ff08-47dd-82ac-2f2660373e27"
+    "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3"
   ],
   "tasks": [
     {
-      "id": "4b545e7a-ff08-47dd-82ac-2f2660373e27",
-      "phaseId": "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
-      "number": 1,
-      "shortName": "menu-nav-1",
-      "title": "menu-nav-1: shared nav binding set + config surface",
-      "status": "planned",
-      "description": "Define flat [keys] bindings menu_up (ArrowUp+Ctrl+k), menu_down (ArrowDown+Ctrl+j), menu_activate (Enter), menu_dismiss (Esc). Wire context menu + command palette to it (widgets become intent-only — remove hardcoded arrow/Ctrl+j/k from ContextMenu::event and CommandPalette; host resolves via keymap and dispatches nav actions). Sidebar is OUT: it keeps its own [keys.mode] name=\"sidebar\" (already configurable). Remove duplicated per-surface nav keys. Document in README + keybindings.default.toml.",
+      "id": "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 250,
+      "shortId": "93UJS",
+      "priority": 8,
+      "shortName": "plugin-task-ui-6",
+      "title": "plugin-task-ui-6 — Author docs",
+      "status": "done",
+      "description": "Author docs: a docs/chrome-and-ui.md with detailed ViewNode examples (panel, complex table, modal with a form) + a short \"Plugins (upcoming)\" pointer in README.md. Must be clearly marked design / target Phase 9 — not yet available until the WASM runtime (plugin-08) ships.\n\n---\n**Completion summary:**\nDONE 2026-07-26 — superseded by a documentation consolidation, not by writing the file this task\noriginally described.\n\nWHAT THE TASK ASKED FOR: a `docs/plugin-authoring.md` with ViewNode examples + a README pointer,\nmarked as design-only until the WASM runtime ships.\n\nWHAT WAS THERE: that file already existed and was complete (274 lines, all three examples). But an\naudit found its examples used a titled `Panel` and a `Label` variant that never existed in the\ncode, and it pointed readers at BACKLOG.md, which is stale.\n\nWHAT WAS DONE INSTEAD (user-directed): four documents were saying overlapping and contradicting\nthings about the same subject — `pluggable-chrome-plugin-plan.md` (1832 lines),\n`grid-ui-chrome-plan.md` (229), `docs/plugin-authoring.md` (274), and a `docs/declarative-ui.md`\nwritten earlier in the session. They are now ONE file:\n\n**`docs/chrome-and-ui.md`** — 1738 lines, three parts:\n- Part I — the declarative UI model, current, with corrected examples.\n- Part II — every architecture section from both plan files, transferred VERBATIM (a script did the\n  copying, so nothing was lost to summarising), each block headed with the planner ids that own it.\n- Part III — the old phase plan mapped to planner ids, a table of everything in Part II that is now\n  out of date, and the work found to be tracked nowhere.\n\nThe four originals are now 14-line pointer stubs kept only so links do not break; delete them once\nnothing references them. Every document that pointed at them was repointed: AGENTS.md, README.md,\nPLAN.md, BACKLOG.md, agents-communication-plan.md, docs/widgets.md, docs/widget-architecture.md,\ndocs/sidebar-provider-modes.md, docs/surface-compositor.md, plus 8 planner phase descriptions.\n\nRULES CHANGED IN PLACE (both were \"settled\" and are now reversed — recorded so they are not\nrestored): AGENTS.md line 721 and its SETTLED table, and the plan file's §2.6.1 rule C, all said\n\"styling is not a prop\". They now say the theme gives the default and code may override it with a\nstring.\n\nALSO REMOVED: the G1–G8 task list in grid-ui-chrome-plan.md §6. All eight items were built; only G7\never had a planner id (F004/P001).\n\nWORK FOUND WITH NO PLANNER ENTRY, NOW ADDED:\n- F004/P009 (gridui-08) — dragging a container between regions. `DragSurfaceId` has one variant,\n  `DockFrame` has no drag handle, `ChromeRegion` receives nothing.\n- F003/P018 (plugin-10) — binding and listing contributed actions. `ActionMeta.default_binding` and\n  `ActionCatalog::describe_all()` both exist and nothing reads either.\n\nCHECKED AND FOUND ALREADY BUILT (so no phase was created): the shared chrome state layer, plan\nPhase 2 — `heca/src/chrome/state.rs`, 1158 lines, `SharedChromeState` + `WorkspacesContainerState`.\n\nThe README pointer this task asked for still stands and now points at the consolidated file.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -39,12 +42,16 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-09T09:25:14.679Z"
+      "startedAt": "2026-07-26T08:21:55.139Z",
+      "completedAt": "2026-07-26T10:33:08.141Z",
+      "createdAt": "2026-07-08T11:47:40.594Z",
+      "updatedAt": "2026-07-26T10:33:08.141Z"
     }
   ],
   "createdAt": "2026-07-09T09:24:46.826Z",
-  "updatedAt": "2026-07-09T09:25:14.679Z"
+  "updatedAt": "2026-07-27T11:40:15.512Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

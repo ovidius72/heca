@@ -1,10 +1,11 @@
 {
   "id": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 9,
+  "number": 79,
+  "shortId": "J5TXQ",
+  "priority": 9,
   "slug": "gridui-08-drag-a-container-between-chrome-regions-dnd-hooks-the-plugin-escape-hatch",
   "title": "gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,194 +22,134 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "1203fec7-aa63-4369-b1de-e02986482f1d",
-    "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
-    "87175753-f899-4090-9acb-28a48d93457a",
-    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
-    "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300"
+    "78f61bb7-7c00-4d41-942a-237a3a3c68ad",
+    "7eb642e7-0b6b-4133-a55c-dae05d198c77",
+    "88ebda68-22af-4fce-96c3-4d1e445f7313",
+    "addecabb-0eb8-4e8d-a9ef-57f793a4738a",
+    "e276308e-38f6-45be-a3fb-e8c4bec9a6c9"
   ],
   "tasks": [
     {
-      "id": "1203fec7-aa63-4369-b1de-e02986482f1d",
-      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 1,
-      "shortName": "region-drag-surfaces",
-      "title": "Add region drag surfaces — additively",
+      "id": "78f61bb7-7c00-4d41-942a-237a3a3c68ad",
+      "phaseId": "dcf766af-eb11-4a78-9dd3-1e1e15663c33",
+      "number": 167,
+      "shortId": "Z4Q5N",
+      "priority": 3,
+      "shortName": "full-key-encoding",
+      "title": "Full key encoding to nvim_input",
       "status": "planned",
-      "description": "`DragSurfaceId` has exactly one variant, `LeftSidebar`. Add right sidebar, top bar and bottom bar. ADDITIVE ONLY: never modify or re-type an existing drag type, never remove or rename a variant. The app constructs these and matches exhaustively, so adding is free and the compiler simply asks for new arms.",
+      "description": "Encoding completo di tasti/modificatori per `nvim_input`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "region-drag-surfaces-c1",
-          "title": "New surface variants added additively",
-          "checked": false
-        },
-        {
-          "id": "region-drag-surfaces-c2",
-          "title": "No existing type or variant changed",
-          "checked": false
-        },
-        {
-          "id": "region-drag-surfaces-c3",
-          "title": "Compiler-required match arms filled in",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-01T18:15:25.598Z",
+      "updatedAt": "2026-07-01T18:15:25.598Z"
     },
     {
-      "id": "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
-      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 2,
-      "shortName": "dockframe-drag-handle",
-      "title": "DockFrame gets the drag handle it was specified with",
+      "id": "7eb642e7-0b6b-4133-a55c-dae05d198c77",
+      "phaseId": "dcf766af-eb11-4a78-9dd3-1e1e15663c33",
+      "number": 168,
+      "shortId": "NJXEN",
+      "priority": 1,
+      "shortName": "prefix-nvim-coexist",
+      "title": "Prefix binding coexistence with nvim",
       "status": "planned",
-      "description": "`DockFrame` was specified as title + collapse toggle + DRAG HANDLE + header-controls slot. The handle was never built. It drives `SurfaceDragState` carrying a `DragItem`.",
+      "description": "Convivenza tra prefix mode di Heca e input routing verso Neovim.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "dockframe-drag-handle-c1",
-          "title": "Drag handle drives SurfaceDragState",
-          "checked": false
-        },
-        {
-          "id": "dockframe-drag-handle-c2",
-          "title": "Ghost renders in the overlay layer",
-          "checked": false
-        },
-        {
-          "id": "dockframe-drag-handle-c3",
-          "title": "USER drags a container",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-01T18:15:25.598Z",
+      "updatedAt": "2026-07-01T18:15:25.598Z"
     },
     {
-      "id": "87175753-f899-4090-9acb-28a48d93457a",
-      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 3,
-      "shortName": "region-drop-targets",
-      "title": "ChromeRegion and inter-dock gaps receive",
+      "id": "88ebda68-22af-4fce-96c3-4d1e445f7313",
+      "phaseId": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
+      "number": 169,
+      "shortId": "8MYKZ",
+      "priority": 1,
+      "shortName": "nvim-image-rpc",
+      "title": "Dedicated RPC channel for images",
       "status": "planned",
-      "description": "They set `hover_item` when they can accept. `DragContext` already updates hover on EVERY surface, not just the active one, so several drop targets highlight at once — the cross-region model is already there.",
+      "description": "Canale RPC dedicato per comandi immagine.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "region-drop-targets-c1",
-          "title": "Region and gaps set hover_item",
-          "checked": false
-        },
-        {
-          "id": "region-drop-targets-c2",
-          "title": "Multiple targets highlight at once",
-          "checked": false
-        },
-        {
-          "id": "region-drop-targets-c3",
-          "title": "Insertion line renders in the overlay layer",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-01T18:15:25.598Z",
+      "updatedAt": "2026-07-01T18:15:25.598Z"
     },
     {
-      "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
-      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 4,
-      "shortName": "action-first-then-drag",
-      "title": "The move is an ACTION first; drag is only the mouse surface",
+      "id": "addecabb-0eb8-4e8d-a9ef-57f793a4738a",
+      "phaseId": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
+      "number": 170,
+      "shortId": "W9YHG",
+      "priority": 3,
+      "shortName": "reuse-image-renderer",
+      "title": "Reuse ImageRenderer from terminal",
       "status": "planned",
-      "description": "⚠️ Build the action BEFORE the drag. On drop, dispatch `chrome.dock.move_to_region` / `chrome.dock.reorder_before` through the registry — never mutate directly. The same move MUST be reachable by keyboard and RPC (input parity, AGENTS.md). A drag that does something no keybinding can do is a rule violation.",
+      "description": "Riutilizzare il renderer immagini del terminale.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "action-first-then-drag-c1",
-          "title": "Actions exist and work from keyboard + RPC first",
-          "checked": false
-        },
-        {
-          "id": "action-first-then-drag-c2",
-          "title": "Drop dispatches the action, never mutates",
-          "checked": false
-        },
-        {
-          "id": "action-first-then-drag-c3",
-          "title": "Follow the full Adding-New-Actions checklist",
-          "checked": false
-        },
-        {
-          "id": "action-first-then-drag-c4",
-          "title": "USER confirms keyboard and mouse agree",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-01T18:15:25.598Z",
+      "updatedAt": "2026-07-01T18:15:25.598Z"
     },
     {
-      "id": "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
-      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 5,
-      "shortName": "plugin-escape-hatch",
-      "title": "The open variants for plugins (defer until plugins exist)",
-      "status": "planned",
-      "description": "`DragItemKind::Custom(u32)` so non-workspace containers do not inherit window-manager nouns, and `DragSurfaceId::Plugin(PluginSurfaceId)` funnelling dynamic surfaces through runtime dispatch while built-ins keep the fast path. Not needed until F003/P001 — but it is the same code and the same decision, so it lives here.",
+      "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9",
+      "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
+      "number": 171,
+      "shortId": "HJYP5",
+      "priority": 1,
+      "shortName": "agentdriver-registry",
+      "title": "AgentDriver trait and registry",
+      "status": "deferred",
+      "description": "Trait/registry per driver agent.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "plugin-escape-hatch-c1",
-          "title": "Defer until plugins exist",
-          "checked": false
-        },
-        {
-          "id": "plugin-escape-hatch-c2",
-          "title": "One open variant each, additive",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
-      "dependsOn": [],
+      "dependsOn": [
+        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
+        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
+        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+        "88b87a32-ff00-4044-9a32-c575e3ed5401",
+        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      ],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-01T18:15:25.598Z",
+      "updatedAt": "2026-07-01T19:58:10.784796Z"
     }
   ],
   "createdAt": "2026-07-26T08:37:59.875Z",
-  "updatedAt": "2026-07-26T11:44:50.918444Z"
+  "updatedAt": "2026-07-27T11:40:15.495Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

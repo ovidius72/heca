@@ -1,7 +1,7 @@
 {
   "id": "a3be94c5-7427-499f-82d6-4d91bd4c61dc",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 6,
+  "number": 13,
   "shortId": "GR2DD",
   "priority": 6,
   "slug": "terminal-06-text-selection",
@@ -29,7 +29,7 @@
     {
       "id": "017e8c32-6118-40c8-933f-a579ba9f37c4",
       "phaseId": "a3be94c5-7427-499f-82d6-4d91bd4c61dc",
-      "number": 1,
+      "number": 16,
       "shortId": "JQA69",
       "priority": 1,
       "shortName": "selection-state-model",
@@ -51,7 +51,7 @@
     {
       "id": "a0f8ecfe-1767-40ce-8fe4-164a5c058987",
       "phaseId": "a3be94c5-7427-499f-82d6-4d91bd4c61dc",
-      "number": 2,
+      "number": 28,
       "shortId": "NHSGF",
       "priority": 2,
       "shortName": "selection-overlay-host",
@@ -74,5 +74,7 @@
   "createdAt": "2026-07-01T18:09:07.246Z",
   "updatedAt": "2026-07-27T11:40:15.482Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

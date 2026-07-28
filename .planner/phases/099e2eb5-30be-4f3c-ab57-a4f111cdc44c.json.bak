@@ -1,10 +1,11 @@
 {
   "id": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 2,
+  "number": 21,
+  "shortId": "SRJ8W",
+  "priority": 2,
   "slug": "plugin-06-placeholder-token-system",
   "title": "plugin-06: Placeholder token system",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,19 +22,21 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "12766991-ce77-4b08-9153-51549aa98e92",
-    "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
-    "db20fa00-a387-4ef1-b035-53c50913d9a1"
+    "5e0face8-7901-4eba-ac34-12fc1b9e26ad",
+    "64b075f7-f924-4811-9e5a-30e3aee7ff42",
+    "7dfd4996-aceb-4501-8670-9d7da7c11025"
   ],
   "tasks": [
     {
-      "id": "12766991-ce77-4b08-9153-51549aa98e92",
-      "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
-      "number": 1,
-      "shortName": "token-syntax-registry",
-      "title": "Define token syntax and registry",
+      "id": "5e0face8-7901-4eba-ac34-12fc1b9e26ad",
+      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
+      "number": 186,
+      "shortId": "AWF5F",
+      "priority": 9,
+      "shortName": "config-default",
+      "title": "Add notification_system config default",
       "status": "planned",
-      "description": "Definire `${var}` e registry dei token pane/column/workspace.",
+      "description": "Aggiungere `notification_system = \"app\"` a `config.default.toml` con commento conciso e senza promettere OS notifications v1.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -43,17 +46,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "createdAt": "2026-07-03T22:51:04.232Z",
+      "updatedAt": "2026-07-03T22:51:04.232Z"
     },
     {
-      "id": "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
-      "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
-      "number": 2,
-      "shortName": "token-pane-infobar",
-      "title": "Wire token resolution into pane info bar",
+      "id": "64b075f7-f924-4811-9e5a-30e3aee7ff42",
+      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
+      "number": 187,
+      "shortId": "XPKL5",
+      "priority": 10,
+      "shortName": "config-docs",
+      "title": "Document notification_system setting",
       "status": "planned",
-      "description": "Risoluzione token nei segmenti dell'info bar del pane.",
+      "description": "Documentare in README i valori `app`, `system`, `none`; chiarire che `system` è riservato/fallback finché il backend OS non atterra.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -63,17 +68,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "createdAt": "2026-07-03T22:51:04.232Z",
+      "updatedAt": "2026-07-03T22:51:04.232Z"
     },
     {
-      "id": "db20fa00-a387-4ef1-b035-53c50913d9a1",
-      "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
-      "number": 3,
-      "shortName": "token-config-paths",
-      "title": "Wire token resolution into config paths",
+      "id": "7dfd4996-aceb-4501-8670-9d7da7c11025",
+      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
+      "number": 188,
+      "shortId": "YPQ8G",
+      "priority": 6,
+      "shortName": "app-notification-model",
+      "title": "Define AppNotification canonical model",
       "status": "planned",
-      "description": "Risoluzione token in label e path di configurazione.",
+      "description": "Definire `AppNotification` come source of truth runtime con id, severity, title/body, source, lifecycle, action, dedup_key, created_at/expires_at.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -83,10 +90,14 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
+      "createdAt": "2026-07-03T22:51:04.232Z",
+      "updatedAt": "2026-07-03T22:51:04.232Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:12:56.211Z"
+  "updatedAt": "2026-07-27T11:40:15.499Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

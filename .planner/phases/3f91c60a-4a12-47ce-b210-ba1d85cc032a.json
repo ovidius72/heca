@@ -1,7 +1,7 @@
 {
   "id": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
-  "number": 5,
+  "number": 6,
   "shortId": "Q6ETV",
   "priority": 5,
   "slug": "theming-01-showcase-visual-verification",
@@ -22,36 +22,14 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "76f2e3f6-2bde-433f-8c90-c88b63f431ab",
-    "2ed60a90-1467-436c-b286-7f0225737e7c"
+    "2ed60a90-1467-436c-b286-7f0225737e7c",
+    "76f2e3f6-2bde-433f-8c90-c88b63f431ab"
   ],
   "tasks": [
     {
-      "id": "76f2e3f6-2bde-433f-8c90-c88b63f431ab",
-      "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
-      "number": 1,
-      "shortId": "PZSYH",
-      "priority": 1,
-      "shortName": "verify-widget-theme",
-      "title": "Verify every widget reacts to theme change",
-      "status": "done",
-      "description": "Verificare colori, border width, radius, glow e font family/size su tutti i widget.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-01T18:10:58.813Z",
-      "completedAt": "2026-07-01T18:10:58.813Z",
-      "createdAt": "2026-07-01T18:10:58.813Z",
-      "updatedAt": "2026-07-01T18:10:58.813Z"
-    },
-    {
       "id": "2ed60a90-1467-436c-b286-7f0225737e7c",
       "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
-      "number": 2,
+      "number": 5,
       "shortId": "2CPSC",
       "priority": 2,
       "shortName": "verify-latte-render",
@@ -69,10 +47,34 @@
       "completedAt": "2026-07-01T18:10:58.813Z",
       "createdAt": "2026-07-01T18:10:58.813Z",
       "updatedAt": "2026-07-01T18:10:58.813Z"
+    },
+    {
+      "id": "76f2e3f6-2bde-433f-8c90-c88b63f431ab",
+      "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
+      "number": 6,
+      "shortId": "PZSYH",
+      "priority": 1,
+      "shortName": "verify-widget-theme",
+      "title": "Verify every widget reacts to theme change",
+      "status": "done",
+      "description": "Verificare colori, border width, radius, glow e font family/size su tutti i widget.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-01T18:10:58.813Z",
+      "completedAt": "2026-07-01T18:10:58.813Z",
+      "createdAt": "2026-07-01T18:10:58.813Z",
+      "updatedAt": "2026-07-01T18:10:58.813Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
   "updatedAt": "2026-07-27T11:40:15.475Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

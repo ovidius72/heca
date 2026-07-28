@@ -1,7 +1,7 @@
 {
   "id": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 2,
+  "number": 21,
   "shortId": "SRJ8W",
   "priority": 2,
   "slug": "plugin-06-placeholder-token-system",
@@ -23,14 +23,14 @@
   "completionCriteria": [],
   "taskIds": [
     "12766991-ce77-4b08-9153-51549aa98e92",
-    "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
-    "db20fa00-a387-4ef1-b035-53c50913d9a1"
+    "db20fa00-a387-4ef1-b035-53c50913d9a1",
+    "deece3a4-e107-44fe-8e6d-f087ccb5daf5"
   ],
   "tasks": [
     {
       "id": "12766991-ce77-4b08-9153-51549aa98e92",
       "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
-      "number": 1,
+      "number": 66,
       "shortId": "7UAN8",
       "priority": 1,
       "shortName": "token-syntax-registry",
@@ -50,31 +50,9 @@
       "updatedAt": "2026-07-01T18:12:56.211Z"
     },
     {
-      "id": "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
-      "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
-      "number": 2,
-      "shortId": "LUV6K",
-      "priority": 2,
-      "shortName": "token-pane-infobar",
-      "title": "Wire token resolution into pane info bar",
-      "status": "planned",
-      "description": "Risoluzione token nei segmenti dell'info bar del pane.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-01T18:12:56.211Z",
-      "updatedAt": "2026-07-01T18:12:56.211Z"
-    },
-    {
       "id": "db20fa00-a387-4ef1-b035-53c50913d9a1",
       "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
-      "number": 3,
+      "number": 69,
       "shortId": "QNR2U",
       "priority": 3,
       "shortName": "token-config-paths",
@@ -92,10 +70,34 @@
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:56.211Z",
       "updatedAt": "2026-07-01T18:12:56.211Z"
+    },
+    {
+      "id": "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
+      "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
+      "number": 70,
+      "shortId": "LUV6K",
+      "priority": 2,
+      "shortName": "token-pane-infobar",
+      "title": "Wire token resolution into pane info bar",
+      "status": "planned",
+      "description": "Risoluzione token nei segmenti dell'info bar del pane.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:12:56.211Z",
+      "updatedAt": "2026-07-01T18:12:56.211Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.499Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

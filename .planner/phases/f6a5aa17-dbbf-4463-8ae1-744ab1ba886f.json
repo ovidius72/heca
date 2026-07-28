@@ -1,7 +1,7 @@
 {
   "id": "f6a5aa17-dbbf-4463-8ae1-744ab1ba886f",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 3,
+  "number": 50,
   "shortId": "S3RSR",
   "priority": 3,
   "slug": "app-01-niri-layout-parity-audit",
@@ -22,21 +22,21 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "f81ee832-a76d-4e80-82ad-85b996799d01",
+    "6007cc4a-b2fd-4a5d-9622-5087ab894123",
     "dd0b334f-38d3-46c9-8c5e-991fbb3fae05",
-    "6007cc4a-b2fd-4a5d-9622-5087ab894123"
+    "f81ee832-a76d-4e80-82ad-85b996799d01"
   ],
   "tasks": [
     {
-      "id": "f81ee832-a76d-4e80-82ad-85b996799d01",
+      "id": "6007cc4a-b2fd-4a5d-9622-5087ab894123",
       "phaseId": "f6a5aa17-dbbf-4463-8ae1-744ab1ba886f",
-      "number": 1,
-      "shortId": "ZPABU",
-      "priority": 1,
-      "shortName": "catalog-niri-anims",
-      "title": "Catalog niri animation types",
+      "number": 129,
+      "shortId": "5YU7X",
+      "priority": 3,
+      "shortName": "reaudit-niri-compat",
+      "title": "Re-audit remaining niri compat items",
       "status": "planned",
-      "description": "Catalogare le animazioni Niri e i relativi gap.",
+      "description": "Rivedere i residui gap di compatibilità con Niri.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -52,7 +52,7 @@
     {
       "id": "dd0b334f-38d3-46c9-8c5e-991fbb3fae05",
       "phaseId": "f6a5aa17-dbbf-4463-8ae1-744ab1ba886f",
-      "number": 2,
+      "number": 138,
       "shortId": "HP869",
       "priority": 2,
       "shortName": "verify-column-reflow",
@@ -72,15 +72,15 @@
       "updatedAt": "2026-07-01T18:14:28.688Z"
     },
     {
-      "id": "6007cc4a-b2fd-4a5d-9622-5087ab894123",
+      "id": "f81ee832-a76d-4e80-82ad-85b996799d01",
       "phaseId": "f6a5aa17-dbbf-4463-8ae1-744ab1ba886f",
-      "number": 3,
-      "shortId": "5YU7X",
-      "priority": 3,
-      "shortName": "reaudit-niri-compat",
-      "title": "Re-audit remaining niri compat items",
+      "number": 141,
+      "shortId": "ZPABU",
+      "priority": 1,
+      "shortName": "catalog-niri-anims",
+      "title": "Catalog niri animation types",
       "status": "planned",
-      "description": "Rivedere i residui gap di compatibilità con Niri.",
+      "description": "Catalogare le animazioni Niri e i relativi gap.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -97,5 +97,7 @@
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.465Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

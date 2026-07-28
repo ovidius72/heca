@@ -1,7 +1,7 @@
 {
   "id": "e544983e-887a-4978-985d-4f9a279496ff",
   "featureId": "...",
-  "number": 1,
+  "number": 65,
   "shortId": "3AB69",
   "priority": 1,
   "slug": "notification-06",
@@ -26,5 +26,7 @@
   "createdAt": "2026-07-04T07:05:14.792Z",
   "updatedAt": "2026-07-27T11:40:15.456Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

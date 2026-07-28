@@ -1,10 +1,11 @@
 {
   "id": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
-  "number": 5,
+  "number": 61,
+  "shortId": "WEGDL",
+  "priority": 5,
   "slug": "notification-01-model-config",
   "title": "notification-01: Model + Config",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,219 +22,413 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "ae6aecf5-b9dd-4327-9cb6-0306aa40551d",
-    "2167fa5e-750b-42b1-be11-1658c13913b6",
-    "208ad51d-2f42-436e-83c7-69af2c350b6d",
-    "b2319f2a-2902-4235-adbe-26d64149910c",
-    "994de278-bc6a-4744-8865-d0e0f1fb0876",
-    "7dfd4996-aceb-4501-8670-9d7da7c11025",
-    "b5a302b6-06ed-4409-b3f2-3a857b410cb0",
-    "f11023cb-6ce5-4962-a971-23d14a858f9e",
-    "5e0face8-7901-4eba-ac34-12fc1b9e26ad",
-    "64b075f7-f924-4811-9e5a-30e3aee7ff42"
+    "1203fec7-aa63-4369-b1de-e02986482f1d",
+    "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+    "2afbc43e-4f96-42b0-8202-232f17318401",
+    "2d578290-8e14-4e6b-ad88-7dc398790859",
+    "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+    "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+    "58a4843a-f15c-4313-86a4-e694f82f8921",
+    "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
+    "87175753-f899-4090-9acb-28a48d93457a",
+    "87f64d16-9cf8-48bf-bbe4-1542954e23b1"
   ],
   "tasks": [
     {
-      "id": "ae6aecf5-b9dd-4327-9cb6-0306aa40551d",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 1,
-      "shortName": "severity-mapping",
-      "title": "Define app notification severity and ToastSeverity mapping",
+      "id": "1203fec7-aa63-4369-b1de-e02986482f1d",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 318,
+      "shortId": "CYVSC",
+      "priority": 1,
+      "shortName": "region-drag-surfaces",
+      "title": "Add region drag surfaces — additively",
       "status": "planned",
-      "description": "Definire `NotificationSeverity` app-owned e mapping completo verso `ToastSeverity`, senza colori o stile nel modello app.",
+      "description": "`DragSurfaceId` has exactly one variant, `LeftSidebar`. Add right sidebar, top bar and bottom bar. ADDITIVE ONLY: never modify or re-type an existing drag type, never remove or rename a variant. The app constructs these and matches exhaustively, so adding is free and the compiler simply asks for new arms.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "region-drag-surfaces-c1",
+          "title": "New surface variants added additively",
+          "checked": false
+        },
+        {
+          "id": "region-drag-surfaces-c2",
+          "title": "No existing type or variant changed",
+          "checked": false
+        },
+        {
+          "id": "region-drag-surfaces-c3",
+          "title": "Compiler-required match arms filled in",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "2167fa5e-750b-42b1-be11-1658c13913b6",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 2,
-      "shortName": "lifecycle-defaults",
-      "title": "Define notification lifecycle defaults",
+      "id": "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 319,
+      "shortId": "YQLV7",
+      "priority": 1,
+      "shortName": "provider-content-model",
+      "title": "The write-once Group/Item content model",
       "status": "planned",
-      "description": "Definire `NotificationLifecycle::AutoDismiss(Duration)` / `Sticky` e policy default per severity: info 4s, success 3s, warning 6s, danger sticky.",
+      "description": "A Provider describes its content ONCE as a semantic tree of Groups and Items. Each node carries its meaning a single time: an Item has icon, label, status, intent and expanded-only actions; a Group has identity, collapsed, and children nested to any depth. The author NEVER writes an expanded tree and a collapsed tree — that double authoring is what this rejects, and it would fall on every plugin too.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "provider-content-model-c1",
+          "title": "Group/Item model defined",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c2",
+          "title": "Nesting to any depth",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c3",
+          "title": "No second tree anywhere in the author's code",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "208ad51d-2f42-436e-83c7-69af2c350b6d",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 3,
-      "shortName": "notification-source",
-      "title": "Define notification source model",
+      "id": "2afbc43e-4f96-42b0-8202-232f17318401",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 320,
+      "shortId": "KTPUY",
+      "priority": 2,
+      "shortName": "confirm-dialog-as-layer",
+      "title": "Convert the confirm dialog to a layer with hintable buttons",
       "status": "planned",
-      "description": "Definire `NotificationSource` per System, Config, Action, Pane, Workspace, ChromeProvider e Agent; solo metadata/debug/dedup, non routing.",
+      "description": "Migration step 2 from the design. A modal that draws its buttons manually has no child subtree, so `collect_hint_targets` finds nothing and it shows no keycaps — against the project rule that every action is KeyHint-reachable. Do it the conformant way: `OverlayHost::open_modal` with a ViewNode body and actions, NOT a bespoke modal.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "confirm-dialog-as-layer-c1",
+          "title": "Confirm dialog goes through OverlayHost::open_modal",
+          "checked": false
+        },
+        {
+          "id": "confirm-dialog-as-layer-c2",
+          "title": "Its buttons are real components with hint targets",
+          "checked": false
+        },
+        {
+          "id": "confirm-dialog-as-layer-c3",
+          "title": "USER confirms the keycaps appear",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "b2319f2a-2902-4235-adbe-26d64149910c",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 4,
-      "shortName": "notification-system-enum",
-      "title": "Define NotificationSystem config enum",
+      "id": "2d578290-8e14-4e6b-ad88-7dc398790859",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 321,
+      "shortId": "A7JKV",
+      "priority": 2,
+      "shortName": "bind-any-action-by-name",
+      "title": "Let config bind ANY action by name, contributed ones included",
       "status": "planned",
-      "description": "Aggiungere `NotificationSystem { App, System, None }` in `heca-config/src/settings.rs`, serde snake_case, default App e test parsing.",
+      "description": "keybindings.default.toml and the user's keybindings only speak to built-in `WmAction`s today. The registry is already keyed by name, so this is a lookup, not a new mechanism. Same syntax as a built-in — a user should not need to know whether an action is built in or contributed.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "bind-any-action-by-name-c1",
+          "title": "Bind by name in config for contributed actions",
+          "checked": false
+        },
+        {
+          "id": "bind-any-action-by-name-c2",
+          "title": "Same syntax as built-ins",
+          "checked": false
+        },
+        {
+          "id": "bind-any-action-by-name-c3",
+          "title": "Unknown name is reported, not silently ignored",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "994de278-bc6a-4744-8865-d0e0f1fb0876",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 5,
-      "shortName": "notification-action",
-      "title": "Define notification action model",
+      "id": "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 322,
+      "shortId": "FYRQE",
+      "priority": 4,
+      "shortName": "railcell-widget-work",
+      "title": "RailCell text label + nav_selected, and Glyph::Stack",
       "status": "planned",
-      "description": "Definire `NotificationAction { label, action: WmAction, dismiss_after }`; vietate closure e mutazioni dirette di AppState.",
+      "description": "Verified NOT built 2026-07-26: `RailCell` has no `nav_selected` (0 hits in rail_cell.rs) and `Glyph::Stack` does not exist — `Glyph::FolderSimple` already does. Extend RailCell to show a short text label for the name/number styles, add `nav_selected` mirroring Row / MarkerGroup / DockFrame, and add the Stack glyph. All styling from Theme — no literals.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "railcell-widget-work-c1",
+          "title": "RailCell shows a short text label",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c2",
+          "title": "nav_selected added, mirroring the other widgets",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c3",
+          "title": "Glyph::Stack added",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c4",
+          "title": "All colours from theme tokens",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c5",
+          "title": "docs/widgets.md + showcase updated",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "7dfd4996-aceb-4501-8670-9d7da7c11025",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 6,
-      "shortName": "app-notification-model",
-      "title": "Define AppNotification canonical model",
+      "id": "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 323,
+      "shortId": "2T7E5",
+      "priority": 4,
+      "shortName": "verify-visually",
+      "title": "USER verifies every container agrees at 0 and at a large width",
       "status": "planned",
-      "description": "Definire `AppNotification` come source of truth runtime con id, severity, title/body, source, lifecycle, action, dedup_key, created_at/expires_at.",
+      "description": "Borders are visible. Green tests are not verification. Build the showcase, set the global width to 0 and then to something large, and confirm Toast, Modal, Bracketed panes, plain Panes and the control widgets all agree.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "verify-visually-c1",
+          "title": "USER confirms at width 0",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c2",
+          "title": "USER confirms at a large width",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c3",
+          "title": "Separate from fix/bracket-frame-render — do not conflate",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "b5a302b6-06ed-4409-b3f2-3a857b410cb0",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 7,
-      "shortName": "notification-draft",
-      "title": "Define NotificationDraft builder API",
+      "id": "58a4843a-f15c-4313-86a4-e694f82f8921",
+      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
+      "number": 324,
+      "shortId": "NEETL",
+      "priority": 3,
+      "shortName": "palette-lists-contributed",
+      "title": "Command palette lists contributed actions",
       "status": "planned",
-      "description": "Aggiungere `NotificationDraft` e builder helpers (`success/info/warning/danger`, body, source, action, dedup_key, sticky, auto_dismiss) per producer ergonomici.",
+      "description": "`ActionCatalog::describe_all()` already returns `ActionInfo` (serde) with label, icon and category — everything a palette needs. The palette does not read it. Feed it from there so contributed actions are listed, searchable and runnable.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "palette-lists-contributed-c1",
+          "title": "Palette reads describe_all()",
+          "checked": false
+        },
+        {
+          "id": "palette-lists-contributed-c2",
+          "title": "Label, icon and category shown",
+          "checked": false
+        },
+        {
+          "id": "palette-lists-contributed-c3",
+          "title": "Running one dispatches it",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "f11023cb-6ce5-4962-a971-23d14a858f9e",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 8,
-      "shortName": "toast-adapter",
-      "title": "Convert AppNotification to ToastSpec",
+      "id": "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 325,
+      "shortId": "J5592",
+      "priority": 2,
+      "shortName": "dockframe-drag-handle",
+      "title": "DockFrame gets the drag handle it was specified with",
       "status": "planned",
-      "description": "Implementare adapter app→grid-ui: title/body/severity/action label verso `ToastSpec`; nessun comportamento azione dentro `ToastSpec`.",
+      "description": "`DockFrame` was specified as title + collapse toggle + DRAG HANDLE + header-controls slot. The handle was never built. It drives `SurfaceDragState` carrying a `DragItem`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "dockframe-drag-handle-c1",
+          "title": "Drag handle drives SurfaceDragState",
+          "checked": false
+        },
+        {
+          "id": "dockframe-drag-handle-c2",
+          "title": "Ghost renders in the overlay layer",
+          "checked": false
+        },
+        {
+          "id": "dockframe-drag-handle-c3",
+          "title": "USER drags a container",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "5e0face8-7901-4eba-ac34-12fc1b9e26ad",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 9,
-      "shortName": "config-default",
-      "title": "Add notification_system config default",
+      "id": "87175753-f899-4090-9acb-28a48d93457a",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 326,
+      "shortId": "3YEJ4",
+      "priority": 3,
+      "shortName": "region-drop-targets",
+      "title": "ChromeRegion and inter-dock gaps receive",
       "status": "planned",
-      "description": "Aggiungere `notification_system = \"app\"` a `config.default.toml` con commento conciso e senza promettere OS notifications v1.",
+      "description": "They set `hover_item` when they can accept. `DragContext` already updates hover on EVERY surface, not just the active one, so several drop targets highlight at once — the cross-region model is already there.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "region-drop-targets-c1",
+          "title": "Region and gaps set hover_item",
+          "checked": false
+        },
+        {
+          "id": "region-drop-targets-c2",
+          "title": "Multiple targets highlight at once",
+          "checked": false
+        },
+        {
+          "id": "region-drop-targets-c3",
+          "title": "Insertion line renders in the overlay layer",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "64b075f7-f924-4811-9e5a-30e3aee7ff42",
-      "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
-      "number": 10,
-      "shortName": "config-docs",
-      "title": "Document notification_system setting",
+      "id": "87f64d16-9cf8-48bf-bbe4-1542954e23b1",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 327,
+      "shortId": "J34RD",
+      "priority": 4,
+      "shortName": "show-layer-actions",
+      "title": "ShowLayer / HideLayer on-demand layers → a first native exposé",
       "status": "planned",
-      "description": "Documentare in README i valori `app`, `system`, `none`; chiarire che `system` è riservato/fallback finché il backend OS non atterra.",
+      "description": "Migration step 3. `ShowLayer(id)` makes an OnDemand layer visible and active, so the base context goes dormant when it is a context switch. A keybinding maps to it like any action, so it is rebindable and reachable from mouse and RPC.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "show-layer-actions-c1",
+          "title": "ShowLayer/HideLayer drive OnDemand layers",
+          "checked": false
+        },
+        {
+          "id": "show-layer-actions-c2",
+          "title": "Bindable + RPC-reachable like any action",
+          "checked": false
+        },
+        {
+          "id": "show-layer-actions-c3",
+          "title": "A first native exposé proves it",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-07-03T22:51:04.232Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-03T22:51:04.232Z"
+  "updatedAt": "2026-07-27T11:40:15.531Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

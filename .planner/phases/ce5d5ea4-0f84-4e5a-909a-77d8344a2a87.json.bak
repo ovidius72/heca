@@ -1,10 +1,11 @@
 {
   "id": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 4,
+  "number": 46,
+  "shortId": "C8KVB",
+  "priority": 4,
   "slug": "gridui-04-showcase-coverage-and-visual-regression",
   "title": "gridui-04: Showcase coverage and visual regression",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,18 +22,20 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "d7b4523a-c813-4cfd-bee5-e9726906e036",
-    "e4f328e7-0ef8-45ac-b261-dc7959ec0a0e"
+    "0c4afd42-0366-4270-8d91-015cdee2fefb",
+    "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc"
   ],
   "tasks": [
     {
-      "id": "d7b4523a-c813-4cfd-bee5-e9726906e036",
-      "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
-      "number": 1,
-      "shortName": "visual-regression-snapshots",
-      "title": "Visual regression snapshots for widget states",
+      "id": "0c4afd42-0366-4270-8d91-015cdee2fefb",
+      "phaseId": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
+      "number": 142,
+      "shortId": "499MY",
+      "priority": 5,
+      "shortName": "pane-damage-render",
+      "title": "Pane rendering from damage signals",
       "status": "planned",
-      "description": "Snapshot/render tests per stati normali, hover, active, disabled, focused.",
+      "description": "Render dei pane guidato dai damage signals.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,17 +45,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-01T18:14:56.477Z"
     },
     {
-      "id": "e4f328e7-0ef8-45ac-b261-dc7959ec0a0e",
-      "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
-      "number": 2,
-      "shortName": "audit-showcase-demos",
-      "title": "Audit showcase for missing widget demos",
+      "id": "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc",
+      "phaseId": "884c75d3-e99a-4537-b09c-aa9efab3270c",
+      "number": 143,
+      "shortId": "6XW2M",
+      "priority": 1,
+      "shortName": "fix-vibrancy-warning",
+      "title": "Fix NSWindow vibrancy console warning",
       "status": "planned",
-      "description": "Individuare e aggiungere demo mancanti nello showcase.",
+      "description": "Silenziare il warning macOS sulla vibrancy.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -62,10 +67,14 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-01T18:14:56.477Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:13:27.647Z"
+  "updatedAt": "2026-07-27T11:40:15.491Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

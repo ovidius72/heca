@@ -1,7 +1,7 @@
 {
   "id": "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 13,
+  "number": 69,
   "shortId": "5BCC8",
   "priority": 13,
   "slug": "menu-nav-shared-list-menu-navigation-keybindings",
@@ -28,7 +28,7 @@
     {
       "id": "4b545e7a-ff08-47dd-82ac-2f2660373e27",
       "phaseId": "05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9",
-      "number": 1,
+      "number": 258,
       "shortId": "B8Q99",
       "priority": 1,
       "shortName": "menu-nav-1",
@@ -51,5 +51,7 @@
   "createdAt": "2026-07-09T09:24:46.826Z",
   "updatedAt": "2026-07-27T11:40:15.512Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

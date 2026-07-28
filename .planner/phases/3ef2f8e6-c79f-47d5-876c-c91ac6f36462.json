@@ -1,7 +1,7 @@
 {
   "id": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 9,
+  "number": 79,
   "shortId": "J5TXQ",
   "priority": 9,
   "slug": "gridui-08-drag-a-container-between-chrome-regions-dnd-hooks-the-plugin-escape-hatch",
@@ -25,14 +25,14 @@
     "1203fec7-aa63-4369-b1de-e02986482f1d",
     "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
     "87175753-f899-4090-9acb-28a48d93457a",
-    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
-    "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300"
+    "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
+    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8"
   ],
   "tasks": [
     {
       "id": "1203fec7-aa63-4369-b1de-e02986482f1d",
       "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 1,
+      "number": 318,
       "shortId": "CYVSC",
       "priority": 1,
       "shortName": "region-drag-surfaces",
@@ -70,7 +70,7 @@
     {
       "id": "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
       "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 2,
+      "number": 325,
       "shortId": "J5592",
       "priority": 2,
       "shortName": "dockframe-drag-handle",
@@ -108,7 +108,7 @@
     {
       "id": "87175753-f899-4090-9acb-28a48d93457a",
       "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 3,
+      "number": 326,
       "shortId": "3YEJ4",
       "priority": 3,
       "shortName": "region-drop-targets",
@@ -144,9 +144,42 @@
       "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
+      "id": "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 330,
+      "shortId": "L5K5F",
+      "priority": 5,
+      "shortName": "plugin-escape-hatch",
+      "title": "The open variants for plugins (defer until plugins exist)",
+      "status": "planned",
+      "description": "`DragItemKind::Custom(u32)` so non-workspace containers do not inherit window-manager nouns, and `DragSurfaceId::Plugin(PluginSurfaceId)` funnelling dynamic surfaces through runtime dispatch while built-ins keep the fast path. Not needed until F003/P001 — but it is the same code and the same decision, so it lives here.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "plugin-escape-hatch-c1",
+          "title": "Defer until plugins exist",
+          "checked": false
+        },
+        {
+          "id": "plugin-escape-hatch-c2",
+          "title": "One open variant each, additive",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
       "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
       "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 4,
+      "number": 333,
       "shortId": "F7ZWL",
       "priority": 4,
       "shortName": "action-first-then-drag",
@@ -185,43 +218,12 @@
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
-      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
-      "number": 5,
-      "shortId": "L5K5F",
-      "priority": 5,
-      "shortName": "plugin-escape-hatch",
-      "title": "The open variants for plugins (defer until plugins exist)",
-      "status": "planned",
-      "description": "`DragItemKind::Custom(u32)` so non-workspace containers do not inherit window-manager nouns, and `DragSurfaceId::Plugin(PluginSurfaceId)` funnelling dynamic surfaces through runtime dispatch while built-ins keep the fast path. Not needed until F003/P001 — but it is the same code and the same decision, so it lives here.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "plugin-escape-hatch-c1",
-          "title": "Defer until plugins exist",
-          "checked": false
-        },
-        {
-          "id": "plugin-escape-hatch-c2",
-          "title": "One open variant each, additive",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-26T08:37:59.875Z",
   "updatedAt": "2026-07-27T11:40:15.495Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

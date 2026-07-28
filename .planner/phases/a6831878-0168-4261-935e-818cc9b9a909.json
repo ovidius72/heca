@@ -1,7 +1,7 @@
 {
   "id": "a6831878-0168-4261-935e-818cc9b9a909",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 9,
+  "number": 43,
   "shortId": "NULVM",
   "priority": 9,
   "slug": "app-03-app-wide-zoom-and-font-size-controls",
@@ -22,37 +22,15 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "2c58342a-be3a-4591-befb-e7a947803bcc",
     "262d15e2-e380-49bd-b207-26635e823dc7",
+    "2c58342a-be3a-4591-befb-e7a947803bcc",
     "92548b51-e669-4f8f-84dd-c96c8becfbfa"
   ],
   "tasks": [
     {
-      "id": "2c58342a-be3a-4591-befb-e7a947803bcc",
-      "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
-      "number": 1,
-      "shortId": "7J98P",
-      "priority": 1,
-      "shortName": "app-wide-zoom-action",
-      "title": "App-wide zoom WmAction",
-      "status": "planned",
-      "description": "Aggiungere le action per zoom globale.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-01T18:14:28.688Z",
-      "updatedAt": "2026-07-01T18:14:28.688Z"
-    },
-    {
       "id": "262d15e2-e380-49bd-b207-26635e823dc7",
       "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
-      "number": 2,
+      "number": 126,
       "shortId": "ZA53A",
       "priority": 2,
       "shortName": "ui-font-size-actions",
@@ -72,9 +50,31 @@
       "updatedAt": "2026-07-01T18:14:28.688Z"
     },
     {
+      "id": "2c58342a-be3a-4591-befb-e7a947803bcc",
+      "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
+      "number": 127,
+      "shortId": "7J98P",
+      "priority": 1,
+      "shortName": "app-wide-zoom-action",
+      "title": "App-wide zoom WmAction",
+      "status": "planned",
+      "description": "Aggiungere le action per zoom globale.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-07-01T18:14:28.688Z"
+    },
+    {
       "id": "92548b51-e669-4f8f-84dd-c96c8becfbfa",
       "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
-      "number": 3,
+      "number": 131,
       "shortId": "LNNZY",
       "priority": 3,
       "shortName": "terminal-font-actions",
@@ -97,5 +97,7 @@
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.469Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

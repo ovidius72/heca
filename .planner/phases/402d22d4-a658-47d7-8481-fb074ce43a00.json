@@ -1,7 +1,7 @@
 {
   "id": "402d22d4-a658-47d7-8481-fb074ce43a00",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 8,
+  "number": 74,
   "shortId": "QJGXJ",
   "priority": 8,
   "slug": "button-shortcut-button-accelerator-shortcut",
@@ -32,7 +32,7 @@
     {
       "id": "a43f300a-2162-40ac-9b86-ca16ad006c90",
       "phaseId": "402d22d4-a658-47d7-8481-fb074ce43a00",
-      "number": 1,
+      "number": 273,
       "shortId": "5AU6N",
       "priority": 1,
       "shortName": "button-shortcut-api",
@@ -54,7 +54,7 @@
     {
       "id": "760365ea-80cb-4b5c-99de-ffe1b63f8eb3",
       "phaseId": "402d22d4-a658-47d7-8481-fb074ce43a00",
-      "number": 2,
+      "number": 276,
       "shortId": "RP42W",
       "priority": 2,
       "shortName": "modal-shortcut-prop",
@@ -77,5 +77,7 @@
   "createdAt": "2026-07-13T15:29:44.427Z",
   "updatedAt": "2026-07-27T11:40:15.494Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }
