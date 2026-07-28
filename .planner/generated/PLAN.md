@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-27T23:42:19.429Z
+**Last updated:** 2026-07-28T06:45:55.055Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -97,7 +97,7 @@ Status: 🚧 `in-progress`
 - 📋 **74abdac5-8a35-4e5f-a82f-3abb9bb0b738** P008 — plugin-05: Host API actions/overlay/region (0/3 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - ✅ **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (5/6 tasks)
-- 🚧 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (15/21 tasks)
+- 🚧 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (17/21 tasks)
 - ✅ **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (8/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
@@ -120,7 +120,7 @@ Status: 🚧 `in-progress`
 - 📋 **981bc6b0-9529-4a1c-96a3-7c8e34217bc4** P003 — gridui-02: Pane shell header and tabs (0/4 tasks)
 - 📋 **ce5d5ea4-0f84-4e5a-909a-77d8344a2a87** P004 — gridui-04: Showcase coverage and visual regression (0/2 tasks)
 - 📋 **35d74cc9-a3df-49c9-a5bb-59e12a88b49c** P005 — gridui-06: Additional widgets (0/7 tasks)
-- 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** P006 — gridui-07: Crate-review debt (0/9 tasks)
+- 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** P006 — gridui-07: Crate-review debt (0/10 tasks)
 - 📋 **36628b50-a0b5-4974-852e-96d68c09f11f** P007 — gridui-03: Nerd-Font icon widget (0/4 tasks)
 - 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P008 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
 - 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P009 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/5 tasks)
@@ -694,7 +694,7 @@ Debito tecnico del crate: docs, allocazioni, test coverage, helper condivisi.
 
 Status: 📋 `planned`
 
-**Tasks:** 0/9
+**Tasks:** 0/10
 
 ### 📋 36628b50-a0b5-4974-852e-96d68c09f11f — P007 — gridui-03: Nerd-Font icon widget
 
@@ -823,7 +823,7 @@ The serializable widget tree plugins author, SwiftUI/Flutter-style — a contain
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 15/21
+**Tasks:** 17/21
 
 ### ✅ 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
 

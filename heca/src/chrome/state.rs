@@ -980,9 +980,9 @@ mod tests {
     fn every_placement_owns_its_own_scroll_offset() {
         let s = state();
 
-        s.set_container_scroll("workspaces.testbed.top", 30.0);
+        s.set_container_scroll("dock.a", 30.0);
         assert_eq!(
-            s.container_scroll("workspaces.testbed.bottom").get_untracked(),
+            s.container_scroll("dock.b").get_untracked(),
             0.0,
             "two placements of one container scroll independently",
         );
@@ -991,7 +991,7 @@ mod tests {
             0.0,
             "and a third placement elsewhere is untouched",
         );
-        assert_eq!(s.container_scroll("workspaces.testbed.top").get_untracked(), 30.0);
+        assert_eq!(s.container_scroll("dock.a").get_untracked(), 30.0);
     }
 
     #[test]
