@@ -1,7 +1,7 @@
 {
   "id": "99d19246-1ba9-4720-9895-e70c66acf144",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 11,
+  "number": 67,
   "shortId": "73GZ3",
   "priority": 11,
   "slug": "plugin-ui-declarative-widget-tree-ui-model-viewnode",
@@ -24,13 +24,13 @@
   "taskIds": [
     "972dbde6-37b9-438b-acc4-4ec9be7fd3cd",
     "d3555dc1-fd37-415e-98e4-bd1307ed75ad",
-    "8b510741-5108-41c1-af0c-c8ad5b04ebe5",
-    "2cd2ee16-abca-4362-80cc-31a0a08f5ede",
-    "fc199765-dfbe-4c2a-99b4-e3a64cf49686",
-    "6c81c18b-1b80-4128-ba2a-276791879edb",
-    "cf390afd-99f3-4a5a-b79c-71edad09b29e",
-    "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
     "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
+    "2cd2ee16-abca-4362-80cc-31a0a08f5ede",
+    "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
+    "6c81c18b-1b80-4128-ba2a-276791879edb",
+    "8b510741-5108-41c1-af0c-c8ad5b04ebe5",
+    "cf390afd-99f3-4a5a-b79c-71edad09b29e",
+    "fc199765-dfbe-4c2a-99b4-e3a64cf49686",
     "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
     "586953dc-a2af-45cc-8eff-f6d5441f6ece",
     "126d0855-658d-471f-86a6-27eb144fc591",
@@ -48,7 +48,7 @@
     {
       "id": "972dbde6-37b9-438b-acc4-4ec9be7fd3cd",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 1,
+      "number": 245,
       "shortId": "HAPFK",
       "priority": 1,
       "shortName": "plugin-task-ui-1",
@@ -70,7 +70,7 @@
     {
       "id": "d3555dc1-fd37-415e-98e4-bd1307ed75ad",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 2,
+      "number": 246,
       "shortId": "Q7UQ7",
       "priority": 2,
       "shortName": "plugin-task-ui-core",
@@ -90,31 +90,48 @@
       "updatedAt": "2026-07-08T11:47:40.593Z"
     },
     {
-      "id": "8b510741-5108-41c1-af0c-c8ad5b04ebe5",
+      "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 3,
-      "shortId": "WHS53",
-      "priority": 3,
-      "shortName": "plugin-task-ui-surface",
-      "title": "Surface compositor + LayerRegistry (step 1)",
+      "number": 248,
+      "shortId": "SST9A",
+      "priority": 9,
+      "shortName": "plugin-task-ui-7",
+      "title": "plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)",
       "status": "done",
-      "description": "docs/surface-compositor.md = layered-surface architecture deciding KeyHint visibility (active-context + geometric occlusion, no hardcoded z). active_hint_targets (chrome/mod.rs) builds the on-screen surface stack (overlays → chrome → panes) and resolves it; replaced the three interim geometric filters. LayerRegistry (chrome/layers.rs) holds dynamically-added layers (band/kind/modal). Referenced from AGENTS.md + README.md.",
+      "description": "EVERY widget must be able to receive a ViewNode (arbitrary child subtree) as its content — the real SwiftUI/Flutter model.\n\n## Scope (original, locked with user 2026-07-08)\n1. Composition-first widgets [SETTLED done per AGENTS.md]. 2. realize() coverage complete [SETTLED done]. 3. Any ViewNode renders, any widget hosts any widget.\nOverlay direction: base Overlay widget with Modal/Dialog as specializations (composition, not inheritance); BLOCKING STAYS A LAYER PROPERTY; overlay sizing + scrollable body gaps. Update showcase + docs/widgets.md; styling from theme; vocabulary host-owned.\n\n## DONE 2026-07-16 — Part 2 steps 2+3, USER-VERIFIED, commit 431e0d1 (PR #244 to main)\nShowcase page root = ScrollRegion.both() (BUG C fixed); overlays hosted above the scroll in a second tree (BUG B fixed); ScrollRegion children-first wheel + on_layout re-clamp + press-and-hold track paging; Component::overlay_occludes + overlay_occluded_at hook (right-click gate; ToastStack cards / Dialog / CommandPalette / Select impls; ContextMenu deliberately default). Docs + tests complete. User confirmed right-click over page widgets opening the menu is the wanted baseline.\n\n## STEP 4 BUILT 2026-07-16 — base Overlay widget + BUG A fix (uncommitted, AWAITING USER GPU VERIFICATION)\n- NEW heca-grid-ui/src/widgets/overlay.rs: base `Overlay` widget — viewport-filling centering layer, single `panel` child (`.panel()`/`.panel_boxed()` for realized content), BLOCKING AS A LAYER PROPERTY (`.blocking(bool)`: true = scrim + swallow outside input; false = light-dismiss fall-through), `.on_outside_click`, open_signal; focusable/overlay_active while open; overlay_occludes = viewport when blocking else panel rect; standalone event semantics (nested-overlay-first, outside-click hook, blocking swallow). Chrome (scrim/drop-shadow/surface fill/bracket reticle) moved here from Dialog. Anchor-to-rect positioning NOT built yet (no consumer this round) — planned extension.\n- Dialog REFACTORED to compose Overlay: Dialog = full-size passthrough → Overlay (blocking) → panel [title, body?, action-row]. Dialog keeps behaviour (focus trap, field-first keyboard, dismissible policy); paint override deleted (Overlay paints the layer); open signal IS the overlay's.\n- BUG A FIXED at low level, two halves:\n  (a) PAINT: scene.rs overlay segments now carry NESTING DEPTH; Scene::overlay_segments() yields depth-ordered (stable within depth) — a nested overlay (Select list in a Dialog body) composites ABOVE everything its parent draws, including the action buttons painted after it. Tests: nested_overlay_keeps_parent_segment_and_composites_on_top, sibling_overlays_keep_record_order_within_a_depth.\n  (b) INPUT: Dialog offers PointerMoved / Scroll / Widget* intents to an overlay-active descendant FIRST (focus.offer_to_overlay), and presses route through dispatch_trapped when the point is in the panel OR occluded by a nested overlay (overlay_occluded_at) — so an open Select captures hover/wheel/keys over the buttons; Dismiss closes the DROPDOWN (not the dialog), Activate commits its row.\n- Showcase: Dialog body now INCLUDES a nested Select (\"Archive target\") — the deliberately-omitted BUG A case is now the verification demo.\n- heca/src/chrome/overlay.rs test updated to the composed structure (root → Overlay → panel).\n- Docs: widgets.md new §Overlay entry (native + declarative/host-only note), §Dialog rewritten (composes Overlay + nested-overlays-work note), Scene/PaintCx with_overlay table row (depth ordering); AGENTS.md catalogs; overlay-design.md phasing (steps 4–5 built). Full rustdoc.\n- Workspace tests green, clippy clean, showcase builds.\n\nVERIFY (user, GPU showcase): open the Dialog (DELETE PANE button) →\n(a) open the \"Archive target\" Select INSIDE it: its list paints ABOVE the Cancel/Delete buttons (no show-through), buttons under the open list do NOT hover, wheel over the list scrolls the list (not the page), Esc closes the LIST first (second Esc dismisses the dialog), clicking a row commits and closes the list only;\n(b) dialog still centers, scrim still dims, buttons/Input/Checkbox still work, Tab traps, outside click dismisses;\n(c) no regression in the top-level Selects / palette / menu / toasts / page scroll.\n\n## REMAINING after step-4 verification (explicit deferrals, recorded — not silent debt)\n- Overlay anchor-to-rect positioning (clamp + flip) — build when the first specialization converts.\n- Convert Select / Tooltip / ContextMenu / CommandPalette panels to compose Overlay (they keep their own correct placement/chrome today).\n- Fold in overlay sizing (.panel_size) + scrollable body (ScrollRegion in a modal body) gaps from the original scope.\n\n## BUG A — nested Select-in-Dialog (found 2026-07-15) — FIX BUILT (above), awaiting GPU verification. Original diagnosis preserved in docs/overlay-design.md + git history of this task.\n## BUG B — Dialog off-screen in scrolled content — FIXED + verified (431e0d1).\n## BUG C — no horizontal page scroll — FIXED + verified (431e0d1).",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00-check-001-in-progress-planned",
+          "date": "2026-07-15T17:45:43.580Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Reverting: user chose F003/P011/T005 (plugin-task-ui-4, Dialog + rich modal bodies) as the task to work on instead of T009. T009 not started; no work done.",
+          "description": "Reverting: user chose F003/P011/T005 (plugin-task-ui-4, Dialog + rich modal bodies) as the task to work on instead of T009. T009 not started; no work done."
+        },
+        {
+          "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00-check-002-in-progress-done",
+          "date": "2026-07-16T22:33:28.120Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "DONE — all delivered scope user-verified in the GPU showcase. (1) Composition-first widgets + full realize() coverage: SETTLED done earlier (AGENTS.md). (2) Overlay/scroll rework complete across commits c84528a (T010 Part 1), 431e0d1 (steps 2+3: whole-page ScrollRegion.both() + overlays hosted above the scroll — BUG B and BUG C fixed, verified 2026-07-16), d448702 (step 4: base Overlay widget with blocking-as-a-layer-property, Dialog composes it; BUG A fixed low-level via depth-ordered scene overlay segments + nested-overlay-first input routing in Dialog; nested Select-in-Dialog showcase demo — verified \"works great\" 2026-07-17). Step 5 docs done (widgets.md §Overlay + §Dialog + Scene depth ordering; overlay-design.md phasing closed). Explicit remaining scope moved to F003/P011/T014 \"Overlay follow-ups\" (anchor-to-rect mode, converting Select/Tooltip/ContextMenu/CommandPalette panels, .panel_size + scrollable modal body, SDF glyph glow) — recorded, not silent debt. Bug diagnoses preserved in git history of this task + docs/overlay-design.md.",
+          "description": "DONE — all delivered scope user-verified in the GPU showcase. (1) Composition-first widgets + full realize() coverage: SETTLED done earlier (AGENTS.md). (2) Overlay/scroll rework complete across commits c84528a (T010 Part 1), 431e0d1 (steps 2+3: whole-page ScrollRegion.both() + overlays hosted above the scroll — BUG B and BUG C fixed, verified 2026-07-16), d448702 (step 4: base Overlay widget with blocking-as-a-layer-property, Dialog composes it; BUG A fixed low-level via depth-ordered scene overlay segments + nested-overlay-first input routing in Dialog; nested Select-in-Dialog showcase demo — verified \"works great\" 2026-07-17). Step 5 docs done (widgets.md §Overlay + §Dialog + Scene depth ordering; overlay-design.md phasing closed). Explicit remaining scope moved to F003/P011/T014 \"Overlay follow-ups\" (anchor-to-rect mode, converting Select/Tooltip/ContextMenu/CommandPalette panels, .panel_size + scrollable modal body, SDF glyph glow) — recorded, not silent debt. Bug diagnoses preserved in git history of this task + docs/overlay-design.md."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-08T11:47:40.594Z",
-      "completedAt": "2026-07-08T11:47:40.594Z",
+      "startedAt": "2026-07-15T17:45:26.715Z",
+      "completedAt": "2026-07-16T22:33:28.120Z",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-08T11:47:40.594Z"
+      "updatedAt": "2026-07-16T22:33:28.120Z"
     },
     {
       "id": "2cd2ee16-abca-4362-80cc-31a0a08f5ede",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 4,
+      "number": 249,
       "shortId": "FVHKA",
       "priority": 4,
       "shortName": "plugin-task-ui-3",
@@ -134,15 +151,15 @@
       "updatedAt": "2026-07-08T11:47:40.594Z"
     },
     {
-      "id": "fc199765-dfbe-4c2a-99b4-e3a64cf49686",
+      "id": "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 5,
-      "shortId": "BD8LM",
-      "priority": 5,
-      "shortName": "plugin-task-ui-4",
-      "title": "plugin-task-ui-4 — Dialog widget + rich modal bodies",
+      "number": 250,
+      "shortId": "93UJS",
+      "priority": 8,
+      "shortName": "plugin-task-ui-6",
+      "title": "plugin-task-ui-6 — Author docs",
       "status": "done",
-      "description": "LARGELY DONE for the modal case: added heca-grid-ui::Dialog (real body + real action Button children; scrim/centering/focus-trap; self-contained keyboard). OverlayHost::open_modal takes ModalSpec { title, body: ViewNode, actions }, realizes the body via realize, builds it into a Dialog layer. Showcase demo + docs/widgets.md §Dialog added.\n\n## Progress 2026-07-15 (scoped against code)\nForm marshalling was ALREADY wired for Input/Toggle/Checkbox: interaction.rs:673 `collect_overlay_form` → `ModalResult::Action{data}` on SubmitOverlay. The ONE gap was Select.\n\nDONE this session (branch feat/action-task-c, awaiting commit approval):\n- realize.rs: named `Select` now marshals its CHOSEN OPTION VALUE (not index) into form data — new `option_values(node)` helper + reader over `select.state()` index → value.\n- overlay.rs: fixed stale `ModalResult::Action` doc (Input→Text, Toggle/Checkbox→Bool, Select→Text).\n- Tests: `named_select_is_collected_as_its_chosen_value` + `rich_modal_body_marshals_every_named_field`. All suites green, clippy 0 (only pre-existing block v0.1.6 dep note).\n- docs/widgets.md: §Dialog modal-from-data prose+example add Select field; §Select notes `name` opts into form submission.\n- showcase.rs: Dialog demo body enriched to a NON-overlay rich form (Label + Input + Checkbox) — deliberately not nesting a Select (see BUG A in T009).\n\nREGRESSIONS FOUND + HANDLED (moved to T009, NOT T005):\n- BUG A (nested Select inside Dialog: z-order show-through + hover fall-through) → documented in T009.\n- BUG B (Dialog off-screen when mounted in-flow in the scrolled showcase). Attempted a widget fix (Dialog::on_layout viewport-recenter) — it REGRESSED (still off-screen + backdrop-but-no-panel on re-open because showcase bounds are in scrolled-tree coords, not screen coords) so it was REVERTED. Dialog restored to taffy-only centering (correct in the app). Full analysis + correct approach in T009 BUG B.\n- BUG C (showcase has no horizontal scrollbar; ScrollRegion is vertical-only) → noted in T009.\n\nREMAINING for T005: none functional — the marshalling deliverable is complete and tested. Table = T007. Ready to mark done after user commit approval.\n\n---\n**Completion summary:**\nDONE. Commit 9c92696 (feat) + c152ef7 (planner) on branch feat/action-task-c. Named Select in a ViewNode modal body now marshals its chosen option VALUE into ModalResult::Action.data (was the last value-widget not marshalling; Input/Toggle/Checkbox already did via interaction.rs:673 collect_overlay_form). Files: heca/src/chrome/realize.rs (new option_values() helper + Select name-binding), heca/src/chrome/overlay.rs (ModalResult::Action doc fix), docs/widgets.md (§Dialog + §Select code examples for named form fields), heca-renderer/examples/showcase.rs (Dialog demo → non-overlay rich form). Tests: named_select_is_collected_as_its_chosen_value, rich_modal_body_marshals_every_named_field. Full workspace green, clippy clean. Table deferred to T007. Overlay-rendering bugs surfaced by the demo (nested-overlay z/occlusion, Dialog off-screen when scrolled, no horizontal scroll) were NOT part of this task and are documented in T009 (plugin-task-ui-7).",
+      "description": "Author docs: a docs/chrome-and-ui.md with detailed ViewNode examples (panel, complex table, modal with a form) + a short \"Plugins (upcoming)\" pointer in README.md. Must be clearly marked design / target Phase 9 — not yet available until the WASM runtime (plugin-08) ships.\n\n---\n**Completion summary:**\nDONE 2026-07-26 — superseded by a documentation consolidation, not by writing the file this task\noriginally described.\n\nWHAT THE TASK ASKED FOR: a `docs/plugin-authoring.md` with ViewNode examples + a README pointer,\nmarked as design-only until the WASM runtime ships.\n\nWHAT WAS THERE: that file already existed and was complete (274 lines, all three examples). But an\naudit found its examples used a titled `Panel` and a `Label` variant that never existed in the\ncode, and it pointed readers at BACKLOG.md, which is stale.\n\nWHAT WAS DONE INSTEAD (user-directed): four documents were saying overlapping and contradicting\nthings about the same subject — `pluggable-chrome-plugin-plan.md` (1832 lines),\n`grid-ui-chrome-plan.md` (229), `docs/plugin-authoring.md` (274), and a `docs/declarative-ui.md`\nwritten earlier in the session. They are now ONE file:\n\n**`docs/chrome-and-ui.md`** — 1738 lines, three parts:\n- Part I — the declarative UI model, current, with corrected examples.\n- Part II — every architecture section from both plan files, transferred VERBATIM (a script did the\n  copying, so nothing was lost to summarising), each block headed with the planner ids that own it.\n- Part III — the old phase plan mapped to planner ids, a table of everything in Part II that is now\n  out of date, and the work found to be tracked nowhere.\n\nThe four originals are now 14-line pointer stubs kept only so links do not break; delete them once\nnothing references them. Every document that pointed at them was repointed: AGENTS.md, README.md,\nPLAN.md, BACKLOG.md, agents-communication-plan.md, docs/widgets.md, docs/widget-architecture.md,\ndocs/sidebar-provider-modes.md, docs/surface-compositor.md, plus 8 planner phase descriptions.\n\nRULES CHANGED IN PLACE (both were \"settled\" and are now reversed — recorded so they are not\nrestored): AGENTS.md line 721 and its SETTLED table, and the plan file's §2.6.1 rule C, all said\n\"styling is not a prop\". They now say the theme gives the default and code may override it with a\nstring.\n\nALSO REMOVED: the G1–G8 task list in grid-ui-chrome-plan.md §6. All eight items were built; only G7\never had a planner id (F004/P001).\n\nWORK FOUND WITH NO PLANNER ENTRY, NOW ADDED:\n- F004/P009 (gridui-08) — dragging a container between regions. `DragSurfaceId` has one variant,\n  `DockFrame` has no drag handle, `ChromeRegion` receives nothing.\n- F003/P018 (plugin-10) — binding and listing contributed actions. `ActionMeta.default_binding` and\n  `ActionCatalog::describe_all()` both exist and nothing reads either.\n\nCHECKED AND FOUND ALREADY BUILT (so no phase was created): the shared chrome state layer, plan\nPhase 2 — `heca/src/chrome/state.rs`, 1158 lines, `SharedChromeState` + `WorkspacesContainerState`.\n\nThe README pointer this task asked for still stands and now points at the consolidated file.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -150,15 +167,15 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-15T17:45:46.666Z",
-      "completedAt": "2026-07-15T20:04:38.057Z",
+      "startedAt": "2026-07-26T08:21:55.139Z",
+      "completedAt": "2026-07-26T10:33:08.141Z",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-15T20:04:38.057Z"
+      "updatedAt": "2026-07-26T10:33:08.141Z"
     },
     {
       "id": "6c81c18b-1b80-4128-ba2a-276791879edb",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 6,
+      "number": 251,
       "shortId": "295EW",
       "priority": 6,
       "shortName": "plugin-task-ui-2",
@@ -203,9 +220,31 @@
       "updatedAt": "2026-07-28T06:44:15.003Z"
     },
     {
+      "id": "8b510741-5108-41c1-af0c-c8ad5b04ebe5",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 252,
+      "shortId": "WHS53",
+      "priority": 3,
+      "shortName": "plugin-task-ui-surface",
+      "title": "Surface compositor + LayerRegistry (step 1)",
+      "status": "done",
+      "description": "docs/surface-compositor.md = layered-surface architecture deciding KeyHint visibility (active-context + geometric occlusion, no hardcoded z). active_hint_targets (chrome/mod.rs) builds the on-screen surface stack (overlays → chrome → panes) and resolves it; replaced the three interim geometric filters. LayerRegistry (chrome/layers.rs) holds dynamically-added layers (band/kind/modal). Referenced from AGENTS.md + README.md.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-08T11:47:40.594Z",
+      "completedAt": "2026-07-08T11:47:40.594Z",
+      "createdAt": "2026-07-08T11:47:40.594Z",
+      "updatedAt": "2026-07-08T11:47:40.594Z"
+    },
+    {
       "id": "cf390afd-99f3-4a5a-b79c-71edad09b29e",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 7,
+      "number": 253,
       "shortId": "87G27",
       "priority": 7,
       "shortName": "plugin-task-ui-5",
@@ -234,15 +273,15 @@
       "updatedAt": "2026-07-25T13:10:31.668Z"
     },
     {
-      "id": "4bf9d63a-8a2b-4cf1-896d-39e261b0e1c3",
+      "id": "fc199765-dfbe-4c2a-99b4-e3a64cf49686",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 8,
-      "shortId": "93UJS",
-      "priority": 8,
-      "shortName": "plugin-task-ui-6",
-      "title": "plugin-task-ui-6 — Author docs",
+      "number": 254,
+      "shortId": "BD8LM",
+      "priority": 5,
+      "shortName": "plugin-task-ui-4",
+      "title": "plugin-task-ui-4 — Dialog widget + rich modal bodies",
       "status": "done",
-      "description": "Author docs: a docs/chrome-and-ui.md with detailed ViewNode examples (panel, complex table, modal with a form) + a short \"Plugins (upcoming)\" pointer in README.md. Must be clearly marked design / target Phase 9 — not yet available until the WASM runtime (plugin-08) ships.\n\n---\n**Completion summary:**\nDONE 2026-07-26 — superseded by a documentation consolidation, not by writing the file this task\noriginally described.\n\nWHAT THE TASK ASKED FOR: a `docs/plugin-authoring.md` with ViewNode examples + a README pointer,\nmarked as design-only until the WASM runtime ships.\n\nWHAT WAS THERE: that file already existed and was complete (274 lines, all three examples). But an\naudit found its examples used a titled `Panel` and a `Label` variant that never existed in the\ncode, and it pointed readers at BACKLOG.md, which is stale.\n\nWHAT WAS DONE INSTEAD (user-directed): four documents were saying overlapping and contradicting\nthings about the same subject — `pluggable-chrome-plugin-plan.md` (1832 lines),\n`grid-ui-chrome-plan.md` (229), `docs/plugin-authoring.md` (274), and a `docs/declarative-ui.md`\nwritten earlier in the session. They are now ONE file:\n\n**`docs/chrome-and-ui.md`** — 1738 lines, three parts:\n- Part I — the declarative UI model, current, with corrected examples.\n- Part II — every architecture section from both plan files, transferred VERBATIM (a script did the\n  copying, so nothing was lost to summarising), each block headed with the planner ids that own it.\n- Part III — the old phase plan mapped to planner ids, a table of everything in Part II that is now\n  out of date, and the work found to be tracked nowhere.\n\nThe four originals are now 14-line pointer stubs kept only so links do not break; delete them once\nnothing references them. Every document that pointed at them was repointed: AGENTS.md, README.md,\nPLAN.md, BACKLOG.md, agents-communication-plan.md, docs/widgets.md, docs/widget-architecture.md,\ndocs/sidebar-provider-modes.md, docs/surface-compositor.md, plus 8 planner phase descriptions.\n\nRULES CHANGED IN PLACE (both were \"settled\" and are now reversed — recorded so they are not\nrestored): AGENTS.md line 721 and its SETTLED table, and the plan file's §2.6.1 rule C, all said\n\"styling is not a prop\". They now say the theme gives the default and code may override it with a\nstring.\n\nALSO REMOVED: the G1–G8 task list in grid-ui-chrome-plan.md §6. All eight items were built; only G7\never had a planner id (F004/P001).\n\nWORK FOUND WITH NO PLANNER ENTRY, NOW ADDED:\n- F004/P009 (gridui-08) — dragging a container between regions. `DragSurfaceId` has one variant,\n  `DockFrame` has no drag handle, `ChromeRegion` receives nothing.\n- F003/P018 (plugin-10) — binding and listing contributed actions. `ActionMeta.default_binding` and\n  `ActionCatalog::describe_all()` both exist and nothing reads either.\n\nCHECKED AND FOUND ALREADY BUILT (so no phase was created): the shared chrome state layer, plan\nPhase 2 — `heca/src/chrome/state.rs`, 1158 lines, `SharedChromeState` + `WorkspacesContainerState`.\n\nThe README pointer this task asked for still stands and now points at the consolidated file.",
+      "description": "LARGELY DONE for the modal case: added heca-grid-ui::Dialog (real body + real action Button children; scrim/centering/focus-trap; self-contained keyboard). OverlayHost::open_modal takes ModalSpec { title, body: ViewNode, actions }, realizes the body via realize, builds it into a Dialog layer. Showcase demo + docs/widgets.md §Dialog added.\n\n## Progress 2026-07-15 (scoped against code)\nForm marshalling was ALREADY wired for Input/Toggle/Checkbox: interaction.rs:673 `collect_overlay_form` → `ModalResult::Action{data}` on SubmitOverlay. The ONE gap was Select.\n\nDONE this session (branch feat/action-task-c, awaiting commit approval):\n- realize.rs: named `Select` now marshals its CHOSEN OPTION VALUE (not index) into form data — new `option_values(node)` helper + reader over `select.state()` index → value.\n- overlay.rs: fixed stale `ModalResult::Action` doc (Input→Text, Toggle/Checkbox→Bool, Select→Text).\n- Tests: `named_select_is_collected_as_its_chosen_value` + `rich_modal_body_marshals_every_named_field`. All suites green, clippy 0 (only pre-existing block v0.1.6 dep note).\n- docs/widgets.md: §Dialog modal-from-data prose+example add Select field; §Select notes `name` opts into form submission.\n- showcase.rs: Dialog demo body enriched to a NON-overlay rich form (Label + Input + Checkbox) — deliberately not nesting a Select (see BUG A in T009).\n\nREGRESSIONS FOUND + HANDLED (moved to T009, NOT T005):\n- BUG A (nested Select inside Dialog: z-order show-through + hover fall-through) → documented in T009.\n- BUG B (Dialog off-screen when mounted in-flow in the scrolled showcase). Attempted a widget fix (Dialog::on_layout viewport-recenter) — it REGRESSED (still off-screen + backdrop-but-no-panel on re-open because showcase bounds are in scrolled-tree coords, not screen coords) so it was REVERTED. Dialog restored to taffy-only centering (correct in the app). Full analysis + correct approach in T009 BUG B.\n- BUG C (showcase has no horizontal scrollbar; ScrollRegion is vertical-only) → noted in T009.\n\nREMAINING for T005: none functional — the marshalling deliverable is complete and tested. Table = T007. Ready to mark done after user commit approval.\n\n---\n**Completion summary:**\nDONE. Commit 9c92696 (feat) + c152ef7 (planner) on branch feat/action-task-c. Named Select in a ViewNode modal body now marshals its chosen option VALUE into ModalResult::Action.data (was the last value-widget not marshalling; Input/Toggle/Checkbox already did via interaction.rs:673 collect_overlay_form). Files: heca/src/chrome/realize.rs (new option_values() helper + Select name-binding), heca/src/chrome/overlay.rs (ModalResult::Action doc fix), docs/widgets.md (§Dialog + §Select code examples for named form fields), heca-renderer/examples/showcase.rs (Dialog demo → non-overlay rich form). Tests: named_select_is_collected_as_its_chosen_value, rich_modal_body_marshals_every_named_field. Full workspace green, clippy clean. Table deferred to T007. Overlay-rendering bugs surfaced by the demo (nested-overlay z/occlusion, Dialog off-screen when scrolled, no horizontal scroll) were NOT part of this task and are documented in T009 (plugin-task-ui-7).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -250,54 +289,15 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-26T08:21:55.139Z",
-      "completedAt": "2026-07-26T10:33:08.141Z",
+      "startedAt": "2026-07-15T17:45:46.666Z",
+      "completedAt": "2026-07-15T20:04:38.057Z",
       "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-26T10:33:08.141Z"
-    },
-    {
-      "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00",
-      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 9,
-      "shortId": "SST9A",
-      "priority": 9,
-      "shortName": "plugin-task-ui-7",
-      "title": "plugin-task-ui-7 — Composition-first widgets (every widget accepts a ViewNode)",
-      "status": "done",
-      "description": "EVERY widget must be able to receive a ViewNode (arbitrary child subtree) as its content — the real SwiftUI/Flutter model.\n\n## Scope (original, locked with user 2026-07-08)\n1. Composition-first widgets [SETTLED done per AGENTS.md]. 2. realize() coverage complete [SETTLED done]. 3. Any ViewNode renders, any widget hosts any widget.\nOverlay direction: base Overlay widget with Modal/Dialog as specializations (composition, not inheritance); BLOCKING STAYS A LAYER PROPERTY; overlay sizing + scrollable body gaps. Update showcase + docs/widgets.md; styling from theme; vocabulary host-owned.\n\n## DONE 2026-07-16 — Part 2 steps 2+3, USER-VERIFIED, commit 431e0d1 (PR #244 to main)\nShowcase page root = ScrollRegion.both() (BUG C fixed); overlays hosted above the scroll in a second tree (BUG B fixed); ScrollRegion children-first wheel + on_layout re-clamp + press-and-hold track paging; Component::overlay_occludes + overlay_occluded_at hook (right-click gate; ToastStack cards / Dialog / CommandPalette / Select impls; ContextMenu deliberately default). Docs + tests complete. User confirmed right-click over page widgets opening the menu is the wanted baseline.\n\n## STEP 4 BUILT 2026-07-16 — base Overlay widget + BUG A fix (uncommitted, AWAITING USER GPU VERIFICATION)\n- NEW heca-grid-ui/src/widgets/overlay.rs: base `Overlay` widget — viewport-filling centering layer, single `panel` child (`.panel()`/`.panel_boxed()` for realized content), BLOCKING AS A LAYER PROPERTY (`.blocking(bool)`: true = scrim + swallow outside input; false = light-dismiss fall-through), `.on_outside_click`, open_signal; focusable/overlay_active while open; overlay_occludes = viewport when blocking else panel rect; standalone event semantics (nested-overlay-first, outside-click hook, blocking swallow). Chrome (scrim/drop-shadow/surface fill/bracket reticle) moved here from Dialog. Anchor-to-rect positioning NOT built yet (no consumer this round) — planned extension.\n- Dialog REFACTORED to compose Overlay: Dialog = full-size passthrough → Overlay (blocking) → panel [title, body?, action-row]. Dialog keeps behaviour (focus trap, field-first keyboard, dismissible policy); paint override deleted (Overlay paints the layer); open signal IS the overlay's.\n- BUG A FIXED at low level, two halves:\n  (a) PAINT: scene.rs overlay segments now carry NESTING DEPTH; Scene::overlay_segments() yields depth-ordered (stable within depth) — a nested overlay (Select list in a Dialog body) composites ABOVE everything its parent draws, including the action buttons painted after it. Tests: nested_overlay_keeps_parent_segment_and_composites_on_top, sibling_overlays_keep_record_order_within_a_depth.\n  (b) INPUT: Dialog offers PointerMoved / Scroll / Widget* intents to an overlay-active descendant FIRST (focus.offer_to_overlay), and presses route through dispatch_trapped when the point is in the panel OR occluded by a nested overlay (overlay_occluded_at) — so an open Select captures hover/wheel/keys over the buttons; Dismiss closes the DROPDOWN (not the dialog), Activate commits its row.\n- Showcase: Dialog body now INCLUDES a nested Select (\"Archive target\") — the deliberately-omitted BUG A case is now the verification demo.\n- heca/src/chrome/overlay.rs test updated to the composed structure (root → Overlay → panel).\n- Docs: widgets.md new §Overlay entry (native + declarative/host-only note), §Dialog rewritten (composes Overlay + nested-overlays-work note), Scene/PaintCx with_overlay table row (depth ordering); AGENTS.md catalogs; overlay-design.md phasing (steps 4–5 built). Full rustdoc.\n- Workspace tests green, clippy clean, showcase builds.\n\nVERIFY (user, GPU showcase): open the Dialog (DELETE PANE button) →\n(a) open the \"Archive target\" Select INSIDE it: its list paints ABOVE the Cancel/Delete buttons (no show-through), buttons under the open list do NOT hover, wheel over the list scrolls the list (not the page), Esc closes the LIST first (second Esc dismisses the dialog), clicking a row commits and closes the list only;\n(b) dialog still centers, scrim still dims, buttons/Input/Checkbox still work, Tab traps, outside click dismisses;\n(c) no regression in the top-level Selects / palette / menu / toasts / page scroll.\n\n## REMAINING after step-4 verification (explicit deferrals, recorded — not silent debt)\n- Overlay anchor-to-rect positioning (clamp + flip) — build when the first specialization converts.\n- Convert Select / Tooltip / ContextMenu / CommandPalette panels to compose Overlay (they keep their own correct placement/chrome today).\n- Fold in overlay sizing (.panel_size) + scrollable body (ScrollRegion in a modal body) gaps from the original scope.\n\n## BUG A — nested Select-in-Dialog (found 2026-07-15) — FIX BUILT (above), awaiting GPU verification. Original diagnosis preserved in docs/overlay-design.md + git history of this task.\n## BUG B — Dialog off-screen in scrolled content — FIXED + verified (431e0d1).\n## BUG C — no horizontal page scroll — FIXED + verified (431e0d1).",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00-check-001-in-progress-planned",
-          "date": "2026-07-15T17:45:43.580Z",
-          "fromStatus": "in-progress",
-          "toStatus": "planned",
-          "title": "Reverting: user chose F003/P011/T005 (plugin-task-ui-4, Dialog + rich modal bodies) as the task to work on instead of T009. T009 not started; no work done.",
-          "description": "Reverting: user chose F003/P011/T005 (plugin-task-ui-4, Dialog + rich modal bodies) as the task to work on instead of T009. T009 not started; no work done."
-        },
-        {
-          "id": "2a269cea-f5a9-421b-9da7-eb1893dc9c00-check-002-in-progress-done",
-          "date": "2026-07-16T22:33:28.120Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "DONE — all delivered scope user-verified in the GPU showcase. (1) Composition-first widgets + full realize() coverage: SETTLED done earlier (AGENTS.md). (2) Overlay/scroll rework complete across commits c84528a (T010 Part 1), 431e0d1 (steps 2+3: whole-page ScrollRegion.both() + overlays hosted above the scroll — BUG B and BUG C fixed, verified 2026-07-16), d448702 (step 4: base Overlay widget with blocking-as-a-layer-property, Dialog composes it; BUG A fixed low-level via depth-ordered scene overlay segments + nested-overlay-first input routing in Dialog; nested Select-in-Dialog showcase demo — verified \"works great\" 2026-07-17). Step 5 docs done (widgets.md §Overlay + §Dialog + Scene depth ordering; overlay-design.md phasing closed). Explicit remaining scope moved to F003/P011/T014 \"Overlay follow-ups\" (anchor-to-rect mode, converting Select/Tooltip/ContextMenu/CommandPalette panels, .panel_size + scrollable modal body, SDF glyph glow) — recorded, not silent debt. Bug diagnoses preserved in git history of this task + docs/overlay-design.md.",
-          "description": "DONE — all delivered scope user-verified in the GPU showcase. (1) Composition-first widgets + full realize() coverage: SETTLED done earlier (AGENTS.md). (2) Overlay/scroll rework complete across commits c84528a (T010 Part 1), 431e0d1 (steps 2+3: whole-page ScrollRegion.both() + overlays hosted above the scroll — BUG B and BUG C fixed, verified 2026-07-16), d448702 (step 4: base Overlay widget with blocking-as-a-layer-property, Dialog composes it; BUG A fixed low-level via depth-ordered scene overlay segments + nested-overlay-first input routing in Dialog; nested Select-in-Dialog showcase demo — verified \"works great\" 2026-07-17). Step 5 docs done (widgets.md §Overlay + §Dialog + Scene depth ordering; overlay-design.md phasing closed). Explicit remaining scope moved to F003/P011/T014 \"Overlay follow-ups\" (anchor-to-rect mode, converting Select/Tooltip/ContextMenu/CommandPalette panels, .panel_size + scrollable modal body, SDF glyph glow) — recorded, not silent debt. Bug diagnoses preserved in git history of this task + docs/overlay-design.md."
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-15T17:45:26.715Z",
-      "completedAt": "2026-07-16T22:33:28.120Z",
-      "createdAt": "2026-07-08T11:47:40.594Z",
-      "updatedAt": "2026-07-16T22:33:28.120Z"
+      "updatedAt": "2026-07-15T20:04:38.057Z"
     },
     {
       "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 10,
+      "number": 297,
       "shortId": "YRTYE",
       "priority": 10,
       "shortName": "scrollregion-two-axis-scrollab",
@@ -370,7 +370,7 @@
     {
       "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 11,
+      "number": 298,
       "shortId": "Q5DW4",
       "priority": 11,
       "shortName": "regression-widget-glow-only-on",
@@ -446,13 +446,13 @@
     {
       "id": "126d0855-658d-471f-86a6-27eb144fc591",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 12,
+      "number": 299,
       "shortId": "CY8C2",
       "priority": 12,
       "shortName": "scrollregion-keyboard-scroll-a",
-      "title": "ScrollRegion keyboard-scroll actions (vertical prefix+Home/End/PgUp/PgDown; horizontal prefix+Shift+ the same four — settled 2026-07-27)",
-      "status": "blocked",
-      "description": "# Keyboard scrolling for any scroll area\n\n**USER DECISION 2026-07-16/27 — the keys, SETTLED:** vertical `prefix+Home/End/PageUp/PageDown`;\nhorizontal `prefix+Shift+` the same four. One shape: plain = vertical, Shift = horizontal, across the\nwhole set. (Supersedes the 2026-07-17 note that named only Shift+PageUp/PageDown.) No collision with\n`prefix+Shift+ArrowLeft/Right` (niri view pan) or terminal scrollback `Shift+` bindings. **Do not\nreopen this.**\n\n# ✅ SHIPPED — the widget half (`096f06e`)\n\nEight `WidgetIntent` variants: `ScrollPageUp` / `ScrollPageDown` / `ScrollToTop` / `ScrollToBottom`\nand the four horizontal ones. `ScrollRegion` acts on them:\n\n- it owns the arithmetic — a page is 0.9 of its viewport, the edges clamp — because it is the only\n  thing that knows its viewport and its content;\n- it **declines** an axis it cannot scroll (axis off, or content fits), so a nested region or the host\n  gets a turn; consuming would make the key silently do nothing;\n- handled after the children, so the innermost scrollable region wins, as with the wheel;\n- `keyboard_target(Signal<bool>)` gates which instance responds — per instance, position-agnostic,\n  unset means yes.\n\n**The logic lives in the widget, once.** Every `ScrollRegion` anywhere — any container, any nesting\ndepth, any region, any one added later — behaves identically with no per-usage code. That is the\nstanding requirement (user, 2026-07-28): *a widget holds its logic like a React component; move it\naround the app and it works the same, without reinventing anything.* The host will only ever say\n\"one page down, this axis\"; the widget decides everything else.\n\n# ✅ THE ROUTE — settled 2026-07-28, checked in code\n\nAn intermediate note in this task proposed feeding the eight intents through the **widget keymap**\n(`build_widget_keymap`, `heca/src/app/registry.rs:202`, the `[keys.widgets]` config table that\n`Input`/`Select`/`Tabs`/`Dialog` use). **That was wrong for these bindings** and is ruled out:\n\n- The widget keymap is consulted at `heca/src/app/events.rs:156`, inside a branch that requires **a\n  modal to be open** and the mode *not* to be `Prefix` / `HintPick`. So `[keys.widgets]` reaches\n  focused widgets **inside modals only**.\n- The chosen bindings are **prefix-gated**, so they arrive on the `WmAction` path by construction — a\n  prefix sequence never reaches that branch.\n\n**So: four `WmAction`s, as originally planned.** The keys decide the route; there was nothing to\nchoose. Do not add a widget-keymap path beside them — it would be a second way to do one thing, and\nit cannot carry a prefix anyway.\n\nThe actions carry only the semantic instruction plus the axis, so the widget keeps the logic:\n\n1. Four actions (page back / page on / to start / to end) with an **axis** argument. `ResizeAxis`\n   (`heca/src/input.rs:40`, `EnumArg::VALUES = [\"x\",\"horizontal\",\"width\",\"y\",\"vertical\",\"height\"]`)\n   already exists and fits — reuse it rather than adding an axis enum. Optional, defaulting to\n   vertical, so a plain binding stays legal (a *required* argument would forbid a bare key,\n   F003/P010/T006).\n2. Full Adding-New-Actions checklist (AGENTS.md): variant → `action_from_name` → `action_priority` →\n   `action_policy()` (exhaustive) → handler → `build_registry` → `keybindings.default.toml` (the eight\n   bindings above) → `ActionRegistry::ALL` descriptor **with its `args` declaration** → `rpc.rs` →\n   README. Configurable through `KeymapRegistry`, never hardcoded. RPC comes free.\n3. The handler dispatches `Event::Widget(intent)` into the chrome tree; every scroll area that is not\n   the keyboard's target declines, so the focused one takes it. No tree paths, no per-container code.\n\n# ⛔ The one dependency\n\n**Which area obeys.** `keyboard_target` is the gate; what *sets* it is **F003/P011/T020**\n(`FocusDock` — chrome keyboard focus as a container id, via `ActionRegistry` + `KeymapRegistry` +\n`KeyHint`). Until that lands there is no way to say \"the container I am looking at\", and there are\nthree scroll areas on screen today (two of them the temporary test bed, F003/P011/T021).\n\n# The 2026-07-17 blocker is discharged\n\n\"No chrome surface mounts a `ScrollRegion`\" is false since 2026-07-26: containers nest their own\n(`heca/src/providers/workspaces.rs`). `GridKey` still has no `PageUp`/`PageDown` — and does not need\nit, because the intent is semantic. That is the point of not delivering a key.\n\n# Acceptance\n\n- The eight bindings scroll the focused area; every other area declines.\n- Reachable from RPC through the same actions, one code path.\n- No second mechanism for the same job.\n- Whole workspace green, clippy 0 warnings.\n- **USER verifies in the app**, with more than one scroll area on screen.",
+      "title": "Keyboard scrolling acts on whatever has focus — one branch, plus the four horizontal actions",
+      "status": "canceled",
+      "description": "# Keyboard scrolling for any scroll area\n\n# ✅ SHIPPED — the widget half (`096f06e`), unchanged by anything below\n\nEight `WidgetIntent` variants: `ScrollPageUp` / `ScrollPageDown` / `ScrollToTop` / `ScrollToBottom`\nand the four horizontal ones. `ScrollRegion` acts on them:\n\n- it owns the arithmetic — a page is 0.9 of its viewport, the edges clamp — because it is the only\n  thing that knows its viewport and its content;\n- it **declines** an axis it cannot scroll (axis off, or content fits), so a nested region or the host\n  gets a turn; consuming would make the key silently do nothing;\n- handled after the children, so the innermost scrollable region wins, as with the wheel;\n- `keyboard_target(Signal<bool>)` gates which instance responds — per instance, position-agnostic,\n  unset means yes. Bound to the mount's chrome focus by F003/P011/T020\n  (`StateView::container_keyboard_target`).\n\n**The logic lives in the widget, once.** Every `ScrollRegion` anywhere behaves identically with no\nper-usage code. The host only ever says \"one page down, this axis\".\n\n# ⚠️ THE ROUTE CHANGED — 2026-07-29, by the user. This supersedes the 2026-07-16/27 keys.\n\n**Superseded:** vertical `prefix+Home/End/PageUp/PageDown`, horizontal `prefix+Shift+` the same four.\nThat shape existed because there was no other way to stop the keys reaching the terminal.\n\n**Now:** *focus is the mode* (P085(F007) — \"Components declare their actions; chrome focus is the\nmode\"). While a component holds chrome focus nothing is forwarded to a backend, so **plain\n`PageUp` / `PageDown` / `Home` / `End` are free** and are the container's scroll keys; the existing\n`Shift+` variants stay exactly as they are for the focused *pane*'s scrollback.\n\n**And it is not a new action family.** The bindings already exist and are already global/direct:\n`scroll_page_up = \"Shift+PageUp\"`, `scroll_page_down`, `scroll_to_top = \"Shift+Home\"`,\n`scroll_to_bottom = \"Shift+End\"`, `scroll_line_up/down` (`keybindings.default.toml`), handled today\nagainst the focused terminal viewport. So the app half is:\n\n1. **One branch at the top of those existing handlers**: chrome focus set ⇒ dispatch the matching\n   `Event::Widget(WidgetIntent::Scroll*)` into the chrome tree — the FocusScope (P085/T351) delivers it\n   to the focused container and every other container is inert — else the terminal viewport path,\n   unchanged. One binding, one meaning: *scroll whatever has focus*.\n2. **The four horizontal actions** still need adding (`ScrollPageLeft/Right`, `ScrollToLeftEdge/RightEdge`\n   — the widget intents exist, no `WmAction` does), through the full Adding-New-Actions checklist\n   (AGENTS.md): variant → `action_from_name` → `action_priority` → `action_policy()` → handler →\n   `build_registry` → `keybindings.default.toml` → `ActionRegistry::ALL` descriptor **with its `args`\n   declaration** → `rpc.rs` → README. Reuse `ResizeAxis` (`heca/src/input.rs:40`) if an axis argument is\n   preferred over four names — optional, defaulting to vertical, so a plain binding stays legal\n   (a *required* argument would forbid a bare key, F003/P010/T006).\n3. A **declined** intent stops at the chrome; it does **not** fall through to the pane. The\n   innermost-wins rule is about nested *scroll areas*, and the pane is not an outer scroll area of the\n   sidebar.\n\n**This half is specified in P085(F007)/T352 step 5** (the routing task) — whichever is picked up first,\ndo not implement it twice. What remains uniquely here is the horizontal action family.\n\n# Still ruled out (2026-07-28, checked in code — do not re-open)\n\nFeeding these through the **widget keymap** (`build_widget_keymap`, `heca/src/app/registry.rs:202`,\nthe `[keys.widgets]` table). It is consulted at `heca/src/app/events.rs:156` inside a branch that\nrequires **a modal to be open**, so `[keys.widgets]` reaches focused widgets inside modals only.\n\n# The 2026-07-17 blocker is discharged\n\n\"No chrome surface mounts a `ScrollRegion`\" is false since 2026-07-26: containers nest their own\n(`heca/src/providers/workspaces.rs`). `GridKey` still has no `PageUp`/`PageDown` — and does not need\nit, because the intent is semantic. That is the point of not delivering a key.\n\n# Acceptance\n\n- With a container focused, plain `PageUp/PageDown/Home/End` scroll **it**; with a pane focused, the\n  `Shift+` variants scroll the pane's scrollback, as today.\n- Every other scroll area declines; nothing reaches the terminal while a container is focused.\n- Horizontal scrolling reachable from RPC through the same actions, one code path.\n- No second mechanism for the same job.\n- Whole workspace green, clippy 0 warnings.\n- **USER verifies in the app**, with more than one scroll area on screen (P085(F007)/T359 seats the\n  second one).",
       "notes": "",
       "statusLog": [
         {
@@ -478,6 +478,22 @@
           "toStatus": "blocked",
           "title": "Half shipped, half blocked (2026-07-28). The WIDGET half is done and committed in `096f06e`: eight `WidgetIntent::Scroll*` variants (page and edge, both axes), `ScrollRegion` acting on them — it owns the paging arithmetic and the clamp because it is the only thing that knows its viewport and content — declining any axis it cannot scroll so a nested region or the host gets a turn, handled after the children so the innermost wins like the wheel, plus `ScrollRegion::keyboard_target(Signal<bool>)` which gates which instance responds and is per-instance and position-agnostic. Tests included, and the gating was verified by flipping the signal. The APP half cannot be built honestly yet: it must target the container that holds keyboard focus, and there is no such thing until F003/P011/T020 (`FocusDock`) lands. Everything else about it is settled and written in the description — the four actions through the full Adding-New-Actions checklist, the bindings (`prefix+Home/End/PageUp/PageDown`, Shift for horizontal), the dispatch into the chrome tree where every non-focused container declines. No keybindings exist yet, so there are no dead keys in the meantime.",
           "description": "Half shipped, half blocked (2026-07-28). The WIDGET half is done and committed in `096f06e`: eight `WidgetIntent::Scroll*` variants (page and edge, both axes), `ScrollRegion` acting on them — it owns the paging arithmetic and the clamp because it is the only thing that knows its viewport and content — declining any axis it cannot scroll so a nested region or the host gets a turn, handled after the children so the innermost wins like the wheel, plus `ScrollRegion::keyboard_target(Signal<bool>)` which gates which instance responds and is per-instance and position-agnostic. Tests included, and the gating was verified by flipping the signal. The APP half cannot be built honestly yet: it must target the container that holds keyboard focus, and there is no such thing until F003/P011/T020 (`FocusDock`) lands. Everything else about it is settled and written in the description — the four actions through the full Adding-New-Actions checklist, the bindings (`prefix+Home/End/PageUp/PageDown`, Shift for horizontal), the dispatch into the chrome tree where every non-focused container declines. No keybindings exist yet, so there are no dead keys in the meantime."
+        },
+        {
+          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-004-blocked-planned",
+          "date": "2026-07-28T12:27:03.803Z",
+          "fromStatus": "blocked",
+          "toStatus": "planned",
+          "title": "Its one blocker is discharged: F003/P011/T020 landed chrome focus (a container id + per-mount keyboard_target signals), so \"which area obeys\" now has an answer. The route it had settled is superseded by the user's 2026-07-29 decision (focus is the mode), which shrinks this task to one branch in the existing scroll handlers plus the four horizontal actions — recorded in the description.",
+          "description": "Its one blocker is discharged: F003/P011/T020 landed chrome focus (a container id + per-mount keyboard_target signals), so \"which area obeys\" now has an answer. The route it had settled is superseded by the user's 2026-07-29 decision (focus is the mode), which shrinks this task to one branch in the existing scroll handlers plus the four horizontal actions — recorded in the description."
+        },
+        {
+          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-005-planned-canceled",
+          "date": "2026-07-28T12:32:57.291Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Unified into P085(F007)/T352 (VKF85, \"Focus is the mode\") at the user's request 2026-07-30 — the two said the same thing once the route changed to focus-is-the-mode. Every section this task still carried was transferred into T352 verbatim first: the shipped widget half (096f06e), the superseded prefix-gated keys, the four horizontal actions still to add, the widget-keymap route ruled out (events.rs:156 is modal-only), and the discharged 2026-07-17 blocker. Canceled rather than done — the work is not done, it has one home now.",
+          "description": "Unified into P085(F007)/T352 (VKF85, \"Focus is the mode\") at the user's request 2026-07-30 — the two said the same thing once the route changed to focus-is-the-mode. Every section this task still carried was transferred into T352 verbatim first: the shipped widget half (096f06e), the superseded prefix-gated keys, the four horizontal actions still to add, the widget-keymap route ruled out (events.rs:156 is modal-only), and the discharged 2026-07-17 blocker. Canceled rather than done — the work is not done, it has one home now."
         }
       ],
       "decisions": [],
@@ -519,12 +535,12 @@
       "startedAt": "2026-07-27T21:02:01.727Z",
       "completedAt": "",
       "createdAt": "2026-07-16T09:37:52.181Z",
-      "updatedAt": "2026-07-28T06:39:26.449Z"
+      "updatedAt": "2026-07-28T12:32:57.291Z"
     },
     {
       "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 13,
+      "number": 300,
       "shortId": "EM6A4",
       "priority": 13,
       "shortName": "focus-ring-polish-honor-focus",
@@ -589,7 +605,7 @@
     {
       "id": "b413c466-8239-4787-94f3-b1623d041aad",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 14,
+      "number": 301,
       "shortId": "72FCK",
       "priority": 14,
       "shortName": "overlay-follow-ups-anchor-to-r",
@@ -611,7 +627,7 @@
     {
       "id": "bb22b786-77f8-4e23-ae65-f11c5c0a6c58",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 15,
+      "number": 302,
       "shortId": "7ASG6",
       "priority": 15,
       "shortName": "overlay-sizing-panel-size-scro",
@@ -633,7 +649,7 @@
     {
       "id": "33f9e6f5-3f69-4849-8bc0-e4cccb111877",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 16,
+      "number": 303,
       "shortId": "KBL4B",
       "priority": 16,
       "shortName": "sdf-glyph-text-glow-renderer-i",
@@ -655,7 +671,7 @@
     {
       "id": "9af494a0-c1ff-43d5-8e65-cdd0ed813634",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 17,
+      "number": 305,
       "shortId": "EUPVR",
       "priority": 17,
       "shortName": "field-widget-label-control-gro",
@@ -686,7 +702,7 @@
     {
       "id": "caa74f04-376d-480b-b096-dd8288b9566e",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 18,
+      "number": 345,
       "shortId": "D8PKQ",
       "priority": 18,
       "shortName": "a-property-value-can-hold-an-o",
@@ -708,7 +724,7 @@
     {
       "id": "86af5605-64f5-4543-bb1f-20ce465ea432",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 19,
+      "number": 346,
       "shortId": "E9UYL",
       "priority": 19,
       "shortName": "fixed-value-sets-become-types",
@@ -730,13 +746,13 @@
     {
       "id": "448a9630-74e6-4fd3-a2f2-3e257fedd1eb",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 20,
+      "number": 347,
       "shortId": "FUC7F",
       "priority": 20,
       "shortName": "chrome-keyboard-focus-is-a-reg",
       "title": "Focus a dock by picking it: FocusDock through ActionRegistry + KeyHint",
-      "status": "planned",
-      "description": "# The bug this replaces\n\nA sidebar is a **container** and left/right is a position. `handle_sidebar_focus`\n(`heca/src/handlers.rs:1532`) reads `left_visible()` and calls `set_left_mode(Expanded)` — it names a\nside. The workspaces dock declares `RegionSet::sidebars()`, so it may be seated on the right\n(`heca/src/providers/workspaces.rs:66`), and then the focus key **expands the empty left container\nand navigates a tree drawn on the right**. `state.sidebar_tree` carries no region either.\n\nThere is also no notion of chrome keyboard focus at all, and `Provider` has no focus concept\n(`heca/src/providers/mod.rs`: id, supported_regions, default_region, default_order, title, movable,\ncollapsible, grow, build_contribution, context_menus, on_activate).\n\n# ✅ DECIDED BY THE USER 2026-07-28 — pick a dock, through the existing machinery\n\n**`FocusDock`: an action that hints every dock and focuses the one picked.** Built out of what is\nalready there, not a new subsystem:\n\n- **`ActionRegistry`** owns the action, with its descriptor and its declared args (F003/P010/T006).\n- **`KeymapRegistry`** binds it, so the key is configurable and never hardcoded — and because it is\n  an action, **RPC can call it** like any other.\n- **`KeyHint`** draws the letters. The workspaces dock already wraps each workspace in one\n  (`KeyHint::new(dock).hint(..).placement(TopRight)`, `providers/workspaces.rs`), so a dock pick is\n  the same idiom one level up.\n\n## The shape\n\n1. **`WmAction::FocusDock { dock: Option<ContainerId> }`** — one action, two ways in:\n   - **bare** (`focus_dock`) → enters the pick: every mounted container lights a letter, press one\n     and it takes focus. This is the keybinding case.\n   - **with an id** (`focus_dock(dock=\"workspaces\")`) → focuses it directly, no pick. This is the RPC\n     and scripting case, and it falls out of the optional-argument machinery for free.\n   Declared as `ArgDescriptor::optional_*`, so the bare binding stays legal (an action that *requires*\n   an argument cannot carry one).\n2. **Candidates come from the host**, not from a side: `ChromeHost::contributions(region)` over the\n   regions, in the order the host maintains. Letters assigned as the other picks do\n   (`pick_candidates` / `PendingPick`, `heca/src/chrome/state.rs`).\n3. **Focus is state: a container id.** Not a side, not a dock's name written in code. Sticky, as\n   focus is.\n4. **Focus must be visible.** A focused container needs a ring or marker, or nothing tells the user\n   where the keyboard is. This is a visual decision → the user judges it in the app.\n5. **`Provider::keyboard_navigable()`** (default `false`) says whether a dock does anything with\n   focus beyond scrolling. `WorkspacesContainerProvider` returns `true`. Knowledge of what can be\n   navigated belongs to the provider.\n6. **The old action stops naming a side.** `sidebar_focus` becomes focus-a-dock: with one navigable\n   dock mounted it behaves as today; with none it is a no-op instead of expanding an empty container.\n\n## What it unblocks\n\n- **F003/P011/T012** app half: the scroll actions target the focused container. Its widget half is\n  shipped (`096f06e`) — every `ScrollRegion` already acts on the intents and\n  `ScrollRegion::keyboard_target(signal)` gates which one, per instance and position-agnostic. So the\n  host sends one intent and the focused container's area takes it; every other declines.\n- The dock's own navigation (the workspaces j/k cursor) follows the focused dock rather than a side.\n\n# Steps\n\n1. `Provider::keyboard_navigable()`; workspaces returns true.\n2. Chrome keyboard focus state: `Option<ContainerId>`.\n3. `WmAction::FocusDock { dock: Option<..> }` through the full Adding-New-Actions checklist\n   (AGENTS.md): variant → `action_from_name` → `action_priority` → `action_policy()` → handler →\n   `build_registry` → `keybindings.default.toml` → `ActionRegistry::ALL` descriptor **with its args\n   declaration** → `rpc.rs` → README.\n4. The pick: candidates from `ChromeHost`, letters via `KeyHint`, resolve → focus.\n5. Bind each container's `ScrollRegion::keyboard_target` to `focus == my id`.\n6. `sidebar_focus` stops naming a side.\n7. Tests: focus survives the dock being moved between regions; no navigable dock → no-op; exactly one\n   container is the keyboard target at a time; `focus_dock(dock=\"…\")` needs no pick.\n8. **USER verifies**: the letters appear over the docks, the picked one shows it has focus, and the\n   scroll keys then act on it.\n\n# Acceptance\n\n- No side literal in the focus path.\n- A container's wiring names no dock.\n- `focus_dock` reachable from a keybinding **and** from RPC, the same action either way.\n- Whole workspace green, clippy 0 warnings.",
+      "status": "done",
+      "description": "# The bug this replaces\n\nA sidebar is a **container** and left/right is a position. `handle_sidebar_focus`\n(`heca/src/handlers.rs:1532`) reads `left_visible()` and calls `set_left_mode(Expanded)` — it names a\nside. The workspaces dock declares `RegionSet::sidebars()`, so it may be seated on the right\n(`heca/src/providers/workspaces.rs:66`), and then the focus key **expands the empty left container\nand navigates a tree drawn on the right**. `state.sidebar_tree` carries no region either.\n\nThere is also no notion of chrome keyboard focus at all, and `Provider` has no focus concept\n(`heca/src/providers/mod.rs`: id, supported_regions, default_region, default_order, title, movable,\ncollapsible, grow, build_contribution, context_menus, on_activate).\n\n# ✅ DECIDED BY THE USER 2026-07-28 — pick a dock, through the existing machinery\n\n**`FocusDock`: an action that hints every dock and focuses the one picked.** Built out of what is\nalready there, not a new subsystem:\n\n- **`ActionRegistry`** owns the action, with its descriptor and its declared args (F003/P010/T006).\n- **`KeymapRegistry`** binds it, so the key is configurable and never hardcoded — and because it is\n  an action, **RPC can call it** like any other.\n- **`KeyHint`** draws the letters. The workspaces dock already wraps each workspace in one\n  (`KeyHint::new(dock).hint(..).placement(TopRight)`, `providers/workspaces.rs`), so a dock pick is\n  the same idiom one level up.\n\n## The shape\n\n1. **`WmAction::FocusDock { dock: Option<ContainerId> }`** — one action, two ways in:\n   - **bare** (`focus_dock`) → enters the pick: every mounted container lights a letter, press one\n     and it takes focus. This is the keybinding case.\n   - **with an id** (`focus_dock(dock=\"workspaces\")`) → focuses it directly, no pick. This is the RPC\n     and scripting case, and it falls out of the optional-argument machinery for free.\n   Declared as `ArgDescriptor::optional_*`, so the bare binding stays legal (an action that *requires*\n   an argument cannot carry one).\n2. **Candidates come from the host**, not from a side: `ChromeHost::contributions(region)` over the\n   regions, in the order the host maintains. Letters assigned as the other picks do\n   (`pick_candidates` / `PendingPick`, `heca/src/chrome/state.rs`).\n3. **Focus is state: a container id.** Not a side, not a dock's name written in code. Sticky, as\n   focus is.\n4. **Focus must be visible.** A focused container needs a ring or marker, or nothing tells the user\n   where the keyboard is. This is a visual decision → the user judges it in the app.\n5. **`Provider::keyboard_navigable()`** (default `false`) says whether a dock does anything with\n   focus beyond scrolling. `WorkspacesContainerProvider` returns `true`. Knowledge of what can be\n   navigated belongs to the provider.\n6. **The old action stops naming a side.** `sidebar_focus` becomes focus-a-dock: with one navigable\n   dock mounted it behaves as today; with none it is a no-op instead of expanding an empty container.\n\n## What it unblocks\n\n- **F003/P011/T012** app half: the scroll actions target the focused container. Its widget half is\n  shipped (`096f06e`) — every `ScrollRegion` already acts on the intents and\n  `ScrollRegion::keyboard_target(signal)` gates which one, per instance and position-agnostic. So the\n  host sends one intent and the focused container's area takes it; every other declines.\n- The dock's own navigation (the workspaces j/k cursor) follows the focused dock rather than a side.\n\n# Steps\n\n1. `Provider::keyboard_navigable()`; workspaces returns true.\n2. Chrome keyboard focus state: `Option<ContainerId>`.\n3. `WmAction::FocusDock { dock: Option<..> }` through the full Adding-New-Actions checklist\n   (AGENTS.md): variant → `action_from_name` → `action_priority` → `action_policy()` → handler →\n   `build_registry` → `keybindings.default.toml` → `ActionRegistry::ALL` descriptor **with its args\n   declaration** → `rpc.rs` → README.\n4. The pick: candidates from `ChromeHost`, letters via `KeyHint`, resolve → focus.\n5. Bind each container's `ScrollRegion::keyboard_target` to `focus == my id`.\n6. `sidebar_focus` stops naming a side.\n7. Tests: focus survives the dock being moved between regions; no navigable dock → no-op; exactly one\n   container is the keyboard target at a time; `focus_dock(dock=\"…\")` needs no pick.\n8. **USER verifies**: the letters appear over the docks, the picked one shows it has focus, and the\n   scroll keys then act on it.\n\n# Acceptance\n\n- No side literal in the focus path.\n- A container's wiring names no dock.\n- `focus_dock` reachable from a keybinding **and** from RPC, the same action either way.\n- Whole workspace green, clippy 0 warnings.\n\n---\n**Completion summary:**\n# ✅ DONE 2026-07-30 — verified in the app by the user\n\n**Closed on what it set out to do: a dock can be picked by letter and takes focus, visibly.** The user\ndrove it and confirmed: *\"FUC7F works... it brings us the hint to focus a container and it works.\"*\nWhat is deliberately **not** here — being able to *do* anything with the focused container without\nfalling back to `prefix+e` — is the whole of **P085(F007) \"Components declare their actions; chrome\nfocus is the mode\"**, opened for exactly that reason. This task is not a partial delivery of that; it\nis the state that phase builds on.\n\n## What landed\n\n- **Focus is a container id, not a side.** `SharedChromeState.focused_container` +\n  `set_focused_container` (`heca/src/chrome/state.rs`), emitting `chrome.container.focus.changed`.\n  Per-**mount** `keyboard_target` signals derived from it, so exactly one placement is the keyboard\n  target by construction, and a signal asked for after focus moved is created already knowing.\n- **`heca/src/chrome/focus.rs`** (new) — the two decisions as pure functions over `ChromeHost`:\n  `dock_candidates(host, on_screen)` (letters, host order, on-screen regions only — a letter over a\n  body nobody can see is a key that does nothing) and `navigable_dock(host, focused)` (which dock\n  `sidebar_focus` acts on **and the region it sits in**).\n- **The live bug is fixed.** `handle_sidebar_focus` no longer reads `left_visible()`; it asks the host\n  for the navigable dock, reveals *that dock's* region (`reveal_region`), focuses it, then enters nav\n  mode. With no navigable dock mounted it is a **no-op** instead of expanding an empty container.\n- **`WmAction::FocusDock { dock: Option<ContainerId> }`** through the full Adding-New-Actions\n  checklist: variant → `action_from_name` (bare ⇒ pick) → `build_action` (optional `dock` ⇒ direct) →\n  `action_priority` → `handle_focus_dock` → `build_registry` → `keybindings.default.toml`\n  (`prefix+Shift+e`) → descriptor with declared `args` → `rpc.rs` (`focus-dock [id]`) →\n  `action_policy` = `Global` (chrome state, no layout impact; `SidebarFocus` stays `TiledOnly`) →\n  README. An unknown id logs instead of vanishing.\n- **The pick**: `InputMode::DockPick` (letter → container id), resolved in `app/input.rs` back out\n  through the *same* `focus_dock` action carrying the id — the letter is only how a keyboard supplies\n  an argument it cannot type. Status bar reads `FOCUS DOCK` with the action's own prompt.\n- **`Provider::keyboard_navigable()`** (default `false`); `WorkspacesContainerProvider` returns `true`.\n- **Library**: `FocusRing` — a generic transparent wrapper drawing the theme's focus outline from a\n  host signal (a control owns its focus and rings itself; an *area* the keyboard is aimed at has no\n  owner in the tree). Same `PaintCx::focus_ring`, same tokens, respects `show_focus_border`. Plus\n  `KeyHint::new_boxed` so a dynamically built subtree can be wrapped. Both documented (rustdoc +\n  `docs/widgets.md`), showcase demo, prop-drift guard satisfied.\n- **Wiring**: `build_region_content` wraps every container in `FocusRing(KeyHint(body))`; the ring\n  binds the **same signal** the container's `ScrollRegion` takes as its `keyboard_target`, so the ring\n  and the keys cannot disagree.\n\n## The trap it hit, for the next reader\n\nThe wrappers reintroduced F003/P011/T021's failure one level down: a hugging wrapper measures its\nchild's *content* and a flex item's automatic minimum stops it shrinking back, so the dock measured\n**1214px inside its 296px slot**. `pass_box_down` passes the box through each wrapper level, and only\nwhen there **is** a share (`grow = 0.0` means \"size me to my content\" and a zero base size inside a\ncontent-sized parent collapses it to nothing). Same `flex: 1 1 0` debt as `with_share`, documented as\nsuch — **F004/P006/T010 still replaces both with one `share(n)` setter.**\n\nTests measure pixels, not flags (the T021 lesson): shares still divide 296/296 through the wrappers; a\ncontent-sized container keeps its 120px; the focus ring is found in the painted scene and disappears\nwhen focus moves elsewhere (same tree, one signal); the dock letter is stamped over the dock; focus\nsurvives a `move_container`; no navigable dock ⇒ nothing to focus.\n\n## Left open, on purpose\n\n- **Interaction** — the whole of P085(F007).\n- A click that focuses an *arbitrary* dock: the mouse layer is still region-named\n  (`MouseLeftSidebar` / `mouse/surface_left.rs`), so only the sidebar-nav click path focuses (via\n  `SidebarFocus`). P085(F007)/T354 removes that naming.\n- Only one container was on screen, so \"a letter per dock\" and \"focus moving between docks\" were not\n  demonstrable. P085(F007)/T359 seats the second one.\n\nWorkspace green (1009 tests, was 985), clippy 0 warnings.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -744,15 +760,15 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-28T06:55:59.961Z",
+      "completedAt": "2026-07-28T12:31:56.792Z",
       "createdAt": "2026-07-27T21:20:37.203Z",
-      "updatedAt": "2026-07-27T23:02:25.857Z"
+      "updatedAt": "2026-07-28T12:31:56.792Z"
     },
     {
       "id": "42fc5b3c-1724-4b51-9a5e-cc4370da653b",
       "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 21,
+      "number": 348,
       "shortId": "3F5LR",
       "priority": 21,
       "shortName": "each-container-scrolls-its-own",
@@ -775,5 +791,7 @@
   "createdAt": "2026-07-08T11:47:16.270Z",
   "updatedAt": "2026-07-28T06:45:55.036Z",
   "handoff": "# Session handoff — 2026-07-27 → 28\n\n**Reason:** context spent. Everything committed and pushed; tree clean; **985 tests, clippy 0\nwarnings**. Nothing half-built.\n\n## Read this first: how this user works\n\nTwo rounds of real frustration today, both earned. Read this before writing code.\n\n- **Nothing hardcoded that is data.** The day's recurring defect: solved for the one case in front of\n  the author, wrong the moment the model is used as designed. Three found in one session — the focus\n  key naming a *side*, a scroll offset keyed by container *kind*, a shell owning a scroll area that\n  belongs to whoever nests one.\n- **The model, in their words:** a **widget** is a component like React's, placeable anywhere, holding\n  its own logic — move it around the app and it behaves the same, no reinvention. A **container** holds\n  widgets and may nest a scroll area. A **sidebar** is a shell hosting containers, knowing almost\n  nothing about them. **Left/right is only position.** Placing a container twice is *placing it twice*.\n- **Reuse what exists; invent nothing.** `flex_grow` already was the fractional share; `Glyph::ALL`\n  already existed; the resize *mode* already existed; `ResizeAxis` already covers x/y. Every time I\n  proposed machinery they asked whether something already did it, and it usually did. **Search first.**\n- **They verify anything visual themselves.** Green tests never verify layout or interaction.\n- **Assert what was reported.** A test asserting a `grow` *flag* passed while the layout was visibly\n  broken; the measured-height test caught it. If a bug was visible, measure the visible thing.\n- **Never decide whether a task lives or dies**, and do not act on an instruction's letter when the next\n  step needs otherwise — ask. **\"We are discussing\" means stop writing.**\n- **Commit messages say what changed.** Prior-error archaeology belongs in the task.\n- **`git checkout <file>` destroyed uncommitted work twice.** Copy to the scratchpad first. A global\n  find-and-replace also broke code outside its intent — bound every edit.\n\n## Where the work is\n\nBranch `feat/action-arg-declaration`, pushed. **PR #250** —\nhttps://github.com/ovidius72/heca/pull/250 (PR #249 merged; #250 is everything after it).\n\n## Closed this session\n\nF003/P011 **T006** (typed builder SDK — the user confirmed the described and native panels are\nidentical), **T018** (`PropValue::Map`, so `border`/`glow` are authorable at last), **T019** (fixed\nvalue sets as types), plus all of T021's implementation.\n\nCommits: `f2deecd` `1653169` `7183250` `189a2cd` `096f06e` `1f4b92d` `7b3a624` `fd403dd` `1d75cb3`\n`3084714` `8c65a54` `c65ae90` `fcbba56` `95a894d`.\n\n**The technical lesson worth carrying:** `flex_grow` alone does **not** divide a region — it\ndistributes only *positive* free space, and container content is taller than a sidebar, so two\ncontainers measured **1214px each inside a 600px body**. A share needs a **zero base size + permission\nto shrink** (CSS `flex: 1 1 0`). Then **296px each**, measured. `Layout` has no `flex_basis`, so that\nzero is written as a height today — **do not copy it**; F004/P006/T010 replaces it with one `share(n)`.\n\n## ✅ The test bed is gone and STAYS gone\n\n`95a894d` removed the two extra placements from `heca/src/app/startup.rs`; the right sidebar is empty\nuntil it gets real features. I asked whether to restore it for verifying T012/T020 — **the user said no\n(2026-07-28). Do not re-add it.**\n\nConsequence to plan around: there is **one** container on screen, so focus and \"the focused area\nscrolls, the others decline\" cannot be demonstrated with two real docks. Verify what one container can\nshow, and say plainly what a single container cannot prove rather than quietly asserting it works. A\nsecond real dock is a future feature, not scaffolding to invent.\n\n## Open, in order\n\n1. **T021 — close it.** All implementation and docs are done (`fcbba56`: `docs/widgets.md` + README\n   carry container shares, nested scrolling and the model). The test-bed question is settled above.\n2. **T020 — `FocusDock`.** Chrome keyboard focus as a **container id**, via `ActionRegistry` +\n   `KeymapRegistry` + `KeyHint` (the user's design). One action, two doors: bare → pick a dock by\n   letter; `focus_dock(dock=\"…\")` → direct, for RPC. **Focus must be visible.** Fixes a live bug: the\n   focus key expands the *left* container even when the dock is seated right, which the dock allows.\n3. **T012 — keyboard scrolling (blocked on T020).** Widget half shipped (`096f06e`): eight semantic\n   `WidgetIntent::Scroll*`, `ScrollRegion` owning the paging and the clamp, declining any axis it cannot\n   scroll, `keyboard_target(Signal<bool>)` gating which instance responds. **Route settled 2026-07-28\n   after checking the code:** the bindings are prefix-gated (`prefix+[Shift+]PageUp/PageDown/Home/End`\n   — settled, do not reopen), so they arrive on the `WmAction` path by construction. The widget-keymap\n   idea is **ruled out**: `[keys.widgets]` is consulted at `heca/src/app/events.rs:156` only when a\n   modal is open and the mode is not Prefix. Four actions with an axis argument (reuse `ResizeAxis`),\n   full Adding-New-Actions checklist, handler dispatches `Event::Widget` into the chrome tree.\n4. **F004/P005/T007 — resize handle + resize mode.** Config keeps declaring **fixed** amounts (nothing\n   a user wrote breaks); the **proportion is computed internally per target**; one conversion shared by\n   drag and key; both axes; defaults shipped and customizable. The app hand-rolls divider resizing in\n   `heca/src/mouse/resize.rs` — absorb or delete it, never both.\n5. **F004/P006/T010 — `flex_basis` + one `share(n)` setter**, so no caller writes a fixed measure to\n   express a proportion.\n\n## Facts worth not rediscovering\n\n- `.planner/HANDOFF.md` is **deprecated**; handoffs live on `phase.handoff`.\n- `resume.json`'s `nextSteps`/`notes` are free text that task operations never refresh, and have\n  misdirected two sessions. **Read the task.**\n- `planner-task-show` / `planner-phase-update` can exceed the tool output limit; the response is saved\n  to a file, and `phase-update` **applies** even when it cannot be displayed.\n- Phase status is derived from tasks, so a phase JSON keeps `status: null` while the tool reports done.\n- **Check task statuses against the commits before trusting a recap** — two finished tasks sat\n  `in-progress` for a whole session here.",
-  "handoffUpdatedAt": "2026-07-28T06:45:31.077Z"
+  "handoffUpdatedAt": "2026-07-28T06:45:31.077Z",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

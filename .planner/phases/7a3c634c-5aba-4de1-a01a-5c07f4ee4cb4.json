@@ -1,7 +1,7 @@
 {
   "id": "7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 14,
+  "number": 70,
   "shortId": "7XEVR",
   "priority": 14,
   "slug": "topbar-menu-top-bar-menu-menubar-stub",
@@ -28,7 +28,7 @@
     {
       "id": "d9365597-d60e-4ff4-b3dd-b3ffcf970789",
       "phaseId": "7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4",
-      "number": 1,
+      "number": 261,
       "shortId": "Z3N9M",
       "priority": 1,
       "shortName": "topbar-menu-1",
@@ -51,5 +51,7 @@
   "createdAt": "2026-07-09T09:24:47.001Z",
   "updatedAt": "2026-07-27T11:40:15.514Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

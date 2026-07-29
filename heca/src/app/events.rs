@@ -15,11 +15,10 @@ use crate::app::terminal_host::{
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
 use crate::input::{FontZoomStep, WmAction};
-use crate::keymap::{KeyCombo, KeymapRegistry};
+use crate::keymap::Keymaps;
 use crate::mouse;
 use heca_core::layout::Point;
 use heca_grid_ui::{Event, Handled};
-use std::collections::HashMap;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 #[derive(Clone, Debug)]
@@ -35,9 +34,7 @@ pub enum AppEvent {
 pub(crate) fn handle_window_event(
     event_loop: &ActiveEventLoop,
     registry: &ActionRegistry,
-    keymap: &KeymapRegistry,
-    mode_keymaps: &HashMap<String, KeymapRegistry>,
-    mode_triggers: &HashMap<String, (KeyCombo, bool)>,
+    keymaps: &Keymaps,
     state: &mut AppState,
     event: WindowEvent,
 ) {
@@ -168,9 +165,7 @@ pub(crate) fn handle_window_event(
 
             handle_keyboard_input(
                 registry,
-                keymap,
-                mode_keymaps,
-                mode_triggers,
+                keymaps,
                 state,
                 KeyInputContext {
                     logical_key: &event.logical_key,

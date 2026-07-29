@@ -19,6 +19,7 @@ mod context_menu;
 mod dialog;
 mod dock_frame;
 mod flex;
+mod focus_scope;
 mod gauge;
 mod grid;
 mod icon;
@@ -68,6 +69,7 @@ pub use overlay::{
 };
 pub use dock_frame::DockFrame;
 pub use flex::{Container, Flex, container};
+pub use focus_scope::FocusScope;
 pub use gauge::Gauge;
 pub use grid::Grid;
 pub use icon::{Glyph, Icon};

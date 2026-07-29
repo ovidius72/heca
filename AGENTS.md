@@ -16,7 +16,7 @@ These are made over and over. **Violating either = redo.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
-    `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
+    `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `FocusScope`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
     `Label`, `Input`, `Select`, `Choice`, `Overlay`, `Dialog`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
     (There is **no `Modal` widget** — it was deleted; `Overlay` is the base overlay layer
     (blocking = a layer property) and `Dialog` — which composes it — is the confirm/modal widget;
@@ -847,7 +847,7 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 - **Change widgets report via callbacks**, not return values: `.on_change(|action: Action| …)` carrying `Action::value("<name>-change", SignalData::…)` (`toggle-change`/Bool, `checkbox-change`/Bool, `input-change`/String, `tab-change`/Usize). Buttons use `.on_click(|| …)`.
 - **`Base.disabled`** (dim+inert+unfocusable) and **`Base.tab_index`** are common to all widgets. Focus via one `FocusManager` (Tab/Shift+Tab, click-focus, `deliver_key`). Animations via `tick(dt) -> bool`.
 
-**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `Panel` (titled section), `Row` (clickable/selectable), `Item`, `ItemGroup`, `Grid`, `DockFrame`, `ChromeRegion`, `ScrollRegion`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `Tag`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
+**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`, `Panel` (titled section), `Row` (clickable/selectable), `Item`, `ItemGroup`, `Grid`, `DockFrame`, `ChromeRegion`, `ScrollRegion`; wrappers `KeyHint` (pick keycap), `FocusScope` (a whole area's keyboard focus: gates its subtree's keys + draws the ring), `Visibility`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`, `Select`; overlays `Overlay` (base layer; blocking = a layer property), `Dialog`, `CommandPalette`, `ContextMenu`, `Tooltip`, `ToastStack`; display `Badge`, `Tag`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
 
 ### Gotchas
 
@@ -1060,7 +1060,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
    fail if the declaration and the `build_action()` arm disagree.
 9. Add RPC parser support in `heca/src/rpc.rs`
 9b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
-9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` (may differ from the action name, as `close` → `delete_pane`); users toggle it under `[confirm]`.
+9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` — a separate field, because one spec can govern several `WmAction` variants, though every built-in uses its own action name; users toggle it under `[confirm]`.
 10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate. Metadata is discoverable via RPC introspection (`list-actions` / `describe-action <name>`, `ActionCatalog::describe_all/describe`).
 11. Document examples in `README.md` and `keybindings.default.toml`
 

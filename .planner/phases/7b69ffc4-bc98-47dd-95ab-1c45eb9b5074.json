@@ -1,7 +1,7 @@
 {
   "id": "7b69ffc4-bc98-47dd-95ab-1c45eb9b5074",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 5,
+  "number": 11,
   "shortId": "UQFF7",
   "priority": 5,
   "slug": "terminal-05-pane-shell-hosting-contract",
@@ -28,7 +28,7 @@
     {
       "id": "3d20f9cc-da40-4585-b9cd-c731934fef29",
       "phaseId": "7b69ffc4-bc98-47dd-95ab-1c45eb9b5074",
-      "number": 1,
+      "number": 20,
       "shortId": "CJLHT",
       "priority": 1,
       "shortName": "mount-terminal-pane-shell",
@@ -51,5 +51,7 @@
   "createdAt": "2026-07-01T18:09:07.246Z",
   "updatedAt": "2026-07-27T11:40:15.481Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

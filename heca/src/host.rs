@@ -83,7 +83,15 @@ pub struct StateView<'a> {
     state: &'a SharedChromeState,
 }
 
-impl StateView<'_> {
+impl<'a> StateView<'a> {
+    /// A view over a store held somewhere other than an [`App`] — what
+    /// [`ProviderCx`](crate::providers::ProviderCx) has during a `perform`, where the only thing
+    /// alive is an `Rc` alias of the store (no `&mut AppState` may be, since the provider lives
+    /// inside it).
+    pub fn over(state: &'a SharedChromeState) -> Self {
+        Self { state }
+    }
+
     /// This mount's own scroll offset signal, for a container that nests its own scroll area
     /// (F003/P011/T021).
     ///
@@ -97,6 +105,36 @@ impl StateView<'_> {
     /// Record this mount's scroll offset, emitting `ContainerScrollChanged`.
     pub fn set_container_scroll(&self, container: &str, offset: f32) {
         self.state.set_container_scroll(container, offset);
+    }
+
+    /// Whether this mount currently holds chrome **keyboard focus** (F003/P011/T020).
+    ///
+    /// Keyed by **mount id**, like the scroll offset beside it: only one placement can hold focus,
+    /// so two placements of one container are two different answers. A container binds this to
+    /// whatever it wants gated on focus — its scroll area's
+    /// [`keyboard_target`](heca_grid_ui::ScrollRegion::keyboard_target), a cursor, a mode — and the
+    /// host writes it (`focus_dock`), so nothing has to decide for itself that it has focus.
+    pub fn container_keyboard_target(
+        &self,
+        container: &str,
+    ) -> heca_grid_ui::reactive::Signal<bool> {
+        self.state.container_keyboard_target(container)
+    }
+
+    /// The container holding chrome keyboard focus, if any.
+    pub fn focused_container(&self) -> Option<String> {
+        self.state.focused_container()
+    }
+
+    /// **This placement's** cursor: the row that declared `nav_key`, or `None`.
+    ///
+    /// Keyed by mount id like the scroll offset and the keyboard target, so two placements of one
+    /// container answer independently.
+    pub fn container_cursor(
+        &self,
+        container: &str,
+    ) -> heca_grid_ui::reactive::Signal<Option<String>> {
+        self.state.container_cursor(container)
     }
 
     /// The currently active (focused) pane, if any.

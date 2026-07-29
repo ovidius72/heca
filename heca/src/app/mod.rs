@@ -5,12 +5,14 @@
 
 pub mod backend_factory;
 pub mod backend_store;
+pub(crate) mod conflicts;
 pub mod events;
 pub mod focus;
 pub mod git_monitor;
 pub mod input;
 pub mod interaction;
 pub mod keyboard;
+pub(crate) mod keys_show;
 pub mod lifecycle;
 pub mod mutations;
 pub mod pane_ops;

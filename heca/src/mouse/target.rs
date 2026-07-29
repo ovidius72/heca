@@ -11,27 +11,7 @@
 use crate::app_state::AppState;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
-use heca_grid_ui::drag::{DragItemId, DragSurfaceId};
-
-/// Returns true if the cursor position is within the given surface's bounds.
-#[expect(dead_code, reason = "reserved for future multi-surface support")]
-pub(crate) fn surface_contains(state: &AppState, id: DragSurfaceId, pos: (f32, f32)) -> bool {
-    match id {
-        DragSurfaceId::LeftSidebar => super::surface_left::contains(state, pos),
-    }
-}
-
-/// Returns the item at the cursor position within the given surface, if any.
-#[expect(dead_code, reason = "reserved for future multi-surface support")]
-pub(crate) fn surface_item_at(
-    state: &AppState,
-    id: DragSurfaceId,
-    pos: (f32, f32),
-) -> Option<DragItemId> {
-    match id {
-        DragSurfaceId::LeftSidebar => super::surface_left::item_at(state, pos),
-    }
-}
+use heca_grid_ui::drag::DragSurfaceId;
 
 /// Returns the click action for an item in the given surface, if any.
 pub(crate) fn surface_click_action(
@@ -41,22 +21,6 @@ pub(crate) fn surface_click_action(
 ) -> Option<WmAction> {
     match id {
         DragSurfaceId::LeftSidebar => super::surface_left::click_action(state, pos),
-    }
-}
-
-/// Check if the given surface can accept a drop of the source item onto the target item.
-#[expect(dead_code, reason = "reserved for future multi-surface support")]
-pub(crate) fn surface_can_accept(
-    state: &AppState,
-    id: DragSurfaceId,
-    source_pane_id: PaneId,
-    target_fi: usize,
-    swap: bool,
-) -> bool {
-    match id {
-        DragSurfaceId::LeftSidebar => {
-            super::surface_left::can_accept(state, source_pane_id, target_fi, swap)
-        }
     }
 }
 
@@ -87,13 +51,5 @@ pub(crate) fn surface_interactive_move_drop(
 ) -> bool {
     match id {
         DragSurfaceId::LeftSidebar => super::surface_left::handle_interactive_move_drop(state, pos),
-    }
-}
-
-/// Update the hover highlight for the given surface.
-#[expect(dead_code, reason = "reserved for future multi-surface support")]
-pub(crate) fn surface_update_hover(state: &mut AppState, id: DragSurfaceId) {
-    match id {
-        DragSurfaceId::LeftSidebar => super::surface_left::update_hover(state),
     }
 }

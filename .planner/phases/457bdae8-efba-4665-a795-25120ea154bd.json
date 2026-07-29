@@ -51,7 +51,7 @@
     {
       "id": "917e5b54-2ab1-46d2-a382-9513fbafb738",
       "phaseId": "457bdae8-efba-4665-a795-25120ea154bd",
-      "number": 2,
+      "number": 11,
       "shortId": "D28FQ",
       "priority": 2,
       "shortName": "update-gridui-callsites",
@@ -74,5 +74,7 @@
   "createdAt": "2026-07-01T18:09:07.245Z",
   "updatedAt": "2026-07-27T11:40:15.473Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

@@ -45,6 +45,12 @@ pub enum Glyph {
     Close,
     Check,
     CaretRight,
+    /// Left chevron — "collapse this row" / "out to the parent", the mirror of
+    /// [`CaretRight`](Glyph::CaretRight). Inferred codepoint (`0xe138`): Phosphor lays the caret
+    /// family out alphabetically two codepoints apart (`caret-down` `0xe136`, `caret-left`,
+    /// `caret-right` `0xe13a`, `caret-up` `0xe13c`), so this is the slot between down and right —
+    /// confirm visually in the showcase glyph grid, as [`CaretUp`](Glyph::CaretUp) also asks.
+    CaretLeft,
     CaretDown,
     /// Up chevron — the polished form of the macOS Control symbol (`⌃`), used to render a
     /// button's `Ctrl` accelerator. Inferred codepoint (`0xe13c`) — confirm visually in the
@@ -101,7 +107,8 @@ impl Glyph {
         Glyph::Folder, Glyph::FolderOpen, Glyph::File, Glyph::FileCode,
         Glyph::GitBranch, Glyph::GitCommit, Glyph::GitMerge, Glyph::GitPullRequest,
         Glyph::Terminal, Glyph::Gear, Glyph::Search, Glyph::Close,
-        Glyph::Check, Glyph::CaretRight, Glyph::CaretDown, Glyph::CaretUp, Glyph::Play,
+        Glyph::Check, Glyph::CaretRight, Glyph::CaretLeft, Glyph::CaretDown, Glyph::CaretUp,
+        Glyph::Play,
         Glyph::Pause, Glyph::Stop, Glyph::Warning, Glyph::WarningCircle,
         Glyph::Info, Glyph::Circle, Glyph::Lightning, Glyph::List,
         Glyph::Sidebar, Glyph::DotsThreeVertical, Glyph::ArrowRight, Glyph::ArrowLineLeft,
@@ -131,6 +138,7 @@ impl Glyph {
             Glyph::Close => 0xe4f6,
             Glyph::Check => 0xe182,
             Glyph::CaretRight => 0xe13a,
+            Glyph::CaretLeft => 0xe138,
             Glyph::CaretDown => 0xe136,
             Glyph::CaretUp => 0xe13c,
             Glyph::Play => 0xe3d0,

@@ -1,7 +1,7 @@
 {
   "id": "227d7422-e493-41ff-b786-8e659bf2f88c",
   "featureId": "...",
-  "number": 1,
+  "number": 64,
   "shortId": "HZJ3S",
   "priority": 1,
   "slug": "notification-03",
@@ -26,5 +26,7 @@
   "createdAt": "2026-07-04T07:05:14.792Z",
   "updatedAt": "2026-07-27T11:40:15.455Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

@@ -6,20 +6,11 @@
 use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
-use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
+use crate::app::conflicts::{BindingConflict, Conflicts};
+use crate::keymap::{index_binding, ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
-
-#[derive(Clone, Debug)]
-struct BindingConflict {
-    mode: String,
-    combo: KeyCombo,
-    previous_action: ActionRef,
-    previous_source: String,
-    new_action: ActionRef,
-    new_source: String,
-}
 
 /// Resolve a config action **name** (+ its args) to what the key should be bound to.
 ///
@@ -55,46 +46,137 @@ fn action_ref_from_config(name: &str, args: &HashMap<String, String>) -> ActionR
     ActionRef::Dynamic(intent)
 }
 
+/// The action id a `[[keys.component]]` entry means, and the reference to bind (F003/P086/T362).
+///
+/// **Binding names are short; the action id is `<component>.<name>`.** A user writes `cursor_up`
+/// under `name = "workspaces"` and means `workspaces.cursor_up` — they should never have to repeat
+/// the component in every line of its own block.
+///
+/// The one exception is an id heca already knows: a component **binds** existing actions rather than
+/// redeclaring them (`next_pane`, `zoom_column`), and those keep their catalog id. That is decided
+/// by whether [`action_ref_from_config`] can resolve the name at load — a built-in resolves, a
+/// component's or plugin's own name does not and becomes a `Dynamic` ref answered at press time.
+///
+/// An already-qualified name is left alone, so writing the id out in full is never wrong.
+fn component_action(
+    component: &str,
+    written: &str,
+    args: &HashMap<String, String>,
+) -> (String, ActionRef) {
+    let direct = action_ref_from_config(written, args);
+    if matches!(direct, ActionRef::Builtin(_)) || written.starts_with(&format!("{component}.")) {
+        return (written.to_string(), direct);
+    }
+    let id = format!("{component}.{written}");
+    let action = action_ref_from_config(&id, args);
+    (id, action)
+}
+
+/// What a binding was written as: which action, in which layer, under which key.
+///
+/// Carried together because the same three facts answer two questions — where to send the user when
+/// two bindings collide, and what key an action answers to ([`BindingIndex`], F003/P086/T366).
+struct Written<'a> {
+    /// The action id the binding resolves to, after any component qualification.
+    action: &'a str,
+    /// The layer, named the way the config file names it.
+    layer: &'a str,
+    /// The combo exactly as the user types it — `prefix+` and all.
+    key: &'a str,
+}
+
 fn bind_with_conflict_tracking(
     keymap: &mut KeymapRegistry,
     mode: &str,
     combo: KeyCombo,
     action: ActionRef,
-    source: String,
-    conflicts: &mut Vec<BindingConflict>,
+    written: Written<'_>,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
 ) {
     if let Some(previous_action) = keymap.resolve(mode, &combo).cloned()
         && previous_action != action
     {
-        conflicts.push(BindingConflict {
+        conflicts.key(BindingConflict {
             mode: mode.to_string(),
             combo: combo.clone(),
             previous_action,
             previous_source: "existing binding".to_string(),
             new_action: action.clone(),
-            new_source: source,
+            new_source: format!("{} {}", written.layer, written.action),
         });
     }
     keymap.bind(mode, combo, action);
+    index_binding(index, written.action, written.layer, written.key);
 }
 
-fn format_combo(combo: &KeyCombo) -> String {
-    let mut parts = Vec::new();
-    if combo.ctrl {
-        parts.push("Ctrl".to_string());
+/// Retire a combo from a layer, and from the index with it (F003/P086/T366).
+///
+/// An `unbind` that left the index alone would have `--keys-show` and every tooltip reporting a key
+/// that no longer does anything — the exact drift the index exists to end. Matched on the parsed
+/// combo rather than the literal string, so `"Prefix+W"` retires `"prefix+w"`.
+fn unbind_and_deindex(
+    keymap: &mut KeymapRegistry,
+    mode: &str,
+    layer: &str,
+    key: &str,
+    index: &mut BindingIndex,
+) {
+    let split = |s: &str| {
+        let s = s.trim();
+        match s.strip_prefix("prefix+") {
+            Some(rest) => (true, KeyCombo::parse(rest.trim())),
+            None => (false, KeyCombo::parse(s)),
+        }
+    };
+    let target = split(key);
+    keymap.unbind(mode, &target.1);
+    for bound in index.values_mut() {
+        bound.retain(|b| b.layer != layer || split(&b.key) != target);
     }
-    if combo.shift {
-        parts.push("Shift".to_string());
-    }
-    if combo.alt {
-        parts.push("Alt".to_string());
-    }
-    if combo.super_ {
-        parts.push("Super".to_string());
-    }
-    parts.push(combo.key.clone());
-    parts.join("+")
+    index.retain(|_, bound| !bound.is_empty());
 }
+
+/// Bind a component's **runtime-registered** key into its layer, unless the user already spoke
+/// (F003/P086/T366).
+///
+/// The plugin path — see [`bind_provider_keybindings`](crate::providers::bind_provider_keybindings)
+/// for why only a plugin uses it. **User config always wins, and a registration never silently
+/// shadows one.** Two ways it can lose: the combo is already bound in this layer (the user put
+/// something else there), or the action already answers to a key **in any layer** — the index is
+/// built from config before this runs, so an entry there means the user has spoken about this
+/// action, wherever they wrote it, and it must not also keep the key the plugin asked for.
+pub fn register_component_keybinding(
+    keymaps: &mut HashMap<String, KeymapRegistry>,
+    index: &mut BindingIndex,
+    component: &str,
+    keys: &str,
+    action: &str,
+) {
+    let trimmed = keys.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unbound") {
+        return;
+    }
+    let layer = keymaps
+        .entry(component.to_string())
+        .or_insert_with(KeymapRegistry::new);
+    if index.contains_key(action) {
+        return;
+    }
+    for key_str in trimmed.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let combo = KeyCombo::parse(key_str);
+        if layer.resolve(component, &combo).is_some() {
+            continue;
+        }
+        layer.bind(
+            component,
+            combo,
+            action_ref_from_config(action, &HashMap::new()),
+        );
+        index_binding(index, action, "plugin", key_str);
+    }
+}
+
 
 /// What is wrong with a binding's `args` table, judged against what the action declares it takes.
 ///
@@ -129,28 +211,6 @@ fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
     }
 }
 
-fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
-    if conflicts.is_empty() || cfg!(test) {
-        return;
-    }
-
-    eprintln!(
-        "[heca] detected {} keybinding conflict(s):",
-        conflicts.len()
-    );
-    for conflict in conflicts {
-        eprintln!(
-            "[heca] {} conflict in mode '{}': '{}' => {:?} ({}) overwritten by {:?} ({})",
-            kind,
-            conflict.mode,
-            format_combo(&conflict.combo),
-            conflict.previous_action,
-            conflict.previous_source,
-            conflict.new_action,
-            conflict.new_source,
-        );
-    }
-}
 
 /// Convert a parsed [`KeyCombo`] into a renderer-agnostic `heca_grid_ui` chord
 /// (`GridKey` + `Modifiers`), or `None` for a key name grid-ui does not model. Handles both
@@ -232,9 +292,12 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
     km
 }
 
-pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
+pub fn build_keymap(
+    config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) -> KeymapRegistry {
     let mut keymap = KeymapRegistry::new();
-    let mut conflicts = Vec::new();
 
     let default_keys = heca_config::theme::KeysConfig::default();
     let mut merged_bindings: BTreeMap<String, heca_config::theme::BindingValue> = default_keys
@@ -252,15 +315,20 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         let action = action_ref_from_config(action_name, &no_args);
         for key_str in value.keys() {
             let trimmed = key_str.trim();
-            if trimmed.starts_with("prefix+") {
-                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+            let written = Written {
+                action: action_name,
+                layer: "[keys]",
+                key: trimmed,
+            };
+            if let Some(rest) = trimmed.strip_prefix("prefix+") {
                 bind_with_conflict_tracking(
                     &mut keymap,
                     "normal",
-                    KeyCombo::parse(rest),
+                    KeyCombo::parse(rest.trim()),
                     action.clone(),
-                    format!("[keys] {action_name}"),
-                    &mut conflicts,
+                    written,
+                    conflicts,
+                    index,
                 );
             } else {
                 bind_with_conflict_tracking(
@@ -268,8 +336,9 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                     "global",
                     KeyCombo::parse(trimmed),
                     action.clone(),
-                    format!("[keys] {action_name}"),
-                    &mut conflicts,
+                    written,
+                    conflicts,
+                    index,
                 );
             }
         }
@@ -277,14 +346,8 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
 
     for combo_str in config.keys.unbind.keys() {
         let trimmed = combo_str.trim();
-        if trimmed.starts_with("prefix+") {
-            let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-            let combo = KeyCombo::parse(rest);
-            keymap.unbind("normal", &combo);
-        } else {
-            let combo = KeyCombo::parse(trimmed);
-            keymap.unbind("global", &combo);
-        }
+        let mode = if trimmed.starts_with("prefix+") { "normal" } else { "global" };
+        unbind_and_deindex(&mut keymap, mode, "[keys]", trimmed, index);
     }
 
     for cmd_cfg in &config.keys.command {
@@ -299,15 +362,20 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
             },
         });
         let trimmed = cmd_cfg.key.trim();
-        if trimmed.starts_with("prefix+") {
-            let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+        let written = Written {
+            action: &cmd_cfg.command,
+            layer: "[[keys.command]]",
+            key: trimmed,
+        };
+        if let Some(rest) = trimmed.strip_prefix("prefix+") {
             bind_with_conflict_tracking(
                 &mut keymap,
                 "normal",
-                KeyCombo::parse(rest),
+                KeyCombo::parse(rest.trim()),
                 action,
-                format!("[[keys.command]] {}", cmd_cfg.command),
-                &mut conflicts,
+                written,
+                conflicts,
+                index,
             );
         } else {
             bind_with_conflict_tracking(
@@ -315,26 +383,238 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                 "global",
                 KeyCombo::parse(trimmed),
                 action,
-                format!("[[keys.command]] {}", cmd_cfg.command),
-                &mut conflicts,
+                written,
+                conflicts,
+                index,
             );
         }
     }
 
-    log_conflicts("flat", &conflicts);
     keymap
+}
+
+/// The built-in mode keymaps that are **entered by focus rather than by a key**, so they never take
+/// a trigger — see the note at the trigger site in [`build_modes`].
+const UNTRIGGERED_MODES: &[&str] = &["sidebar", crate::app::input::FOCUS_LAYER];
+
+/// Build **every** keymap layer, and the reverse index over all of them, from one config.
+///
+/// The single entry point, so startup and `prefix+Shift+r` cannot build a different set — and so
+/// [`Keymaps::by_action`] is filled by the same pass that binds, and can never describe a layer that
+/// was not built (F003/P086/T366).
+pub fn build_keymaps(
+    config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
+) -> crate::keymap::Keymaps {
+    let mut by_action = BindingIndex::new();
+    let (modes, triggers) = build_modes(config, conflicts, &mut by_action);
+    let mut flat = build_keymap(config, conflicts, &mut by_action);
+    let (components, global_focus) = build_component_keymaps(config, conflicts, &mut by_action);
+    bind_global_focus(&mut flat, &global_focus, conflicts, &mut by_action);
+    crate::keymap::Keymaps {
+        flat,
+        modes,
+        components,
+        triggers,
+        by_action,
+    }
+}
+
+/// Put each container's `global_focus` into the **global** map, aimed at that container.
+///
+/// It belongs here rather than in the container's own layer because it has to work while the
+/// container does *not* have focus — which is the only time it is useful. Bound like any flat
+/// binding, so `prefix+e` lands in the leader map and `e` in the direct one, and so two components
+/// claiming one combo come out of the conflict report rather than silently overwriting each other
+/// (F003/P086/T363).
+fn bind_global_focus(
+    flat: &mut KeymapRegistry,
+    entries: &[GlobalFocus],
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) {
+    for entry in entries {
+        let action = ActionRef::Builtin(WmAction::FocusDock {
+            dock: Some(entry.target.clone()),
+        });
+        let written = Written {
+            action: "focus_dock",
+            layer: &entry.source,
+            key: &entry.key,
+        };
+        let (mode, combo) = match entry.key.strip_prefix("prefix+") {
+            Some(rest) => ("normal", KeyCombo::parse(rest.trim())),
+            None => ("global", KeyCombo::parse(&entry.key)),
+        };
+        bind_with_conflict_tracking(flat, mode, combo, action, written, conflicts, index);
+    }
+}
+
+/// Layer one `[[keys.component]]` entry over another (F003/P086/T362).
+///
+/// **The merge rules, and why they differ between the two forms.** A TOML table merges per key
+/// already, so the plain `action = "key"` entries need nothing special — overriding one keeps the
+/// rest. An **array** is replaced wholesale, which for `[[keys.component.bind]]` would mean adding
+/// one arg-carrying binding silently drops every shipped default. So those are merged **by their
+/// `keys` field**: a keymap *is* a map from combo to action, and merging on the combo is the
+/// ordinary table rule applied to the thing the array is really keyed by — not a special case.
+///
+/// `unbind` is applied last, at build time, and keyed by the **combo**, so it retires a binding
+/// whatever it points at — the same rule as the global `[keys.unbind]`, and never a null or
+/// empty-string convention.
+///
+/// Carried over verbatim from the `[keys.<kind>]` shape it replaces: only *where the entries come
+/// from* changed, never how two of them combine.
+fn layer_component_keys(
+    base: &mut heca_config::theme::ComponentKeysConfig,
+    over: heca_config::theme::ComponentKeysConfig,
+) {
+    // Identity travels with the entries so the merged layer can still say which `[[keys.component]]`
+    // a conflict came from. A base only ever takes id-less entries, so it keeps `id: None`; a
+    // placement is seeded from that base and then stamped with its own id here.
+    base.name = over.name;
+    if over.id.is_some() {
+        base.id = over.id;
+    }
+    base.bindings.extend(over.bindings);
+    for binding in over.bind {
+        match base.bind.iter_mut().find(|b| b.keys == binding.keys) {
+            Some(existing) => *existing = binding,
+            None => base.bind.push(binding),
+        }
+    }
+    base.unbind.extend(over.unbind);
+}
+
+/// Build the component binding layers from `[[keys.component]]` (F003/P086/T362).
+///
+/// **Keyed by placement, falling back to the kind.** An entry with no `id` speaks for the component
+/// *type*, so writing it once covers every seating; an entry with an `id` is layered on top of that
+/// base for one mount alone. The returned map therefore holds an entry under each component name and
+/// an entry under each placement id that config actually mentions — [`focus_layer_action`] asks for
+/// the focused mount first and falls back to its kind, so a placement nobody narrowed costs nothing.
+///
+/// [`focus_layer_action`]: crate::app::input
+pub fn build_component_keymaps(
+    config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) -> (HashMap<String, KeymapRegistry>, Vec<GlobalFocus>) {
+    let defaults = heca_config::theme::KeysConfig::default();
+    let entries = || defaults.component.iter().chain(config.keys.component.iter());
+
+    // Pass 1 — the per-component base: every entry with no `id`, defaults first so the user's file
+    // layers over them. BTreeMap so the build order (and any conflict report) is deterministic.
+    let mut bases: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    for entry in entries().filter(|e| e.id.is_none()) {
+        layer_component_keys(bases.entry(entry.name.clone()).or_default(), entry.clone());
+    }
+
+    // Pass 2 — the placements, each seeded from its component's finished base. Run as a second pass
+    // for exactly that reason: a narrowing entry must see the whole base, wherever it was written.
+    let mut placements: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    for entry in entries() {
+        let Some(id) = entry.id.clone() else { continue };
+        let seeded = placements
+            .entry(id)
+            .or_insert_with(|| bases.get(&entry.name).cloned().unwrap_or_default());
+        layer_component_keys(seeded, entry.clone());
+    }
+
+    // A placement id that is also a component name would otherwise be built twice; the placement is
+    // the more specific of the two and already contains the base, so it wins.
+    let bases: Vec<_> = bases
+        .into_iter()
+        .filter(|(name, _)| !placements.contains_key(name))
+        .collect();
+    let layers = bases.into_iter().chain(placements);
+
+    let mut out = HashMap::new();
+    let mut global_focus = Vec::new();
+    for (layer_name, layer) in layers {
+        let mut keymap = KeymapRegistry::new();
+        let no_args = HashMap::new();
+        // The label a conflict is reported under: which entry the user has to go and edit.
+        // How this layer is named wherever it is reported: which `[[keys.component]]` entry the user
+        // has to go and edit.
+        let label = match layer.id.as_deref() {
+            Some(id) => format!("[[keys.component]] {}:{id}", layer.name),
+            None => format!("[[keys.component]] {}", layer.name),
+        };
+        let bind_label = format!("{label}.bind");
+        for (name, value) in &layer.bindings {
+            // `global_focus` is the one binding that must NOT land in this layer: the layer is only
+            // consulted while the container already has focus, so a key to *take* focus placed here
+            // could never fire (F003/P086/T363). It goes to the global map instead, below.
+            if name == GLOBAL_FOCUS {
+                for key in value.keys() {
+                    global_focus.push(GlobalFocus {
+                        target: layer.id.clone().unwrap_or_else(|| layer.name.clone()),
+                        key: key.trim().to_string(),
+                        source: label.clone(),
+                    });
+                }
+                continue;
+            }
+            let (id, action) = component_action(&layer.name, name, &no_args);
+            for key_str in value.keys() {
+                bind_with_conflict_tracking(
+                    &mut keymap,
+                    &layer_name,
+                    KeyCombo::parse(key_str.trim()),
+                    action.clone(),
+                    Written { action: &id, layer: &label, key: key_str.trim() },
+                    conflicts,
+                    index,
+                );
+            }
+        }
+        for binding in &layer.bind {
+            let (id, action) = component_action(&layer.name, &binding.action, &binding.args);
+            bind_with_conflict_tracking(
+                &mut keymap,
+                &layer_name,
+                KeyCombo::parse(&binding.keys),
+                action,
+                Written { action: &id, layer: &bind_label, key: binding.keys.trim() },
+                conflicts,
+                index,
+            );
+        }
+        for combo in layer.unbind.keys() {
+            unbind_and_deindex(&mut keymap, &layer_name, &label, combo, index);
+        }
+        out.insert(layer_name, keymap);
+    }
+    (out, global_focus)
+}
+
+/// The binding name every container answers to, reserved so it can never be a component's own
+/// action (F003/P086/T363).
+const GLOBAL_FOCUS: &str = "global_focus";
+
+/// One container's key to **take** the keyboard, pulled out of its `[[keys.component]]` entry.
+pub struct GlobalFocus {
+    /// The placement id when the entry named one, else the component — resolved at press time by
+    /// `placement_for`, which falls back to the seating you were last in.
+    target: String,
+    /// The combo as written, `prefix+` and all.
+    key: String,
+    /// The entry it came from, for the conflict report and `--keys-show`.
+    source: String,
 }
 
 /// Build mode keymaps and triggers from config.
 pub fn build_modes(
     config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
 ) -> (
     HashMap<String, KeymapRegistry>,
     HashMap<String, (KeyCombo, bool)>,
 ) {
     let mut mode_keymaps = HashMap::new();
     let mut mode_triggers: HashMap<String, (KeyCombo, bool)> = HashMap::new();
-    let mut conflicts = Vec::new();
 
     let default_keys = heca_config::theme::KeysConfig::default();
     let mut merged_modes: BTreeMap<String, heca_config::theme::KeyModeConfig> = default_keys
@@ -355,6 +635,7 @@ pub fn build_modes(
 
     for mode_cfg in merged_modes.values() {
         let mut mode_map = KeymapRegistry::new();
+        let label = format!("[[keys.mode]] {}", mode_cfg.name);
         for binding in &mode_cfg.bindings {
             // Same rule as the flat bindings: an unresolvable name is a Dynamic ref, not a dropped
             // binding. A mode binding's `args` become the Intent's args.
@@ -364,14 +645,46 @@ pub fn build_modes(
                 &mode_cfg.name,
                 KeyCombo::parse(&binding.keys),
                 action,
-                format!("[keys.mode:{}] {}", mode_cfg.name, binding.action),
-                &mut conflicts,
+                Written {
+                    action: &binding.action,
+                    layer: &label,
+                    key: binding.keys.trim(),
+                },
+                conflicts,
+                index,
+            );
+        }
+        // **`Esc` is a guarantee, not a default** (F003/P086/T363). Every focused container must
+        // have a way back to the main region, including one that declares nothing at all — so it is
+        // re-asserted here after the merge instead of being left to the file. `[[keys.mode]]` arrays
+        // are replaced wholesale by a user's config, so a `focus` block that simply forgot this line
+        // would otherwise strand the keyboard in a dock with only the mouse to get out.
+        //
+        // Bound through the same door as everything else: putting something *else* on `Escape` in
+        // this layer is a real collision and comes out in the report rather than silently losing.
+        // Binding `unfocus_dock` to further keys is untouched — this adds a floor, not a ceiling.
+        if mode_cfg.name == crate::app::input::FOCUS_LAYER {
+            bind_with_conflict_tracking(
+                &mut mode_map,
+                &mode_cfg.name,
+                KeyCombo::parse("Escape"),
+                ActionRef::Builtin(WmAction::UnfocusDock),
+                Written {
+                    action: "unfocus_dock",
+                    layer: "built-in (every container has a way out)",
+                    key: "Escape",
+                },
+                conflicts,
+                index,
             );
         }
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
-        // SidebarNav is entered via SidebarFocus / mouse interaction, so the
-        // built-in sidebar mode does not use a trigger entry here.
-        if mode_cfg.name != "sidebar" {
+        // These two are **entered by focus, not by a key**: `sidebar` by `sidebar_focus` or a
+        // click, `focus` by focusing a dock. A trigger would make them reachable as a plain
+        // `InputMode::Mode`, where their bindings resolve against a focus nothing is holding — a
+        // mode that looks entered and does nothing. So a trigger is refused even when a user
+        // config supplies one.
+        if !UNTRIGGERED_MODES.contains(&mode_cfg.name.as_str()) {
             let trigger_trimmed = mode_cfg.trigger.trim();
             let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
                 let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
@@ -383,7 +696,6 @@ pub fn build_modes(
         }
     }
 
-    log_conflicts("mode", &conflicts);
     (mode_keymaps, mode_triggers)
 }
 
@@ -415,6 +727,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SplitHorizontal, handle_split_horizontal);
     registry.register(&WmAction::SplitVertical, handle_split_vertical);
     registry.register(&WmAction::ZoomColumn, handle_zoom_column);
+    registry.register(
+        &WmAction::ZoomColumnAtIndex { ws_idx: 0, col_idx: 0 },
+        handle_zoom_column_at_index,
+    );
     registry.register(&WmAction::OpenContextMenu, handle_open_context_menu);
     registry.register(&WmAction::ScrollViewLeft, handle_scroll_view_left);
     registry.register(&WmAction::ScrollViewRight, handle_scroll_view_right);
@@ -655,30 +971,8 @@ pub fn build_registry() -> ActionRegistry {
     // ── Sidebar / Chrome ──
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
-    registry.register(&WmAction::SidebarFocus, handle_sidebar_focus);
-    registry.register(&WmAction::SidebarUp, handle_sidebar_up);
-    registry.register(&WmAction::SidebarDown, handle_sidebar_down);
-    registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
-    registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
-    registry.register(&WmAction::SidebarPeek, handle_sidebar_peek);
-    registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
-    registry.register(
-        &WmAction::SidebarCreateWorkspace,
-        handle_sidebar_create_workspace,
-    );
-    registry.register(&WmAction::SidebarCreateColumn, handle_sidebar_create_column);
-    registry.register(
-        &WmAction::SidebarSplitInColumn,
-        handle_sidebar_split_in_column,
-    );
-    registry.register(
-        &WmAction::SidebarZoomSelectedColumn,
-        handle_sidebar_zoom_selected_column,
-    );
-    registry.register(
-        &WmAction::SidebarDeleteSelected,
-        handle_sidebar_delete_selected,
-    );
+    registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
+    registry.register(&WmAction::UnfocusDock, handle_unfocus_dock);
     registry.register(
         &WmAction::CollapseCurrentWorkspace,
         handle_collapse_current_workspace,
@@ -798,6 +1092,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::ScrollPageDown, handle_scroll_page_down);
     registry.register(&WmAction::ScrollToTop, handle_scroll_to_top);
     registry.register(&WmAction::ScrollToBottom, handle_scroll_to_bottom);
+    registry.register(&WmAction::ScrollPageLeft, handle_scroll_page_left);
+    registry.register(&WmAction::ScrollPageRight, handle_scroll_page_right);
+    registry.register(&WmAction::ScrollToLeftEdge, handle_scroll_to_left_edge);
+    registry.register(&WmAction::ScrollToRightEdge, handle_scroll_to_right_edge);
     registry.register(
         &WmAction::ScrollToOffset { rows: 0 },
         handle_scroll_to_offset,
@@ -828,11 +1126,12 @@ pub fn build_registry() -> ActionRegistry {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_ref_from_config, binding_arg_problems, build_keymap, build_modes, build_registry,
-        build_widget_keymap, format_combo,
+        action_ref_from_config, bind_global_focus, binding_arg_problems,
+        build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
     };
+    use crate::app::conflicts::{Conflicts, format_combo};
     use crate::input::WmAction;
-    use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
+    use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
 
@@ -897,7 +1196,7 @@ mod tests {
     #[test]
     fn every_default_binding_still_resolves_to_a_builtin_at_load() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         for mode in ["normal", "global"] {
             let Some(bindings) = keymap.bindings_in_mode(mode) else {
                 continue;
@@ -1245,7 +1544,7 @@ mod tests {
     fn default_font_size_modes_build_with_triggers_and_keys() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         // Both modes exist, are sticky, and are entered by prefix+! / prefix+@.
         let (app_trigger, app_sticky) = mode_triggers
@@ -1307,7 +1606,7 @@ mod tests {
     #[test]
     fn default_ctrl_k_binding_stays_swap_up() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+k")),
@@ -1331,7 +1630,7 @@ mod tests {
     fn default_font_zoom_bindings_resolve_without_collision() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         // Global (app-wide) branch: prefix+Ctrl+= / - / 0.
         assert_eq!(
@@ -1402,7 +1701,7 @@ mod tests {
     #[test]
     fn default_workspace_aliases_include_ctrl_p_and_ctrl_n() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("u")),
@@ -1425,7 +1724,7 @@ mod tests {
     #[test]
     fn default_sidebar_global_collapse_bindings_exist() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("(")),
@@ -1440,7 +1739,7 @@ mod tests {
     #[test]
     fn default_pane_navigation_and_palette_bindings_are_separate() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("[")),
@@ -1459,7 +1758,7 @@ mod tests {
     #[test]
     fn default_selection_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("s")),
@@ -1484,7 +1783,7 @@ mod tests {
     #[test]
     fn default_selection_mode_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config);
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let keymap = mode_keymaps
             .get("selection")
             .expect("selection mode exists");
@@ -1529,90 +1828,467 @@ mod tests {
         );
     }
 
-    #[test]
-    fn sidebar_mode_includes_arrow_aliases() {
-        let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config);
-        let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
+    // ── Component layers — `[[keys.component]]` (F003/P086/T362) ──
 
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowUp")),
-            Some(&WmAction::SidebarUp)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowDown")),
-            Some(&WmAction::SidebarDown)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowLeft")),
-            Some(&WmAction::SidebarLeftNav)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowRight")),
-            Some(&WmAction::SidebarRightNav)
-        );
-        // Space is the "focus but stay" key (`sidebar_peek`), distinct from `l`/Right,
-        // which focus and leave the mode.
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("Space")),
-            Some(&WmAction::SidebarPeek)
-        );
+    /// The per-component layers alone. `global_focus` comes back separately (F003/P086/T363) and
+    /// has its own tests; every other case here is about what a focused container answers to.
+    fn layers_only(
+        config: &heca_config::theme::Config,
+        conflicts: &mut Conflicts,
+        index: &mut BindingIndex,
+    ) -> HashMap<String, KeymapRegistry> {
+        build_component_keymaps(config, conflicts, index).0
     }
 
-    #[test]
-    fn sidebar_mode_includes_mutation_bindings() {
-        let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config);
-        let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("w")),
-            Some(&WmAction::SidebarCreateWorkspace)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("c")),
-            Some(&WmAction::SidebarCreateColumn)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("v")),
-            Some(&WmAction::SidebarSplitInColumn)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("z")),
-            Some(&WmAction::SidebarZoomSelectedColumn)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("d")),
-            Some(&WmAction::SidebarDeleteSelected)
-        );
-    }
-
-    #[test]
-    fn user_sidebar_mode_with_same_name_overrides_defaults() {
+    /// Build a config carrying these `[[keys.component]]` entries, as TOML would produce.
+    fn with_layers(
+        layers: Vec<heca_config::theme::ComponentKeysConfig>,
+    ) -> heca_config::theme::Config {
         let mut config = heca_config::theme::Config::default();
-        config.keys.mode.push(KeyModeConfig {
-            name: "sidebar".to_string(),
-            trigger: "prefix+e".to_string(),
+        config.keys.component = layers;
+        config
+    }
+
+    fn with_layer(layer: heca_config::theme::ComponentKeysConfig) -> heca_config::theme::Config {
+        with_layers(vec![layer])
+    }
+
+    /// One `[[keys.component]]` entry: which component, which placement (if narrowed), its bindings.
+    fn layer_of(
+        name: &str,
+        id: Option<&str>,
+        entries: &[(&str, &str)],
+    ) -> heca_config::theme::ComponentKeysConfig {
+        heca_config::theme::ComponentKeysConfig {
+            name: name.to_string(),
+            id: id.map(str::to_string),
+            bindings: entries
+                .iter()
+                .map(|(a, k)| {
+                    (
+                        a.to_string(),
+                        heca_config::theme::BindingValue::Single(k.to_string()),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// A component's layer resolves under its **name**, and binds any action id — its own or an
+    /// existing built-in it simply reuses.
+    #[test]
+    fn a_component_layer_binds_its_own_actions_and_existing_ones() {
+        let config = with_layer(layer_of(
+            "docker",
+            None,
+            &[("docker.restart_selected", "r"), ("next_pane", "n")],
+        ));
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let docker = maps.get("docker").expect("an id-less entry is keyed by name");
+
+        match docker.resolve("docker", &KeyCombo::parse("r")) {
+            Some(ActionRef::Dynamic(intent)) => assert_eq!(intent.action, "docker.restart_selected"),
+            other => panic!("its own action resolves at press time: {other:?}"),
+        }
+        assert_eq!(
+            docker.resolve_builtin("docker", &KeyCombo::parse("n")),
+            Some(&WmAction::NextPane),
+            "an existing action is bound here, not redeclared",
+        );
+    }
+
+    /// **The table merges per key**: overriding one binding keeps every other default. Two entries
+    /// for the same component are now just two entries in the array — the builder layers them.
+    #[test]
+    fn overriding_one_binding_keeps_the_rest() {
+        let config = with_layers(vec![
+            layer_of(
+                "docker",
+                None,
+                &[("docker.restart_selected", "r"), ("docker.stop_selected", "s")],
+            ),
+            layer_of("docker", None, &[("docker.stop_selected", "x")]),
+        ]);
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let docker = &maps["docker"];
+
+        assert!(
+            docker.resolve("docker", &KeyCombo::parse("x")).is_some(),
+            "the overridden action moved to its new key",
+        );
+        assert!(
+            docker.resolve("docker", &KeyCombo::parse("r")).is_some(),
+            "and every other default survived",
+        );
+    }
+
+    /// **Binding names are short.** `cursor_up` under `name = "workspaces"` is
+    /// `workspaces.cursor_up`; a built-in keeps its catalog id, because a component binds those
+    /// rather than redeclaring them; and writing the id out in full is never wrong.
+    #[test]
+    fn a_short_name_means_the_components_own_action() {
+        let config = with_layer(layer_of(
+            "workspaces",
+            None,
+            &[
+                ("cursor_up", "k"),
+                ("next_pane", "n"),
+                ("workspaces.peek_selected", "Space"),
+            ],
+        ));
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let layer = &maps["workspaces"];
+
+        match layer.resolve("workspaces", &KeyCombo::parse("k")) {
+            Some(ActionRef::Dynamic(intent)) => assert_eq!(intent.action, "workspaces.cursor_up"),
+            other => panic!("a short name is qualified with the component: {other:?}"),
+        }
+        assert_eq!(
+            layer.resolve_builtin("workspaces", &KeyCombo::parse("n")),
+            Some(&WmAction::NextPane),
+            "a built-in keeps its own id — it is bound here, not redeclared",
+        );
+        match layer.resolve("workspaces", &KeyCombo::parse("Space")) {
+            Some(ActionRef::Dynamic(intent)) => {
+                assert_eq!(intent.action, "workspaces.peek_selected", "never qualified twice")
+            }
+            other => panic!("an already-qualified name is left alone: {other:?}"),
+        }
+    }
+
+    // ── The two keys a container has for free (F003/P086/T363) ──
+
+    /// `global_focus` must **not** land in the container's own layer: that layer is only consulted
+    /// while the container already holds focus, so a key to *take* focus placed there could never
+    /// fire. It goes into the flat map, aimed at this container.
+    #[test]
+    fn global_focus_goes_to_the_global_map_not_the_containers_own_layer() {
+        let config = with_layer(layer_of(
+            "docker",
+            None,
+            &[("global_focus", "prefix+d"), ("restart_selected", "r")],
+        ));
+        let mut index = BindingIndex::new();
+        let (layers, global) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut index);
+
+        assert!(
+            layers["docker"].resolve("docker", &KeyCombo::parse("d")).is_none(),
+            "a key that takes focus is useless in the layer that needs focus first",
+        );
+        assert!(
+            layers["docker"].resolve("docker", &KeyCombo::parse("r")).is_some(),
+            "…while its ordinary bindings are untouched",
+        );
+
+        let mut flat = KeymapRegistry::new();
+        bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut index);
+        assert_eq!(
+            flat.resolve_builtin("normal", &KeyCombo::parse("d")),
+            Some(&WmAction::FocusDock { dock: Some("docker".to_string()) }),
+            "`prefix+d` lands in the leader map, aimed at this container",
+        );
+        assert!(
+            index["focus_dock"]
+                .iter()
+                .any(|b| b.key == "prefix+d" && b.layer.contains("docker")),
+            "and --keys-show can say where it came from: {index:?}",
+        );
+    }
+
+    /// An `id` aims the key at **one seating**; without one it names the component, and
+    /// `placement_for` resolves that at press time to the seating the user was last in.
+    #[test]
+    fn an_id_aims_global_focus_at_one_placement() {
+        let config = with_layers(vec![
+            layer_of("docker", None, &[("global_focus", "prefix+d")]),
+            layer_of("docker", Some("docker.right"), &[("global_focus", "prefix+Shift+d")]),
+        ]);
+        let (_, global) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let mut flat = KeymapRegistry::new();
+        bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut BindingIndex::new());
+
+        assert_eq!(
+            flat.resolve_builtin("normal", &KeyCombo::parse("Shift+d")),
+            Some(&WmAction::FocusDock { dock: Some("docker.right".to_string()) }),
+            "the narrowed entry names its placement",
+        );
+        assert_eq!(
+            flat.resolve_builtin("normal", &KeyCombo::parse("d")),
+            Some(&WmAction::FocusDock { dock: Some("docker".to_string()) }),
+            "the id-less entry names the component, resolved at press time",
+        );
+    }
+
+    /// Two components asking for one combo is exactly what the report exists to say out loud.
+    #[test]
+    fn two_containers_claiming_one_global_focus_is_reported() {
+        let config = with_layers(vec![
+            layer_of("docker", None, &[("global_focus", "prefix+d")]),
+            layer_of("notes", None, &[("global_focus", "prefix+d")]),
+        ]);
+        let (_, global) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let mut conflicts = Conflicts::default();
+        bind_global_focus(
+            &mut KeymapRegistry::new(),
+            &global,
+            &mut conflicts,
+            &mut BindingIndex::new(),
+        );
+        assert_eq!(conflicts.keys.len(), 1, "one combo, two claimants");
+    }
+
+    /// **`Esc` is a floor, not a default.** `[[keys.mode]]` arrays are replaced wholesale by a
+    /// user's config, so a `focus` block that forgot this line would strand the keyboard in a dock
+    /// with only the mouse to get out. It is re-asserted after the merge.
+    #[test]
+    fn escape_always_releases_a_focused_container() {
+        let mut config = heca_config::theme::Config::default();
+        // A user's `focus` layer that keeps the paging keys and drops the way out.
+        config.keys.mode = vec![heca_config::theme::KeyModeConfig {
+            name: crate::app::input::FOCUS_LAYER.to_string(),
+            trigger: String::new(),
             sticky: true,
-            bindings: vec![ModeBindingConfig {
-                action: "sidebar_left_nav".to_string(),
-                keys: "j".to_string(),
+            bindings: vec![heca_config::theme::ModeBindingConfig {
+                action: "scroll_page_up".to_string(),
+                keys: "PageUp".to_string(),
                 args: HashMap::new(),
             }],
+        }];
+        let (modes, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let focus = &modes[crate::app::input::FOCUS_LAYER];
+
+        assert_eq!(
+            focus.resolve_builtin(crate::app::input::FOCUS_LAYER, &KeyCombo::parse("Escape")),
+            Some(&WmAction::UnfocusDock),
+            "a container can always be left, whatever the config says",
+        );
+    }
+
+    /// Putting something *else* on `Escape` in the focus layer is a real collision — the guarantee
+    /// wins, and the user is told rather than left wondering.
+    #[test]
+    fn taking_escape_in_the_focus_layer_is_reported() {
+        let mut config = heca_config::theme::Config::default();
+        config.keys.mode = vec![heca_config::theme::KeyModeConfig {
+            name: crate::app::input::FOCUS_LAYER.to_string(),
+            trigger: String::new(),
+            sticky: true,
+            bindings: vec![heca_config::theme::ModeBindingConfig {
+                action: "scroll_to_top".to_string(),
+                keys: "Escape".to_string(),
+                args: HashMap::new(),
+            }],
+        }];
+        let mut conflicts = Conflicts::default();
+        let (modes, _) = build_modes(&config, &mut conflicts, &mut BindingIndex::new());
+
+        assert_eq!(
+            modes[crate::app::input::FOCUS_LAYER]
+                .resolve_builtin(crate::app::input::FOCUS_LAYER, &KeyCombo::parse("Escape")),
+            Some(&WmAction::UnfocusDock),
+            "the guarantee wins",
+        );
+        // Two lines, both true: the user's `Escape` displaced the shipped default, and the
+        // guarantee then displaced the user's. A key this consequential deserves the noise.
+        assert!(
+            conflicts
+                .keys
+                .iter()
+                .any(|c| format_combo(&c.combo).eq_ignore_ascii_case("escape")),
+            "and it is not silent: {:?}",
+            conflicts.keys,
+        );
+    }
+
+    /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
+    /// and the layer — and an `unbind` must take its entry out with it (F003/P086/T366).
+    #[test]
+    fn the_index_records_the_qualified_id_and_forgets_what_is_unbound() {
+        let mut layer = layer_of("workspaces", None, &[("cursor_up", "k"), ("cursor_down", "j")]);
+        layer.unbind.insert("j".to_string(), true);
+        let mut index = BindingIndex::new();
+        build_component_keymaps(&with_layer(layer), &mut Conflicts::default(), &mut index);
+
+        let up = &index["workspaces.cursor_up"];
+        assert_eq!(up.len(), 1);
+        assert_eq!(up[0].key, "k");
+        assert_eq!(up[0].layer, "[[keys.component]] workspaces");
+        assert!(
+            !index.contains_key("workspaces.cursor_down"),
+            "a retired key must not be reported as still running the action: {index:?}",
+        );
+    }
+
+    /// The reason the shape is an array: an `id` narrows an entry to one placement, and that
+    /// placement's layer carries the id-less base underneath it — so the mount lookup alone is
+    /// enough at press time.
+    #[test]
+    fn an_id_layers_over_the_base_for_one_placement_only() {
+        let config = with_layers(vec![
+            layer_of(
+                "docker",
+                None,
+                &[("docker.restart_selected", "r"), ("docker.stop_selected", "s")],
+            ),
+            layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
+        ]);
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+
+        let right = &maps["docker.right"];
+        assert!(
+            right.resolve("docker.right", &KeyCombo::parse("x")).is_some(),
+            "the narrowed binding applies to this placement",
+        );
+        assert!(
+            right.resolve("docker.right", &KeyCombo::parse("r")).is_some(),
+            "and the base came with it — one lookup, no merging at press time",
+        );
+
+        let base = &maps["docker"];
+        assert!(
+            base.resolve("docker", &KeyCombo::parse("s")).is_some(),
+            "every other placement still has the base binding",
+        );
+        assert!(
+            base.resolve("docker", &KeyCombo::parse("x")).is_none(),
+            "and never sees what was written for one seating",
+        );
+    }
+
+    /// A narrowing entry sees the **whole** base, wherever it was written — which is why the build
+    /// runs the id-less entries in a first pass rather than in file order.
+    #[test]
+    fn a_placement_is_seeded_from_the_finished_base() {
+        let config = with_layers(vec![
+            layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
+            // Written *after* the placement entry, and still part of what it inherits.
+            layer_of("docker", None, &[("docker.restart_selected", "r")]),
+        ]);
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        assert!(
+            maps["docker.right"]
+                .resolve("docker.right", &KeyCombo::parse("r"))
+                .is_some(),
+            "file order does not decide what a placement inherits",
+        );
+    }
+
+    /// An `id` naming a placement that will never mount is not an error: config is read before
+    /// anything mounts, so the layer is simply built and never asked for.
+    #[test]
+    fn an_id_for_a_placement_that_never_mounts_is_harmless() {
+        let mut conflicts = Conflicts::default();
+        let config = with_layer(layer_of("docker", Some("nowhere"), &[("docker.stop", "s")]));
+        let maps = layers_only(&config, &mut conflicts, &mut BindingIndex::new());
+        assert!(maps.contains_key("nowhere"));
+        assert!(conflicts.is_empty(), "nothing to report");
+    }
+
+    /// **The array merges by `keys`** — the rule that makes the arg-carrying form usable at all.
+    /// Replacing the array wholesale (TOML's own rule for arrays) would mean adding one binding
+    /// silently drops every shipped default.
+    #[test]
+    fn an_arg_carrying_override_replaces_only_its_own_combo() {
+        use heca_config::theme::ModeBindingConfig;
+        let bind = |action: &str, keys: &str, cmd: &str| ModeBindingConfig {
+            action: action.to_string(),
+            keys: keys.to_string(),
+            args: HashMap::from([("command".to_string(), cmd.to_string())]),
+        };
+        let shipped = heca_config::theme::ComponentKeysConfig {
+            name: "docker".to_string(),
+            bind: vec![
+                bind("spawn_command", "t", "lazydocker"),
+                bind("spawn_command", "g", "lazygit"),
+            ],
+            ..Default::default()
+        };
+        // The user rebinds `t` only, in a second entry the builder layers over the first.
+        let user = heca_config::theme::ComponentKeysConfig {
+            name: "docker".to_string(),
+            bind: vec![bind("spawn_command", "t", "ctop")],
+            ..Default::default()
+        };
+
+        let maps = layers_only(
+            &with_layers(vec![shipped, user]),
+            &mut Conflicts::default(),
+            &mut BindingIndex::new(),
+        );
+        let docker = &maps["docker"];
+        match docker.resolve("docker", &KeyCombo::parse("t")) {
+            Some(ActionRef::Builtin(WmAction::SpawnCommand { command, .. })) => {
+                assert_eq!(command, "ctop", "exactly that combo was replaced")
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(
+            docker.resolve("docker", &KeyCombo::parse("g")).is_some(),
+            "and the other arg-carrying default survived — the whole point of merging by key",
+        );
+    }
+
+    /// `unbind` is keyed by the **combo**, so it retires a binding whatever it points at — never a
+    /// null or empty-string convention.
+    #[test]
+    fn a_component_layer_unbinds_by_combo() {
+        let mut layer = layer_of("docker", None, &[("docker.stop_selected", "s")]);
+        layer.unbind.insert("s".to_string(), true);
+        let maps = layers_only(&with_layer(layer), &mut Conflicts::default(), &mut BindingIndex::new());
+        assert!(maps["docker"].resolve("docker", &KeyCombo::parse("s")).is_none());
+    }
+
+    /// The focus layer ships the keys the **widgets** answer, and is never enterable by a trigger
+    /// — it is entered by focusing a dock (F003/P085/T352).
+    #[test]
+    fn the_focus_layer_ships_the_scroll_keys_and_the_way_out() {
+        let config = heca_config::theme::Config::default();
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let focus = mode_keymaps
+            .get(crate::app::input::FOCUS_LAYER)
+            .expect("the focus layer is a built-in mode keymap");
+
+        for (key, want) in [
+            ("PageUp", WmAction::ScrollPageUp),
+            ("PageDown", WmAction::ScrollPageDown),
+            ("Home", WmAction::ScrollToTop),
+            ("End", WmAction::ScrollToBottom),
+            ("Alt+PageUp", WmAction::ScrollPageLeft),
+            ("Alt+PageDown", WmAction::ScrollPageRight),
+            ("Alt+Home", WmAction::ScrollToLeftEdge),
+            ("Alt+End", WmAction::ScrollToRightEdge),
+            ("Escape", WmAction::UnfocusDock),
+        ] {
+            assert_eq!(
+                focus.resolve_builtin(crate::app::input::FOCUS_LAYER, &KeyCombo::parse(key)),
+                Some(&want),
+                "{key} must reach {want:?} while a dock holds the keyboard",
+            );
+        }
+        assert!(
+            !mode_triggers.contains_key(crate::app::input::FOCUS_LAYER),
+            "focus is entered by focusing a dock, never by a key",
+        );
+    }
+
+    /// …and a user trigger on it is refused, exactly as it is for `sidebar`: the mode's bindings
+    /// only mean anything while a dock is focused, so an enterable copy would be a dead mode.
+    #[test]
+    fn a_user_trigger_on_the_focus_layer_is_refused() {
+        let mut config = heca_config::theme::Config::default();
+        config.keys.mode.push(KeyModeConfig {
+            name: crate::app::input::FOCUS_LAYER.to_string(),
+            trigger: "prefix+Shift+f".to_string(),
+            sticky: true,
+            bindings: Vec::new(),
         });
-
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
-        let sidebar = mode_keymaps.get("sidebar").expect("sidebar mode exists");
-
-        assert_eq!(
-            sidebar.resolve_builtin("sidebar", &KeyCombo::parse("j")),
-            Some(&WmAction::SidebarLeftNav)
-        );
-        assert_eq!(
-            sidebar.resolve_builtin("sidebar", &KeyCombo::parse("k")),
-            Some(&WmAction::SidebarUp)
-        );
-        assert!(!mode_triggers.contains_key("sidebar"));
+        let (_, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        assert!(!mode_triggers.contains_key(crate::app::input::FOCUS_LAYER));
     }
 
     #[test]
@@ -1629,7 +2305,7 @@ mod tests {
             }],
         });
 
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let resize = mode_keymaps.get("resize").expect("resize mode exists");
 
         assert!(resize.resolve_builtin("resize", &KeyCombo::parse("h")).is_some());

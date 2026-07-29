@@ -3,7 +3,7 @@
 //! This module owns the `on_cursor_moved` router and sidebar-drag handlers.
 //! Interactive move logic lives in `mouse/interactive.rs`.
 
-use heca_grid_ui::drag::{DragItemId, DragLabel, DragPhase, DragSurfaceId};
+use heca_grid_ui::drag::{DragLabel, DragPhase, DragSurfaceId};
 
 use crate::app_state::{AppDragPayload, AppState};
 
@@ -18,10 +18,6 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
     handle_sidebar_drag_starting(state, pos);
     super::interactive::handle_interactive_move_drag(state, pos);
     handle_sidebar_drag_move(state, pos);
-
-    if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
-        update_sidebar_drag_hover(state);
-    }
 }
 
 // ── Sidebar drag starting (threshold phase) ──────────────────────────────
@@ -92,9 +88,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
 /// Human-readable ghost-chip text for an in-flight sidebar drag.
 fn drag_ghost_label(state: &AppState, payload: &AppDragPayload) -> String {
     match payload {
-        AppDragPayload::Pane { pane_id, .. } => state
-            .sidebar_tree
-            .workspaces
+        AppDragPayload::Pane { pane_id, .. } => state.chrome_state.workspaces.tree().workspaces
             .iter()
             .flat_map(|ws| &ws.columns)
             .flat_map(|col| &col.panes)
@@ -123,37 +117,3 @@ fn handle_sidebar_drag_move(state: &mut AppState, pos: (f32, f32)) {
     }
 }
 
-// ── Sidebar drag hover ──────────────────────────────────────────────────
-
-fn update_sidebar_drag_hover(state: &mut AppState) {
-    let (_win_w, win_h) = super::window_logical_size(state);
-    let chrome = super::chrome_config(state);
-    let pos = state.mouse.pos;
-    let sidebar_top = chrome.tab_bar_height;
-    let sidebar_bottom = win_h - chrome.status_bar_height;
-    // 0 when Hidden (no icon rail) — the drag bounds collapse to nothing.
-    let sw = chrome.left_sidebar_width;
-    let left = state
-        .mouse
-        .drag_ctx
-        .surface_mut(DragSurfaceId::LeftSidebar)
-        .expect("LeftSidebar pre-populated in DragContext::default");
-    if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
-        let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1);
-        if let Some(fi) = fi {
-            if matches!(
-                state.sidebar_tree.flat_items.get(fi),
-                Some(&crate::sidebar::SidebarItem::FloatingPane { .. })
-            ) {
-                left.hover_item = None;
-            } else {
-                left.hover_item = Some(DragItemId::new(fi));
-            }
-        } else {
-            left.hover_item = None;
-        }
-    } else {
-        left.hover_item = None;
-    }
-}

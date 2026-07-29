@@ -1,7 +1,7 @@
 {
   "id": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 17,
+  "number": 78,
   "shortId": "37HYB",
   "priority": 17,
   "slug": "plugin-ui-gaps-close-the-declarative-model-s-capability-gaps-make-the-translator-self-maintaining",
@@ -22,558 +22,220 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "7d82f8e0-a7cc-4922-b96b-667207c2be4e",
-    "c386da25-df9c-4f9d-ace5-7103a6c389fd",
-    "1ea732ca-3582-44f4-be02-245375910948",
-    "0223c291-8cba-4ca0-8712-6ade0e8d0aed",
-    "eea3a791-01d6-4ce1-a335-17e3622fae7f",
-    "6e2a7db7-0092-471a-9db3-ff1fbb685152",
-    "59f5c555-2a36-4247-9216-5002ae4ce55a",
-    "5cf37c3b-b128-4abd-9f49-1018e2deb4d2",
-    "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822"
+    "ede93e46-85f2-403a-b49a-677775dd7cc4",
+    "eb1cd685-873e-4ed5-a047-8a92b147e211",
+    "78c2189c-2d42-4362-9bf1-d85cce85c3b8",
+    "e1226de1-7fe2-4fa5-a5f3-a984ec4ca8bc",
+    "03c835c0-d261-4756-a098-18ab67e2980c",
+    "271a0d1e-832c-4083-b5de-278b24c8abe6",
+    "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
+    "a721d49b-827e-4dce-bffb-2e4270c08c5d",
+    "a43f300a-2162-40ac-9b86-ca16ad006c90"
   ],
   "tasks": [
     {
-      "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 1,
-      "shortId": "PT33R",
+      "id": "ede93e46-85f2-403a-b49a-677775dd7cc4",
+      "phaseId": "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
+      "number": 265,
+      "shortId": "8FSPU",
       "priority": 1,
-      "shortName": "separate-layout-settings-from",
-      "title": "Separate layout settings from visual settings in Style (make the plugin boundary a type)",
-      "status": "done",
-      "description": "PREREQUISITE for T2. Do this first — T2's whole-struct merge is unsafe until it lands.\n\nCURRENT STATE\n`heca-grid-ui/src/style.rs:211` — one flat `Style` struct, `#[derive(Debug, Clone, Copy, PartialEq)]`\n(style.rs:210), embedded in `Base` on every widget. It mixes two categories:\n- LAYOUT (plugin-writable): direction, justify, align, align_self, justify_items, justify_self, gap,\n  margin + per-side overrides, padding + padding_x/padding_y, pad_spacing_x/y, gap_spacing, width,\n  height, min_width, min_height, max_width, max_height, flex_grow, flex_shrink, hidden, grid_cell.\n- VISUAL (host/theme-owned, NEVER plugin-writable): fill, border, glow, accent, fg, radius,\n  font_size, font_scale, size, size_explicit (style.rs:289-315).\n\nWHY\n\"Styling is not a property — the plugin picks intent, the host resolves the pixels from the Theme\"\nis rule C of docs/chrome-and-ui.md §2.6.1 and appears in AGENTS.md's SETTLED table\n(\"Is styling a prop? NO\"). T2 merges a node's properties straight into the layout settings; if the\ntwo categories stay in one struct, that merge hands plugins raw colours and borders. The boundary\nmust be enforced by the type system, not by whoever reviews the next PR.\n\nBORDERLINE — decide explicitly and record the reasoning in the task:\n- `size` / `size_explicit` / `font_scale` are SEMANTIC (Small/Normal/Big), already exposed as the\n  `size` property and legitimately plugin-writable. They are visual by category but allowed by rule.\n  Suggest a third group, or an allow-marker on the visual side. Do NOT silently lump them in.\n- `hidden` and `grid_cell` are layout, not visual, despite sitting near the visual block.\n\nWORK\n- Group the fields. Preferred: nested `Style { layout: Layout, visual: Visual, .. }`. `Style` is\n  `Copy` and flat today and is touched by every widget plus the layout pass, so a nested split is a\n  wide mechanical change — measure it before committing to the shape. A flat struct with a derive\n  marker per field is the fallback if nesting proves too invasive.\n- Keep every existing call site compiling. `LayoutExt`/`StyleExt` (heca-grid-ui/src/builders.rs)\n  write through `base_mut().style` and must keep working unchanged — this is a data reorganisation,\n  not an API change.\n- `StyleExt` is deliberately NOT implemented for `Flex` (builders.rs:1-10) so a layout-only\n  container cannot become a styled surface. Preserve that.\n\nBEHAVIOUR TO PRESERVE\nEverything visual. This task must produce ZERO rendering change. Per AGENTS.md, green tests are not\nverification for anything visual — build the showcase and have the user look before closing.\n\nACCEPTANCE\n- Layout and visual fields are separately addressable as types.\n- Full workspace green, clippy clean under --all-targets --all-features --locked -- -D warnings.\n- No visual diff in the showcase (user-verified).\n\n---\n**Completion summary:**\nDONE 2026-07-25 — commit 8718718 on branch feat/p017-t1-style-split. User verified in the showcase: no visual change.\n\nSHAPE SHIPPED (differs from the \"preferred\" one in the original description — the user chose it):\n    pub struct Style { pub layout: Layout, pub visual: Visual }\nTwo PEERS, neither privileged. Not `Style { ...layout fields flat..., visual: Visual }`, which was\nbuilt first and then redone: that version needed `#[serde(skip)]` on the visual field for T2, i.e.\nONE line whose deletion would silently make colours plugin-writable. The peer shape needs no serde\nattribute at all — `Layout` will derive serialization in T2, `Visual` simply will not. style.rs now\ncontains ZERO serde attributes. That is the whole point: nothing to forget, and the default outcome\nis correct on both sides.\n\nFIELD ASSIGNMENT + REASONING\n- `Layout` (caller-owned, will be serializable): direction, justify, align, align_self,\n  justify_items, justify_self, gap, gap_spacing, margin + 4 per-side overrides, padding,\n  padding_x/y, pad_spacing_x/y, width, height, min/max width+height, flex_grow, flex_shrink,\n  hidden, grid_cell, size, size_explicit.\n- `Visual` (theme-owned, never serializable): fill, border, glow, radius, font_size, font_scale.\n- `size`/`size_explicit` → Layout: SEMANTIC (Small/Normal/Big), not a pixel value, and the layout\n  pass reads it and cascades it to children. `set_size` moved to Layout.\n- `font_scale` → Visual: a RAW multiplier. The semantic route a description may take is `size`.\n- `to_taffy()` / `to_taffy_grid()` moved onto `Layout` — they read only those fields.\n\nDEAD CODE REMOVED: `Style::accent` and `Style::fg`. Declared with hardcoded colour literals in the\nDefault impl (Color::rgb(137,180,250) / (205,214,244)) and never read or written anywhere in the\nworkspace — widgets go through `theme.colors.accent`. Compiler-confirmed unused.\n\nMEASUREMENT (for T2 and anyone sizing similar work): 52 files, ~200 layout accesses, ~25 visual.\nA grep for `.style.<field>` UNDERCOUNTS badly — many sites reach fields through a `&Style` binding\n(`let s = &mut base.style; s.padding_x = ..`). Those were fixed by rebinding to `.style.layout`,\nwhich left the block bodies untouched. Use `cargo build --workspace --all-targets` to enumerate:\nplain `--workspace` skips examples and tests, and heca-renderer/examples/showcase.rs plus\nheca-grid-ui/tests/phase_a.rs both needed the rewrite.\n\nNEW EXPORTS: `Layout` and `Visual` alongside `Style` from the heca-grid-ui crate root (lib.rs:64).\n\nVERIFICATION: 899 tests pass, 0 failures. clippy --all-targets --all-features --locked -D warnings\nexits 0 (only the pre-existing `block v0.1.6` future-incompat note). Builder API unchanged —\n`.gap()`, `.fill()`, `.font_size()` behave exactly as before; LayoutExt/StyleExt write to the\ncorrect half internally, and StyleExt is still NOT implemented for Flex.\n\nDOCS: docs/widgets.md §`Style` & layout enums rewritten for the pair, including why `size` is on\none side and `font_scale` the other, and stating that builder calls did not change.",
+      "shortName": "notify-blocked-keybinding",
+      "title": "notify-blocked-keybinding: Notification when an action is blocked by policy",
+      "status": "planned",
+      "description": "Show a toast notification when a user-triggered action is blocked by the interaction policy (FocusDomain::Floating blocking TiledOnly/WorkspaceLevel/AlwaysAllowed actions, or any other RouteDecision::Block).\n\nPREREQUISITE (shared with the config-reload task): wire a toast host in the app — the `heca-grid-ui` `Toast`/`ToastStack` widgets exist (`heca-grid-ui/src/widgets/toast.rs`, `toast_stack.rs`) but NO host is mounted today (`grep ToastStack heca/src/` = empty). Mount a `ToastStack` as a retained overlay band (or chrome region) and expose a `push_toast`/notification API reachable from the interaction dispatch path. Keep it minimal and reusable (the full Notification System feature fc19894f owns the richer store/lifecycle/routing — do not duplicate that).\n\nHOOK: in `heca/src/app/interaction.rs`, the policy block happens in `route_action` (~:471) returning `RouteDecision::Block` (arms at :427/:435/:443/:450/:458 + floating-domain blocks :491/:501/:508). The blocked action is silently discarded at the `dispatch_action`/`dispatch_intent` chokepoints (AGENTS: \"silently discarded — debug log\"). Fire the toast there with the blocked action's user-facing label (resolve via `ActionCatalog::label`) — e.g. \"Float toggle blocked (floating pane active)\" or a generic \"Action blocked by policy\". Must be reachable from keyboard + mouse + RPC sources (the block already spans all sources). No hardcoded text — use the ActionCatalog label + a configurable template if needed.\n\nVerify: cargo test + clippy --workspace --all-targets --all-features clean; manual check (open a floating pane, press a TiledOnly binding like prefix+Enter/split → toast appears).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-001-inventory-every-style-field-into-layout-visual-semantic-allowed-with-the-reasoning-written-down",
-          "title": "Inventory every Style field into layout / visual / semantic-allowed, with the reasoning written down",
-          "checked": false
-        },
-        {
-          "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-002-decide-the-shape-nested-structs-vs-per-field-markers-after-measuring-the-call-site-blast-radius",
-          "title": "Decide the shape (nested structs vs per-field markers) after measuring the call-site blast radius",
-          "checked": false
-        },
-        {
-          "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-003-apply-the-split-keep-layoutext-styleext-call-sites-unchanged",
-          "title": "Apply the split; keep LayoutExt/StyleExt call sites unchanged",
-          "checked": false
-        },
-        {
-          "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-004-preserve-styleext-not-being-implemented-for-flex",
-          "title": "Preserve StyleExt NOT being implemented for Flex",
-          "checked": false
-        },
-        {
-          "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-005-workspace-green-clippy-clean",
-          "title": "Workspace green + clippy clean",
-          "checked": false
-        },
-        {
-          "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-006-user-verifies-zero-visual-change-in-the-showcase",
-          "title": "USER verifies zero visual change in the showcase",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-25T20:04:58.850Z",
-      "completedAt": "2026-07-25T20:33:59.603Z",
-      "createdAt": "2026-07-25T19:12:58.734Z",
-      "updatedAt": "2026-07-25T20:33:59.603Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:08:33.508Z",
+      "updatedAt": "2026-07-09T13:08:33.508Z"
     },
     {
-      "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 2,
-      "shortId": "DV7J8",
+      "id": "eb1cd685-873e-4ed5-a047-8a92b147e211",
+      "phaseId": "dcf9ff70-cf6e-416e-8e46-8cc36b4ec233",
+      "number": 266,
+      "shortId": "5B9X6",
       "priority": 2,
-      "shortName": "layout-settings-self-describin",
-      "title": "Layout settings: self-describing, applied to every widget kind, zero per-property code",
-      "status": "done",
-      "description": "DEPENDS ON T1 (the layout/visual split). Closes gap 1 of the phase description.\n\nCURRENT STATE\n`realize_flex` (heca/src/chrome/realize.rs:440-459) reads exactly TWO layout properties — `gap` and\n`align` — and only for `Column`/`Row`. Every other layout setting on `Style` is unreachable from a\n`ViewNode`: padding, justify, width, height, direction, margins, min/max sizes, flex_grow,\nflex_shrink, the spacing tokens, hidden, grid_cell.\n\nTHE PRECEDENT TO FINISH (not invent)\n`realize` already applies two properties generically for EVERY kind, at realize.rs:100-112:\n    let mut realized = realize_kind(node, emit, hints, forms);\n    if let Some(align) = align_prop(node, \"align_self\") { ...base_mut().style.align_self = ... }\n    if let Some(justify) = align_prop(node, \"justify_self\") { ... }\nwith the comment: \"Self-alignment is a property of the node *inside its parent*, so it applies to\nevery kind — read it once here rather than in each arm.\"\nThat is the correct pattern, started and abandoned. This task finishes it.\n\nWHY NOT A HAND-WRITTEN apply_style_props()\nExplicitly rejected by the user 2026-07-25: a function listing each field still needs a new line\nevery time a `Style` field is added. It relocates the drift instead of removing it. The property\nlist must BE A TYPE that a generator reads.\n\nWORK\n- Add serialization to the LAYOUT group produced by T1. `heca-grid-ui` has NO serialization\n  dependency today (Cargo.toml:8-12 — heca-core, heca-theme, floem_reactive, taffy), so this adds\n  one, plus derives on the types the layout group holds: `Length`, `Align`, `Justify`, `Direction`,\n  `Spacing`, `GridCell` (and `WidgetSize` if T1 puts the semantic group here).\n- In `realize`, merge the node's properties into the realized widget's layout settings, replacing\n  the two hand-written blocks at realize.rs:104-111 AND the gap/align reads in realize_flex.\n- Property NAMES must match the field names so the mapping needs no table. Where a field name is a\n  poor public name, rename the field rather than adding a lookup — a lookup is the drift again.\n\nEDGE CASES\n- Untrusted input: `realize` is TOTAL by design (view.rs rustdoc: \"Missing/mistyped props are\n  ignored (the widget keeps its default)\"). A bad value must leave the default in place, never\n  panic and never abort the rest of the merge. Keep this behaviour and test it.\n- Widgets set deliberate non-default layout in their constructors — e.g. `ScrollRegion::new()` sets\n  min_width/min_height to Px(0.0), flex_shrink Some(1.0), pad_spacing_y and gap_spacing\n  (scroll_region.rs:188-214), each with a comment explaining why. The merge must apply ON TOP of\n  the constructed widget, overriding only properties the node actually carries. Never build from a\n  default `Style`, or every ScrollRegion silently stops scrolling.\n- `size` is already read via `size_prop` (realize.rs:493, 946) and cascades to children. Do not\n  double-apply it.\n\nACCEPTANCE\n- Every layout setting is reachable from a `ViewNode` on every kind.\n- realize.rs contains NO list of layout property names.\n- A test proves a new `Style` field is reachable with no change to realize.rs.\n- Totality test: nonsense values are ignored, defaults survive, nothing panics.\n- ScrollRegion's constructor-set layout survives a merge that does not mention those fields.\n- Update BOTH the props-by-kind table in view.rs's rustdoc (view.rs:311-337) and docs/widgets.md.\n\n---\n**Completion summary:**\nDONE 2026-07-25 — commit def0967. User verified in the showcase: no visual change.\n\nWHAT LANDED\n`realize.rs` contains NO layout property name in non-test code (verified by grep). `merge_layout_props`\n(heca/src/chrome/realize.rs, called from `realize`) serializes the CONSTRUCTED widget's\n`style.layout` to a JSON map, overlays only the keys the node carries, and deserializes back.\nThe field list is `Layout`'s own fields — derived, never written down.\n\nTHREE HAND-WRITTEN BLOCKS DELETED (all replaced by the one merge):\n- `align_self` / `justify_self` at the top of `realize` (the original half-finished precedent).\n- `gap` / `align` in `realize_flex`.\n- `align` / `justify_items` in the Grid arm. The pre-existing Grid test passes UNCHANGED — that is\n  the proof the generic path covers what the hand-written reads did.\n\nNEWLY REACHABLE FROM A ViewNode (none worked before): padding, padding_x/y, pad_spacing_x/y,\nmargin + 4 per-side overrides, width, height, min/max width+height, justify, direction, flex_grow,\nflex_shrink, hidden, grid_cell, gap_spacing.\n\nDESIGN DECISIONS\n- `Length` got a hand-written Serialize/Deserialize (heca-grid-ui/src/style.rs) so it reads as an\n  author would write it: bare number = px, \"auto\" = Auto, \"50%\" = Pct(0.5). NOT the derived\n  `{\"px\": 240}` shape. It ROUND-TRIPS, which the merge depends on (it serializes current state\n  first). One impl, no per-field work.\n- Enums travel by NAME in snake_case (\"center\", \"space_between\", \"small\"), consistent with how\n  glyphs and colours already cross. Derived on Direction/Justify/Align/WidgetSize/Spacing/GridCell.\n- `Layout` is `#[serde(default)]` so a partial map deserializes.\n- serde added to heca-grid-ui (version = \"1\", features = [\"derive\"]) — the crate had no\n  serialization dependency before. `Visual` deliberately derives NOTHING; that is the boundary.\n- TOTALITY IS PER-PROPERTY: fast path merges all keys at once; on failure it falls back to applying\n  one key at a time and keeping only those that fit. A misspelled length no longer discards the\n  good props on the same node. Keys that do not name a `Layout` field are skipped by checking\n  against the serialized map (i.e. against the real field list).\n\nSAFETY CHECK WORTH REPEATING FOR LATER TASKS: because previously-ignored props now take effect,\nI grepped for any app-side ViewNode setting a layout prop that had been silently dropped — every\nhit was in test code, so no production tree changed behaviour. Do this check whenever a prop\nbecomes newly live.\n\nTESTS — 5 new in realize.rs's test module, 904 green overall, clippy 0:\n- `layout_properties_never_named_in_realize_still_reach_the_widget` — padding/width/justify/\n  flex_grow/margin on a Column. THE regression guard: it fails the moment someone reintroduces a\n  hand-written property list that omits one.\n- `length_accepts_the_spelling_an_author_would_reach_for`\n- `a_bad_property_never_takes_the_good_ones_with_it`\n- `merging_preserves_layout_the_widget_set_in_its_constructor` (ScrollRegion min sizes +\n  flex_shrink + gap_spacing survive)\n- `a_node_with_no_properties_changes_nothing`\n\nDOCS: view.rs rustdoc gained a \"Layout props — every kind, no list\" section ahead of the\nprops-by-kind table (whose Column/Row row now reads \"layout only — see above\"); docs/widgets.md\nmirrors it with a worked example.\n\nNOTE FOR T4: the same merge mechanism does NOT cover widget-specific settings (placeholder, scroll\naxes) — those are fields on individual widget structs, which is T3's problem.",
+      "shortName": "notify-config-reload",
+      "title": "notify-config-reload: Success/warning notification on config reload outcome",
+      "status": "planned",
+      "description": "Show a toast notification on config reload (`prefix+Shift+r` / `WmAction::ReloadConfig`): a SUCCESS toast when the reload applied the new config, a WARNING toast when the reload failed (bad config.toml) so the user knows the working config was kept and what to fix.\n\nPREREQUISITE (shared with the blocked-keybinding task): wire a toast host in the app — `heca-grid-ui` `Toast`/`ToastStack` exist but no host is mounted today. Same host as the blocked-keybinding task; build it once.\n\nHOOK: `heca/src/main.rs:96` `HecaApp::reload_config` — today the error arm only `eprintln!(\"[heca] reload failed: {e}\")` (:101) and `eprintln!(\"[heca] fix config.toml and press prefix+Shift+r to retry\")`; the success arm has no user feedback at all (silent). Replace/augment the `eprintln!` with a warning toast (including the error message) on failure, and add a success toast (\"Config reloaded\") on the success path. `heca/src/handlers.rs:2312` `handle_reload_config` sets `pending_reload = true`; the actual reload runs in `main.rs::reload_config` (called from :240). The toast API must be reachable from `main.rs` (push via `event_proxy` or a state field).\n\nNo hardcoded text where a config/template can live — keep the toast messages in one place, configurable if practical. Must be reachable from keyboard (the ReloadConfig binding) and RPC.\n\nVerify: cargo test + clippy --workspace --all-targets --all-features clean; manual check (good config → success toast on prefix+Shift+r; bad config → warning toast with the error, working config preserved).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-001-add-serialization-to-the-layout-group-from-t1-the-types-it-holds",
-          "title": "Add serialization to the layout group from T1 + the types it holds",
-          "checked": false
-        },
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-002-replace-the-align-self-justify-self-blocks-and-realize-flex-s-gap-align-reads-with-one-generic-merge",
-          "title": "Replace the align_self/justify_self blocks and realize_flex's gap/align reads with one generic merge",
-          "checked": false
-        },
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-003-align-property-names-to-field-names-rename-fields-rather-than-adding-a-lookup-table",
-          "title": "Align property names to field names; rename fields rather than adding a lookup table",
-          "checked": false
-        },
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-004-merge-on-top-of-the-constructed-widget-verify-scrollregion-s-constructor-defaults-survive",
-          "title": "Merge ON TOP of the constructed widget — verify ScrollRegion's constructor defaults survive",
-          "checked": false
-        },
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-005-totality-test-mistyped-unknown-values-ignored-no-panic",
-          "title": "Totality test: mistyped/unknown values ignored, no panic",
-          "checked": false
-        },
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-006-test-that-a-newly-added-style-field-works-with-no-realize-rs-change",
-          "title": "Test that a newly added Style field works with no realize.rs change",
-          "checked": false
-        },
-        {
-          "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-007-update-view-rs-props-table-docs-widgets-md",
-          "title": "Update view.rs props table + docs/widgets.md",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-25T20:34:08.152Z",
-      "completedAt": "2026-07-25T21:30:02.684Z",
-      "createdAt": "2026-07-25T19:13:24.752Z",
-      "updatedAt": "2026-07-25T21:30:02.684Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:08:39.843Z",
+      "updatedAt": "2026-07-09T13:08:39.843Z"
     },
     {
-      "id": "1ea732ca-3582-44f4-be02-245375910948",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 3,
-      "shortId": "RL7LK",
+      "id": "78c2189c-2d42-4362-9bf1-d85cce85c3b8",
+      "phaseId": "6d582a8a-3b10-4157-8009-2b2db2825e29",
+      "number": 267,
+      "shortId": "WVNSB",
+      "priority": 1,
+      "shortName": "rename-closepane",
+      "title": "actions-1: Rename ClosePane → DeletePane (unit action, delete_ prefix consistency)",
+      "status": "planned",
+      "description": "Rename the unit pane-close action to the `delete_` prefix, matching `delete_column`/`delete_workspace`. Atomic compile-preserving slice.\n\nUpdate:\n- `heca/src/input.rs`: `WmAction::ClosePane` → `DeletePane`; `action_from_name` `\"close\"` → `\"delete_pane\"` (:491); `action_priority` arm (:874); tests (incl. :1037).\n- `heca/src/handlers.rs`: `handle_close_pane` → `handle_delete_pane`; `confirm_config_name`/`maybe_confirm_destructive` refs.\n- `heca/src/app/interaction.rs`: `action_policy` arm `ClosePane` → `DeletePane` (policy stays `FocusedPaneLocal`); spot-check assertion + routing test.\n- `heca/src/app/registry.rs`: handler registration.\n- `heca/src/actions.rs`: descriptor `name` `\"close\"` → `\"delete_pane\"`; `builtin_confirm_specs` (confirm key already `delete_pane` in config.default.toml:101 — verify not broken); tests.\n- `heca/src/mouse.rs`: `DropdownItem` refs `WmAction::ClosePane` → `DeletePane`.\n- `keybindings.default.toml`: `close = \"prefix+x\"` → `delete_pane = \"prefix+x\"` (:67).\n- `AGENTS.md` + `README.md`: action-name references.\n\nGate: test suite + `cargo clippy --workspace --all-targets --all-features` clean.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:15:13.990Z",
+      "updatedAt": "2026-07-09T13:15:13.990Z"
+    },
+    {
+      "id": "e1226de1-7fe2-4fa5-a5f3-a984ec4ca8bc",
+      "phaseId": "6d582a8a-3b10-4157-8009-2b2db2825e29",
+      "number": 268,
+      "shortId": "Q46BU",
+      "priority": 2,
+      "shortName": "rename-closepanebyid",
+      "title": "actions-2: Rename ClosePaneById → DeletePaneById (parameterized)",
+      "status": "planned",
+      "description": "Rename the parameterized pane-close action to the `delete_` prefix. Independent of actions-1 (different variant).\n\nUpdate:\n- `heca/src/input.rs`: `WmAction::ClosePaneById { .. }` → `DeletePaneById { .. }` (:264); `action_from_name` `\"close_pane_by_id\"` → `\"delete_pane_by_id\"` (:760); `action_priority` arm (:960).\n- `heca/src/handlers.rs`: handler function + confirm refs.\n- `heca/src/app/interaction.rs`: `action_policy` arm `ClosePaneById` → `DeletePaneById`; assertions/tests.\n- `heca/src/app/registry.rs`: handler registration.\n- `heca/src/rpc.rs`: parser name.\n- `heca/src/actions.rs`: descriptor `name` + tests.\n- `AGENTS.md` + `README.md`: action-name references.\n\nGate: test suite + `cargo clippy --workspace --all-targets --all-features` clean.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:15:17.708Z",
+      "updatedAt": "2026-07-09T13:15:17.708Z"
+    },
+    {
+      "id": "03c835c0-d261-4756-a098-18ab67e2980c",
+      "phaseId": "6d582a8a-3b10-4157-8009-2b2db2825e29",
+      "number": 269,
+      "shortId": "UMVZH",
       "priority": 3,
-      "shortName": "generated-translation-for-widg",
-      "title": "Generated translation for widget-specific settings + a drift test that fails on a missing one",
-      "status": "done",
-      "description": "Layer B of the plumbing decision. Independent of T1/T2 (which handle layout) but shares their goal:\nrealize.rs must stop containing a hand-written list of property names.\n\nCURRENT STATE\nSettings that belong to ONE widget — placeholder, scroll axes, checked, on, severity, value,\nselected, expanded, active, frameless, nav_selected, dismissible, action_text, body — are fields on\nindividual widget structs. Nothing generic reaches them, so `realize_kind`\n(heca/src/chrome/realize.rs:114+) hand-writes an arm per kind, each naming its properties as string\nliterals. When a builder is added to a widget, nothing forces the arm to be updated. That is how\ngaps 2 and 3 (placeholder, scroll axes) happened.\n\nWORK\n- Add a uniform setter to `heca-grid-ui`: a trait along the lines of\n  `fn set_prop(&mut self, key: &str, value: PropInput) -> bool`, plus a small code generator that\n  writes the implementation from the widget's own annotated builder methods.\n- `realize_kind` then shrinks to: construct the widget for the kind, then feed it the node's\n  properties. No property names in the app.\n\nHARD CONSTRAINT (AGENTS.md:739-746, SETTLED)\n`heca-grid-ui` must NEVER see `ViewNode`, `PropValue`, or anything else from the app — the app\ndepends on the library, never the reverse. The library may only gain a NEUTRAL scalar type\n(bool / int / float / text / enum-name). The app converts `PropValue` into it at the boundary. If a\nproposed design needs the library to know an app type, the design is wrong — stop and re-plan.\n\nOPT-OUT IS REQUIRED, NOT OPTIONAL\nSome builders bind closures or live signals and CANNOT come from static data. These are host-only\nby design and must be excluded from the generator, not merely undocumented:\n- `on_click` / `on_activate` / `on_change` — behaviour crosses as an `Intent`, never a callback.\n- Signal-bound builders, e.g. `DockFrame::rail(..)` (documented as host-only in docs/widgets.md:1704).\n- The whole `ScrollBar` widget (view.rs coverage note: host-only, plugins use `Scroll`).\nGetting this wrong would let a description claim a capability that silently does nothing — the exact\ndefect this phase exists to remove.\n\nTYPE MAPPING\nBuilders take varied argument types: `impl Into<String>`, `f32`, `bool`, `Glyph`, `ButtonVariant`,\n`ScrollAxes`, `ToastSeverity`, `LabelSide`. Scalars are direct. Enums arrive as NAMES (consistent\nwith how glyphs and colours already work in the model) and need a name→value conversion per enum —\ngenerate that too, or the enum list becomes the new drift.\n\nTHE DRIFT TEST (the real deliverable)\nA test that walks each widget's generated property table and fails when a native builder has no\ndeclarative counterpart and no explicit opt-out marker. Model it on the existing coverage guard\n`every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones`, which already stops a new\n`WidgetKind` from silently rendering an empty container (AGENTS.md:775-778).\nThis test is what would have caught `Input::placeholder` and the scroll axes years ago. It is worth\nmore than the generator itself — if the generator proves too costly, KEEP THIS and report back\nrather than shipping neither.\n\nACCEPTANCE\n- realize.rs holds no property-name string literals for widget-specific settings.\n- Adding a builder to a widget without exposing it or marking it host-only FAILS the build.\n- Host-only builders are excluded by an explicit marker, and the markers are documented.\n- Full workspace green, clippy clean.\n- Update view.rs's props-by-kind table + docs/widgets.md.\n\n---\n**Completion summary:**\nDONE 2026-07-26 — commits 94b1a2e, fc653b4, 58cef57, 7ff13d3, c74f3d3, de5656c.\nUser verified in the showcase after the realize rewiring: no visual change.\n\nWHAT LANDED\n1. New crate `heca-grid-ui-macros` (syn/quote): `#[props]`, `#[prop]`, `#[host_only(\"reason\")]`,\n   and a `PropName` derive. `#[props]` on an impl block generates `SetProp` from the builders\n   inside it, so a widget's own builders ARE its declarative surface.\n2. `heca-grid-ui/src/prop.rs`: neutral `PropInput` (Bool/Number/Text) + `SetProp` + `PropName`.\n   The library still never sees ViewNode/PropValue — the crate graph is untouched.\n   `extern crate self as heca_grid_ui` in lib.rs so generated paths resolve inside the library.\n3. `heca/src/chrome/realize.rs`: `with_props` + `prop_to_input` — the ONE conversion at the\n   boundary. realize.rs now contains ZERO widget property names. `bool_prop`, `f32_prop` and\n   `align_prop` deleted (no callers left).\n4. Drift guard `heca-grid-ui/tests/prop_drift.rs` — reads the widget sources, fails when an impl\n   block full of builders has no surface. Found NINE widgets the annotation pass had missed on its\n   first run, plus a stale entry in its own exceptions list. `NO_SURFACE_REQUIRED` is an\n   EXCEPTIONS list (fails closed) and a second test fails when an entry names a type that no\n   longer exists.\n\nORDER — USER REQUIREMENT, ENFORCED NOT DOCUMENTED\n\"I don't want users / developers / agents to think about order when developing.\"\n`#[prop(late)]` was designed and then REMOVED. Properties are applied AFTER children are attached,\nwhich dissolves the only real dependency (Select/Tabs clamp `selected` against the option count).\n`#[prop]` now REJECTS ANY ARGUMENT at compile time with an explanation, so a sequencing hint\n(`late`, `after = \"..\"`) cannot be reintroduced one widget at a time. Verified the error fires.\n\nCLASSIFICATION IS NEVER IMPLICIT — USER REQUIREMENT\n\"we need to expose all properties the same way a single widget does.\"\nA builder must be `#[prop]` or `#[host_only(\"reason\")]`; neither = build failure. 168 builders\nclassified: 93 props, 75 host-only. The host-only reasons ARE the answer to \"what is unreachable\":\n  22 closures (behaviour crosses as an Intent) · 19 composed content (use `children`)\n  12 no value to carry · 8 COLOUR (dated gap → F003/P017/T7) · 4 live host signals\n  2 multi-argument builders · 1 unsupported arg type (impl Into<Option<f32>>)\nThree categories are principled; colour is a real gap pointing at the task that closes it.\n\nGAPS DELIBERATELY LEFT (not oversights — each is recorded in code):\n- Colour: 8 builders marked host_only with \"reachable once F003/P017/T7 makes appearance\n  overridable\". T7 flips them to `#[prop]`.\n- Multi-argument builders (`Overlay::panel_size(Length, Length)`): the macro maps ONE argument.\n  Either split the builder or extend the macro — not decided.\n- `char` and `impl Into<Option<f32>>` argument types unmapped.\n- The drift guard checks impl-block level; per-builder classification is enforced by the MACRO\n  instead, which is stronger. Both together mean nothing is unclassified.\n\nFLAGSHIP GAPS CLOSED, WITH TESTS: `Input::placeholder` and `ScrollRegion` axes are now settable\nfrom a ViewNode (`a_description_can_now_set_an_inputs_placeholder`,\n`a_description_can_now_ask_for_a_two_axis_scroll_region` in realize.rs). Both existed in the\nwidgets for months and no description could reach them. This also closes most of T4.\n\nBUG WORTH REMEMBERING: the first marker check used `path().is_ident(\"prop\")`, which does not match\n`#[heca_grid_ui_macros::prop]` — every marked builder was silently demoted to host-only and the\ngenerator produced an empty surface that looked like it worked. Now matches the LAST path segment.\n\nDEFAULTS CHECKED BEFORE REWIRING: the old arms used `unwrap_or(true)` for `expanded` and\n`unwrap_or(false)` for `checked`; both match the widgets' constructor defaults, so feeding only the\nproperties a node carries is behaviour-preserving. `DockFrame::frameless()` became `frameless(bool)`\nso it could be a property; one showcase call site that looked affected was a `Pane`, not a\n`DockFrame`.\n\nVERIFICATION: 915 tests green, clippy --all-targets --all-features --locked -D warnings exits 0,\nshowcase builds, user confirmed no visual change.\n\nDOCS (both mandatory places): view.rs rustdoc + docs/widgets.md now state that the builders are the\nauthority and the props-by-kind table is a reader's summary, plus the order-independence guarantee\nand what is deliberately not a property.",
+      "shortName": "rename-paneaction-deletepane",
+      "title": "actions-3: Rename PaneAction::Close → PaneAction::DeletePane (config namespace + docs)",
+      "status": "planned",
+      "description": "Rename the pane-info-bar action enum so the target is explicit (pane, not a generic Close/Delete). Separate namespace from the WmAction config name. Depends on actions-1 (maps to `WmAction::DeletePane`).\n\nUpdate:\n- `heca-config/src/appearance.rs`: `PaneAction::Close` → `PaneAction::DeletePane` (:68) + doc comment; defaults `vec![PaneAction::Split, PaneAction::Close]` → `DeletePane` (:180/:856). `#[serde(rename_all = \"snake_case\")]` serializes as `\"delete_pane\"`.\n- `heca/src/chrome/mod.rs`: `PaneAction::Close => \"close\"` → `PaneAction::DeletePane => \"delete_pane\"` (:452); `pane_action_spec` arm (:516); `is_close: matches!(action, PaneAction::Close)` → `PaneAction::DeletePane` (:624); refs :566/:609; test :4112.\n- `config.default.toml`: `title_actions` default `[\"split\",\"close\"]` → `[\"split\",\"delete_pane\"]` + the :260-265 comment block.\n- `AGENTS.md` (Pane Info Bar section) + `README.md` (supported-actions table).\n\nGate: test suite + `cargo clippy --workspace --all-targets --all-features` clean.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-001-design-the-neutral-scalar-type-setter-trait-confirm-heca-grid-ui-gains-no-app-types",
-          "title": "Design the neutral scalar type + setter trait; confirm heca-grid-ui gains no app types",
-          "checked": false
-        },
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-002-build-the-generator-over-annotated-builder-methods",
-          "title": "Build the generator over annotated builder methods",
-          "checked": false
-        },
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-003-add-explicit-host-only-opt-out-markers-closures-signal-bound-builders-scrollbar",
-          "title": "Add explicit host-only opt-out markers (closures, signal-bound builders, ScrollBar)",
-          "checked": false
-        },
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-004-generate-enum-name-value-conversion-so-the-enum-list-is-not-new-drift",
-          "title": "Generate enum name→value conversion so the enum list is not new drift",
-          "checked": false
-        },
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-005-shrink-realize-kind-to-construct-then-feed-remove-the-per-property-string-literals",
-          "title": "Shrink realize_kind to construct-then-feed; remove the per-property string literals",
-          "checked": false
-        },
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-006-add-the-drift-test-modelled-on-the-existing-widgetkind-coverage-guard",
-          "title": "Add the drift test modelled on the existing WidgetKind coverage guard",
-          "checked": false
-        },
-        {
-          "id": "1ea732ca-3582-44f4-be02-245375910948-check-007-update-view-rs-props-table-docs-widgets-md",
-          "title": "Update view.rs props table + docs/widgets.md",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-25T21:30:07.498Z",
-      "completedAt": "2026-07-26T07:05:15.332Z",
-      "createdAt": "2026-07-25T19:13:48.734Z",
-      "updatedAt": "2026-07-26T07:05:15.332Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:15:21.801Z",
+      "updatedAt": "2026-07-09T13:15:21.801Z"
     },
     {
-      "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 4,
-      "shortId": "8RLW9",
+      "id": "271a0d1e-832c-4083-b5de-278b24c8abe6",
+      "phaseId": "6d582a8a-3b10-4157-8009-2b2db2825e29",
+      "number": 270,
+      "shortId": "3FEJ6",
       "priority": 4,
-      "shortName": "expose-the-two-proven-missing",
-      "title": "Expose the two proven-missing widget settings: Input placeholder and Scroll axes",
-      "status": "done",
-      "description": "Closes gaps 2 and 3 of the phase description. These are the two concrete cases that revealed the\nwhole defect, so they double as the proof that T3's generator works.\n\nSEQUENCING\nDo this AFTER T3. Once the generator lands, each of these should reduce to marking the existing\nbuilder plus a test — if either still needs a hand-written arm in realize.rs, T3 is incomplete and\nthat is the finding to report.\nIf T3 is dropped or deferred, this task still stands on its own as two hand-written arms.\n\nGAP 2 — Input placeholder\n- Native: `Input::placeholder(impl Into<String>)` exists at heca-grid-ui/src/widgets/input.rs:122.\n- In use: showcase.rs:264 (the command palette — \"Type a command…   (↑/↓ · Ctrl+J/K · Enter)\") and\n  showcase.rs:698 (\"CALLSIGN\").\n- Declarative: the realize arm (realize.rs:163-176) reads ONLY the value via `text_of(node)`, the\n  `name` binding for form submission, and the change intent. No placeholder. A description cannot\n  produce an empty input that tells the user what to type.\n- Note the naming trap: `Input` uses `text` for the VALUE (view.rs props table: \"`Input` | `text`\n  (value), `name`\"). The placeholder needs its own key; do not overload `text`.\n\nGAP 3 — Scroll axes\n- Native: `ScrollRegion::new()` is vertical; `horizontal()`, `both()` and `axes(ScrollAxes)` exist\n  at scroll_region.rs:231-247. `ScrollAxes` (scroll_region.rs:101) has `is_vertical`/`is_horizontal`.\n- In use and load-bearing: the showcase's ENTIRE root is `ScrollRegion::new().both()`\n  (showcase.rs:1897), plus a `.both()` grid demo (showcase.rs:1400-1401).\n- Declarative: realize.rs:133 builds a bare `ScrollRegion::new()`. Every declarative scroll area is\n  vertical forever. A horizontal or two-axis region cannot be described at all.\n- The property carries an ENUM by name (vertical / horizontal / both), matching how glyph and colour\n  names already travel in the model. Unknown name ⇒ keep the widget's default (vertical), never panic.\n\nEDGE CASES\n- Realize stays TOTAL: a missing or mistyped value leaves the widget's own default in place.\n- Do not disturb `ScrollRegion::new()`'s deliberate constructor settings (min sizes Px(0.0),\n  flex_shrink Some(1.0), pad_spacing_y, gap_spacing — scroll_region.rs:188-214). See T2's warning:\n  apply on top of the constructed widget, never rebuild from defaults.\n\nACCEPTANCE\n- A ViewNode can set an input's placeholder and a scroll area's axes.\n- Tests for both, including the unknown-enum-name and wrong-type cases.\n- The declarative form is verified to match the native one — same widget, same behaviour.\n- Update view.rs's props-by-kind table + docs/widgets.md (§Input, §ScrollRegion).\n- Scroll axes are visible behaviour: build it and have the USER confirm a two-axis declarative\n  region actually scrolls both ways. Green tests are not verification here.\n\n---\n**Completion summary:**\nDONE 2026-07-26, verified by the user in the app.\n\n## The finding the task asked for: T3's generator made both FREE\n\nNeither gap needed code. `Input::placeholder` (input.rs) and `ScrollRegion::axes` (scroll_region.rs)\nwere already `#[prop]`, and both realize arms already ran `with_props`, so a description could set\nthem the moment T3 landed. T3 is complete, not short.\n\n## What this task actually added\n\n- **Two end-to-end tests through `realize` itself** (heca/src/chrome/realize.rs). The tests T3 left\n  called `with_props` directly, which proves the surface exists but not that the arm wires it:\n  - `a_realized_input_paints_the_placeholder_it_was_given` — reads the result the only way a\n    `Box<dyn Component>` allows, by painting it and looking for the run.\n  - `a_realized_two_axis_region_is_the_native_one` — a described region produces a scene IDENTICAL\n    to `ScrollRegion::new().axes(Both)` with the same content; unset matches the vertical default;\n    an unknown axis name keeps vertical through the whole path.\n  - `a_realized_two_axis_region_consumes_a_horizontal_wheel` — routing, not just geometry: the\n    described two-axis region consumes a horizontal wheel delta, the default one does not.\n- **Docs.** `view.rs`'s props table and docs/widgets.md both gave `Scroll` no props at all and listed\n  `Input` as `text`/`name` only. `Scroll` now documents `axes`; §ScrollRegion's declarative note said\n  axes were host-side, which had become false; §Input documents `placeholder` under its own key with\n  the reason it is not `text`. Folded §Input's duplicated \"From a plugin\" heading into one.\n- **Two doc-comment slips** from T3's accessor insertion: `Input::placeholder`'s and\n  `ScrollRegion::axes`'s doc lines had landed on the new `placeholder_str` / `clone_axes` getters,\n  leaving both builders undocumented.\n\n## Verification\n\nThe user confirmed a described two-axis region scrolls both ways, in a modal body (the only surface\nin the app that realizes a `ViewNode`). The showcase cannot host this: `realize` lives in `heca` and\nheca-renderer must not depend on it. A temporary demo body was used and has been removed.\n\nThat verification also uncovered the two real bugs behind this phase's sibling work: the app was\nnever delivering `Scroll` or `PointerReleased` to a modal layer. Tracked and fixed under F004/P011.",
+      "shortName": "action-tooltip-field",
+      "title": "actions-4: Add tooltip field to ActionDescriptor (separate from config name)",
+      "status": "planned",
+      "description": "Add an explicit tooltip property to `ActionDescriptor`, distinct from `name` (config key), `label` (display), and `description` (long-form). Independent of the rename tasks.\n\nUpdate:\n- `heca/src/actions.rs`: `pub tooltip: Option<&'static str>` on `ActionDescriptor` (:65-82); populate in `ALL` where meaningful (e.g. delete-pane `tooltip: Some(\"Close the active pane\")`).\n- `heca/src/chrome/mod.rs`: `action_tooltip()` reads from the `ActionCatalog` tooltip when `Some`, falls back to `label` + shortcut when `None`.\n- `ActionCatalog` type + tests: carry the tooltip; add a test that `tooltip: Some(...)` surfaces via `action_tooltip`.\n- `AGENTS.md` (\"Chrome buttons → action, tooltip, KeyHint\" section): tooltip is now an `ActionDescriptor` property, not name-derived.\n\nGate: test suite + `cargo clippy --workspace --all-targets --all-features` clean.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-001-expose-input-placeholder-under-its-own-key-do-not-overload-text-which-is-the-value",
-          "title": "Expose Input placeholder under its own key — do NOT overload `text` (which is the value)",
-          "checked": false
-        },
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-002-expose-scroll-axes-as-an-enum-name-vertical-horizontal-both-unknown-name-default",
-          "title": "Expose Scroll axes as an enum name (vertical/horizontal/both), unknown name → default",
-          "checked": false
-        },
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-003-confirm-t3-s-generator-made-both-nearly-free-if-not-report-that-as-a-t3-gap",
-          "title": "Confirm T3's generator made both nearly free; if not, report that as a T3 gap",
-          "checked": false
-        },
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-004-tests-unknown-enum-name-wrong-value-type-missing-property-all-keep-the-default",
-          "title": "Tests: unknown enum name, wrong value type, missing property — all keep the default",
-          "checked": false
-        },
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-005-verify-scrollregion-s-constructor-settings-survive",
-          "title": "Verify ScrollRegion's constructor settings survive",
-          "checked": false
-        },
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-006-update-view-rs-props-table-docs-widgets-md-input-and-scrollregion",
-          "title": "Update view.rs props table + docs/widgets.md §Input and §ScrollRegion",
-          "checked": false
-        },
-        {
-          "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-007-user-confirms-a-declarative-two-axis-region-scrolls-both-ways-in-the-showcase",
-          "title": "USER confirms a declarative two-axis region scrolls both ways in the showcase",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-26T12:09:58.524Z",
-      "completedAt": "2026-07-26T18:04:34.103Z",
-      "createdAt": "2026-07-25T19:14:11.280Z",
-      "updatedAt": "2026-07-26T18:04:34.103Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:15:24.946Z",
+      "updatedAt": "2026-07-09T13:15:24.946Z"
     },
     {
-      "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 5,
-      "shortId": "DA3MC",
-      "priority": 5,
-      "shortName": "add-separator-to-the-widget-vo",
-      "title": "Add Separator to the widget vocabulary",
-      "status": "done",
-      "description": "Closes gap 5 of the phase description.\n\nCURRENT STATE\n- The widget EXISTS: heca-grid-ui/src/widgets/separator.rs — `Orientation` enum (line 17),\n  `horizontal()` (line 42), `vertical()` (line 47), `length(f32)` (line 53, documented as \"force an\n  explicit span when the parent centers instead of stretching\"). Catalogued in docs/widgets.md:1753.\n- The vocabulary has NO entry for it. `WidgetKind` (heca/src/chrome/view.rs:30-69) lists 30\n  variants; `Separator` is not among them, and it is absent from `WidgetKind::ALL` (view.rs:78-110).\n- docs/chrome-and-ui.md example 2 uses `Separator::new()` between a table header and its body —\n  a description cannot produce it today. A plugin has to fake a rule with a thin sized Surface,\n  which will not follow the theme.\n\nWORK — follow the \"adding a WidgetKind\" path exactly; the guards make most of it mechanical:\n1. Add the variant to `WidgetKind` (view.rs:30).\n2. Add it to `WidgetKind::ALL` (view.rs:78). Note the built-in protection: `ordinal()` (view.rs:113)\n   is an EXHAUSTIVE match, so forgetting it there is a COMPILE error, and the\n   `all_lists_every_widget_kind` test then catches the reverse omission. Do not fight these — they\n   are why a new kind cannot silently render an empty box.\n3. Add a `realize` arm (realize.rs:114+) mapping to the widget.\n4. Properties: orientation (an enum by NAME — horizontal / vertical, default horizontal) and\n   `length`. If T3 has landed, this should come from the generator rather than a hand-written read.\n5. The existing coverage test\n   `every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones` must pass — it walks ALL\n   and fails on a kind that does not produce a live widget.\n6. Check the fixture that builds a sample node per kind (realize.rs:1660-1680 gives leaves text or a\n   glyph) and give `Separator` whatever it needs there.\n\nWHY IT IS NOT \"just compose it\"\nA separator is themed: colour, thickness and inset come from the Theme. A hand-rolled sized Surface\nin a plugin would hardcode them, which is precisely what AGENTS.md forbids (\"Read ALL styling from\nthe Theme — hardcode nothing\"). The widget exists so nobody has to.\n\nACCEPTANCE\n- `Separator` is in the vocabulary and realizes to the real widget with orientation + length.\n- Both existing guards (`ordinal` exhaustive match, `all_lists_every_widget_kind`) pass unchanged.\n- Coverage test passes with the new kind included.\n- Update view.rs's props-by-kind table + docs/widgets.md, and add it to the showcase.\n- Visible output: build it and have the USER look before closing.\n\n---\n**Completion summary:**\nDONE 2026-07-27 — branch `feat/action-arg-declaration`, commits 67fb118 (the kind) + bf8a5c9 (the stretch fix). Verified in the showcase by the user (\"now it works\"). NOT pushed.\n\n## THE WIRING WAS THE EASY HALF\n\n`WidgetKind::Separator` + `ALL` + `ordinal` + a `realize` arm (heca/src/chrome/realize.rs, next to `StatusDot`) that names neither property — `with_props(Separator::horizontal(), node)`. The exhaustive `ordinal` match forced the arm exactly as the task predicted, and `all_lists_every_widget_kind` + the coverage test passed unchanged.\n\n## TWO REAL DEFECTS THE WORK EXPOSED\n\n**1. `length` and `orientation` depended on each other.** To be settable from a description, `orientation` had to become a `#[prop]` builder. But `length` wrote straight onto `width`, assuming a horizontal rule. Properties arrive sorted by name (`props` is a `BTreeMap`), so `length` lands **before** `orientation` — the length would have gone onto the axis the rule runs *across*, leaving the span unset. That is precisely the order dependency `#[prop]` refuses to express (R3: \"if two properties on a widget genuinely depend on each other, fix that widget's setters\").\n\nFixed in the widget: it keeps `length: Option<f32>` as intent and `apply_axes()` recomputes **both** axes from the orientation/length pair. Neither has to come first. The coverage fixture in realize.rs sets both in the order that used to be wrong.\n\n**2. A rule in a centring container did not appear at all.** Caught by the user looking at the showcase. With no length the span axis was `Length::Auto`; a row with `Align::Center` — which most showcase rows use — gives `Auto` nothing to fill, so the rule laid out 1px × 0 and was invisible. The widget's answer had been a doc line telling the caller to pass a `length`: a workaround at every call site, silently producing nothing when forgotten.\n\nFixed in the widget: with no length it sets `align_self = Some(Align::Stretch)`, so it spans whether or not the container stretches its children. An explicit length is a definite size, so it still wins and the container's own alignment places it. The `length` builder's doc changed meaning — it now *cuts the line shorter*, it is not a workaround.\n\n## TESTS (heca-grid-ui/tests/phase_a.rs)\n\n- `a_separators_length_and_orientation_can_be_set_in_either_order` — drives `set_prop` both ways round. Restoring the old `length` body fails it.\n- `a_separator_spans_a_container_that_centres_its_children` — a centring row and a centring column. Dropping the `align_self` fails it.\n- The pre-existing `horizontal_separator_spans_container_width` still passes untouched.\n\n## FILES\n\n- heca-grid-ui/src/widgets/separator.rs — `Orientation` derives `PropName`; new `orientation` prop; `length` stored as intent; `apply_axes`.\n- heca/src/chrome/view.rs — the variant, `ALL`, `ordinal` (30), props-by-kind table row.\n- heca/src/chrome/realize.rs — the arm + the coverage fixture (which sets both props).\n- heca-renderer/examples/showcase.rs — a new row under \"Separator\" with the vertical rule twice: full height (in a centring row) and `length(24)`.\n- docs/widgets.md — the declarative half, the new stretch behaviour, and why this is a widget rather than something to compose.\n- docs/chrome-and-ui.md — the table example called `Separator::new()`, which never existed; now `Separator::horizontal()`, with a note that it reached the vocabulary here.\n\n## GATE\n\n`cargo clippy --workspace --all-targets --all-features` 0 warnings; `cargo test --workspace` green across 20 suites; showcase builds. No `cargo fmt`. **User confirmed both rules render.**",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-001-add-the-widgetkind-variant-the-all-entry-ordinal-s-exhaustive-match-will-force-the-second",
-          "title": "Add the WidgetKind variant + the ALL entry (ordinal's exhaustive match will force the second)",
-          "checked": false
-        },
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-002-add-the-realize-arm-mapping-to-the-separator-widget",
-          "title": "Add the realize arm mapping to the separator widget",
-          "checked": false
-        },
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-003-expose-orientation-enum-by-name-default-horizontal-length",
-          "title": "Expose orientation (enum by name, default horizontal) + length",
-          "checked": false
-        },
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-004-coverage-all-lists-every-widget-kind-tests-pass",
-          "title": "Coverage + all_lists_every_widget_kind tests pass",
-          "checked": false
-        },
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-005-give-the-per-kind-test-fixture-whatever-a-separator-needs",
-          "title": "Give the per-kind test fixture whatever a Separator needs",
-          "checked": false
-        },
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-006-update-view-rs-props-table-docs-widgets-md-the-showcase",
-          "title": "Update view.rs props table + docs/widgets.md + the showcase",
-          "checked": false
-        },
-        {
-          "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-007-user-looks-at-it-before-closing",
-          "title": "USER looks at it before closing",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-26T21:50:14.904Z",
-      "completedAt": "2026-07-26T22:24:38.699Z",
-      "createdAt": "2026-07-25T19:14:32.975Z",
-      "updatedAt": "2026-07-26T22:24:38.699Z"
-    },
-    {
-      "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 6,
-      "shortId": "J2LU8",
+      "id": "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
+      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
+      "number": 271,
+      "shortId": "NUNLY",
       "priority": 6,
-      "shortName": "expose-the-clickable-row-widge",
-      "title": "Expose the clickable Row widget — rename the KIND (decided 2026-07-27)",
+      "shortName": "unified-open-registry",
+      "title": "context-menu-6: ContextMenuRegistry + open_context_menu_for (unified open) + mouse refactor",
       "status": "done",
-      "description": "Closes gap 4 of the phase description.\n\n# ✅ DECIDED BY THE USER 2026-07-27 — Option A, plus the symmetry follow-on\n\n**`WidgetKind::Row` → `WidgetKind::HStack`. `WidgetKind::Column` → `WidgetKind::VStack`. The name `Row` is freed for the real interactive widget.**\n\nThe two questions were put to the user with the trade-offs and the counts (the widget: 11 call sites in 3 files; the kind: 7 code sites + ~40 doc mentions). Both answers were the recommended one:\n\n1. **Which `Row` gives up the name → the KIND.** Truest to the library, and nothing outside this repo consumes the vocabulary yet — no WASM plugin exists — so the breakage is internal and only grows if deferred.\n2. **Does `Column` follow → YES, `VStack`.** The pair stays symmetric and both names read as layout, which is the point. Renaming it later would be a second churn through the same files.\n\nThe alternatives are closed: naming the new kind something else (leaves the library's `Row` and the model's `Row` permanently different things) and renaming the library widget (the widget has the better claim to the name). **Do not re-open them.**\n\n# THE COLLISION (verified in code 2026-07-25, still true 2026-07-27)\n\nTwo different things are called Row.\n- `heca-grid-ui/src/widgets/row.rs` — a REAL WIDGET. Its own doc header: \"a **focusable, clickable\n  container** for arbitrary composed content… `Item` is the fixed leading/label/trailing row; `Row`\n  is its open cousin: it provides the same interactive chrome — hover tint, active (selected) state\n  with an `ActiveMarker`, press flash, focus ring, and `on_activate` (mouse + Enter/Space) — but\n  holds **any** children… Use it for rich Dock rows that need to be clicked and selected, where\n  `Item`'s slots aren't enough.\" `on_activate` is at row.rs:96.\n- `WidgetKind::Row` — maps to `Flex::row()` (realize.rs:124). A plain horizontal box. No focus, no\n  hover, no press, no activation.\n\nCONSEQUENCES\n- The interactive Row widget has NO declarative spelling at all. A plugin cannot make a clickable,\n  selectable rich row — the exact thing the widget was built for.\n- docs/chrome-and-ui.md example 2 writes `Row::new().gap(12) … .on_press(intent(\"plugin.docker.select\",\n  {\"id\": …}))` for a clickable table row. That is the WIDGET's behaviour written against the KIND\n  that cannot do it. The published example is wrong in a way no reader could detect.\n- Anyone reading `WidgetKind::Row` in the app and `Row` in the library reasonably assumes they are\n  the same thing. They are not.\n\n# WORK\n\n**1. Rename the two layout kinds.** `Row` → `HStack`, `Column` → `VStack`, everywhere: `WidgetKind` and `ALL` and `ordinal` (view.rs), the `realize` arms (realize.rs:124), every native construction site, the props-by-kind rustdoc table, docs/widgets.md, docs/chrome-and-ui.md, README.md, AGENTS.md. Note `WidgetKind` is `#[serde(rename_all = \"snake_case\")]`, so the wire spelling changes from `\"row\"`/`\"column\"` to `\"h_stack\"`/`\"v_stack\"` — check that reads as intended, and consider an explicit `#[serde(rename)]` if `hstack`/`vstack` is wanted instead. **Record which spelling was chosen and why.**\n\n**2. Add `WidgetKind::Row` for the interactive widget** + a `realize` arm mapping it to `heca_grid_ui::Row`.\n\n**3. Wire it as ACTIONABLE.** It needs its `press` event on BOTH a click handler and a KeyHint target, the same way the `Button` arm does (realize.rs:461+ — \"wiring its `press` intent to both a click handler and a hint target… a click emits it, the picker fires it\"). Without the hint target, `prefix+/` cannot reach it.\n\n**4. Selected/active state** — follow `Item`'s arm, which already has the precedent. Do not invent a second spelling for the same idea.\n\n**5. Properties come from the generated surface** (`with_props`), not a hand-written list — the T3 mechanism. Check `Row`'s builders are all `#[prop]`/`#[host_only]` classified; the macro will refuse to compile otherwise.\n\n**6. The coverage fixture** in realize.rs (`sample_node`) needs an arm: `Row` is a container that is also actionable, so give it a child AND a press intent.\n\n# ACCEPTANCE\n- A description can produce a clickable, selectable rich row that behaves exactly like the native one.\n- The rename is applied consistently across code AND every document — no file left saying `WidgetKind::Row` means a flex box.\n- Coverage + `all_lists_every_widget_kind` guards pass.\n- docs/chrome-and-ui.md example 2 becomes correct rather than aspirational.\n- **USER verifies click, keyboard activation, hover and selected state in the showcase** — this is interactive behaviour, so tests alone do not close it (see the `no-unverified-rendering-widget-changes` rule).\n\n---\n**Completion summary:**\nDONE 2026-07-27 — commit a413730 on branch `feat/action-arg-declaration`. NOT pushed.\n\n## DECISION APPLIED (user, 2026-07-27)\n\nOption A plus the symmetry follow-on: **`WidgetKind::Row` → `HStack`, `WidgetKind::Column` → `VStack`**, and the freed name `Row` went to the real interactive widget. Both answers were the recommended one, taken with the counts on the table (the widget: 11 call sites in 3 files; the kind: 7 code sites + ~40 doc mentions).\n\n**Wire spelling:** `WidgetKind` is `#[serde(rename_all = \"snake_case\")]`, so the wire form is `\"h_stack\"` / `\"v_stack\"`. Kept rather than pinned to `\"hstack\"`: the model's own stated rule (docs/chrome-and-ui.md Part I §6) is that enums travel as their name in lower case with underscores, and a hand-written `#[serde(rename)]` would have been an exception to it for cosmetics.\n\n## WHAT SHIPPED\n\n- `heca/src/chrome/view.rs`: the two renames through the enum, `ALL` and `ordinal`; a new `Row` variant at ordinal 2 with rustdoc explaining what it is and what it used to be.\n- `heca/src/chrome/realize.rs`: the `Row` arm. `active` / `nav_selected` / `marker` arrive through the generated surface (`with_props`); the press is wired to a click, to Enter/Space, **and** to a KeyHint target the way the `Button` arm does, so `prefix+/` reaches it. Imported as `Row as GridRow` since `Row` is now also a `WidgetKind`.\n- **With no press intent the row stays inert** — not focusable, no hover. A described row nothing can activate should not look like a control.\n- Coverage fixture: `Row` needs both a child and a press intent, or it reads as \"realized to nothing\".\n\n## TESTS\n\n- `a_described_row_is_clickable_and_keyboard_activatable` — dispatches a real `PointerPressed` and a real `GridKey::Enter` through the realized widget; both fire the same intent with its args; one hint target registered; content held.\n- `a_described_row_without_a_press_intent_is_inert`.\n\n## DOCS\n\ndocs/chrome-and-ui.md's table example was the reason this task existed — it wrote the widget's behaviour (press, selection) against the kind that had none of it, undetectably. It now uses `HStack` for the header and a real clickable `Row` for the body rows, with a note on what changed and when. Also: docs/widgets.md (`Row` gains its declarative half + a \"Row is not HStack\" note), the props-by-kind tables in view.rs and widgets.md, the vocabulary lists in AGENTS.md and docs/widget-architecture.md, and widget-architecture.md's own example.\n\n## ⚠️ VERIFICATION — WHAT WAS AND WAS NOT CHECKED\n\nThe acceptance asked the user to click through the described row in the showcase. **That is impossible and the task should not have promised it:** the showcase lives in `heca-renderer`, which is BELOW `heca` in the crate graph, so it cannot call `realize` at all. The only production caller of `realize` is a modal body, so no described `Row` appears anywhere in the running app.\n\nWhat was verified instead: the interaction test above drives real pointer and key events through the real widget. The **native** `Row` (the showcase PANES cards) is untouched by this task.\n\nThe user was told this plainly rather than the box being ticked. The underlying limitation is recorded on **F003/P017/T009**, which gained this as a second motivation independent of plugins.\n\n## GATE\n\n`cargo clippy --workspace --all-targets --all-features` 0 warnings; `cargo test --workspace` green across 20 suites; showcase builds.",
+      "description": "DONE 2026-07-09. Built the unified context-menu open path + ContextMenuRegistry with 4 built-in providers + overlay_origin_mode (mode-restore field/hook). Behavior-preserving: mouse right-click + keyboard pane path route through the unified path with parity.\n\nImplemented:\n- `heca/src/chrome/context_menu.rs` (NEW): `ContextPath` (dotted string, consts PANE/SIDEBAR_PANE/SIDEBAR_COLUMN/SIDEBAR_WORKSPACE), `ContextTarget` enum (Pane{pane_id,hyperlink} / SidebarPane / SidebarColumn / SidebarWorkspace), `ContextMenuProvider` {weight: Vec<i64>, build: fn}, `ContextMenuRegistry::with_builtins()` (4 providers) + `register` + `items_for` + `ordered_providers`, `open_context_menu_for(state, path, target, anchor, source, origin)` (registry lookup → merge by weight → open_dropdown; centered derived from source=Keyboard; captures overlay_origin_mode when None), `restorable_mode` (SidebarNav whitelist). 5 unit tests.\n- `heca/src/chrome/mod.rs`: `mod context_menu;` + pub(crate) exports (open_context_menu_for, ContextMenuProvider, ContextMenuRegistry, ContextPath, ContextTarget).\n- `heca/src/app_state.rs`: fields `overlay_origin_mode: Option<InputMode>` (:664) + `context_menu_registry: ContextMenuRegistry` (:709).\n- `heca/src/app/startup.rs`: init both fields (:368/:378, registry via with_builtins()).\n- `heca/src/chrome/overlay.rs`: `resolve()` (:362) restores input_mode when the last overlay closes and overlay_origin_mode is Some — BEFORE running the completion (so a follow-up confirm opens with origin already restored; origin consumed before completion may push a new overlay). No-op when origin None (Normal).\n- `heca/src/mouse.rs`: `open_context_menu` (mouse pane) → open_context_menu_for(PANE, PaneTarget{pane_id,hyperlink resolved from click}, MouseContent, None); `open_focused_context_menu` (keyboard pane) → open_context_menu_for(PANE, PaneTarget{focused, None}, window_center, Keyboard, None); `open_sidebar_context_menu` → maps ChromeDragItem→(path,target) → open_context_menu_for(...,MouseLeftSidebar,None). `pane_action_items` moved into context_menu.rs (pane provider).\n\nVerify: cargo check clean (no project warnings); cargo clippy --workspace --all-targets --all-features clean; cargo test -p heca context_menu 5/5 pass; full heca suite green. heca-core flaky terminal test fails only under full-workspace concurrent load (preexisting, not touched by this slice — passes in isolation 88/88).\n\nDependencies: none (foundation). context-menu-7 depends on this.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-001-blocking-put-options-a-b-c-to-the-user-with-the-trade-offs-do-not-pick-silently",
-          "title": "BLOCKING: put options A / B / C to the user with the trade-offs; do not pick silently",
-          "checked": false
-        },
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-002-add-the-kind-realize-arm-mapping-to-the-row-widget",
-          "title": "Add the kind + realize arm mapping to the Row widget",
-          "checked": false
-        },
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-003-wire-press-intent-and-a-keyhint-target-follow-the-button-arm-else-prefix-cannot-reach-it",
-          "title": "Wire press → intent AND a KeyHint target (follow the Button arm), else prefix+/ cannot reach it",
-          "checked": false
-        },
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-004-handle-selected-active-state-the-way-item-s-arm-already-does",
-          "title": "Handle selected/active state the way Item's arm already does",
-          "checked": false
-        },
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-005-apply-the-naming-decision-across-view-rs-realize-rs-widgets-md-plugin-authoring-md-readme-the-plan",
-          "title": "Apply the naming decision across view.rs, realize.rs, widgets.md, plugin-authoring.md, README, the plan",
-          "checked": false
-        },
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-006-coverage-guards-pass",
-          "title": "Coverage guards pass",
-          "checked": false
-        },
-        {
-          "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-007-user-verifies-click-enter-space-hover-and-selected-state-in-the-showcase",
-          "title": "USER verifies click, Enter/Space, hover and selected state in the showcase",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-26T22:34:53.860Z",
-      "completedAt": "2026-07-27T06:41:31.269Z",
-      "createdAt": "2026-07-25T19:14:59.729Z",
-      "updatedAt": "2026-07-27T06:41:31.269Z"
+      "startedAt": "2026-07-09T13:44:29.545Z",
+      "completedAt": "2026-07-09T13:57:46.719Z",
+      "createdAt": "2026-07-09T13:43:02.741Z",
+      "updatedAt": "2026-07-09T13:57:46.719Z"
     },
     {
-      "id": "59f5c555-2a36-4247-9216-5002ae4ce55a",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 7,
-      "shortId": "SSCHJ",
+      "id": "a721d49b-827e-4dce-bffb-2e4270c08c5d",
+      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
+      "number": 272,
+      "shortId": "REFR5",
       "priority": 7,
-      "shortName": "decide-the-fate-of-the-unused",
-      "title": "Colour and appearance become overridable props — theme is the default, not a wall",
+      "shortName": "keyboard-context-aware",
+      "title": "context-menu-7: resolve_active_context + prefix arm + pending_context + mode-restore (keyboard context-aware)",
       "status": "done",
-      "description": "⚠️ USER DECISION 2026-07-25 — THIS OVERTURNS A \"SETTLED\" RULE. Do not re-derive the old one.\n\nTHE DECISION, in the user's words: \"color should not be forbidden it should default to theme but be\noverridable as all other props for all widgets.\"\n\n# ✅ SCOPE DECIDED BY THE USER 2026-07-27 — the WHOLE of `Visual`\n\n**Every appearance field becomes overridable: fill, border, glow, radius, font size.** Not colour alone, and not colour+border+glow. The user was given all three and chose the whole of `Visual`, because it is one rule with no per-field exceptions to explain, and the merge mechanism is the same either way — the extra fields cost almost nothing once `Visual` serializes at all.\n\nNote the two unset spellings differ and both must keep meaning \"ask the theme\": `fill`/`border`/`glow` are `Option`, while `radius`/`font_size` use a `0.0 = inherit` sentinel. A serialized `Visual` must round-trip both without turning \"unset\" into \"set to zero\" — that is the one place this scope decision costs real care.\n\n## Token resolution — settled by the assistant 2026-07-27, tell the user if you change it\n\nA theme token NAME is stored **unresolved** and resolved at paint; only raw hex resolves eagerly.\n\n`realize` has no `Theme` (widgets read `cx.theme()` when they paint), so resolving a token name in `realize` would need one threaded in — and worse, it would freeze the colour at build time, so a token-named override would stop following `prefix+Shift+r`. Following a theme reload is the whole reason to prefer a token name over hex, so eager resolution would destroy the thing that makes the preferred spelling worth preferring.\n\n# WHAT IT REPLACES\n- AGENTS.md SETTLED table: \"Is styling a prop? **NO.** Only semantic ViewVariant / ViewSize /\n  ViewAlign + color/glyph **names**; the host resolves the pixels from Theme.\"\n- docs/chrome-and-ui.md §2.6.1 rule C: \"Styling is not a free prop: colors/fonts/alphas\n  come from the Theme/config, never from raw values passed by the plugin.\"\nBoth must be UPDATED IN PLACE as part of this task. Leaving them contradicting the code is exactly\nthe trap that makes the next agent revert the work. (docs/chrome-and-ui.md Part I R2 and §21 already\ncarry the new rule; Part II §2.6.1 rule C still carries the old wording verbatim by design — update\nthe §21 row, not the verbatim text.)\n\n# THE NEW RULE\nAppearance is a normal property, on every widget, like any other. The Theme supplies the DEFAULT;\na description may override it. Unset ⇒ theme, which is already how the widgets behave: `fill`,\n`border` and `glow` are `Option`, and `radius`/`font_size` use a 0.0 = inherit sentinel, so \"not\nspecified\" already means \"ask the theme\" at paint time. Nothing about theme reload changes for\nwidgets that do not override.\n\n# CONSEQUENCE FOR F003/P017/T1 (already shipped, commit 8718718)\nT1 split `Style` into `Layout` (serializable) and `Visual` (deliberately NOT serializable, so\nappearance was unreachable by construction). That premise is now wrong. `Visual` must gain\nserialization and be merged exactly like `Layout` — which is cheap, because T2's\n`merge_layout_props` (heca/src/chrome/realize.rs) is generic and can be pointed at both halves.\nThe `Layout`/`Visual` split KEEPS ITS VALUE as documentation and grouping (caller intent vs theme\ndefault), it just stops being a barrier. Do not undo the split.\n\n# CONSEQUENCE FOR THIS TASK\n`PropValue::Color` (view.rs:201-202) stops being dead — it becomes the carrier. Its existing\nrustdoc already promises exactly the right thing: \"`#rrggbb` / `#rrggbbaa`, or a theme color token\nname\". Both spellings work, with the trade-off documented honestly:\n- Raw hex — a literal override, resolved eagerly. It does NOT follow a runtime theme reload\n  (prefix+Shift+r), by definition.\n- Theme token NAME — stored unresolved, resolved at paint, so it DOES follow a reload. Preferred,\n  and what the docs should steer authors toward.\n\n# WORK\n- Add Serialize/Deserialize to `Visual`, to `Color` (accepting \"#rrggbb\"/\"#rrggbbaa\" and a token\n  name), and to `Border` and `Glow` — all of `Visual` is in scope per the decision above. Make sure\n  the `Option` fields and the `0.0 = inherit` sentinels both round-trip as \"unset\".\n- Merge `Visual` in `realize` alongside `Layout`, reusing T2's mechanism.\n- Update AGENTS.md's SETTLED table and docs/chrome-and-ui.md §21's row to state the new rule and\n  that it replaces the old one, with the date.\n- Update view.rs's props-by-kind rustdoc + docs/widgets.md.\n- Tests: an override lands; an unset field still follows the theme; a bad colour string is ignored\n  (realize stays total); a theme reload restyles a non-overriding widget AND one overriding with a\n  token name, but not one overriding with hex.\n- Visible change: the USER verifies in the showcase.\n\n---\n**Completion summary:**\nDONE 2026-07-27 — commits eb9e021 (the model) + aec4d8a (the per-widget colours + the first caller), branch `feat/action-arg-declaration`. **Verified in the running app by the user** on the destructive confirm dialog. NOT pushed.\n\n## THE RULE, NOW BUILT\n\nAppearance is an ordinary property on every widget; the Theme supplies the default. The user's rule (2026-07-25) and scope (2026-07-27: the WHOLE of `Visual`, not colour alone).\n\n## PART 1 — THE STYLE HALF (eb9e021)\n\n- `Visual` gains `Serialize`/`Deserialize` + `#[serde(default)]`. `Border` and `Glow` too; `Color` already had serde (hex in, `#rrggbbaa` out) so it needed nothing.\n- `merge_layout_props` → **`merge_style_half<T>`**, generic over the half. Pointing it at `Visual` as well as `Layout` was the entire change on the realize side — which is exactly why keeping the `Layout`/`Visual` split was right. It stopped being a barrier and stayed the honest grouping of caller intent versus theme default. **The split was not undone.**\n- Unset still means \"ask the theme\": the `Option` fields and the `0.0 = inherit` sentinels round-trip as unset, so a widget that overrides nothing is unaffected.\n\n## ⚠️ TOKEN RESOLUTION — I SETTLED THIS WRONG FIRST, CORRECTED BEFORE CODING\n\nI told the user a token name should be stored **unresolved** and resolved at paint, so it would keep following `prefix+Shift+r`. **That was wrong**, and reading the app is what showed it:\n\n> `main.rs` reload_config: \"Retained pane headers bake theme colors / fonts into their tree at build time, and `pane_header_key` intentionally has no theme identity (themes only change on reload). Drop every header so `sync_pane_headers` rebuilds them against the new theme next frame.\"\n\n`reload_config` already drops `chrome_tree` and every pane header. So **resolving eagerly follows a theme reload for free.** Storing unresolved would have meant turning every `Option<Color>` in `Visual` into a source type and touching all 14 paint sites, to buy behaviour the rebuild already gives — and inventing a second mechanism beside the one the app lives by.\n\nSo: `realize` takes a `&Theme`, and a token resolves there. The correction was told to the user, not quietly applied.\n\n**The token vocabulary is derived, not written.** `heca_theme::Theme` is `Serialize` and its colours serialize as hex, so the accepted names ARE the theme's colour fields (`resolve_color` in realize.rs). Add a colour token to the theme and a description can name it the same day, with no table to update. A non-colour theme field cannot be named by accident (it is not a `#`-prefixed string).\n\nA hex literal is exactly the colour it says and does not track the theme — the trade a caller makes, documented plainly.\n\n## PART 2 — THE PER-WIDGET COLOURS (aec4d8a)\n\n`Visual` covers container appearance only. Eight builders carried the note `host_only(\"colour — reachable once F003/P017/T7 makes appearance overridable\")` — `Label::color`, `Icon::color` (×2), `IconButton`, `KeyHint`, `Tag`, `Row::highlight`, `Row::attention_color`. Leaving them host-only would have made the new rule half true, so they are `#[prop]` now.\n\nThe macro (`heca-grid-ui-macros`) learned `Color`: it arrives as text and parses through `Color`'s own `FromStr`. A token never reaches the library — the host resolves it to hex in `prop_to_input`, where it has the theme — so `heca-grid-ui` still knows nothing about themes.\n\n## PART 3 — THE FIRST CALLER (aec4d8a)\n\n`open_confirm` (heca/src/handlers.rs): a destructive prompt renders its message (\"This action cannot be undone.\") in the theme's **danger** colour. Written as the token NAME, not a hex value, so it follows the active theme and a reload — the first override in heca demonstrates the spelling the docs steer authors toward.\n\nThis exists because the capability was otherwise **unverifiable**: nothing in the app overrode anything, so \"look at the modal\" meant \"confirm it is identical\", which told the user nothing and wasted their time. Reachable with `ctrl+b` then `x`.\n\n## TESTS (6)\n\n- the whole of `Visual` lands from a description;\n- an unset field is left alone (not zeroed — the sentinel trap);\n- the same token gives **different pixels under two themes** while a hex gives the same;\n- the vocabulary is the theme's own fields, and `name` cannot be named as a colour;\n- a bad colour is dropped and its neighbours still apply;\n- a token reaches a **widget's own** colour builder and changes what is painted, and follows the theme.\n\n## DOCS — the dead rule corrected wherever it was still stated\n\n`Style`'s and `Visual`'s own rustdoc (both asserted `Visual` was unserializable *by design*), view.rs's props section (now \"Style props\", both halves, with the token/hex trade), docs/widget-architecture.md (§1's \"never raw colors/pixels\", the `realize` signature in the diagram, and the SETTLED row), AGENTS.md's SETTLED row, docs/widgets.md's props section (rewritten, incl. the per-widget builders and the confirm as the first caller).\n\n## GATE\n\n`cargo clippy --workspace --all-targets --all-features` 0 warnings; `cargo test --workspace` green across 20 suites; showcase builds. **User confirmed the danger-coloured confirm message in the running app.**",
+      "description": "DONE 2026-07-09. Keyboard context-aware menus: prefix+> now works everywhere (pane in Normal, sidebar item in SidebarNav), with mode-restore so the user returns to SidebarNav after closing a menu opened from the sidebar.\n\nImplemented:\n- `resolve_active_context(state)` in context_menu.rs: reads InputMode + sidebar cursor (SidebarNav) or focused pane (Normal) → (ContextPath, ContextTarget). SidebarItem→(path,target) mapping: Pane→sidebar.pane, Column→sidebar.column, Workspace→sidebar.workspace, FloatingPane→pane.\n- `PendingContext` struct in context_menu.rs: carries (path, target, origin: Option<InputMode>) through the Prefix→Normal dispatch transition.\n- `pending_context: Option<PendingContext>` on AppState (app_state.rs:711), init None (startup.rs:379).\n- Prefix arm in handle_sidebar_nav_mode (input.rs:651-665): mirrors handle_selection_mode pattern — resolves active context BEFORE the Prefix transition, stashes in pending_context with origin=Some(SidebarNav), transitions to Prefix mode.\n- handle_open_context_menu (handlers.rs:188-207): consumes pending_context if present → open_context_menu_for with the stashed (path,target,origin); else falls back to open_focused_context_menu (Normal mode).\n- window_center_logical made pub(crate) (mouse.rs:89) for handlers.rs access.\n\nMode-restore (overlay_origin_mode) was already implemented in context-menu-6 — this task wires it: when origin=Some(SidebarNav) is passed, open_context_menu_for captures it, and overlay::resolve() restores SidebarNav when the last overlay closes.\n\nVerify: cargo check + clippy clean (zero warnings); cargo test --workspace green (heca-core flaky preexisting). Manual: prefix+e → sidebar nav, j/k select item, prefix+> → context menu centered for that item, Esc → back in SidebarNav (not Normal).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-001-blocking-put-option-a-token-names-only-vs-b-remove-to-the-user-recommend-a",
-          "title": "BLOCKING: put option A (token names only) vs B (remove) to the user; recommend A",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-002-if-a-resolve-token-names-against-the-theme-unknown-name-keeps-the-default-hex-refused",
-          "title": "If A: resolve token names against the Theme; unknown name keeps the default; hex refused",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-003-if-a-correct-the-rustdoc-that-currently-promises-rrggbb",
-          "title": "If A: correct the rustdoc that currently promises #rrggbb",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-004-if-a-decide-which-kinds-accept-a-colour-be-conservative-label-at-minimum",
-          "title": "If A: decide which kinds accept a colour — be conservative, Label at minimum",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-005-if-a-verify-a-runtime-theme-reload-restyles-it",
-          "title": "If A: verify a runtime theme reload restyles it",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-006-if-b-remove-the-variant-and-coordinate-the-doc-rewrite-with-t8",
-          "title": "If B: remove the variant and coordinate the doc rewrite with T8",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-007-update-view-rs-rustdoc-docs-widgets-md",
-          "title": "Update view.rs rustdoc + docs/widgets.md",
-          "checked": false
-        },
-        {
-          "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-008-user-looks-at-the-result",
-          "title": "USER looks at the result",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-27T06:41:59.906Z",
-      "completedAt": "2026-07-27T06:41:59.906Z",
-      "createdAt": "2026-07-25T19:15:22.695Z",
-      "updatedAt": "2026-07-27T06:41:59.906Z"
+      "startedAt": "2026-07-09T14:23:11.329Z",
+      "completedAt": "2026-07-09T15:00:45.024Z",
+      "createdAt": "2026-07-09T13:43:10.939Z",
+      "updatedAt": "2026-07-09T15:00:45.024Z"
     },
     {
-      "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 8,
-      "shortId": "GFFU8",
-      "priority": 8,
-      "shortName": "correct-the-published-document",
-      "title": "Correct the published documents so the examples match what the model can actually do",
-      "status": "done",
-      "description": "Closes gaps 7 and 8, and reconciles the docs with whatever T1-T7 changed. DO THIS LAST — the\ncorrections depend on the decisions taken in T6 (Row naming) and T7 (colour).\n\nWHY THIS IS NOT COSMETIC\ndocs/chrome-and-ui.md is the file a plugin author reads first. Its examples are currently\nunbuildable in spirit: they use settings and widgets the model does not have. A reader cannot tell\nwhich lines are real. The document does carry a \"STATUS: DESIGN — target Phase 9, NOT yet available\"\nbanner (docs/chrome-and-ui.md:3-8), which excuses the SDK types not existing — it does not excuse\nexamples that will still be wrong after the SDK ships.\n\nTHE TWO OUTRIGHT ERRORS (no native equivalent exists — these are doc bugs, not gaps)\n1. `Panel::new().title(\"Hello\")` — docs/chrome-and-ui.md example 1 and README.md's Plugins section.\n   There is no Panel widget. `WidgetKind::Panel` realizes to a plain `Surface` (realize.rs:129-131,\n   whose comment states \"No dedicated `Panel` widget — a bare panel is a plain `Surface`\"), and\n   `Surface` has no title (surface.rs — only `new`/`row`/`column`). `Card::new(title)` is the titled\n   container. Either rewrite the example onto `Card`, or add a title to Panel — but do not leave a\n   title on a thing that has none.\n2. `Label::new(..).variant(Variant::Muted)` — docs/chrome-and-ui.md example 2. No `Label` variant\n   exists natively and `ViewVariant` has no Muted (view.rs:169-176). Resolution depends on T7: if\n   colour tokens are wired, rewrite as a token colour; if T7 removes the colour value, drop the\n   muted styling from the example entirely.\n\nALSO RECONCILE (settings that WILL exist once this phase lands, so the examples become true)\n- `Column::new().padding(10)` — real after T2.\n- `Input::new(..).placeholder(\"filter…\")` — real after T4. Note the example writes\n  `Input::new(\"filter\")`, which reads like a name but is positioned as a value; make the example\n  unambiguous about which is which, since `text` is the value and `name` is the form key.\n- `Scroll::vertical()` — real after T4, and worth showing the two-axis form too, since that was the\n  capability nobody could reach.\n- `Separator::new()` — real after T5.\n- `Row::new()…on_press(..)` for a clickable table row — real after T6, spelled however T6 decided.\n\nFILES TO UPDATE — all of them, in one pass\n- docs/chrome-and-ui.md (examples 1, 2, 3 + the \"What's shipped vs planned\" section at line 268).\n- README.md — the \"Plugins (Planned)\" section (README.md:30 in the contents, the section itself\n  further down) carries the same Panel/title example.\n- docs/chrome-and-ui.md §2.6.1 (line ~252) and §2.6.2 (line ~340) — both sketch the SDK\n  with `.padding(12)` and a titled Panel.\n- docs/widgets.md + the props-by-kind table in view.rs's rustdoc, if any earlier task left them\n  behind.\n\nONE MORE FIX — A STALE POINTER\ndocs/chrome-and-ui.md:7 tells the reader to \"Track progress under the `plugin-ui` and `plugin-08`\nphases in `BACKLOG.md`\". BACKLOG.md is stale and is NOT the source of truth — the planner is. Point\nreaders at the planner instead. (This is the correction that was owed to F003/P011/T008, whose docs\nare otherwise complete.)\n\nACCEPTANCE\n- Every code example in the three documents uses only settings and widgets that exist after this\n  phase.\n- No document promises a titled Panel or a Label variant unless one was actually built.\n- The BACKLOG pointer is gone.\n- Re-read each example as a newcomer would and confirm nothing left in them is aspirational without\n  saying so.\n\n---\n**Completion summary:**\nDONE 2026-07-27 — commits a3485a6 (Panel), 5768cd3 (Part II examples), e5a3b56 (the source sweep), branch `feat/action-arg-declaration`. Showcase verified by the user. NOT pushed.\n\n## ⚠️ ONE RESERVATION LEFT OPEN BY THE USER — DO NOT LOSE THIS\n\nOn seeing the showcase: *\"showcase is ok. not sure the title position is what i expected but for now is ok.\"*\n\nSo `Panel`'s heading placement is **accepted provisionally, not approved**. As built it is the first child of a padding-10, gap-8 column: top-left, inside the padding, directly above the content, bold at font_scale 1.05. If a future session touches `Panel`, ask before assuming the current placement is settled — the user was asked what they expected instead and their answer governs.\n\n## THE USER'S DECISIONS THIS TASK APPLIED\n\n1. **The Panel title is real** — rather than rewriting the examples onto `Card`. \"add a title to panel, label use the new color prop. but the panel title should be tested in the showcase.\"\n2. **Part II's code examples get corrected in place** — the user pushed back on my leaving them: *\"should them be HStack and VStack now?\"* and *\"you have to update the docs, right? so if you find things that do not respect the current code you have to change / fix them.\"* The verbatim rule protects design *reasoning*, not identifiers that no longer compile.\n\n## WHAT SHIPPED\n\n**`Panel` is a real widget** (heca-grid-ui/src/widgets/panel.rs). Titled section container; the difference from `Card` is presentation, not structure — a Card stands apart (padding 18, theme frame), a Panel is a slice of a region and is quiet by default. The heading is a real `Label` child per the composition rule, created up front and **hidden until a title is set**, so `title` works applied before OR after children — properties land after children are attached, and a widget whose setters depend on ordering is the bug. `title_signal()` retitles a mounted panel with no rebuild. `WidgetKind::Panel` stops sharing the `Surface` arm and takes `text` as its heading, like `Card`/`DockFrame`.\n\nTest `a_panel_titles_itself_whichever_order_it_is_built_in` covers both orders, the hidden header when untitled, and clearing a title back to empty. Showcase shows a titled and an untitled panel side by side.\n\n**Doc errors fixed (the two the task named, plus more found while fixing them):**\n- `Panel::new().title(\"Hello\")` against a widget with no title — chrome-and-ui.md example 1 + README. Now real.\n- `Label::new(..).variant(Variant::Heading)` (Part II §3) — `Label` has NO `variant` builder, ever. A heading is `size: header`.\n- `Variant::Danger` on a Button (Part II §3) — the vocabulary is Primary/Secondary/Destructive/Outline/Ghost/Link.\n- `Panel::new(\"docker.containers\")` — took an argument Panel does not have.\n- The serialized form in the same comment used `kind:\"Panel\"` / `kind:\"Row\"`; the model emits snake_case, so `kind:\"panel\"` / `kind:\"h_stack\"`.\n- `Theme::grid_ares()` (widgets.md) — never existed. Only `grid_tron()` is built in code; bundled themes are grid_tron/mocha/latte via `load_theme`, which falls back user file → bundled → grid_tron and never fails.\n- AGENTS.md's \"implemented catalog\" was missing Panel, Row, Item, ItemGroup, Grid, DockFrame, ChromeRegion, Tag.\n- `Column`/`Row` → `VStack`/`HStack` in every remaining example, both parts, plus docs/widgets.md's two mentions of the future typed builder.\n\n**Part II's header no longer claims to be unedited.** It now says the prose is verbatim and the code examples were corrected on 2026-07-27, with the reason. §21 gained rows for the Label and Button variants so the record of what was wrong survives the correction.\n\n## TWO ITEMS IN THE TASK WERE ALREADY DONE\n\nVerified, not fixed by me: `Label::new(..).variant(Variant::Muted)` is nowhere in the docs, and the stale `BACKLOG.md` progress pointer is gone — both removed by the 2026-07-26 consolidation.\n\n## THE SWEEP (how \"every example matches the code\" was actually checked)\n\nCross-checked all 97 distinct `Type::method(` calls in the code examples of chrome-and-ui.md, widgets.md, README.md, AGENTS.md and widget-architecture.md against the source, then every documented builder in widgets.md against its own widget's file. Three apparent mismatches were false positives worth recording so the next sweep does not re-derive them: `Row::child` and `MarkerGroup::child` come from the `Parent` trait, `IconButton::size` from `LayoutExt`. AGENTS.md's mention of `Intensity::glow_scale` describes its removal, not a promise.\n\n## GATE\n\n`cargo clippy --workspace --all-targets --all-features` 0 warnings; `cargo test --workspace` green across 20 suites; showcase builds and was run. No `cargo fmt`.\n\n---\n**Completion summary:**\nDONE 2026-07-27 — commits a3485a6 (Panel), 5768cd3 (Part II examples), e5a3b56 (source sweep), a5ac706 (the header rule). Branch `feat/action-arg-declaration`, not pushed.\n\n## CLOSED AS-IS BY THE USER, WITH THE PANEL HEADER AS BUILT\n\nThe user saw the first Panel and said *\"showcase is ok. not sure the title position is what i expected but for now is ok.\"* Rather than leave that as a \"for now\", they were given four concrete options and chose **a rule under the heading**, adding *\"like in the pane header we have in the app.\"*\n\nThe pane header could not be copied: it is a **marker bar plus a button cluster in a centred row** (`build_pane_header`, heca/src/chrome/mod.rs:733), with no titled band. So `a5ac706` builds the shape they picked — heading → rule → body — and they were told plainly it matches the shape, not that construction.\n\nTheir close: *\"close it as it is now. eventually a new task will handle a refactoring.\"* So the current Panel header is **accepted, and any further shaping is a future task's job** — not an open reservation on this one. If that task appears, the likely axes are the header's height, where the rule sits, and the title's weight.\n\n## THE USER'S DECISIONS THIS TASK APPLIED\n\n1. **The Panel title is real** — over rewriting the examples onto `Card`.\n2. **Part II's code examples get corrected in place.** The user pushed twice: *\"should them be HStack and VStack now?\"* then *\"you have to update the docs, right? so if you find things that do not respect the current code you have to change / fix them. Come on.\"* The verbatim rule protects design *reasoning*, not identifiers that no longer compile.\n\n## WHAT SHIPPED\n\n**`Panel` is a real widget** (heca-grid-ui/src/widgets/panel.rs). A titled section container: heading, a `Separator` under it, then the body. The difference from `Card` is presentation, not structure — a Card stands apart (padding 18, theme frame), a Panel is a slice of a region and is quiet by default.\n\nThe heading and its rule are real composed children per the composition rule, created up front and **hidden together until a title is set** — so `title` works applied before OR after children (properties land after children attach), and an untitled panel draws neither a blank line nor a bare rule. `title_signal()` retitles a mounted panel with no rebuild. `WidgetKind::Panel` stops sharing the `Surface` arm and takes `text` as its heading, like `Card`/`DockFrame`.\n\nTest `a_panel_titles_itself_whichever_order_it_is_built_in` covers both orders, the hidden header+rule when untitled, and clearing a title back to empty. Showcase shows a titled and an untitled panel side by side.\n\n**Doc errors fixed** (the two the task named, plus more found while fixing them):\n- `Panel::new().title(\"Hello\")` against a widget with no title — chrome-and-ui.md example 1 + README.\n- `Label::new(..).variant(Variant::Heading)` (Part II §3) — `Label` has NO `variant` builder, ever. A heading is `size: header`.\n- `Variant::Danger` on a Button — the vocabulary is Primary/Secondary/Destructive/Outline/Ghost/Link.\n- `Panel::new(\"docker.containers\")` — an argument Panel does not take.\n- `kind:\"Panel\"` / `kind:\"Row\"` in a serialized-form comment — the model emits snake_case.\n- `Theme::grid_ares()` (widgets.md) — never existed. Only `grid_tron()` is built in code; bundled themes are grid_tron/mocha/latte via `load_theme`, which falls back user file → bundled → grid_tron.\n- AGENTS.md's \"implemented catalog\" was missing Panel, Row, Item, ItemGroup, Grid, DockFrame, ChromeRegion, Tag.\n- `Column`/`Row` → `VStack`/`HStack` in every remaining example, both parts, plus widgets.md's two mentions of the future typed builder.\n\n**Part II's header no longer claims to be unedited.** It says the prose is verbatim and the code examples were corrected 2026-07-27, with the reason. §21 gained rows for the Label and Button variants so the record survives the correction.\n\n## TWO ITEMS IN THE TASK WERE ALREADY DONE\n\nVerified, not fixed by me: `Label::new(..).variant(Variant::Muted)` is nowhere in the docs, and the stale `BACKLOG.md` pointer is gone — both removed by the 2026-07-26 consolidation.\n\n## THE SWEEP\n\nCross-checked all 97 distinct `Type::method(` calls in the code examples of chrome-and-ui.md, widgets.md, README.md, AGENTS.md and widget-architecture.md against the source, then every documented builder in widgets.md against its own widget's file. Three apparent mismatches were false positives, recorded so the next sweep does not re-derive them: `Row::child` and `MarkerGroup::child` come from the `Parent` trait, `IconButton::size` from `LayoutExt`. AGENTS.md's mention of `Intensity::glow_scale` describes its removal, not a promise.\n\n## GATE\n\nclippy 0 warnings; `cargo test --workspace` green across 20 suites; showcase builds and was run by the user. No `cargo fmt`.",
+      "id": "a43f300a-2162-40ac-9b86-ca16ad006c90",
+      "phaseId": "402d22d4-a658-47d7-8481-fb074ce43a00",
+      "number": 273,
+      "shortId": "5AU6N",
+      "priority": 1,
+      "shortName": "button-shortcut-api",
+      "title": "button-shortcut-1: Button::shortcut(char) + accelerator dispatch",
+      "status": "planned",
+      "description": "`Button::shortcut(char)` → composed `Icon(NerdFont ⌃) + Label(letter)` trailing slot rendered **inside** the button (via the content-slot refactor from `viewnode-task-2`). `Ctrl+<c>` self-submit + `FocusManager::deliver_accelerator`.\n\nBLOCKED on:\n- `viewnode-task-2` (Button content-slot refactor — must land first).\n- `gridui-03` `NfIcon` (NerdFont embedding — the accelerator icon uses NerdFont; Phosphor caret was judged ugly). `Glyph::CaretUp` (0xe13c) stays in the enum but the accelerator uses NerdFont.\n\nFiles: `heca-grid-ui/src/widgets/button.rs` (shortcut API + trailing slot), `heca-grid-ui/src/component.rs` / `FocusManager` (`deliver_accelerator`).\n\nBehaviors to preserve: existing Button variants/sizes/labels unchanged; theme-driven styling; the accelerator is an additive trailing slot (empty by default → no layout shift). Update `docs/widgets.md` + showcase.",
       "notes": "",
-      "statusLog": [
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-001-done-in-progress",
-          "date": "2026-07-27T08:31:41.422Z",
-          "fromStatus": "done",
-          "toStatus": "in-progress",
-          "title": "Reopened 2026-07-27, immediately after closing: the user's reservation on the Panel title placement was put to them as a concrete choice rather than left as \"for now\", and they chose a rule under the heading so the title reads as a header band instead of the first line of content. Finishing the visual this task produced, then re-closing.</motivation>",
-          "description": "Reopened 2026-07-27, immediately after closing: the user's reservation on the Panel title placement was put to them as a concrete choice rather than left as \"for now\", and they chose a rule under the heading so the title reads as a header band instead of the first line of content. Finishing the visual this task produced, then re-closing.</motivation>\n</invoke>"
-        }
-      ],
+      "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-001-fix-the-panel-title-error-rewrite-onto-card-or-add-a-real-title-to-panel",
-          "title": "Fix the Panel title error — rewrite onto Card, or add a real title to Panel",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-002-fix-the-label-muted-error-according-to-t7-s-decision",
-          "title": "Fix the Label Muted error according to T7's decision",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-003-reconcile-padding-placeholder-scroll-axes-separator-clickable-row-with-what-now-exists",
-          "title": "Reconcile padding / placeholder / scroll axes / separator / clickable row with what now exists",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-004-make-the-input-example-unambiguous-about-value-vs-name",
-          "title": "Make the Input example unambiguous about value vs name",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-005-update-docs-plugin-authoring-md-examples-1-3-shipped-vs-planned",
-          "title": "Update docs/plugin-authoring.md (examples 1-3 + shipped-vs-planned)",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-006-update-readme-md-s-plugins-section",
-          "title": "Update README.md's Plugins section",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-007-update-pluggable-chrome-plugin-plan-md-2-6-1-and-2-6-2",
-          "title": "Update pluggable-chrome-plugin-plan.md §2.6.1 and §2.6.2",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-008-replace-the-stale-backlog-md-progress-pointer-with-the-planner",
-          "title": "Replace the stale BACKLOG.md progress pointer with the planner",
-          "checked": false
-        },
-        {
-          "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-009-re-read-every-example-as-a-newcomer-nothing-aspirational-left-unmarked",
-          "title": "Re-read every example as a newcomer; nothing aspirational left unmarked",
-          "checked": false
-        }
-      ],
+      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-27T07:11:34.689Z",
-      "completedAt": "2026-07-27T11:19:44.679Z",
-      "createdAt": "2026-07-25T19:15:48.735Z",
-      "updatedAt": "2026-07-27T11:19:44.679Z"
-    },
-    {
-      "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822",
-      "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 9,
-      "shortId": "B5E92",
-      "priority": 9,
-      "shortName": "open-question-not-for-this-pha",
-      "title": "Move the view model to its own crate + make realize callable from below heca",
-      "status": "done",
-      "description": "# ✅ DECIDED BY THE USER 2026-07-27 — LEVEL 2. START HERE, DO NOT RE-ASK.\n\n**Move the pure-data model out of the app into its own crate, AND make `realize` callable from\nbelow `heca`.** The user was given Level 1 / Level 2 / neither with an effort estimate and chose\nLevel 2: *\"go with level 2, record it in t009.\"*\n\n- **Level 1 (NOT enough, do not stop here):** move only `ViewNode` / `WidgetKind` / `PropValue` /\n  `Intent`. Buys a plugin author type-checking and completion for the tree they author. Buys\n  **nothing** for rendering — `realize` would still be stuck in `heca`.\n- **Level 2 (WHAT WAS CHOSEN):** the above **plus** abstracting `realize`'s three app couplings so\n  it can live and be called below `heca`. This is what makes a described tree renderable from the\n  showcase.\n\n## ✅ CRATE LAYOUT — DECIDED BY THE USER 2026-07-27 (step 3's open sub-question, now closed)\n\n**TWO crates.** Do not revisit.\n\n| Crate | Holds | Depends on |\n|---|---|---|\n| **`heca-view`** | the model: `ViewNode`, `WidgetKind`, `PropValue`, `Intent`, `PropMap`, `ViewSize`, `ViewVariant`, `ViewAlign`, `Events` | **`serde` only** — no widget library, no renderer, no taffy |\n| **`heca-view-realize`** | `realize` + `FormBindings` + realize's ~1500-line test module | `heca-view`, `heca-grid-ui`, `heca-theme` |\n\nWhy two: the model crate staying dependency-free is what lets a WASM plugin depend on the\nvocabulary without compiling the thing that draws it. One crate would have dragged\n`heca-grid-ui` + taffy into every such dependant, which is reason 1 of this task lost.\n\n## WHY — two independent reasons, and the second is what decided it\n\n1. **A plugin author gets no editor help.** The model is inside the app binary crate; a plugin is a\n   separate program and cannot depend on it. (The original reason this task was written.)\n2. **The showcase cannot render a described tree at all** — and this bit three times in one day.\n   `heca-renderer/examples/showcase.rs` sits BELOW `heca` in the crate graph, so it cannot call\n   `realize`. During F003/P017/T005 (Separator), T006 (Row) and T007 (appearance) the user could\n   not be shown the declarative half of any of them; each time the answer was \"I can't show you\n   this.\" The only production caller of `realize` is a modal body\n   (`heca/src/chrome/overlay.rs:367`), so no described tree appears anywhere else in the running\n   app. **That is a verification gap on every future vocabulary task**, and the user verifies\n   rendering themselves — green tests are never verification for anything visual.\n\nThe user also asked separately whether `heca-grid-ui` could ship as a standalone UI crate. Answer:\nthe renderer is NOT the blocker (heca-grid-ui depends only on heca-core, heca-theme, taffy and its\nmacros — `Scene`, the draw-command list, lives in `heca-grid-ui/src/scene.rs`, so an embedder\nsupplies their own backend). `realize` being app-side IS the blocker, for the declarative path.\n\n## WHY THIS IS NOT THE FORBIDDEN THING\n\n`AGENTS.md` and `docs/widget-architecture.md` §5 reject `heca-grid-ui` owning `ViewNode`: it\ninverts the crate graph, and `ViewNode` cannot carry the closures/signals the native chrome needs.\nThat rule is about pushing the model **DOWN INTO the widget library**. A separate crate\n**ALONGSIDE** inverts nothing and is a different question. Do not treat the settled rule as having\nalready answered it — this task's original text says exactly that, and the user has now decided.\n\n# MEASUREMENTS (taken 2026-07-27 — do not re-derive)\n\n| Thing | Size / fact |\n|---|---|\n| `heca/src/chrome/view.rs` (the model) | **632 lines**. Imports are ONLY `serde::{Deserialize, Serialize}` and `std::collections::BTreeMap` — a clean lift, no app dependencies at all. |\n| `heca/src/chrome/realize.rs` | **2630 lines**, of which roughly **1500 is its `#[cfg(test)]` module**. Non-test body ≈ 1100 lines. |\n| `HintTargetRegistry` (heca/src/chrome/mod.rs:2579) | **7 fields/lines of struct**; methods `register`/`checkpoint`/`remove_range`/`get`. |\n| `FormBindings` (heca/src/chrome/realize.rs:58) | **6 lines**. Already local to realize.rs — moves with it. |\n| `InteractionIntent` inside non-test `realize` | **7 real use sites** (plus doc comments). |\n\n**Files that touch the model types** (the blast radius of moving them):\n`heca/src/actions.rs`, `app/interaction.rs`, `app/registry.rs`, `chrome/context_menu.rs`,\n`chrome/layers.rs`, `chrome/mod.rs`, `chrome/overlay.rs`, `chrome/realize.rs`, `chrome/view.rs`,\n`handlers.rs`, `keymap.rs`.\n\n**CORRECTION, measured 2026-07-27 while doing the work:** only **four** import lines name the\n`view` module path directly (`chrome/realize.rs:45`, `chrome/overlay.rs:24`, `:29`, `:445`). The\nother files reach the types through `chrome`'s own re-export, so re-pointing that one re-export at\n`heca_view` covers them. And there is **ONE** production caller of `realize`, not two:\n`heca/src/chrome/overlay.rs:371`. `chrome/mod.rs` only re-exports it.\n\n# THE KEY INSIGHT THAT MAKES THIS SMALL\n\n**`realize` only ever constructs ONE `InteractionIntent` variant: `View(intent)`.** It never touches\n`ActivateAction`, `FocusPane`, `FocusWorkspace` or any other. So `realize` does not depend on the\napp's intent model — it depends on *being able to hand back an intent*. The coupling is a **wrapper\nat the boundary, not a real dependency**.\n\n# ⚠️ THE WRINKLE — CHECKED 2026-07-27, DO NOT ASSUME OTHERWISE\n\nI first guessed the hint registry could simply become `Intent`-keyed. **It cannot.**\n`HintTargetRegistry` stores `InteractionIntent` and is **shared**: `heca/src/chrome/overlay.rs`\nregisters modal action buttons carrying `InteractionIntent::ActivateAction(WmAction::SubmitOverlay\n{..})`, which is not a `View` intent. So the registry must keep storing `InteractionIntent` to serve\nthe app's own callers.\n\n**Therefore `realize` needs a narrower seam than the concrete registry** — the same shape as the\nemitter:\n\n- **emit:** `Rc<dyn Fn(Intent)>` over the *model's* `Intent`. `heca` supplies a closure that wraps it\n  as `InteractionIntent::View(..)`.\n- **register a hint target:** a callback (or small trait) `FnMut(Intent) -> HintTargetId`. `heca`\n  supplies a closure that wraps and calls its existing `HintTargetRegistry::register`. The registry\n  itself is UNCHANGED and keeps serving overlay.\n\n`HintTargetId` already lives in `heca-grid-ui` (`heca-grid-ui/src/hint.rs:22`), which is below —\nnothing to move there.\n\n# THE WORK, IN ORDER\n\n1. **New crate `heca-view`.** Move `heca/src/chrome/view.rs` into it wholesale. Add it to the\n   workspace members and to `heca`'s dependencies. Fix imports — mechanical, compiler-guided.\n2. **Flip the two seams.** Change `realize`'s `emit` to take the model `Intent`, and replace\n   `hints: &mut HintTargetRegistry` with the register callback/trait. Wrap at the `heca` boundary in\n   the one production caller (`chrome/overlay.rs:371`). Only ~7 sites inside realize construct the\n   carrier.\n3. **Move `realize` down** into **`heca-view-realize`** (deps: `heca-view`, `heca-grid-ui`,\n   `heca-theme`) — the two-crate split decided above. `FormBindings` moves with it. Its ~1500-line\n   test module moves too.\n4. **Prove it: a showcase demo that renders a described tree.** This is the point of the whole task\n   — without it, Level 2 has bought nothing observable. Show a `ViewNode` tree with a `Panel`, a\n   `Row` with a press intent, a `Separator` and a colour override, side by side with the native\n   equivalents.\n\n# RISK\n\n**Low.** This is a move, not a redesign: the compiler catches every miss, and the workspace has 20\ngreen test suites guarding behaviour. The cost is **bulk, not danger**.\n\n# EFFORT\n\n**One focused session** with full context — comparable to F003/P010/T006 (the action-argument\ndeclarations) plus crate plumbing. Explicitly NOT started on 2026-07-27 because that session was at\n~69% context and a multi-file crate move is the worst thing to run out of context partway through.\n\n# ALSO IN SCOPE ONCE THIS LANDS (mentioned in the original task text)\n\n- A plugin written in JavaScript or Python still gets no Rust completion. Because the vocabulary is\n  a CLOSED list with a coverage guard already walking it (`WidgetKind::ALL`), matching definitions\n  for other languages could be **generated** from that same list. Nobody has costed this.\n  Tracked separately as **F003/P001/T006**.\n- Check that F003/P017/T003's generated property tables are reusable rather than private to the app\n  — they are the natural source for those generated definitions.\n- **F003/P011/T006** (\"typed builder SDK over ViewNode\") says \"the WASM SDK re-exports it\". With the\n  model inside the app that sentence could not be true of anything; after this task it can be.\n\n# ACCEPTANCE\n\n- The model lives in its own crate, depending on nothing app-side.\n- `realize` is callable from below `heca`, with the emitter and hint-target registration passed in\n  rather than reaching into app types.\n- `heca`'s production caller wraps at the boundary; `HintTargetRegistry` is unchanged and still\n  serves overlay's non-`View` intents.\n- **The showcase renders a described tree**, and the USER looks at it — that is the whole point.\n- Whole workspace green, clippy 0 warnings.\n\n---\n**Completion summary:**\n# ✅ DONE 2026-07-27 — Level 2 shipped, verified in the app by the user (\"looks good\")\n\nSix commits on `feat/action-arg-declaration`. Whole workspace green (**961 tests, 24 suites**),\nclippy 0 warnings at every commit. Nothing pushed.\n\n| Commit | What |\n|---|---|\n| `a81f068` | **`heca-view`** — the model moves out of the app. `serde` only, no widget library, no renderer, no taffy. |\n| `f098e99` | `realize` takes **seams** instead of app types: `IntentEmitter` (`Rc<dyn Fn(Intent)>`) + the `HintTargets` trait. |\n| `8519db4` | **`heca-view-realize`** — the mapper moves below the app. |\n| `541c479` | The showcase renders a described tree beside its hand-built twin. |\n| `01f14c8` | `fix(row)`: a state highlight can no longer be shorter than its content (found by looking). |\n| `d1eb204` | The demo rows get padding, like every other row on the page. |\n\n## Crate layout, as decided\n\n- **`heca-view`** — `ViewNode`, `WidgetKind`, `PropValue`, `Intent`, `PropMap`, `ViewSize`,\n  `ViewVariant`, `ViewAlign`, `Events`. Dep: `serde` (+ `serde_json` for its tests).\n- **`heca-view-realize`** — `realize`, `FormBindings`, `IntentEmitter`, `HintTargets`. Deps:\n  `heca-view`, `heca-grid-ui`, `serde`, `serde_json` (+ `heca-core` for tests). Note: `heca-theme`\n  turned out NOT to be needed — `Theme` is re-exported by `heca-grid-ui`.\n- `heca` depends on both; `heca-renderer` takes both as **dev**-dependencies for the showcase.\n\n## The app side of the seams (where to look)\n\n- `heca/src/chrome/mod.rs` — re-exports the model from `heca_view` and the mapper from\n  `heca_view_realize`, so the app still has one path to the vocabulary. `ViewHintTargets<'a>` lives\n  here, next to `HintTargetRegistry`: it is the only thing that knows both an `Intent` and an\n  `InteractionIntent`.\n- `heca/src/chrome/overlay.rs` (`build_modal_root`) — the one production caller. It wraps the\n  emitter in a closure and the registry in `ViewHintTargets`.\n- `HintTargetRegistry` is **unchanged** and still stores `InteractionIntent`, because overlay\n  registers `ActivateAction(SubmitOverlay)` in the same map. That was the wrinkle; the seam is the\n  one operation realize performs on it.\n\n## Two measurements in the old plan were wrong — corrected here\n\n- **ONE** production caller of `realize`, not two. `chrome/mod.rs` only re-exported it.\n- **FOUR** import lines named the `view` module path, not eleven files. Everything else reached the\n  types through `chrome`'s re-export, so re-pointing that one re-export covered them.\n\n## Dead code the move surfaced\n\n`map_align` (`ViewAlign` → grid-ui `Align`) had been redundant since alignment became an ordinary\nproperty travelling by name onto `Layout`; the app's module-wide `allow(dead_code)` hid it. Deleted,\nwith a note where it stood pointing at `grid_alignment_is_authorable_on_both_axes`. The one\nremaining narrow allow is on `WidgetKind::ordinal`, which must stay **compiled** in every build\nbecause its exhaustive match is what makes an unlisted variant a compile error.\n\nTests were conserved exactly across the move: heca's 422 unit tests became **374 + 48**.\n\n## The widget defect the showcase found (this is why step 4 mattered)\n\nThe hover/active pill was drawn inset 3px unconditionally, so a row whose content reaches its own\nedges got a pill **shorter than its content** — the badge stuck out above and below. Fixed in the\nlibrary, not the call site:\n\n- `Base::highlight_rect(inset)` (`heca-grid-ui/src/component.rs`) — the inset may only spend space\n  the widget's own padding already reserves, per side. Every widget drawing an inset highlight asks\n  here.\n- `Item` had the identical arithmetic with a 4px inset and the same latent bug — same call now.\n- `Layout::pad_left/pad_right/pad_top/pad_bottom` (`heca-grid-ui/src/style.rs`) — the per-side\n  padding cascade had been inline in `to_taffy`; paint needs the same numbers, so it has one home\n  and `to_taffy` reads it.\n- Guard: `a_state_highlight_never_crops_the_content_it_covers` in\n  `heca-grid-ui/tests/phase_a.rs`. Confirmed by restoring the old arithmetic and watching it fail\n  (3.0 vs 0.0 on the unpadded row).\n\n**Second report, measured not guessed:** the remaining \"badge overflows\" was the badge's *glow*\n(`GLOW_RADIUS = 10.0`), which paints outside its box by design — row 37px, badge box 35px centred\ninside it. Nothing left to fix in the library; the demo rows were simply the only rows on the page\nwritten without padding, and now carry 6px. Noted for whoever writes the next demo: 6px does not\nfully contain a 10px halo, and that is expected.\n\n## Follow-ups this unblocks (not done here)\n\n- **F003/P001/T006** — generated widget definitions for JS/Python from `WidgetKind::ALL`.\n- **F003/P011/T006** — \"the WASM SDK re-exports it\" can now be true of `heca-view`.\n- Check whether F003/P017/T003's generated property tables are reusable outside the app.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-001-planned-deferred",
-          "date": "2026-07-25T19:16:26.139Z",
-          "fromStatus": "planned",
-          "toStatus": "deferred",
-          "title": "Deferred on creation, as the task itself states. It is a recorded question, not work: deciding where the builder types live only makes sense alongside plugin-08 (the WASM runtime), when there is a real plugin to write against. Recorded now so that phase does not rediscover late that the model sits inside the app crate and no plugin kit exists in the workspace.",
-          "description": "Deferred on creation, as the task itself states. It is a recorded question, not work: deciding where the builder types live only makes sense alongside plugin-08 (the WASM runtime), when there is a real plugin to write against. Recorded now so that phase does not rediscover late that the model sits inside the app crate and no plugin kit exists in the workspace."
-        },
-        {
-          "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-002-deferred-planned",
-          "date": "2026-07-27T11:27:19.374Z",
-          "fromStatus": "deferred",
-          "toStatus": "planned",
-          "title": "Decided by the user 2026-07-27: take LEVEL 2 — move the pure-data model into its own crate AND make `realize` callable from below `heca`. Moved off `deferred` because it is now a decided piece of work waiting for a fresh session, not an open question. Everything the next session needs is in the description; it should NOT have to ask what was decided.</motivation>",
-          "description": "Decided by the user 2026-07-27: take LEVEL 2 — move the pure-data model into its own crate AND make `realize` callable from below `heca`. Moved off `deferred` because it is now a decided piece of work waiting for a fresh session, not an open question. Everything the next session needs is in the description; it should NOT have to ask what was decided.</motivation>\n<parameter name=\"title\">Move the view model to its own crate AND make realize callable from below heca (LEVEL 2 — decided 2026-07-27)"
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-001-defer-to-plugin-08-unless-the-user-wants-it-decided-sooner",
-          "title": "Defer to plugin-08 unless the user wants it decided sooner",
-          "checked": false
-        },
-        {
-          "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-002-if-taken-up-put-the-separate-crate-question-to-the-user-with-the-settled-rule-s-actual-scope-made-clear",
-          "title": "If taken up: put the separate-crate question to the user with the settled rule's actual scope made clear",
-          "checked": false
-        },
-        {
-          "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-003-check-that-t3-s-generated-property-tables-are-reusable-for-generating-other-language-definitions",
-          "title": "Check that T3's generated property tables are reusable for generating other-language definitions",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-27T11:46:40.699Z",
-      "completedAt": "2026-07-27T12:28:19.820Z",
-      "createdAt": "2026-07-25T19:16:11.069Z",
-      "updatedAt": "2026-07-27T12:28:19.820Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-13T15:30:01.843Z",
+      "updatedAt": "2026-07-13T15:30:01.843Z"
     }
   ],
   "createdAt": "2026-07-25T19:12:29.404Z",
-  "updatedAt": "2026-07-27T12:28:36.123Z",
+  "updatedAt": "2026-07-27T12:28:51.535Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

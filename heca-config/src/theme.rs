@@ -1,5 +1,6 @@
 pub use crate::keys::{
-    BindingValue, CommandKeybindConfig, KeyModeConfig, KeybindingMap, KeysConfig, ModeBindingConfig,
+    BindingValue, CommandKeybindConfig, ComponentKeysConfig, KeyModeConfig, KeybindingMap,
+    KeysConfig, ModeBindingConfig,
 };
 pub use crate::loader::{AppConfig, Config, config_dir};
 pub use crate::settings::{ModifierKey, SettingsConfig};

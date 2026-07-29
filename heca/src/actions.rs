@@ -307,10 +307,6 @@ pub struct ActionDescriptor {
     pub description: &'static str,
     /// Category for grouping.
     pub category: ActionCategory,
-    /// Default keybinding string (e.g. "h,ArrowLeft").
-    // Preserved for the command palette + RPC introspection (read in tests only for now).
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub default_binding: &'static str,
     /// Centralized action icon. The single source of an action's [`Glyph`] —
     /// every surface that renders this action (pane-action bar, context menu,
     /// command palette) reads it from here instead of inventing its own. `None`
@@ -376,6 +372,15 @@ pub enum Dispatch {
 /// action is exactly how a provider is supposed to change things.
 pub type DynHandler = std::rc::Rc<dyn Fn(&mut crate::app_state::AppState, &crate::chrome::Intent)>;
 
+/// Why a name-keyed action's id was already taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DuplicateAction {
+    /// A compiled-in action owns the id. The declaration is **rejected**.
+    ShadowsBuiltin,
+    /// Another name-keyed action owned it; this one replaced it.
+    ReplacedDynamic,
+}
+
 /// RAII handle for a registered dynamic action.
 ///
 /// Held by the provider that registered the action (in `ProviderHandles`, alongside its event
@@ -399,21 +404,18 @@ pub struct ActionHandle(pub String);
 /// plugin-08 forwards it to its owner). Re-registering the same id replaces the previous entry (a
 /// provider remounting). Returns the [`ActionHandle`] the provider keeps and hands back to
 /// [`unregister_dynamic`] on unmount.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "plugin-04 seam: the first registrant is T1 (chrome placement actions) / a provider; exercised by tests today"
-    )
-)]
 pub fn register_dynamic(
     registry: &mut ActionRegistry,
     catalog: &mut ActionCatalog,
     meta: ActionMeta,
     handler: Option<DynHandler>,
-) -> ActionHandle {
+) -> Result<ActionHandle, DuplicateAction> {
     let id = meta.name.clone();
-    catalog.insert(meta);
+    // A rejected id must not get a handler either, or the key would run something whose metadata
+    // says it is a different action.
+    if let Err(dup @ DuplicateAction::ShadowsBuiltin) = catalog.insert_dynamic(meta) {
+        return Err(dup);
+    }
     match handler {
         Some(h) => {
             registry.dyn_handlers.insert(id.clone(), h);
@@ -422,7 +424,7 @@ pub fn register_dynamic(
             registry.dyn_handlers.remove(&id);
         }
     }
-    ActionHandle(id)
+    Ok(ActionHandle(id))
 }
 
 /// A **native** action declared in one place: its `WmAction` variant (dispatched by discriminant),
@@ -455,13 +457,6 @@ pub fn register(registry: &mut ActionRegistry, catalog: &mut ActionCatalog, spec
 
 /// Retire a name-keyed action — drops both its handler and its metadata. `true` if it was
 /// registered. Built-ins cannot be retired (their names are not removable from the catalog).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "plugin-04 seam: providers retire their actions on unmount once T1 registers the first one; exercised by tests today"
-    )
-)]
 pub fn unregister_dynamic(
     registry: &mut ActionRegistry,
     catalog: &mut ActionCatalog,
@@ -567,7 +562,6 @@ impl ActionRegistry {
             label: "Focus Column Left",
             description: "Move focus to the column on the left.",
             category: ActionCategory::Navigation,
-            default_binding: "h",
             icon: None,
             args: &[],
         },
@@ -576,7 +570,6 @@ impl ActionRegistry {
             label: "Focus Column Right",
             description: "Move focus to the column on the right.",
             category: ActionCategory::Navigation,
-            default_binding: "l",
             icon: None,
             args: &[],
         },
@@ -585,7 +578,6 @@ impl ActionRegistry {
             label: "Focus Pane Up",
             description: "Move focus to the pane above in the current column.",
             category: ActionCategory::Navigation,
-            default_binding: "k",
             icon: None,
             args: &[],
         },
@@ -594,7 +586,6 @@ impl ActionRegistry {
             label: "Focus Pane Down",
             description: "Move focus to the pane below in the current column.",
             category: ActionCategory::Navigation,
-            default_binding: "j",
             icon: None,
             args: &[],
         },
@@ -603,7 +594,6 @@ impl ActionRegistry {
             label: "Next Pane in Column",
             description: "Cycle focus forward through panes in the active column.",
             category: ActionCategory::Navigation,
-            default_binding: "]",
             icon: None,
             args: &[],
         },
@@ -612,61 +602,29 @@ impl ActionRegistry {
             label: "Previous Pane in Column",
             description: "Cycle focus backward through panes in the active column.",
             category: ActionCategory::Navigation,
-            default_binding: "[",
             icon: None,
             args: &[],
         },
         ActionDescriptor {
-            name: "sidebar_focus",
-            label: "Focus Sidebar",
-            description: "Enter sidebar navigation mode.",
-            category: ActionCategory::Navigation,
-            default_binding: "e",
+            name: "focus_dock",
+            label: "Focus Dock",
+            description: "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.",
+            category: ActionCategory::Chrome,
             icon: None,
-            args: &[],
+            // OPTIONAL, deliberately: the bare binding opens the pick, and a caller that already
+            // knows which dock it wants (RPC, a menu entry, a script) names it and skips the pick.
+            // A *required* argument would make the bare binding illegal (F003/P010/T006).
+            args: &[ArgDescriptor::optional(
+                "dock",
+                ArgKind::Text,
+                "Id of the dock to focus; omit to pick one by letter.",
+            )],
         },
         ActionDescriptor {
-            name: "sidebar_up",
-            label: "Sidebar Cursor Up",
-            description: "Move the sidebar selection up.",
-            category: ActionCategory::Navigation,
-            default_binding: "k",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_down",
-            label: "Sidebar Cursor Down",
-            description: "Move the sidebar selection down.",
-            category: ActionCategory::Navigation,
-            default_binding: "j",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_left_nav",
-            label: "Sidebar Collapse / Out",
-            description: "Collapse the current tree node or move to parent.",
-            category: ActionCategory::Navigation,
-            default_binding: "h",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_right_nav",
-            label: "Sidebar Expand / Enter",
-            description: "Expand the current tree node or activate the selected item.",
-            category: ActionCategory::Navigation,
-            default_binding: "l",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_peek",
-            label: "Sidebar Peek",
-            description: "Focus the selected pane or workspace without leaving sidebar mode.",
-            category: ActionCategory::Navigation,
-            default_binding: "Space",
+            name: "unfocus_dock",
+            label: "Release Dock Focus",
+            description: "Give the keyboard back to the focused pane, releasing chrome focus.",
+            category: ActionCategory::Chrome,
             icon: None,
             args: &[],
         },
@@ -675,7 +633,6 @@ impl ActionRegistry {
             label: "Next Workspace",
             description: "Switch to the next workspace.",
             category: ActionCategory::Navigation,
-            default_binding: "d",
             icon: None,
             args: &[],
         },
@@ -684,7 +641,6 @@ impl ActionRegistry {
             label: "Previous Workspace",
             description: "Switch to the previous workspace.",
             category: ActionCategory::Navigation,
-            default_binding: "u",
             icon: None,
             args: &[],
         },
@@ -693,7 +649,6 @@ impl ActionRegistry {
             label: "Toggle Focus Local",
             description: "Toggle between current and last-focused pane in the same workspace.",
             category: ActionCategory::Navigation,
-            default_binding: "i",
             icon: None,
             args: &[],
         },
@@ -702,7 +657,6 @@ impl ActionRegistry {
             label: "Toggle Focus Global",
             description: "Toggle between current and last-visited workspace.",
             category: ActionCategory::Navigation,
-            default_binding: "Shift+l",
             icon: None,
             args: &[],
         },
@@ -712,7 +666,6 @@ impl ActionRegistry {
             label: "New Column (Horizontal Split)",
             description: "Create a new column to the right.",
             category: ActionCategory::Layout,
-            default_binding: "Enter",
             // New column opens to the right (see the description); ColumnsPlusLeft stays
             // in the Glyph set for a future "add column to the left" action.
             icon: Some(Glyph::ColumnsPlusRight),
@@ -723,7 +676,6 @@ impl ActionRegistry {
             label: "New Pane in Column (Vertical Split)",
             description: "Add a new pane below the current one in the same column.",
             category: ActionCategory::Layout,
-            default_binding: "v",
             icon: Some(Glyph::SquareHalfBottom),
             args: &[],
         },
@@ -736,7 +688,6 @@ impl ActionRegistry {
             label: "New Pane in Column",
             description: "Add a new pane to this column.",
             category: ActionCategory::Layout,
-            default_binding: "unbound",
             icon: Some(Glyph::FolderSimplePlus),
             args: &[
                 ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
@@ -748,7 +699,6 @@ impl ActionRegistry {
             label: "Toggle Column Zoom",
             description: "Toggle the active column between viewport-wide zoom and its previous width.",
             category: ActionCategory::Layout,
-            default_binding: "z",
             icon: Some(Glyph::FrameCorners),
             args: &[],
         },
@@ -757,7 +707,6 @@ impl ActionRegistry {
             label: "Open Context Menu",
             description: "Open the focused pane's context menu at the cursor.",
             category: ActionCategory::Layout,
-            default_binding: ">",
             icon: Some(Glyph::DotsThreeVertical),
             args: &[],
         },
@@ -766,7 +715,6 @@ impl ActionRegistry {
             label: "Scroll View Left",
             description: "Pan the horizontal view left to reach off-screen / overflowing columns.",
             category: ActionCategory::Layout,
-            default_binding: "Shift+ArrowLeft",
             icon: None,
             args: &[],
         },
@@ -775,7 +723,6 @@ impl ActionRegistry {
             label: "Scroll View Right",
             description: "Pan the horizontal view right to reach off-screen / overflowing columns.",
             category: ActionCategory::Layout,
-            default_binding: "Shift+ArrowRight",
             icon: None,
             args: &[],
         },
@@ -784,7 +731,6 @@ impl ActionRegistry {
             label: "Increase Column Width",
             description: "Widen the active column.",
             category: ActionCategory::Layout,
-            default_binding: "=",
             icon: None,
             args: &[],
         },
@@ -793,7 +739,6 @@ impl ActionRegistry {
             label: "Decrease Column Width",
             description: "Narrow the active column.",
             category: ActionCategory::Layout,
-            default_binding: "-",
             icon: None,
             args: &[],
         },
@@ -802,7 +747,6 @@ impl ActionRegistry {
             label: "Increase Pane Height",
             description: "Tallens the active pane within its column.",
             category: ActionCategory::Layout,
-            default_binding: "Shift+=",
             icon: None,
             args: &[],
         },
@@ -811,7 +755,6 @@ impl ActionRegistry {
             label: "Decrease Pane Height",
             description: "Shortens the active pane within its column.",
             category: ActionCategory::Layout,
-            default_binding: "Shift+-",
             icon: None,
             args: &[],
         },
@@ -821,7 +764,6 @@ impl ActionRegistry {
             label: "App Font Bigger (Everything)",
             description: "Increase the whole-app font: chrome/UI and every terminal pane.",
             category: ActionCategory::System,
-            default_binding: "Ctrl+=",
             icon: None,
             args: &[],
         },
@@ -830,7 +772,6 @@ impl ActionRegistry {
             label: "App Font Smaller (Everything)",
             description: "Decrease the whole-app font: chrome/UI and every terminal pane.",
             category: ActionCategory::System,
-            default_binding: "Ctrl+-",
             icon: None,
             args: &[],
         },
@@ -839,7 +780,6 @@ impl ActionRegistry {
             label: "App Font Reset (Everything)",
             description: "Reset the whole-app font to the configured sizes.",
             category: ActionCategory::System,
-            default_binding: "Ctrl+0",
             icon: None,
             args: &[],
         },
@@ -848,7 +788,6 @@ impl ActionRegistry {
             label: "Terminal Font Bigger (Pane)",
             description: "Increase the focused pane's terminal font size.",
             category: ActionCategory::Pane,
-            default_binding: "Ctrl+Shift+=",
             icon: None,
             args: &[],
         },
@@ -857,7 +796,6 @@ impl ActionRegistry {
             label: "Terminal Font Smaller (Pane)",
             description: "Decrease the focused pane's terminal font size.",
             category: ActionCategory::Pane,
-            default_binding: "Ctrl+Shift+-",
             icon: None,
             args: &[],
         },
@@ -866,7 +804,6 @@ impl ActionRegistry {
             label: "Terminal Font Reset (Pane)",
             description: "Reset the focused pane to follow the app-wide font size.",
             category: ActionCategory::Pane,
-            default_binding: "Ctrl+Shift+0",
             icon: None,
             args: &[],
         },
@@ -875,7 +812,6 @@ impl ActionRegistry {
             label: "Swap Column Left",
             description: "Swap the active column with the one to its left.",
             category: ActionCategory::Layout,
-            default_binding: "Ctrl+h",
             icon: None,
             args: &[],
         },
@@ -884,7 +820,6 @@ impl ActionRegistry {
             label: "Swap Column Right",
             description: "Swap the active column with the one to its right.",
             category: ActionCategory::Layout,
-            default_binding: "Ctrl+l",
             icon: None,
             args: &[],
         },
@@ -893,7 +828,6 @@ impl ActionRegistry {
             label: "Swap Pane Up",
             description: "Swap the active pane with the one above.",
             category: ActionCategory::Layout,
-            default_binding: "Ctrl+k",
             icon: None,
             args: &[],
         },
@@ -902,7 +836,6 @@ impl ActionRegistry {
             label: "Swap Pane Down",
             description: "Swap the active pane with the one below.",
             category: ActionCategory::Layout,
-            default_binding: "Ctrl+j",
             icon: None,
             args: &[],
         },
@@ -911,7 +844,6 @@ impl ActionRegistry {
             label: "Move Pane to Column Left",
             description: "Move the active pane into the column on the left.",
             category: ActionCategory::Layout,
-            default_binding: "[",
             icon: Some(Glyph::ArrowLineLeft),
             args: &[ArgDescriptor::optional("pane_id", ArgKind::Int, "The pane to move; omit for the focused one.")],
         },
@@ -920,16 +852,26 @@ impl ActionRegistry {
             label: "Move Pane to Column Right",
             description: "Move the active pane into the column on the right.",
             category: ActionCategory::Layout,
-            default_binding: "]",
             icon: Some(Glyph::ArrowLineRight),
             args: &[ArgDescriptor::optional("pane_id", ArgKind::Int, "The pane to move; omit for the focused one.")],
         },
         ActionDescriptor {
+            name: "zoom_column_at_index",
+            label: "Zoom Column",
+            description: "Toggle zoom on the named column, making it active first.",
+            category: ActionCategory::Layout,
+            // Same glyph as `zoom_column`: one act, two ways of naming its target.
+            icon: Some(Glyph::FrameCorners),
+            args: &[
+                ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
+                ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to zoom."),
+            ],
+        },
+        ActionDescriptor {
             name: "delete_column",
             label: "Delete Column",
-            description: "Delete the focused column and all its panes.",
+            description: "Delete the named column and all its panes.",
             category: ActionCategory::Layout,
-            default_binding: "unbound",
             icon: Some(Glyph::Trash),
             args: &[
                 ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
@@ -942,7 +884,6 @@ impl ActionRegistry {
             label: "Close Pane",
             description: "Close the active pane.",
             category: ActionCategory::Pane,
-            default_binding: "x",
             // Remove/close pane; pairs with add-pane's FolderSimplePlus (both act on a
             // pane "slot" in a column).
             icon: Some(Glyph::FolderSimpleMinus),
@@ -953,7 +894,6 @@ impl ActionRegistry {
             label: "Toggle Float",
             description: "Toggle the active pane between tiling and floating.",
             category: ActionCategory::Pane,
-            default_binding: "f",
             icon: Some(Glyph::Cards),
             args: &[],
         },
@@ -962,7 +902,6 @@ impl ActionRegistry {
             label: "Quick-Select Pane",
             description: "Press a letter to focus it.",
             category: ActionCategory::Pane,
-            default_binding: "q",
             icon: None,
             args: &[],
         },
@@ -972,7 +911,6 @@ impl ActionRegistry {
             description: "Open the hyperlink in the OS default handler.",
             category: ActionCategory::Pane,
             // Constructed with a URL (mouse/HintKey/selection/menu); no global key.
-            default_binding: "",
             icon: Some(Glyph::ArrowRight),
             args: &[ArgDescriptor::required("url", ArgKind::Text, "The link to open.")],
         },
@@ -981,7 +919,6 @@ impl ActionRegistry {
             label: "Follow Link",
             description: "Press a letter to open the link.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+o",
             icon: None,
             args: &[],
         },
@@ -993,7 +930,6 @@ impl ActionRegistry {
             label: "Quick-Swap Pane",
             description: "Select a pane to swap with — focus stays where it is.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+m",
             icon: None,
             args: &[],
         },
@@ -1002,7 +938,6 @@ impl ActionRegistry {
             label: "Swap and Focus",
             description: "Select a pane to swap with, then follow focus to it.",
             category: ActionCategory::Pane,
-            default_binding: "m",
             icon: None,
             args: &[],
         },
@@ -1011,7 +946,6 @@ impl ActionRegistry {
             label: "Take Pane",
             description: "Select a pane to pull into the active column — focus stays where it is.",
             category: ActionCategory::Pane,
-            default_binding: "t",
             icon: None,
             args: &[],
         },
@@ -1020,7 +954,6 @@ impl ActionRegistry {
             label: "Take and Focus",
             description: "Select a pane to pull into the active column, then focus it.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+t",
             icon: None,
             args: &[],
         },
@@ -1029,7 +962,6 @@ impl ActionRegistry {
             label: "Move Pane to Workspace",
             description: "Select a workspace to move the active pane to.",
             category: ActionCategory::Layout,
-            default_binding: "g",
             icon: None,
             args: &[],
         },
@@ -1038,7 +970,6 @@ impl ActionRegistry {
             label: "Move Column to Workspace",
             description: "Select a workspace to move the active column to.",
             category: ActionCategory::Layout,
-            default_binding: "c",
             icon: None,
             args: &[],
         },
@@ -1047,7 +978,6 @@ impl ActionRegistry {
             label: "Move Pane to Column",
             description: "Select a column to move the active pane into.",
             category: ActionCategory::Layout,
-            default_binding: "Shift+c",
             icon: None,
             args: &[],
         },
@@ -1056,7 +986,6 @@ impl ActionRegistry {
             label: "Rename Pane",
             description: "Rename the active pane/tab.",
             category: ActionCategory::Pane,
-            default_binding: "$",
             icon: Some(Glyph::NotePencil),
             args: &[],
         },
@@ -1065,7 +994,6 @@ impl ActionRegistry {
             label: "Use Process Name",
             description: "Clear the pane's custom name, reverting to the program name.",
             category: ActionCategory::Pane,
-            default_binding: "unbound",
             icon: Some(Glyph::Backspace),
             args: &[],
         },
@@ -1074,7 +1002,6 @@ impl ActionRegistry {
             label: "Rename Column",
             description: "Rename the active column.",
             category: ActionCategory::Layout,
-            default_binding: "Shift+c",
             icon: Some(Glyph::NotePencil),
             args: &[],
         },
@@ -1084,7 +1011,6 @@ impl ActionRegistry {
             label: "Create Workspace",
             description: "Create a new workspace and switch to it.",
             category: ActionCategory::Workspace,
-            default_binding: "w",
             icon: Some(Glyph::StackPlus),
             args: &[],
         },
@@ -1093,7 +1019,6 @@ impl ActionRegistry {
             label: "Rename Workspace",
             description: "Rename the current workspace.",
             category: ActionCategory::Workspace,
-            default_binding: "Shift+w",
             icon: Some(Glyph::NotePencil),
             args: &[],
         },
@@ -1102,7 +1027,6 @@ impl ActionRegistry {
             label: "Use Default Name",
             description: "Clear the workspace's custom name, reverting to \"Workspace N\".",
             category: ActionCategory::Workspace,
-            default_binding: "unbound",
             icon: Some(Glyph::Backspace),
             args: &[],
         },
@@ -1111,7 +1035,6 @@ impl ActionRegistry {
             label: "Delete Workspace",
             description: "Delete a workspace and all its panes (not the last workspace).",
             category: ActionCategory::Workspace,
-            default_binding: "unbound",
             icon: Some(Glyph::StackMinus),
             args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to delete.")],
         },
@@ -1121,7 +1044,6 @@ impl ActionRegistry {
             label: "Toggle Left Sidebar",
             description: "Show or hide the left sidebar.",
             category: ActionCategory::Chrome,
-            default_binding: "b",
             icon: None,
             args: &[],
         },
@@ -1130,16 +1052,6 @@ impl ActionRegistry {
             label: "Toggle Right Sidebar",
             description: "Show or hide the right sidebar.",
             category: ActionCategory::Chrome,
-            default_binding: ".",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_expand_toggle",
-            label: "Toggle Sidebar Expand",
-            description: "Expand or collapse the selected sidebar node.",
-            category: ActionCategory::Chrome,
-            default_binding: "Tab",
             icon: None,
             args: &[],
         },
@@ -1150,7 +1062,6 @@ impl ActionRegistry {
             label: "Show Left Sidebar",
             description: "Mount (show) the left sidebar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1159,7 +1070,6 @@ impl ActionRegistry {
             label: "Hide Left Sidebar",
             description: "Unmount (hide) the left sidebar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1168,7 +1078,6 @@ impl ActionRegistry {
             label: "Toggle Left Sidebar (show/hide)",
             description: "Mount or unmount the left sidebar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1177,7 +1086,6 @@ impl ActionRegistry {
             label: "Show Right Sidebar",
             description: "Mount (show) the right sidebar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1186,7 +1094,6 @@ impl ActionRegistry {
             label: "Hide Right Sidebar",
             description: "Unmount (hide) the right sidebar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1195,7 +1102,6 @@ impl ActionRegistry {
             label: "Toggle Right Sidebar (show/hide)",
             description: "Mount or unmount the right sidebar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1204,7 +1110,6 @@ impl ActionRegistry {
             label: "Show Top Bar",
             description: "Mount (show) the top bar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1213,7 +1118,6 @@ impl ActionRegistry {
             label: "Hide Top Bar",
             description: "Unmount (hide) the top bar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1222,7 +1126,6 @@ impl ActionRegistry {
             label: "Toggle Top Bar (show/hide)",
             description: "Mount or unmount the top bar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1231,7 +1134,6 @@ impl ActionRegistry {
             label: "Show Bottom Bar",
             description: "Mount (show) the bottom bar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1240,7 +1142,6 @@ impl ActionRegistry {
             label: "Hide Bottom Bar",
             description: "Unmount (hide) the bottom bar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1249,7 +1150,6 @@ impl ActionRegistry {
             label: "Toggle Bottom Bar (show/hide)",
             description: "Mount or unmount the bottom bar region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[],
         },
@@ -1265,7 +1165,6 @@ impl ActionRegistry {
             label: "Move Container to Region",
             description: "Move a chrome container to another region (left/right sidebar, top/bottom bar).",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: Some(Glyph::ArrowLineRight),
             args: &[
                 ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move."),
@@ -1277,7 +1176,6 @@ impl ActionRegistry {
             label: "Move Container to Left Sidebar",
             description: "Move a chrome container into the left sidebar.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: Some(Glyph::ArrowLineLeft),
             args: &[ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move.")],
         },
@@ -1286,7 +1184,6 @@ impl ActionRegistry {
             label: "Move Container to Right Sidebar",
             description: "Move a chrome container into the right sidebar.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: Some(Glyph::ArrowLineRight),
             args: &[ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move.")],
         },
@@ -1295,7 +1192,6 @@ impl ActionRegistry {
             label: "Reorder Container Before",
             description: "Move a chrome container before another in its region (omit the target to move it to the end).",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move."),
@@ -1307,7 +1203,6 @@ impl ActionRegistry {
             label: "Reorder Container After",
             description: "Move a chrome container after another in its region.",
             category: ActionCategory::Chrome,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("container_id", ArgKind::Text, "Id of the container to move."),
@@ -1315,56 +1210,10 @@ impl ActionRegistry {
             ],
         },
         ActionDescriptor {
-            name: "sidebar_create_workspace",
-            label: "Sidebar Create Workspace",
-            description: "Create a new workspace from the current sidebar selection context.",
-            category: ActionCategory::Workspace,
-            default_binding: "w",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_create_column",
-            label: "Sidebar Create Column",
-            description: "Create a new column in the selected sidebar workspace context.",
-            category: ActionCategory::Layout,
-            default_binding: "c",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_split_in_column",
-            label: "Sidebar Split in Column",
-            description: "Add a new pane in the selected sidebar column context.",
-            category: ActionCategory::Layout,
-            default_binding: "v",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_zoom_selected_column",
-            label: "Sidebar Zoom Selected Column",
-            description: "Toggle zoom for the column implied by the current sidebar selection.",
-            category: ActionCategory::Layout,
-            default_binding: "z",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
-            name: "sidebar_delete_selected",
-            label: "Sidebar Delete Selected",
-            description: "Delete the selected sidebar item with confirmation.",
-            category: ActionCategory::Pane,
-            default_binding: "d",
-            icon: None,
-            args: &[],
-        },
-        ActionDescriptor {
             name: "collapse_current_workspace",
             label: "Collapse Current Workspace Row",
             description: "Collapse the active workspace row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
-            default_binding: "unbound",
             icon: None,
             args: &[],
         },
@@ -1373,7 +1222,6 @@ impl ActionRegistry {
             label: "Expand Current Workspace Row",
             description: "Expand the active workspace row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
-            default_binding: "unbound",
             icon: None,
             args: &[],
         },
@@ -1382,7 +1230,6 @@ impl ActionRegistry {
             label: "Toggle Current Workspace Row",
             description: "Toggle the active workspace row collapsed state in the sidebar tree UI.",
             category: ActionCategory::Chrome,
-            default_binding: "<",
             icon: None,
             args: &[],
         },
@@ -1391,7 +1238,6 @@ impl ActionRegistry {
             label: "Collapse Current Column Row",
             description: "Collapse the focused tiled column row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
-            default_binding: "unbound",
             icon: None,
             args: &[],
         },
@@ -1400,7 +1246,6 @@ impl ActionRegistry {
             label: "Expand Current Column Row",
             description: "Expand the focused tiled column row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
-            default_binding: "unbound",
             icon: None,
             args: &[],
         },
@@ -1409,7 +1254,6 @@ impl ActionRegistry {
             label: "Toggle Current Column Row",
             description: "Toggle the focused tiled column row collapsed state in the sidebar tree UI.",
             category: ActionCategory::Chrome,
-            default_binding: "(",
             icon: None,
             args: &[],
         },
@@ -1419,7 +1263,6 @@ impl ActionRegistry {
             label: "Command Palette",
             description: "Open the command palette (not yet implemented).",
             category: ActionCategory::System,
-            default_binding: "p",
             icon: None,
             args: &[],
         },
@@ -1428,7 +1271,6 @@ impl ActionRegistry {
             label: "Reload Config",
             description: "Reload keymaps, theme, and settings from config.toml without restarting.",
             category: ActionCategory::System,
-            default_binding: "Shift+r",
             icon: None,
             args: &[],
         },
@@ -1438,7 +1280,6 @@ impl ActionRegistry {
             label: "Scrollback Page Up",
             description: "Scroll the terminal viewport up by one page and enter selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "PageUp",
             icon: None,
             args: &[],
         },
@@ -1447,7 +1288,6 @@ impl ActionRegistry {
             label: "Scrollback Page Down",
             description: "Scroll the terminal viewport down by one page and enter selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "PageDown",
             icon: None,
             args: &[],
         },
@@ -1456,7 +1296,6 @@ impl ActionRegistry {
             label: "Scrollback Line Up",
             description: "Scroll the terminal viewport up by a configurable number of lines (selection mode).",
             category: ActionCategory::Pane,
-            default_binding: "u",
             icon: None,
             args: &[ArgDescriptor::optional("amount", ArgKind::Int, "Notches to scroll; each is multiplied by `terminal_wheel_scroll_lines`. Default 1.")],
         },
@@ -1465,7 +1304,6 @@ impl ActionRegistry {
             label: "Scrollback Line Down",
             description: "Scroll the terminal viewport down by a configurable number of lines (selection mode).",
             category: ActionCategory::Pane,
-            default_binding: "d",
             icon: None,
             args: &[ArgDescriptor::optional("amount", ArgKind::Int, "Notches to scroll; each is multiplied by `terminal_wheel_scroll_lines`. Default 1.")],
         },
@@ -1474,7 +1312,6 @@ impl ActionRegistry {
             label: "Scrollback to Top",
             description: "Jump the terminal viewport to the top of scrollback history.",
             category: ActionCategory::Pane,
-            default_binding: "g,Home",
             icon: None,
             args: &[],
         },
@@ -1483,7 +1320,6 @@ impl ActionRegistry {
             label: "Scrollback to Bottom",
             description: "Snap the terminal viewport to the live bottom (latest output).",
             category: ActionCategory::Pane,
-            default_binding: "Shift+g,End",
             icon: None,
             args: &[],
         },
@@ -1492,7 +1328,6 @@ impl ActionRegistry {
             label: "Exit Scrollback",
             description: "Snap to the live bottom, clear selection, and exit selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "Escape",
             icon: None,
             args: &[],
         },
@@ -1502,7 +1337,6 @@ impl ActionRegistry {
             label: "Scroll Page Up",
             description: "Scroll the terminal viewport up by one page immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+PageUp",
             icon: None,
             args: &[],
         },
@@ -1511,7 +1345,6 @@ impl ActionRegistry {
             label: "Scroll Page Down",
             description: "Scroll the terminal viewport down by one page immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+PageDown",
             icon: None,
             args: &[],
         },
@@ -1520,7 +1353,6 @@ impl ActionRegistry {
             label: "Scroll Line Up",
             description: "Scroll the terminal viewport up by a configurable number of lines immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+Up",
             icon: None,
             args: &[],
         },
@@ -1529,7 +1361,6 @@ impl ActionRegistry {
             label: "Scroll Line Down",
             description: "Scroll the terminal viewport down by a configurable number of lines immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+Down",
             icon: None,
             args: &[],
         },
@@ -1538,7 +1369,6 @@ impl ActionRegistry {
             label: "Scroll to Top",
             description: "Jump the terminal viewport to the top of scrollback history immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+Home",
             icon: None,
             args: &[],
         },
@@ -1547,7 +1377,39 @@ impl ActionRegistry {
             label: "Scroll to Bottom",
             description: "Snap the terminal viewport to the live bottom immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+End",
+            icon: None,
+            args: &[],
+        },
+        // ── Horizontal scroll (a chrome container's scroll area; a pane has one axis) ──
+        ActionDescriptor {
+            name: "scroll_page_left",
+            label: "Scroll Page Left",
+            description: "Scroll the focused chrome container one page left. Does nothing when no dock holds chrome focus — a terminal viewport has no horizontal axis.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "scroll_page_right",
+            label: "Scroll Page Right",
+            description: "Scroll the focused chrome container one page right. Does nothing when no dock holds chrome focus — a terminal viewport has no horizontal axis.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "scroll_to_left_edge",
+            label: "Scroll to Left Edge",
+            description: "Jump the focused chrome container to its left edge. Does nothing when no dock holds chrome focus.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "scroll_to_right_edge",
+            label: "Scroll to Right Edge",
+            description: "Jump the focused chrome container to its right edge. Does nothing when no dock holds chrome focus.",
+            category: ActionCategory::Chrome,
             icon: None,
             args: &[],
         },
@@ -1556,7 +1418,6 @@ impl ActionRegistry {
             label: "Scroll to Offset",
             description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
             category: ActionCategory::Pane,
-            default_binding: "unbound",
             icon: None,
             args: &[ArgDescriptor::required("rows", ArgKind::Int, "Rows above the live bottom to jump to.")],
         },
@@ -1566,7 +1427,6 @@ impl ActionRegistry {
             label: "Enter Selection Mode",
             description: "Enter the host-owned selection input mode. Selection data is driven by surface adapters (mouse, keyboard, RPC).",
             category: ActionCategory::Pane,
-            default_binding: "s",
             icon: None,
             args: &[],
         },
@@ -1575,7 +1435,6 @@ impl ActionRegistry {
             label: "Selection Left",
             description: "Move the active selection focus one cell left in selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "h,ArrowLeft",
             icon: None,
             args: &[],
         },
@@ -1584,7 +1443,6 @@ impl ActionRegistry {
             label: "Selection Right",
             description: "Move the active selection focus one cell right in selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "l,ArrowRight",
             icon: None,
             args: &[],
         },
@@ -1593,7 +1451,6 @@ impl ActionRegistry {
             label: "Selection Up",
             description: "Move the active selection focus one row up in selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "k,ArrowUp",
             icon: None,
             args: &[],
         },
@@ -1602,7 +1459,6 @@ impl ActionRegistry {
             label: "Selection Down",
             description: "Move the active selection focus one row down in selection mode.",
             category: ActionCategory::Pane,
-            default_binding: "j,ArrowDown",
             icon: None,
             args: &[],
         },
@@ -1611,7 +1467,6 @@ impl ActionRegistry {
             label: "Clear Selection",
             description: "Clear the active selection and exit selection mode if active.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+s",
             icon: None,
             args: &[],
         },
@@ -1620,7 +1475,6 @@ impl ActionRegistry {
             label: "Copy Selection",
             description: "Copy the active selection text to the system clipboard.",
             category: ActionCategory::Pane,
-            default_binding: "y",
             icon: None,
             args: &[],
         },
@@ -1629,7 +1483,6 @@ impl ActionRegistry {
             label: "Paste Clipboard",
             description: "Paste system clipboard content into the focused pane (bracketed-paste aware).",
             category: ActionCategory::Pane,
-            default_binding: "unbound",
             icon: None,
             args: &[],
         },
@@ -1638,7 +1491,6 @@ impl ActionRegistry {
             label: "Begin Selection",
             description: "Start a selection from the caret position in selection mode. No-op if a selection already exists — clear first to restart.",
             category: ActionCategory::Pane,
-            default_binding: "v",
             icon: None,
             args: &[],
         },
@@ -1647,7 +1499,6 @@ impl ActionRegistry {
             label: "Toggle Selection Endpoint",
             description: "Swap which end of the selection is active so movement grows from the other side.",
             category: ActionCategory::Pane,
-            default_binding: "o",
             icon: None,
             args: &[],
         },
@@ -1656,7 +1507,6 @@ impl ActionRegistry {
             label: "Open Link at Caret",
             description: "Open the hyperlink under the selection caret.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+o",
             icon: None,
             args: &[],
         },
@@ -1665,7 +1515,6 @@ impl ActionRegistry {
             label: "Search Scrollback",
             description: "Type to search the scrollback; Enter keeps matches, Esc cancels.",
             category: ActionCategory::Pane,
-            default_binding: "/",
             icon: Some(Glyph::Search),
             args: &[],
         },
@@ -1674,7 +1523,6 @@ impl ActionRegistry {
             label: "Next Search Match",
             description: "Jump to the next scrollback-search match.",
             category: ActionCategory::Pane,
-            default_binding: "n",
             icon: None,
             args: &[],
         },
@@ -1683,7 +1531,6 @@ impl ActionRegistry {
             label: "Previous Search Match",
             description: "Jump to the previous scrollback-search match.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+n",
             icon: None,
             args: &[],
         },
@@ -1695,7 +1542,6 @@ impl ActionRegistry {
             label: "Move Column Up",
             description: "Move the focused column one position earlier.",
             category: ActionCategory::Layout,
-            default_binding: "prefix+Ctrl+Shift+k",
             icon: None,
             args: &[],
         },
@@ -1704,7 +1550,6 @@ impl ActionRegistry {
             label: "Move Column Down",
             description: "Move the focused column one position later.",
             category: ActionCategory::Layout,
-            default_binding: "prefix+Ctrl+Shift+j",
             icon: None,
             args: &[],
         },
@@ -1724,7 +1569,6 @@ impl ActionRegistry {
             label: "Focus Pane",
             description: "Move focus to a specific pane by id.",
             category: ActionCategory::Navigation,
-            default_binding: "",
             icon: None,
             args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to focus.")],
         },
@@ -1733,7 +1577,6 @@ impl ActionRegistry {
             label: "Focus Workspace",
             description: "Switch to a specific workspace by index.",
             category: ActionCategory::Navigation,
-            default_binding: "",
             icon: None,
             args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to switch to.")],
         },
@@ -1742,7 +1585,6 @@ impl ActionRegistry {
             label: "Swap Panes",
             description: "Swap the positions of two panes.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("a_id", ArgKind::Int, "The first pane."),
@@ -1754,7 +1596,6 @@ impl ActionRegistry {
             label: "Move Pane to Column",
             description: "Move a pane into another column of the current workspace.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
@@ -1766,7 +1607,6 @@ impl ActionRegistry {
             label: "Move Pane to Workspace",
             description: "Move a pane into another workspace.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
@@ -1778,7 +1618,6 @@ impl ActionRegistry {
             label: "Move Pane to Column in Workspace",
             description: "Move a pane into a specific column of a specific workspace.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to move."),
@@ -1791,7 +1630,6 @@ impl ActionRegistry {
             label: "Move Column",
             description: "Move a column to another position, in this workspace or another one.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("src_ws", ArgKind::Int, "Index of the workspace the column is in."),
@@ -1806,7 +1644,6 @@ impl ActionRegistry {
             label: "Swap Columns",
             description: "Swap the positions of two columns.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("a_ws", ArgKind::Int, "Workspace of the first column."),
@@ -1820,7 +1657,6 @@ impl ActionRegistry {
             label: "Resize",
             description: "Resize the focused column or pane along one axis by a relative amount.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
@@ -1833,7 +1669,6 @@ impl ActionRegistry {
             label: "Resize To",
             description: "Resize the focused column or pane to an explicit size.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
@@ -1846,7 +1681,6 @@ impl ActionRegistry {
             label: "Float Pane at Position",
             description: "Float a pane at an explicit position and size.",
             category: ActionCategory::Pane,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to float."),
@@ -1861,7 +1695,6 @@ impl ActionRegistry {
             label: "Close Pane by Id",
             description: "Close a specific pane by id, whether or not it is focused.",
             category: ActionCategory::Pane,
-            default_binding: "",
             icon: Some(Glyph::XSquare),
             args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to close.")],
         },
@@ -1870,7 +1703,6 @@ impl ActionRegistry {
             label: "Rename Pane To",
             description: "Set a pane's name directly, without opening the rename prompt.",
             category: ActionCategory::Pane,
-            default_binding: "",
             icon: Some(Glyph::NotePencil),
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to rename."),
@@ -1882,7 +1714,6 @@ impl ActionRegistry {
             label: "Rename Pane",
             description: "Open the rename prompt for a specific pane.",
             category: ActionCategory::Pane,
-            default_binding: "",
             icon: Some(Glyph::NotePencil),
             args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to rename.")],
         },
@@ -1891,7 +1722,6 @@ impl ActionRegistry {
             label: "Rename Workspace",
             description: "Open the rename prompt for a specific workspace.",
             category: ActionCategory::Workspace,
-            default_binding: "",
             icon: Some(Glyph::NotePencil),
             args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to rename.")],
         },
@@ -1900,7 +1730,6 @@ impl ActionRegistry {
             label: "Rename Column",
             description: "Open the rename prompt for a specific column.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: Some(Glyph::NotePencil),
             args: &[
                 ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace holding the column."),
@@ -1912,7 +1741,6 @@ impl ActionRegistry {
             label: "Reset Pane Name",
             description: "Drop a pane's custom name so it follows its process again.",
             category: ActionCategory::Pane,
-            default_binding: "",
             icon: None,
             args: &[ArgDescriptor::required("pane_id", ArgKind::Int, "The pane whose name to reset.")],
         },
@@ -1921,7 +1749,6 @@ impl ActionRegistry {
             label: "Reset Workspace Name",
             description: "Drop a workspace's custom name so it follows its default again.",
             category: ActionCategory::Workspace,
-            default_binding: "",
             icon: None,
             args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace whose name to reset.")],
         },
@@ -1930,7 +1757,6 @@ impl ActionRegistry {
             label: "Take Pane",
             description: "Pull a pane out of wherever it is and into the focused column.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("pane_id", ArgKind::Int, "The pane to take."),
@@ -1942,7 +1768,6 @@ impl ActionRegistry {
             label: "New Column in Workspace",
             description: "Add a column to a specific workspace.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: Some(Glyph::FolderSimplePlus),
             args: &[ArgDescriptor::required("ws_idx", ArgKind::Int, "Index of the workspace to add the column to.")],
         },
@@ -1951,7 +1776,6 @@ impl ActionRegistry {
             label: "App Font Zoom",
             description: "Step the whole app's font size up, down, or back to the configured size.",
             category: ActionCategory::System,
-            default_binding: "",
             icon: None,
             args: &[ArgDescriptor::required_enum("step", <crate::input::FontZoomStep as crate::input::EnumArg>::VALUES, "Which way to step.")],
         },
@@ -1960,7 +1784,6 @@ impl ActionRegistry {
             label: "Pane Font Zoom",
             description: "Step one terminal pane's font size up, down, or back to following the app.",
             category: ActionCategory::Pane,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::optional("pane_id", ArgKind::Int, "The pane to zoom; omit for the focused one."),
@@ -1972,7 +1795,6 @@ impl ActionRegistry {
             label: "Spawn Command",
             description: "Open a new pane running a command.",
             category: ActionCategory::System,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("command", ArgKind::Text, "The command line to run."),
@@ -1988,7 +1810,6 @@ impl ActionRegistry {
             label: "Move Column to Workspace",
             description: "Move a column into another workspace.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to move."),
@@ -2001,7 +1822,6 @@ impl ActionRegistry {
             label: "Resize Column By",
             description: "Change one column's width by a fraction of the working width. The mouse divider drag and RPC use this; the keyboard resize acts on the focused column.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column to resize."),
@@ -2013,7 +1833,6 @@ impl ActionRegistry {
             label: "Resize Pane Height By",
             description: "Change one stacked pane's height by a number of logical pixels.",
             category: ActionCategory::Layout,
-            default_binding: "",
             icon: None,
             args: &[
                 ArgDescriptor::required("col_idx", ArgKind::Int, "Index of the column holding the pane."),
@@ -2050,10 +1869,6 @@ pub struct ActionMeta {
     pub label: String,
     pub description: String,
     pub category: ActionCategory,
-    /// Default keybinding string (e.g. "h,ArrowLeft"); empty / "unbound" when it has none.
-    // Preserved for the command palette + RPC introspection (read in tests only for now).
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub default_binding: String,
     /// Centralized action icon — the single source of an action's [`Glyph`]. Every surface that
     /// renders this action reads it from here instead of inventing its own.
     pub icon: Option<Glyph>,
@@ -2071,10 +1886,10 @@ pub struct ActionMeta {
     /// button, a context-menu entry, RPC — confirms identically. A plugin declares its own the same
     /// way (through [`register_dynamic`]).
     ///
-    /// The confirm's toggle key is [`ConfirmSpec::config_name`], which is **not always the action's
-    /// own name**: the `close` action's spec is keyed `delete_pane` (`ClosePane` + `ClosePaneById`
-    /// confirm identically, §5.1). So the meta of `close` carries a `config_name = "delete_pane"`
-    /// spec — the field lives with the action, the toggle key stays independent.
+    /// The confirm's toggle key is [`ConfirmSpec::config_name`], a separate field so a spec **may**
+    /// be toggled under a name of its own — one spec can govern several `WmAction` variants
+    /// (`ClosePane` + `ClosePaneById` confirm identically, §5.1). Every built-in nonetheless uses
+    /// its own action name, so a user toggles `[confirm] <action> = false` and nothing else.
     pub confirm: Option<ConfirmSpec>,
 }
 
@@ -2088,7 +1903,6 @@ impl std::fmt::Debug for ActionMeta {
             .field("label", &self.label)
             .field("description", &self.description)
             .field("category", &self.category)
-            .field("default_binding", &self.default_binding)
             .field("icon", &self.icon)
             .field("policy", &self.policy)
             .field("args", &self.args)
@@ -2123,10 +1937,9 @@ impl ActionCatalog {
     /// via [`builtin_policy`] — never hand-written here — so the exhaustive `match` in
     /// `interaction.rs` remains the only authority on built-in policy and the two cannot drift.
     ///
-    /// The three destructive confirm specs are attached to their **owner action's** meta:
-    /// `delete_pane` → `close`, `delete_column` → `delete_column`, `delete_workspace` →
-    /// `delete_workspace` (§5.1 — the spec's `config_name` is the toggle key, which may differ from
-    /// the action name, as it does for `close`).
+    /// The three destructive confirm specs are attached to their **owner action's** meta — `close`,
+    /// `delete_column`, `delete_workspace` — each toggled under that same name (§5.1; the spec's
+    /// `config_name` may differ from the action name, but no built-in needs it to).
     pub fn with_builtins() -> Self {
         let mut catalog = Self {
             by_name: HashMap::new(),
@@ -2140,7 +1953,6 @@ impl ActionCatalog {
                 label: d.label.to_string(),
                 description: d.description.to_string(),
                 category: d.category,
-                default_binding: d.default_binding.to_string(),
                 icon: d.icon,
                 policy: builtin_policy(d.name, &args),
                 args,
@@ -2166,6 +1978,28 @@ impl ActionCatalog {
         self.by_name.insert(meta.name.clone(), meta);
     }
 
+    /// Insert a **name-keyed** action's metadata, refusing to shadow a built-in.
+    ///
+    /// A built-in's id is compiled in and its label, icon, policy and confirm are what every
+    /// surface renders, so a component taking it over would silently change the meaning of a menu
+    /// entry the component has nothing to do with. `false` means the id was rejected and the
+    /// built-in still owns it; a duplicate between two *dynamic* declarers is allowed (a remount
+    /// legitimately replaces itself) but recorded, because two different components claiming one id
+    /// is a mistake either way.
+    ///
+    /// Returns whether the id was free — the caller records the collision.
+    pub(crate) fn insert_dynamic(&mut self, meta: ActionMeta) -> Result<(), DuplicateAction> {
+        if self.is_builtin(&meta.name) {
+            return Err(DuplicateAction::ShadowsBuiltin);
+        }
+        let replaced = self.by_name.contains_key(&meta.name);
+        self.insert(meta);
+        if replaced {
+            return Err(DuplicateAction::ReplacedDynamic);
+        }
+        Ok(())
+    }
+
     /// Remove a **dynamic** action's metadata. Built-ins are never removable, so a provider
     /// unmounting can't retire `close`. `true` if a dynamic entry was removed.
     pub(crate) fn remove_dynamic(&mut self, name: &str) -> bool {
@@ -2182,8 +2016,8 @@ impl ActionCatalog {
         self.builtins.contains(name)
     }
 
-    /// The declarative confirmation spec for an action, by its **action name** (the owner name —
-    /// e.g. `close`, not the toggle key `delete_pane`). `None` when the action needs no prompt.
+    /// The declarative confirmation spec for an action, by its **action name** — the owner, e.g.
+    /// `close`. `None` when the action needs no prompt.
     pub fn confirm_spec(&self, action_name: &str) -> Option<&ConfirmSpec> {
         self.find(action_name).and_then(|m| m.confirm.as_ref())
     }
@@ -2260,7 +2094,6 @@ pub struct ActionInfo {
     pub label: String,
     pub description: String,
     pub category: String,
-    pub default_binding: String,
     pub policy: String,
     /// The arguments the action takes, in declaration order — what a caller has to supply to build
     /// it. Empty when it takes none. Without this a tool could discover an action's *name* and
@@ -2287,7 +2120,6 @@ impl ActionInfo {
             label: m.label.clone(),
             description: m.description.clone(),
             category: m.category.label().to_string(),
-            default_binding: m.default_binding.clone(),
             policy: policy.to_string(),
             args: m.args.clone(),
             confirm: m.confirm.as_ref().map(|c| c.config_name.clone()),
@@ -2479,9 +2311,14 @@ pub struct ConfirmSpec {
 /// three destructive actions — close pane / delete column / delete workspace — each get a
 /// `[Cancel] [<verb>]` forced prompt.
 ///
-/// Note the `close` row: its owner is the action `close`, but its **toggle key** (`config_name`) is
-/// `delete_pane` — `[confirm] delete_pane = false` disables it, and `ClosePane`/`ClosePaneById` both
-/// resolve to this one spec (§5.1). The owner name and the toggle key are separate on purpose.
+/// Note the `close` row: `ClosePane` and `ClosePaneById` both resolve to this **one** spec (§5.1),
+/// which is what `config_name` is for — it stays a separate field so a spec can be toggled under a
+/// name of its own. No built-in uses that freedom: every one of these is toggled by its own action
+/// name, so `[confirm] close = false` disables the pane prompt.
+///
+/// A pane is **closed**, not deleted: that is the word its id, its binding name and its label all
+/// use, and the "cannot be undone" line already carries the weight. Delete is kept for the two
+/// containers below, which are a different kind of thing.
 fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
     let mk = |config_name: &'static str, verb: &str| ConfirmSpec {
         message: "This action cannot be undone.".to_string(),
@@ -2494,7 +2331,7 @@ fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
         default_enabled: true,
     };
     vec![
-        ("close", mk("delete_pane", "Delete")),
+        ("close", mk("close", "Close")),
         ("delete_column", mk("delete_column", "Delete")),
         ("delete_workspace", mk("delete_workspace", "Delete")),
     ]
@@ -2767,10 +2604,6 @@ mod tests {
             let desc = catalog.find(name);
             assert!(desc.is_some(), "missing descriptor for {name}");
             let desc = desc.unwrap();
-            assert!(
-                !desc.default_binding.is_empty(),
-                "{name} default_binding must be set"
-            );
             assert!(!desc.label.is_empty(), "{name} label must be set");
             assert!(
                 !desc.description.is_empty(),
@@ -2815,7 +2648,6 @@ mod tests {
             assert_eq!(m.label, d.label);
             assert_eq!(m.description, d.description);
             assert_eq!(m.category, d.category);
-            assert_eq!(m.default_binding, d.default_binding);
             assert_eq!(m.icon, d.icon);
             assert!(catalog.is_builtin(d.name));
         }
@@ -2856,7 +2688,6 @@ mod tests {
             label: "Restart Container".to_string(),
             description: "Restart the selected Docker container.".to_string(),
             category: ActionCategory::System,
-            default_binding: String::new(),
             icon: Some(Glyph::Trash),
             policy,
             args: Vec::new(),
@@ -2881,7 +2712,7 @@ mod tests {
             Some(std::rc::Rc::new(|_state, _intent| {})),
         );
 
-        assert_eq!(handle, ActionHandle("plugin.docker.restart".to_string()));
+        assert_eq!(handle, Ok(ActionHandle("plugin.docker.restart".to_string())));
         assert_eq!(catalog.count(), builtins + 1);
         assert_eq!(
             catalog.label("plugin.docker.restart"),
@@ -2913,7 +2744,7 @@ mod tests {
         use crate::app::interaction::ActionPolicy;
         let mut registry = ActionRegistry::new();
         let mut catalog = ActionCatalog::with_builtins();
-        register_dynamic(
+        let _ = register_dynamic(
             &mut registry,
             &mut catalog,
             dyn_meta("plugin.docker.restart", ActionPolicy::TiledOnly),
@@ -2942,7 +2773,7 @@ mod tests {
         let mut registry = ActionRegistry::new();
         let mut catalog = ActionCatalog::with_builtins();
         let before = catalog.count();
-        register_dynamic(
+        let _ = register_dynamic(
             &mut registry,
             &mut catalog,
             dyn_meta("plugin.x", ActionPolicy::Global),
@@ -2950,7 +2781,7 @@ mod tests {
         );
         let mut second = dyn_meta("plugin.x", ActionPolicy::TiledOnly);
         second.label = "Second".to_string();
-        register_dynamic(&mut registry, &mut catalog, second, None);
+        let _ = register_dynamic(&mut registry, &mut catalog, second, None);
 
         assert_eq!(catalog.count(), before + 1, "replaced, not duplicated");
         assert_eq!(catalog.label("plugin.x"), Some("Second"));
@@ -2964,7 +2795,7 @@ mod tests {
         use crate::app::interaction::ActionPolicy;
         let mut registry = ActionRegistry::new();
         let mut catalog = ActionCatalog::with_builtins();
-        register_dynamic(
+        let _ = register_dynamic(
             &mut registry,
             &mut catalog,
             dyn_meta("plugin.wasm.thing", ActionPolicy::FocusedPaneLocal),
@@ -2991,29 +2822,6 @@ mod tests {
 
     #[test]
     fn test_descriptors_are_populated() {
-        // An action that REQUIRES an argument can never carry a bare default keybinding — a key
-        // supplies no pane id — so it is exempt by rule rather than by name. That rule replaced six
-        // hand-listed names (`open_link` and the five `chrome.container.*`) once actions declared
-        // their arguments, and it exempts every future one for free.
-        //
-        // The rest below have no arguments and are still deliberately unbound: the user picks the
-        // keys they want.
-        const UNBOUND: &[&str] = &[
-            // Chrome region show/hide (sidebar-fu-6): intentionally unbound — the
-            // user binds the wanted ones in config.
-            "show_left_sidebar",
-            "hide_left_sidebar",
-            "toggle_left_sidebar",
-            "show_right_sidebar",
-            "hide_right_sidebar",
-            "toggle_right_sidebar",
-            "show_top_bar",
-            "hide_top_bar",
-            "toggle_top_bar",
-            "show_bottom_bar",
-            "hide_bottom_bar",
-            "toggle_bottom_bar",
-        ];
         for desc in ActionRegistry::ALL {
             assert!(!desc.name.is_empty(), "name must not be empty");
             assert!(!desc.label.is_empty(), "label must not be empty");
@@ -3021,14 +2829,6 @@ mod tests {
                 !desc.description.is_empty(),
                 "description must not be empty"
             );
-            let needs_an_argument = desc.args.iter().any(|a| a.required);
-            if !UNBOUND.contains(&desc.name) && !needs_an_argument {
-                assert!(
-                    !desc.default_binding.is_empty(),
-                    "default_binding must not be empty for {}",
-                    desc.name
-                );
-            }
             assert!(
                 !desc.category.label().is_empty(),
                 "category label must not be empty"
@@ -3039,11 +2839,11 @@ mod tests {
     #[test]
     fn builtin_confirm_specs_are_declared_for_the_destructive_actions() {
         let catalog = ActionCatalog::with_builtins();
-        // The confirm spec now lives ON the owner action's meta (action-task-C), keyed by ACTION
-        // name — not a parallel index keyed by toggle key. `close` owns the pane-delete prompt whose
-        // toggle key is `delete_pane` (the owner name and the toggle key deliberately differ, §5.1).
+        // The confirm spec lives ON the owner action's meta (action-task-C), keyed by ACTION name
+        // — not a parallel index keyed by toggle key. `config_name` stays a separate field (§5.1),
+        // but every built-in is toggled under its own name, so the two agree here.
         for (owner, toggle_key) in [
-            ("close", "delete_pane"),
+            ("close", "close"),
             ("delete_column", "delete_column"),
             ("delete_workspace", "delete_workspace"),
         ] {
@@ -3060,7 +2860,8 @@ mod tests {
             assert_eq!(spec.buttons[1].role, ButtonRole::Danger);
             assert!(matches!(spec.buttons[1].outcome, Outcome::Proceed));
         }
-        // The toggle key is NOT an action, so it is not itself a confirm-spec lookup key anymore.
+        // `delete_pane` was this spec's toggle key until the vocabulary was made to agree; it is
+        // not an action, so it is not a confirm-spec lookup key.
         assert!(catalog.confirm_spec("delete_pane").is_none());
         // Non-destructive actions carry no confirm spec.
         assert!(catalog.confirm_spec("focus_left").is_none());
@@ -3118,7 +2919,7 @@ mod tests {
             config_name: "plugin.docker.remove".to_string(),
             default_enabled: true,
         });
-        register_dynamic(&mut registry, &mut catalog, meta, None);
+        let _ = register_dynamic(&mut registry, &mut catalog, meta, None);
 
         let spec = catalog.confirm_spec("plugin.docker.remove").unwrap();
         assert_eq!(spec.config_name, "plugin.docker.remove");

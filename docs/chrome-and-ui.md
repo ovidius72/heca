@@ -959,6 +959,47 @@ Important app-wide action rule:
 
 This rule aligns with the broader heca principle that app capabilities should not be trapped behind only one input surface.
 
+## 2.10 Chrome keyboard focus is a container id — decided 2026-07-28 (F003/P011/T020)
+
+**Which dock the keyboard is aimed at is held as a container id.** Not a side, not a region: a
+sidebar is a shell and left/right is only a position, so a dock is focused wherever it happens to be
+seated and stays focused when it is moved between regions. Sticky, as focus is.
+
+The bug this replaced read `left_visible()` and expanded the *left* container. The workspaces dock
+declares `RegionSet::sidebars()`, so it may sit on the right — and then the focus key expanded an
+empty left sidebar and navigated a tree drawn on the right.
+
+**One action, two doors.** `focus_dock` is a single `WmAction` with an **optional** `dock` argument:
+
+- **bare** (a keybinding, `prefix+Shift+e` by default) → the **pick**: every dock on screen lights a
+  letter (a `KeyHint` keycap, tinted `warning` so it reads distinctly from a pane or column pick) and
+  the next keypress focuses that one. `InputMode::DockPick` holds the candidates; the letter resolves
+  back through the same action carrying the id.
+- **with an id** (`focus_dock(dock="workspaces")`, `focus-dock workspaces` over RPC, a menu entry's
+  `Intent`) → focuses it directly, no pick.
+
+Both doors are the same action, so the keyboard, RPC and a plugin reach one code path. The optional
+argument is what makes the bare binding legal — an action with a *required* argument cannot be bound
+to a key at all.
+
+**Focus is visible, and the ring is the same one every control draws.** The host wraps each mounted
+container in a `FocusScope` (the generic grid-ui wrapper) bound to that placement's
+`keyboard_target` signal — which is also the **gate**: keys and widget intents enter a container's
+subtree only while it holds focus, and an unfocused one declines rather than consuming, so the host
+broadcasts one intent and the focused container answers. It is the **same signal** the container's own
+`ScrollRegion` binds as its keyboard target, so the ring and the keys cannot disagree about which dock
+has focus, and neither has to be told where the container sits in the tree.
+
+**What a provider says about it.** `Provider::keyboard_navigable()` (default `false`) declares whether
+a dock does anything with focus *beyond scrolling* — its own cursor, its own selection.
+`WorkspacesContainerProvider` returns `true`. `sidebar_focus` looks for that: it focuses the navigable
+dock, reveals whichever region that dock is seated in, and enters nav mode; with no navigable dock
+mounted it does **nothing** rather than expanding a region to show an empty frame.
+
+**Per placement, not per kind.** Both the focus target and the keyboard-target signals are keyed by
+**mount id**, like the scroll offsets: the same container can be seated twice and only one of the two
+can hold focus.
+
 ---
 
 
@@ -1003,6 +1044,10 @@ HecaApp                                   # winit runtime — the outer shell
      ├── chrome_state: SharedChromeState[✓] # signal-backed DERIVED mirror:
      │    │                                 #   active_pane, per-ws collapse, pick,
      │    │                                 #   scroll, PaneRuntime (proc/status/cwd/git)
+     │    ├── focused_container           [✓] # chrome keyboard focus — a CONTAINER ID (§2.10)
+     │    ├── keyboard_target[mount]      [✓] #   derived: exactly one placement is true
+     │    ├── container_scroll[mount]     [✓] # per-placement scroll offsets (T021)
+     │    ├── dock_pick_candidates        [✓] # letter → container id while a dock pick is open
      │    └── events: ChromeEventBus    [✓] # string-named events + "*" catch-all
      ├── chrome_host: ChromeHost        [~] # SHIPPED runtime (plugin-02), still EMPTY
      │    └── regions: [RegionHost; 4]  [~] #   one generic RegionHost per RegionId

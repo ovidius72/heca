@@ -15,10 +15,22 @@ use crate::app::keyboard::{
 use crate::app::selection::find_pane_location;
 use crate::app_state::{AppState, InputMode, WorkspacePickTarget};
 use crate::input::WmAction;
-use crate::keymap::{KeyCombo, KeymapRegistry};
+use crate::keymap::{KeyCombo, KeymapRegistry, Keymaps};
 use heca_core::layout::PaneId;
 use std::collections::HashMap;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
+
+/// The keymap consulted while a chrome container holds keyboard focus (F003/P085/T352).
+///
+/// It is a mode **keymap**, not an [`InputMode`]: chrome focus already answers "where do the keys
+/// go", and a mode beside it would be a second fact that can disagree with the first. Like the
+/// `sidebar` map it has no trigger — you enter it by focusing a dock, not by pressing something.
+///
+/// What lives here is what the **widgets** answer — paging and edges for whatever scroll area the
+/// focused container nests — because a scroll region behaves identically wherever it is mounted and
+/// no component should have to declare that. What a *component* declares is a separate, per-kind
+/// layer (`[keys.<kind>]`, F003/P085/T355) resolved through this same seam.
+pub(crate) const FOCUS_LAYER: &str = "focus";
 
 #[derive(Clone, Copy)]
 pub(crate) struct KeyInputContext<'a> {
@@ -33,16 +45,37 @@ pub(crate) struct KeyInputContext<'a> {
 
 pub(crate) fn handle_keyboard_input(
     registry: &ActionRegistry,
-    keymap: &KeymapRegistry,
-    mode_keymaps: &HashMap<String, KeymapRegistry>,
-    mode_triggers: &HashMap<String, (KeyCombo, bool)>,
+    keymaps: &Keymaps,
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) {
+    let (keymap, mode_keymaps, component_keymaps, mode_triggers) = (
+        &keymaps.flat,
+        &keymaps.modes,
+        &keymaps.components,
+        &keymaps.triggers,
+    );
     let input_mode = state.input_mode.clone();
     match input_mode {
         InputMode::Normal => {
             if ctx.is_prefix {
+                // Resolve the container's context **before** the Prefix transition, and stash it:
+                // `handle_prefix_mode` dispatches from Prefix, where the handler can no longer tell
+                // that a container was driving, so `prefix+>` would open the focused *pane's* menu
+                // instead of the cursor row's (context-menu-7).
+                //
+                // This lived inside the `SidebarNav` mode handler until that mode was deleted
+                // (F003/P086/T365) — it is gated on chrome focus now, which is what it always meant.
+                if state.chrome_state.focused_container().is_some()
+                    && let Some((path, target)) = crate::chrome::resolve_active_context(state)
+                {
+                    state.pending_context = Some(crate::chrome::PendingContext {
+                        path,
+                        target,
+                        // No mode to restore: the container still holds the keyboard afterwards.
+                        origin: None,
+                    });
+                }
                 state.input_mode = InputMode::Prefix;
                 state.prefix_entered_at = Some(std::time::Instant::now());
                 state.needs_redraw = true;
@@ -52,6 +85,22 @@ pub(crate) fn handle_keyboard_input(
             let global_action = keymap.resolve("global", ctx.event_combo).cloned();
             if let Some(act) = global_action {
                 dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
+                return;
+            }
+
+            // **Focus is the mode.** A dock holding chrome focus redirects the keyboard: the key
+            // resolves in its layer, and an unbound one is **swallowed** rather than forwarded. A
+            // `j` leaking into a shell while the user is driving a sidebar is the worse failure —
+            // and the focus ring plus the status bar are what stop the swallowing being silent.
+            //
+            // `state.focused_pane` is deliberately untouched: only the keyboard is redirected, so
+            // `prefix+Enter` still splits the pane you last worked in.
+            if state.chrome_state.focused_container().is_some() {
+                if let Some(act) =
+                    focus_layer_action(state, mode_keymaps, component_keymaps, ctx.event_combo)
+                {
+                    dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
+                }
                 return;
             }
 
@@ -88,7 +137,15 @@ pub(crate) fn handle_keyboard_input(
             }
         }
         InputMode::Prefix => {
-            handle_prefix_mode(registry, keymap, mode_triggers, state, ctx);
+            handle_prefix_mode(
+                registry,
+                keymap,
+                mode_keymaps,
+                component_keymaps,
+                mode_triggers,
+                state,
+                ctx,
+            );
         }
         InputMode::Chord { sequence } => {
             handle_chord_mode(registry, state, &sequence, ctx);
@@ -129,8 +186,8 @@ pub(crate) fn handle_keyboard_input(
         } => {
             handle_column_pick_mode(registry, state, &candidates, pane_id, ctx);
         }
-        InputMode::SidebarNav => {
-            handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
+        InputMode::DockPick { candidates } => {
+            handle_dock_pick_mode(registry, state, &candidates, ctx);
         }
         InputMode::Selection => {
             handle_selection_mode(registry, mode_keymaps, state, ctx);
@@ -205,9 +262,49 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
 }
 
 
+/// The action a key resolves to in the **focused container's layer** — `None` when no chrome
+/// container holds the keyboard, which is what makes this seam inert in the ordinary case.
+///
+/// Both key routes come through here, deliberately: the direct one (an unprefixed key while a dock
+/// is focused) and the prefix fall-through (the global `normal` map missed). One declaration, both
+/// doors — so a container's `r` works whether the user typed `r` or `prefix+r`.
+fn focus_layer_action(
+    state: &AppState,
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
+    component_keymaps: &HashMap<String, KeymapRegistry>,
+    combo: &KeyCombo,
+) -> Option<crate::keymap::ActionRef> {
+    let mount = state.chrome_state.focused_container()?;
+    // **The component's own layer first** (`[[keys.component]]`, F003/P086/T362), so a component can
+    // bind a key the host layer also uses and win — its rows are the more specific thing the key is
+    // aimed at.
+    //
+    // **This placement, then the component.** An entry that named an `id` was built into a layer
+    // under that mount id, already carrying the id-less base merged underneath it; so finding the
+    // mount means the user narrowed this seating, and missing it means they spoke about the
+    // component as a whole. Two lookups, no merging at press time.
+    let kind = state.chrome_host.provider(&mount).map(|p| p.kind());
+    for layer in [Some(mount.as_str()), kind] {
+        if let Some(layer) = layer
+            && let Some(action) = component_keymaps
+                .get(layer)
+                .and_then(|map| map.resolve(layer, combo))
+        {
+            return Some(action.clone());
+        }
+    }
+    // Then what the **widgets** answer for every container alike — paging, edges, releasing focus.
+    mode_keymaps
+        .get(FOCUS_LAYER)
+        .and_then(|map| map.resolve(FOCUS_LAYER, combo))
+        .cloned()
+}
+
 fn handle_prefix_mode(
     registry: &ActionRegistry,
     keymap: &KeymapRegistry,
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
+    component_keymaps: &HashMap<String, KeymapRegistry>,
     mode_triggers: &HashMap<String, (KeyCombo, bool)>,
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
@@ -218,6 +315,12 @@ fn handle_prefix_mode(
         // Leaving Prefix without opening a menu: drop any sidebar context stashed by the
         // SidebarNav prefix arm so a later OpenContextMenu can't pick up a stale one (context-menu-7).
         state.pending_context = None;
+        // The double-prefix literal passthrough is for a pane that is *taking text*. While a dock
+        // holds the keyboard nothing is, so sending a literal `Ctrl+B` to a pane the user is not
+        // typing in is a surprise rather than a passthrough (F003/P085/T352).
+        if state.chrome_state.focused_container().is_some() {
+            return;
+        }
         if let Some(pane_id) = state.focused_pane
             && let Some(backend) = state.backends.get_mut(pane_id)
         {
@@ -262,7 +365,14 @@ fn handle_prefix_mode(
         return;
     }
 
-    let action = keymap.resolve("normal", &combo).cloned();
+    // The prefix (`normal`) map first, then — when it misses — the focused container's layer,
+    // before the key is dropped. That fall-through is what lets a component bind `r` without having
+    // to know whether the user reaches it directly or through the prefix (user decision,
+    // 2026-07-29).
+    let action = keymap
+        .resolve("normal", &combo)
+        .cloned()
+        .or_else(|| focus_layer_action(state, mode_keymaps, component_keymaps, &combo));
     if let Some(ref act) = action {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -581,114 +691,35 @@ fn handle_column_pick_mode(
     state.needs_redraw = true;
 }
 
-fn handle_sidebar_nav_mode(
+/// Resolve a [`InputMode::DockPick`] keypress: a matching candidate letter gives that **dock**
+/// chrome keyboard focus; any other key (e.g. Esc) exits the mode.
+///
+/// It goes back out through the same `focus_dock` action, carrying the picked id — so the letter, an
+/// RPC call and a script all take one path, and the pick is only how a keyboard supplies an argument
+/// it cannot type (F003/P011/T020).
+fn handle_dock_pick_mode(
     registry: &ActionRegistry,
-    mode_keymaps: &HashMap<String, KeymapRegistry>,
     state: &mut AppState,
+    candidates: &[(char, crate::chrome::ContainerId)],
     ctx: KeyInputContext<'_>,
 ) {
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
+    let candidates = candidates.to_vec();
+    state.input_mode = InputMode::Normal;
 
-    if is_escape {
-        if let Some(item) = state.sidebar_tree.current_item().cloned()
-            && let Some(pane_id) = sidebar_item_focus_target(&state.session, &item)
-        {
-            dispatch_action(
-                state,
-                registry,
-                InteractionSource::Keyboard,
-                &WmAction::FocusPane { pane_id },
-            );
-        }
-        state.input_mode = InputMode::Normal;
-        state.needs_redraw = true;
-    } else if is_enter {
-        let item = state.sidebar_tree.current_item().cloned();
-        match item {
-            Some(crate::sidebar::SidebarItem::Pane { pane_id })
-            | Some(crate::sidebar::SidebarItem::FloatingPane { pane_id, .. }) => {
-                dispatch_action(
-                    state,
-                    registry,
-                    InteractionSource::Keyboard,
-                    &WmAction::FocusPane { pane_id },
-                );
-                state.input_mode = InputMode::Normal;
-            }
-            Some(crate::sidebar::SidebarItem::Workspace { ws_idx })
-            | Some(crate::sidebar::SidebarItem::Column { ws_idx, .. })
-                if ws_idx != state.session.active_workspace_idx =>
-            {
-                dispatch_action(
-                    state,
-                    registry,
-                    InteractionSource::Keyboard,
-                    &WmAction::FocusWorkspace { ws_idx },
-                );
-            }
-            _ => {}
-        }
-        state.needs_redraw = true;
-    } else if ctx.is_prefix {
-        // context-menu-7: resolve the active sidebar context BEFORE the Prefix transition
-        // (handle_prefix_mode normalises to Normal before dispatch, so the handler can't
-        // read SidebarNav). Stash the (path, target, origin) in pending_context so
-        // handle_open_context_menu can open the correct menu.
-        if let Some((path, target)) =
-            crate::chrome::resolve_active_context(state)
-        {
-            state.pending_context = Some(crate::chrome::PendingContext {
-                path,
-                target,
-                origin: Some(InputMode::SidebarNav),
-            });
-        }
-        state.input_mode = InputMode::Prefix;
-        state.prefix_entered_at = Some(std::time::Instant::now());
-        state.needs_redraw = true;
-    } else {
-        let combo = mode_combo(ctx);
-        let action = mode_keymaps
-            .get("sidebar")
-            .and_then(|mode_map| mode_map.resolve("sidebar", &combo).cloned());
-        if let Some(act) = action {
-            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
-        }
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    if let Some(ch) = typed
+        && let Some((_, dock)) = candidates.iter().find(|(c, _)| *c == ch)
+    {
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::FocusDock {
+                dock: Some(dock.clone()),
+            },
+        );
     }
-}
-
-fn sidebar_item_focus_target(
-    session: &heca_core::layout::Session,
-    item: &crate::sidebar::SidebarItem,
-) -> Option<PaneId> {
-    match item {
-        crate::sidebar::SidebarItem::Pane { pane_id }
-        | crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => Some(*pane_id),
-        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => session
-            .workspaces
-            .get(*ws_idx)
-            .and_then(|ws| ws.scrolling.columns.get(*col_idx))
-            .and_then(|col| col.active_pane().or_else(|| col.panes.first()))
-            .map(|pane| pane.id),
-        crate::sidebar::SidebarItem::Workspace { ws_idx } => session
-            .workspaces
-            .get(*ws_idx)
-            .and_then(workspace_focus_target),
-    }
-}
-
-fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<PaneId> {
-    ws.active_pane()
-        .map(|pane| pane.id)
-        .or_else(|| {
-            ws.scrolling
-                .columns
-                .iter()
-                .find_map(|col| col.active_pane().or_else(|| col.panes.first()))
-                .map(|pane| pane.id)
-        })
-        .or_else(|| ws.floating_panes.first().map(|float| float.pane.id))
+    state.needs_redraw = true;
 }
 
 fn handle_selection_mode(
@@ -767,130 +798,3 @@ fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::sidebar_item_focus_target;
-    use crate::sidebar::SidebarItem;
-    use heca_core::layout::column::Pane;
-    use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
-    use heca_core::layout::{FocusDomain, PaneId, Session, SessionId};
-
-    fn make_session() -> Session {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        session.add_pane(Pane::new(PaneId(1), "pane-1"), None, true);
-        session.add_pane(Pane::new(PaneId(2), "pane-2"), Some(0), true);
-        session.add_pane(Pane::new(PaneId(3), "pane-3"), None, true);
-        session
-    }
-
-    #[test]
-    fn workspace_focus_target_prefers_active_pane() {
-        let session = make_session();
-        let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
-        assert_eq!(target, Some(PaneId(3)));
-    }
-
-    #[test]
-    fn column_focus_target_uses_column_active_pane() {
-        let session = make_session();
-        let target = sidebar_item_focus_target(
-            &session,
-            &SidebarItem::Column {
-                ws_idx: 0,
-                col_idx: 0,
-            },
-        );
-        assert_eq!(target, Some(PaneId(2)));
-    }
-
-    #[test]
-    fn floating_and_pane_items_target_their_exact_pane() {
-        let mut session = make_session();
-        let ws = session
-            .active_workspace_mut()
-            .expect("active workspace exists");
-        ws.floating_panes
-            .push(heca_core::layout::workspace::FloatingPane {
-                pane: Pane::new(PaneId(99), "float"),
-                position: Point::new(0.0, 0.0),
-                size: Size::new(200.0, 100.0),
-                is_active: false,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
-        ws.focus_domain = FocusDomain::Tiled;
-
-        assert_eq!(
-            sidebar_item_focus_target(&session, &SidebarItem::Pane { pane_id: PaneId(2) }),
-            Some(PaneId(2))
-        );
-        assert_eq!(
-            sidebar_item_focus_target(
-                &session,
-                &SidebarItem::FloatingPane {
-                    pane_id: PaneId(99),
-                    ws_idx: 0,
-                },
-            ),
-            Some(PaneId(99))
-        );
-    }
-
-    #[test]
-    fn workspace_focus_target_falls_back_to_first_floating_pane() {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        let ws = session
-            .active_workspace_mut()
-            .expect("active workspace exists");
-        ws.floating_panes
-            .push(heca_core::layout::workspace::FloatingPane {
-                pane: Pane::new(PaneId(77), "float-only"),
-                position: Point::new(0.0, 0.0),
-                size: Size::new(200.0, 100.0),
-                is_active: false,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
-        ws.update_working_area(Rectangle::new(
-            Point::new(0.0, 0.0),
-            Size::new(1280.0, 800.0),
-        ));
-
-        let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
-        assert_eq!(target, Some(PaneId(77)));
-    }
-
-    // Note: `handle_selection_mode` is not unit-tested directly because it
-    // requires a fully-constructed `AppState` (winit window + wgpu device).
-    // Its contracts are verified by:
-    //   - the `selection_model` unit tests (clear/end/SelectionState lifecycle)
-    //   - the registry integration (ClearSelection is registered and routed
-    //     through `build_registry()`)
-    //   - the keymap test `default_selection_bindings_resolve` (the
-    //     `prefix+s` binding reaches the action surface)
-    //   - the `cargo check`/`cargo clippy` builds (compile-time
-    //     exhaustiveness of the `InputMode::Selection` arm and the
-    //     `action_from_name` mapping)
-    //
-    // The two coordinator-flagged regressions are structurally prevented by
-    // the implementation:
-    //   - `handle_selection_mode`'s `ctx.is_prefix` arm sets
-    //     `state.prefix_entered_at = Some(Instant::now())` alongside the
-    //     `InputMode::Prefix` transition, so the timeout in
-    //     `lifecycle::handle_about_to_wait` is armed and the prefix mode
-    //     cannot get stuck.
-    //   - The Esc path dispatches `WmAction::ClearSelection` through
-    //     `dispatch_action(...)` instead of calling
-    //     `state.selection.clear()` directly, so the new action surface
-    //     is the only entry point for clearing the selection.
-}

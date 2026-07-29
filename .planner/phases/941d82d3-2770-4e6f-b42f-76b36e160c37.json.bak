@@ -1,10 +1,11 @@
 {
   "id": "941d82d3-2770-4e6f-b42f-76b36e160c37",
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
-  "number": 8,
+  "number": 63,
+  "shortId": "K928J",
+  "priority": 8,
   "slug": "notification-07-os-backend",
   "title": "notification-07: OS/System Notification Backend",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,61 +22,148 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "6c14b330-693e-49c7-9616-5b4be2699d06",
-    "b3db9297-e0e9-4fb1-a40f-0a188c238ffe",
-    "3a993014-82fb-4551-b976-dc0d4662e145",
-    "3dad3770-2179-42ee-928d-3efb03db615f",
-    "fbfdf381-38e2-4391-8501-0e22ba975548"
+    "d3be3b18-5bb2-4670-8468-adbb118988a9",
+    "57de8925-6015-4d79-8545-b32bb967f3cd",
+    "bad7fd3a-0a82-4fc1-b113-f075c0627e9c",
+    "caa74f04-376d-480b-b096-dd8288b9566e",
+    "86af5605-64f5-4543-bb1f-20ce465ea432"
   ],
   "tasks": [
     {
-      "id": "6c14b330-693e-49c7-9616-5b4be2699d06",
-      "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
-      "number": 1,
-      "shortName": "system-fallback",
-      "title": "Decide fallback behavior for system backend failures",
-      "status": "planned",
-      "description": "Definire fallback sicuro verso in-app senza loop ricorsivi quando il backend system fallisce; deferred.",
+      "id": "d3be3b18-5bb2-4670-8468-adbb118988a9",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 342,
+      "shortId": "VTFWF",
+      "priority": 3,
+      "shortName": "scrollregion-reports-its-posit",
+      "title": "ScrollRegion reports its position — scroll_start / scroll / scroll_end, with full metrics",
+      "status": "done",
+      "description": "Nobody using a scroll area implements scrolling. This is the other half of that promise: watching it\nmust not require implementing it either.\n\n## Decided with the user (2026-07-26)\n\nThree callbacks, all optional. A host that just wants a working scroll area attaches none.\n\n```rust\npub struct ScrollInfo<'a> {\n    pub offset_x: f32, pub offset_y: f32,   // scrollLeft / scrollTop\n    pub max_x: f32,    pub max_y: f32,      // furthest it can travel\n    pub content: Size,                       // scrollWidth / scrollHeight\n    pub viewport: Size,                      // clientWidth / clientHeight\n    pub event: Option<&'a Event>,            // the wheel/press that moved it; None = host's scroll_to\n}\n```\n\nBorrowed, so no clone on a path that fires at frame rate. The user rejected a synthesized\n`ScrollSource` enum in favour of carrying the real event: `event.is_none()` is exactly \"this was my\nown `scroll_to`\", which is what keeps a scroll-into-view call from fighting the user's wheel.\n\n## Current state\n\n- Half-written and uncommitted (2026-07-26): `ScrollInfo` + a `ScrollSource` enum, an `on_scroll`\n  field/builder, and `set_offset_y` / `set_offset_x` chokepoints that every path now funnels through\n  (wheel scroll_region.rs, thumb drag, `page_toward`, `ensure_visible`, the public `scroll_to*`).\n  **The enum must be replaced by `Option<&Event>` per the decision above.**\n- `scroll_by` gained a source parameter; revisit as the event is threaded instead.\n\n## Build\n\n1. Replace `ScrollSource` with `event: Option<&Event>` on `ScrollInfo`; thread the `&Event` from the\n   handling site into the chokepoint. `scroll_to`/`scroll_to_x`/`ensure_visible`/`scroll_to_child`\n   pass `None`.\n2. Fire `on_scroll` from the chokepoint **only when the value actually changed** (a clamped no-op at\n   either end must not spam).\n3. `on_scroll_start` — the first movement of a gesture. Gesture state exists already for the thumb\n   (`thumb_grab`, `h_thumb_grab`) and the held track press (`track_repeat`); the wheel has none.\n4. `on_scroll_end` — release for thumb/track. **A wheel gesture has no end event**, so it needs an\n   idle timer in `tick(dt)`: fire when nothing has scrolled for ~100ms, which is how browsers\n   implement `scrollend`. `tick` already runs for every layer (heca/src/app/lifecycle.rs:133) and\n   already returns `true` while the track repeat is armed — extend that so a pending scroll-end keeps\n   requesting frames.\n5. All three are `#[host_only(\"behaviour crosses as an Intent, never a callback\")]` for the property\n   macro.\n\n## Edge cases\n\n- **Re-entrancy**: the callback fires inside the mutation. A listener calling `scroll_to` from\n  `on_scroll` either loops or fights the gesture — document it, and consider deferring the fire to\n  the end of the event.\n- The higher-ranked bound (`for<'a> Fn(ScrollInfo<'a>)`) makes the stored closure type uglier than\n  the library's other callbacks; check it stays usable at a call site before committing to it.\n- `max_x`/`max_y` are derivable from `content - viewport`; keep them consistent.\n- A relayout re-clamps both axes (`on_layout`) — decide whether that counts as a scroll (it moves\n  the offset without anyone asking). Leaning yes, with `event: None`.\n\n## Done when\n\n- The three callbacks fire from every path: wheel, thumb, track click, held-track repeat, and the\n  host's own `scroll_to`.\n- Tests: fires on change only; `event.is_some()` for input and `None` for `scroll_to`; the wheel's\n  end arrives after the idle timeout and not before.\n- The USER sees it: `on_scroll_end` firing once at the end of a wheel gesture, not per notch.\n\n---\n**Completion summary:**\nDONE 2026-07-26 (code + tests; NOT yet driven by the user in the app).\n\n## Shipped — heca-grid-ui/src/widgets/scroll_region.rs\n\n- `ScrollSource` **deleted**. `ScrollInfo<'a>` now carries `offset_x/offset_y`, `max_x/max_y`,\n  `content: Size`, `viewport: Size` and `event: Option<&'a Event>` — the metrics are always present\n  (the user's point: we always have the position), and only the *input* is sometimes absent.\n  `event.is_none()` means the host's own `scroll_to` moved it, which is what stops a scroll-into-view\n  call fighting the user's wheel. Borrowed, so nothing is cloned on a path that fires per frame;\n  `type ScrollListener = Box<dyn for<'a> Fn(ScrollInfo<'a>)>` carries the HRTB.\n- Three optional listeners: `on_scroll_start`, `on_scroll`, `on_scroll_end`, all\n  `#[host_only(..)]` for the property macro.\n- `set_offset_y` / `set_offset_x` remain the single chokepoint every path funnels through (wheel,\n  thumb, track click, held repeat, `ensure_visible`, the public API) and now take the causing\n  `Option<&Event>`. They fire only on an ACTUAL change — a clamped no-op at either end is not a\n  scroll, and there is a test for it.\n- `report_scroll` raises `scroll_start` on the first movement of a gesture; `end_scroll` raises\n  `scroll_end` once and is idempotent.\n- **The wheel's end is a silence.** `WHEEL_IDLE_END = 0.12s`: `report_scroll` arms `wheel_idle` for\n  wheel/programmatic moves, and `tick` counts it down and returns `true` while pending so the host\n  keeps supplying frames — otherwise the timer would only advance when something else redrew and the\n  end would land late or never. A thumb drag and a held track press end on their release instead.\n\nExported as `heca_grid_ui::ScrollInfo` (widgets/mod.rs + lib.rs + prelude).\n\n## Tests (6 new, in scroll_region.rs)\n\n`a_programmatic_scroll_reports_with_no_event`, `a_clamped_no_op_reports_nothing`,\n`the_wheel_reports_with_the_event_that_caused_it`,\n`a_wheel_gesture_ends_after_the_idle_timeout_and_not_before` (also asserts it keeps requesting frames\nwhile pending and stops afterwards), `a_thumb_drag_ends_on_the_release`,\n`the_payload_carries_the_whole_picture`.\n\n933 workspace tests, clippy 0.\n\n## Docs\n\ndocs/widgets.md §ScrollRegion gained \"Using one — the whole surface\": the four-line mount that needs\nno listeners, the three-listener form, a table of what `ScrollInfo` answers, when each fires, and the\nstatement that the host's side is one line.\n\n## Left for the user\n\nDriving it in the app — in particular that `scroll_end` fires ONCE at the end of a wheel gesture\nrather than per notch.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-001-scrollinfo-carries-offsets-maxima-content-viewport-and-option-event",
+          "title": "ScrollInfo carries offsets, maxima, content, viewport and Option<&Event>",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-002-scrollsource-enum-removed-in-favour-of-the-real-event",
+          "title": "ScrollSource enum removed in favour of the real event",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-003-every-offset-path-funnels-through-the-one-chokepoint",
+          "title": "every offset path funnels through the one chokepoint",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-004-fires-only-on-an-actual-change",
+          "title": "fires only on an actual change",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-005-scroll-start-scroll-end-for-thumb-and-track-from-existing-gesture-state",
+          "title": "scroll_start/scroll_end for thumb and track from existing gesture state",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-006-wheel-scroll-end-via-an-idle-timer-in-tick-keeping-frames-requested",
+          "title": "wheel scroll_end via an idle timer in tick, keeping frames requested",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-007-re-entrancy-rule-documented-or-the-fire-deferred",
+          "title": "re-entrancy rule documented or the fire deferred",
+          "checked": false
+        },
+        {
+          "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-008-user-confirms-one-scroll-end-per-wheel-gesture-not-per-notch",
+          "title": "USER confirms one scroll_end per wheel gesture, not per notch",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "startedAt": "2026-07-26T18:04:16.106Z",
+      "completedAt": "2026-07-26T18:04:16.106Z",
+      "createdAt": "2026-07-26T16:50:32.050Z",
+      "updatedAt": "2026-07-26T18:04:16.106Z"
     },
     {
-      "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe",
-      "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
-      "number": 2,
-      "shortName": "system-backend-trait",
-      "title": "Define SystemNotificationBackend trait",
-      "status": "planned",
-      "description": "Definire trait backend OS notifications separato dallo store e dai producer; deferred.",
+      "id": "57de8925-6015-4d79-8545-b32bb967f3cd",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 343,
+      "shortId": "DDDV7",
+      "priority": 4,
+      "shortName": "scrolling-is-observable-from-a",
+      "title": "Scrolling is observable from a description too — plus the worked example a reader can copy",
+      "status": "deferred",
+      "description": "Rust code can already listen to scrolling: `ScrollRegion::on_scroll_start` / `on_scroll` /\n`on_scroll_end`, shipped in F004/P011/T3. This task is only about plugins.\n\n## Decision (with the user, 2026-07-26): wait for the WASM runtime\n\nDo not build this before the plugin runtime exists (F003/P001, plugin-08). Reasons, in order:\n\n1. **Nothing would receive it.** No plugin is running today. The only consumers of a declarative\n   scroll event would be RPC and the app's own screens, and neither needs one.\n2. **We would build the wrong half.** Sending the event out is the awkward part (a name on the wire,\n   arguments, routing it back to the right node). The pleasant part — the author writing a plain\n   function — belongs to the plugin toolkit, which does not exist yet either.\n3. **Nothing in today's work blocks it.** The listeners, the metrics payload and the single\n   chokepoint they fire from are all in place.\n\n## What it should look like when the runtime lands\n\nThe plugin author attaches a function to the scroll area, and that is the whole API. No id, no name,\nno arguments — attaching to the region IS how you know which region fired:\n\n```ts\nScroll({ axes: \"both\", onScrollEnd: (s) => { if (s.offsetY === s.maxY) loadMore() } })\n```\n\nThe user pushed back on an earlier design where the author supplied an identifying argument, and was\nright to: that was machinery from underneath the API surfacing in it. If the API ever makes an author\nname their own scroll area, that is a bug in the API.\n\nUnderneath, the toolkit keeps the function on the plugin's side and gives heca a name for it. heca\nsends that name back when the region scrolls. This is R4 in `docs/chrome-and-ui.md` and is the same\npath `press` and `change` already take — no new mechanism.\n\n## Which of the three events should cross\n\n`scroll_start` and `scroll_end` only. The continuous `scroll` fires on every movement (each wheel\nnotch, each pointer move during a drag), and one message per movement to another program is too many.\n`scroll_end` carries the full position, so anything that needs to know where it stopped gets it. If a\nplugin ever genuinely needs live tracking, decide on a rate limit then rather than guessing one now.\n\n## Still to settle when built\n\n- An action does not describe the arguments it takes (`ActionMeta` has label, icon, policy, confirm —\n  no argument list). So a wrong or misspelled argument is ignored in silence. That is the same shape\n  of defect this phase fixed twice, and it is worth fixing before adding more argument-carrying\n  events.\n- The declarative event vocabulary is documented as three words (`press`, `change`, `toggle`) in both\n  `docs/widgets.md` and `heca/src/chrome/view.rs`. Update both, and say why scrolling earns its own:\n  it is the only widget event with a beginning and an end rather than a single moment.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-001-planned-deferred",
+          "date": "2026-07-26T21:17:49.064Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Waits on the WASM plugin runtime (F003/P001). There are no plugins running, so there is nothing to send a scroll event to. Building only the sending half now would add an awkward API with no user, and it would be replaced by the toolkit anyway. Decided with the user 2026-07-26.",
+          "description": "Waits on the WASM plugin runtime (F003/P001). There are no plugins running, so there is nothing to send a scroll event to. Building only the sending half now would add an awkward API with no user, and it would be replaced by the toolkit anyway. Decided with the user 2026-07-26."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-001-settle-node-level-intent-vs-app-on-bus-with-the-identity-problem-answered",
+          "title": "settle node-level intent vs app.on bus, with the identity problem answered",
+          "checked": false
+        },
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-002-scroll-start-scroll-scroll-end-reachable-from-a-description",
+          "title": "scroll_start / scroll / scroll_end reachable from a description",
+          "checked": false
+        },
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-003-a-written-decision-on-the-rate-at-which-scroll-crosses-a-plugin-boundary",
+          "title": "a written decision on the rate at which scroll crosses a plugin boundary",
+          "checked": false
+        },
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-004-event-vocabulary-docs-updated-in-both-docs-widgets-md-and-view-rs",
+          "title": "event-vocabulary docs updated in BOTH docs/widgets.md and view.rs",
+          "checked": false
+        },
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-005-worked-example-in-docs-widgets-md-native-declarative-the-host-s-one-line",
+          "title": "worked example in docs/widgets.md: native + declarative + the host's one line",
+          "checked": false
+        },
+        {
+          "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-006-user-confirms-the-example-shows-what-they-asked-for",
+          "title": "USER confirms the example shows what they asked for",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "createdAt": "2026-07-26T16:51:00.329Z",
+      "updatedAt": "2026-07-26T21:17:49.064Z"
     },
     {
-      "id": "3a993014-82fb-4551-b976-dc0d4662e145",
-      "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
-      "number": 3,
-      "shortName": "spike-linux",
-      "title": "Spike notify-rust on Linux",
-      "status": "planned",
-      "description": "Validare freedesktop/D-Bus notifications, app name/icon e supporto actions; deferred.",
+      "id": "bad7fd3a-0a82-4fc1-b113-f075c0627e9c",
+      "phaseId": "3e04a8f5-3c51-4f2d-8fab-d51b392e80bc",
+      "number": 344,
+      "shortId": "86ZPT",
+      "priority": 6,
+      "shortName": "action-task-e-an-action-declar",
+      "title": "action-task-E — An action declares the arguments it takes",
+      "status": "done",
+      "description": "Handoff 2026-07-26, item 1. Same shape as the two defects fixed in F004/P011: something in the middle drops input and says nothing. There, a widget swallowed its children's events. Here, an action swallows its own arguments.\n\n## THE DEFECT\n\n`ActionMeta` (heca/src/actions.rs:1332) carries name, label, description, category, default_binding, icon, policy and confirm. It does **not** say which arguments the action takes. The only place that knows is the hand-written `match` in `build_action` (heca/src/input.rs:746-933), which reads each argument by literal string: `get_u64(args, \"pane_id\")`, `get_usize(args, \"ws_idx\")`, and so on across 35 arms.\n\nFour consequences, all silent:\n\n1. **A misspelled required argument kills the whole action.** `get_u64(args,\"pane_id\")?` returns `None`, so `build_action` returns `None`. From config (heca/src/app/registry.rs:35 `action_ref_from_config`) the binding then falls through to `ActionRef::Dynamic`, and at press time `dispatch_view_intent` (heca/src/app/interaction.rs:809) fails to resolve it and prints one line **only under `cfg(debug_assertions)`** (interaction.rs:828-835). In a release build the key does nothing, forever, with no output. README §\"Creating Custom Actions\" already documents this resignation: \"a typo is not an error: it simply never fires. If a binding seems dead, check the name.\"\n2. **A misspelled optional argument is worse — it silently takes the default.** `move_column`'s `focus` (input.rs:779), `take_pane`'s `focus_after` (832), `spawn_command`'s `float`/`close_pane`/`keep_on_error`/`keep_on_success` (912-928), `scrollback_line_up`/`_down`'s `amount` (850/853) all end in `.unwrap_or(...)`. Misspell one and the action runs with the wrong value and never complains, in any build.\n3. **An argument that does not exist at all is ignored.** Nothing compares the supplied names against a list, because there is no list.\n4. **23 of the 35 argument-taking actions have no metadata whatsoever.** Verified by comparing `build_action`'s arms against `ActionRegistry::ALL`: `focus_pane`, `focus_workspace`, `swap`, `move`, `move_pane_to_workspace`, `move_pane_to_column`, `move_column`, `swap_columns`, `resize`, `resize_to`, `float_at`, `close_pane_by_id`, `rename_target`, `rename_pane_by_id`, `rename_workspace_by_idx`, `rename_column_by_idx`, `reset_pane_name_by_id`, `reset_workspace_name_by_idx`, `take_pane`, `app_font_zoom`, `pane_terminal_font_zoom`, `add_column_to_workspace`, `spawn_command`. They are dispatchable by name from a widget, a menu, config and RPC, but `list-actions` / `describe-action` (heca/src/rpc.rs:117-140) cannot see them, they have no label, no icon, no declared policy. The only description of their arguments anywhere is a stale doc comment above `build_action` (input.rs:734-745) that lists 11 of 35.\n\n## WHAT TO BUILD\n\n**1. `ArgSpec` — a pure-data argument declaration** (heca/src/actions.rs, next to `ActionMeta`). Serializable, so it crosses to RPC and later to a plugin:\n\n```rust\npub struct ArgSpec {\n    pub name: String,\n    pub kind: ArgKind,          // Int | Float | Text | Bool | Enum(Vec<String>)\n    pub required: bool,\n    pub description: String,\n}\n```\n\n`ArgKind::Enum` carries the accepted spellings, so `resize`'s `target`/`axis`, `app_font_zoom`'s `step`, `spawn_command`'s `kind` and `chrome.container.move_to_region`'s `region` describe their own vocabulary instead of leaving it to `get_enum`'s silent `.ok()`.\n\n**2. `ActionMeta.args: Vec<ArgSpec>` — required, no default.** Same reasoning already written on `policy` (actions.rs:1322-1328): a default would mean \"the author forgot\" resolves silently to the most permissive setting. An action with no arguments declares an empty list, deliberately.\n\n**3. `ActionDescriptor.args: &'static [ArgSpec]`** for the built-in seed, and **descriptors for the 23 missing actions** so every dispatchable name has exactly one metadata entry. This is not scope creep: `ActionMeta.args` can only exist where an `ActionMeta` exists. Do NOT create a second table keyed by name — the \"two registries\" mistake is on record in this phase's description (the `DynActionMeta` incident). One catalog.\n\n**4. Delete `builtin_policy`'s hand-written fallback match** (actions.rs:1578-1600). It exists because a parameterized action has no bare-name `WmAction`, so it hand-picks a representative variant for `open_link`, `scroll_to_offset` and the four `chrome.container.*` ids, and `unreachable!`s on anything else — which is why the other 23 could never be added. With declared args the representative comes for free: build sample values from each `ArgSpec.kind` and call `build_action(name, &samples)`. That also makes a wrong declaration a **startup failure** (`with_builtins` runs at startup), not a latent one.\n\n**5. Check the arguments at the two doors, and say something.**\n   - `action_ref_from_config` (app/registry.rs:35): an unknown argument name or a missing required one is reported at load through the existing channel next to `log_conflicts` (app/registry.rs:92) — `eprintln!(\"[heca] …\")`, unconditional, not `cfg(debug_assertions)`. Config typos must be audible.\n   - `dispatch_view_intent` (app/interaction.rs:809): same check on the `Intent`'s args before building.\n   - Rule, matching the ViewNode model (docs/chrome-and-ui.md Part I §6, \"a single bad value costs only itself\"): an **unknown** argument is reported and ignored, the action still runs; a **missing required** argument is reported and the action does not run (today's behaviour, now audible). Never a crash — an unknown action name stays legitimate (a provider may not be mounted).\n\n**6. `ActionInfo` gains `args`** (actions.rs:1535) so `list-actions` and `describe-action` finally tell a caller what to pass. This is what F003/P001/T6 (generated plugin type definitions) and F003/P018 (command palette) both need and neither can get today.\n\n**7. Docs.** Delete the stale hand-written arg list above `build_action` — the data replaces it. Add the declaration step to README §\"Creating Custom Actions\" path A and to AGENTS.md \"Adding New Actions\", and correct the README line that tells the reader a dead binding is just something to live with.\n\n## TESTS\n\n- Round trip per declared action: build sample args from the declared `ArgSpec`s → `build_action` returns `Some`. Fails when a declaration names an argument the code does not read, or misses one it does.\n- Per required arg: drop it → `build_action` returns `None`. Per optional arg: drop it → still `Some`. This pins `required` honestly and catches the `.unwrap_or` arms being declared as required.\n- Every name `build_action` accepts has a catalog entry, and every catalog entry with a non-empty `args` is buildable.\n- A config binding with an unknown arg name reports and still binds; with a missing required arg reports and does not.\n- Put the original defect back (rename `pane_id` to `paneid` in one arm) and watch the tests fail, as was done for `pointer_delivery.rs` / `pointer_funnel.rs`.\n\n## GATE\n\n`cargo clippy --workspace --all-targets --all-features` 0 warnings; `cargo test -p heca` green (937 across the workspace today). No `cargo fmt`. Nothing here is visual, so no in-app verification is needed — but the confirm dialog path must stay green since `ActionMeta` is shared with it.\n\n---\n**Completion summary:**\nDONE 2026-07-26 — branch `feat/action-arg-declaration`, 3 commits (dd350c5 code, 3963446 docs, + the Display test). NOT pushed, no PR yet.\n\n## WHAT SHIPPED\n\n**`ArgDescriptor` (static) / `ArgSpec` (owned) / `ArgKind` / `ArgProblem` / `check_args` — heca/src/actions.rs.** Same static/owned pair the file already uses for `ActionDescriptor` / `ActionMeta`, for the same reason: a plugin-registered action has no `'static` strings. `ArgKind` is `Int | Float | Bool | Text | Enum`; a vocabulary argument carries its accepted spellings.\n\n**`ActionDescriptor.args` and `ActionMeta.args` are required, no default.** A struct literal has to fill every field, so an action cannot be added without answering the question — the same argument already written on `policy`.\n\n**`EnumArg` trait — heca/src/input.rs.** `VALUES` lives beside each `FromStr` (`ResizeTarget`, `ResizeAxis`, `FontZoomStep`, `SpawnKind`, and `RegionId` in chrome/events.rs). A descriptor points at `<T as EnumArg>::VALUES` rather than restating the list, and `every_enum_arg_value_parses` walks each list through its own parser.\n\n**Both doors check and report.** `action_ref_from_config` → `log_arg_problems` (heca/src/app/registry.rs, unconditional `eprintln!`, next to `log_conflicts`); `dispatch_view_intent` → `report_arg_problems` (heca/src/app/interaction.rs). Missing required stops the action; unknown or malformed costs only itself. A misspelling offers the nearest declared name (Levenshtein, ≤ len/3).\n\n**`ActionInfo.args`** — `list-actions` / `describe-action` now say how to call what they list.\n\n## WHAT THE WORK TURNED UP, BEYOND THE TASK AS WRITTEN\n\n**Eight actions answered their bare name with every index set to 0.** `action_from_name` had `\"delete_workspace\" => DeleteWorkspace { ws_idx: 0 }`, and likewise `delete_column`, `add_pane_to_column`, `move_pane_to_workspace`, `move_pane_to_column`, `move_column_to_workspace`, `move_column`, `swap_columns`. Binding `delete_workspace` to a key deleted **workspace 0** — not the focused one, not nothing. Those arms are gone; the function's own doc comment had always said parameterized variants were not reachable from config, and now that is true. Checked first that no default binding and no menu entry relied on them (the sidebar menu supplies `ws_idx`/`col_idx`; the pane menu uses `add_pane_to_column` as an id only and runs `split_vertical`).\n\n**Five more actions were reachable only from RPC or the mouse.** `move_column_up`, `move_column_down`, `move_column_to_workspace`, `resize_column_by`, `resize_pane_height_by` had no descriptor, and the last three had no `build_action` arm either — so they could not be bound to a key or named by a menu or plugin, which is a P2 parity hole. All five are nameable now. `move_pane_left`/`move_pane_right` gained an optional `pane_id`, matching what their RPC commands always accepted.\n\n**23 argument-taking actions had no metadata at all** (the list in the original description). They have descriptors now — not scope creep: an argument list can only live where metadata lives, and there is one catalog.\n\n## TWO HAND-WRITTEN TABLES DELETED\n\n- `builtin_policy`'s representative-variant map. It named six actions and `unreachable!`d on the rest, which is exactly why the other 23 could never be catalogued. It now builds a stand-in from the action's own declared arguments via `ArgSpec::sample_value`, so a wrong declaration is a **startup panic**, not a latent bug.\n- Six entries of `test_descriptors_are_populated`'s UNBOUND list. An action with a required argument cannot carry a bare keybinding — a rule, not a list, and it exempts every future one for free.\n- Also gone: the stale doc comment above `build_action` that listed 11 of 35 actions' arguments.\n\n## TESTS (6 new + 1 refactor)\n\n- `every_declared_argument_is_read_by_the_action` / `every_required_argument_is_actually_required` / `every_optional_argument_is_actually_optional` (actions.rs) — walk every declaration, check `build_action` agrees.\n- `every_wm_action_variant_is_reachable_by_name` (input.rs) — the other direction: walks every `WmAction` and checks a declaration exists. Needed `each_variant()` lifted out of `test_action_priority_exhaustive` to module level.\n- `every_action_that_needs_a_target_refuses_to_default_it` — the line that stops the workspace-0 defect returning.\n- `check_args_names_what_is_wrong`, `a_misspelled_optional_argument_is_reported_even_though_the_action_still_runs`, `a_bindings_argument_mistakes_are_reported_at_load` (registry.rs), `a_problem_reads_as_a_sentence` (pins the wording, since printing is skipped under cfg(test) as conflict logging is), `introspection_carries_the_arguments`, `every_enum_arg_value_parses`.\n\n**Both original defects were put back and watched to fail.** `pane_id` → `paneid` in `build_action`'s `focus_pane` arm fails the round-trip test *and* stops the catalog building. A restored `\"delete_workspace\" => DeleteWorkspace { ws_idx: 0 }` fails the target test.\n\n## DOCS\n\nREADME §\"Creating Custom Actions\" step 6 (+ the `args` forms, the messages, the no-bare-keybinding rule); README §\"Actions System\" — the line saying a dead binding is just something to live with now distinguishes a wrong *name* (still resolved at press, still silent, and legitimately so) from a wrong *argument* (reported). AGENTS.md \"Adding New Actions\" step 8b + a warning on step 2 about placeholder fields in `action_from_name`. docs/widgets.md: introspection `args` payload, the Intent section, the `register_dynamic` example.\n\n## GATE\n\n`cargo clippy --workspace --all-targets --all-features` 0 warnings. `cargo test --workspace` all green — 418 in heca (was 407), 20 suites. No `cargo fmt`. Nothing visual, so no in-app verification needed; the confirm-dialog path shares `ActionMeta` and stayed green.\n\n## NOT DONE, DELIBERATELY\n\n`parse_rpc_command` (heca/src/rpc.rs) is a **third**, positional argument parser, separate from `build_action`. It is not part of this defect — it already returns typed errors (`MissingArgument`, `ParseInt`) rather than failing silently. Folding it onto the declarations would let RPC report the same way and would remove the duplication, but it is a distinct piece of work with its own error-surface decisions.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -83,19 +171,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "startedAt": "2026-07-26T21:27:10.960Z",
+      "completedAt": "2026-07-26T21:46:58.686Z",
+      "createdAt": "2026-07-26T21:27:07.661Z",
+      "updatedAt": "2026-07-26T21:46:58.686Z"
     },
     {
-      "id": "3dad3770-2179-42ee-928d-3efb03db615f",
-      "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
-      "number": 4,
-      "shortName": "spike-macos",
-      "title": "Spike notify-rust on macOS",
-      "status": "planned",
-      "description": "Validare Notification Center permissions/app identity e failure behavior; deferred.",
+      "id": "caa74f04-376d-480b-b096-dd8288b9566e",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 345,
+      "shortId": "D8PKQ",
+      "priority": 18,
+      "shortName": "a-property-value-can-hold-an-o",
+      "title": "A property value can hold an object, so appearance is really authorable",
+      "status": "done",
+      "description": "# The hole\n\n`Visual` has six fields: `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`\n(`heca-grid-ui/src/style.rs:276`). **Two of them cannot be set from a description, and never could.**\n\n`border` is `Border { color, width }` and `glow` is `Glow { color, radius, intensity }`\n(`heca-grid-ui/src/scene.rs:271` and `:280`). A property value is a **closed list of scalars** —\n`Bool, Int, Float, Text, Size, Variant, Align, Color, Glyph, List`\n(`heca-view/src/lib.rs:218`). There is no object, so there is no way to write `{color, width}`.\n\n**F003/P017/T007 claimed otherwise.** Its commit `eb9e021` says \"the whole of `Visual` — fill,\nborder, glow, radius, font size, font scale\". It gave `Border` and `Glow` serde derives, which made\nthem look reachable. Serde on the type is not the same as a property value that can carry it.\nFour fields work; the commit says six. Nothing tested the two, so nothing failed.\n\nThis is the exact defect class F003/P017 existed to close, and it survived the phase.\n\n# Why this blocks F003/P011/T006\n\nThe typed builder SDK is meant to make a wrong property a compile error. Built on today's\n`PropValue` it would instead ship an exceptions list saying \"border and glow cannot be authored\" —\nfreezing the hole into a compile-checked API, which is precisely why T006 was split out of this\nphase in the first place (see its status log, 2026-07-25).\n\n# What to build\n\n**`PropValue::Map(PropMap)`** in `heca-view/src/lib.rs`. `PropMap` is already\n`BTreeMap<String, PropValue>` (`heca-view/src/lib.rs:260`), so the variant is recursive for free and\n**no future struct-valued field needs another variant** — that is the point. Serde is externally\ntagged with `rename_all = \"snake_case\"`, so it travels as `{\"map\": {...}}`.\n\n**`prop_to_json` must recurse** (`heca-view-realize/src/lib.rs:208`). It already recurses for\n`List` at `:226`. A `Map` becomes a JSON object, and — this is the part to get right — **a colour\ntoken nested inside it must still resolve**: `border = {color: \"accent\", width: 2}` has to go\nthrough `resolve_color` (`:221`, `:233`) at any depth, not just at the top level. Without that, a\nnested colour silently becomes the literal string \"accent\" and the field fails to deserialize.\n\n**Totality still holds.** `merge_style_half` (`heca-view-realize/src/lib.rs`) drops a value that\ndoes not fit its field *individually* — one bad property never discards the good ones and never\npanics. A malformed nested object must behave the same way; there is an existing test for the flat\ncase (`a_bad_colour_does_not_discard_its_neighbours`, `:1449`).\n\n**Not in scope:** `PropInput` (`heca-grid-ui/src/prop.rs:27`) stays `Bool | Number | Text`.\nThat is the *widget-property* channel, and no widget builder takes a struct today. `border`/`glow`\nare `Visual` fields, which reach the widget through `merge_style_half` and serde, not through\n`PropInput`. If a widget ever needs a struct property, that is a separate change — record it, do not\npre-build it.\n\n# Steps\n\n1. Add the variant + doc it as the extension point for any struct-shaped field.\n2. Recurse in `prop_to_json`, resolving colours at any depth.\n3. Tests in `heca-view-realize`: a described `border` reaches the widget; a described `glow` does;\n   a **token name** nested inside one resolves against the theme; a malformed nested object drops\n   only itself.\n4. **Fix the record.** T007's claim is repeated wherever appearance is documented — check\n   `docs/chrome-and-ui.md`, `AGENTS.md` and the `Visual` doc comments, and correct anything that\n   says all of `Visual` was reachable before this task.\n5. Then unblock F003/P011/T006 and let the SDK expose `border`/`glow` like any other property.\n\n# Acceptance\n\n- A `ViewNode` can set `border` and `glow`, proven by a test that asserts the value on the realized\n  widget, not merely that it parses.\n- A theme token nested inside an object resolves.\n- Whole workspace green, clippy 0 warnings.\n\n---\n**Completion summary:**\n# ✅ DONE 2026-07-27 — commit `f2deecd`\n\n`PropValue::Map(PropMap)` in `heca-view/src/lib.rs`. Recursive, so **no future struct-shaped\nproperty needs another variant** — that was the point, not `border`/`glow` specifically.\n\n- `prop_to_json` (`heca-view-realize/src/lib.rs:208`) recurses, resolving a colour token **at any\n  depth**. Without that a nested `\"accent\"` reaches serde as the literal word and the whole field is\n  dropped, silently.\n- `prop_to_input` rejects `Map` alongside `List`, with the reason on the arm: `PropInput` is the\n  scalar channel for *widget* builders and no `#[prop]` builder takes a struct. `Visual` fields\n  reach the widget through `merge_style_half` and serde instead. If a widget builder ever takes one,\n  `PropInput` grows a variant then — deliberately, not pre-built.\n- Totality holds at depth: a member that does not convert costs only itself.\n\n**Three tests, asserting the value on the realized widget rather than that it parses**, and they\ninterlock: `a_bad_member_of_an_object_does_not_discard_the_rest` proves an unusable colour drops the\nborder; `a_token_nested_in_an_object_resolves_against_the_theme` proves `\"accent\"` yields the\ntheme's accent and follows a theme change. If resolution did not recurse, the second would take the\nfirst's path and fail. Plus\n`a_struct_shaped_appearance_property_reaches_the_widget` for border and glow together.\n\n**The record was corrected**, which was half the point of the task: `AGENTS.md:753` and\n`docs/chrome-and-ui.md` §R2 both repeated T7's \"the whole of `Visual`\". Both now state what was true\nthen, what is true now, and the lesson — **adding serde to a type is not the same as being able to\nauthor it; check the value channel.**\n\n964 tests, 0 failures, clippy 0 warnings. Nothing visual changed, so there was nothing for the user\nto look at; the proof is the tests.\n\n## Follow-up this exposed (not done here)\n\n`PropValue` carries three hardcoded enum mirrors — `Size`, `Variant`, `Align` — which is the same\nclosed shape `Map` was added to escape: every new enum would want its own variant. It does not need\none. Fixed value sets travel as their **name**, so a `Text` carries any of them and the *type* lives\nin the authoring layer. New mirrors added from here on must NOT get a `PropValue` variant. Collapsing\nthe existing three is a wire-format change and wants its own task.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -103,19 +193,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "startedAt": "2026-07-27T18:00:12.730Z",
+      "completedAt": "2026-07-27T18:07:52.174Z",
+      "createdAt": "2026-07-27T17:59:57.500Z",
+      "updatedAt": "2026-07-27T18:07:52.174Z"
     },
     {
-      "id": "fbfdf381-38e2-4391-8501-0e22ba975548",
-      "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
-      "number": 5,
-      "shortName": "spike-windows",
-      "title": "Spike notify-rust on Windows",
-      "status": "planned",
-      "description": "Validare Windows toast app identity requirements e fallback behavior; deferred.",
+      "id": "86af5605-64f5-4543-bb1f-20ce465ea432",
+      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
+      "number": 346,
+      "shortId": "E9UYL",
+      "priority": 19,
+      "shortName": "fixed-value-sets-become-types",
+      "title": "Fixed value sets become types, so a misspelt one cannot compile",
+      "status": "done",
+      "description": "# The hole\n\nSeveral properties accept only a fixed set of words. In a description they are written as free text:\n\n```rust\n.prop(\"orientation\", PropValue::Text(\"vertcal\".into()))   // typo — compiles, silently ignored\n```\n\nThe separator stays horizontal and nothing reports anything. This is the same silent failure\nF003/P010/T006 spent a whole task removing from **actions** (a misspelt argument name did nothing\nforever, one stderr line in debug and none in release). It is still live in the **UI vocabulary**.\n\nThree value sets already have types in `heca-view` for exactly this reason — `ViewSize`,\n`ViewVariant`, `ViewAlign`. The rest never got them.\n\n# ✅ DECIDED BY THE USER 2026-07-27\n\n**Give the small sets real types, and generate the glyph list.** Two separate answers because the\nglyph set is not like the others.\n\n## The small sets — measured, `heca-grid-ui`\n\n| grid-ui type | Values | Used by |\n|---|---|---|\n| `Orientation` (`widgets/separator.rs`) | Horizontal, Vertical | Separator.orientation |\n| `ScrollAxes` (`widgets/scroll_region.rs`) | Vertical, Horizontal, Both | Scroll.axes |\n| `ToastSeverity` (`widgets/toast.rs`) | Info, Success, Warning, Danger | Toast.severity |\n| `AlertVariant` (`widgets/alert.rs`) | Info, Success, Warning, Danger | Alert.variant |\n| `LabelSide` (`widgets/checkbox.rs`) | Right, Left | Checkbox.label_side |\n| `ActiveMarker` (`widgets/item.rs`) | None, Bar, Check | Row.marker, Item.marker |\n| `TextAlign` (`scene.rs`) | Start, Center, End | Label.align |\n\n**`AlertVariant` and `ToastSeverity` have identical values** — one mirror (`ViewSeverity`) serves\nboth. So **six** new types, 21 values in total.\n\n## ⚠️ They must NOT get `PropValue` variants\n\nThis is the lesson from F003/P011/T018, and it is the whole reason this task is small.\n\n`PropValue` already carries three hardcoded mirrors (`Size`, `Variant`, `Align`) — the closed shape\n`Map` was added to escape. **A fixed value set travels as its name**, so `PropValue::Text` carries\nany of them and the *type* lives in the authoring layer. Give each mirror\n`impl From<ViewOrientation> for PropValue` producing `Text(name)`, so `.prop(\"orientation\",\nViewOrientation::Vertical)` reads well without `PropValue` learning anything.\n\nVerified this works end to end: `prop_to_json` turns `Text` into a JSON string and the widget's own\nenum deserializes from its snake_case name (`heca-view-realize/src/lib.rs:222`); `prop_to_input`\nturns it into `PropInput::Text` and the generated `set_prop` parses the name\n(`:299`). No realize change should be needed — confirm rather than assume.\n\nCollapsing the existing three into this scheme is a wire-format change and wants its own task.\n\n## Glyphs — generated, not copied\n\n`Glyph` (`heca-grid-ui/src/widgets/icon.rs:33`) has **52 variants and grows**. A hand-written mirror\nis the \"list nobody is forced to update\" that this codebase keeps being bitten by.\n\nPlan:\n1. `Glyph::ALL` + a `name()` in `heca-grid-ui`, mirroring the `WidgetKind::ALL` pattern the model\n   already uses. Useful on its own.\n2. A **checked-in generated** `ViewGlyph` in `heca-view` — `heca-view` cannot depend on\n   `heca-grid-ui` and must not start.\n3. A drift test in **`heca-view-realize`** (the one crate that sees both) comparing `ViewGlyph`'s\n   list against `Glyph::ALL` and failing when they diverge, naming what is missing. Same\n   fails-closed shape as `prop_drift.rs`.\n\n# Steps\n\n1. Six mirrors in `heca-view`, serde `rename_all = \"snake_case\"`, each with `name()` and\n   `From<_> for PropValue` → `Text`.\n2. Confirm a realized widget actually receives each one (a test per mirror, asserting on the widget,\n   not on the parse).\n3. `Glyph::ALL` + `name()` in `heca-grid-ui`; generated `ViewGlyph` in `heca-view`; drift test in\n   `heca-view-realize`.\n4. Point the existing docs at the types where they currently show text values.\n\n# Acceptance\n\n- A misspelt value in any of the seven sets **does not compile** when written through a mirror.\n- `heca-view` still depends on nothing but serde.\n- The glyph list cannot silently disagree with `heca-grid-ui`'s.\n- Whole workspace green, clippy 0 warnings.\n- Unblocks F003/P011/T006, whose builders can then be honestly typed.\n\n---\n**Completion summary:**\n# ✅ DONE 2026-07-27 — commit `1653169`\n\nSix mirrors in `heca-view`: `ViewOrientation`, `ViewScrollAxes`, `ViewSeverity`, `ViewLabelSide`,\n`ViewMarker`, `ViewTextAlign`. Six not seven because `ToastSeverity` and `AlertVariant` carry the\nsame four values, and two copies of one list is how this codebase gets into trouble. A seventh,\n**`ViewJustify`**, was added later in `7183250` — T019's inventory came from the widgets' own\nproperties and `justify` is a `Layout` field, so it never appeared.\n\n**None of them has a `PropValue` variant, and the comment there says the next one must not either.**\nA fixed set travels as its name, so `Text` carries every one of them and the type belongs in the\nauthoring layer. `Size`/`Variant`/`Align` predate that rule and are the closed shape `PropValue::Map`\nwas added to escape.\n\n**Glyphs are generated, then held to account.** 52 names and growing, so `ViewGlyph` is generated and\n`every_glyph_name_has_a_mirror` (`heca-view-realize`) compares it against the library's own list both\nways, naming what is missing. Verified by deleting a glyph and reading the failure:\n`these glyphs exist in heca-grid-ui but not in ViewGlyph … [\"backspace\"]`. Nothing was needed in\n`heca-grid-ui` — `Glyph::ALL` and the `PropName` derive already existed.\n\n**Two guards on the names**, because agreement across two crates and a serde attribute is not\nsomething to assume: `name()` and the serde spelling must match (checked over a list generated from\nthe same variants, so it cannot miss one), and every mirror is taken through `PropValue` into a\nrealized widget and asserted to change it — matching names is not the same as the name being\nunderstood.\n\nDocs: `docs/widgets.md` examples now use the types; `docs/chrome-and-ui.md` §R2 records the rule.\n\nNothing visual changed, so there was nothing for the user to look at; the proof is the tests.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -123,12 +215,16 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "startedAt": "2026-07-27T18:08:34.724Z",
+      "completedAt": "2026-07-27T23:42:08.723Z",
+      "createdAt": "2026-07-27T18:08:27.185Z",
+      "updatedAt": "2026-07-27T23:42:08.723Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.127Z",
-  "updatedAt": "2026-07-03T22:53:21.680Z"
+  "updatedAt": "2026-07-27T11:40:15.533Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

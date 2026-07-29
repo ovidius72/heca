@@ -176,6 +176,17 @@ pub struct KeyHint {
 impl KeyHint {
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
     pub fn new(child: impl Component + 'static) -> Self {
+        Self::wrap(Box::new(child))
+    }
+
+    /// Wrap an **already-boxed** subtree — what a dynamically built tree is (a chrome provider's
+    /// render seam, `realize` output), where the concrete widget type is not known at the call
+    /// site. Mirrors [`Parent::child_boxed`](crate::builders::Parent::child_boxed).
+    pub fn new_boxed(child: Box<dyn Component>) -> Self {
+        Self::wrap(child)
+    }
+
+    fn wrap(child: Box<dyn Component>) -> Self {
         let mut base = Base::new();
         // Hug the child so the wrapper's bounds match it (overlay positions off them).
         base.style.layout.width = Length::Auto;
@@ -185,7 +196,7 @@ impl KeyHint {
         // to a stretching parent: a wide list row fills its column instead of
         // shrinking to content width, while a hugged square target is unaffected.
         base.style.layout.direction = Direction::Column;
-        base.children.push(Box::new(child));
+        base.children.push(child);
         Self {
             base,
             hint: signal(None),

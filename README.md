@@ -222,11 +222,144 @@ mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0
 | Rename pane | `$` | Rename active pane |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
-| Sidebar focus | `e` | Enter sidebar navigation mode |
+| Sidebar focus | `e` | Focus the navigable dock and enter sidebar navigation mode |
+| Focus dock | `Shift+E` | Letters over every dock; press one to give it keyboard focus |
 | Collapse current workspace | `<` | Collapse the active workspace tree row (UI only) |
 | Collapse current column | `(` | Collapse the focused tiled column tree row (UI only) |
 
-Today, sidebar navigation operates on the built-in workspace tree shown in the left sidebar. Long-term, the sidebar is expected to evolve into a shell/host for pluggable containers, with the current workspace tree becoming a built-in `WorkspacesContainer`.
+Today, sidebar navigation operates on the built-in workspace tree, which is a **container** (dock) mounted in a sidebar shell. Long-term the sidebar hosts several pluggable containers side by side.
+
+**Chrome keyboard focus is a dock, not a side.** `focus_dock` (`Shift+E`) lights a letter over every
+dock on screen and focuses the one you pick; the focused dock shows a focus ring, and keyboard
+scrolling acts on it. Because focus is held by *container id*, moving a dock from one sidebar to the
+other takes its focus with it — nothing in this path names left or right. `sidebar_focus` (`e`) is the
+same idea aimed at navigation: it focuses the dock that has keyboard navigation of its own, reveals
+whichever region that dock is seated in, and enters nav mode. With no navigable dock mounted it does
+nothing (it will not expand an empty sidebar to show you a blank frame).
+
+The dock can also be named, which skips the pick: `focus-dock workspaces` over RPC, or a mode binding
+carrying `args = { dock = "workspaces" }` (no flat binding form takes args yet). It is one action
+either way — the pick is only how a keyboard supplies an argument it cannot type. Aiming it at the
+dock that already has focus is the way back out, so one key both takes the keyboard and gives it
+back; `unfocus-dock` (RPC) and `Esc` do the same thing explicitly.
+
+**Focus is the mode.** While a dock holds chrome focus the keyboard is *redirected to it* — there is
+no separate mode to enter, because focus already answers where the keys go. Concretely:
+
+- unprefixed keys resolve in the **focus layer** (below) instead of being forwarded to the terminal;
+- an **unbound** key while a dock is focused does nothing — it is swallowed, never leaked into the
+  shell behind the dock;
+- `prefix+…` keeps working exactly as it does otherwise, and falls through to the focus layer when
+  the global map has no binding for the key;
+- the focused pane is **not** changed. Only the keyboard moves, so `prefix+Enter` still splits the
+  pane you last worked in;
+- the status bar shows the dock's name where it would say `NORMAL`, so a swallowed key is never
+  silent about where it went. The focus ring is the other half of that.
+
+Two layers are consulted while a dock is focused, in this order:
+
+1. **the component's own** — `[[keys.component]]`, below (this placement first, then the
+   component as a whole);
+2. **the focus layer** — a built-in mode keymap, `[[keys.mode]] name = "focus"`, overridable in
+   `keybindings.toml` like any other. It carries what the *widgets* answer — paging and edges for
+   whatever scroll area the focused container nests — deliberately not a per-container vocabulary: a
+   scroll region behaves the same wherever it is mounted, so nothing has to declare it, and a
+   container with nothing scrollable simply declines and the key does nothing.
+
+### A component's own keys — `[[keys.component]]`
+
+A component declares the actions only it can do; the keys for them live in a `[[keys.component]]`
+entry. `name` says which component — a **field**, not the table name, so a component may be called
+`unbind` or `widgets` without colliding with a config keyword. An optional `id` narrows the entry to
+one placement, layered over the id-less one, so two seatings can differ while cursor, scroll position
+and focus are per placement anyway.
+
+Binding names are **short**: under `name = "docker"`, `restart_selected` means the action id
+`docker.restart_selected`. You never repeat the component on every line of its own block. An id heca
+already knows keeps its own name — a component *binds* existing actions rather than redeclaring them.
+
+```toml
+[[keys.component]]
+name             = "docker"
+restart_selected = "r"        # → docker.restart_selected
+next_pane        = "n"        # …an EXISTING action id, simply bound here — never redeclared
+
+[[keys.component]]            # the same component, one placement only
+name = "docker"
+id   = "docker.right"
+restart_selected = "R"        # everything else is inherited from the entry above
+
+[[keys.component.bind]]       # the arg-carrying form
+action = "spawn_command"
+keys   = "t"
+args   = { command = "lazydocker", float = "true" }
+
+[keys.component.unbind]       # explicit removal, keyed by the combo
+"s" = true
+```
+
+**Merge rules, and why the two forms differ.** A TOML table already merges per key, so changing one
+`action = "key"` entry keeps every other default. An **array** is replaced wholesale, which for
+`[[keys.component.bind]]` would mean adding one binding silently drops every shipped default — so
+those merge **by their `keys` field** instead: a keymap *is* a map from combo to action, so merging on
+the combo is the ordinary table rule applied to what the array is really keyed by. `unbind` is applied
+last and keyed by the **combo**, so it retires a binding whatever it points at.
+
+**Where the defaults are.** heca's own components ship their keys in `keybindings.default.toml`, in
+this same shape, at the bottom of the file — one place a key is written and one place to change it. A
+**plugin** has no entry in that merge, so it registers its keys at runtime instead; whatever your
+config says still wins, and a registration never overwrites a combo you bound or gives a rebound
+action a second key. Binding an id whose component is not mounted is not an error: like every binding
+it resolves at press time, and simply does nothing until that component appears. Nor is an `id` for a
+placement that never exists.
+
+### Two keys every container has for free
+
+A container does not have to declare anything to be usable:
+
+- **`global_focus`** — written in its `[[keys.component]]` entry, but it applies while the container
+  does *not* have focus, which is the only time it is useful. heca therefore binds it in the global
+  map rather than the container's own layer. With an `id` it aims at that seating; without one it
+  names the component and lands on the seating you were last in. Pressing it again while that
+  container holds the keyboard gives it back. The name is reserved — a component cannot have an
+  action called `global_focus`.
+- **`Escape`** — gives the keyboard back to the main region. Always bound, for every container, and
+  **not removable**. You can add other ways out by binding `unfocus_dock`; you cannot take this one
+  away, because a dock that declares nothing must still be leavable without the mouse.
+
+Two components asking for the same `global_focus` combo is reported at startup like any other
+collision.
+
+### Finding a key — `heca --keys-show`
+
+Keys are no longer all in one file, so reading config can no longer answer "what runs this action":
+a mode's keys are in `[[keys.mode]]`, a component's in `[[keys.component]]`, and a plugin's are in no
+file at all. `heca --keys-show` prints every binding name, the key it resolves to and the layer it
+came from — read out of the **built keymaps**, so it sees all of them alike. `--json` emits the same
+three facts per line for scripting.
+
+```
+$ heca --keys-show
+BINDING                       KEY              LAYER
+close                         prefix+x         [keys]
+workspaces.cursor_down        j                [[keys.component]] workspaces
+docker.restart                r                plugin
+```
+
+| Key | Action |
+|-----|--------|
+| `PageUp` / `PageDown` | Scroll the focused dock one page up / down |
+| `Home` / `End` | Jump the focused dock to top / bottom |
+| `Alt+PageUp` / `Alt+PageDown` | Scroll the focused dock one page left / right |
+| `Alt+Home` / `Alt+End` | Jump the focused dock to its left / right edge |
+| `Esc` | Give the keyboard back to the focused pane |
+
+The bare keys are free here precisely because nothing is being forwarded to a backend. The `Shift+`
+scroll bindings under "Direct (non-prefix) keybindings" are unchanged and, while a dock is focused,
+aim at the dock too — one binding, one meaning: *scroll whatever has the keyboard*. Horizontal
+scrolling exists only here (`scroll_page_left`, `scroll_page_right`, `scroll_to_left_edge`,
+`scroll_to_right_edge`, also reachable over RPC as `direct-scroll-page-left` and friends), because a
+terminal viewport has a single axis.
 
 The default sidebar-mode bindings are defined via `[[keys.mode]] name = "sidebar"` and can be overridden in `config.toml`. The trigger field is ignored for this built-in mode because `SidebarNav` is entered via `SidebarFocus` or mouse interaction.
 
@@ -331,6 +464,10 @@ These are intercepted as global keybindings before reaching the terminal.
 They stay in Normal mode, so holding the key repeats the scroll without
 entering Selection mode. Page jumps and top/bottom jumps honor
 `terminal_scroll_animations`; line steps remain immediate.
+
+While a chrome dock holds keyboard focus these same four page/edge bindings are aimed at **the dock**
+instead of the pane — see "Chrome keyboard focus is a dock, not a side" above. The line steps
+(`Shift+Up` / `Shift+Down`) stay with the pane: a scroll area answers pages and edges, not lines.
 
 ### Scrollback GUI
 
@@ -713,7 +850,7 @@ name — `true` prompts (Cancel / \<action\>), `false` runs immediately:
 
 ```toml
 [confirm]
-delete_pane = true      # confirm before closing a pane
+close = true            # confirm before closing a pane
 delete_column = true    # confirm before deleting a column (and its panes)
 delete_workspace = true # confirm before deleting a workspace (and its contents)
 ```
@@ -726,7 +863,12 @@ action not listed uses its own declared default. Changes apply on
 
 > Replaces the old `[settings] confirm_close_pane` / `confirm_delete_column` /
 > `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
-> `delete_pane` / `delete_column` / `delete_workspace`.
+> `close` / `delete_column` / `delete_workspace`.
+>
+> The pane toggle was once `delete_pane`; it still works, but `close` is the name
+> now — one word for the action, its key, its label and its dialog. **Close** is
+> for the pane you work in; **Delete** stays for a column or workspace, which
+> destroys everything inside it.
 
 ### Fonts
 

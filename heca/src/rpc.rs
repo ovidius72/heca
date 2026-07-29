@@ -421,26 +421,24 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let ws_idx = parse_usize!(arg, "ws_idx");
             Ok(WmAction::ResetWorkspaceNameByIdx { ws_idx })
         }
-        // ── Sidebar ──
-        // Every sidebar action is reachable from here, not just the region toggles. A
-        // capability that only the keyboard can reach is trapped behind one surface; the
-        // nav + mutation actions used to be exactly that. A script drives the sidebar the
-        // way a user does: `sidebar-focus` to enter nav mode, then move/act.
+        // ── Sidebar / chrome focus ──
+        // The region toggles, and chrome keyboard focus by dock.
+        //
+        // The twelve `sidebar-*` nav/mutation commands are gone with the built-ins they named
+        // (F003/P085/T356). Their replacements are the workspaces component's declared actions
+        // (`workspaces.cursor_up`, `workspaces.delete_selected`, …), which **this parser cannot
+        // reach**: it returns a `WmAction`, a closed enum, and a component's action is an `Intent`
+        // resolved by name at press time. That is a real gap for every component and plugin action,
+        // not just these — see the follow-up task.
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
-        "sidebar-focus" => Ok(WmAction::SidebarFocus),
-        "sidebar-up" => Ok(WmAction::SidebarUp),
-        "sidebar-down" => Ok(WmAction::SidebarDown),
-        "sidebar-left-nav" => Ok(WmAction::SidebarLeftNav),
-        "sidebar-right-nav" => Ok(WmAction::SidebarRightNav),
-        // Focus the row under the sidebar cursor without changing the input mode.
-        "sidebar-peek" => Ok(WmAction::SidebarPeek),
-        "sidebar-expand-toggle" => Ok(WmAction::SidebarExpandToggle),
-        "sidebar-create-workspace" => Ok(WmAction::SidebarCreateWorkspace),
-        "sidebar-create-column" => Ok(WmAction::SidebarCreateColumn),
-        "sidebar-split-in-column" => Ok(WmAction::SidebarSplitInColumn),
-        "sidebar-zoom-selected-column" => Ok(WmAction::SidebarZoomSelectedColumn),
-        "sidebar-delete-selected" => Ok(WmAction::SidebarDeleteSelected),
+        // Chrome keyboard focus by dock id. The id is OPTIONAL here too: omitted, it opens the same
+        // letter pick a bare keybinding does, so a script can drive the pick as well as skip it.
+        "focus-dock" => Ok(WmAction::FocusDock {
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+        // …and the way back: the keyboard returns to the focused pane.
+        "unfocus-dock" => Ok(WmAction::UnfocusDock),
         // Chrome container placement (plugin-02, §2.9) — RPC parity for the moves.
         "move-container-to-region" => {
             let container_id = expect_arg!("container_id").to_string();
@@ -598,6 +596,11 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "direct-scroll-line-down" => Ok(WmAction::ScrollLineDown),
         "direct-scroll-to-top" => Ok(WmAction::ScrollToTop),
         "direct-scroll-to-bottom" => Ok(WmAction::ScrollToBottom),
+        // The horizontal four reach a focused chrome container's scroll area; a pane has one axis.
+        "direct-scroll-page-left" => Ok(WmAction::ScrollPageLeft),
+        "direct-scroll-page-right" => Ok(WmAction::ScrollPageRight),
+        "direct-scroll-to-left-edge" => Ok(WmAction::ScrollToLeftEdge),
+        "direct-scroll-to-right-edge" => Ok(WmAction::ScrollToRightEdge),
         "direct-scroll-to-offset" => {
             let rows_str = expect_arg!("rows");
             let rows = rows_str.parse::<usize>().map_err(|_| RpcError::ParseInt {
@@ -669,7 +672,7 @@ mod tests {
         let json = introspect(&catalog, "describe-action close").unwrap().unwrap();
         let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info.name, "close");
-        assert_eq!(info.confirm.as_deref(), Some("delete_pane"));
+        assert_eq!(info.confirm.as_deref(), Some("close"));
         let json = introspect(&catalog, "describe-action focus_left").unwrap().unwrap();
         let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info.policy, "tiled_only");
@@ -971,6 +974,23 @@ mod tests {
         );
     }
 
+    /// `focus-dock` with and without an id — one command, both doors (F003/P011/T020).
+    #[test]
+    fn focus_dock_takes_an_optional_dock_id() {
+        assert_eq!(
+            parse_rpc_command("focus-dock workspaces"),
+            Ok(WmAction::FocusDock {
+                dock: Some("workspaces".to_string())
+            }),
+            "named ⇒ focus it directly, no pick",
+        );
+        assert_eq!(
+            parse_rpc_command("focus-dock"),
+            Ok(WmAction::FocusDock { dock: None }),
+            "bare ⇒ the same letter pick a bare keybinding opens",
+        );
+    }
+
     #[test]
     fn test_sidebar_commands() {
         assert_eq!(parse_rpc_command("sidebar-left"), Ok(WmAction::SidebarLeft));
@@ -978,71 +998,11 @@ mod tests {
             parse_rpc_command("sidebar-right"),
             Ok(WmAction::SidebarRight)
         );
-        // The whole sidebar family is RPC-reachable, not just the region toggles: a
-        // capability the keyboard alone can reach is trapped behind one surface.
-        assert_eq!(
-            parse_rpc_command("sidebar-focus"),
-            Ok(WmAction::SidebarFocus)
-        );
-        assert_eq!(parse_rpc_command("sidebar-up"), Ok(WmAction::SidebarUp));
-        assert_eq!(parse_rpc_command("sidebar-down"), Ok(WmAction::SidebarDown));
-        assert_eq!(
-            parse_rpc_command("sidebar-left-nav"),
-            Ok(WmAction::SidebarLeftNav)
-        );
-        assert_eq!(
-            parse_rpc_command("sidebar-right-nav"),
-            Ok(WmAction::SidebarRightNav)
-        );
-        assert_eq!(parse_rpc_command("sidebar-peek"), Ok(WmAction::SidebarPeek));
-        assert_eq!(
-            parse_rpc_command("sidebar-expand-toggle"),
-            Ok(WmAction::SidebarExpandToggle)
-        );
-        assert_eq!(
-            parse_rpc_command("sidebar-create-workspace"),
-            Ok(WmAction::SidebarCreateWorkspace)
-        );
-        assert_eq!(
-            parse_rpc_command("sidebar-create-column"),
-            Ok(WmAction::SidebarCreateColumn)
-        );
-        assert_eq!(
-            parse_rpc_command("sidebar-split-in-column"),
-            Ok(WmAction::SidebarSplitInColumn)
-        );
-        assert_eq!(
-            parse_rpc_command("sidebar-zoom-selected-column"),
-            Ok(WmAction::SidebarZoomSelectedColumn)
-        );
-        assert_eq!(
-            parse_rpc_command("sidebar-delete-selected"),
-            Ok(WmAction::SidebarDeleteSelected)
-        );
-        assert_eq!(
-            parse_rpc_command("collapse-current-workspace"),
-            Ok(WmAction::CollapseCurrentWorkspace)
-        );
-        assert_eq!(
-            parse_rpc_command("expand-current-workspace"),
-            Ok(WmAction::ExpandCurrentWorkspace)
-        );
-        assert_eq!(
-            parse_rpc_command("toggle-current-workspace-collapsed"),
-            Ok(WmAction::ToggleCurrentWorkspaceCollapsed)
-        );
-        assert_eq!(
-            parse_rpc_command("collapse-current-column"),
-            Ok(WmAction::CollapseCurrentColumn)
-        );
-        assert_eq!(
-            parse_rpc_command("expand-current-column"),
-            Ok(WmAction::ExpandCurrentColumn)
-        );
-        assert_eq!(
-            parse_rpc_command("toggle-current-column-collapsed"),
-            Ok(WmAction::ToggleCurrentColumnCollapsed)
-        );
+        // The twelve `sidebar-*` nav/mutation commands went with the built-ins they named
+        // (F003/P085/T356). Their replacements are the workspaces component's declared actions,
+        // which this parser cannot express — it returns a `WmAction`, a closed enum.
+        assert!(parse_rpc_command("sidebar-up").is_err());
+        assert!(parse_rpc_command("sidebar-delete-selected").is_err());
     }
 
     #[test]

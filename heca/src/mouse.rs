@@ -146,7 +146,7 @@ fn open_sidebar_context_menu(
     pos: (f32, f32),
 ) {
     use crate::app::interaction::InteractionSource;
-    use crate::chrome::{ContextPath, ContextTarget};
+    use crate::chrome::ContextTarget;
     // Map the sidebar drag-item (from the chrome hit-test) to its context-menu `(path, target)`;
     // the sidebar provider for each path builds the add/delete entries acting on that target.
     let (path, target) = match item {
@@ -158,15 +158,15 @@ fn open_sidebar_context_menu(
                 return;
             };
             (
-                ContextPath::SIDEBAR_PANE,
+                crate::providers::workspaces::MENU_PANE,
                 ContextTarget::SidebarPane { pane_id, ws_idx, col_idx },
             )
         }
         crate::chrome::ChromeDragItem::Column { ws, col } => {
-            (ContextPath::SIDEBAR_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
+            (crate::providers::workspaces::MENU_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
         }
         crate::chrome::ChromeDragItem::Workspace { ws } => (
-            ContextPath::SIDEBAR_WORKSPACE,
+            crate::providers::workspaces::MENU_WORKSPACE,
             ContextTarget::SidebarWorkspace {
                 ws_idx: ws,
                 custom_name: state
@@ -246,6 +246,38 @@ pub fn on_mouse_input(
             // No clicks, no drags, no mode changes.
             if crate::app::interaction::is_floating_domain(&state.session) {
                 return None;
+            }
+
+            // **A click inside a container focuses it; one outside every container releases**
+            // (F003/P086/T365). Resolved from the retained tree's real bounds, so it works for any
+            // container — a plugin's included — with nothing declared.
+            //
+            // First, and deliberately independent of whether a widget then consumes the press: a
+            // click on a scrollbar thumb is still a click *in* that container and must focus it.
+            // Each of the branches below returns early, so doing this later would mean repeating it
+            // in every one of them and still missing the paths that consume.
+            //
+            // This is also the generic form of the release the left-press content path did on its
+            // own (F003/P086/T364): "no container under the point" covers a pane, the top bar and
+            // empty space alike.
+            match crate::chrome::container_at(state, pos) {
+                Some(container) => {
+                    if state.chrome_state.focused_container().as_deref() != Some(container.as_str())
+                    {
+                        crate::handlers::handle_focus_dock(
+                            state,
+                            &WmAction::FocusDock { dock: Some(container.clone()) },
+                        );
+                    }
+                    // **The cursor and the click are the same thing.** Click row 5 and `j` must go
+                    // to row 6 — so the press moves the container's cursor, not just the highlight.
+                    // A press that lands on no row leaves the cursor alone: clicking a container's
+                    // padding is not a request to move it.
+                    if let Some(key) = crate::chrome::nav_key_at(state, pos) {
+                        crate::providers::move_provider_cursor(state, &container, &key);
+                    }
+                }
+                None => crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock),
             }
 
             // Right sidebar chrome click (e.g. the collapse toggle). The right sidebar
@@ -335,7 +367,9 @@ pub fn on_mouse_input(
                 return Some((action, InteractionSource::MouseLeftSidebar));
             }
 
-            // Content click → focus.
+            // Content click → focus. The release that used to be here is gone: the generic
+            // "no container under the point" branch above covers it, and covers the paths this one
+            // never reached (F003/P086/T365).
             if let Some(pane_id) = hit_test_pane(state, pos) {
                 return Some((
                     WmAction::FocusPane { pane_id },
@@ -416,6 +450,11 @@ pub fn on_mouse_input(
         // Focus the clicked pane so the menu's pane actions target it, then open
         // the menu in place. terminal-task-18 (context-menu open surface).
         (MouseButton::Right, ElementState::Pressed) => {
+            // NOT a release site, deliberately (F003/P086/T364). `open_context_menu_for` captures
+            // `restorable_mode(state.input_mode)` as the overlay's origin, and releasing first
+            // rewrites `SidebarNav` to `Normal` — so the menu would stop restoring sidebar nav on
+            // close. Right-click while a dock holds the keyboard is rebuilt wholesale in
+            // F003/P086/T365, once the legacy mode this depends on is gone.
             if let Some(pane_id) = hit_test_pane(state, pos) {
                 open_context_menu(state, pane_id, pos);
                 return Some((

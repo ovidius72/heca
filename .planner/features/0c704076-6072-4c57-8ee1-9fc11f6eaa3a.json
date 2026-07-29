@@ -1,8 +1,8 @@
 {
   "id": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
   "number": 7,
-  "shortId": "5XEMM",
-  "priority": 7,
+  "shortId": "Y3TR7",
+  "priority": 0,
   "name": "🖋️ Neovim GUI Pane",
   "description": "Integrazione Neovim GUI come pane: `nvim --embed`, msgpack-RPC, render singola grid, multi-istanza, `ext_multigrid`, input routing, image layer dedicato e markdown layer. Feature ancora in fase di idea/progettazione.",
   "discussedAt": "",

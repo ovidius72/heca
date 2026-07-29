@@ -143,6 +143,16 @@ pub enum WmAction {
     SplitHorizontal,
     SplitVertical,
     ZoomColumn,
+    /// Zoom **the column you name**, wherever it is — the parameterized twin of [`ZoomColumn`],
+    /// which acts on the active one (F003/P085/T356).
+    ///
+    /// A component resolves its cursor to a column and dispatches this; a menu entry or an RPC call
+    /// names one outright. Without it, "zoom the selected column" could only ever be a handler that
+    /// reached into one specific component's model.
+    ZoomColumnAtIndex {
+        ws_idx: usize,
+        col_idx: usize,
+    },
     /// Open the pane context menu for the focused pane (keyboard/RPC entry; the mouse right-click
     /// opens it directly). Anchored at the last cursor position.
     OpenContextMenu,
@@ -340,22 +350,6 @@ pub enum WmAction {
     // ── Sidebar / Chrome (unit) ──
     SidebarLeft,
     SidebarRight,
-    SidebarFocus,
-    SidebarUp,
-    SidebarDown,
-    SidebarLeftNav,
-    SidebarRightNav,
-    /// Focus the row under the sidebar-nav cursor **without leaving sidebar mode** — so
-    /// the tree can be walked with `j`/`k`, previewing each pane/workspace in the main
-    /// view. This is what separates it from [`SidebarRightNav`](WmAction::SidebarRightNav),
-    /// which focuses and *exits*.
-    SidebarPeek,
-    SidebarExpandToggle,
-    SidebarCreateWorkspace,
-    SidebarCreateColumn,
-    SidebarSplitInColumn,
-    SidebarZoomSelectedColumn,
-    SidebarDeleteSelected,
     CollapseCurrentWorkspace,
     ExpandCurrentWorkspace,
     ToggleCurrentWorkspaceCollapsed,
@@ -406,6 +400,18 @@ pub enum WmAction {
     ScrollToTop,
     /// Scroll to the live bottom (immediate).
     ScrollToBottom,
+    /// Scroll the focused chrome container one page **left** (F003/P085/T352).
+    ///
+    /// The four horizontal variants have no terminal half: a pane's scrollback has one axis, so
+    /// there is nothing for them to do when no dock holds chrome focus. They exist because a scroll
+    /// area in a container has two, and the vertical actions above reach it already.
+    ScrollPageLeft,
+    /// Scroll the focused chrome container one page **right**.
+    ScrollPageRight,
+    /// Jump the focused chrome container to its **left** edge.
+    ScrollToLeftEdge,
+    /// Jump the focused chrome container to its **right** edge.
+    ScrollToRightEdge,
     /// Jump the host viewport to an explicit offset in rows above the live bottom.
     /// Used by the GUI scrollbar / RPC; no default keybinding.
     ScrollToOffset {
@@ -497,6 +503,25 @@ pub enum WmAction {
         visible: bool,
     },
 
+    /// Give chrome **keyboard focus** to a mounted dock — one action, two ways in (F003/P011/T020).
+    ///
+    /// - `dock: None` (a bare `focus_dock` binding) opens the **pick**: every dock on screen lights
+    ///   a letter and the next keypress focuses that one.
+    /// - `dock: Some(id)` focuses it directly, no pick — the RPC and scripting case, which falls out
+    ///   of the optional argument rather than needing a second action.
+    ///
+    /// The target is a **container id**, never a side: a dock is focused wherever it is seated.
+    FocusDock {
+        dock: Option<crate::chrome::ContainerId>,
+    },
+
+    /// Give the keyboard back to the focused pane — chrome focus is released (F003/P085/T352).
+    ///
+    /// The counterpart of [`FocusDock`](Self::FocusDock), and the reason `Esc` is a *binding* in the
+    /// focus layer rather than a key this module recognises: releasing focus has to be reachable
+    /// from RPC and a menu too, not only from a key nothing else can rebind.
+    UnfocusDock,
+
     // ── Overlay control (parameterized) — plugin-ui, §2.7.2 ──
     // "Everything is an action": an overlay (modal/dropdown) is confirmed or dismissed by
     // dispatching an action carrying the overlay's id. The `OverlayHost` injects the id into
@@ -573,18 +598,9 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
         "sidebar_right" => Some(WmAction::SidebarRight),
-        "sidebar_focus" => Some(WmAction::SidebarFocus),
-        "sidebar_up" => Some(WmAction::SidebarUp),
-        "sidebar_down" => Some(WmAction::SidebarDown),
-        "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
-        "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
-        "sidebar_peek" => Some(WmAction::SidebarPeek),
-        "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
-        "sidebar_create_workspace" => Some(WmAction::SidebarCreateWorkspace),
-        "sidebar_create_column" => Some(WmAction::SidebarCreateColumn),
-        "sidebar_split_in_column" => Some(WmAction::SidebarSplitInColumn),
-        "sidebar_zoom_selected_column" => Some(WmAction::SidebarZoomSelectedColumn),
-        "sidebar_delete_selected" => Some(WmAction::SidebarDeleteSelected),
+        // Bare: no dock named ⇒ pick one by letter. `dock = "…"` goes through `build_action`.
+        "focus_dock" => Some(WmAction::FocusDock { dock: None }),
+        "unfocus_dock" => Some(WmAction::UnfocusDock),
         // Chrome region show/hide (sidebar-fu-6) — mounted-gate, unbound by default.
         "show_left_sidebar" => Some(WmAction::ShowLeftSidebar),
         "hide_left_sidebar" => Some(WmAction::HideLeftSidebar),
@@ -681,6 +697,10 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "scroll_page_down" => Some(WmAction::ScrollPageDown),
         "scroll_to_top" => Some(WmAction::ScrollToTop),
         "scroll_to_bottom" => Some(WmAction::ScrollToBottom),
+        "scroll_page_left" => Some(WmAction::ScrollPageLeft),
+        "scroll_page_right" => Some(WmAction::ScrollPageRight),
+        "scroll_to_left_edge" => Some(WmAction::ScrollToLeftEdge),
+        "scroll_to_right_edge" => Some(WmAction::ScrollToRightEdge),
         // `amount` is in notches; the handler multiplies by the user-configurable
         // `terminal_wheel_scroll_lines` before scrolling.  Default = 1 notch.
         "scrollback_line_up" => Some(WmAction::ScrollbackLineUp { amount: 1 }),
@@ -871,6 +891,10 @@ pub fn build_action(
             ws_idx: get_usize(args, "ws_idx")?,
             col_idx: get_usize(args, "col_idx")?,
         }),
+        "zoom_column_at_index" => Some(WmAction::ZoomColumnAtIndex {
+            ws_idx: get_usize(args, "ws_idx")?,
+            col_idx: get_usize(args, "col_idx")?,
+        }),
         "delete_workspace" => Some(WmAction::DeleteWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
@@ -934,6 +958,13 @@ pub fn build_action(
             container_id: get_string(args, "container_id")?,
             after_id: get_string(args, "after_id")?,
         }),
+        // `dock` is OPTIONAL, which is what makes one action serve both doors: a keybinding cannot
+        // name a container, so a bare binding picks one by letter; a caller that knows which dock it
+        // wants says so and skips the pick. An action with a *required* argument could not be bound
+        // bare at all (F003/P010/T006).
+        "focus_dock" => Some(WmAction::FocusDock {
+            dock: get_string(args, "dock"),
+        }),
 
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
@@ -977,21 +1008,9 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::FocusDown
         | WmAction::NextPane
         | WmAction::PrevPane => 0,
-        // Sidebar navigation (only used in sidebar mode via resolve_mode)
-        // Low priority so they don't override focus bindings in normal/prefix mode.
-        WmAction::SidebarFocus => 0,
-        WmAction::SidebarUp
-        | WmAction::SidebarDown
-        | WmAction::SidebarLeftNav
-        | WmAction::SidebarRightNav
-        | WmAction::SidebarPeek
-        | WmAction::SidebarExpandToggle
-        | WmAction::SidebarCreateWorkspace
-        | WmAction::SidebarCreateColumn
-        | WmAction::SidebarSplitInColumn
-        | WmAction::SidebarZoomSelectedColumn
-        | WmAction::SidebarDeleteSelected
-        | WmAction::CollapseCurrentWorkspace
+        // Chrome focus is navigation: low priority so it does not override focus bindings.
+        WmAction::FocusDock { .. } | WmAction::UnfocusDock => 0,
+        WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed
         | WmAction::CollapseCurrentColumn
@@ -1076,6 +1095,10 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ScrollPageDown
         | WmAction::ScrollToTop
         | WmAction::ScrollToBottom
+        | WmAction::ScrollPageLeft
+        | WmAction::ScrollPageRight
+        | WmAction::ScrollToLeftEdge
+        | WmAction::ScrollToRightEdge
         | WmAction::ScrollToOffset { .. } => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
@@ -1106,6 +1129,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::AddPaneToColumn { .. }
         | WmAction::AddColumnToWorkspace { .. }
         | WmAction::DeleteColumn { .. }
+        | WmAction::ZoomColumnAtIndex { .. }
         | WmAction::DeleteWorkspace { .. }
         | WmAction::TakePane { .. }
         | WmAction::OpenLink { .. }
@@ -1164,7 +1188,6 @@ mod tests {
         assert_eq!(action_from_name("focus_left"), Some(WmAction::FocusLeft));
         assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
         assert_eq!(action_from_name("zoom_column"), Some(WmAction::ZoomColumn));
-        assert_eq!(action_from_name("sidebar_peek"), Some(WmAction::SidebarPeek));
         assert_eq!(
             action_from_name("toggle_current_workspace_collapsed"),
             Some(WmAction::ToggleCurrentWorkspaceCollapsed)
@@ -1370,18 +1393,9 @@ mod tests {
             WmAction::RenameColumn,
             WmAction::WorkspaceNext,
             WmAction::WorkspacePrev,
-            // Sidebar (mode-internal + global toggles)
-            WmAction::SidebarFocus,
-            WmAction::SidebarUp,
-            WmAction::SidebarDown,
-            WmAction::SidebarLeftNav,
-            WmAction::SidebarRightNav,
-            WmAction::SidebarExpandToggle,
-            WmAction::SidebarCreateWorkspace,
-            WmAction::SidebarCreateColumn,
-            WmAction::SidebarSplitInColumn,
-            WmAction::SidebarZoomSelectedColumn,
-            WmAction::SidebarDeleteSelected,
+            // Chrome focus
+            WmAction::FocusDock { dock: None },
+            WmAction::UnfocusDock,
             WmAction::CollapseCurrentWorkspace,
             WmAction::ExpandCurrentWorkspace,
             WmAction::ToggleCurrentWorkspaceCollapsed,
@@ -1400,6 +1414,11 @@ mod tests {
             WmAction::ScrollbackToTop,
             WmAction::ScrollbackToBottom,
             WmAction::ExitScrollback,
+            // Direct scroll — the four horizontal ones reach a chrome container only
+            WmAction::ScrollPageLeft,
+            WmAction::ScrollPageRight,
+            WmAction::ScrollToLeftEdge,
+            WmAction::ScrollToRightEdge,
             // Selection (host capability, Task 02)
             WmAction::EnterSelectionMode,
             WmAction::SelectionLeft,
@@ -1591,6 +1610,35 @@ mod tests {
             missing.is_empty(),
             "these actions cannot be reached by name — each needs an `ActionDescriptor` (with its \
              `args` declared, if it takes any): {missing:#?}"
+        );
+    }
+
+    /// `focus_dock` is **one** action with two doors: a bare name for the keybinding (which opens the
+    /// pick) and a `dock` argument for a caller that already knows the answer (F003/P011/T020).
+    ///
+    /// The bare form is only legal because the argument is **optional** — an action with a required
+    /// argument must not resolve from its name alone (`every_action_that_needs_a_target_refuses_to_
+    /// default_it`), and that is exactly the rule this action is shaped around.
+    #[test]
+    fn focus_dock_resolves_bare_and_with_a_dock() {
+        assert_eq!(
+            action_from_name("focus_dock"),
+            Some(WmAction::FocusDock { dock: None }),
+            "bare: nothing named ⇒ pick one by letter",
+        );
+        let mut args = std::collections::HashMap::new();
+        args.insert("dock".to_string(), "workspaces".to_string());
+        assert_eq!(
+            build_action("focus_dock", &args),
+            Some(WmAction::FocusDock {
+                dock: Some("workspaces".to_string())
+            }),
+            "named: focus it directly, no pick",
+        );
+        assert_eq!(
+            build_action("focus_dock", &std::collections::HashMap::new()),
+            Some(WmAction::FocusDock { dock: None }),
+            "and omitting it through the argument path means the same as the bare name",
         );
     }
 

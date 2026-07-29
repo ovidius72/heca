@@ -1,7 +1,7 @@
 {
   "id": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
-  "number": 1,
+  "number": 25,
   "shortId": "AC78Z",
   "priority": 1,
   "slug": "nvim-03-ext-multigrid",
@@ -22,38 +22,16 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "ab6687d7-f0cf-478d-a834-26bf8ceb48e0",
     "248035a0-dd96-4494-b788-0713f09c8ea9",
     "625ef496-a969-4d6e-bb48-22299c1b9670",
-    "94e81f8d-9e0a-4090-9d43-65a9372a016a"
+    "94e81f8d-9e0a-4090-9d43-65a9372a016a",
+    "ab6687d7-f0cf-478d-a834-26bf8ceb48e0"
   ],
   "tasks": [
     {
-      "id": "ab6687d7-f0cf-478d-a834-26bf8ceb48e0",
-      "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
-      "number": 1,
-      "shortId": "BZU44",
-      "priority": 1,
-      "shortName": "ext-multigrid",
-      "title": "Per-window grids from ext_multigrid",
-      "status": "planned",
-      "description": "Supporto multiple grid/window via `ext_multigrid`.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.597Z",
-      "updatedAt": "2026-07-01T18:15:25.597Z"
-    },
-    {
       "id": "248035a0-dd96-4494-b788-0713f09c8ea9",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
-      "number": 2,
+      "number": 160,
       "shortId": "E8CZD",
       "priority": 2,
       "shortName": "win-viewport-tracking",
@@ -75,7 +53,7 @@
     {
       "id": "625ef496-a969-4d6e-bb48-22299c1b9670",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
-      "number": 3,
+      "number": 161,
       "shortId": "Y3YK6",
       "priority": 3,
       "shortName": "win-pos-geometry",
@@ -97,7 +75,7 @@
     {
       "id": "94e81f8d-9e0a-4090-9d43-65a9372a016a",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
-      "number": 4,
+      "number": 162,
       "shortId": "KDMAG",
       "priority": 4,
       "shortName": "float-z-ordering",
@@ -115,10 +93,34 @@
       "completedAt": "",
       "createdAt": "2026-07-01T18:15:25.597Z",
       "updatedAt": "2026-07-01T18:15:25.597Z"
+    },
+    {
+      "id": "ab6687d7-f0cf-478d-a834-26bf8ceb48e0",
+      "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
+      "number": 163,
+      "shortId": "BZU44",
+      "priority": 1,
+      "shortName": "ext-multigrid",
+      "title": "Per-window grids from ext_multigrid",
+      "status": "planned",
+      "description": "Supporto multiple grid/window via `ext_multigrid`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:15:25.597Z",
+      "updatedAt": "2026-07-01T18:15:25.597Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.457Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

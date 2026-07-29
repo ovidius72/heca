@@ -1,7 +1,7 @@
 {
   "id": "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 6,
+  "number": 36,
   "shortId": "KJ3NN",
   "priority": 6,
   "slug": "plugin-02-chromehost-and-region-hosts",
@@ -24,14 +24,14 @@
   "taskIds": [
     "741f7abc-d115-4a09-a5e3-d40a6d1d900c",
     "fec08ab0-8564-485a-8dee-f78417958668",
-    "50a6494f-7b92-4f84-992f-769fbf0015a1",
-    "4d3bd319-3760-4e09-b92a-994c9bf1cb57"
+    "4d3bd319-3760-4e09-b92a-994c9bf1cb57",
+    "50a6494f-7b92-4f84-992f-769fbf0015a1"
   ],
   "tasks": [
     {
       "id": "741f7abc-d115-4a09-a5e3-d40a6d1d900c",
       "phaseId": "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-      "number": 1,
+      "number": 51,
       "shortId": "5D75Y",
       "priority": 1,
       "shortName": "container-order-persist",
@@ -53,7 +53,7 @@
     {
       "id": "fec08ab0-8564-485a-8dee-f78417958668",
       "phaseId": "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-      "number": 2,
+      "number": 54,
       "shortId": "CYSA4",
       "priority": 2,
       "shortName": "move-container-region",
@@ -73,31 +73,9 @@
       "updatedAt": "2026-07-03T11:11:34.091Z"
     },
     {
-      "id": "50a6494f-7b92-4f84-992f-769fbf0015a1",
-      "phaseId": "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-      "number": 3,
-      "shortId": "C8SD3",
-      "priority": 3,
-      "shortName": "introduce-region-hosts",
-      "title": "Introduce region hosts",
-      "status": "done",
-      "description": "RegionHost generici per left/right/top/bottom.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-03T11:11:34.092Z",
-      "completedAt": "2026-07-03T11:11:34.092Z",
-      "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-03T11:11:34.092Z"
-    },
-    {
       "id": "4d3bd319-3760-4e09-b92a-994c9bf1cb57",
       "phaseId": "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-      "number": 4,
+      "number": 56,
       "shortId": "R25L7",
       "priority": 4,
       "shortName": "introduce-chromehost",
@@ -115,10 +93,34 @@
       "completedAt": "2026-07-03T11:11:34.092Z",
       "createdAt": "2026-07-01T18:12:25.304Z",
       "updatedAt": "2026-07-03T11:11:34.092Z"
+    },
+    {
+      "id": "50a6494f-7b92-4f84-992f-769fbf0015a1",
+      "phaseId": "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
+      "number": 57,
+      "shortId": "C8SD3",
+      "priority": 3,
+      "shortName": "introduce-region-hosts",
+      "title": "Introduce region hosts",
+      "status": "done",
+      "description": "RegionHost generici per left/right/top/bottom.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-03T11:11:34.092Z",
+      "completedAt": "2026-07-03T11:11:34.092Z",
+      "createdAt": "2026-07-01T18:12:25.304Z",
+      "updatedAt": "2026-07-03T11:11:34.092Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.502Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

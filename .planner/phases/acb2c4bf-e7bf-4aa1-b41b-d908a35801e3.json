@@ -1,7 +1,7 @@
 {
   "id": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 7,
+  "number": 14,
   "shortId": "C3VMV",
   "priority": 7,
   "slug": "terminal-04-backend-and-renderer-tests",
@@ -22,37 +22,15 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "3dcec4d9-f035-46e3-b80a-8e7fcd7dfdfd",
     "21e56e42-006f-4fe8-919b-838163ea8dff",
+    "3dcec4d9-f035-46e3-b80a-8e7fcd7dfdfd",
     "c59f097a-ee19-4c87-bb04-9faa3d853c10"
   ],
   "tasks": [
     {
-      "id": "3dcec4d9-f035-46e3-b80a-8e7fcd7dfdfd",
-      "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
-      "number": 1,
-      "shortId": "KK3PU",
-      "priority": 1,
-      "shortName": "backend-lifecycle-tests",
-      "title": "Backend lifecycle tests",
-      "status": "done",
-      "description": "Test di spawn/resize/kill/re-spawn PTY backend.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-01T18:11:32.026Z",
-      "completedAt": "2026-07-01T18:11:32.026Z",
-      "createdAt": "2026-07-01T18:11:32.026Z",
-      "updatedAt": "2026-07-01T18:11:32.026Z"
-    },
-    {
       "id": "21e56e42-006f-4fe8-919b-838163ea8dff",
       "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
-      "number": 2,
+      "number": 18,
       "shortId": "9C452",
       "priority": 2,
       "shortName": "manual-validation-matrix",
@@ -72,9 +50,31 @@
       "updatedAt": "2026-07-02T07:46:51.035Z"
     },
     {
+      "id": "3dcec4d9-f035-46e3-b80a-8e7fcd7dfdfd",
+      "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
+      "number": 21,
+      "shortId": "KK3PU",
+      "priority": 1,
+      "shortName": "backend-lifecycle-tests",
+      "title": "Backend lifecycle tests",
+      "status": "done",
+      "description": "Test di spawn/resize/kill/re-spawn PTY backend.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-01T18:11:32.026Z",
+      "completedAt": "2026-07-01T18:11:32.026Z",
+      "createdAt": "2026-07-01T18:11:32.026Z",
+      "updatedAt": "2026-07-01T18:11:32.026Z"
+    },
+    {
       "id": "c59f097a-ee19-4c87-bb04-9faa3d853c10",
       "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
-      "number": 3,
+      "number": 30,
       "shortId": "UM65T",
       "priority": 3,
       "shortName": "terminal-renderer-tests",
@@ -97,5 +97,7 @@
   "createdAt": "2026-07-01T18:09:07.246Z",
   "updatedAt": "2026-07-27T11:40:15.483Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

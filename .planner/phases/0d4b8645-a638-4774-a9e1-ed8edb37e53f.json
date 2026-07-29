@@ -1,7 +1,7 @@
 {
   "id": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
-  "number": 5,
+  "number": 23,
   "shortId": "BJV83",
   "priority": 5,
   "slug": "nvim-01-embed-nvim-rpc-render-single-grid",
@@ -22,15 +22,37 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
+    "72778c97-81f4-4748-9b64-7dce0da33d27",
     "754a27df-a876-453c-8c97-af764beb75fa",
-    "95937176-78be-4b37-8933-39de1a5369e0",
-    "72778c97-81f4-4748-9b64-7dce0da33d27"
+    "95937176-78be-4b37-8933-39de1a5369e0"
   ],
   "tasks": [
     {
+      "id": "72778c97-81f4-4748-9b64-7dce0da33d27",
+      "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
+      "number": 147,
+      "shortId": "5YDWV",
+      "priority": 3,
+      "shortName": "nvim-ui-attach",
+      "title": "nvim_ui_attach and render single grid",
+      "status": "planned",
+      "description": "Attach UI e render della prima grid.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-01T18:14:56.477Z"
+    },
+    {
       "id": "754a27df-a876-453c-8c97-af764beb75fa",
       "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
-      "number": 1,
+      "number": 149,
       "shortId": "WSQUB",
       "priority": 1,
       "shortName": "embed-nvim",
@@ -52,7 +74,7 @@
     {
       "id": "95937176-78be-4b37-8933-39de1a5369e0",
       "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
-      "number": 2,
+      "number": 152,
       "shortId": "W35LC",
       "priority": 2,
       "shortName": "nvim-msgpack-rpc",
@@ -70,32 +92,12 @@
       "completedAt": "",
       "createdAt": "2026-07-01T18:14:56.477Z",
       "updatedAt": "2026-07-01T18:14:56.477Z"
-    },
-    {
-      "id": "72778c97-81f4-4748-9b64-7dce0da33d27",
-      "phaseId": "0d4b8645-a638-4774-a9e1-ed8edb37e53f",
-      "number": 3,
-      "shortId": "5YDWV",
-      "priority": 3,
-      "shortName": "nvim-ui-attach",
-      "title": "nvim_ui_attach and render single grid",
-      "status": "planned",
-      "description": "Attach UI e render della prima grid.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-01T18:14:56.477Z",
-      "updatedAt": "2026-07-01T18:14:56.477Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.460Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

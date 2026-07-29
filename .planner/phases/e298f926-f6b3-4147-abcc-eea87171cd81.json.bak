@@ -1,10 +1,11 @@
 {
   "id": "e298f926-f6b3-4147-abcc-eea87171cd81",
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
-  "number": 6,
+  "number": 60,
+  "shortId": "CYZQB",
+  "priority": 6,
   "slug": "notification-03-toast-rendering",
   "title": "notification-03: In-App Toast Rendering",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,135 +22,242 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
-    "e1a0a159-85ee-489c-8347-688c7b4e46a6",
-    "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
-    "98793de9-2224-4fb4-b156-e989e3301033",
-    "3206fec1-67f3-4190-98ca-7a9d96492140",
-    "03455c50-7d6c-418d-9010-bcf66524628e"
+    "88963acd-0cce-4897-837c-6fd617d604b8",
+    "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+    "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
+    "9417690f-e416-42e4-b4a2-8dce72068de3",
+    "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8"
   ],
   "tasks": [
     {
-      "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 1,
-      "shortName": "toast-signal",
-      "title": "Add notification ToastSpec signal to ChromeSignals",
+      "id": "88963acd-0cce-4897-837c-6fd617d604b8",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 328,
+      "shortId": "WAZD5",
+      "priority": 1,
+      "shortName": "decide-override-rule",
+      "title": "DECIDE FIRST: does an explicit .border(color, width) override the global?",
       "status": "planned",
-      "description": "Aggiungere signal retained `Vec<ToastSpec>` per ToastStack senza rebuild chrome a ogni notifica.",
+      "description": "⛔ Blocking, and it is the user's call. Either an explicit `.border(color, width)` still overrides the global width, or width is ALWAYS theme-driven and a widget picks only the colour. Both are defensible and the answer changes the widget API. Ties into the planned config (memory `border-style-config-options`: sidebar_border_style / pane_border_style).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "decide-override-rule-c1",
+          "title": "BLOCKING: put both options to the user with the trade-off",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 2,
-      "shortName": "appstate-store",
-      "title": "Add notification store to AppState",
+      "id": "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 329,
+      "shortId": "C4X6X",
+      "priority": 5,
+      "shortName": "rail-config-and-behaviour",
+      "title": "The two config settings + click, right-click and KeyHint behaviour",
       "status": "planned",
-      "description": "Aggiungere `notifications: NotificationStore` a `AppState` e inizializzarlo in startup.",
+      "description": "`workspace_collapsed_style` and `pane_collapsed_style`, both `[appearance]`, typed snake_case enums defaulting to \"icon\", both added to config.default.toml and the README.\n\nBehaviour: a workspace cell click TOGGLES its pane list and does NOT switch workspace; a pane cell click focuses that pane. Right-click shows the SAME context menu as the expanded form — reuse the existing builders. The universal picker stamps letters over the cells. Column-target picks are unavailable while collapsed — an accepted limitation.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "rail-config-and-behaviour-c1",
+          "title": "Both config settings, documented in config.default.toml + README",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c2",
+          "title": "Workspace click toggles, pane click focuses",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c3",
+          "title": "Right-click reuses the expanded menu builders",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c4",
+          "title": "KeyHint over cells",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c5",
+          "title": "USER drives a region through its modes",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 3,
-      "shortName": "toast-callback-events",
-      "title": "Bridge dismiss/action callbacks to AppEvent",
+      "id": "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 330,
+      "shortId": "L5K5F",
+      "priority": 5,
+      "shortName": "plugin-escape-hatch",
+      "title": "The open variants for plugins (defer until plugins exist)",
       "status": "planned",
-      "description": "Le callback ToastStack devono inviare eventi app (`NotificationDismiss`, `NotificationAction`), non mutare AppState direttamente.",
+      "description": "`DragItemKind::Custom(u32)` so non-workspace containers do not inherit window-manager nouns, and `DragSurfaceId::Plugin(PluginSurfaceId)` funnelling dynamic surfaces through runtime dispatch while built-ins keep the fast path. Not needed until F003/P001 — but it is the same code and the same decision, so it lives here.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "plugin-escape-hatch-c1",
+          "title": "Defer until plugins exist",
+          "checked": false
+        },
+        {
+          "id": "plugin-escape-hatch-c2",
+          "title": "One open variant each, additive",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "98793de9-2224-4fb4-b156-e989e3301033",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 4,
-      "shortName": "toast-pass-through",
-      "title": "Validate ToastStack overlay pass-through",
+      "id": "9417690f-e416-42e4-b4a2-8dce72068de3",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 331,
+      "shortId": "X86TA",
+      "priority": 2,
+      "shortName": "realize-per-mode",
+      "title": "Mode-awareness lives in exactly one place: realize()",
       "status": "planned",
-      "description": "Verificare che click fuori dai toast passi all'UI sottostante; dismiss e action consumano solo sui card/affordance.",
+      "description": "The host renders the one tree for the region's current mode. Expanded → Group becomes a `DockFrame`, Item becomes a `Row` with all extras. Collapsed → a `RailCell` per node, recursively, with expanded-only extras omitted. This must NOT be duplicated across widgets or in the author's code.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "realize-per-mode-c1",
+          "title": "Both renderings come from one tree",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c2",
+          "title": "Mode branch exists only in realize()",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c3",
+          "title": "Group collapse is a generic host behaviour, not workspace-specific",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "3206fec1-67f3-4190-98ca-7a9d96492140",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 5,
-      "shortName": "sync-toast-signal",
-      "title": "Sync visible notifications into chrome signal",
+      "id": "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 332,
+      "shortId": "VGTZY",
+      "priority": 3,
+      "shortName": "showcase-reads-theme",
+      "title": "The showcase stops hardcoding 2.0",
       "status": "planned",
-      "description": "In `sync_chrome_signals`, aggiornare il signal solo quando `visible_toast_specs()` cambia.",
+      "description": "heca-renderer/examples/showcase.rs has literal `.border(theme.accent, 2.0)` calls (~762, 771, 793, 819 as of 2026-06-23) that ignore the global control entirely. Read `theme.border_width` instead. This is also why the demo panes kept a border at 0.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "showcase-reads-theme-c1",
+          "title": "Showcase reads theme.border_width",
+          "checked": false
+        },
+        {
+          "id": "showcase-reads-theme-c2",
+          "title": "No literal border widths left",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "03455c50-7d6c-418d-9010-bcf66524628e",
-      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
-      "number": 6,
-      "shortName": "mount-toaststack",
-      "title": "Mount ToastStack in chrome root",
+      "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 333,
+      "shortId": "F7ZWL",
+      "priority": 4,
+      "shortName": "action-first-then-drag",
+      "title": "The move is an ACTION first; drag is only the mouse surface",
       "status": "planned",
-      "description": "Montare `ToastStack` nel chrome root usando widget esistente, corner TopRight e styling theme-driven.",
+      "description": "⚠️ Build the action BEFORE the drag. On drop, dispatch `chrome.dock.move_to_region` / `chrome.dock.reorder_before` through the registry — never mutate directly. The same move MUST be reachable by keyboard and RPC (input parity, AGENTS.md). A drag that does something no keybinding can do is a rule violation.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "action-first-then-drag-c1",
+          "title": "Actions exist and work from keyboard + RPC first",
+          "checked": false
+        },
+        {
+          "id": "action-first-then-drag-c2",
+          "title": "Drop dispatches the action, never mutates",
+          "checked": false
+        },
+        {
+          "id": "action-first-then-drag-c3",
+          "title": "Follow the full Adding-New-Actions checklist",
+          "checked": false
+        },
+        {
+          "id": "action-first-then-drag-c4",
+          "title": "USER confirms keyboard and mouse agree",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-07-03T22:51:52.451Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-03T22:51:52.451Z"
+  "updatedAt": "2026-07-27T11:40:15.532Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

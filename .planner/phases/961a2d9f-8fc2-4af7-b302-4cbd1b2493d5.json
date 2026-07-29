@@ -1,7 +1,7 @@
 {
   "id": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 20,
+  "number": 83,
   "shortId": "XV49H",
   "priority": 20,
   "slug": "plugin-12-region-display-modes-the-collapsed-rail-render-per-mode-provider-contract",
@@ -22,93 +22,17 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "16871aea-041e-45f4-9dd7-ecce60ffa38d",
-    "9417690f-e416-42e4-b4a2-8dce72068de3",
     "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+    "16871aea-041e-45f4-9dd7-ecce60ffa38d",
     "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
-    "89ba55be-c2d1-4406-a4fb-0888b58d98b7"
+    "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+    "9417690f-e416-42e4-b4a2-8dce72068de3"
   ],
   "tasks": [
     {
-      "id": "16871aea-041e-45f4-9dd7-ecce60ffa38d",
-      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
-      "number": 1,
-      "shortId": "YQLV7",
-      "priority": 1,
-      "shortName": "provider-content-model",
-      "title": "The write-once Group/Item content model",
-      "status": "planned",
-      "description": "A Provider describes its content ONCE as a semantic tree of Groups and Items. Each node carries its meaning a single time: an Item has icon, label, status, intent and expanded-only actions; a Group has identity, collapsed, and children nested to any depth. The author NEVER writes an expanded tree and a collapsed tree — that double authoring is what this rejects, and it would fall on every plugin too.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "provider-content-model-c1",
-          "title": "Group/Item model defined",
-          "checked": false
-        },
-        {
-          "id": "provider-content-model-c2",
-          "title": "Nesting to any depth",
-          "checked": false
-        },
-        {
-          "id": "provider-content-model-c3",
-          "title": "No second tree anywhere in the author's code",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "9417690f-e416-42e4-b4a2-8dce72068de3",
-      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
-      "number": 2,
-      "shortId": "X86TA",
-      "priority": 2,
-      "shortName": "realize-per-mode",
-      "title": "Mode-awareness lives in exactly one place: realize()",
-      "status": "planned",
-      "description": "The host renders the one tree for the region's current mode. Expanded → Group becomes a `DockFrame`, Item becomes a `Row` with all extras. Collapsed → a `RailCell` per node, recursively, with expanded-only extras omitted. This must NOT be duplicated across widgets or in the author's code.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "realize-per-mode-c1",
-          "title": "Both renderings come from one tree",
-          "checked": false
-        },
-        {
-          "id": "realize-per-mode-c2",
-          "title": "Mode branch exists only in realize()",
-          "checked": false
-        },
-        {
-          "id": "realize-per-mode-c3",
-          "title": "Group collapse is a generic host behaviour, not workspace-specific",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
       "id": "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
       "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
-      "number": 3,
+      "number": 317,
       "shortId": "JC8WV",
       "priority": 3,
       "shortName": "collapse-flavours",
@@ -144,9 +68,47 @@
       "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
+      "id": "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 319,
+      "shortId": "YQLV7",
+      "priority": 1,
+      "shortName": "provider-content-model",
+      "title": "The write-once Group/Item content model",
+      "status": "planned",
+      "description": "A Provider describes its content ONCE as a semantic tree of Groups and Items. Each node carries its meaning a single time: an Item has icon, label, status, intent and expanded-only actions; a Group has identity, collapsed, and children nested to any depth. The author NEVER writes an expanded tree and a collapsed tree — that double authoring is what this rejects, and it would fall on every plugin too.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "provider-content-model-c1",
+          "title": "Group/Item model defined",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c2",
+          "title": "Nesting to any depth",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c3",
+          "title": "No second tree anywhere in the author's code",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
       "id": "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
       "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
-      "number": 4,
+      "number": 322,
       "shortId": "FYRQE",
       "priority": 4,
       "shortName": "railcell-widget-work",
@@ -194,7 +156,7 @@
     {
       "id": "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
       "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
-      "number": 5,
+      "number": 329,
       "shortId": "C4X6X",
       "priority": 5,
       "shortName": "rail-config-and-behaviour",
@@ -238,10 +200,50 @@
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "9417690f-e416-42e4-b4a2-8dce72068de3",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 331,
+      "shortId": "X86TA",
+      "priority": 2,
+      "shortName": "realize-per-mode",
+      "title": "Mode-awareness lives in exactly one place: realize()",
+      "status": "planned",
+      "description": "The host renders the one tree for the region's current mode. Expanded → Group becomes a `DockFrame`, Item becomes a `Row` with all extras. Collapsed → a `RailCell` per node, recursively, with expanded-only extras omitted. This must NOT be duplicated across widgets or in the author's code.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "realize-per-mode-c1",
+          "title": "Both renderings come from one tree",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c2",
+          "title": "Mode branch exists only in realize()",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c3",
+          "title": "Group collapse is a generic host behaviour, not workspace-specific",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-26T11:29:06.784Z",
   "updatedAt": "2026-07-27T11:40:15.521Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

@@ -8,29 +8,15 @@
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, InteractiveMovePhase};
-use crate::chrome::default_column_width;
+use crate::chrome::{ChromeDragItem, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
-use heca_grid_ui::drag::{DragItemId, DragSurfaceId, DropSide};
+use heca_grid_ui::drag::{DragSurfaceId, DropSide};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Geometry
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/// Returns true if the cursor is within the left sidebar bounds.
-pub(crate) fn contains(state: &AppState, pos: (f32, f32)) -> bool {
-    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom
-}
-
-/// Returns the flat index of the sidebar item at the cursor position.
-pub(crate) fn item_at(state: &AppState, pos: (f32, f32)) -> Option<DragItemId> {
-    let (_sx, _sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    let sidebar_h = sidebar_bottom - sidebar_top;
-    crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1)
-        .map(DragItemId::new)
-}
 
 /// Helper: compute sidebar geometry (width, top, bottom).
 fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
@@ -53,42 +39,19 @@ fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
 
 /// Handle a click (press+release without drag) in the left sidebar.
 ///
-/// Routes to button clicks, workspace switches, or pane focus actions.
+/// The press goes into the **retained** chrome tree, whose widgets route their own intents through
+/// the app event loop. Nothing here resolves a row: the tree knows where its rows are.
 pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
 
-    if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
-        // Button hits (close, delete) take priority.
-        if let Some((btn_idx, button)) =
-            crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1)
-        {
-            let is_delete = matches!(
-                &button,
-                WmAction::DeleteWorkspace { .. } | WmAction::DeleteColumn { .. }
-            );
-            if is_delete {
-                // Centralized: confirm (per config) or delete now, message generated
-                // by the chokepoint.
-                crate::handlers::request_destructive(state, button, true);
-                return None;
-            }
-
-            state.input_mode = crate::app_state::InputMode::SidebarNav;
-            if let Some(hitbox) = state.sidebar_tree.button_hitboxes.get(btn_idx)
-                && let Some(ws_idx) = hitbox.ws_idx
-                && ws_idx != state.session.active_workspace_idx
-            {
-                crate::switch_workspace_tracked(state, ws_idx);
-            }
-            return Some(button);
-        }
-
-        // The sidebar is Expanded whenever it is visible (there is no collapsed rail):
-        // dispatch the press into the retained grid-ui chrome tree so widget callbacks
-        // route their own intents through the app event loop.
-        if state.chrome_state.left_visible() {
-            let _ = crate::chrome::chrome_dispatch_press(state, pos);
-        }
+    if pos.0 >= sx
+        && pos.0 <= sx + sw
+        && pos.1 >= sidebar_top
+        && pos.1 <= sidebar_bottom
+        // The sidebar is Expanded whenever it is visible (there is no collapsed rail).
+        && state.chrome_state.left_visible()
+    {
+        let _ = crate::chrome::chrome_dispatch_press(state, pos);
     }
 
     None
@@ -98,53 +61,9 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
 //  Hover
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Update the hover item for the left sidebar during a drag.
-pub(crate) fn update_hover(state: &mut AppState) {
-    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    let pos = state.mouse.pos;
-    let left = state
-        .mouse
-        .drag_ctx
-        .surface_mut(DragSurfaceId::LeftSidebar)
-        .expect("LeftSidebar pre-populated in DragContext::default");
-    if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
-        let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1);
-        if let Some(fi) = fi {
-            if matches!(
-                state.sidebar_tree.flat_items.get(fi),
-                Some(&crate::sidebar::SidebarItem::FloatingPane { .. })
-            ) {
-                left.hover_item = None;
-            } else {
-                left.hover_item = Some(DragItemId::new(fi));
-            }
-        } else {
-            left.hover_item = None;
-        }
-    } else {
-        left.hover_item = None;
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Accept / Drop
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/// Check if the left sidebar can accept a drop of the given source pane
-/// onto the target item (by flat index).
-pub(crate) fn can_accept(
-    state: &AppState,
-    _source_pane_id: PaneId,
-    target_fi: usize,
-    _swap: bool,
-) -> bool {
-    // Floating panes cannot be drop targets (they float over the content area).
-    !matches!(
-        state.sidebar_tree.flat_items.get(target_fi),
-        Some(&crate::sidebar::SidebarItem::FloatingPane { .. })
-    )
-}
 
 /// Execute a drop during sidebar drag: move or swap the pane.
 ///
@@ -166,13 +85,13 @@ pub(crate) fn accept_drop(
         crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
             .and_then(|(item, side)| match item {
                 crate::chrome::ChromeDragItem::Pane(pid) => {
-                    Some((crate::sidebar::SidebarItem::Pane { pane_id: pid }, side))
+                    Some((crate::providers::workspaces::WorkspaceRow::Pane { pane_id: pid }, side))
                 }
                 // Dropping a pane on a workspace's header/empty area moves it INTO that
                 // workspace — the only way to reach an *empty* workspace (which has no pane
                 // card to aim at). Columns can't be empty, so they need no pane-drop target.
                 crate::chrome::ChromeDragItem::Workspace { ws } => {
-                    Some((crate::sidebar::SidebarItem::Workspace { ws_idx: ws }, side))
+                    Some((crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx: ws }, side))
                 }
                 crate::chrome::ChromeDragItem::Column { .. } => None,
             });
@@ -185,7 +104,7 @@ pub(crate) fn accept_drop(
     // plain move into that workspace.
     if swap
         && let Some((
-            crate::sidebar::SidebarItem::Pane {
+            crate::providers::workspaces::WorkspaceRow::Pane {
                 pane_id: target_pid,
             },
             _side,
@@ -225,7 +144,7 @@ pub(crate) fn accept_drop(
     match target {
         // Dropped onto a pane card → place relative to it.
         Some((
-            crate::sidebar::SidebarItem::Pane {
+            crate::providers::workspaces::WorkspaceRow::Pane {
                 pane_id: target_pid,
             },
             side,
@@ -234,14 +153,14 @@ pub(crate) fn accept_drop(
                 state,
                 original_ws,
                 removed_pane,
-                crate::sidebar::SidebarItem::Pane {
+                crate::providers::workspaces::WorkspaceRow::Pane {
                     pane_id: target_pid,
                 },
                 side,
             );
         }
         // Dropped onto a workspace (its header/empty area) → move into that workspace.
-        Some((item @ crate::sidebar::SidebarItem::Workspace { .. }, side)) => {
+        Some((item @ crate::providers::workspaces::WorkspaceRow::Workspace { .. }, side)) => {
             place_pane_at_sidebar_target(state, original_ws, removed_pane, item, side);
         }
         // Off any card (or onto itself) → re-add to the active workspace.
@@ -276,7 +195,7 @@ fn place_pane_at_sidebar_target(
     state: &mut AppState,
     original_ws: usize,
     pane: heca_core::layout::Pane,
-    item: crate::sidebar::SidebarItem,
+    item: crate::providers::workspaces::WorkspaceRow,
     side: DropSide,
 ) {
     let default_width = state
@@ -286,7 +205,7 @@ fn place_pane_at_sidebar_target(
         .unwrap_or(ColumnWidth::Proportion(0.85));
 
     match item {
-        crate::sidebar::SidebarItem::Pane {
+        crate::providers::workspaces::WorkspaceRow::Pane {
             pane_id: target_pid,
         } => {
             if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, target_pid)
@@ -317,7 +236,7 @@ fn place_pane_at_sidebar_target(
             }
             state.focused_pane = Some(target_pid);
         }
-        crate::sidebar::SidebarItem::Workspace { ws_idx } => {
+        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 // Dropping a pane on a workspace makes a NEW column at the end (appending
@@ -334,7 +253,7 @@ fn place_pane_at_sidebar_target(
                 );
             }
         }
-        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
@@ -352,7 +271,7 @@ fn place_pane_at_sidebar_target(
                 );
             }
         }
-        crate::sidebar::SidebarItem::FloatingPane { .. } => {
+        crate::providers::workspaces::WorkspaceRow::FloatingPane { .. } => {
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(original_ws) {
                 let active_col = ws.scrolling.active_column_idx;
@@ -392,14 +311,10 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
         return false;
     }
 
-    let sidebar_h = sidebar_bottom - sidebar_top;
-    let fi = match crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1)
-    {
-        Some(fi) => fi,
-        None => return false,
-    };
-
-    let item = match state.sidebar_tree.flat_items.get(fi).cloned() {
+    // Resolved against the **retained** tree's real laid-out bounds, like every other row
+    // resolution — not by arithmetic on a fixed row height, which stopped describing this sidebar
+    // the moment its rows became widgets of varying height (F003/P085/T356).
+    let item = match crate::chrome::sidebar_item_at(state, pos) {
         Some(item) => item,
         None => return false,
     };
@@ -418,9 +333,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     let shift_held = state.modifiers.shift_key();
 
     match item {
-        crate::sidebar::SidebarItem::Pane {
-            pane_id: target_pid,
-        } if shift_held => {
+        ChromeDragItem::Pane(target_pid) if shift_held => {
             // Swap: delegate to shared swap handler.
             // The source pane is still in the layout (interactive move keeps it there).
             crate::handlers::handle_swap_param(
@@ -443,9 +356,11 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
             };
 
             match item {
-                crate::sidebar::SidebarItem::Pane {
-                    pane_id: target_pid,
-                } => {
+                // A **floating** pane's card resolves here too: it is a pane row like any other,
+                // and `find_pane_location` simply does not find it in the tiled layout, so it takes
+                // the same fallback the old floating-only arm did — `Session::add_pane` uses the
+                // very default width that arm spelled out, on the same workspace.
+                ChromeDragItem::Pane(target_pid) => {
                     // Move: insert source pane after the target pane.
                     if let Some((ws_idx, col_idx, pane_idx)) =
                         crate::find_pane_location(&state.session, target_pid)
@@ -470,7 +385,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                     }
                     state.focused_pane = Some(target_pid);
                 }
-                crate::sidebar::SidebarItem::Workspace { ws_idx } => {
+                ChromeDragItem::Workspace { ws: ws_idx } => {
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                         let width = state
                             .session
@@ -480,21 +395,11 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                         ws.add_pane(pane, None, true, width);
                     }
                 }
-                crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+                ChromeDragItem::Column { ws: ws_idx, col: col_idx } => {
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                         let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
                         ws.scrolling
                             .add_pane_to_column(target_col, None, pane, true);
-                    }
-                }
-                crate::sidebar::SidebarItem::FloatingPane { .. } => {
-                    let width = state
-                        .session
-                        .options
-                        .default_column_width
-                        .unwrap_or(ColumnWidth::Proportion(0.85));
-                    if let Some(ws) = state.session.workspaces.get_mut(original_ws) {
-                        ws.add_pane(pane, None, true, width);
                     }
                 }
             }

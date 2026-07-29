@@ -2,7 +2,6 @@ use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
-use crate::sidebar::SidebarTree;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
@@ -55,7 +54,6 @@ pub enum InputMode {
         focus_after: bool,
     },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
-    SidebarNav,
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
     ///
@@ -118,6 +116,13 @@ pub enum InputMode {
     /// matches (so `n`/`N` navigate in selection mode), Esc cancels. The query +
     /// matches live in [`SearchState`], not here.
     Search,
+    /// Dock (chrome container) letter pick, entered with a bare `focus_dock`: every dock on
+    /// screen gets a letter (a `KeyHint` keycap over its body) and the next keypress gives it
+    /// chrome **keyboard focus**. Candidates carry a **container id**, so the pick is
+    /// position-agnostic — a dock is picked wherever it is seated (F003/P011/T020).
+    DockPick {
+        candidates: Vec<(char, crate::chrome::ContainerId)>,
+    },
     /// Universal leader/vimium **hint picker** (entered with `prefix+/`): every
     /// actionable chrome target gets a letter (a keycap stamped over its bounds);
     /// the next keypress fires that target's intent. Each candidate carries the
@@ -201,6 +206,14 @@ impl InputMode {
         }
     }
 
+    /// Dock pick candidates (letter → container id) while a `DockPick` is active.
+    pub fn dock_candidates(&self) -> Option<&[(char, crate::chrome::ContainerId)]> {
+        match self {
+            InputMode::DockPick { candidates } => Some(candidates),
+            _ => None,
+        }
+    }
+
     /// The keyboard pick currently in progress (move / select / swap / take), if any —
     /// a structured description of the pending action. Mirrored into the reactive chrome
     /// store (and emitted as `PendingPickChanged`) so any component or plugin can react
@@ -237,6 +250,7 @@ impl InputMode {
             InputMode::ColumnPick { .. } => {
                 (PickKind::MovePaneToColumn, "move_pane_to_column_pick")
             }
+            InputMode::DockPick { .. } => (PickKind::FocusDock, "focus_dock"),
             _ => return None,
         };
         let meta = catalog.find(action_name)?;
@@ -277,6 +291,8 @@ pub enum PickKind {
     MovePaneToWorkspace,
     MoveColumnToWorkspace,
     MovePaneToColumn,
+    /// Pick a chrome container to give keyboard focus to.
+    FocusDock,
 }
 
 /// What a surface drag carries — the app payload `P` for
@@ -591,7 +607,7 @@ fn make_terminal_texture(
 /// - `input_mode` is `Normal` unless an explicit mode transition happened
 ///   (prefix key, sidebar entry, rename, etc.). Mode transitions always go
 ///   through the input dispatch, never by direct field mutation.
-/// - `sidebar_tree` is rebuilt via `sync_from_session()` after any layout
+/// - the workspaces model is rebuilt via `sync_from_session()` after any layout
 ///   or focus change that affects the sidebar projection.
 pub struct AppState {
     pub window: Arc<Window>,
@@ -665,8 +681,6 @@ pub struct AppState {
     /// overlay remains. `None` for menus opened from Normal (no-op). See
     /// `chrome::context_menu` for the full contract.
     pub overlay_origin_mode: Option<InputMode>,
-    /// The sidebar tree model for workspace/pane tree navigation.
-    pub sidebar_tree: SidebarTree,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
@@ -705,7 +719,7 @@ pub struct AppState {
     /// runtime home every UI surface resolves action metadata through (see
     /// [`crate::actions::ActionCatalog`]).
     pub action_catalog: crate::actions::ActionCatalog,
-    /// Context-menu registry: built-in providers (pane + sidebar.pane/column/workspace) seeded
+    /// Context-menu registry: the content-pane built-in seeded
     /// at startup; plugins attach via `Contribution::ContextMenu` (context-menu-5). Both the
     /// mouse right-click and the keyboard `OpenContextMenu` resolve through it via
     /// `chrome::context_menu::open_context_menu_for`.
@@ -873,13 +887,14 @@ impl AppState {
         self.needs_redraw = true;
     }
 
-    /// Whether the sidebar nav cursor should be shown. True while actively navigating
-    /// (`SidebarNav`) **and** while a context menu opened *from* the sidebar is still up —
-    /// so the target row stays highlighted for the duration of the menu instead of losing
-    /// its highlight the moment the overlay takes over the input mode (context-menu-3).
-    pub fn sidebar_nav_active(&self) -> bool {
-        matches!(self.input_mode, InputMode::SidebarNav)
-            || matches!(self.overlay_origin_mode, Some(InputMode::SidebarNav))
+    /// Whether a container's cursor should be shown — **its keyboard focus**, which an overlay
+    /// does not take away (context-menu-3, F003/P086/T365).
+    ///
+    /// The row stays highlighted for the duration of a menu opened on it, instead of losing the
+    /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a
+    /// container holding the keyboard is the thing that was always meant.
+    pub fn container_cursor_visible(&self) -> bool {
+        self.chrome_state.focused_container().is_some()
     }
 
     /// Effective tab-bar (top bar) height: the default when shown, `0.0` when
@@ -1017,7 +1032,6 @@ mod tests {
     fn test_input_mode_candidates_none() {
         assert_eq!(InputMode::Normal.candidates(), None);
         assert_eq!(InputMode::Prefix.candidates(), None);
-        assert_eq!(InputMode::SidebarNav.candidates(), None);
     }
 
     #[test]

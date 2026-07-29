@@ -1,10 +1,11 @@
 {
   "id": "9cefac90-9fea-427c-9106-9a41e71e8acd",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 12,
+  "number": 77,
+  "shortId": "VBKFM",
+  "priority": 12,
   "slug": "app-13-mouse-input-leftovers",
   "title": "app-13: Mouse/input leftovers",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,18 +22,20 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a",
-    "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567"
+    "e74dca51-0219-4881-929c-53d94682ffa2",
+    "12766991-ce77-4b08-9153-51549aa98e92"
   ],
   "tasks": [
     {
-      "id": "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a",
-      "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
-      "number": 1,
-      "shortName": "swap-param-delegation",
-      "title": "Swap param delegation",
+      "id": "e74dca51-0219-4881-929c-53d94682ffa2",
+      "phaseId": "74abdac5-8a35-4e5f-a82f-3abb9bb0b738",
+      "number": 65,
+      "shortId": "GKVDS",
+      "priority": 2,
+      "shortName": "host-overlay-open",
+      "title": "Add app.overlay open modal and dropdown",
       "status": "planned",
-      "description": "APERTO — punto 3 della lista finale di `redo-mouse.md` (file cancellato 2026-07-14; contenuto verificato e migrato qui).\nTesto originale: \"Fix `handle_swap_param` for true cross-workspace swap or keep one-way move\".\n\n## STATO (verificato 2026-07-14)\n- `heca/src/handlers.rs:385` — `handle_swap_param(state, action)` destruttura `WmAction::Swap { a_id, b_id }`.\n- `AGENTS.md`, § \"Remaining in original refactoring plan\", lo elenca ANCORA come aperto: \"**Phase 3.2: `handle_swap_param()` still needs delegation to shared helpers (partial progress)**\".\n- Gli helper condivisi vivono in `heca/src/app/pane_ops.rs` (`find_pane_indices_in_workspace`, `insert_pane_at_position`, …) e in `heca/src/app/mutations.rs` (`after_layout_change`).\n\n## DECISIONE DA PRENDERE (è il cuore del task)\nDelle due, una — e va DECISA, non lasciata ambigua:\n(a) **swap cross-workspace VERO**: due pane in workspace diversi si scambiano di posto (ognuna finisce nello slot dell'altra);\n(b) **one-way move**: si ammette solo lo spostamento in una direzione, e lo swap cross-workspace viene esplicitamente NON supportato (e documentato come tale).\nOggi il comportamento è ambiguo/parziale: è questa ambiguità il bug.\n\n## LAVORO\n1. Decidere (a) o (b) con l'utente.\n2. Delegare `handle_swap_param` agli helper condivisi invece di ri-derivare indici/inserimenti a mano (è il debito che AGENTS segnala).\n3. ⚠️ ATTENZIONE, invariante: NON perdere pane. Vale la stessa lezione del task `sidebar-drop-loses-panes` (app-10): rimuovere una pane PRIMA di sapere dove reinserirla, ignorando il `Result` dell'insert, la fa sparire. Risolvere/validare la destinazione PRIMA di rimuovere, oppure take-or-restore.\n4. Test: swap same-workspace (regressione), swap cross-workspace (o rifiuto esplicito se (b)), conteggio pane SEMPRE conservato, indici stale dopo rimozione.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`; l'azione resta raggiungibile da tastiera + mouse/UI + RPC (P2).",
+      "description": "Host API per modal/dropdown con risultato async.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,17 +45,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-14T18:13:22.014Z",
-      "updatedAt": "2026-07-14T18:13:22.014Z"
+      "createdAt": "2026-07-01T18:12:25.316Z",
+      "updatedAt": "2026-07-01T18:12:25.316Z"
     },
     {
-      "id": "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567",
-      "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
-      "number": 2,
-      "shortName": "focus-follows-mouse-delay",
-      "title": "Focus follows mouse delay",
+      "id": "12766991-ce77-4b08-9153-51549aa98e92",
+      "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
+      "number": 66,
+      "shortId": "7UAN8",
+      "priority": 1,
+      "shortName": "token-syntax-registry",
+      "title": "Define token syntax and registry",
       "status": "planned",
-      "description": "APERTO — punto 4 della lista finale di `redo-mouse.md` (file cancellato 2026-07-14; contenuto verificato e migrato qui).\nTesto originale: \"Add `focus_follows_mouse_delay_ms` config\".\n\n## PERCHÉ\nCon `focus_follows_mouse = true`, il focus segue il cursore ISTANTANEAMENTE: attraversare una pane per raggiungerne un'altra ruba il focus alle pane intermedie (il classico \"focus flicker\" mentre si muove il mouse in diagonale). Un ritardo (hover dwell) prima di cambiare focus lo elimina: il focus cambia solo se il cursore RESTA sulla pane per N ms.\n\n## STATO (verificato 2026-07-14)\n- `focus_follows_mouse` ESISTE: setting in `heca-config` `[settings]`, letto sul `CursorMoved` in `heca/src/mouse.rs` (gate: `mouse_enabled` + `focus_follows_mouse` + `InputMode::Normal|Prefix` + cursore nell'area contenuto, poi `hit_test_pane`).\n- **`focus_follows_mouse_delay_ms` NON esiste**: zero occorrenze in tutto il repo (`--include=*.rs --include=*.toml`). Mai implementato.\n\n## LAVORO\n1. `heca-config/src/settings.rs`: nuovo campo `focus_follows_mouse_delay_ms: u64` (0 = comportamento odierno, istantaneo → back-compat totale).\n2. **`config.default.toml`**: aggiungere il setting con commento sotto `[settings]` (regola cardinale AGENTS.md: un campo di `SettingsConfig` che non sta nel file di default è un BUG — il default vivrebbe solo nel codice, invisibile all'utente).\n3. `heca/src/mouse.rs` (`CursorMoved`): non cambiare focus subito. Registrare pane candidata + istante; il focus scatta quando il cursore è rimasto sulla STESSA pane per `delay_ms`. Se il cursore passa su un'altra pane prima della scadenza, il timer riparte. NB: serve un tick (l'`about_to_wait`/loop di redraw già esiste — lì gira anche `dnd_edge_scroll`), altrimenti senza ulteriori eventi mouse il focus non scatterebbe mai.\n4. Il cambio di focus DEVE passare dall'azione (`WmAction::FocusPane` via il dispatch centrale), non da una mutazione diretta.\n5. Reload a runtime (`prefix+Shift+r`) deve raccogliere il nuovo valore.\n6. `README.md`: documentare il setting.\n\n## TEST\n- delay = 0 → comportamento identico a oggi (test di non-regressione);\n- delay > 0 → attraversare una pane senza fermarsi NON le dà il focus;\n- restare fermi oltre la soglia → il focus cambia una volta sola;\n- il timer si resetta cambiando pane.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`.",
+      "description": "Definire `${var}` e registry dei token pane/column/workspace.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -62,10 +67,14 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-14T18:13:43.153Z",
-      "updatedAt": "2026-07-14T18:13:43.153Z"
+      "createdAt": "2026-07-01T18:12:56.211Z",
+      "updatedAt": "2026-07-01T18:12:56.211Z"
     }
   ],
   "createdAt": "2026-07-14T18:13:04.164Z",
-  "updatedAt": "2026-07-14T18:13:43.153Z"
+  "updatedAt": "2026-07-27T11:40:15.471Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

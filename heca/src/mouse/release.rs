@@ -195,11 +195,6 @@ pub(super) fn handle_sidebar_drag_starting_release(
     state.mouse.drag_ctx.cancel_all();
 
     if let Some(action) = click_action {
-        if matches!(action, WmAction::FocusPane { .. })
-            && matches!(state.input_mode, crate::app_state::InputMode::SidebarNav)
-        {
-            state.input_mode = crate::app_state::InputMode::Normal;
-        }
         return Some((action, InteractionSource::MouseLeftSidebar));
     }
     None

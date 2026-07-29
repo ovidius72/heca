@@ -1,7 +1,7 @@
 {
   "id": "87939acb-c177-4c6b-b4d7-2df14c25390d",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
-  "number": 3,
+  "number": 37,
   "shortId": "2E3J8",
   "priority": 3,
   "slug": "nvim-06-markdown-layer",
@@ -29,7 +29,7 @@
     {
       "id": "35f3891d-a670-4bc7-a9d2-9405c602566f",
       "phaseId": "87939acb-c177-4c6b-b4d7-2df14c25390d",
-      "number": 1,
+      "number": 165,
       "shortId": "AAC5C",
       "priority": 1,
       "shortName": "read-buffer-rpc",
@@ -51,7 +51,7 @@
     {
       "id": "80d65d00-ea07-4725-9891-69499125f645",
       "phaseId": "87939acb-c177-4c6b-b4d7-2df14c25390d",
-      "number": 2,
+      "number": 172,
       "shortId": "3N8M2",
       "priority": 2,
       "shortName": "markdown-preview",
@@ -74,5 +74,7 @@
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-07-27T11:40:15.458Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

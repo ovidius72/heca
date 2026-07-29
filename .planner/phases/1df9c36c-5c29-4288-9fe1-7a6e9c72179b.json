@@ -1,7 +1,7 @@
 {
   "id": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 16,
+  "number": 76,
   "shortId": "6JDGF",
   "priority": 16,
   "slug": "viewnode-choice-choice-primitive-compose-the-remaining-widgets-full-viewnode-coverage",
@@ -36,7 +36,7 @@
     {
       "id": "d19bdbe7-a355-4c64-923e-d3f48af6db19",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 1,
+      "number": 278,
       "shortId": "SNEKU",
       "priority": 1,
       "shortName": "choice-1-choice-widget-value-c",
@@ -58,7 +58,7 @@
     {
       "id": "6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 2,
+      "number": 279,
       "shortId": "GWVX6",
       "priority": 2,
       "shortName": "choice-2-refactor-select-to-co",
@@ -89,7 +89,7 @@
     {
       "id": "7ef645d5-dc18-4552-87ce-ba819452cb11",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 3,
+      "number": 280,
       "shortId": "KSB6E",
       "priority": 3,
       "shortName": "choice-3-refactor-tabs-to-comp",
@@ -120,7 +120,7 @@
     {
       "id": "bfc43fce-a202-414c-a3f6-0d87a50547e8",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 4,
+      "number": 281,
       "shortId": "RXA77",
       "priority": 4,
       "shortName": "choice-4-realize-arms-choice-s",
@@ -151,7 +151,7 @@
     {
       "id": "fdbcabf3-eaa5-4983-9d36-75f393cb0b44",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 5,
+      "number": 282,
       "shortId": "YQE75",
       "priority": 5,
       "shortName": "choice-5-realize-arms-itemgrou",
@@ -182,7 +182,7 @@
     {
       "id": "2178830d-f5d6-46a1-9cba-6352afba8187",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 6,
+      "number": 283,
       "shortId": "PNC8T",
       "priority": 6,
       "shortName": "choice-6-propvalue-list-grid-r",
@@ -221,7 +221,7 @@
     {
       "id": "b4ef758e-bf59-46ba-a77e-ebd9b20d6638",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 7,
+      "number": 284,
       "shortId": "CHF9L",
       "priority": 7,
       "shortName": "choice-7-named-child-slots-slo",
@@ -252,7 +252,7 @@
     {
       "id": "af69ae20-58d6-4014-a4b7-9294e0c7ebe1",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 8,
+      "number": 285,
       "shortId": "S4SSC",
       "priority": 8,
       "shortName": "choice-8-vocabulary-coverage-p",
@@ -283,7 +283,7 @@
     {
       "id": "db61a57c-fccf-4a50-b2bf-fe23a5b7ae7f",
       "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 9,
+      "number": 289,
       "shortId": "CYGDN",
       "priority": 9,
       "shortName": "label-decorations-italic-under",
@@ -315,5 +315,7 @@
   "createdAt": "2026-07-13T20:45:04.639Z",
   "updatedAt": "2026-07-27T11:40:15.515Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

@@ -10,7 +10,6 @@ use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
-use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_grid_ui::install_frame_request;
@@ -305,8 +304,6 @@ pub(crate) async fn init_state(
     );
 
     let ws_count = session.workspaces.len();
-    let mut sidebar_tree = SidebarTree::new();
-    sidebar_tree.sync_from_session(&session, None, Some(pane_id), &vec![None; ws_count]);
 
     let terminal_layer_scratch =
         app_state::RetainedTerminalScratch::new(&device, config.format, 1, 1);
@@ -331,6 +328,20 @@ pub(crate) async fn init_state(
     // registration is *why* there is a workspace tree in the sidebar at all. Move the
     // container to the right region and its UI goes with it.
     chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
+    // A **second placement** of the same container, in the right sidebar (F003/P085/T359, user
+    // 2026-07-30). Not scaffolding: with one dock on screen none of this phase is observable — not
+    // a letter per dock, not focus moving between them, not "the focused one answers and every
+    // other declines", not two cursors, not two scroll positions. And a terminal has no horizontal
+    // scroll at all, so the horizontal keys have nothing to act on without it.
+    //
+    // It is also the only thing that exercises the kind/mount split for real: same content, same
+    // bindings, separate cursor / scroll / focus, because those are keyed by mount id.
+    chrome_host.register(Box::new(
+        crate::providers::WorkspacesContainerProvider::placed(
+            "workspaces.right",
+            crate::chrome::RegionId::RightSidebar,
+        ),
+    ));
 
     Box::new(AppState {
         window,
@@ -366,14 +377,15 @@ pub(crate) async fn init_state(
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
         overlay_origin_mode: None,
-        sidebar_tree,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
         hint_targets: crate::chrome::HintTargetRegistry::default(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
-        action_shortcuts: crate::chrome::ActionShortcuts::from_config(&app_config.config),
+        // Filled in `resumed`, from the built keymaps, once every layer — including the
+        // components' and any plugin's — has actually bound (F003/P086/T366).
+        action_shortcuts: crate::chrome::ActionShortcuts::default(),
         action_catalog: crate::actions::ActionCatalog::with_builtins(),
         context_menu_registry: crate::chrome::ContextMenuRegistry::with_builtins(),
         pending_context: None,

@@ -1,7 +1,7 @@
 {
   "id": "8f760a9b-3ce8-4932-8286-67d742397f2e",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 12,
+  "number": 68,
   "shortId": "6ZND9",
   "priority": 12,
   "slug": "context-menu-contextual-menu-overlayhost-plugin-declarable",
@@ -72,10 +72,10 @@
   "completionCriteria": [],
   "taskIds": [
     "6da5a4c5-1796-4287-9f20-6c78ff8843cc",
-    "a7226c35-9876-4bad-8775-01cd9bbc3204",
-    "63d4e696-bacc-4556-8d7c-a074816097cc",
     "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
     "3724e701-8519-4dfc-bed2-7aa978b96979",
+    "63d4e696-bacc-4556-8d7c-a074816097cc",
+    "a7226c35-9876-4bad-8775-01cd9bbc3204",
     "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
     "a721d49b-827e-4dce-bffb-2e4270c08c5d",
     "bc9ca992-57d9-4c4b-bc19-b92fa948d1f9"
@@ -84,7 +84,7 @@
     {
       "id": "6da5a4c5-1796-4287-9f20-6c78ff8843cc",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 1,
+      "number": 255,
       "shortId": "BTQQP",
       "priority": 1,
       "shortName": "context-menu-1",
@@ -104,15 +104,15 @@
       "updatedAt": "2026-07-09T09:25:14.678Z"
     },
     {
-      "id": "a7226c35-9876-4bad-8775-01cd9bbc3204",
+      "id": "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 2,
-      "shortId": "2J7DR",
-      "priority": 2,
-      "shortName": "context-menu-2",
-      "title": "context-menu-2: grid-ui entry widget + ContextMenu::on_dismiss",
+      "number": 256,
+      "shortId": "QZ8LC",
+      "priority": 4,
+      "shortName": "context-menu-4",
+      "title": "context-menu-4: Migration onto OverlayHost::open_dropdown",
       "status": "done",
-      "description": "Preserve focused-left-border + theme glow + icon on the realized entry; add on_dismiss (mirrors Dialog::on_dismiss). Showcase + docs/widgets.md. DONE — landed in #225/#226 (ContextMenu widget with MenuEntry builders, on_dismiss, layout flip/clamp).",
+      "description": "Both open_context_menu/open_sidebar_context_menu (mouse.rs) build a DropdownSpec + open via OverlayHost::open_dropdown (host-owned Overlay-band modal layer). Removed the whole bespoke path: AppState.context_menu + context_menu_action sink, 3 events.rs input branches + context_menu_open/settle_context_menu, chrome/mod.rs layout_context_menu/paint_context_menu + hint blocks + render.rs calls (layout_layers/paint_layers replace them). Drops prefix+X labels; adds host-assigned letter quick-picks; destructive still confirms via central gate. DONE 2026-07-08 commit 7d031c5, GUI-verified.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -126,9 +126,40 @@
       "updatedAt": "2026-07-09T09:25:14.679Z"
     },
     {
+      "id": "3724e701-8519-4dfc-bed2-7aa978b96979",
+      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
+      "number": 257,
+      "shortId": "RZU5Z",
+      "priority": 5,
+      "shortName": "context-menu-5",
+      "title": "context-menu-5: plugin Contribution::ContextMenu (full design now)",
+      "status": "done",
+      "description": "Plugin context-menu contribution. Builds on the ContextMenuRegistry + open_context_menu_for from context-menu-6: the plugin does NOT pass mode/origin (host-internal); it declares context_path + weight + build(target), and the host includes its items when the context is active (keyboard resolve_active_context) or clicked (mouse hit-test). Merge by weight (Dewey Vec<i64>, C2).\n\n⛔ BLOCCATO DA plugin-04 (Dynamic action registry) — decisione utente 2026-07-14.\nMOTIVO (scoperto iniziando l'implementazione): `DropdownItem.action` è un `WmAction` (heca/src/chrome/overlay.rs:220) e `WmAction` è un enum CHIUSO. Un plugin NON può creare una variante. Quindi:\n- un menu-item di plugin potrebbe oggi dispatchare solo azioni GIÀ esistenti in heca → il task non raggiungerebbe il suo scopo (menu \"plugin-declarable\" con azioni DEL plugIN);\n- il contratto che scriveremmo ora (`Contribution::ContextMenu` → `Vec<DropdownItem>` con `WmAction`) andrebbe RISCRITTO da plugin-04 in forma `Intent` (action id stringa + args). Sarebbe lavoro \"for now\" (vietato da AGENTS.md §3).\n\nFORMA TARGET (dopo plugin-04):\n    Contribution::ContextMenu {\n        context_path: \"sidebar.workspace\".into(),\n        weight: vec![1, 1, 1],                 // si incastra tra i built-in\n        build: |ctx, target| vec![\n            MenuEntrySpec::new(\"docker.restart\", \"Restart\")\n                .intent(Intent::new(\"docker.restart\").arg(\"id\", target.id())),  // azione DEL PLUGIN\n        ],\n    }\n\nFONDAMENTA GIÀ PRONTE (context-menu-6/7, heca/src/chrome/context_menu.rs):\n- `ContextMenuRegistry` con 4 provider built-in (pane, sidebar.pane, sidebar.column, sidebar.workspace), `register(path, weight, build)`, `items_for` (merge per weight, sort stabile), `ordered_providers` (unit-testabile senza AppState).\n- `ContextMenuProvider { weight: Vec<i64>, build: fn(&AppState, &ContextTarget) -> Vec<DropdownItem> }` — NB: il `build` built-in è un fn pointer che riceve `&AppState`; il build di un PLUGIN non può ricevere AppState (§2.3: i provider leggono via selector del facade). Servirà quindi un enum di build (Native fn-ptr host-side / Plugin closure su `&ChromeCtx`), oppure unificare su ChromeCtx.\n- `open_context_menu_for` (path, target, anchor, source, origin) — apertura unificata mouse+tastiera.\n- `Contribution` (chrome/contribution.rs:130) NON ha ancora la variante `ContextMenu`: va aggiunta qui.\n\nLAVORO QUANDO SI SBLOCCA:\n1. `Contribution::ContextMenu { context_path, weight, build }` in chrome/contribution.rs.\n2. Build del plugin su `&ChromeCtx` (mai `&AppState`) → enum `MenuBuild::{Native(fn), Plugin(Rc<dyn Fn>)}` in ContextMenuProvider, oppure unificazione.\n3. Item in forma `Intent` (da plugin-04), non `WmAction`.\n4. Installazione: all'attivazione del provider, l'host legge la sua `Contribution::ContextMenu` e la registra nel `ContextMenuRegistry` (path + weight + build).\n5. Test: merge per weight tra built-in e plugin (il caso `[1,1,1]` tra `[1,1]` e `[1,2]` — c'è già `ordered_providers_sorts_by_weight` da estendere), e un item di plugin che dispatcha un'azione del plugin.\n\nLocked design (C1/C2/C3, 2026-07-09):\n- C1 context granularity: dotted context path. La ContextMenuRegistry keya i provider per ContextPath; la Contribution::ContextMenu del plugin porta il suo context_path.\n- C2 weight: Vec<i64> Dewey/fractional-index + separatori + tie-break. Built-in con weight stabile; un plugin inserisce [1,1,1] tra [1,1] e [1,2].\n- C3 native + WASM: design completo ora (closure nativa; marshalling WASM rimandato a plugin-08).\n\n---\n**Completion summary:**\nDONE 2026-07-15 — commit `ab6d2fc` (branch `test/context-menu-keyboard-nav`). Verificato a runtime dall'utente: right-click su un pane e su una riga della sidebar aprono il menu e le azioni partono come atteso.\n\n## COSA È STATO FATTO\nUn provider può contribuire voci a qualunque context menu, e quelle voci possono dispatchare le AZIONI PROPRIE del provider. Il blocco era un enum chiuso: `DropdownItem.action` era un `WmAction`, quindi una voce di plugin poteva solo eseguire azioni già esistenti in heca. plugin-04 ha reso le azioni name-keyed ⇒ la voce ora porta un `Intent` (nome azione + args).\n\n- **`DropdownItem { id, label, intent, danger, enabled }`** (heca/src/chrome/overlay.rs): `id` = identità VISIVA (risolve l'icona), `intent` = ciò che ESEGUE — separati DI PROPOSITO: la voce sidebar \"Delete pane\" mostra l'icona `close` ma esegue `close_pane_by_id` sul pane di quella riga. Costruttori `new(id,label)` (id≡azione) e `with_intent(id,label,intent)` (identità≠comportamento). Il dispatch della voce scelta passa da `dispatch_intent(InteractionIntent::View)` — la porta unica — quindi policy e confirm gate valgono come per un tasto.\n- **`Provider::context_menus(ctx) -> Vec<ContextMenuContribution>`** (heca/src/providers/mod.rs): il provider dichiara *dove* (`context_path`) e *cosa* (`build`), mai *quando*. L'host apre il menu (right-click / `prefix+>`), risolve il contesto e fonde per weight Dewey ⇒ le voci di plugin si incastrano TRA i built-in (`[1,1,1]` tra `[1,1]` e `[1,2]`), non appese in fondo.\n- **`MenuBuild = Rc<dyn Fn(&ChromeCtx, &ContextTarget) -> Vec<DropdownItem>>`** (heca/src/chrome/context_menu.rs): UNA firma per built-in e plugin. I builder leggono l'app via il facade `ChromeCtx` (mai `&AppState`) ⇒ una lacuna del facade la incontrano PRIMA i menu built-in, allo scoperto. `ContextTarget` porta ciò che solo l'host risolve (colonna del pane sidebar, custom_name del workspace), così il builder non tocca mai la session.\n- `open_context_menu_for` costruisce un `ChromeCtx::new(App::new(&state.chrome_state))` e chiama `items_for(ctx, path, target, plugin)`; `plugin_providers_for` raccoglie le voci dai provider MONTATI al momento dell'apertura.\n- `build_action` guadagna `add_column_to_workspace` e `open_link` (i 2 nomi che i menu built-in servivano a esprimere come intent).\n\n## DUE DEVIAZIONI DALLA TASK (il codice contraddiceva il piano)\n1. **NIENTE `Contribution::ContextMenu` variant.** `Provider::build_contribution` restituisce UNA sola `Contribution` — il body montato che il render path proietta ogni frame — e un provider vuole SIA un container SIA voci di menu sulle sue righe. Un variant lo costringerebbe a scegliere. ⇒ i menu sono un hook a sé (`context_menus`). `ContextMenuContribution` è un tipo a sé, non una variante di `Contribution`.\n2. **NIENTE installazione \"on activation\".** `MountedContribution::activate()` è definito ma NON è mai chiamato da nessuna parte — l'attivazione dei provider non è mai stata cablata (residuo plugin-03). Invece di simulare un lifecycle che non gira, le voci si raccolgono dai provider MONTATI all'apertura del menu: sempre fresche, niente da deregistrare, e le voci di un provider smontato non restano appese. `ContextMenuRegistry::items_for` prende un `Vec<ContextMenuProvider>` `plugin` e li rifonde per weight con i built-in.\n\n## FILE TOCCATI\n`heca/src/chrome/overlay.rs` (DropdownItem→intent + dispatch), `heca/src/chrome/context_menu.rs` (MenuBuild, target arricchito, builder su ctx, items_for con plugin, plugin_providers_for, resolve_context_for con closure locate/ws_name), `heca/src/chrome/contribution.rs` (ContextMenuContribution), `heca/src/providers/mod.rs` (Provider::context_menus), `heca/src/chrome/host.rs` (mounted_providers), `heca/src/chrome/mod.rs` (re-export MenuBuild + ContextMenuContribution), `heca/src/mouse.rs` (host risolve ws/col e custom_name nel target), `heca/src/input.rs` (2 nomi in build_action).\n\n## TEST (nuovi, verdi)\n- `a_plugin_entry_merges_between_the_builtins_and_runs_its_own_action` — IL punto della task: la voce di plugin si incastra a `[1,1,1]` tra `[1,1]` e `[1,2]` e dispatcha `plugin.docker.restart`, che NON ha variante `WmAction` (asserito).\n- `every_builtin_menu_entry_resolves_to_a_real_action` — rete di sicurezza della conversione `WmAction`→`Intent`: OGNI voce built-in deve risolvere via `build_action`/`action_from_name`, altrimenti la conversione produrrebbe voci che non fanno niente al click. (Questo è esattamente il rischio che la verifica runtime dell'utente ha poi confermato assente.)\n- `an_entry_identity_and_the_action_it_runs_are_separate`, `dropdown_item_can_run_an_action_other_than_its_id` — id (icona) ≠ azione eseguita.\n- `ordered_providers_sorts_by_weight` aggiornato a `MenuBuild`.\n\n## GATE\n`cargo clippy --workspace --all-targets --all-features` 0 warning; `cargo test -p heca` 387 passed / 0 failed; showcase builda; niente `cargo fmt`. **Verifica runtime: OK (utente, 2026-07-15).**\n\n## LASCIATO APERTO (non in questa task)\n- Nessun provider first-party contribuisce ancora un menu: `Provider::context_menus` ha default `Vec::new()` e il seam è esercitato solo dai test + dai built-in. Il primo consumatore reale sarà un provider di plugin-05/plugin-09 (es. Docker/git) — sarà anche il primo REGISTRANT dinamico reale (vedi nota in plugin-04/T3: gli `expect(dead_code)` su `register_dynamic` si tolgono LÌ).\n- `ProviderHandles` (providers/mod.rs) tiene ancora solo le `subscriptions`; l'aggancio RAII degli `ActionHandle` (G5) resta a plugin-05.\n- Marshalling WASM del `build` (C3): rimandato a plugin-08 come da design.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3724e701-8519-4dfc-bed2-7aa978b96979-check-001-in-progress-planned",
+          "date": "2026-07-14T16:18:46.677Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "BLOCCATO da plugin-04 (Dynamic action registry). Scoperto 2026-07-14 iniziando l'implementazione: DropdownItem.action è un WmAction (heca/src/chrome/overlay.rs:220) e WmAction è un enum CHIUSO — un plugin non può crearne uno. Quindi un menu-item di un plugin oggi non avrebbe NIENTE da dispatchare tranne azioni già esistenti in heca, cioè il task non può raggiungere il suo scopo (\"plugin-declarable context menu\"). Costruirlo ora significherebbe scrivere un contratto (Contribution::ContextMenu → Vec<DropdownItem> con WmAction) che plugin-04 dovrà poi RISCRIVERE in forma Intent (action id stringa + args). Decisione utente 2026-07-14: fare prima plugin-04, poi T5 una volta sola e giusta.",
+          "description": "BLOCCATO da plugin-04 (Dynamic action registry). Scoperto 2026-07-14 iniziando l'implementazione: DropdownItem.action è un WmAction (heca/src/chrome/overlay.rs:220) e WmAction è un enum CHIUSO — un plugin non può crearne uno. Quindi un menu-item di un plugin oggi non avrebbe NIENTE da dispatchare tranne azioni già esistenti in heca, cioè il task non può raggiungere il suo scopo (\"plugin-declarable context menu\"). Costruirlo ora significherebbe scrivere un contratto (Contribution::ContextMenu → Vec<DropdownItem> con WmAction) che plugin-04 dovrà poi RISCRIVERE in forma Intent (action id stringa + args). Decisione utente 2026-07-14: fare prima plugin-04, poi T5 una volta sola e giusta."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-14T16:14:56.306Z",
+      "completedAt": "2026-07-15T06:48:52.531Z",
+      "createdAt": "2026-07-09T09:25:14.679Z",
+      "updatedAt": "2026-07-15T06:48:52.531Z"
+    },
+    {
       "id": "63d4e696-bacc-4556-8d7c-a074816097cc",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 3,
+      "number": 259,
       "shortId": "XM7GQ",
       "priority": 3,
       "shortName": "context-menu-3",
@@ -169,15 +200,15 @@
       "updatedAt": "2026-07-13T15:48:37.380Z"
     },
     {
-      "id": "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
+      "id": "a7226c35-9876-4bad-8775-01cd9bbc3204",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 4,
-      "shortId": "QZ8LC",
-      "priority": 4,
-      "shortName": "context-menu-4",
-      "title": "context-menu-4: Migration onto OverlayHost::open_dropdown",
+      "number": 260,
+      "shortId": "2J7DR",
+      "priority": 2,
+      "shortName": "context-menu-2",
+      "title": "context-menu-2: grid-ui entry widget + ContextMenu::on_dismiss",
       "status": "done",
-      "description": "Both open_context_menu/open_sidebar_context_menu (mouse.rs) build a DropdownSpec + open via OverlayHost::open_dropdown (host-owned Overlay-band modal layer). Removed the whole bespoke path: AppState.context_menu + context_menu_action sink, 3 events.rs input branches + context_menu_open/settle_context_menu, chrome/mod.rs layout_context_menu/paint_context_menu + hint blocks + render.rs calls (layout_layers/paint_layers replace them). Drops prefix+X labels; adds host-assigned letter quick-picks; destructive still confirms via central gate. DONE 2026-07-08 commit 7d031c5, GUI-verified.",
+      "description": "Preserve focused-left-border + theme glow + icon on the realized entry; add on_dismiss (mirrors Dialog::on_dismiss). Showcase + docs/widgets.md. DONE — landed in #225/#226 (ContextMenu widget with MenuEntry builders, on_dismiss, layout flip/clamp).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -191,40 +222,9 @@
       "updatedAt": "2026-07-09T09:25:14.679Z"
     },
     {
-      "id": "3724e701-8519-4dfc-bed2-7aa978b96979",
-      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 5,
-      "shortId": "RZU5Z",
-      "priority": 5,
-      "shortName": "context-menu-5",
-      "title": "context-menu-5: plugin Contribution::ContextMenu (full design now)",
-      "status": "done",
-      "description": "Plugin context-menu contribution. Builds on the ContextMenuRegistry + open_context_menu_for from context-menu-6: the plugin does NOT pass mode/origin (host-internal); it declares context_path + weight + build(target), and the host includes its items when the context is active (keyboard resolve_active_context) or clicked (mouse hit-test). Merge by weight (Dewey Vec<i64>, C2).\n\n⛔ BLOCCATO DA plugin-04 (Dynamic action registry) — decisione utente 2026-07-14.\nMOTIVO (scoperto iniziando l'implementazione): `DropdownItem.action` è un `WmAction` (heca/src/chrome/overlay.rs:220) e `WmAction` è un enum CHIUSO. Un plugin NON può creare una variante. Quindi:\n- un menu-item di plugin potrebbe oggi dispatchare solo azioni GIÀ esistenti in heca → il task non raggiungerebbe il suo scopo (menu \"plugin-declarable\" con azioni DEL plugIN);\n- il contratto che scriveremmo ora (`Contribution::ContextMenu` → `Vec<DropdownItem>` con `WmAction`) andrebbe RISCRITTO da plugin-04 in forma `Intent` (action id stringa + args). Sarebbe lavoro \"for now\" (vietato da AGENTS.md §3).\n\nFORMA TARGET (dopo plugin-04):\n    Contribution::ContextMenu {\n        context_path: \"sidebar.workspace\".into(),\n        weight: vec![1, 1, 1],                 // si incastra tra i built-in\n        build: |ctx, target| vec![\n            MenuEntrySpec::new(\"docker.restart\", \"Restart\")\n                .intent(Intent::new(\"docker.restart\").arg(\"id\", target.id())),  // azione DEL PLUGIN\n        ],\n    }\n\nFONDAMENTA GIÀ PRONTE (context-menu-6/7, heca/src/chrome/context_menu.rs):\n- `ContextMenuRegistry` con 4 provider built-in (pane, sidebar.pane, sidebar.column, sidebar.workspace), `register(path, weight, build)`, `items_for` (merge per weight, sort stabile), `ordered_providers` (unit-testabile senza AppState).\n- `ContextMenuProvider { weight: Vec<i64>, build: fn(&AppState, &ContextTarget) -> Vec<DropdownItem> }` — NB: il `build` built-in è un fn pointer che riceve `&AppState`; il build di un PLUGIN non può ricevere AppState (§2.3: i provider leggono via selector del facade). Servirà quindi un enum di build (Native fn-ptr host-side / Plugin closure su `&ChromeCtx`), oppure unificare su ChromeCtx.\n- `open_context_menu_for` (path, target, anchor, source, origin) — apertura unificata mouse+tastiera.\n- `Contribution` (chrome/contribution.rs:130) NON ha ancora la variante `ContextMenu`: va aggiunta qui.\n\nLAVORO QUANDO SI SBLOCCA:\n1. `Contribution::ContextMenu { context_path, weight, build }` in chrome/contribution.rs.\n2. Build del plugin su `&ChromeCtx` (mai `&AppState`) → enum `MenuBuild::{Native(fn), Plugin(Rc<dyn Fn>)}` in ContextMenuProvider, oppure unificazione.\n3. Item in forma `Intent` (da plugin-04), non `WmAction`.\n4. Installazione: all'attivazione del provider, l'host legge la sua `Contribution::ContextMenu` e la registra nel `ContextMenuRegistry` (path + weight + build).\n5. Test: merge per weight tra built-in e plugin (il caso `[1,1,1]` tra `[1,1]` e `[1,2]` — c'è già `ordered_providers_sorts_by_weight` da estendere), e un item di plugin che dispatcha un'azione del plugin.\n\nLocked design (C1/C2/C3, 2026-07-09):\n- C1 context granularity: dotted context path. La ContextMenuRegistry keya i provider per ContextPath; la Contribution::ContextMenu del plugin porta il suo context_path.\n- C2 weight: Vec<i64> Dewey/fractional-index + separatori + tie-break. Built-in con weight stabile; un plugin inserisce [1,1,1] tra [1,1] e [1,2].\n- C3 native + WASM: design completo ora (closure nativa; marshalling WASM rimandato a plugin-08).\n\n---\n**Completion summary:**\nDONE 2026-07-15 — commit `ab6d2fc` (branch `test/context-menu-keyboard-nav`). Verificato a runtime dall'utente: right-click su un pane e su una riga della sidebar aprono il menu e le azioni partono come atteso.\n\n## COSA È STATO FATTO\nUn provider può contribuire voci a qualunque context menu, e quelle voci possono dispatchare le AZIONI PROPRIE del provider. Il blocco era un enum chiuso: `DropdownItem.action` era un `WmAction`, quindi una voce di plugin poteva solo eseguire azioni già esistenti in heca. plugin-04 ha reso le azioni name-keyed ⇒ la voce ora porta un `Intent` (nome azione + args).\n\n- **`DropdownItem { id, label, intent, danger, enabled }`** (heca/src/chrome/overlay.rs): `id` = identità VISIVA (risolve l'icona), `intent` = ciò che ESEGUE — separati DI PROPOSITO: la voce sidebar \"Delete pane\" mostra l'icona `close` ma esegue `close_pane_by_id` sul pane di quella riga. Costruttori `new(id,label)` (id≡azione) e `with_intent(id,label,intent)` (identità≠comportamento). Il dispatch della voce scelta passa da `dispatch_intent(InteractionIntent::View)` — la porta unica — quindi policy e confirm gate valgono come per un tasto.\n- **`Provider::context_menus(ctx) -> Vec<ContextMenuContribution>`** (heca/src/providers/mod.rs): il provider dichiara *dove* (`context_path`) e *cosa* (`build`), mai *quando*. L'host apre il menu (right-click / `prefix+>`), risolve il contesto e fonde per weight Dewey ⇒ le voci di plugin si incastrano TRA i built-in (`[1,1,1]` tra `[1,1]` e `[1,2]`), non appese in fondo.\n- **`MenuBuild = Rc<dyn Fn(&ChromeCtx, &ContextTarget) -> Vec<DropdownItem>>`** (heca/src/chrome/context_menu.rs): UNA firma per built-in e plugin. I builder leggono l'app via il facade `ChromeCtx` (mai `&AppState`) ⇒ una lacuna del facade la incontrano PRIMA i menu built-in, allo scoperto. `ContextTarget` porta ciò che solo l'host risolve (colonna del pane sidebar, custom_name del workspace), così il builder non tocca mai la session.\n- `open_context_menu_for` costruisce un `ChromeCtx::new(App::new(&state.chrome_state))` e chiama `items_for(ctx, path, target, plugin)`; `plugin_providers_for` raccoglie le voci dai provider MONTATI al momento dell'apertura.\n- `build_action` guadagna `add_column_to_workspace` e `open_link` (i 2 nomi che i menu built-in servivano a esprimere come intent).\n\n## DUE DEVIAZIONI DALLA TASK (il codice contraddiceva il piano)\n1. **NIENTE `Contribution::ContextMenu` variant.** `Provider::build_contribution` restituisce UNA sola `Contribution` — il body montato che il render path proietta ogni frame — e un provider vuole SIA un container SIA voci di menu sulle sue righe. Un variant lo costringerebbe a scegliere. ⇒ i menu sono un hook a sé (`context_menus`). `ContextMenuContribution` è un tipo a sé, non una variante di `Contribution`.\n2. **NIENTE installazione \"on activation\".** `MountedContribution::activate()` è definito ma NON è mai chiamato da nessuna parte — l'attivazione dei provider non è mai stata cablata (residuo plugin-03). Invece di simulare un lifecycle che non gira, le voci si raccolgono dai provider MONTATI all'apertura del menu: sempre fresche, niente da deregistrare, e le voci di un provider smontato non restano appese. `ContextMenuRegistry::items_for` prende un `Vec<ContextMenuProvider>` `plugin` e li rifonde per weight con i built-in.\n\n## FILE TOCCATI\n`heca/src/chrome/overlay.rs` (DropdownItem→intent + dispatch), `heca/src/chrome/context_menu.rs` (MenuBuild, target arricchito, builder su ctx, items_for con plugin, plugin_providers_for, resolve_context_for con closure locate/ws_name), `heca/src/chrome/contribution.rs` (ContextMenuContribution), `heca/src/providers/mod.rs` (Provider::context_menus), `heca/src/chrome/host.rs` (mounted_providers), `heca/src/chrome/mod.rs` (re-export MenuBuild + ContextMenuContribution), `heca/src/mouse.rs` (host risolve ws/col e custom_name nel target), `heca/src/input.rs` (2 nomi in build_action).\n\n## TEST (nuovi, verdi)\n- `a_plugin_entry_merges_between_the_builtins_and_runs_its_own_action` — IL punto della task: la voce di plugin si incastra a `[1,1,1]` tra `[1,1]` e `[1,2]` e dispatcha `plugin.docker.restart`, che NON ha variante `WmAction` (asserito).\n- `every_builtin_menu_entry_resolves_to_a_real_action` — rete di sicurezza della conversione `WmAction`→`Intent`: OGNI voce built-in deve risolvere via `build_action`/`action_from_name`, altrimenti la conversione produrrebbe voci che non fanno niente al click. (Questo è esattamente il rischio che la verifica runtime dell'utente ha poi confermato assente.)\n- `an_entry_identity_and_the_action_it_runs_are_separate`, `dropdown_item_can_run_an_action_other_than_its_id` — id (icona) ≠ azione eseguita.\n- `ordered_providers_sorts_by_weight` aggiornato a `MenuBuild`.\n\n## GATE\n`cargo clippy --workspace --all-targets --all-features` 0 warning; `cargo test -p heca` 387 passed / 0 failed; showcase builda; niente `cargo fmt`. **Verifica runtime: OK (utente, 2026-07-15).**\n\n## LASCIATO APERTO (non in questa task)\n- Nessun provider first-party contribuisce ancora un menu: `Provider::context_menus` ha default `Vec::new()` e il seam è esercitato solo dai test + dai built-in. Il primo consumatore reale sarà un provider di plugin-05/plugin-09 (es. Docker/git) — sarà anche il primo REGISTRANT dinamico reale (vedi nota in plugin-04/T3: gli `expect(dead_code)` su `register_dynamic` si tolgono LÌ).\n- `ProviderHandles` (providers/mod.rs) tiene ancora solo le `subscriptions`; l'aggancio RAII degli `ActionHandle` (G5) resta a plugin-05.\n- Marshalling WASM del `build` (C3): rimandato a plugin-08 come da design.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "3724e701-8519-4dfc-bed2-7aa978b96979-check-001-in-progress-planned",
-          "date": "2026-07-14T16:18:46.677Z",
-          "fromStatus": "in-progress",
-          "toStatus": "planned",
-          "title": "BLOCCATO da plugin-04 (Dynamic action registry). Scoperto 2026-07-14 iniziando l'implementazione: DropdownItem.action è un WmAction (heca/src/chrome/overlay.rs:220) e WmAction è un enum CHIUSO — un plugin non può crearne uno. Quindi un menu-item di un plugin oggi non avrebbe NIENTE da dispatchare tranne azioni già esistenti in heca, cioè il task non può raggiungere il suo scopo (\"plugin-declarable context menu\"). Costruirlo ora significherebbe scrivere un contratto (Contribution::ContextMenu → Vec<DropdownItem> con WmAction) che plugin-04 dovrà poi RISCRIVERE in forma Intent (action id stringa + args). Decisione utente 2026-07-14: fare prima plugin-04, poi T5 una volta sola e giusta.",
-          "description": "BLOCCATO da plugin-04 (Dynamic action registry). Scoperto 2026-07-14 iniziando l'implementazione: DropdownItem.action è un WmAction (heca/src/chrome/overlay.rs:220) e WmAction è un enum CHIUSO — un plugin non può crearne uno. Quindi un menu-item di un plugin oggi non avrebbe NIENTE da dispatchare tranne azioni già esistenti in heca, cioè il task non può raggiungere il suo scopo (\"plugin-declarable context menu\"). Costruirlo ora significherebbe scrivere un contratto (Contribution::ContextMenu → Vec<DropdownItem> con WmAction) che plugin-04 dovrà poi RISCRIVERE in forma Intent (action id stringa + args). Decisione utente 2026-07-14: fare prima plugin-04, poi T5 una volta sola e giusta."
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-14T16:14:56.306Z",
-      "completedAt": "2026-07-15T06:48:52.531Z",
-      "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-15T06:48:52.531Z"
-    },
-    {
       "id": "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 6,
+      "number": 271,
       "shortId": "NUNLY",
       "priority": 6,
       "shortName": "unified-open-registry",
@@ -246,7 +246,7 @@
     {
       "id": "a721d49b-827e-4dce-bffb-2e4270c08c5d",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 7,
+      "number": 272,
       "shortId": "REFR5",
       "priority": 7,
       "shortName": "keyboard-context-aware",
@@ -268,7 +268,7 @@
     {
       "id": "bc9ca992-57d9-4c4b-bc19-b92fa948d1f9",
       "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 8,
+      "number": 287,
       "shortId": "BL773",
       "priority": 8,
       "shortName": "context-menu-bug-keyboard-navi",
@@ -291,5 +291,7 @@
   "createdAt": "2026-07-09T09:24:46.628Z",
   "updatedAt": "2026-07-27T11:40:15.511Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

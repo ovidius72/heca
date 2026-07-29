@@ -1,10 +1,11 @@
 {
   "id": "cb8f1203-9ae5-431d-8e7d-07dad2804396",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 2,
+  "number": 18,
+  "shortId": "E6HNP",
+  "priority": 2,
   "slug": "gridui-05-bloom-and-custom-draw-effects",
   "title": "gridui-05: Bloom and custom draw effects",
-  "status": "planned",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,18 +22,20 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "d6d3ce85-9553-429c-8322-1ec4ca726178",
-    "d2abc295-6706-471d-b113-83e240c85675"
+    "d8ebde50-62a9-469c-bd13-b94a0eab8fd1",
+    "dab566c5-3abf-4067-bba2-a81b992f9228"
   ],
   "tasks": [
     {
-      "id": "d6d3ce85-9553-429c-8322-1ec4ca726178",
-      "phaseId": "cb8f1203-9ae5-431d-8e7d-07dad2804396",
-      "number": 1,
-      "shortName": "offscreen-bloom",
-      "title": "Implement offscreen bloom pipeline",
+      "id": "d8ebde50-62a9-469c-bd13-b94a0eab8fd1",
+      "phaseId": "50c22c08-b639-4a1a-a3cb-2a9f7084c0f9",
+      "number": 136,
+      "shortId": "2WSCH",
+      "priority": 1,
+      "shortName": "workspace-drag-payload",
+      "title": "Add Workspace drag payload",
       "status": "planned",
-      "description": "Bloom pipeline con bright-pass, blur e compositing.",
+      "description": "Payload DnD per le workspace.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,17 +45,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "createdAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-07-01T18:14:28.688Z"
     },
     {
-      "id": "d2abc295-6706-471d-b113-83e240c85675",
-      "phaseId": "cb8f1203-9ae5-431d-8e7d-07dad2804396",
-      "number": 2,
-      "shortName": "custom-drawcommand",
-      "title": "DrawCommand Custom escape hatch",
+      "id": "dab566c5-3abf-4067-bba2-a81b992f9228",
+      "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 137,
+      "shortId": "82CFX",
+      "priority": 6,
+      "shortName": "extract-geometry",
+      "title": "Extract geometry helpers",
       "status": "planned",
-      "description": "Escape hatch `DrawCommand::Custom` per effetti custom.",
+      "description": "Estrarre helper di geometry da `render.rs`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -62,10 +67,14 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "createdAt": "2026-07-01T18:14:28.688Z",
+      "updatedAt": "2026-07-01T18:14:28.688Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.860Z",
-  "updatedAt": "2026-07-01T18:13:27.647Z"
+  "updatedAt": "2026-07-27T11:40:15.490Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

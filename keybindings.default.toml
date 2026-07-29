@@ -11,7 +11,7 @@
 #   • flat bindings + [keys.unbind] merge per-key (override one, keep the rest);
 #   • [[keys.command]] and [[keys.mode]] arrays REPLACE the default list wholesale
 #     — re-list the defaults you still want, or rely on heca's built-in modes
-#     (resize/sidebar/selection are always merged back in at runtime by name).
+#     (resize/sidebar/selection/focus are always merged back in at runtime by name).
 #
 # Combo syntax:
 #   "prefix+h"        → prefix key (Ctrl+B) then h
@@ -89,8 +89,12 @@ prev_pane = "prefix+["
 # ── Sidebars ──
 sidebar_left          = "prefix+b"    # Toggle left sidebar
 sidebar_right         = "prefix+."    # Toggle right sidebar
-sidebar_focus         = "prefix+e"    # Focus sidebar (enter nav mode)
-sidebar_expand_toggle = "prefix+Tab"  # Expand/collapse selected sidebar node
+# Chrome keyboard focus is a DOCK, not a side: the letters go over every dock on screen and the
+# one you pick takes focus (a focus ring shows where the keyboard is). `focus_dock` also accepts a
+# `dock` id, which skips the pick — that is how RPC and menu entries focus a specific dock. No flat
+# binding form carries args yet, so to aim a key at one dock, use a mode block (as with
+# `scroll_to_offset` further down).
+focus_dock            = "prefix+Shift+e"  # Letters on every dock, pick one to focus
 # Sidebar-tree UI collapse state (works even when the sidebar is hidden):
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
@@ -213,6 +217,66 @@ scroll_line_down   = "Shift+Down"
 # action = "plugin.docker.restart"
 # keys = "w"
 # args = { container = "web" }
+
+# ── A COMPONENT'S OWN KEYS — `[[keys.component]]` ──
+# These apply **only while that component holds chrome focus** (see the `focus` mode further down
+# for the keys every focused container shares). `name` says which component; an optional `id`
+# narrows the entry to ONE placement, so two seatings of the same component can differ while its
+# cursor, scroll position and focus stay per placement anyway.
+#
+# Binding names are SHORT: under `name = "docker"`, `restart_selected` means the action id
+# `docker.restart_selected`. You never repeat the component on every line of its own block. An id
+# heca already knows keeps its own name — a component BINDS existing actions, it does not redeclare
+# them. Writing the id out in full is never wrong either.
+#
+# heca's own components ship their keys in this file, at the bottom, where you can see and change
+# them. A plugin has no file, so it registers its keys at runtime instead — whatever you write here
+# still wins.
+#
+# [[keys.component]]
+# name = "docker"               # a FIELD, never the table name — so a component may be called
+# restart_selected = "r"        #   `unbind` or `widgets` without colliding with a keyword
+# next_pane        = "n"        # …an existing action id, simply bound here
+#
+# [[keys.component]]            # the same component, narrowed to one placement
+# name = "docker"
+# id   = "docker.right"         # layered OVER the entry above; everything else is inherited
+# restart_selected = "R"
+#
+# [[keys.component.bind]]       # the arg-carrying form. Arrays are normally replaced wholesale,
+# action = "spawn_command"      #   which would drop every other default — so these merge by their
+# keys   = "t"                  #   `keys` field: this replaces exactly the binding for `t`.
+# args   = { command = "lazydocker", float = "true" }
+#
+# [keys.component.unbind]       # explicit removal, keyed by the COMBO, so it retires whatever that
+# "s" = true                    #   key pointed at. Never null / empty-string semantics.
+#
+# Binding an id whose component is not mounted is not an error: like every other binding it
+# resolves at press time, so it simply does nothing until that component appears. Nor is an `id`
+# for a placement that never exists.
+#
+# TWO KEYS EVERY CONTAINER HAS, WITH NOTHING DECLARED (F003/P086/T363):
+#
+#   global_focus = "prefix+d"    # takes the keyboard. Written in the entry above like any other
+#                                #   binding, but it applies while the container does NOT have
+#                                #   focus — which is the only time it is useful — so heca puts it
+#                                #   in the global map rather than the container's own layer.
+#                                #   With an `id` it aims at that seating; without one it names the
+#                                #   component and lands on the seating you were last in. Pressing
+#                                #   it again while that container has focus gives the keyboard
+#                                #   back. `global_focus` is reserved: a component cannot have an
+#                                #   action of that name.
+#
+#   Escape                       # gives the keyboard back to the main region. Always bound, for
+#                                #   every container, and NOT removable — a dock that declares
+#                                #   nothing must still be leavable without the mouse. You can add
+#                                #   other ways out by binding `unfocus_dock`; you cannot take this
+#                                #   one away.
+#
+# Those two are what make the rule work: a container that declares nothing at all is still
+# reachable, scrollable and leavable, with no code written for it.
+#
+# `heca --keys-show` lists every binding name and the key it resolves to, for every layer.
 
 # ── Chrome container placement (built-in, dotted ids) ──
 # heca's own container-placement actions use the same dotted id scheme, so you can
@@ -364,80 +428,54 @@ action = "resize"
 keys = "Up"
 args = { target = "pane", axis = "y", amount = "40" }
 
-# ── sidebar ── (entered via sidebar_focus / mouse; no trigger of its own)
+# ── focus ── (entered by focusing a DOCK — focus_dock / a click; no trigger of its own)
+#
+# While a chrome container holds the keyboard, THESE keys apply instead of the terminal:
+# unprefixed, no leader, and an unbound key does nothing rather than leaking into the
+# shell behind the dock. `prefix+…` still works throughout, and Esc gives the keyboard
+# back to the pane (as does aiming `focus_dock` at the dock that already has it).
+#
+# What lives here is what the WIDGETS answer — paging and edges for whatever scroll area
+# the container nests. It is deliberately not a per-container vocabulary: a scroll region
+# behaves the same wherever it is mounted, so nothing declares it. A container with
+# nothing scrollable simply declines and the key does nothing.
+#
+# Vertical uses the bare keys, which are free here precisely because nothing is being
+# forwarded to a backend; the `Shift+` forms in [keys] above keep scrolling the focused
+# PANE and, while a dock is focused, are aimed at the dock too — one binding, one
+# meaning: scroll whatever has the keyboard. Horizontal takes the same four keys with
+# Alt, since a terminal viewport has no horizontal axis to share them with.
 [[keys.mode]]
-name = "sidebar"
+name = "focus"
 trigger = ""
 sticky = true
 [[keys.mode.bindings]]
-action = "sidebar_up"
-keys = "k"
+action = "scroll_page_up"
+keys = "PageUp"
 [[keys.mode.bindings]]
-action = "sidebar_down"
-keys = "j"
+action = "scroll_page_down"
+keys = "PageDown"
 [[keys.mode.bindings]]
-action = "sidebar_up"
-keys = "Up"
+action = "scroll_to_top"
+keys = "Home"
 [[keys.mode.bindings]]
-action = "sidebar_down"
-keys = "Down"
+action = "scroll_to_bottom"
+keys = "End"
 [[keys.mode.bindings]]
-action = "sidebar_up"
-keys = "ArrowUp"
+action = "scroll_page_left"
+keys = "Alt+PageUp"
 [[keys.mode.bindings]]
-action = "sidebar_down"
-keys = "ArrowDown"
+action = "scroll_page_right"
+keys = "Alt+PageDown"
 [[keys.mode.bindings]]
-action = "sidebar_left_nav"
-keys = "h"
+action = "scroll_to_left_edge"
+keys = "Alt+Home"
 [[keys.mode.bindings]]
-action = "sidebar_right_nav"
-keys = "l"
-[[keys.mode.bindings]]
-action = "sidebar_left_nav"
-keys = "Left"
-[[keys.mode.bindings]]
-action = "sidebar_right_nav"
-keys = "Right"
-[[keys.mode.bindings]]
-action = "sidebar_left_nav"
-keys = "ArrowLeft"
-[[keys.mode.bindings]]
-action = "sidebar_right_nav"
-keys = "ArrowRight"
-[[keys.mode.bindings]]
-action = "sidebar_create_workspace"
-keys = "w"
-[[keys.mode.bindings]]
-action = "sidebar_create_column"
-keys = "c"
-[[keys.mode.bindings]]
-action = "sidebar_split_in_column"
-keys = "v"
-[[keys.mode.bindings]]
-action = "sidebar_zoom_selected_column"
-keys = "z"
-[[keys.mode.bindings]]
-action = "sidebar_delete_selected"
-keys = "d"
-[[keys.mode.bindings]]
-# Delete the selected item's whole column (the cursor never lands on a column
-# itself, so `d` above can only reach a pane/workspace). Shift+d, kept distinct
-# from `d` — a bare "D" folds to "d" in the keymap, so the Shift+ prefix is required.
-action = "delete_current_column"
-keys = "Shift+d"
-[[keys.mode.bindings]]
-action = "sidebar_expand_toggle"
-keys = "Tab"
-[[keys.mode.bindings]]
-# Focus the selected pane/workspace but STAY in sidebar mode, so the tree can be
-# walked with j/k while each row is previewed in the main view. `l`/`Right` focus
-# and *leave*; this is the one that keeps you here.
-action = "sidebar_peek"
-keys = "Space"
-[[keys.mode.bindings]]
-action = "sidebar_left"
-keys = "b"
+action = "scroll_to_right_edge"
+keys = "Alt+End"
+# NB: `Escape` → `unfocus_dock` is deliberately NOT listed here. Every container has it whatever
+# this block says (F003/P086/T363) — a line here would look editable and would not be. Bind
+# `unfocus_dock` to further keys if you want more ways out; Escape is the floor.
 
 # ── selection ── (entered via enter_selection_mode; no trigger of its own)
 [[keys.mode]]
@@ -576,3 +614,30 @@ keys = "ArrowDown"
 [[keys.mode.bindings]]
 action = "pane_terminal_font_reset"
 keys = "0"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Component keys — [[keys.component]]  (F003/P086/T362)
+# ═══════════════════════════════════════════════════════════════════════════════
+# heca's own components ship their keys HERE rather than in their code, so there is exactly one
+# place a key is written and one place to change it. See the block near the top for the shape.
+# These apply only while the component holds chrome focus; `prefix+Shift+e` picks a dock.
+
+[[keys.component]]
+name              = "workspaces"
+# The same keystroke `sidebar_focus` used to own. It is a plain container key now: nothing
+# app-side knows this dock exists, and a second component asks for its own the same way.
+global_focus      = "prefix+e"
+cursor_up         = "k,Up,ArrowUp"
+cursor_down       = "j,Down,ArrowDown"
+collapse_row      = "h,Left,ArrowLeft"
+activate_selected = "l,Right,ArrowRight,Enter"
+peek_selected     = "Space"
+toggle_selected   = "Tab"
+# The mutations. Each acts on the row the cursor is on, so they need no prefix and no mode — the
+# dock has the keyboard or it does not.
+create_workspace  = "w"
+create_pane       = "p"
+create_column     = "c"
+delete_selected   = "x"          # the pane or workspace under the cursor
+delete_selected_column = "Shift+x"  # its whole column — the cursor never lands on a column row
+zoom_selected     = "z"

@@ -1,7 +1,7 @@
 {
   "id": "68a01ad8-1026-4c09-b516-2e2838723903",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 15,
+  "number": 75,
   "shortId": "VP52E",
   "priority": 15,
   "slug": "viewnode-all-widgets-viewnode-all-widgets-compositional-refactor",
@@ -31,7 +31,7 @@
     {
       "id": "c9937902-a2bd-4ed3-8115-551bf87a7396",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
-      "number": 1,
+      "number": 274,
       "shortId": "MV7N5",
       "priority": 1,
       "shortName": "realize-coverage",
@@ -62,7 +62,7 @@
     {
       "id": "3d8841ae-3adc-4016-a83d-dec93a4c942b",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
-      "number": 2,
+      "number": 275,
       "shortId": "HET4A",
       "priority": 2,
       "shortName": "compose-leaf-widgets",
@@ -84,7 +84,7 @@
     {
       "id": "23d2e8b8-e251-4ae5-9f74-cd28ae96ff4b",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
-      "number": 3,
+      "number": 277,
       "shortId": "AUFAE",
       "priority": 3,
       "shortName": "viewnode-task-3-exhaustive-wid",
@@ -106,7 +106,7 @@
     {
       "id": "ee13e1f3-f329-46be-9c2a-6552d245e627",
       "phaseId": "68a01ad8-1026-4c09-b516-2e2838723903",
-      "number": 4,
+      "number": 288,
       "shortId": "YK3CB",
       "priority": 4,
       "shortName": "viewnode-task-4-retire-root-ha",
@@ -129,5 +129,7 @@
   "createdAt": "2026-07-13T15:29:44.427Z",
   "updatedAt": "2026-07-27T11:40:15.515Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

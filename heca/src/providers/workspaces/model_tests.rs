@@ -1,5 +1,6 @@
 #![allow(clippy::module_inception)]
 
+
 use super::*;
 use crate::app_state::SidebarItemState;
 use heca_core::layout::{
@@ -13,13 +14,13 @@ use heca_core::layout::{
 fn test_chrome() -> crate::chrome::SharedChromeState {
     crate::chrome::SharedChromeState::new(200.0, true, 200.0, true)
 }
-fn toggle_ws(tree: &mut SidebarTree, chrome: &crate::chrome::SharedChromeState, ws_idx: usize) {
+fn toggle_ws(tree: &mut WorkspaceTree, chrome: &crate::chrome::SharedChromeState, ws_idx: usize) {
     chrome.workspaces.toggle_ws_collapsed(ws_idx);
     let set = chrome.workspaces.with_collapsed_ws(|s| s.clone());
     tree.apply_ws_collapsed(&set, Some(ws_idx));
 }
 fn set_ws_collapsed(
-    tree: &mut SidebarTree,
+    tree: &mut WorkspaceTree,
     chrome: &crate::chrome::SharedChromeState,
     ws_idx: usize,
     collapsed: bool,
@@ -72,7 +73,7 @@ fn make_test_session() -> (Session, Vec<u64>) {
 #[test]
 fn test_tree_rebuild() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
 
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
@@ -100,7 +101,7 @@ fn test_tree_rebuild() {
 #[test]
 fn test_tree_flat_items() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // Flat items should contain workspaces, columns, and panes
@@ -111,7 +112,7 @@ fn test_tree_flat_items() {
 
     // First item should be a workspace
     match &tree.flat_items[0] {
-        SidebarItem::Workspace { .. } => {}
+        WorkspaceRow::Workspace { .. } => {}
         other => panic!("first flat item should be Workspace, got {:?}", other),
     }
 
@@ -126,7 +127,7 @@ fn test_tree_flat_items() {
 #[test]
 fn test_cursor_movement() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     assert_eq!(tree.cursor, 0, "cursor starts at 0");
@@ -135,7 +136,7 @@ fn test_cursor_movement() {
     tree.cursor_down();
     assert!(tree.cursor > 0, "cursor moves down");
     assert!(
-        !matches!(tree.current_item(), Some(SidebarItem::Column { .. })),
+        !matches!(tree.current_item(), Some(WorkspaceRow::Column { .. })),
         "cursor never lands on a column"
     );
 
@@ -147,7 +148,7 @@ fn test_cursor_movement() {
         tree.cursor_down();
     }
     assert!(
-        !matches!(tree.current_item(), Some(SidebarItem::Column { .. })),
+        !matches!(tree.current_item(), Some(WorkspaceRow::Column { .. })),
         "cursor clamps on a navigable item, not a column"
     );
 
@@ -161,7 +162,7 @@ fn test_cursor_movement() {
 #[test]
 fn test_expand_collapse_workspace() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // Initially not collapsed
@@ -199,7 +200,7 @@ fn test_expand_collapse_workspace() {
 #[test]
 fn test_visited_tracking() {
     let (mut session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
 
     // Simulate visiting workspace 1 (switch to it)
     session.switch_to_workspace(1);
@@ -225,7 +226,7 @@ fn test_visited_tracking() {
 #[test]
 fn test_rebuild_clears_previous() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
 
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
     let first_count = tree.flat_items.len();
@@ -256,7 +257,7 @@ fn test_empty_session() {
         2.0,
         heca_core::layout::types::LayoutOptions::default(),
     );
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
 
     tree.sync_from_session(&session, None, None, &[]);
 
@@ -271,7 +272,7 @@ fn test_empty_session() {
 #[test]
 fn test_toggle_expand_clamps_cursor() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // Place cursor deep inside workspace 0 (e.g. on a pane).
@@ -280,9 +281,9 @@ fn test_toggle_expand_clamps_cursor() {
         .iter()
         .enumerate()
         .rposition(|(_, i)| {
-            matches!(i, SidebarItem::Workspace { ws_idx } if *ws_idx == 0)
-                || matches!(i, SidebarItem::Column { ws_idx, .. } if *ws_idx == 0)
-                || matches!(i, SidebarItem::Pane { pane_id } if pane_id.0 <= 4)
+            matches!(i, WorkspaceRow::Workspace { ws_idx } if *ws_idx == 0)
+                || matches!(i, WorkspaceRow::Column { ws_idx, .. } if *ws_idx == 0)
+                || matches!(i, WorkspaceRow::Pane { pane_id } if pane_id.0 <= 4)
         })
         .expect("should have ws0 items");
     tree.cursor = ws0_last_idx;
@@ -305,21 +306,21 @@ fn test_toggle_expand_clamps_cursor() {
 #[test]
 fn test_column_expand_collapse() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // Find first Column item in flat list.
     let col_idx = tree
         .flat_items
         .iter()
-        .position(|i| matches!(i, SidebarItem::Column { .. }))
+        .position(|i| matches!(i, WorkspaceRow::Column { .. }))
         .expect("should have a column");
     tree.cursor = col_idx;
     let chrome = test_chrome();
 
     // Collapse the column.
     tree.toggle_expand(&chrome.workspaces);
-    if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
+    if let WorkspaceRow::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
         assert!(
             tree.workspaces[ws_idx].columns[c].collapsed,
             "column should be collapsed"
@@ -328,7 +329,7 @@ fn test_column_expand_collapse() {
 
     // Expand it back.
     tree.toggle_expand(&chrome.workspaces);
-    if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
+    if let WorkspaceRow::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
         assert!(
             !tree.workspaces[ws_idx].columns[c].collapsed,
             "column should be expanded"
@@ -339,13 +340,13 @@ fn test_column_expand_collapse() {
 #[test]
 fn test_collapse_workspace_moves_cursor_to_workspace_row() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
         .iter()
-        .position(|item| matches!(item, SidebarItem::Pane { .. }))
+        .position(|item| matches!(item, WorkspaceRow::Pane { .. }))
         .expect("should have a pane row");
     tree.cursor = pane_idx;
 
@@ -354,26 +355,26 @@ fn test_collapse_workspace_moves_cursor_to_workspace_row() {
 
     assert!(matches!(
         tree.current_item(),
-        Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
+        Some(WorkspaceRow::Workspace { ws_idx }) if *ws_idx == 0
     ));
 }
 
 #[test]
 fn test_collapse_column_moves_cursor_to_column_row() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
         .iter()
-        .position(|item| matches!(item, SidebarItem::Pane { .. }))
+        .position(|item| matches!(item, WorkspaceRow::Pane { .. }))
         .expect("should have a pane row");
     let (ws_idx, col_idx) = tree
         .flat_items
         .iter()
         .find_map(|item| match item {
-            SidebarItem::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
             _ => None,
         })
         .expect("should have a column row");
@@ -383,7 +384,7 @@ fn test_collapse_column_moves_cursor_to_column_row() {
 
     assert!(matches!(
         tree.current_item(),
-        Some(SidebarItem::Column {
+        Some(WorkspaceRow::Column {
             ws_idx: item_ws,
             col_idx: item_col,
         }) if *item_ws == ws_idx && *item_col == col_idx
@@ -393,13 +394,13 @@ fn test_collapse_column_moves_cursor_to_column_row() {
 #[test]
 fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
         .iter()
-        .position(|item| matches!(item, SidebarItem::Pane { .. }))
+        .position(|item| matches!(item, WorkspaceRow::Pane { .. }))
         .expect("should have a pane row");
     tree.cursor = pane_idx;
     let chrome = test_chrome();
@@ -408,33 +409,33 @@ fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
     assert!(tree.workspaces[0].collapsed);
     assert!(matches!(
         tree.current_item(),
-        Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
+        Some(WorkspaceRow::Workspace { ws_idx }) if *ws_idx == 0
     ));
 
     toggle_ws(&mut tree, &chrome, 0);
     assert!(!tree.workspaces[0].collapsed);
     assert!(matches!(
         tree.current_item(),
-        Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
+        Some(WorkspaceRow::Workspace { ws_idx }) if *ws_idx == 0
     ));
 }
 
 #[test]
 fn test_toggle_column_collapsed_by_index_updates_cursor() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     let pane_idx = tree
         .flat_items
         .iter()
-        .position(|item| matches!(item, SidebarItem::Pane { .. }))
+        .position(|item| matches!(item, WorkspaceRow::Pane { .. }))
         .expect("should have a pane row");
     let (ws_idx, col_idx) = tree
         .flat_items
         .iter()
         .find_map(|item| match item {
-            SidebarItem::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
             _ => None,
         })
         .expect("should have a column row");
@@ -444,7 +445,7 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
     assert!(tree.workspaces[ws_idx].columns[col_idx].collapsed);
     assert!(matches!(
         tree.current_item(),
-        Some(SidebarItem::Column {
+        Some(WorkspaceRow::Column {
             ws_idx: item_ws,
             col_idx: item_col,
         }) if *item_ws == ws_idx && *item_col == col_idx
@@ -454,7 +455,7 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
     assert!(!tree.workspaces[ws_idx].columns[col_idx].collapsed);
     assert!(matches!(
         tree.current_item(),
-        Some(SidebarItem::Column {
+        Some(WorkspaceRow::Column {
             ws_idx: item_ws,
             col_idx: item_col,
         }) if *item_ws == ws_idx && *item_col == col_idx
@@ -462,30 +463,9 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
 }
 
 #[test]
-fn test_sidebar_hit_test_expanded() {
-    let (session, _ids) = make_test_session();
-    let tree = SidebarTree::new();
-    // Rebuild into a fresh tree (cursor at 0)
-    let mut tree = tree;
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
-
-    // sidebar_top=32, 4px padding, then [+w] button row (24px), then first flat item.
-    // First flat item starts at y = 32 + 4 + 24 = 60. Click middle of that row.
-    let fi = sidebar_hit_test(&tree, 32.0, 400.0, 60.0 + ITEM_HEIGHT / 2.0);
-    assert_eq!(fi, Some(0), "click on first line should hit flat item 0");
-
-    // Click above sidebar should miss.
-    assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 10.0), None);
-
-    // Click in the [+w] button row area should miss (returns None).
-    let btn_row = sidebar_hit_test(&tree, 32.0, 400.0, 32.0 + 4.0 + BTN_ROW_HEIGHT / 2.0);
-    assert_eq!(btn_row, None, "click on [+w] button row should miss items");
-}
-
-#[test]
 fn test_collapse_persists_across_rebuild() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // Collapse workspace 0.
@@ -525,7 +505,7 @@ fn test_collapse_persists_across_rebuild() {
 #[test]
 fn selection_projects_the_row_under_the_cursor() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // The cursor starts on the first row; the projection names that same row.
@@ -553,7 +533,7 @@ fn selection_survives_a_tree_rebuild() {
     session.switch_to_workspace(1);
     session.add_pane(LayoutPane::new(PaneId(9), "Pane9"), None, true);
     let chrome = test_chrome();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     // Park the cursor on the pane in the SECOND workspace and publish it the way the nav
@@ -590,7 +570,7 @@ fn store_selection_drives_the_cursor() {
     // because the cursor is projected FROM the store, never the reverse.
     let (session, ids) = make_test_session();
     let chrome = test_chrome();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     let target = crate::chrome::SidebarSelection::Pane {
@@ -607,7 +587,7 @@ fn a_selection_whose_row_is_gone_leaves_the_cursor_in_range() {
     // A pane that no longer exists (closed while its menu was open, say) must not move the
     // cursor somewhere arbitrary — and must not panic.
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     tree.cursor_down();
@@ -623,7 +603,7 @@ fn a_selection_whose_row_is_gone_leaves_the_cursor_in_range() {
 #[test]
 fn no_selection_is_not_a_request_to_move() {
     let (session, _ids) = make_test_session();
-    let mut tree = SidebarTree::new();
+    let mut tree = WorkspaceTree::new();
     tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
 
     tree.cursor_down();

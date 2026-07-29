@@ -1,7 +1,7 @@
 {
   "id": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 17,
+  "number": 78,
   "shortId": "37HYB",
   "priority": 17,
   "slug": "plugin-ui-gaps-close-the-declarative-model-s-capability-gaps-make-the-translator-self-maintaining",
@@ -36,7 +36,7 @@
     {
       "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 1,
+      "number": 307,
       "shortId": "PT33R",
       "priority": 1,
       "shortName": "separate-layout-settings-from",
@@ -89,7 +89,7 @@
     {
       "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 2,
+      "number": 308,
       "shortId": "DV7J8",
       "priority": 2,
       "shortName": "layout-settings-self-describin",
@@ -147,7 +147,7 @@
     {
       "id": "1ea732ca-3582-44f4-be02-245375910948",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 3,
+      "number": 309,
       "shortId": "RL7LK",
       "priority": 3,
       "shortName": "generated-translation-for-widg",
@@ -205,7 +205,7 @@
     {
       "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 4,
+      "number": 310,
       "shortId": "8RLW9",
       "priority": 4,
       "shortName": "expose-the-two-proven-missing",
@@ -263,7 +263,7 @@
     {
       "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 5,
+      "number": 311,
       "shortId": "DA3MC",
       "priority": 5,
       "shortName": "add-separator-to-the-widget-vo",
@@ -321,7 +321,7 @@
     {
       "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 6,
+      "number": 312,
       "shortId": "J2LU8",
       "priority": 6,
       "shortName": "expose-the-clickable-row-widge",
@@ -379,7 +379,7 @@
     {
       "id": "59f5c555-2a36-4247-9216-5002ae4ce55a",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 7,
+      "number": 313,
       "shortId": "SSCHJ",
       "priority": 7,
       "shortName": "decide-the-fate-of-the-unused",
@@ -442,7 +442,7 @@
     {
       "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 8,
+      "number": 314,
       "shortId": "GFFU8",
       "priority": 8,
       "shortName": "correct-the-published-document",
@@ -519,7 +519,7 @@
     {
       "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822",
       "phaseId": "4d4aa26b-6245-4c0f-8bdf-64573a7afbf5",
-      "number": 9,
+      "number": 315,
       "shortId": "B5E92",
       "priority": 9,
       "shortName": "open-question-not-for-this-pha",
@@ -575,5 +575,7 @@
   "createdAt": "2026-07-25T19:12:29.404Z",
   "updatedAt": "2026-07-27T12:28:51.535Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

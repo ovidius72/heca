@@ -1,7 +1,7 @@
 {
   "id": "029ef1b3-822b-4151-b5b0-b296b042b350",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 10,
+  "number": 81,
   "shortId": "WU7SY",
   "priority": 10,
   "slug": "gridui-09-one-border-width-control-three-paths-currently-disagree",
@@ -22,16 +22,54 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
+    "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
     "88963acd-0cce-4897-837c-6fd617d604b8",
-    "f226ca8f-7f28-4f4e-97f6-83a89b03f12c",
     "b2600373-eb4e-4d59-ab66-ad548a5076dc",
-    "5266fb8f-0e99-4993-8613-f5b88a1c6e1b"
+    "f226ca8f-7f28-4f4e-97f6-83a89b03f12c"
   ],
   "tasks": [
     {
+      "id": "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 323,
+      "shortId": "2T7E5",
+      "priority": 4,
+      "shortName": "verify-visually",
+      "title": "USER verifies every container agrees at 0 and at a large width",
+      "status": "planned",
+      "description": "Borders are visible. Green tests are not verification. Build the showcase, set the global width to 0 and then to something large, and confirm Toast, Modal, Bracketed panes, plain Panes and the control widgets all agree.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "verify-visually-c1",
+          "title": "USER confirms at width 0",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c2",
+          "title": "USER confirms at a large width",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c3",
+          "title": "Separate from fix/bracket-frame-render — do not conflate",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
       "id": "88963acd-0cce-4897-837c-6fd617d604b8",
       "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
-      "number": 1,
+      "number": 328,
       "shortId": "WAZD5",
       "priority": 1,
       "shortName": "decide-override-rule",
@@ -57,9 +95,42 @@
       "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
+      "id": "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 332,
+      "shortId": "VGTZY",
+      "priority": 3,
+      "shortName": "showcase-reads-theme",
+      "title": "The showcase stops hardcoding 2.0",
+      "status": "planned",
+      "description": "heca-renderer/examples/showcase.rs has literal `.border(theme.accent, 2.0)` calls (~762, 771, 793, 819 as of 2026-06-23) that ignore the global control entirely. Read `theme.border_width` instead. This is also why the demo panes kept a border at 0.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "showcase-reads-theme-c1",
+          "title": "Showcase reads theme.border_width",
+          "checked": false
+        },
+        {
+          "id": "showcase-reads-theme-c2",
+          "title": "No literal border widths left",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
       "id": "f226ca8f-7f28-4f4e-97f6-83a89b03f12c",
       "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
-      "number": 2,
+      "number": 337,
       "shortId": "T8G9T",
       "priority": 2,
       "shortName": "one-global-control",
@@ -98,81 +169,12 @@
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "b2600373-eb4e-4d59-ab66-ad548a5076dc",
-      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
-      "number": 3,
-      "shortId": "VGTZY",
-      "priority": 3,
-      "shortName": "showcase-reads-theme",
-      "title": "The showcase stops hardcoding 2.0",
-      "status": "planned",
-      "description": "heca-renderer/examples/showcase.rs has literal `.border(theme.accent, 2.0)` calls (~762, 771, 793, 819 as of 2026-06-23) that ignore the global control entirely. Read `theme.border_width` instead. This is also why the demo panes kept a border at 0.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "showcase-reads-theme-c1",
-          "title": "Showcase reads theme.border_width",
-          "checked": false
-        },
-        {
-          "id": "showcase-reads-theme-c2",
-          "title": "No literal border widths left",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
-      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
-      "number": 4,
-      "shortId": "2T7E5",
-      "priority": 4,
-      "shortName": "verify-visually",
-      "title": "USER verifies every container agrees at 0 and at a large width",
-      "status": "planned",
-      "description": "Borders are visible. Green tests are not verification. Build the showcase, set the global width to 0 and then to something large, and confirm Toast, Modal, Bracketed panes, plain Panes and the control widgets all agree.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "verify-visually-c1",
-          "title": "USER confirms at width 0",
-          "checked": false
-        },
-        {
-          "id": "verify-visually-c2",
-          "title": "USER confirms at a large width",
-          "checked": false
-        },
-        {
-          "id": "verify-visually-c3",
-          "title": "Separate from fix/bracket-frame-render — do not conflate",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-26T11:20:26.506Z",
   "updatedAt": "2026-07-27T11:40:15.496Z",
   "handoff": "",
-  "handoffUpdatedAt": ""
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

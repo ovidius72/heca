@@ -81,7 +81,7 @@ impl std::str::FromStr for RegionId {
 }
 
 /// A `Copy` projection of the sidebar-nav cursor selection — a mirror of
-/// `sidebar::model::SidebarItem` without the sidebar-model coupling. Carried by
+/// `workspaces::model::WorkspaceRow` without the sidebar-model coupling. Carried by
 /// [`ChromeEvent::SidebarSelectionChanged`] and mirrored into the chrome store so
 /// the expanded sidebar can highlight the nav cursor **distinctly** from the real
 /// focused pane (`active_pane`).
@@ -159,6 +159,18 @@ pub enum ChromeEvent {
         at_bottom: bool,
         scrollback_rows: usize,
     },
+    /// Chrome **keyboard focus** moved to another container, or was cleared (`None`).
+    ///
+    /// Carries a **container id**, not a region: a dock is focused wherever it is seated, so the
+    /// focus survives it being moved between regions (F003/P011/T020).
+    ContainerFocusChanged {
+        container: Option<String>,
+    },
+    /// The dock pick opened, moved on, or closed (empty = closed) — letter → container id.
+    /// Mirrors the pane/workspace/column pick candidates, at the shell level.
+    DockPickCandidatesChanged {
+        candidates: Vec<(char, String)>,
+    },
     /// A mounted container's host-level placement changed — it was moved to a
     /// different region or reordered within its region by `ChromeHost`. Lets
     /// future chrome consumers re-read placement. `region` is the container's new
@@ -192,6 +204,8 @@ impl ChromeEvent {
             ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
             ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
+            ChromeEvent::ContainerFocusChanged { .. } => "chrome.container.focus.changed",
+            ChromeEvent::DockPickCandidatesChanged { .. } => "dock.pick.changed",
             ChromeEvent::ContainerPlacementChanged { .. } => "chrome.container.placement.changed",
             ChromeEvent::SidebarSelectionChanged { .. } => "sidebar.selection.changed",
         }

@@ -17,11 +17,30 @@ pub struct ConfirmConfig {
     pub actions: HashMap<String, bool>,
 }
 
+/// Toggle keys that were renamed, as `(retired, current)`.
+///
+/// A rename here silently turns a prompt the user had switched **off** back on: they wrote `false`
+/// and the app quietly stops reading that line. So a retired key keeps working, and loses only to
+/// the current one being set as well.
+const RENAMED: &[(&str, &str)] = &[
+    // A pane is *closed*, not deleted — the word its action id, its binding name and its label
+    // already used. The dialog and this toggle were the two that disagreed (F003/P086/T370).
+    ("delete_pane", "close"),
+];
+
 impl ConfirmConfig {
     /// Whether the confirmation prompt for `action_name` is enabled: the user's `[confirm]` value
-    /// when set, else the action's declared `default`.
+    /// when set, else a retired name for the same toggle, else the action's declared `default`.
     pub fn enabled(&self, action_name: &str, default: bool) -> bool {
-        self.actions.get(action_name).copied().unwrap_or(default)
+        if let Some(set) = self.actions.get(action_name) {
+            return *set;
+        }
+        RENAMED
+            .iter()
+            .find(|(_, current)| *current == action_name)
+            .and_then(|(retired, _)| self.actions.get(*retired))
+            .copied()
+            .unwrap_or(default)
     }
 }
 
@@ -34,6 +53,20 @@ mod tests {
         let c = ConfirmConfig::default();
         assert!(c.enabled("close", true));
         assert!(!c.enabled("close", false));
+    }
+
+    /// A rename must not switch a prompt the user turned off back on (F003/P086/T370).
+    #[test]
+    fn a_retired_toggle_name_still_disables_its_prompt() {
+        let c: ConfirmConfig = toml::from_str("delete_pane = false\n").expect("parse [confirm]");
+        assert!(
+            !c.enabled("close", true),
+            "the old name still speaks for the pane prompt",
+        );
+
+        let both: ConfirmConfig =
+            toml::from_str("delete_pane = false\nclose = true\n").expect("parse [confirm]");
+        assert!(both.enabled("close", false), "the current name wins when both are set");
     }
 
     #[test]

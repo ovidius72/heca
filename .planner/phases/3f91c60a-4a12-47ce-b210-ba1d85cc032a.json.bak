@@ -1,10 +1,11 @@
 {
   "id": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
-  "number": 5,
+  "number": 6,
+  "shortId": "Q6ETV",
+  "priority": 5,
   "slug": "theming-01-showcase-visual-verification",
   "title": "theming-01: Showcase visual verification",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,38 +22,51 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "76f2e3f6-2bde-433f-8c90-c88b63f431ab",
-    "2ed60a90-1467-436c-b286-7f0225737e7c"
+    "8965eded-5630-4e53-93db-50d374e5373a",
+    "9b3e7f08-4786-4570-98d9-c925a75aed8c"
   ],
   "tasks": [
     {
-      "id": "76f2e3f6-2bde-433f-8c90-c88b63f431ab",
-      "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
-      "number": 1,
-      "shortName": "verify-widget-theme",
-      "title": "Verify every widget reacts to theme change",
-      "status": "done",
-      "description": "Verificare colori, border width, radius, glow e font family/size su tutti i widget.",
+      "id": "8965eded-5630-4e53-93db-50d374e5373a",
+      "phaseId": "ef538743-f412-443d-811b-9e02b66106c1",
+      "number": 80,
+      "shortId": "N2M6Z",
+      "priority": 2,
+      "shortName": "scroll-pgup-pgdn",
+      "title": "PageUp and PageDown scroll keys",
+      "status": "deferred",
+      "description": "Key handling per PageUp/PageDown nello ScrollRegion.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "8965eded-5630-4e53-93db-50d374e5373a-check-001-planned-deferred",
+          "date": "2026-07-08T11:46:53.446Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "DEFER in backlog (2026-07-03): no consumer yet — do it when a scroll region needs paging. Blocked on GridKey having no page keys — add PageUp/PageDown to the GridKey enum + host key mapping, then handle in ScrollRegion::event.",
+          "description": "DEFER in backlog (2026-07-03): no consumer yet — do it when a scroll region needs paging. Blocked on GridKey having no page keys — add PageUp/PageDown to the GridKey enum + host key mapping, then handle in ScrollRegion::event."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-01T18:10:58.813Z",
-      "completedAt": "2026-07-01T18:10:58.813Z",
-      "createdAt": "2026-07-01T18:10:58.813Z",
-      "updatedAt": "2026-07-01T18:10:58.813Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:12:56.212Z",
+      "updatedAt": "2026-07-08T11:46:53.446Z"
     },
     {
-      "id": "2ed60a90-1467-436c-b286-7f0225737e7c",
-      "phaseId": "3f91c60a-4a12-47ce-b210-ba1d85cc032a",
-      "number": 2,
-      "shortName": "verify-latte-render",
-      "title": "Verify latte light theme rendering",
-      "status": "done",
-      "description": "Controllare tutti i path di rendering del tema chiaro nel showcase.",
+      "id": "9b3e7f08-4786-4570-98d9-c925a75aed8c",
+      "phaseId": "cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc",
+      "number": 81,
+      "shortId": "GF5GZ",
+      "priority": 3,
+      "shortName": "config-plugin-renderer",
+      "title": "Implement config plugin renderer",
+      "status": "planned",
+      "description": "Renderizzare contribution testuali da config nelle regioni.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -60,12 +74,16 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-01T18:10:58.813Z",
-      "completedAt": "2026-07-01T18:10:58.813Z",
-      "createdAt": "2026-07-01T18:10:58.813Z",
-      "updatedAt": "2026-07-01T18:10:58.813Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:12:56.212Z",
+      "updatedAt": "2026-07-01T18:12:56.212Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T18:10:58.813Z"
+  "updatedAt": "2026-07-27T11:40:15.475Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }

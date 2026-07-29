@@ -2,9 +2,10 @@
   "id": "457bdae8-efba-4665-a795-25120ea154bd",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
   "number": 3,
+  "shortId": "WTPKT",
+  "priority": 3,
   "slug": "theming-03-migrate-heca-grid-ui-to-heca-theme",
   "title": "theming-03: Migrate heca-grid-ui to heca-theme",
-  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -21,51 +22,77 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "1165d4c4-cd7a-4ca4-bce0-390422592af0",
-    "917e5b54-2ab1-46d2-a382-9513fbafb738"
+    "5a24313d-6249-496e-9f05-f7b07897544d",
+    "5eaed06e-6c0c-4e1b-b82a-4815cdd95a99"
   ],
   "tasks": [
     {
-      "id": "1165d4c4-cd7a-4ca4-bce0-390422592af0",
-      "phaseId": "457bdae8-efba-4665-a795-25120ea154bd",
-      "number": 1,
-      "shortName": "compose-theme-colors",
-      "title": "Compose Theme via colors field of heca-theme",
-      "status": "done",
-      "description": "Usare `Theme.colors = heca_theme::Theme` e re-export dei token.",
+      "id": "5a24313d-6249-496e-9f05-f7b07897544d",
+      "phaseId": "ef538743-f412-443d-811b-9e02b66106c1",
+      "number": 73,
+      "shortId": "M25JF",
+      "priority": 5,
+      "shortName": "nested-scroll-hit",
+      "title": "Nested scroll hit-testing for wheel",
+      "status": "deferred",
+      "description": "Hit-testing innermost scrollable per wheel routing.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5a24313d-6249-496e-9f05-f7b07897544d-check-001-planned-deferred",
+          "date": "2026-07-08T11:46:53.446Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "DEFER in backlog (2026-07-02): until a real consumer. Nested-region wheel hit-testing — with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree.",
+          "description": "DEFER in backlog (2026-07-02): until a real consumer. Nested-region wheel hit-testing — with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-01T18:10:58.813Z",
-      "completedAt": "2026-07-01T18:10:58.813Z",
-      "createdAt": "2026-07-01T18:10:58.813Z",
-      "updatedAt": "2026-07-01T18:10:58.813Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:12:56.212Z",
+      "updatedAt": "2026-07-08T11:46:53.446Z"
     },
     {
-      "id": "917e5b54-2ab1-46d2-a382-9513fbafb738",
-      "phaseId": "457bdae8-efba-4665-a795-25120ea154bd",
-      "number": 2,
-      "shortName": "update-gridui-callsites",
-      "title": "Update grid-ui callsites to use theme colors",
-      "status": "done",
-      "description": "Aggiornare i callsite grid-ui per leggere sempre dal tema.",
+      "id": "5eaed06e-6c0c-4e1b-b82a-4815cdd95a99",
+      "phaseId": "ef538743-f412-443d-811b-9e02b66106c1",
+      "number": 74,
+      "shortId": "T96CW",
+      "priority": 3,
+      "shortName": "scrollbar-theme-token",
+      "title": "Scrollbar color token from theme",
+      "status": "canceled",
+      "description": "Token di tema per il thumb della scrollbar.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5eaed06e-6c0c-4e1b-b82a-4815cdd95a99-check-001-planned-canceled",
+          "date": "2026-07-08T11:46:53.445Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "CUT in backlog (2026-07-02): already covered — scroll_bar.rs exists; the thumb reuses theme.accent (alphas widget-internal, consistent with MarkerGroup), no dedicated Theme token needed.",
+          "description": "CUT in backlog (2026-07-02): already covered — scroll_bar.rs exists; the thumb reuses theme.accent (alphas widget-internal, consistent with MarkerGroup), no dedicated Theme token needed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-01T18:10:58.813Z",
-      "completedAt": "2026-07-01T18:10:58.813Z",
-      "createdAt": "2026-07-01T18:10:58.813Z",
-      "updatedAt": "2026-07-01T18:10:58.813Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:12:56.212Z",
+      "updatedAt": "2026-07-08T11:46:53.445Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.245Z",
-  "updatedAt": "2026-07-01T18:10:58.813Z"
+  "updatedAt": "2026-07-27T11:40:15.473Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": []
 }
