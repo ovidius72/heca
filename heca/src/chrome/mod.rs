@@ -155,7 +155,7 @@ use crate::providers::workspaces::{PaneEntry, WorkspaceTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{HintExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{HintExt, LayoutExt, NavExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
@@ -1559,7 +1559,15 @@ fn focus_and_pick(
     if share > 0.0 {
         pass_box_down(&mut picked);
     }
-    Box::new(FocusScope::new(picked).focus(ctx.state().container_keyboard_target(container)))
+    // Stamp the placement id on the outermost wrapper, so a press anywhere inside — including on a
+    // widget that consumes it — resolves back to this container (`nav::scope_at`,
+    // F003/P086/T365). It goes here because this is the one place the host already wraps every
+    // mount, so a container gets click-to-focus with nothing declared, a plugin's included.
+    Box::new(
+        FocusScope::new(picked)
+            .focus(ctx.state().container_keyboard_target(container))
+            .scope_key(container),
+    )
 }
 
 /// Build the body of a chrome **region** from whatever the [`ChromeHost`] has seated in
@@ -3430,6 +3438,16 @@ pub(crate) fn chrome_dispatch_press(
             ) == heca_grid_ui::Handled::Yes
         })
         .unwrap_or(false)
+}
+
+/// Which container a point is inside, or `None` when it is outside every one (F003/P086/T365).
+///
+/// Read off the **retained tree's real laid-out bounds**, so it costs nothing to keep in step with
+/// what is on screen and works for any container — a plugin's included — without the host knowing
+/// anything about it.
+pub(crate) fn container_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
+    let tree = state.chrome_tree.as_ref()?;
+    heca_grid_ui::nav::scope_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
 }
 
 /// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.

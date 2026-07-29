@@ -248,6 +248,31 @@ pub fn on_mouse_input(
                 return None;
             }
 
+            // **A click inside a container focuses it; one outside every container releases**
+            // (F003/P086/T365). Resolved from the retained tree's real bounds, so it works for any
+            // container — a plugin's included — with nothing declared.
+            //
+            // First, and deliberately independent of whether a widget then consumes the press: a
+            // click on a scrollbar thumb is still a click *in* that container and must focus it.
+            // Each of the branches below returns early, so doing this later would mean repeating it
+            // in every one of them and still missing the paths that consume.
+            //
+            // This is also the generic form of the release the left-press content path did on its
+            // own (F003/P086/T364): "no container under the point" covers a pane, the top bar and
+            // empty space alike.
+            match crate::chrome::container_at(state, pos) {
+                Some(container) => {
+                    if state.chrome_state.focused_container().as_deref() != Some(container.as_str())
+                    {
+                        crate::handlers::handle_focus_dock(
+                            state,
+                            &WmAction::FocusDock { dock: Some(container) },
+                        );
+                    }
+                }
+                None => crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock),
+            }
+
             // Right sidebar chrome click (e.g. the collapse toggle). The right sidebar
             // has no drag surface yet (app-task-21); dispatch the press into the retained
             // chrome tree so its widget callbacks (the caret's `on_click`) fire, then
@@ -335,13 +360,10 @@ pub fn on_mouse_input(
                 return Some((action, InteractionSource::MouseLeftSidebar));
             }
 
-            // Content click → focus. Everything above this point resolved inside a container or a
-            // chrome widget; reaching here means the press landed on the main region, outside every
-            // container — one of the four ways container focus ends (F003/P086/T364). The release
-            // is here, at the gesture that means it, and no longer inside `handle_focus_pane`,
-            // which cannot tell a click apart from the component's own `Space`.
+            // Content click → focus. The release that used to be here is gone: the generic
+            // "no container under the point" branch above covers it, and covers the paths this one
+            // never reached (F003/P086/T365).
             if let Some(pane_id) = hit_test_pane(state, pos) {
-                crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock);
                 return Some((
                     WmAction::FocusPane { pane_id },
                     InteractionSource::MouseContent,

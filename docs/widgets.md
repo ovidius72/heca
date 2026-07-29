@@ -321,6 +321,7 @@ return `Self` for chaining.
 | Method | Effect |
 |--------|--------|
 | `.nav_key(impl Into<String>)` | Declare this widget to be a **row with an identity of its own**. |
+| `.scope_key(impl Into<String>)` | Declare this subtree to be an **enclosing region** with an identity of its own — a panel, a dock, a tab group. |
 
 ```rust
 // A list-shaped component labels its rows. That is the whole of its side.
@@ -351,14 +352,45 @@ Two free functions read them, both in `heca_grid_ui::nav`:
 |----------|---------|
 | `collect_nav_keys(&dyn Component) -> Vec<(String, Rectangle)>` | Every navigable row with its laid-out bounds, in **document order** — the order the user sees, which is what "next row" means. Hidden subtrees are skipped, so a collapsed group's rows are not steppable. |
 | `nav_key_at(&dyn Component, Point) -> Option<String>` | The **topmost, deepest** row under a point — what a right-click is aimed at. Same walk as `drag::source_at`, deliberately: a right-click and a drag must agree about what they are pointing at. |
+| `scope_at(&dyn Component, Point) -> Option<String>` | The **innermost scope** under a point — which enclosing region the press landed in. `None` means outside every scope, which is a real answer a host acts on. |
 
 A row that should not be navigable simply declares no key. The **cursor highlight** is separate and
 host-driven: `Row`, `Item`, `DockFrame` and `MarkerGroup` expose `nav_state() -> Signal<bool>`, and
 a widget whose nav state is set reports `wants_visible()`, so any enclosing
 [`ScrollRegion`](#scrollregion) scrolls it into view with nothing wired at the call site.
 
-> **Declarative form:** none. A `nav_key` is authored by the component that owns the row, and a
-> described tree carries it as an ordinary prop on the node — see
+#### `scope_key` — the same idea one level up
+
+`nav_key` answers *which row*; `scope_key` answers *which region containing rows*. A host commonly
+wants both from a single press: heca resolves the press to a chrome container (focus it) **and** to
+the row inside it (move that container's cursor there).
+
+```rust
+// The host stamps it on the wrapper it already puts around each mounted panel.
+Box::new(FocusScope::new(body).scope_key(panel_id))
+```
+
+Three properties earn it a field of its own rather than a convention on top of `nav_key`:
+
+- **Innermost wins**, the same rule as the deepest row: a scope nested inside another resolves to
+  the inner one, so nesting composes instead of needing a flag.
+- **It is independent of consumption.** A press a widget consumes — a scrollbar thumb, a button —
+  still resolves to the scope containing it, because "which panel did the user click in" is not the
+  same question as "did anything handle the click". This is what makes *click a panel to focus it*
+  work for every panel with nothing declared per panel.
+- **It must not be a row.** Folding it into `nav_key` would make every region turn up in
+  `collect_nav_keys` as a steppable row, which it is not.
+
+Like `nav_key`, the string is opaque here and must survive a tree rebuild.
+
+**It is entirely optional.** It defaults to `None`, and a consumer that never calls `.scope_key(…)`
+never meets it — `scope_at` simply answers `None` everywhere. It is the fifth of five host-facing
+identity slots on `ComponentBase` (`drag_source`, `drop_target`, `hint_target`, `nav_key`,
+`scope_key`), all the same bargain: the library provides the slot and the resolver, the host gives
+it meaning.
+
+> **Declarative form:** none. A `nav_key` or `scope_key` is authored by the component that owns the
+> row or region, and a described tree carries it as an ordinary prop on the node — see
 > [`ViewNode`](#declarative-ui-model-viewnode).
 
 ### `Style` & layout enums

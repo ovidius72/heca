@@ -309,6 +309,17 @@ pub trait NavExt: Component + Sized {
         self.base_mut().nav_key = Some(key.into());
         self
     }
+
+    /// Name this subtree as an enclosing **scope** — a panel, a dock, a tab group.
+    ///
+    /// Stamp it on the wrapper around a region and a press anywhere inside it resolves back to that
+    /// region, including a press a widget consumes (a scrollbar thumb is still *inside* the panel
+    /// holding it). That is what lets "click a panel to focus it" work for every panel with nothing
+    /// declared per panel. See [`crate::nav::scope_at`].
+    fn scope_key(mut self, id: impl Into<String>) -> Self {
+        self.base_mut().scope_key = Some(id.into());
+        self
+    }
 }
 
 /// Every component gets the nav-key builder for free: any widget can be a row.

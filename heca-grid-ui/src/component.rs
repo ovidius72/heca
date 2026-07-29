@@ -181,6 +181,16 @@ pub struct Base {
     /// enumerated by [`nav::collect_nav_keys`](crate::nav::collect_nav_keys) and hit-tested by
     /// [`nav::nav_key_at`](crate::nav::nav_key_at). Opaque here — nothing in this library parses it.
     pub nav_key: Option<String>,
+    /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
+    /// the host calls the thing that holds rows. Universal opt-in via
+    /// [`NavExt::scope_key`](crate::builders::NavExt::scope_key); hit-tested by
+    /// [`nav::scope_at`](crate::nav::scope_at). Opaque here, exactly like `nav_key`.
+    ///
+    /// A *separate* field rather than a flavour of `nav_key` because the two answer different
+    /// questions about the same point: `nav_key` says which **row**, this says which **region
+    /// containing rows**, and a host commonly wants both from one press. Folding them together would
+    /// also make a region turn up in `collect_nav_keys` as a steppable row, which it is not.
+    pub scope_key: Option<String>,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
@@ -211,6 +221,7 @@ impl Base {
             drop_target: None,
             hint_target: None,
             nav_key: None,
+            scope_key: None,
             font: 15.0,
             needs_paint: Cell::new(true),
         }
