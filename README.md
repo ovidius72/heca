@@ -313,6 +313,23 @@ action a second key. Binding an id whose component is not mounted is not an erro
 it resolves at press time, and simply does nothing until that component appears. Nor is an `id` for a
 placement that never exists.
 
+### Two keys every container has for free
+
+A container does not have to declare anything to be usable:
+
+- **`global_focus`** — written in its `[[keys.component]]` entry, but it applies while the container
+  does *not* have focus, which is the only time it is useful. heca therefore binds it in the global
+  map rather than the container's own layer. With an `id` it aims at that seating; without one it
+  names the component and lands on the seating you were last in. Pressing it again while that
+  container holds the keyboard gives it back. The name is reserved — a component cannot have an
+  action called `global_focus`.
+- **`Escape`** — gives the keyboard back to the main region. Always bound, for every container, and
+  **not removable**. You can add other ways out by binding `unfocus_dock`; you cannot take this one
+  away, because a dock that declares nothing must still be leavable without the mouse.
+
+Two components asking for the same `global_focus` combo is reported at startup like any other
+collision.
+
 ### Finding a key — `heca --keys-show`
 
 Keys are no longer all in one file, so reading config can no longer answer "what runs this action":

@@ -257,6 +257,27 @@ scroll_line_down   = "Shift+Down"
 # resolves at press time, so it simply does nothing until that component appears. Nor is an `id`
 # for a placement that never exists.
 #
+# TWO KEYS EVERY CONTAINER HAS, WITH NOTHING DECLARED (F003/P086/T363):
+#
+#   global_focus = "prefix+d"    # takes the keyboard. Written in the entry above like any other
+#                                #   binding, but it applies while the container does NOT have
+#                                #   focus — which is the only time it is useful — so heca puts it
+#                                #   in the global map rather than the container's own layer.
+#                                #   With an `id` it aims at that seating; without one it names the
+#                                #   component and lands on the seating you were last in. Pressing
+#                                #   it again while that container has focus gives the keyboard
+#                                #   back. `global_focus` is reserved: a component cannot have an
+#                                #   action of that name.
+#
+#   Escape                       # gives the keyboard back to the main region. Always bound, for
+#                                #   every container, and NOT removable — a dock that declares
+#                                #   nothing must still be leavable without the mouse. You can add
+#                                #   other ways out by binding `unfocus_dock`; you cannot take this
+#                                #   one away.
+#
+# Those two are what make the rule work: a container that declares nothing at all is still
+# reachable, scrollable and leavable, with no code written for it.
+#
 # `heca --keys-show` lists every binding name and the key it resolves to, for every layer.
 
 # ── Chrome container placement (built-in, dotted ids) ──
@@ -454,9 +475,9 @@ keys = "Alt+Home"
 [[keys.mode.bindings]]
 action = "scroll_to_right_edge"
 keys = "Alt+End"
-[[keys.mode.bindings]]
-action = "unfocus_dock"
-keys = "Escape"
+# NB: `Escape` → `unfocus_dock` is deliberately NOT listed here. Every container has it whatever
+# this block says (F003/P086/T363) — a line here would look editable and would not be. Bind
+# `unfocus_dock` to further keys if you want more ways out; Escape is the floor.
 
 # ── sidebar ── (entered via sidebar_focus / mouse; no trigger of its own)
 [[keys.mode]]

@@ -408,12 +408,45 @@ pub fn build_keymaps(
 ) -> crate::keymap::Keymaps {
     let mut by_action = BindingIndex::new();
     let (modes, triggers) = build_modes(config, conflicts, &mut by_action);
+    let mut flat = build_keymap(config, conflicts, &mut by_action);
+    let (components, global_focus) = build_component_keymaps(config, conflicts, &mut by_action);
+    bind_global_focus(&mut flat, &global_focus, conflicts, &mut by_action);
     crate::keymap::Keymaps {
-        flat: build_keymap(config, conflicts, &mut by_action),
+        flat,
         modes,
-        components: build_component_keymaps(config, conflicts, &mut by_action),
+        components,
         triggers,
         by_action,
+    }
+}
+
+/// Put each container's `global_focus` into the **global** map, aimed at that container.
+///
+/// It belongs here rather than in the container's own layer because it has to work while the
+/// container does *not* have focus — which is the only time it is useful. Bound like any flat
+/// binding, so `prefix+e` lands in the leader map and `e` in the direct one, and so two components
+/// claiming one combo come out of the conflict report rather than silently overwriting each other
+/// (F003/P086/T363).
+fn bind_global_focus(
+    flat: &mut KeymapRegistry,
+    entries: &[GlobalFocus],
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) {
+    for entry in entries {
+        let action = ActionRef::Builtin(WmAction::FocusDock {
+            dock: Some(entry.target.clone()),
+        });
+        let written = Written {
+            action: "focus_dock",
+            layer: &entry.source,
+            key: &entry.key,
+        };
+        let (mode, combo) = match entry.key.strip_prefix("prefix+") {
+            Some(rest) => ("normal", KeyCombo::parse(rest.trim())),
+            None => ("global", KeyCombo::parse(&entry.key)),
+        };
+        bind_with_conflict_tracking(flat, mode, combo, action, written, conflicts, index);
     }
 }
 
@@ -466,7 +499,7 @@ pub fn build_component_keymaps(
     config: &heca_config::theme::Config,
     conflicts: &mut Conflicts,
     index: &mut BindingIndex,
-) -> HashMap<String, KeymapRegistry> {
+) -> (HashMap<String, KeymapRegistry>, Vec<GlobalFocus>) {
     let defaults = heca_config::theme::KeysConfig::default();
     let entries = || defaults.component.iter().chain(config.keys.component.iter());
 
@@ -497,6 +530,7 @@ pub fn build_component_keymaps(
     let layers = bases.into_iter().chain(placements);
 
     let mut out = HashMap::new();
+    let mut global_focus = Vec::new();
     for (layer_name, layer) in layers {
         let mut keymap = KeymapRegistry::new();
         let no_args = HashMap::new();
@@ -509,6 +543,19 @@ pub fn build_component_keymaps(
         };
         let bind_label = format!("{label}.bind");
         for (name, value) in &layer.bindings {
+            // `global_focus` is the one binding that must NOT land in this layer: the layer is only
+            // consulted while the container already has focus, so a key to *take* focus placed here
+            // could never fire (F003/P086/T363). It goes to the global map instead, below.
+            if name == GLOBAL_FOCUS {
+                for key in value.keys() {
+                    global_focus.push(GlobalFocus {
+                        target: layer.id.clone().unwrap_or_else(|| layer.name.clone()),
+                        key: key.trim().to_string(),
+                        source: label.clone(),
+                    });
+                }
+                continue;
+            }
             let (id, action) = component_action(&layer.name, name, &no_args);
             for key_str in value.keys() {
                 bind_with_conflict_tracking(
@@ -539,7 +586,22 @@ pub fn build_component_keymaps(
         }
         out.insert(layer_name, keymap);
     }
-    out
+    (out, global_focus)
+}
+
+/// The binding name every container answers to, reserved so it can never be a component's own
+/// action (F003/P086/T363).
+const GLOBAL_FOCUS: &str = "global_focus";
+
+/// One container's key to **take** the keyboard, pulled out of its `[[keys.component]]` entry.
+pub struct GlobalFocus {
+    /// The placement id when the entry named one, else the component — resolved at press time by
+    /// `placement_for`, which falls back to the seating you were last in.
+    target: String,
+    /// The combo as written, `prefix+` and all.
+    key: String,
+    /// The entry it came from, for the conflict report and `--keys-show`.
+    source: String,
 }
 
 /// Build mode keymaps and triggers from config.
@@ -587,6 +649,30 @@ pub fn build_modes(
                     action: &binding.action,
                     layer: &label,
                     key: binding.keys.trim(),
+                },
+                conflicts,
+                index,
+            );
+        }
+        // **`Esc` is a guarantee, not a default** (F003/P086/T363). Every focused container must
+        // have a way back to the main region, including one that declares nothing at all — so it is
+        // re-asserted here after the merge instead of being left to the file. `[[keys.mode]]` arrays
+        // are replaced wholesale by a user's config, so a `focus` block that simply forgot this line
+        // would otherwise strand the keyboard in a dock with only the mouse to get out.
+        //
+        // Bound through the same door as everything else: putting something *else* on `Escape` in
+        // this layer is a real collision and comes out in the report rather than silently losing.
+        // Binding `unfocus_dock` to further keys is untouched — this adds a floor, not a ceiling.
+        if mode_cfg.name == crate::app::input::FOCUS_LAYER {
+            bind_with_conflict_tracking(
+                &mut mode_map,
+                &mode_cfg.name,
+                KeyCombo::parse("Escape"),
+                ActionRef::Builtin(WmAction::UnfocusDock),
+                Written {
+                    action: "unfocus_dock",
+                    layer: "built-in (every container has a way out)",
+                    key: "Escape",
                 },
                 conflicts,
                 index,
@@ -1060,7 +1146,7 @@ pub fn build_registry() -> ActionRegistry {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_ref_from_config, binding_arg_problems,
+        action_ref_from_config, bind_global_focus, binding_arg_problems,
         build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
     };
     use crate::app::conflicts::{Conflicts, format_combo};
@@ -1850,6 +1936,17 @@ mod tests {
 
     // ── Component layers — `[[keys.component]]` (F003/P086/T362) ──
 
+    /// The per-component layers alone. `global_focus` comes back separately (F003/P086/T363) and
+    /// has its own tests; every other case here is about what a focused container answers to.
+    fn layers_only(
+        config: &heca_config::theme::Config,
+        conflicts: &mut Conflicts,
+        index: &mut BindingIndex,
+    ) -> HashMap<String, KeymapRegistry> {
+        build_component_keymaps(config, conflicts, index).0
+    }
+
+
     /// Build a config carrying these `[[keys.component]]` entries, as TOML would produce.
     fn with_layers(
         layers: Vec<heca_config::theme::ComponentKeysConfig>,
@@ -1894,7 +1991,7 @@ mod tests {
             None,
             &[("docker.restart_selected", "r"), ("next_pane", "n")],
         ));
-        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let docker = maps.get("docker").expect("an id-less entry is keyed by name");
 
         match docker.resolve("docker", &KeyCombo::parse("r")) {
@@ -1920,7 +2017,7 @@ mod tests {
             ),
             layer_of("docker", None, &[("docker.stop_selected", "x")]),
         ]);
-        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let docker = &maps["docker"];
 
         assert!(
@@ -1947,7 +2044,7 @@ mod tests {
                 ("workspaces.peek_selected", "Space"),
             ],
         ));
-        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let layer = &maps["workspaces"];
 
         match layer.resolve("workspaces", &KeyCombo::parse("k")) {
@@ -1965,6 +2062,153 @@ mod tests {
             }
             other => panic!("an already-qualified name is left alone: {other:?}"),
         }
+    }
+
+    // ── The two keys a container has for free (F003/P086/T363) ──
+
+    /// `global_focus` must **not** land in the container's own layer: that layer is only consulted
+    /// while the container already holds focus, so a key to *take* focus placed there could never
+    /// fire. It goes into the flat map, aimed at this container.
+    #[test]
+    fn global_focus_goes_to_the_global_map_not_the_containers_own_layer() {
+        let config = with_layer(layer_of(
+            "docker",
+            None,
+            &[("global_focus", "prefix+d"), ("restart_selected", "r")],
+        ));
+        let mut index = BindingIndex::new();
+        let (layers, global) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut index);
+
+        assert!(
+            layers["docker"].resolve("docker", &KeyCombo::parse("d")).is_none(),
+            "a key that takes focus is useless in the layer that needs focus first",
+        );
+        assert!(
+            layers["docker"].resolve("docker", &KeyCombo::parse("r")).is_some(),
+            "…while its ordinary bindings are untouched",
+        );
+
+        let mut flat = KeymapRegistry::new();
+        bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut index);
+        assert_eq!(
+            flat.resolve_builtin("normal", &KeyCombo::parse("d")),
+            Some(&WmAction::FocusDock { dock: Some("docker".to_string()) }),
+            "`prefix+d` lands in the leader map, aimed at this container",
+        );
+        assert!(
+            index["focus_dock"]
+                .iter()
+                .any(|b| b.key == "prefix+d" && b.layer.contains("docker")),
+            "and --keys-show can say where it came from: {index:?}",
+        );
+    }
+
+    /// An `id` aims the key at **one seating**; without one it names the component, and
+    /// `placement_for` resolves that at press time to the seating the user was last in.
+    #[test]
+    fn an_id_aims_global_focus_at_one_placement() {
+        let config = with_layers(vec![
+            layer_of("docker", None, &[("global_focus", "prefix+d")]),
+            layer_of("docker", Some("docker.right"), &[("global_focus", "prefix+Shift+d")]),
+        ]);
+        let (_, global) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let mut flat = KeymapRegistry::new();
+        bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut BindingIndex::new());
+
+        assert_eq!(
+            flat.resolve_builtin("normal", &KeyCombo::parse("Shift+d")),
+            Some(&WmAction::FocusDock { dock: Some("docker.right".to_string()) }),
+            "the narrowed entry names its placement",
+        );
+        assert_eq!(
+            flat.resolve_builtin("normal", &KeyCombo::parse("d")),
+            Some(&WmAction::FocusDock { dock: Some("docker".to_string()) }),
+            "the id-less entry names the component, resolved at press time",
+        );
+    }
+
+    /// Two components asking for one combo is exactly what the report exists to say out loud.
+    #[test]
+    fn two_containers_claiming_one_global_focus_is_reported() {
+        let config = with_layers(vec![
+            layer_of("docker", None, &[("global_focus", "prefix+d")]),
+            layer_of("notes", None, &[("global_focus", "prefix+d")]),
+        ]);
+        let (_, global) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let mut conflicts = Conflicts::default();
+        bind_global_focus(
+            &mut KeymapRegistry::new(),
+            &global,
+            &mut conflicts,
+            &mut BindingIndex::new(),
+        );
+        assert_eq!(conflicts.keys.len(), 1, "one combo, two claimants");
+    }
+
+    /// **`Esc` is a floor, not a default.** `[[keys.mode]]` arrays are replaced wholesale by a
+    /// user's config, so a `focus` block that forgot this line would strand the keyboard in a dock
+    /// with only the mouse to get out. It is re-asserted after the merge.
+    #[test]
+    fn escape_always_releases_a_focused_container() {
+        let mut config = heca_config::theme::Config::default();
+        // A user's `focus` layer that keeps the paging keys and drops the way out.
+        config.keys.mode = vec![heca_config::theme::KeyModeConfig {
+            name: crate::app::input::FOCUS_LAYER.to_string(),
+            trigger: String::new(),
+            sticky: true,
+            bindings: vec![heca_config::theme::ModeBindingConfig {
+                action: "scroll_page_up".to_string(),
+                keys: "PageUp".to_string(),
+                args: HashMap::new(),
+            }],
+        }];
+        let (modes, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let focus = &modes[crate::app::input::FOCUS_LAYER];
+
+        assert_eq!(
+            focus.resolve_builtin(crate::app::input::FOCUS_LAYER, &KeyCombo::parse("Escape")),
+            Some(&WmAction::UnfocusDock),
+            "a container can always be left, whatever the config says",
+        );
+    }
+
+    /// Putting something *else* on `Escape` in the focus layer is a real collision — the guarantee
+    /// wins, and the user is told rather than left wondering.
+    #[test]
+    fn taking_escape_in_the_focus_layer_is_reported() {
+        let mut config = heca_config::theme::Config::default();
+        config.keys.mode = vec![heca_config::theme::KeyModeConfig {
+            name: crate::app::input::FOCUS_LAYER.to_string(),
+            trigger: String::new(),
+            sticky: true,
+            bindings: vec![heca_config::theme::ModeBindingConfig {
+                action: "scroll_to_top".to_string(),
+                keys: "Escape".to_string(),
+                args: HashMap::new(),
+            }],
+        }];
+        let mut conflicts = Conflicts::default();
+        let (modes, _) = build_modes(&config, &mut conflicts, &mut BindingIndex::new());
+
+        assert_eq!(
+            modes[crate::app::input::FOCUS_LAYER]
+                .resolve_builtin(crate::app::input::FOCUS_LAYER, &KeyCombo::parse("Escape")),
+            Some(&WmAction::UnfocusDock),
+            "the guarantee wins",
+        );
+        // Two lines, both true: the user's `Escape` displaced the shipped default, and the
+        // guarantee then displaced the user's. A key this consequential deserves the noise.
+        assert!(
+            conflicts
+                .keys
+                .iter()
+                .any(|c| format_combo(&c.combo).eq_ignore_ascii_case("escape")),
+            "and it is not silent: {:?}",
+            conflicts.keys,
+        );
     }
 
     /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
@@ -1999,7 +2243,7 @@ mod tests {
             ),
             layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
         ]);
-        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         let right = &maps["docker.right"];
         assert!(
@@ -2031,7 +2275,7 @@ mod tests {
             // Written *after* the placement entry, and still part of what it inherits.
             layer_of("docker", None, &[("docker.restart_selected", "r")]),
         ]);
-        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let maps = layers_only(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         assert!(
             maps["docker.right"]
                 .resolve("docker.right", &KeyCombo::parse("r"))
@@ -2046,7 +2290,7 @@ mod tests {
     fn an_id_for_a_placement_that_never_mounts_is_harmless() {
         let mut conflicts = Conflicts::default();
         let config = with_layer(layer_of("docker", Some("nowhere"), &[("docker.stop", "s")]));
-        let maps = build_component_keymaps(&config, &mut conflicts, &mut BindingIndex::new());
+        let maps = layers_only(&config, &mut conflicts, &mut BindingIndex::new());
         assert!(maps.contains_key("nowhere"));
         assert!(conflicts.is_empty(), "nothing to report");
     }
@@ -2077,7 +2321,7 @@ mod tests {
             ..Default::default()
         };
 
-        let maps = build_component_keymaps(
+        let maps = layers_only(
             &with_layers(vec![shipped, user]),
             &mut Conflicts::default(),
             &mut BindingIndex::new(),
@@ -2101,7 +2345,7 @@ mod tests {
     fn a_component_layer_unbinds_by_combo() {
         let mut layer = layer_of("docker", None, &[("docker.stop_selected", "s")]);
         layer.unbind.insert("s".to_string(), true);
-        let maps = build_component_keymaps(&with_layer(layer), &mut Conflicts::default(), &mut BindingIndex::new());
+        let maps = layers_only(&with_layer(layer), &mut Conflicts::default(), &mut BindingIndex::new());
         assert!(maps["docker"].resolve("docker", &KeyCombo::parse("s")).is_none());
     }
 

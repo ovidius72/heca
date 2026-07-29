@@ -1597,23 +1597,30 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
         return;
     };
     if let Some(dock) = dock {
-        // Only a container the host actually has: focus is a promise that something is there to
-        // receive the keys. Say so rather than letting the call vanish — a typo in an RPC call or a
-        // binding's `dock` argument is otherwise indistinguishable from success.
-        if state.chrome_host.placement(dock).is_none() {
-            eprintln!("[heca] focus_dock: no container mounted under id '{dock}'");
+        // `dock` names a **placement or a component** (F003/P086/T363): a `global_focus` written
+        // without an `id` speaks for the component, and lands on the seating you were last in.
+        let focused = state.chrome_state.focused_container();
+        let last = state.chrome_state.last_focused_container();
+        let Some(mount) = crate::chrome::placement_for(
+            &state.chrome_host,
+            dock,
+            focused.as_deref(),
+            last.as_deref(),
+        ) else {
+            // Only a container the host actually has: focus is a promise that something is there to
+            // receive the keys. Say so rather than letting the call vanish — a typo in an RPC call
+            // or a binding's `dock` argument is otherwise indistinguishable from success.
+            eprintln!("[heca] focus_dock: no container mounted under id or component '{dock}'");
             return;
-        }
+        };
         // Aimed at the dock that already has it: this is the way back out. One key both takes the
         // keyboard and gives it back, so a binding to a named dock is a toggle rather than a
         // one-way door the user has to remember a second key to leave (F003/P085/T352).
-        if state.chrome_state.focused_container().as_deref() == Some(dock.as_str()) {
+        if focused.as_deref() == Some(mount.as_str()) {
             handle_unfocus_dock(state, &WmAction::UnfocusDock);
             return;
         }
-        state
-            .chrome_state
-            .set_focused_container(Some(dock.clone()));
+        state.chrome_state.set_focused_container(Some(mount));
         state.needs_redraw = true;
         return;
     }

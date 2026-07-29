@@ -48,7 +48,7 @@ pub use context_menu::MenuBuild;
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 // Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
-pub(crate) use focus::{dock_candidates, navigable_dock, region_on_screen};
+pub(crate) use focus::{dock_candidates, navigable_dock, placement_for, region_on_screen};
 pub use host::ChromeHost;
 pub use state::{SharedChromeState, WorkspacesContainerState};
 // Contribution/placement API surface for the render + provider phases (plugin-03).

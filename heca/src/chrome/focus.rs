@@ -66,6 +66,41 @@ pub(crate) fn navigable_dock(
     }
 }
 
+/// The placement a focus request names — **a mount id, or a component** (F003/P086/T363).
+///
+/// `global_focus` may be written with an `id`, naming one seating, or without, naming the component
+/// as a whole. Both arrive here as one string, and an id wins: it is the more specific answer, and a
+/// single-placement container's id and component name are usually the same word anyway.
+///
+/// Falling back to the component, the rule is the one `owning_mount`
+/// ([`crate::providers`]) already uses for a declared action — **the seating you were last in**:
+/// the focused one if it is of that component, else the last focused, else the first mounted. So a
+/// key written once for a component of two placements keeps landing where the user was working,
+/// rather than on whichever happens to be first in the host's order.
+pub(crate) fn placement_for(
+    host: &ChromeHost,
+    target: &str,
+    focused: Option<&str>,
+    last_focused: Option<&str>,
+) -> Option<ContainerId> {
+    if host.provider(target).is_some() {
+        return Some(target.to_string());
+    }
+    let is_target = |mount: &str| {
+        host.provider(mount)
+            .is_some_and(|p| p.kind() == target)
+    };
+    focused
+        .filter(|m| is_target(m))
+        .or_else(|| last_focused.filter(|m| is_target(m)))
+        .map(str::to_string)
+        .or_else(|| {
+            host.mounted_providers()
+                .find(|p| p.kind() == target)
+                .map(|p| p.id().to_string())
+        })
+}
+
 /// Whether a region currently draws the containers seated in it.
 ///
 /// Only the two sidebars host containers today: `build_chrome_root` builds region content for those,
@@ -105,6 +140,11 @@ mod tests {
     impl Provider for Dock {
         fn id(&self) -> &str {
             &self.id
+        }
+        /// One component, however many seatings — which is what makes `placement_for`'s fallback
+        /// order testable at all.
+        fn kind(&self) -> &str {
+            "dock"
         }
         fn supported_regions(&self) -> RegionSet {
             RegionSet::sidebars()
@@ -191,6 +231,62 @@ mod tests {
         assert_eq!(
             navigable_dock(&host, Some("workspaces")),
             Some(("workspaces".to_string(), RegionId::RightSidebar)),
+        );
+    }
+
+    /// A **placement id wins over a component name** — it is the more specific answer, and it is
+    /// what an entry with an `id` means (F003/P086/T363).
+    #[test]
+    fn a_focus_target_resolves_as_a_placement_before_a_component() {
+        let host = host(vec![
+            Dock::new("workspaces", RegionId::LeftSidebar, true),
+            Dock::new("workspaces.right", RegionId::RightSidebar, true),
+        ]);
+        assert_eq!(
+            placement_for(&host, "workspaces.right", None, None),
+            Some("workspaces.right".to_string()),
+        );
+    }
+
+    /// Named by **component**, it lands on the seating you were last in — the rule `owning_mount`
+    /// uses for a declared action, so one key written once keeps following the user.
+    #[test]
+    fn a_component_name_lands_on_the_seating_you_were_last_in() {
+        // Both docks report `kind() == "dock"` (the stand-in's fixed kind), so the name is ambiguous
+        // by construction — which is exactly the case the fallback order exists for.
+        let host = host(vec![
+            Dock::new("first", RegionId::LeftSidebar, true),
+            Dock::new("second", RegionId::RightSidebar, true),
+        ]);
+        assert_eq!(
+            placement_for(&host, "dock", Some("second"), None),
+            Some("second".to_string()),
+            "the focused seating of that component wins",
+        );
+        assert_eq!(
+            placement_for(&host, "dock", None, Some("second")),
+            Some("second".to_string()),
+            "…else the one focused most recently",
+        );
+        assert_eq!(
+            placement_for(&host, "dock", None, None),
+            Some("first".to_string()),
+            "…else the first mounted, in the host's order",
+        );
+        assert_eq!(
+            placement_for(&host, "dock", Some("gone"), Some("second")),
+            Some("second".to_string()),
+            "a hint naming a mount that is not of this component is skipped, not obeyed",
+        );
+    }
+
+    #[test]
+    fn a_focus_target_naming_nothing_mounted_resolves_to_nothing() {
+        let host = host(vec![Dock::new("workspaces", RegionId::LeftSidebar, true)]);
+        assert_eq!(
+            placement_for(&host, "docker", None, None),
+            None,
+            "a typo in a binding's `dock` must be visible, not a silent no-op",
         );
     }
 
