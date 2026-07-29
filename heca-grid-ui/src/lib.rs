@@ -38,6 +38,7 @@ pub mod effects;
 pub mod focus;
 pub mod font;
 pub mod hint;
+pub mod nav;
 pub mod keymap;
 pub mod layout;
 pub mod reactive;
@@ -51,7 +52,7 @@ pub mod widgets;
 pub use heca_core::layout::{Point, Rectangle, Size};
 
 pub use action::{Action, SignalData};
-pub use builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
+pub use builders::{DragExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
@@ -61,6 +62,7 @@ pub use component::{
 pub use keymap::{KeyChord, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
 pub use hint::{HintTargetId, collect_hint_targets};
+pub use nav::{collect_nav_keys, nav_key_at};
 pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -83,12 +85,13 @@ pub use widgets::{
 /// Common imports for building UIs.
 pub mod prelude {
     pub use crate::action::{Action, SignalData};
-    pub use crate::builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
+    pub use crate::builders::{DragExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
     pub use crate::keymap::{KeyChord, Keymap};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
     pub use crate::hint::{HintTargetId, collect_hint_targets};
+    pub use crate::nav::{collect_nav_keys, nav_key_at};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::{TextAlign, TextStyle};

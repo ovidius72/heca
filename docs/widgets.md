@@ -316,6 +316,51 @@ return `Self` for chaining.
 > inherent methods win over the trait one. `.child_boxed` is the plain "append it to my
 > children" case.
 
+**`NavExt`** (navigable rows — **every** component gets it, like `DragExt` and `HintExt`):
+
+| Method | Effect |
+|--------|--------|
+| `.nav_key(impl Into<String>)` | Declare this widget to be a **row with an identity of its own**. |
+
+```rust
+// A list-shaped component labels its rows. That is the whole of its side.
+Row::new()
+    .nav_key(format!("pane:{}", pane.id))
+    .child(Label::new(&pane.name))
+```
+
+**One declaration, three readers.** The host derives the keyboard **cursor**, the
+**right-click target**, and (later) the **drag identity** from this single string — instead of a
+closed enum of row kinds that only the app could extend, which is what made a plugin row impossible
+to point at.
+
+**Why a string, when `DragItemId` and `HintTargetId` are opaque integers.** Those two are *registry
+slots*: the widget takes a token and the app keeps the map, valid only for the tree that handed it
+out. A nav key is the opposite — it must **survive a tree rebuild**, because a retained tree is
+rebuilt for reasons that have nothing to do with navigation (in heca, a pane's git status changing
+is enough), and a cursor that resets every time is not a cursor. An index into a tree cannot do
+that; an identity the row asserts about itself can. It is also why a scoped `FocusManager` — a visit
+*index* — cannot be the cursor.
+
+The key is **opaque to the library**: nothing here parses it. Choose something stable — prefer an id
+over a position (`pane:7`, not `row:3`) wherever the data has one.
+
+Two free functions read them, both in `heca_grid_ui::nav`:
+
+| Function | Answers |
+|----------|---------|
+| `collect_nav_keys(&dyn Component) -> Vec<(String, Rectangle)>` | Every navigable row with its laid-out bounds, in **document order** — the order the user sees, which is what "next row" means. Hidden subtrees are skipped, so a collapsed group's rows are not steppable. |
+| `nav_key_at(&dyn Component, Point) -> Option<String>` | The **topmost, deepest** row under a point — what a right-click is aimed at. Same walk as `drag::source_at`, deliberately: a right-click and a drag must agree about what they are pointing at. |
+
+A row that should not be navigable simply declares no key. The **cursor highlight** is separate and
+host-driven: `Row`, `Item`, `DockFrame` and `MarkerGroup` expose `nav_state() -> Signal<bool>`, and
+a widget whose nav state is set reports `wants_visible()`, so any enclosing
+[`ScrollRegion`](#scrollregion) scrolls it into view with nothing wired at the call site.
+
+> **Declarative form:** none. A `nav_key` is authored by the component that owns the row, and a
+> described tree carries it as an ordinary prop on the node — see
+> [`ViewNode`](#declarative-ui-model-viewnode).
+
 ### `Style` & layout enums
 
 `Style` is **two peer halves** — `style.layout` and `style.visual`. The split is the plugin
