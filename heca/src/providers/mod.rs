@@ -33,7 +33,6 @@ use heca_config::programs::ProgramsConfig;
 use heca_grid_ui::theme::Theme as GuiTheme;
 
 pub use workspaces::WorkspacesContainerProvider;
-pub(crate) use workspaces::selection_nav_key;
 
 /// A built-in (later WASM-backed) contributor of chrome content.
 pub trait Provider {

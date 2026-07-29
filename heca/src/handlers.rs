@@ -197,6 +197,34 @@ pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
+/// Zoom the column named by `(ws_idx, col_idx)` — [`WmAction::ZoomColumnAtIndex`].
+///
+/// Zoom is a property of the *active* column, so naming another one means making it active first.
+/// That is part of this action rather than a step every caller repeats: "zoom that column" is one
+/// intent, and a caller that forgot the activation would silently zoom the wrong column.
+///
+/// Switching workspace goes through `focus_workspace` rather than assigning the index, so everything
+/// that follows a workspace change still happens.
+pub fn handle_zoom_column_at_index(state: &mut AppState, action: &WmAction) {
+    let WmAction::ZoomColumnAtIndex { ws_idx, col_idx } = action else {
+        return;
+    };
+    if *ws_idx >= state.session.workspaces.len() {
+        return;
+    }
+    if *ws_idx != state.session.active_workspace_idx {
+        handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx: *ws_idx });
+    }
+    if let Some(ws) = state.session.active_workspace_mut()
+        && *col_idx < ws.scrolling.columns.len()
+    {
+        ws.scrolling.activate_column(*col_idx);
+    } else {
+        return;
+    }
+    handle_zoom_column(state, &WmAction::ZoomColumn);
+}
+
 /// Open the context menu for the active context (keyboard / RPC entry, `prefix+>`).
 ///
 /// When a `pending_context` was stashed by the sidebar prefix arm (context-menu-7), it is
@@ -756,7 +784,7 @@ fn close_workspace_if_empty(state: &mut AppState) {
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
-        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        focus_navigable_dock(state);
         return;
     }
     let candidates = collect_all_pane_candidates(&state.session);
@@ -795,7 +823,7 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
-        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        focus_navigable_dock(state);
         return;
     }
     let candidates = collect_all_pane_candidates(&state.session);
@@ -810,7 +838,7 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
-        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        focus_navigable_dock(state);
         return;
     }
     let candidates = collect_all_pane_candidates(&state.session);
@@ -1306,7 +1334,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
 
 pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
-        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        focus_navigable_dock(state);
         return;
     }
     let candidates = crate::collect_all_pane_candidates(&state.session);
@@ -1321,7 +1349,7 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
-        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        focus_navigable_dock(state);
         return;
     }
     let candidates = crate::collect_all_pane_candidates(&state.session);
@@ -1563,24 +1591,19 @@ fn reveal_region(state: &mut AppState, region: crate::chrome::RegionId) {
 ///
 /// With no navigable dock mounted there is nothing to navigate, so this is a **no-op** — it does not
 /// expand a region to show an empty frame.
-pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
+/// Hand the keyboard to the dock that navigates — the overflow escape for the pane pickers.
+///
+/// When there are more panes than letters, a pick cannot offer them all, so the pickers fall back to
+/// driving the dock instead. That is the app reaching for whichever container declares
+/// `keyboard_navigable`, not for a named one; F003/P086 will make the pickers take their targets
+/// from a component instead, at which point this goes.
+pub(crate) fn focus_navigable_dock(state: &mut AppState) {
     let focused = state.chrome_state.focused_container();
-    let Some((dock, region)) = crate::chrome::navigable_dock(&state.chrome_host, focused.as_deref())
+    let Some((dock, _)) = crate::chrome::navigable_dock(&state.chrome_host, focused.as_deref())
     else {
         return;
     };
-    // You cannot navigate a hidden sidebar, so show the one the dock is actually in.
-    reveal_region(state, region);
-    // Chrome focus and sidebar nav are the same intent from the user's side: the keys are aimed at
-    // this dock now, so the ring follows the cursor rather than living in a second place.
-    state.chrome_state.set_focused_container(Some(dock));
-    state.input_mode = InputMode::SidebarNav;
-    // Seed the store with the row the cursor is already on, so entering nav mode publishes
-    // a selection (and emits `SidebarSelectionChanged`) instead of waiting for the first
-    // j/k.
-    publish_sidebar_selection(state);
-    update_session_viewport(state);
-    after_layout_change(state);
+    handle_focus_dock(state, &WmAction::FocusDock { dock: Some(dock) });
 }
 
 /// Give chrome keyboard focus to a dock — by id, or by letter.
@@ -1620,6 +1643,12 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
             handle_unfocus_dock(state, &WmAction::UnfocusDock);
             return;
         }
+        // Show the region it sits in. Focusing a container the user cannot see is a promise
+        // unkept — the keys go somewhere invisible. `sidebar_focus` did this and nothing else
+        // did, so it moved here when that built-in was retired (F003/P085/T356).
+        if let Some(region) = state.chrome_host.placement(&mount) {
+            reveal_region(state, region);
+        }
         state.chrome_state.set_focused_container(Some(mount));
         state.needs_redraw = true;
         return;
@@ -1654,160 +1683,6 @@ pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
-/// Publish the cursor's row into the chrome store, which **owns** the sidebar selection.
-///
-/// The store is the source of truth: it is what the retained tree highlights from, what
-/// `ChromeEvent::SidebarSelectionChanged` carries to subscribers, and what an RPC or a
-/// plugin will read and write. `WorkspaceTree.cursor` is a positional index into a list
-/// rebuilt on every layout change, so it is the *derived* half — after a rebuild the
-/// cursor is re-projected from the store (`apply_nav_selection`), not the other way round.
-///
-/// Every sidebar-nav mutation ends here. The setter is change-guarded, so republishing an
-/// unchanged selection is free and emits nothing.
-fn publish_sidebar_selection(state: &mut AppState) {
-    let selection = state.chrome_state.workspaces.tree().selection();
-    state.chrome_state.workspaces.set_nav_selection(selection);
-    // …and into the **generic** per-mount cursor the rows' outlines now read (F003/P085/T354). The
-    // domain-typed `nav_selection` is still canonical until F003/P085/T356 migrates the container
-    // onto the contract; this is the one bridge between them, so there is exactly one place to
-    // delete when it does — not a second source of truth living alongside the first.
-    let mount = state.chrome_state.focused_container();
-    if let Some(mount) = mount {
-        let key = selection.map(crate::providers::selection_nav_key);
-        state.chrome_state.set_container_cursor(&mount, key);
-    }
-}
-
-pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
-    if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.chrome_state.workspaces.tree_mut().cursor_up();
-        publish_sidebar_selection(state);
-        state.needs_redraw = true;
-    }
-}
-
-pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
-    if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.chrome_state.workspaces.tree_mut().cursor_down();
-        publish_sidebar_selection(state);
-        state.needs_redraw = true;
-    }
-}
-
-pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
-    if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.chrome_state.workspaces.tree_mut().collapse(&state.chrome_state.workspaces);
-        publish_sidebar_selection(state);
-        state.needs_redraw = true;
-    }
-}
-
-pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
-    if matches!(state.input_mode, InputMode::SidebarNav) {
-        let item = state.chrome_state.workspaces.tree().current_item().cloned();
-        match &item {
-            // Focus goes through the focus *action*, not a hand-rolled call — the sidebar
-            // decides *which* row to activate, never what focusing means.
-            Some(
-                workspaces::WorkspaceRow::Pane { pane_id }
-                | workspaces::WorkspaceRow::FloatingPane { pane_id, .. },
-            ) => {
-                handle_focus_pane(
-                    state,
-                    &WmAction::FocusPane {
-                        pane_id: *pane_id,
-                    },
-                );
-                // Activating a leaf hands the keyboard back to the pane, so the dock must let go
-                // of it too — `sidebar_focus` took both, and leaving with only the mode released
-                // would leave every key swallowed by a dock nobody is driving (F003/P085/T352).
-                handle_unfocus_dock(state, &WmAction::UnfocusDock);
-                state.input_mode = InputMode::Normal;
-            }
-            _ => {
-                state.chrome_state.workspaces.tree_mut().expand(&state.chrome_state.workspaces);
-            }
-        }
-        // Activating a leaf leaves nav mode; `sync_chrome_state` clears the selection on
-        // the way out. Expanding stays in nav mode, so the (possibly moved) cursor is
-        // republished here.
-        publish_sidebar_selection(state);
-        state.needs_redraw = true;
-    }
-}
-
-/// Focus the row under the sidebar cursor **without changing the input mode** — the "peek"
-/// action.
-///
-/// The difference from [`handle_sidebar_right_nav`] is the one line that *isn't* here: it
-/// never sets `input_mode = Normal`. In sidebar mode that means the user can walk the tree
-/// with `j`/`k` and preview each row in the main view without dropping out of navigation.
-///
-/// It is deliberately **not** gated on `InputMode::SidebarNav`. The action is a capability,
-/// not a key handler: it must work identically from the keyboard, from RPC (`sidebar-peek`),
-/// and from any future UI surface. Gating it on the mode would make every non-keyboard
-/// caller a silent no-op. "Peek" means *focus what the sidebar cursor points at, and leave
-/// the mode alone* — which is well-defined whatever mode we are in.
-///
-/// The cursor stops only on panes and workspace headers, so both are handled: a pane row
-/// focuses the pane, a workspace row switches to that workspace. A column row is
-/// unreachable, and an empty tree is a no-op.
-///
-/// Focusing rebuilds the sidebar tree, which renumbers its rows — the nav selection is
-/// canonical in the chrome store and re-projected onto the cursor, so the cursor stays on
-/// the row the user is pointing at rather than following the focus.
-pub fn handle_sidebar_peek(state: &mut AppState, _action: &WmAction) {
-    let Some(item) = state.chrome_state.workspaces.tree().current_item().cloned() else {
-        return;
-    };
-    // Both arms go through the action's own handler rather than re-deriving the focus:
-    // each owns its bounds check, visit tracking, and `after_focus_change`. Peek adds no
-    // focus semantics of its own — it is exactly "the existing focus action, minus the
-    // mode change".
-    match item {
-        workspaces::WorkspaceRow::Pane { pane_id }
-        | workspaces::WorkspaceRow::FloatingPane { pane_id, .. } => {
-            handle_focus_pane(state, &WmAction::FocusPane { pane_id });
-        }
-        workspaces::WorkspaceRow::Workspace { ws_idx } => {
-            handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx });
-        }
-        // The cursor never lands on a column (see `WorkspaceTree::is_navigable`).
-        workspaces::WorkspaceRow::Column { .. } => {}
-    }
-    // The focus moved, the selection did not: republish so the store keeps naming the row
-    // the cursor is on.
-    publish_sidebar_selection(state);
-    state.needs_redraw = true;
-}
-
-pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
-    if matches!(state.input_mode, InputMode::SidebarNav) {
-        let item = state.chrome_state.workspaces.tree().current_item().cloned();
-        match &item {
-            Some(workspaces::WorkspaceRow::Pane { .. })
-            | Some(workspaces::WorkspaceRow::FloatingPane { .. }) => {}
-            _ => {
-                state.chrome_state.workspaces.tree_mut().toggle_expand(&state.chrome_state.workspaces);
-            }
-        }
-        publish_sidebar_selection(state);
-        state.needs_redraw = true;
-    }
-}
-
-fn sidebar_selected_workspace_idx(state: &AppState) -> Option<usize> {
-    let item = state.chrome_state.workspaces.tree().current_item().cloned()?;
-    match item {
-        workspaces::WorkspaceRow::Workspace { ws_idx }
-        | workspaces::WorkspaceRow::Column { ws_idx, .. }
-        | workspaces::WorkspaceRow::FloatingPane { ws_idx, .. } => Some(ws_idx),
-        workspaces::WorkspaceRow::Pane { pane_id } => {
-            find_pane_location(&state.session, pane_id).map(|(ws_idx, _, _)| ws_idx)
-        }
-    }
-}
-
 fn sidebar_selected_column_target(state: &AppState) -> Option<(usize, usize)> {
     let item = state.chrome_state.workspaces.tree().current_item().cloned()?;
     match item {
@@ -1827,118 +1702,6 @@ fn current_tiled_column_target(state: &AppState) -> Option<(usize, usize)> {
     let pane_id = focused_pane_id(state)?;
     let (ws_idx, col_idx, _) = find_pane_location(&state.session, pane_id)?;
     (ws_idx == state.session.active_workspace_idx).then_some((ws_idx, col_idx))
-}
-
-fn sidebar_delete_prompt(state: &AppState) -> Option<(String, WmAction)> {
-    let item = state.chrome_state.workspaces.tree().current_item()?.clone();
-    match item {
-        workspaces::WorkspaceRow::Workspace { ws_idx } => {
-            let ws_label = if let Some(ws) = state.session.workspaces.get(ws_idx)
-                && let Some(ref name) = ws.name
-            {
-                name.clone()
-            } else {
-                format!("workspace {}", ws_idx + 1)
-            };
-            Some((
-                format!("Delete {}? (y/n)", ws_label),
-                WmAction::DeleteWorkspace { ws_idx },
-            ))
-        }
-        workspaces::WorkspaceRow::Column { ws_idx, col_idx } => {
-            let ws_label = if let Some(ws) = state.session.workspaces.get(ws_idx)
-                && let Some(ref name) = ws.name
-            {
-                name.clone()
-            } else {
-                format!("ws {}", ws_idx + 1)
-            };
-            Some((
-                format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label),
-                WmAction::DeleteColumn { ws_idx, col_idx },
-            ))
-        }
-        workspaces::WorkspaceRow::Pane { pane_id }
-        | workspaces::WorkspaceRow::FloatingPane { pane_id, .. } => {
-            let pane_label = state
-                .session
-                .workspaces
-                .iter()
-                .find_map(|ws| ws.find_pane(pane_id))
-                .map(|pane| pane.title.clone())
-                .unwrap_or_else(|| format!("pane {}", pane_id));
-            Some((
-                format!("Delete {}? (y/n)", pane_label),
-                WmAction::ClosePaneById { pane_id },
-            ))
-        }
-    }
-}
-
-pub fn handle_sidebar_create_workspace(state: &mut AppState, _action: &WmAction) {
-    if !matches!(state.input_mode, InputMode::SidebarNav) {
-        return;
-    }
-    if matches!(
-        state.chrome_state.workspaces.tree().current_item(),
-        Some(workspaces::WorkspaceRow::FloatingPane { .. })
-    ) {
-        return;
-    }
-    handle_create_workspace(state, &WmAction::CreateWorkspace);
-    state.input_mode = InputMode::SidebarNav;
-}
-
-pub fn handle_sidebar_create_column(state: &mut AppState, _action: &WmAction) {
-    if !matches!(state.input_mode, InputMode::SidebarNav) {
-        return;
-    }
-    if matches!(
-        state.chrome_state.workspaces.tree().current_item(),
-        Some(workspaces::WorkspaceRow::FloatingPane { .. })
-    ) {
-        return;
-    }
-    if let Some(target_ws) = sidebar_selected_workspace_idx(state) {
-        if target_ws != state.session.active_workspace_idx {
-            // Switching workspace IS an action — dispatch it, don't re-derive it.
-            handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx: target_ws });
-        }
-        handle_split_horizontal(state, &WmAction::SplitHorizontal);
-        state.input_mode = InputMode::SidebarNav;
-    }
-}
-
-pub fn handle_sidebar_split_in_column(state: &mut AppState, _action: &WmAction) {
-    if !matches!(state.input_mode, InputMode::SidebarNav) {
-        return;
-    }
-    if let Some((ws_idx, col_idx)) = sidebar_selected_column_target(state) {
-        handle_add_pane_to_column(state, &WmAction::AddPaneToColumn { ws_idx, col_idx });
-        state.input_mode = InputMode::SidebarNav;
-    }
-}
-
-pub fn handle_sidebar_zoom_selected_column(state: &mut AppState, _action: &WmAction) {
-    if !matches!(state.input_mode, InputMode::SidebarNav) {
-        return;
-    }
-    if let Some((ws_idx, col_idx)) = sidebar_selected_column_target(state) {
-        if ws_idx != state.session.active_workspace_idx {
-            // Switching workspace IS an action — dispatch it, don't re-derive it.
-            handle_focus_workspace(state, &WmAction::FocusWorkspace { ws_idx });
-        }
-        // Making a column active has no action of its own (nothing else needs it), so this
-        // stays part of *this* action's implementation: "zoom the SELECTED column" has to
-        // make that column the active one before zooming it.
-        if let Some(ws) = state.session.active_workspace_mut()
-            && col_idx < ws.scrolling.columns.len()
-        {
-            ws.scrolling.activate_column(col_idx);
-        }
-        handle_zoom_column(state, &WmAction::ZoomColumn);
-        state.input_mode = InputMode::SidebarNav;
-    }
 }
 
 /// Raise a declarative [`ConfirmSpec`](crate::actions::ConfirmSpec) as a host-owned overlay modal
@@ -2172,15 +1935,6 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     let resume_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
     open_confirm(state, spec, resolved, resume_sidebar);
     true
-}
-
-pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) {
-    if !matches!(state.input_mode, InputMode::SidebarNav) {
-        return;
-    }
-    if let Some((_, action)) = sidebar_delete_prompt(state) {
-        request_destructive(state, action, true);
-    }
 }
 
 /// Delete the "current" column (and all its panes). The nav cursor never lands on a

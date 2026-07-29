@@ -89,14 +89,12 @@ prev_pane = "prefix+["
 # ── Sidebars ──
 sidebar_left          = "prefix+b"    # Toggle left sidebar
 sidebar_right         = "prefix+."    # Toggle right sidebar
-sidebar_focus         = "prefix+e"    # Focus the navigable dock + enter nav mode (whichever side it sits on)
 # Chrome keyboard focus is a DOCK, not a side: the letters go over every dock on screen and the
 # one you pick takes focus (a focus ring shows where the keyboard is). `focus_dock` also accepts a
 # `dock` id, which skips the pick — that is how RPC and menu entries focus a specific dock. No flat
 # binding form carries args yet, so to aim a key at one dock, use a mode block (as with
 # `scroll_to_offset` further down).
 focus_dock            = "prefix+Shift+e"  # Letters on every dock, pick one to focus
-sidebar_expand_toggle = "prefix+Tab"  # Expand/collapse selected sidebar node
 # Sidebar-tree UI collapse state (works even when the sidebar is hidden):
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
@@ -479,81 +477,6 @@ keys = "Alt+End"
 # this block says (F003/P086/T363) — a line here would look editable and would not be. Bind
 # `unfocus_dock` to further keys if you want more ways out; Escape is the floor.
 
-# ── sidebar ── (entered via sidebar_focus / mouse; no trigger of its own)
-[[keys.mode]]
-name = "sidebar"
-trigger = ""
-sticky = true
-[[keys.mode.bindings]]
-action = "sidebar_up"
-keys = "k"
-[[keys.mode.bindings]]
-action = "sidebar_down"
-keys = "j"
-[[keys.mode.bindings]]
-action = "sidebar_up"
-keys = "Up"
-[[keys.mode.bindings]]
-action = "sidebar_down"
-keys = "Down"
-[[keys.mode.bindings]]
-action = "sidebar_up"
-keys = "ArrowUp"
-[[keys.mode.bindings]]
-action = "sidebar_down"
-keys = "ArrowDown"
-[[keys.mode.bindings]]
-action = "sidebar_left_nav"
-keys = "h"
-[[keys.mode.bindings]]
-action = "sidebar_right_nav"
-keys = "l"
-[[keys.mode.bindings]]
-action = "sidebar_left_nav"
-keys = "Left"
-[[keys.mode.bindings]]
-action = "sidebar_right_nav"
-keys = "Right"
-[[keys.mode.bindings]]
-action = "sidebar_left_nav"
-keys = "ArrowLeft"
-[[keys.mode.bindings]]
-action = "sidebar_right_nav"
-keys = "ArrowRight"
-[[keys.mode.bindings]]
-action = "sidebar_create_workspace"
-keys = "w"
-[[keys.mode.bindings]]
-action = "sidebar_create_column"
-keys = "c"
-[[keys.mode.bindings]]
-action = "sidebar_split_in_column"
-keys = "v"
-[[keys.mode.bindings]]
-action = "sidebar_zoom_selected_column"
-keys = "z"
-[[keys.mode.bindings]]
-action = "sidebar_delete_selected"
-keys = "d"
-[[keys.mode.bindings]]
-# Delete the selected item's whole column (the cursor never lands on a column
-# itself, so `d` above can only reach a pane/workspace). Shift+d, kept distinct
-# from `d` — a bare "D" folds to "d" in the keymap, so the Shift+ prefix is required.
-action = "delete_current_column"
-keys = "Shift+d"
-[[keys.mode.bindings]]
-action = "sidebar_expand_toggle"
-keys = "Tab"
-[[keys.mode.bindings]]
-# Focus the selected pane/workspace but STAY in sidebar mode, so the tree can be
-# walked with j/k while each row is previewed in the main view. `l`/`Right` focus
-# and *leave*; this is the one that keeps you here.
-action = "sidebar_peek"
-keys = "Space"
-[[keys.mode.bindings]]
-action = "sidebar_left"
-keys = "b"
-
 # ── selection ── (entered via enter_selection_mode; no trigger of its own)
 [[keys.mode]]
 name = "selection"
@@ -701,9 +624,20 @@ keys = "0"
 
 [[keys.component]]
 name              = "workspaces"
+# The same keystroke `sidebar_focus` used to own. It is a plain container key now: nothing
+# app-side knows this dock exists, and a second component asks for its own the same way.
+global_focus      = "prefix+e"
 cursor_up         = "k,Up,ArrowUp"
 cursor_down       = "j,Down,ArrowDown"
 collapse_row      = "h,Left,ArrowLeft"
 activate_selected = "l,Right,ArrowRight,Enter"
 peek_selected     = "Space"
 toggle_selected   = "Tab"
+# The mutations. Each acts on the row the cursor is on, so they need no prefix and no mode — the
+# dock has the keyboard or it does not.
+create_workspace  = "w"
+create_pane       = "p"
+create_column     = "c"
+delete_selected   = "x"          # the pane or workspace under the cursor
+delete_selected_column = "Shift+x"  # its whole column — the cursor never lands on a column row
+zoom_selected     = "z"

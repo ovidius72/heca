@@ -356,15 +356,27 @@ do_thing = "u"
         assert!(cfg.bindings.contains_key("close"));
     }
 
+    /// The workspaces dock's keys are a **component layer** now, not a mode. The `sidebar` mode
+    /// and its twelve `sidebar_*` actions are gone (F003/P085/T356) — a container is driven because
+    /// it has focus, not because the app entered a state.
     #[test]
-    fn test_keys_config_has_default_sidebar_mode() {
+    fn the_workspaces_dock_ships_a_component_layer_not_a_mode() {
         let cfg = KeysConfig::default();
-        let sidebar = cfg
-            .mode
+        assert!(
+            !cfg.mode.iter().any(|m| m.name == "sidebar"),
+            "the sidebar mode went with the built-ins it drove",
+        );
+        let ws = cfg
+            .component
             .iter()
-            .find(|mode| mode.name == "sidebar")
-            .expect("sidebar mode should exist by default");
-        assert!(sidebar.bindings.iter().any(|b| b.keys == "j"));
-        assert!(sidebar.bindings.iter().any(|b| b.keys == "Space"));
+            .find(|c| c.name == "workspaces")
+            .expect("the workspaces component ships its keys here");
+        assert_eq!(ws.bindings["cursor_down"].keys(), vec!["j", "Down", "ArrowDown"]);
+        assert_eq!(ws.bindings["peek_selected"].keys(), vec!["Space"]);
+        assert_eq!(
+            ws.bindings["global_focus"].keys(),
+            vec!["prefix+e"],
+            "the keystroke `sidebar_focus` used to own, now a plain container key",
+        );
     }
 }

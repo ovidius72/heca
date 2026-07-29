@@ -475,7 +475,7 @@ color = "#112233"
         }
         assert!(keys.bindings.len() >= 45, "expected the full default keymap");
         // The three built-in modes are present with their bindings.
-        for mode_name in ["resize", "sidebar", "selection"] {
+        for mode_name in ["resize", "selection"] {
             let mode = keys
                 .mode
                 .iter()

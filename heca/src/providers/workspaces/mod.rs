@@ -153,54 +153,104 @@ impl Provider for WorkspacesContainerProvider {
     /// its rows are workspaces, columns and panes, and therefore what "next" means among them. A
     /// component showing a single number has no cursor and declares none of this.
     fn actions(&self) -> Vec<ActionMeta> {
-        let act = |name: &str, label: &str, description: &str, icon| ActionMeta {
+        // **The policy is per action, not per component.** Moving the cursor and deleting a
+        // workspace are not the same kind of act and must not share a gate: the cursor is chrome
+        // state and stays drivable while a pane is floating, while every mutation below touches the
+        // tiled layout and is blocked there — which is exactly what the `sidebar_*` built-ins they
+        // replaced declared (`TiledOnly`). Passing it in is what keeps the two apart, and a single
+        // shared default is how they silently became one (F003/P085/T356).
+        let act = |name: &str, label: &str, description: &str, icon, policy| ActionMeta {
             name: name.to_string(),
             label: label.to_string(),
             description: description.to_string(),
             category: ActionCategory::Navigation,
             icon,
-            // Chrome state: the cursor is not the pane layout, so these stay reachable while a
-            // floating pane is active — the dock is still there to be driven.
-            policy: ActionPolicy::Global,
+            policy,
             args: Vec::new(),
             confirm: None,
         };
+        // Chrome state: the cursor is not the pane layout, so these stay reachable while a floating
+        // pane is active — the dock is still there to be driven.
+        let cursor = ActionPolicy::Global;
+        // Everything that changes the tiled layout. Blocked while floating, as before.
+        let mutates = ActionPolicy::TiledOnly;
         vec![
             act(
                 CURSOR_UP,
                 "Cursor Up",
                 "Move the workspaces cursor to the previous row.",
                 Some(Glyph::CaretUp),
+                cursor,
             ),
             act(
                 CURSOR_DOWN,
                 "Cursor Down",
                 "Move the workspaces cursor to the next row.",
                 Some(Glyph::CaretDown),
+                cursor,
             ),
             act(
                 COLLAPSE_ROW,
                 "Collapse Row",
                 "Collapse the row under the cursor, or move out to its parent.",
                 Some(Glyph::CaretLeft),
+                cursor,
             ),
             act(
                 ACTIVATE_SELECTED,
                 "Activate Row",
                 "Expand a structural row, or focus the pane under the cursor and leave the dock.",
                 Some(Glyph::CaretRight),
+                cursor,
             ),
             act(
                 PEEK_SELECTED,
                 "Peek Row",
                 "Focus what the cursor points at without leaving the dock.",
                 None,
+                cursor,
             ),
             act(
                 TOGGLE_SELECTED,
                 "Expand / Collapse Row",
                 "Fold or unfold the structural row under the cursor.",
                 None,
+                cursor,
+            ),
+            act(
+                CREATE_COLUMN,
+                "New Column",
+                "Add a column to the workspace the cursor is in.",
+                Some(Glyph::ColumnsPlusRight),
+                mutates,
+            ),
+            act(
+                CREATE_PANE,
+                "New Pane",
+                "Add a pane to the column the cursor is in.",
+                Some(Glyph::FolderSimplePlus),
+                mutates,
+            ),
+            act(
+                DELETE_SELECTED,
+                "Delete Row",
+                "Delete what the cursor is on — a pane or a workspace.",
+                Some(Glyph::Trash),
+                mutates,
+            ),
+            act(
+                DELETE_COLUMN,
+                "Delete Column",
+                "Delete the column the cursor is in, and every pane in it.",
+                Some(Glyph::Trash),
+                mutates,
+            ),
+            act(
+                ZOOM_SELECTED,
+                "Zoom Column",
+                "Toggle zoom on the column the cursor is in.",
+                Some(Glyph::FrameCorners),
+                mutates,
             ),
         ]
     }
@@ -213,6 +263,11 @@ impl Provider for WorkspacesContainerProvider {
             TOGGLE_SELECTED => self.fold(cx, Fold::Toggle),
             ACTIVATE_SELECTED => self.activate(cx, Activate::AndLeave),
             PEEK_SELECTED => self.activate(cx, Activate::AndStay),
+            CREATE_COLUMN => self.at_workspace(cx, "add_column_to_workspace"),
+            CREATE_PANE => self.at_column(cx, "add_pane_to_column"),
+            ZOOM_SELECTED => self.at_column(cx, "zoom_column_at_index"),
+            DELETE_COLUMN => self.at_column(cx, "delete_column"),
+            DELETE_SELECTED => self.delete_selected(cx),
             _ => Handled::No,
         }
     }
@@ -226,6 +281,13 @@ const COLLAPSE_ROW: &str = "workspaces.collapse_row";
 const ACTIVATE_SELECTED: &str = "workspaces.activate_selected";
 const PEEK_SELECTED: &str = "workspaces.peek_selected";
 const TOGGLE_SELECTED: &str = "workspaces.toggle_selected";
+// The mutations, moved off `InputMode::SidebarNav` (F003/P085/T356). Each resolves the cursor to a
+// target and dispatches an EXISTING parameterized action — none of them reimplements anything.
+const CREATE_COLUMN: &str = "workspaces.create_column";
+const CREATE_PANE: &str = "workspaces.create_pane";
+const DELETE_SELECTED: &str = "workspaces.delete_selected";
+const DELETE_COLUMN: &str = "workspaces.delete_selected_column";
+const ZOOM_SELECTED: &str = "workspaces.zoom_selected";
 
 enum Step {
     Up,
@@ -325,6 +387,106 @@ impl WorkspacesContainerProvider {
         }
         self.publish_cursor(cx);
         Handled::Yes
+    }
+
+    // ── The mutations (F003/P085/T356) ──
+    //
+    // **"New workspace" is not here on purpose.** It is about no row, so it is not this component's
+    // to declare — `create_workspace` already exists and the component simply BINDS it (`w`), which
+    // is the same rule that keeps `zoom_column`, `close` and `next_pane` out of the list above.
+    // Declaring `workspaces.create_workspace` would also have been unreachable: a short name that
+    // matches a built-in resolves to the built-in, by design.
+    //
+    // Every one of these does the same two things: resolve **this component's cursor** to a target,
+    // then dispatch an action that already exists with that target as arguments. The component
+    // contributes the only part nothing else can know — which row the cursor is on — and reuses the
+    // rest. That is why `zoom_column_at_index` had to be added: without a parameterized form there
+    // was nothing to dispatch, and "zoom the selected column" could only be a handler reaching into
+    // this component's model from outside.
+
+    /// The workspace the cursor is in, whatever kind of row it is on.
+    fn cursor_workspace(&self, cx: &ProviderCx<'_>) -> Option<usize> {
+        let state = cx.state();
+        let tree = state.workspaces().tree();
+        match tree.current_item()? {
+            WorkspaceRow::Workspace { ws_idx }
+            | WorkspaceRow::Column { ws_idx, .. }
+            | WorkspaceRow::FloatingPane { ws_idx, .. } => Some(*ws_idx),
+            WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id).map(|(ws, _)| ws),
+        }
+    }
+
+    /// The column the cursor is in — `None` on a workspace row or a floating pane, neither of which
+    /// is inside a column.
+    fn cursor_column(&self, cx: &ProviderCx<'_>) -> Option<(usize, usize)> {
+        let state = cx.state();
+        let tree = state.workspaces().tree();
+        match tree.current_item()? {
+            WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+            WorkspaceRow::Pane { pane_id } => tree.locate_pane(*pane_id),
+            WorkspaceRow::Workspace { .. } | WorkspaceRow::FloatingPane { .. } => None,
+        }
+    }
+
+    /// Dispatch `action` with the cursor's workspace.
+    fn at_workspace(&self, cx: &mut ProviderCx<'_>, action: &str) -> Handled {
+        // Read, then drop the borrow: `dispatch` reaches back into the store.
+        let Some(ws_idx) = self.cursor_workspace(cx) else {
+            return Handled::No;
+        };
+        cx.dispatch(
+            action,
+            PropMap::from([("ws_idx".to_string(), PropValue::Int(ws_idx as i64))]),
+        );
+        Handled::Yes
+    }
+
+    /// Dispatch `action` with the cursor's column. A cursor that is not in one declines — a silent
+    /// decline is a real answer, not an error.
+    fn at_column(&self, cx: &mut ProviderCx<'_>, action: &str) -> Handled {
+        let Some((ws_idx, col_idx)) = self.cursor_column(cx) else {
+            return Handled::No;
+        };
+        cx.dispatch(
+            action,
+            PropMap::from([
+                ("ws_idx".to_string(), PropValue::Int(ws_idx as i64)),
+                ("col_idx".to_string(), PropValue::Int(col_idx as i64)),
+            ]),
+        );
+        Handled::Yes
+    }
+
+    /// Delete what the cursor is **on** — a pane or a workspace.
+    ///
+    /// Never a column: the cursor does not land on one (`WorkspaceTree::is_navigable`), which is why
+    /// `workspaces.delete_column` is a separate verb rather than a case here.
+    ///
+    /// Both go out as ordinary dispatches, so the central destructive gate raises the same confirm
+    /// it does for a keybinding, a header button or an RPC call — the component neither asks nor can
+    /// skip it.
+    fn delete_selected(&self, cx: &mut ProviderCx<'_>) -> Handled {
+        let row = {
+            let state = cx.state();
+            state.workspaces().tree().current_item().cloned()
+        };
+        match row {
+            Some(WorkspaceRow::Pane { pane_id }) | Some(WorkspaceRow::FloatingPane { pane_id, .. }) => {
+                cx.dispatch(
+                    "close_pane_by_id",
+                    PropMap::from([("pane_id".to_string(), PropValue::Int(pane_id.0 as i64))]),
+                );
+                Handled::Yes
+            }
+            Some(WorkspaceRow::Workspace { ws_idx }) => {
+                cx.dispatch(
+                    "delete_workspace",
+                    PropMap::from([("ws_idx".to_string(), PropValue::Int(ws_idx as i64))]),
+                );
+                Handled::Yes
+            }
+            Some(WorkspaceRow::Column { .. }) | None => Handled::No,
+        }
     }
 
     /// Publish the cursor into the store: the generic per-mount cursor the row outlines read, and —

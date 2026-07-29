@@ -88,7 +88,6 @@ pub(crate) enum InteractionSource {
 /// Intent variants are dispatched in `dispatch_action()`:
 /// - `FocusPane` → `WmAction::FocusPane`
 /// - `FocusWorkspace` → `WmAction::FocusWorkspace`
-/// - `EnterSidebarNav` → `WmAction::SidebarFocus`
 /// - `ToggleWorkspaceCollapsed` → `handlers::apply_ws_collapse`
 /// - `StartSidebarDrag` → mouse-layer drag (no registry dispatch)
 #[derive(Debug, Clone)]
@@ -113,14 +112,6 @@ pub(crate) enum InteractionIntent {
     ///
     /// Dispatched to `WmAction::FocusWorkspace` in `dispatch_action`.
     FocusWorkspace { ws_idx: usize },
-    /// Enter sidebar navigation mode (from keyboard shortcut or click).
-    ///
-    /// Dispatched to `WmAction::SidebarFocus` in `dispatch_action`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "constructed from mouse/sidebar in future wiring pass")
-    )]
-    EnterSidebarNav,
     /// Toggle a specific workspace header's collapsed state from the sidebar.
     ToggleWorkspaceCollapsed { ws_idx: usize },
     /// Start dragging a sidebar item (no WmAction equivalent).
@@ -227,24 +218,24 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::RenameColumn
         | WmAction::RenameColumnByIdx { .. }
         | WmAction::DeleteColumn { .. }
+        | WmAction::ZoomColumnAtIndex { .. }
         | WmAction::DeleteCurrentColumn
         | WmAction::AddPaneToColumn { .. }
         | WmAction::AddColumnToWorkspace { .. }
-        // Sidebar actions: blocked when Floating
+        // Sidebar toggles: blocked when Floating
         | WmAction::SidebarLeft
+        // **Taking** chrome focus, likewise. This was `Global`, justified as "unlike `SidebarFocus`,
+        // which enters a nav mode that moves pane focus". That stopped being true when
+        // `sidebar_focus` was retired: a focused container's own `activate`/`peek` move pane focus,
+        // and they are reached through this (F003/P085/T356). It also matches the two lines below —
+        // a sidebar cannot even be toggled while floating, so being able to focus and drive one was
+        // the stranger half.
+        //
+        // It costs a dock that merely scrolls, which would be harmless during a float. Telling the
+        // two apart needs to know whether *this* dock is `keyboard_navigable`, and `policy_allows`
+        // only receives the session — the widening tracked as F003/P086/T371.
+        | WmAction::FocusDock { .. }
         | WmAction::SidebarRight
-        | WmAction::SidebarFocus
-        | WmAction::SidebarUp
-        | WmAction::SidebarDown
-        | WmAction::SidebarLeftNav
-        | WmAction::SidebarRightNav
-        | WmAction::SidebarPeek
-        | WmAction::SidebarExpandToggle
-        | WmAction::SidebarCreateWorkspace
-        | WmAction::SidebarCreateColumn
-        | WmAction::SidebarSplitInColumn
-        | WmAction::SidebarZoomSelectedColumn
-        | WmAction::SidebarDeleteSelected
         | WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed
@@ -355,10 +346,10 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::ReorderContainerAfter { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
-        // Chrome keyboard focus is chrome state too: it decides which dock the scroll keys reach and
-        // has no effect on the pane layout, so — unlike `SidebarFocus`, which enters a nav mode that
-        // moves pane focus — it stays reachable while a floating pane is active.
-        WmAction::FocusDock { .. } | WmAction::UnfocusDock => ActionPolicy::Global,
+        // **Releasing** chrome focus is always allowed, in every domain. It is the way back to the
+        // main region, and a way out that can be blocked is not a way out — the same reason `Esc`
+        // is a guarantee rather than a default (F003/P086/T363).
+        WmAction::UnfocusDock => ActionPolicy::Global,
         // Horizontal scroll reaches a chrome container's scroll area only — chrome state, no pane
         // layout impact — so it stays reachable while a floating pane is active, unlike the vertical
         // four which also drive the focused pane's scrollback.
@@ -471,14 +462,6 @@ pub(crate) fn route_interaction_for_session(
         }
         InteractionIntent::FocusWorkspace { .. } => {
             // Workspace switching: blocked when floating.
-            if is_floating_domain(session) {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(intent)
-            }
-        }
-        InteractionIntent::EnterSidebarNav => {
-            // Sidebar navigation: blocked when floating.
             if is_floating_domain(session) {
                 RouteDecision::Block
             } else {
@@ -748,9 +731,6 @@ pub(crate) fn dispatch_intent(
         RouteDecision::Allow(InteractionIntent::FocusWorkspace { ws_idx }) => {
             registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
         }
-        RouteDecision::Allow(InteractionIntent::EnterSidebarNav) => {
-            registry.execute(&WmAction::SidebarFocus, state);
-        }
         RouteDecision::Allow(InteractionIntent::ToggleWorkspaceCollapsed { ws_idx }) => {
             crate::handlers::apply_ws_collapse(state, ws_idx, None);
         }
@@ -963,7 +943,6 @@ mod tests {
             WmAction::SplitHorizontal,
             WmAction::ZoomColumn,
             WmAction::SidebarLeft,
-            WmAction::SidebarFocus,
         ];
         for action in &actions {
             let decision = route_interaction_for_session(
@@ -1045,7 +1024,6 @@ mod tests {
             WmAction::FocusDown,
             WmAction::SplitHorizontal,
             WmAction::ZoomColumn,
-            WmAction::SidebarFocus,
             WmAction::SidebarLeft,
             WmAction::WorkspaceNext,
             WmAction::CommandPalette,
@@ -1107,7 +1085,6 @@ mod tests {
                 pane_id: PaneId(99),
             },
             InteractionIntent::FocusWorkspace { ws_idx: 0 },
-            InteractionIntent::EnterSidebarNav,
             InteractionIntent::StartSidebarDrag {
                 pane_id: PaneId(42),
             },
@@ -1165,18 +1142,6 @@ mod tests {
             WmAction::RenameColumn,
             WmAction::SidebarLeft,
             WmAction::SidebarRight,
-            WmAction::SidebarFocus,
-            WmAction::SidebarUp,
-            WmAction::SidebarDown,
-            WmAction::SidebarLeftNav,
-            WmAction::SidebarRightNav,
-            WmAction::SidebarPeek,
-            WmAction::SidebarExpandToggle,
-            WmAction::SidebarCreateWorkspace,
-            WmAction::SidebarCreateColumn,
-            WmAction::SidebarSplitInColumn,
-            WmAction::SidebarZoomSelectedColumn,
-            WmAction::SidebarDeleteSelected,
             WmAction::CollapseCurrentWorkspace,
             WmAction::ExpandCurrentWorkspace,
             WmAction::ToggleCurrentWorkspaceCollapsed,
@@ -1321,9 +1286,6 @@ mod tests {
 
         // Spot-check specific classifications
         assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
-        // Peek focuses a tiled pane/workspace from the sidebar — same domain as every
-        // other Sidebar* action, so it must not fire while a floating pane is active.
-        assert_eq!(action_policy(&WmAction::SidebarPeek), ActionPolicy::TiledOnly);
         // Column rename (active or by-idx) is a tiled-layout op → TiledOnly, like RenameColumn.
         assert_eq!(
             action_policy(&WmAction::RenameColumn),
@@ -1378,24 +1340,21 @@ mod tests {
             ActionPolicy::AlwaysAllowed
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
-        // Chrome keyboard focus is chrome state, not pane layout: it stays reachable while a floating
-        // pane is active. `SidebarFocus` differs deliberately — it enters a nav mode that moves pane
-        // focus, so it is TiledOnly.
+        // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused
+        // container's own `activate`/`peek` move pane focus and are reached through the first, so it
+        // must not open while a float owns the domain — but a way out that can be blocked is not a
+        // way out (F003/P085/T356).
         assert_eq!(
             action_policy(&WmAction::FocusDock { dock: None }),
-            ActionPolicy::Global
+            ActionPolicy::TiledOnly
         );
         assert_eq!(
             action_policy(&WmAction::FocusDock {
                 dock: Some("workspaces".into())
             }),
-            ActionPolicy::Global
-        );
-        assert_eq!(action_policy(&WmAction::UnfocusDock), ActionPolicy::Global);
-        assert_eq!(
-            action_policy(&WmAction::SidebarFocus),
             ActionPolicy::TiledOnly
         );
+        assert_eq!(action_policy(&WmAction::UnfocusDock), ActionPolicy::Global);
         // The horizontal four reach a chrome container's scroll area only, so they follow chrome
         // focus rather than the pane's tiled/floating domain.
         for action in [
@@ -1567,9 +1526,7 @@ mod tests {
 
         // Sidebar actions should be blocked when floating.
         let actions = [
-            WmAction::SidebarFocus,
             WmAction::SidebarLeft,
-            WmAction::SidebarUp,
         ];
         for action in &actions {
             // Test via MouseLeftSidebar source (same result as Keyboard, but testing the source explicitly)
@@ -1744,7 +1701,6 @@ mod tests {
     fn tiled_sidebar_action_allowed_via_mouse_sidebar() {
         let session = test_session();
         let actions = [
-            WmAction::SidebarFocus,
             WmAction::SidebarLeft,
             WmAction::SidebarRight,
         ];
@@ -1980,39 +1936,7 @@ mod tests {
     }
 
     /// Sidebar navigation intent is blocked when floating.
-    #[test]
-    fn floating_blocks_sidebar_nav_intent() {
-        let mut session = test_session();
-        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
-
-        let decision = route_interaction_for_session(
-            &session,
-            InteractionSource::MouseLeftSidebar,
-            InteractionIntent::EnterSidebarNav,
-        );
-        assert!(
-            matches!(decision, RouteDecision::Block),
-            "EnterSidebarNav should be blocked when floating, got {:?}",
-            decision,
-        );
-    }
-
     /// Sidebar navigation intent is allowed when tiled.
-    #[test]
-    fn tiled_allows_sidebar_nav_intent() {
-        let session = test_session();
-        let decision = route_interaction_for_session(
-            &session,
-            InteractionSource::MouseLeftSidebar,
-            InteractionIntent::EnterSidebarNav,
-        );
-        assert!(
-            matches!(decision, RouteDecision::Allow(_)),
-            "EnterSidebarNav should be allowed when tiled, got {:?}",
-            decision,
-        );
-    }
-
     /// can_focus_pane allows the active floating pane when in floating domain.
     #[test]
     fn can_focus_pane_allows_active_floating_pane() {

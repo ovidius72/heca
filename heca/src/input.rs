@@ -143,6 +143,16 @@ pub enum WmAction {
     SplitHorizontal,
     SplitVertical,
     ZoomColumn,
+    /// Zoom **the column you name**, wherever it is — the parameterized twin of [`ZoomColumn`],
+    /// which acts on the active one (F003/P085/T356).
+    ///
+    /// A component resolves its cursor to a column and dispatches this; a menu entry or an RPC call
+    /// names one outright. Without it, "zoom the selected column" could only ever be a handler that
+    /// reached into one specific component's model.
+    ZoomColumnAtIndex {
+        ws_idx: usize,
+        col_idx: usize,
+    },
     /// Open the pane context menu for the focused pane (keyboard/RPC entry; the mouse right-click
     /// opens it directly). Anchored at the last cursor position.
     OpenContextMenu,
@@ -340,22 +350,6 @@ pub enum WmAction {
     // ── Sidebar / Chrome (unit) ──
     SidebarLeft,
     SidebarRight,
-    SidebarFocus,
-    SidebarUp,
-    SidebarDown,
-    SidebarLeftNav,
-    SidebarRightNav,
-    /// Focus the row under the sidebar-nav cursor **without leaving sidebar mode** — so
-    /// the tree can be walked with `j`/`k`, previewing each pane/workspace in the main
-    /// view. This is what separates it from [`SidebarRightNav`](WmAction::SidebarRightNav),
-    /// which focuses and *exits*.
-    SidebarPeek,
-    SidebarExpandToggle,
-    SidebarCreateWorkspace,
-    SidebarCreateColumn,
-    SidebarSplitInColumn,
-    SidebarZoomSelectedColumn,
-    SidebarDeleteSelected,
     CollapseCurrentWorkspace,
     ExpandCurrentWorkspace,
     ToggleCurrentWorkspaceCollapsed,
@@ -604,21 +598,9 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
         "sidebar_right" => Some(WmAction::SidebarRight),
-        "sidebar_focus" => Some(WmAction::SidebarFocus),
         // Bare: no dock named ⇒ pick one by letter. `dock = "…"` goes through `build_action`.
         "focus_dock" => Some(WmAction::FocusDock { dock: None }),
         "unfocus_dock" => Some(WmAction::UnfocusDock),
-        "sidebar_up" => Some(WmAction::SidebarUp),
-        "sidebar_down" => Some(WmAction::SidebarDown),
-        "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
-        "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
-        "sidebar_peek" => Some(WmAction::SidebarPeek),
-        "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
-        "sidebar_create_workspace" => Some(WmAction::SidebarCreateWorkspace),
-        "sidebar_create_column" => Some(WmAction::SidebarCreateColumn),
-        "sidebar_split_in_column" => Some(WmAction::SidebarSplitInColumn),
-        "sidebar_zoom_selected_column" => Some(WmAction::SidebarZoomSelectedColumn),
-        "sidebar_delete_selected" => Some(WmAction::SidebarDeleteSelected),
         // Chrome region show/hide (sidebar-fu-6) — mounted-gate, unbound by default.
         "show_left_sidebar" => Some(WmAction::ShowLeftSidebar),
         "hide_left_sidebar" => Some(WmAction::HideLeftSidebar),
@@ -909,6 +891,10 @@ pub fn build_action(
             ws_idx: get_usize(args, "ws_idx")?,
             col_idx: get_usize(args, "col_idx")?,
         }),
+        "zoom_column_at_index" => Some(WmAction::ZoomColumnAtIndex {
+            ws_idx: get_usize(args, "ws_idx")?,
+            col_idx: get_usize(args, "col_idx")?,
+        }),
         "delete_workspace" => Some(WmAction::DeleteWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
@@ -1022,22 +1008,9 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::FocusDown
         | WmAction::NextPane
         | WmAction::PrevPane => 0,
-        // Sidebar navigation (only used in sidebar mode via resolve_mode)
-        // Low priority so they don't override focus bindings in normal/prefix mode.
-        // Chrome focus: the dock pick and sidebar nav are the same kind of navigation.
-        WmAction::SidebarFocus | WmAction::FocusDock { .. } | WmAction::UnfocusDock => 0,
-        WmAction::SidebarUp
-        | WmAction::SidebarDown
-        | WmAction::SidebarLeftNav
-        | WmAction::SidebarRightNav
-        | WmAction::SidebarPeek
-        | WmAction::SidebarExpandToggle
-        | WmAction::SidebarCreateWorkspace
-        | WmAction::SidebarCreateColumn
-        | WmAction::SidebarSplitInColumn
-        | WmAction::SidebarZoomSelectedColumn
-        | WmAction::SidebarDeleteSelected
-        | WmAction::CollapseCurrentWorkspace
+        // Chrome focus is navigation: low priority so it does not override focus bindings.
+        WmAction::FocusDock { .. } | WmAction::UnfocusDock => 0,
+        WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed
         | WmAction::CollapseCurrentColumn
@@ -1156,6 +1129,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::AddPaneToColumn { .. }
         | WmAction::AddColumnToWorkspace { .. }
         | WmAction::DeleteColumn { .. }
+        | WmAction::ZoomColumnAtIndex { .. }
         | WmAction::DeleteWorkspace { .. }
         | WmAction::TakePane { .. }
         | WmAction::OpenLink { .. }
@@ -1214,7 +1188,6 @@ mod tests {
         assert_eq!(action_from_name("focus_left"), Some(WmAction::FocusLeft));
         assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
         assert_eq!(action_from_name("zoom_column"), Some(WmAction::ZoomColumn));
-        assert_eq!(action_from_name("sidebar_peek"), Some(WmAction::SidebarPeek));
         assert_eq!(
             action_from_name("toggle_current_workspace_collapsed"),
             Some(WmAction::ToggleCurrentWorkspaceCollapsed)
@@ -1420,20 +1393,9 @@ mod tests {
             WmAction::RenameColumn,
             WmAction::WorkspaceNext,
             WmAction::WorkspacePrev,
-            // Sidebar (mode-internal + global toggles)
-            WmAction::SidebarFocus,
+            // Chrome focus
             WmAction::FocusDock { dock: None },
             WmAction::UnfocusDock,
-            WmAction::SidebarUp,
-            WmAction::SidebarDown,
-            WmAction::SidebarLeftNav,
-            WmAction::SidebarRightNav,
-            WmAction::SidebarExpandToggle,
-            WmAction::SidebarCreateWorkspace,
-            WmAction::SidebarCreateColumn,
-            WmAction::SidebarSplitInColumn,
-            WmAction::SidebarZoomSelectedColumn,
-            WmAction::SidebarDeleteSelected,
             WmAction::CollapseCurrentWorkspace,
             WmAction::ExpandCurrentWorkspace,
             WmAction::ToggleCurrentWorkspaceCollapsed,

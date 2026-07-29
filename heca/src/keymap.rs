@@ -302,9 +302,9 @@ mod tests {
         let mut reg = KeymapRegistry::new();
         let combo = KeyCombo::parse("j");
         reg.bind("normal", combo.clone(), ActionRef::Builtin(WmAction::FocusDown));
-        reg.bind("sidebar", combo.clone(), ActionRef::Builtin(WmAction::SidebarDown));
+        reg.bind("selection", combo.clone(), ActionRef::Builtin(WmAction::FocusUp));
         assert_eq!(reg.resolve_builtin("normal", &combo), Some(&WmAction::FocusDown));
-        assert_eq!(reg.resolve_builtin("sidebar", &combo), Some(&WmAction::SidebarDown));
+        assert_eq!(reg.resolve_builtin("selection", &combo), Some(&WmAction::FocusUp));
     }
 
     #[test]

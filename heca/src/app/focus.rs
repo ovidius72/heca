@@ -97,6 +97,36 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
+    // **The dock cursor follows the active pane** (user decision, 2026-07-29).
+    //
+    // The cursor points at "where you are", so when a pane becomes active you are there — a `prefix+q`
+    // pick that leaves the dock highlighting the pane you came *from* is just wrong. Only the active
+    // marker followed before, and nothing pushed this direction at all.
+    //
+    // It could not yank the cursor mid-navigation: while the dock has the keyboard, nothing else is
+    // moving pane focus, and the component's own cursor moves publish the same selection anyway.
+    //
+    // Both halves are written because both are read: the domain-typed `nav_selection` is what the
+    // tree re-derives its positional cursor from after a rebuild (`apply_nav_selection`, below), and
+    // the per-mount `container_cursor` is what the row outlines draw from (F003/P085/T354). The
+    // setters are change-guarded, so an unchanged selection costs nothing and emits nothing.
+    if let Some(pane_id) = state.focused_pane {
+        let selection = crate::chrome::SidebarSelection::Pane { pane_id };
+        state.chrome_state.workspaces.set_nav_selection(Some(selection));
+        let key = crate::providers::workspaces::selection_nav_key(selection);
+        // Every seating of the component, since each keeps its own cursor.
+        let mounts: Vec<String> = state
+            .chrome_host
+            .mounted_providers()
+            .filter(|p| p.kind() == "workspaces")
+            .map(|p| p.id().to_string())
+            .collect();
+        for mount in mounts {
+            state
+                .chrome_state
+                .set_container_cursor(&mount, Some(key.clone()));
+        }
+    }
     notify_focus_changed(state, prev_focused, state.focused_pane);
 
     let focus_changed = prev_focused != state.focused_pane;

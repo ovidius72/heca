@@ -105,6 +105,23 @@ pub struct WorkspaceTree {
 }
 
 impl WorkspaceTree {
+    /// Which `(workspace, column)` a pane sits in, answered from **this component's own model**.
+    ///
+    /// The handlers this replaced asked the session (`find_pane_location`), which a component cannot
+    /// reach and should not need to: the tree already knows where its own rows are, and reaching for
+    /// the session would be the component depending on app state it has no business holding
+    /// (F003/P085/T356). A floating pane is in no column, so it is absent here by construction.
+    pub fn locate_pane(&self, pane_id: PaneId) -> Option<(usize, usize)> {
+        self.workspaces.iter().find_map(|ws| {
+            ws.columns.iter().find_map(|col| {
+                col.panes
+                    .iter()
+                    .any(|p| p.pane_id == pane_id)
+                    .then_some((ws.ws_idx, col.col_idx))
+            })
+        })
+    }
+
     pub fn new() -> Self {
         Self {
             workspaces: Vec::new(),

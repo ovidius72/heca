@@ -727,6 +727,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SplitHorizontal, handle_split_horizontal);
     registry.register(&WmAction::SplitVertical, handle_split_vertical);
     registry.register(&WmAction::ZoomColumn, handle_zoom_column);
+    registry.register(
+        &WmAction::ZoomColumnAtIndex { ws_idx: 0, col_idx: 0 },
+        handle_zoom_column_at_index,
+    );
     registry.register(&WmAction::OpenContextMenu, handle_open_context_menu);
     registry.register(&WmAction::ScrollViewLeft, handle_scroll_view_left);
     registry.register(&WmAction::ScrollViewRight, handle_scroll_view_right);
@@ -967,32 +971,8 @@ pub fn build_registry() -> ActionRegistry {
     // ── Sidebar / Chrome ──
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
-    registry.register(&WmAction::SidebarFocus, handle_sidebar_focus);
     registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
     registry.register(&WmAction::UnfocusDock, handle_unfocus_dock);
-    registry.register(&WmAction::SidebarUp, handle_sidebar_up);
-    registry.register(&WmAction::SidebarDown, handle_sidebar_down);
-    registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
-    registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
-    registry.register(&WmAction::SidebarPeek, handle_sidebar_peek);
-    registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
-    registry.register(
-        &WmAction::SidebarCreateWorkspace,
-        handle_sidebar_create_workspace,
-    );
-    registry.register(&WmAction::SidebarCreateColumn, handle_sidebar_create_column);
-    registry.register(
-        &WmAction::SidebarSplitInColumn,
-        handle_sidebar_split_in_column,
-    );
-    registry.register(
-        &WmAction::SidebarZoomSelectedColumn,
-        handle_sidebar_zoom_selected_column,
-    );
-    registry.register(
-        &WmAction::SidebarDeleteSelected,
-        handle_sidebar_delete_selected,
-    );
     registry.register(
         &WmAction::CollapseCurrentWorkspace,
         handle_collapse_current_workspace,
@@ -1846,92 +1826,6 @@ mod tests {
             keymap.resolve_builtin("selection", &KeyCombo::parse("o")),
             Some(&WmAction::ToggleSelectionEndpoint)
         );
-    }
-
-    #[test]
-    fn sidebar_mode_includes_arrow_aliases() {
-        let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
-        let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
-
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowUp")),
-            Some(&WmAction::SidebarUp)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowDown")),
-            Some(&WmAction::SidebarDown)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowLeft")),
-            Some(&WmAction::SidebarLeftNav)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("ArrowRight")),
-            Some(&WmAction::SidebarRightNav)
-        );
-        // Space is the "focus but stay" key (`sidebar_peek`), distinct from `l`/Right,
-        // which focus and leave the mode.
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("Space")),
-            Some(&WmAction::SidebarPeek)
-        );
-    }
-
-    #[test]
-    fn sidebar_mode_includes_mutation_bindings() {
-        let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
-        let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
-
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("w")),
-            Some(&WmAction::SidebarCreateWorkspace)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("c")),
-            Some(&WmAction::SidebarCreateColumn)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("v")),
-            Some(&WmAction::SidebarSplitInColumn)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("z")),
-            Some(&WmAction::SidebarZoomSelectedColumn)
-        );
-        assert_eq!(
-            keymap.resolve_builtin("sidebar", &KeyCombo::parse("d")),
-            Some(&WmAction::SidebarDeleteSelected)
-        );
-    }
-
-    #[test]
-    fn user_sidebar_mode_with_same_name_overrides_defaults() {
-        let mut config = heca_config::theme::Config::default();
-        config.keys.mode.push(KeyModeConfig {
-            name: "sidebar".to_string(),
-            trigger: "prefix+e".to_string(),
-            sticky: true,
-            bindings: vec![ModeBindingConfig {
-                action: "sidebar_left_nav".to_string(),
-                keys: "j".to_string(),
-                args: HashMap::new(),
-            }],
-        });
-
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
-        let sidebar = mode_keymaps.get("sidebar").expect("sidebar mode exists");
-
-        assert_eq!(
-            sidebar.resolve_builtin("sidebar", &KeyCombo::parse("j")),
-            Some(&WmAction::SidebarLeftNav)
-        );
-        assert_eq!(
-            sidebar.resolve_builtin("sidebar", &KeyCombo::parse("k")),
-            Some(&WmAction::SidebarUp)
-        );
-        assert!(!mode_triggers.contains_key("sidebar"));
     }
 
     // ── Component layers — `[[keys.component]]` (F003/P086/T362) ──
