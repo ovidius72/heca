@@ -24,7 +24,11 @@ use crate::chrome::{
     Contribution, DragItemRegistry, HintTargetRegistry, PaneInfoSignals, RegionId, RegionSet,
     RepaintWatch, WidgetModel, WorkspacesContainerState, CARD_META_FONT_SCALE,
 };
-use crate::providers::{ChromeCtx, Provider};
+use crate::actions::{ActionCategory, ActionMeta};
+use crate::app::interaction::ActionPolicy;
+use crate::chrome::{Intent, PropMap, PropValue};
+use crate::providers::{ChromeCtx, Provider, ProviderCx};
+use heca_grid_ui::Handled;
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
@@ -135,6 +139,210 @@ impl Provider for WorkspacesContainerProvider {
             grow: self.grow(),
             build: Box::new(build_body),
         })
+    }
+
+    /// What only this component can do: act on **its own** cursor.
+    ///
+    /// Everything here is selection-dependent — "the row the cursor is on" is a fact no other
+    /// component and no built-in can know. Anything that is *not* selection-dependent is missing on
+    /// purpose: `zoom_column`, `close`, `next_pane` already exist, and this component **binds**
+    /// them in `[keys.workspaces]` rather than redeclaring them.
+    ///
+    /// The cursor moves are its own actions, not host facilities: only this component knows that
+    /// its rows are workspaces, columns and panes, and therefore what "next" means among them. A
+    /// component showing a single number has no cursor and declares none of this.
+    fn actions(&self) -> Vec<ActionMeta> {
+        let act = |name: &str, label: &str, description: &str, key: &str, icon| ActionMeta {
+            name: name.to_string(),
+            label: label.to_string(),
+            description: description.to_string(),
+            category: ActionCategory::Navigation,
+            default_binding: key.to_string(),
+            icon,
+            // Chrome state: the cursor is not the pane layout, so these stay reachable while a
+            // floating pane is active — the dock is still there to be driven.
+            policy: ActionPolicy::Global,
+            args: Vec::new(),
+            confirm: None,
+        };
+        vec![
+            act(
+                CURSOR_UP,
+                "Cursor Up",
+                "Move the workspaces cursor to the previous row.",
+                "k,Up,ArrowUp",
+                Some(Glyph::CaretUp),
+            ),
+            act(
+                CURSOR_DOWN,
+                "Cursor Down",
+                "Move the workspaces cursor to the next row.",
+                "j,Down,ArrowDown",
+                Some(Glyph::CaretDown),
+            ),
+            act(
+                COLLAPSE_ROW,
+                "Collapse Row",
+                "Collapse the row under the cursor, or move out to its parent.",
+                "h,Left,ArrowLeft",
+                None,
+            ),
+            act(
+                ACTIVATE_SELECTED,
+                "Activate Row",
+                "Expand a structural row, or focus the pane under the cursor and leave the dock.",
+                "l,Right,ArrowRight,Enter",
+                Some(Glyph::CaretRight),
+            ),
+            act(
+                PEEK_SELECTED,
+                "Peek Row",
+                "Focus what the cursor points at without leaving the dock.",
+                "Space",
+                None,
+            ),
+            act(
+                TOGGLE_SELECTED,
+                "Expand / Collapse Row",
+                "Fold or unfold the structural row under the cursor.",
+                "Tab",
+                None,
+            ),
+        ]
+    }
+
+    fn perform(&self, action: &str, _args: &Intent, cx: &mut ProviderCx<'_>) -> Handled {
+        match action {
+            CURSOR_UP => self.step_cursor(cx, Step::Up),
+            CURSOR_DOWN => self.step_cursor(cx, Step::Down),
+            COLLAPSE_ROW => self.fold(cx, Fold::Collapse),
+            TOGGLE_SELECTED => self.fold(cx, Fold::Toggle),
+            ACTIVATE_SELECTED => self.activate(cx, Activate::AndLeave),
+            PEEK_SELECTED => self.activate(cx, Activate::AndStay),
+            _ => Handled::No,
+        }
+    }
+}
+
+// The ids this component declares. Written once so the declaration and `perform` cannot drift, and
+// namespaced by `kind()` so two components can both have a `cursor_up`.
+const CURSOR_UP: &str = "workspaces.cursor_up";
+const CURSOR_DOWN: &str = "workspaces.cursor_down";
+const COLLAPSE_ROW: &str = "workspaces.collapse_row";
+const ACTIVATE_SELECTED: &str = "workspaces.activate_selected";
+const PEEK_SELECTED: &str = "workspaces.peek_selected";
+const TOGGLE_SELECTED: &str = "workspaces.toggle_selected";
+
+enum Step {
+    Up,
+    Down,
+}
+
+enum Fold {
+    Collapse,
+    Toggle,
+}
+
+enum Activate {
+    /// `Enter`/`l` — focus the row and hand the keyboard back to the pane.
+    AndLeave,
+    /// `Space` — focus the row in the main view but keep driving the dock.
+    AndStay,
+}
+
+impl WorkspacesContainerProvider {
+    /// Move the cursor over this component's own rows.
+    fn step_cursor(&self, cx: &mut ProviderCx<'_>, step: Step) -> Handled {
+        {
+            let state = cx.state();
+            let mut tree = state.workspaces().tree_mut();
+            match step {
+                Step::Up => tree.cursor_up(),
+                Step::Down => tree.cursor_down(),
+            }
+        }
+        self.publish_cursor(cx);
+        Handled::Yes
+    }
+
+    /// Fold or unfold the structural row under the cursor. A leaf has nothing to fold, so `Toggle`
+    /// on a pane does nothing rather than guessing at a meaning for it.
+    fn fold(&self, cx: &mut ProviderCx<'_>, fold: Fold) -> Handled {
+        {
+            let state = cx.state();
+            let ws = state.workspaces();
+            let leaf = matches!(
+                ws.tree().current_item(),
+                Some(WorkspaceRow::Pane { .. }) | Some(WorkspaceRow::FloatingPane { .. })
+            );
+            match fold {
+                // `h` on a leaf still means "out to my parent", which `collapse` implements.
+                Fold::Collapse => ws.tree_mut().collapse(ws),
+                Fold::Toggle if !leaf => ws.tree_mut().toggle_expand(ws),
+                Fold::Toggle => {}
+            }
+        }
+        self.publish_cursor(cx);
+        Handled::Yes
+    }
+
+    /// Focus what the cursor points at. A structural row expands instead — `l` on a collapsed
+    /// workspace opens it, which is what makes one key walk the tree outward.
+    fn activate(&self, cx: &mut ProviderCx<'_>, mode: Activate) -> Handled {
+        // Read, then drop the borrow: `dispatch` reaches back into the store.
+        let row = {
+            let state = cx.state();
+            state.workspaces().tree().current_item().cloned()
+        };
+        let Some(row) = row else {
+            return Handled::No;
+        };
+        match row {
+            WorkspaceRow::Pane { pane_id } | WorkspaceRow::FloatingPane { pane_id, .. } => {
+                cx.dispatch(
+                    "focus_pane",
+                    PropMap::from([("pane_id".to_string(), PropValue::Int(pane_id.0 as i64))]),
+                );
+                // Activating a leaf hands the keyboard back; peeking keeps it here.
+                if matches!(mode, Activate::AndLeave) {
+                    cx.dispatch("unfocus_dock", PropMap::new());
+                }
+            }
+            WorkspaceRow::Workspace { ws_idx } => {
+                let collapsed = {
+                    let state = cx.state();
+                    let ws = state.workspaces();
+                    let collapsed = ws.is_ws_collapsed(ws_idx);
+                    // Expanding is this component's own business — no app state involved.
+                    if collapsed && matches!(mode, Activate::AndLeave) {
+                        ws.tree_mut().expand(ws);
+                    }
+                    collapsed
+                };
+                if !(collapsed && matches!(mode, Activate::AndLeave)) {
+                    cx.dispatch(
+                        "focus_workspace",
+                        PropMap::from([("ws_idx".to_string(), PropValue::Int(ws_idx as i64))]),
+                    );
+                }
+            }
+            // The cursor never lands on a column (`WorkspaceTree::is_navigable`).
+            WorkspaceRow::Column { .. } => return Handled::No,
+        }
+        self.publish_cursor(cx);
+        Handled::Yes
+    }
+
+    /// Publish the cursor into the store: the generic per-mount cursor the row outlines read, and —
+    /// until F003/P085/T356 finishes — the domain-typed `nav_selection` beside it.
+    fn publish_cursor(&self, cx: &mut ProviderCx<'_>) {
+        let selection = {
+            let state = cx.state();
+            let selection = state.workspaces().tree().selection();
+            state.workspaces().set_nav_selection(selection);
+            selection
+        };
+        cx.set_selected(selection.map(selection_nav_key));
     }
 }
 
@@ -798,6 +1006,135 @@ mod tests {
             Contribution::Container(c) => c,
             _ => panic!("the workspaces provider contributes a Container"),
         }
+    }
+
+    /// A store whose model is the little tree above, with `mount` holding the keyboard.
+    fn store_with_tree(mount: &str) -> SharedChromeState {
+        let store = store();
+        *store.workspaces.tree_mut() = tree();
+        store.workspaces.tree_mut().sync_flat_items();
+        store.set_focused_container(Some(mount.to_string()));
+        store
+    }
+
+    // ── What the component declares (F003/P085/T356) ──
+
+    #[test]
+    fn it_declares_only_what_acts_on_its_own_cursor() {
+        let declared: Vec<String> = WorkspacesContainerProvider::new()
+            .actions()
+            .into_iter()
+            .map(|m| m.name)
+            .collect();
+
+        for id in [
+            CURSOR_UP,
+            CURSOR_DOWN,
+            COLLAPSE_ROW,
+            ACTIVATE_SELECTED,
+            PEEK_SELECTED,
+            TOGGLE_SELECTED,
+        ] {
+            assert!(declared.contains(&id.to_string()), "{id} is declared");
+        }
+        assert!(
+            declared.iter().all(|n| n.starts_with("workspaces.")),
+            "every id is namespaced by kind(), so two components can both have a cursor: {declared:?}",
+        );
+        // The point of the contract: it redeclares nothing that already exists.
+        for existing in ["zoom_column", "close", "next_pane", "create_workspace"] {
+            assert!(
+                !declared.iter().any(|n| n == existing),
+                "{existing} already exists — bind it, do not redeclare it",
+            );
+        }
+    }
+
+    #[test]
+    fn every_declared_action_ships_a_default_key() {
+        for meta in WorkspacesContainerProvider::new().actions() {
+            assert!(
+                !meta.default_binding.trim().is_empty(),
+                "{} ships no key, so nothing would reach it while the dock is focused",
+                meta.name,
+            );
+        }
+    }
+
+    // ── What `perform` does with it ──
+
+    #[test]
+    fn the_cursor_moves_over_the_components_own_rows() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+
+        let first = store.workspaces.tree().cursor;
+        assert_eq!(
+            p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx),
+            Handled::Yes,
+        );
+        assert_ne!(store.workspaces.tree().cursor, first, "the cursor moved");
+
+        p.perform(CURSOR_UP, &Intent::new(CURSOR_UP), &mut cx);
+        assert_eq!(store.workspaces.tree().cursor, first, "and moved back");
+    }
+
+    /// Moving the cursor publishes it, so the row outlines follow with no rebuild — and it lands on
+    /// **this mount's** cursor, not a global one.
+    #[test]
+    fn moving_the_cursor_publishes_it_for_this_mount() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+
+        p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
+
+        assert!(cx.selected().is_some(), "the mount's cursor names a row");
+        assert!(
+            store.workspaces.nav_selection().is_some(),
+            "and the domain-typed selection beside it still agrees",
+        );
+        assert_eq!(
+            ProviderCx::new("workspaces.right", store).selected(),
+            None,
+            "the other placement of the same component has its own cursor",
+        );
+    }
+
+    /// Activating a leaf asks the host to focus the pane **and** to hand the keyboard back; peeking
+    /// asks only for the focus. Both go out as queued intents — a component never mutates app state.
+    #[test]
+    fn activating_a_row_asks_the_host_rather_than_acting() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+        p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
+        let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        assert!(asked.contains(&"focus_pane".to_string()) || asked.contains(&"focus_workspace".to_string()));
+
+        let mut cx = ProviderCx::new("workspaces", store);
+        p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
+        let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        assert!(
+            !asked.contains(&"unfocus_dock".to_string()),
+            "peek keeps the keyboard on the dock: {asked:?}",
+        );
+    }
+
+    #[test]
+    fn an_action_this_component_does_not_own_declines() {
+        let store = store_with_tree("workspaces");
+        let mut cx = ProviderCx::new("workspaces", store);
+        assert_eq!(
+            WorkspacesContainerProvider::new().perform(
+                "docker.restart_selected",
+                &Intent::new("docker.restart_selected"),
+                &mut cx,
+            ),
+            Handled::No,
+        );
     }
 
     #[test]
