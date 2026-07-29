@@ -2051,11 +2051,17 @@ fn ws_label(state: &AppState, ws_idx: usize) -> String {
 
 /// The dynamic confirm-prompt **title** for a raw destructive action (target-specific — the pane /
 /// column / workspace name — so it can't live in the static [`ConfirmSpec`]).
+///
+/// This resolves the *names* only; the wording is [`confirm_title_for`], split out because a dialog
+/// has **two** independent sources of wording — the button comes from `ConfirmSpec.buttons`, the
+/// title from here — and nothing was comparing them. The pane's title said "Delete" for a while
+/// after its button said "Close" (F003/P086/T370). The split is what lets a test hold them together
+/// without an `AppState`.
 fn confirm_title(state: &AppState, action: &WmAction) -> String {
     match action {
         WmAction::ClosePaneById { pane_id } => {
             // Use the pane's **custom name** if it has one, else a generic "Pane" — never a
-            // placeholder/process title, so an unnamed pane reads "Delete Pane?" not "Delete Yellow?".
+            // placeholder/process title, so an unnamed pane reads "Close Pane?" not "Close Yellow?".
             let label = state
                 .session
                 .workspaces
@@ -2063,12 +2069,31 @@ fn confirm_title(state: &AppState, action: &WmAction) -> String {
                 .find_map(|ws| ws.find_pane(*pane_id))
                 .and_then(|p| p.custom_name.clone())
                 .unwrap_or_else(|| "Pane".to_string());
-            format!("Delete {}?", label)
+            confirm_title_for(action, &label)
         }
-        WmAction::DeleteColumn { ws_idx, col_idx } => {
-            format!("Delete column {} from {}?", col_idx + 1, ws_label(state, *ws_idx))
+        WmAction::DeleteColumn { ws_idx, .. } | WmAction::DeleteWorkspace { ws_idx } => {
+            confirm_title_for(action, &ws_label(state, *ws_idx))
         }
-        WmAction::DeleteWorkspace { ws_idx } => format!("Delete {}?", ws_label(state, *ws_idx)),
+        _ => "Confirm?".to_string(),
+    }
+}
+
+/// The confirm title's **wording**, given the target's already-resolved display name.
+///
+/// **Close** for a pane, matching its action id, its binding name, its catalog label and this
+/// dialog's own button: one process ends and the layout absorbs the gap. **Delete** for a column or
+/// a workspace, which destroy every pane and process inside them — a different act, which should not
+/// read the same (decided with the user, 2026-07-29).
+/// Each title names **just its target** — its name when it has one, else the type word, exactly as
+/// an unnamed pane reads "Close Pane?" rather than its process title. A column has no name, so it is
+/// always the type word.
+fn confirm_title_for(action: &WmAction, target: &str) -> String {
+    match action {
+        WmAction::ClosePaneById { .. } => format!("Close {target}?"),
+        // No index and no parent workspace: the title says what is about to happen, and the column
+        // in question is the one just clicked or focused — it is on screen (F003/P086/T370).
+        WmAction::DeleteColumn { .. } => "Delete Column?".to_string(),
+        WmAction::DeleteWorkspace { .. } => format!("Delete {target}?"),
         _ => "Confirm?".to_string(),
     }
 }
@@ -3048,6 +3073,75 @@ pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
     crate::app::render::update_session_viewport(state);
     state.chrome_tree = None;
     state.needs_redraw = true;
+}
+
+/// The confirm dialog's two halves must agree (F003/P086/T370).
+///
+/// The button's word lives in `ConfirmSpec.buttons` and the title's lives in [`confirm_title_for`],
+/// with nothing between them — which is how the pane came to be *closed* by its button and *deleted*
+/// by its title at the same time. These tests are the thing that compares them.
+#[cfg(test)]
+mod confirm_wording_tests {
+    use super::*;
+    use crate::actions::ActionCatalog;
+    use heca_core::layout::PaneId;
+
+    /// The verb on an action's confirm button, as the user reads it.
+    fn button_verb(catalog: &ActionCatalog, action: &str) -> String {
+        catalog
+            .confirm_spec(action)
+            .unwrap_or_else(|| panic!("{action} declares a confirm"))
+            .buttons
+            .iter()
+            .find(|b| matches!(b.outcome, crate::actions::Outcome::Proceed))
+            .expect("a confirm has a proceed button")
+            .label
+            .clone()
+    }
+
+    #[test]
+    fn the_title_and_the_button_use_the_same_verb() {
+        let catalog = ActionCatalog::with_builtins();
+        for (owner, action, target) in [
+            (
+                "close",
+                WmAction::ClosePaneById { pane_id: PaneId(1) },
+                "Pane",
+            ),
+            (
+                "delete_column",
+                WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+                "ws 1",
+            ),
+            ("delete_workspace", WmAction::DeleteWorkspace { ws_idx: 0 }, "ws 1"),
+        ] {
+            let verb = button_verb(&catalog, owner);
+            let title = confirm_title_for(&action, target);
+            assert!(
+                title.starts_with(&verb),
+                "{owner}: the dialog says '{title}' over a button that says '{verb}'",
+            );
+        }
+    }
+
+    /// A pane is **closed**; the two containers are **deleted**. The split is the decision, so it is
+    /// asserted rather than left to the loop above — which would pass if both said the same word.
+    #[test]
+    fn a_pane_closes_and_a_container_deletes() {
+        assert_eq!(
+            confirm_title_for(&WmAction::ClosePaneById { pane_id: PaneId(1) }, "Pane"),
+            "Close Pane?",
+        );
+        assert_eq!(
+            confirm_title_for(&WmAction::DeleteWorkspace { ws_idx: 0 }, "notes"),
+            "Delete notes?",
+        );
+        assert_eq!(
+            confirm_title_for(&WmAction::DeleteColumn { ws_idx: 0, col_idx: 2 }, "notes"),
+            "Delete Column?",
+            "a column has no name, so it reads as the type word — the same shape as an unnamed pane",
+        );
+    }
 }
 
 #[cfg(test)]

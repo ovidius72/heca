@@ -219,7 +219,7 @@ pub struct DropdownItem {
     /// Stable id returned in [`ModalResult::Action`]; also the **catalog name** the icon and label
     /// resolve from — the entry's visual identity (e.g. `"close"`).
     ///
-    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Delete pane"
+    /// It is deliberately **not** the same thing as what the entry runs: a sidebar "Close pane"
     /// entry has id `close` (so it shows the close icon) but dispatches `close_pane_by_id` with the
     /// row's pane. Identity and behaviour are separate fields.
     pub id: String,

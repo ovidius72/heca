@@ -504,7 +504,7 @@ fn sidebar_pane_items(
         ));
     }
     items.push(
-        item_running("close", "Delete pane", "close_pane_by_id", &[("pane_id", pane)]).danger(true),
+        item_running("close", "Close pane", "close_pane_by_id", &[("pane_id", pane)]).danger(true),
     );
     items
 }
@@ -638,6 +638,51 @@ mod tests {
         sidebar_pane_items(pane_id, ws_idx, col_idx, has_custom_name)
     }
 
+    /// **A destructive entry uses the same verb as the action it names** (F003/P086/T370).
+    ///
+    /// A `DropdownItem`'s `id` is its catalog identity — the icon and the shortcut resolve from it —
+    /// while its label is written by hand at the call site. Nothing compared the two, so the sidebar
+    /// pane row said "Delete pane" while its own action, its palette entry, the content-pane menu
+    /// and its confirm dialog all said close. The user found it by reading the menu.
+    ///
+    /// **Only the destructive three**, deliberately. A menu label is free to differ from the catalog
+    /// in general — "Zoom / unzoom" is a better menu entry than "Toggle Column Zoom" — and holding
+    /// every entry to the catalog's wording would flag those as drift. What may not differ is the
+    /// verb on something irreversible: close and delete promise different consequences.
+    ///
+    /// The verb alone is compared, since a menu is sentence case ("Close pane") and the catalog is
+    /// title case ("Close Pane") — two conventions, each applied consistently.
+    #[test]
+    fn a_destructive_entry_uses_the_same_verb_as_the_action_it_names() {
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let mut every_item = Vec::new();
+        every_item.extend(pane_action_items(true));
+        every_item.extend(sidebar_pane_items(PaneId(1), 0, 0, true));
+        every_item.extend(sidebar_column_items(0, 0));
+        every_item.extend(sidebar_workspace_items(0, true));
+
+        let verb = |s: &str| s.split_whitespace().next().unwrap_or("").to_lowercase();
+        let mut checked = 0;
+        for item in &every_item {
+            if !["close", "delete_column", "delete_workspace"].contains(&item.id.as_str()) {
+                continue;
+            }
+            let meta = catalog
+                .find(&item.id)
+                .unwrap_or_else(|| panic!("`{}` is a built-in action", item.id));
+            assert_eq!(
+                verb(&item.label),
+                verb(&meta.label),
+                "menu entry '{}' (id `{}`) disagrees with its action's label '{}'",
+                item.label,
+                item.id,
+                meta.label,
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 4, "two close entries + one column + one workspace");
+    }
+
     #[test]
     fn registry_seeds_four_built_in_providers() {
         let r = ContextMenuRegistry::with_builtins();
@@ -713,14 +758,14 @@ mod tests {
     // ── context-menu-5: a plugin's entries ──
 
     /// A menu entry's **identity** (`id` → icon/label) and its **behaviour** (`intent` → what runs)
-    /// are separate. The sidebar "Delete pane" entry shows the `close` icon but runs
+    /// are separate. The sidebar "Close pane" entry shows the `close` icon but runs
     /// `close_pane_by_id` against *that row's* pane — the whole reason a plugin entry can exist at
     /// all, since the intent is a NAME, not a closed-enum variant.
     #[test]
     fn an_entry_identity_and_the_action_it_runs_are_separate() {
         let items = build_sidebar_pane_menu_items(PaneId(7), 2, 3, false);
         let delete = items.iter().find(|i| i.id == "close").unwrap();
-        assert_eq!(delete.label, "Delete pane");
+        assert_eq!(delete.label, "Close pane");
         assert!(delete.danger);
         // Identity is `close` (the icon), behaviour is the by-id action with the row's pane.
         assert_eq!(delete.intent.action, "close_pane_by_id");
