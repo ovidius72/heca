@@ -1,8 +1,8 @@
 {
   "id": "cd083ad1-8310-4368-981b-d14c73c20d96",
   "number": 4,
-  "shortId": "GXY3K",
-  "priority": 4,
+  "shortId": "RSH6S",
+  "priority": 0,
   "name": "📐 Grid-UI Widget Library",
   "description": "Espansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pane shell header/tabs, icon widget Nerd Font, showcase coverage con visual regression, bloom/custom draw effects, widget aggiuntivi e cleanup del crate.",
   "discussedAt": "",

@@ -25,7 +25,8 @@
     "a838cc76-edf3-4cb6-8126-d2e5ce52217c",
     "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d",
     "d3be3b18-5bb2-4670-8468-adbb118988a9",
-    "57de8925-6015-4d79-8545-b32bb967f3cd"
+    "57de8925-6015-4d79-8545-b32bb967f3cd",
+    "6dfe4acd-c706-485c-91b1-8b13aa163652"
   ],
   "tasks": [
     {
@@ -268,10 +269,32 @@
       "completedAt": "",
       "createdAt": "2026-07-26T16:51:00.329Z",
       "updatedAt": "2026-07-26T21:17:49.064Z"
+    },
+    {
+      "id": "6dfe4acd-c706-485c-91b1-8b13aa163652",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 361,
+      "shortId": "3PN6N",
+      "priority": 5,
+      "shortName": "a-modal-freezes-hover-state-th",
+      "title": "A modal freezes hover state: the pane-header tooltip appears after the pointer has left",
+      "status": "planned",
+      "description": "# The bug\n\nClick an action button in a pane's top info bar that opens a modal. Move the mouse away. The\nbutton's **tooltip appears anyway**, over a button the pointer left, while a modal owns the screen.\n\nReported by the user 2026-07-29.\n\n# Why — the pointer stops being delivered, and hover is edge-triggered\n\n`Tooltip` decides it is hovered from `PointerMoved` **transitions**\n(`heca-grid-ui/src/widgets/tooltip.rs:239-250`): entering starts a wall-clock\n`hover_since`, leaving clears it, and `shown()` (`:141`) is true once `hover_since` is older than\n`delay` (default 0.5s). It never asks \"is the pointer over me *now*\" — it only reacts to a move that\ncrosses its bounds.\n\nSo it needs a leave event to un-hover, and while a modal is open it never gets one. In\n`heca/src/app/events.rs`, the `WindowEvent::CursorMoved` arm **returns early** as soon as a modal\ntakes the move:\n\n```rust\nif crate::chrome::dispatch_modal_pointer(state, &Event::PointerMoved { pos }) {\n    return;                       // ← the header trees never hear another move\n}\n…\ncrate::chrome::chrome_dispatch_move(state, pos);\ncrate::chrome::dispatch_pane_header_move(state, pos);   // ← unreached\n```\n\nThe header's `Tooltip` therefore keeps the `hover_since` it had at the moment of the click, the\ndelay elapses, `tick` crosses the show boundary, and the bubble appears over a button nobody is\npointing at.\n\n**It is not tooltip-specific.** Every hover affordance in every non-modal retained tree freezes the\nsame way: a `Row`'s hover highlight, a `Button`'s hover fill, the `MarkerGroup` grip cue. The\ntooltip is just the one that *appears* rather than merely persisting, so it is the one that got\nnoticed. The same staleness exists after the modal closes until the user happens to move the mouse.\n\n# The fix — tell the other trees the pointer left\n\nWhen a layer takes ownership of the pointer, every tree that no longer receives moves must be told\nthe pointer is gone, exactly as a real move out of bounds would tell it. One place, all affordances.\n\nCandidate shape (decide with the maintainer):\n\n- an explicit `Event::PointerLeft` in `heca-grid-ui/src/component.rs`'s `Event` enum, broadcast to\n  the non-modal trees when an overlay opens (and to the modal's tree when it closes), OR\n- reuse `PointerMoved` with a position outside every bound — cheaper, but \"a move to nowhere\" is a\n  lie the next reader has to decode, and a widget that tracks the last position would store garbage.\n\nPrefer the explicit event: hover is a real state, and \"the pointer is no longer yours\" is a real\ntransition that today has no vocabulary.\n\nDispatch sites to cover (all in `heca/src/chrome/mod.rs`): `chrome_dispatch_move` (:3479),\n`dispatch_pane_header_move` (:1261), `dispatch_pane_viewport_move`. The overlay open/close path is\n`heca/src/chrome/overlay.rs`.\n\n# Also worth checking while here\n\n- `Tooltip` has no `visible`/`disabled` gate on `shown()` — a tooltip on a widget that becomes\n  hidden between the hover and the reveal will still paint. Same class of bug.\n- The `Attention`/`Flash` and `Row` hover paths should be verified against the same scenario rather\n  than assumed correct.\n\n# Acceptance\n\n- Click a pane-header action button that opens a modal, move the mouse away: **no tooltip appears**,\n  and the button is not left in its hover state.\n- Close the modal without moving the mouse: nothing is stuck hovered anywhere.\n- A tooltip still appears normally on a plain hover with no modal open.\n- A unit test in `heca-grid-ui` holds the transition: a `Tooltip` told the pointer left does not\n  reveal, however long it waits.\n- Whole workspace green, clippy 0 warnings. **The USER drives it in the app** — this is hover\n  timing, which no unit test verifies.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-29T06:14:44.166Z",
+      "updatedAt": "2026-07-29T06:14:44.166Z"
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-07-27T11:40:15.497Z",
+  "updatedAt": "2026-07-29T06:14:44.166Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

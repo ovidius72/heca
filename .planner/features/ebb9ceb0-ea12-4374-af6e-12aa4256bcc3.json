@@ -1,8 +1,8 @@
 {
   "id": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 3,
-  "shortId": "59BNC",
-  "priority": 3,
+  "shortId": "E8S3X",
+  "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
   "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
   "discussedAt": "",
@@ -34,7 +34,7 @@
     "2219cca3-9ed4-4708-9e4c-bc480faad753",
     "5464ff74-fa17-4412-abaa-95aa19810b33",
     "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
-    "5de43f15-8304-4f64-870f-8514d534d5a5"
+    "2e5af5db-420b-45bb-8bde-7e763c69cbea"
   ],
   "dependsOn": [],
   "createdAt": "2026-07-01T18:08:37.398Z",

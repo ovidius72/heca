@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-28T21:24:02.967Z
+**Last updated:** 2026-07-29T17:49:33.150Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -107,7 +107,7 @@ Status: 🚧 `in-progress`
 - 📋 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (0/5 tasks)
 - 📋 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
-- 🚧 **5de43f15-8304-4f64-870f-8514d534d5a5** P085 — Components declare their actions; chrome focus is the mode (1/10 tasks)
+- 🚧 **2e5af5db-420b-45bb-8bde-7e763c69cbea** P086 — A component declares its keys, its mouse and its focus — generically, for any component (6/10 tasks)
 
 ### 🚧 cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -126,7 +126,7 @@ Status: 🚧 `in-progress`
 - 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P074 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
 - 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P079 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/5 tasks)
 - 📋 **029ef1b3-822b-4151-b5b0-b296b042b350** P081 — gridui-09: One border-width control — three paths currently disagree (0/4 tasks)
-- 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (3/4 tasks)
+- 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (3/5 tasks)
 
 ### ✅ b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -736,7 +736,7 @@ The framework walks children, not the widget; ScrollRegion owns its whole gestur
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 3/4
+**Tasks:** 3/5
 
 ### 📋 099e2eb5-30be-4f3c-ab57-a4f111cdc44c — P021 — plugin-06: Placeholder token system
 
@@ -936,7 +936,15 @@ A focused container receives the keyboard directly and runs actions IT declared 
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 1/10
+**Tasks:** 6/11
+
+### 🚧 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
+
+Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
+
+Status: 🚧 `in-progress`
+
+**Tasks:** 6/10
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P048 — agents-01: Agent status tracking and sounds
 

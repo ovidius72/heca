@@ -41,13 +41,6 @@
       "type": "task_updated",
       "ref": "2086fbfc-1d37-4e4a-af69-536692ca12cf",
       "summary": "Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click"
-    },
-    {
-      "id": "act-7-task_updated",
-      "at": "2026-07-29T17:49:33.150Z",
-      "type": "task_updated",
-      "ref": "2086fbfc-1d37-4e4a-af69-536692ca12cf",
-      "summary": "Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click"
     }
   ]
 }
