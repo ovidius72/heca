@@ -146,7 +146,7 @@ fn open_sidebar_context_menu(
     pos: (f32, f32),
 ) {
     use crate::app::interaction::InteractionSource;
-    use crate::chrome::{ContextPath, ContextTarget};
+    use crate::chrome::ContextTarget;
     // Map the sidebar drag-item (from the chrome hit-test) to its context-menu `(path, target)`;
     // the sidebar provider for each path builds the add/delete entries acting on that target.
     let (path, target) = match item {
@@ -158,15 +158,15 @@ fn open_sidebar_context_menu(
                 return;
             };
             (
-                ContextPath::SIDEBAR_PANE,
+                crate::providers::workspaces::MENU_PANE,
                 ContextTarget::SidebarPane { pane_id, ws_idx, col_idx },
             )
         }
         crate::chrome::ChromeDragItem::Column { ws, col } => {
-            (ContextPath::SIDEBAR_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
+            (crate::providers::workspaces::MENU_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
         }
         crate::chrome::ChromeDragItem::Workspace { ws } => (
-            ContextPath::SIDEBAR_WORKSPACE,
+            crate::providers::workspaces::MENU_WORKSPACE,
             ContextTarget::SidebarWorkspace {
                 ws_idx: ws,
                 custom_name: state

@@ -4,7 +4,7 @@
 //! that were previously scattered as magic numbers across the codebase.
 
 mod contribution;
-mod context_menu;
+pub(crate) mod context_menu;
 mod events;
 mod focus;
 mod host;

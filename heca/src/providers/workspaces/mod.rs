@@ -27,6 +27,9 @@ use crate::chrome::{
 use crate::actions::{ActionCategory, ActionMeta};
 use crate::app::interaction::ActionPolicy;
 use crate::chrome::{Intent, PropMap, PropValue};
+// The menu-entry vocabulary, shared with the host's own pane menu (F003/P086/T365).
+use crate::chrome::context_menu::{item, item_running, usize_arg};
+use crate::chrome::{ContextMenuContribution, ContextTarget, DropdownItem};
 use crate::providers::{ChromeCtx, Provider, ProviderCx};
 use heca_grid_ui::Handled;
 use heca_config::programs::ProgramsConfig;
@@ -260,6 +263,26 @@ impl Provider for WorkspacesContainerProvider {
     /// Resolved by **matching this component's own keys against its own rows**, rather than parsing
     /// the key back into a selection. Parsing would have to guess: a tiled pane and a floating one
     /// are both `pane:<id>`, and only the row knows which it is.
+    fn context_menus(&self, _ctx: &ChromeCtx<'_>) -> Vec<ContextMenuContribution> {
+        vec![
+            ContextMenuContribution {
+                context_path: MENU_PANE.to_string(),
+                weight: vec![1],
+                build: std::rc::Rc::new(build_sidebar_pane_menu),
+            },
+            ContextMenuContribution {
+                context_path: MENU_COLUMN.to_string(),
+                weight: vec![1],
+                build: std::rc::Rc::new(build_sidebar_column_menu),
+            },
+            ContextMenuContribution {
+                context_path: MENU_WORKSPACE.to_string(),
+                weight: vec![1],
+                build: std::rc::Rc::new(build_sidebar_workspace_menu),
+            },
+        ]
+    }
+
     fn cursor_moved(&self, key: &str, cx: &mut ProviderCx<'_>) {
         let state = cx.state();
         let ws = state.workspaces();
@@ -1135,6 +1158,161 @@ fn build_workspaces_container(
             }
         })
         .child(col)
+}
+
+// ── This component's context menus (F003/P086/T365) ──
+//
+// **A container's menu is the component's, not the host's.** These three used to be registered in
+// `ContextMenuRegistry::with_builtins` under `sidebar.pane` / `sidebar.column` / `sidebar.workspace`
+// — paths named for *where the rows are drawn*, which is the same defect `SidebarTree` and the
+// `sidebar_*` actions had. They are the component's own paths now, namespaced like its action ids,
+// and a Docker dock names its rows `docker.container` with no host constant involved.
+
+/// A pane row of this component.
+pub(crate) const MENU_PANE: &str = "workspaces.pane";
+/// A column row of this component.
+pub(crate) const MENU_COLUMN: &str = "workspaces.column";
+/// A workspace row of this component.
+pub(crate) const MENU_WORKSPACE: &str = "workspaces.workspace";
+
+/// Provider for [`MENU_PANE`] — a pane row in the sidebar tree. Its actions target
+/// **that row's** pane (by id) and column, both carried on the target.
+fn build_sidebar_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
+    let ContextTarget::SidebarPane {
+        pane_id,
+        ws_idx,
+        col_idx,
+    } = target
+    else {
+        return Vec::new();
+    };
+    // Read through the facade — the same selector a plugin would use.
+    let has_custom_name = ctx.state().pane_custom_name(*pane_id).is_some();
+    sidebar_pane_items(*pane_id, *ws_idx, *col_idx, has_custom_name)
+}
+
+/// Menu items for a sidebar **pane** row (target-only, so unit-testable without a ctx). Every entry
+/// acts on *that* row: the pane by id, "New pane" in the pane's own column.
+pub(crate) fn sidebar_pane_items(
+    pane_id: PaneId,
+    ws_idx: usize,
+    col_idx: usize,
+    has_custom_name: bool,
+) -> Vec<DropdownItem> {
+    let pane = PropValue::Int(pane_id.0 as i64);
+    let mut items = vec![
+        item_running(
+            "add_pane_to_column",
+            "New pane",
+            "add_pane_to_column",
+            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+        ),
+        item_running(
+            "rename_pane",
+            "Rename pane",
+            "rename_pane_by_id",
+            &[("pane_id", pane.clone())],
+        ),
+    ];
+    if has_custom_name {
+        items.push(item_running(
+            "reset_pane_name",
+            "Use process name",
+            "reset_pane_name_by_id",
+            &[("pane_id", pane.clone())],
+        ));
+    }
+    items.push(
+        item_running("close", "Close pane", "close_pane_by_id", &[("pane_id", pane)]).danger(true),
+    );
+    items
+}
+
+/// Provider for [`MENU_COLUMN`] — a column row. "New pane" (in the column) +
+/// "New column" + "Delete column" (danger).
+fn build_sidebar_column_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
+    let ContextTarget::SidebarColumn { ws_idx, col_idx } = target else {
+        return Vec::new();
+    };
+    sidebar_column_items(*ws_idx, *col_idx)
+}
+
+/// Menu items for a sidebar **column** row (target-only, so unit-testable without a ctx).
+pub(crate) fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
+    vec![
+        item_running(
+            "add_pane_to_column",
+            "New pane",
+            "add_pane_to_column",
+            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+        ),
+        item_running(
+            "split_horizontal",
+            "New column",
+            "add_column_to_workspace",
+            &[("ws_idx", usize_arg(ws_idx))],
+        ),
+        // NB: no "Rename column" entry — a column's name is not displayed anywhere yet (columns
+        // render as a MarkerGroup with no header/label), so renaming would have no visible effect.
+        // The rename action stays wired (RPC + handler) for when columns surface a name.
+        item_running(
+            "delete_column",
+            "Delete column",
+            "delete_column",
+            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
+        )
+        .danger(true),
+    ]
+}
+
+/// Provider for [`MENU_WORKSPACE`] — a workspace row.
+fn build_sidebar_workspace_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
+    let ContextTarget::SidebarWorkspace {
+        ws_idx,
+        custom_name,
+    } = target
+    else {
+        return Vec::new();
+    };
+    sidebar_workspace_items(*ws_idx, custom_name.is_some())
+}
+
+/// Menu items for a sidebar **workspace** row. `has_custom_name` gates the "Use default name"
+/// reset entry — it only appears when there is a custom name to clear.
+pub(crate) fn sidebar_workspace_items(ws_idx: usize, has_custom_name: bool) -> Vec<DropdownItem> {
+    let mut items = vec![
+        item_running(
+            "split_horizontal",
+            "New column",
+            "add_column_to_workspace",
+            &[("ws_idx", usize_arg(ws_idx))],
+        ),
+        item("create_workspace", "New workspace"),
+        item_running(
+            "rename_workspace",
+            "Rename workspace",
+            "rename_workspace_by_idx",
+            &[("ws_idx", usize_arg(ws_idx))],
+        ),
+    ];
+    if has_custom_name {
+        items.push(item_running(
+            "reset_workspace_name",
+            "Use default name",
+            "reset_workspace_name_by_idx",
+            &[("ws_idx", usize_arg(ws_idx))],
+        ));
+    }
+    items.push(
+        item_running(
+            "delete_workspace",
+            "Delete workspace",
+            "delete_workspace",
+            &[("ws_idx", usize_arg(ws_idx))],
+        )
+        .danger(true),
+    );
+    items
 }
 
 #[cfg(test)]

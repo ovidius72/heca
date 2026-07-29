@@ -3309,8 +3309,9 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 > `CloseOverlay` (the `on_dismiss` hook above).
 
 > **Context-aware content (`ContextMenuRegistry`).** Which entries appear is resolved from **where**
-> the menu is opened: a dotted **`ContextPath`** (`"pane"`, `"sidebar.pane"`, `"sidebar.column"`,
-> `"sidebar.workspace"`, plugin paths) + an opaque **`ContextTarget"`**. The host resolves the path
+> the menu is opened: a dotted **`ContextPath`** (`"pane"` — the host's own — plus whatever a
+> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + an opaque
+> **`ContextTarget"`**. The host resolves the path
 > from the click / keyboard focus (`resolve_active_context`), looks up all providers registered for
 > it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a plugin inserts entries between
 > built-ins. Same menu widget; different content per context.

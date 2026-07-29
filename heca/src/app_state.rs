@@ -719,7 +719,7 @@ pub struct AppState {
     /// runtime home every UI surface resolves action metadata through (see
     /// [`crate::actions::ActionCatalog`]).
     pub action_catalog: crate::actions::ActionCatalog,
-    /// Context-menu registry: built-in providers (pane + sidebar.pane/column/workspace) seeded
+    /// Context-menu registry: the content-pane built-in seeded
     /// at startup; plugins attach via `Contribution::ContextMenu` (context-menu-5). Both the
     /// mouse right-click and the keyboard `OpenContextMenu` resolve through it via
     /// `chrome::context_menu::open_context_menu_for`.

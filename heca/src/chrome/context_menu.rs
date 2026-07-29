@@ -32,12 +32,6 @@ pub struct ContextPath(pub String);
 impl ContextPath {
     /// A content pane (right-click on a pane, or keyboard `OpenContextMenu` from Normal).
     pub const PANE: &'static str = "pane";
-    /// A pane row in the sidebar tree.
-    pub const SIDEBAR_PANE: &'static str = "sidebar.pane";
-    /// A column row in the sidebar tree.
-    pub const SIDEBAR_COLUMN: &'static str = "sidebar.column";
-    /// A workspace row in the sidebar tree.
-    pub const SIDEBAR_WORKSPACE: &'static str = "sidebar.workspace";
 }
 
 /// Opaque target data a provider's `build` receives — **the facts about the thing the menu was
@@ -142,26 +136,14 @@ pub struct ContextMenuRegistry {
 }
 
 impl ContextMenuRegistry {
-    /// Registry seeded with the four built-in providers (pane + sidebar.pane/column/workspace).
+    /// Registry seeded with the **one** built-in provider: the content pane, which is the app's own
+    /// domain. A container's rows are its component's to describe, and the workspaces component
+    /// registers its three menus through [`Provider::context_menus`] like any plugin
+    /// (F003/P086/T365).
     pub fn with_builtins() -> Self {
         let mut r = Self::default();
-        // Built-ins: weight 0 (pane) / 1 (sidebar.*). Plugins insert fractional weights between.
+        // Weight 0, so a component's or plugin's entries (weight 1 upwards) merge after it.
         r.register(ContextPath::PANE, vec![0], std::rc::Rc::new(build_pane_menu));
-        r.register(
-            ContextPath::SIDEBAR_PANE,
-            vec![1],
-            std::rc::Rc::new(build_sidebar_pane_menu),
-        );
-        r.register(
-            ContextPath::SIDEBAR_COLUMN,
-            vec![1],
-            std::rc::Rc::new(build_sidebar_column_menu),
-        );
-        r.register(
-            ContextPath::SIDEBAR_WORKSPACE,
-            vec![1],
-            std::rc::Rc::new(build_sidebar_workspace_menu),
-        );
         r
     }
 
@@ -299,7 +281,7 @@ fn restorable_mode(_mode: InputMode) -> Option<InputMode> {
 /// provider.
 ///
 /// - `SidebarNav`: maps [`crate::providers::workspaces::WorkspaceRow`] at the cursor to its context path
-///   (pane→`sidebar.pane`, column→`sidebar.column`, workspace→`sidebar.workspace`,
+///   (pane→`workspaces.pane`, column→`workspaces.column`, workspace→`workspaces.workspace`,
 ///   floating-pane→`pane`).
 /// - `Normal` (and any other mode): resolves to the focused content pane (`"pane"`).
 /// - Returns `None` when there is no active target (no focused pane, no sidebar cursor).
@@ -328,8 +310,8 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
 /// container's cursor row + the focused pane → menu `(path, target)`. Split out from the `AppState`
 /// reads so the mapping is unit-testable without a full app.
 ///
-/// **With a container focused the cursor decides** the context (pane→`sidebar.pane`,
-/// column→`sidebar.column`, workspace→`sidebar.workspace`, floating-pane→`pane`); otherwise the
+/// **With a container focused the cursor decides** the context (pane→`workspaces.pane`,
+/// column→`workspaces.column`, workspace→`workspaces.workspace`, floating-pane→`pane`); otherwise the
 /// focused content pane does. Returns `None` when there is nothing to target.
 /// `locate` resolves a pane to its `(ws_idx, col_idx)` and `ws_name` a workspace to its custom
 /// name — the two facts a builder cannot get from the facade, so the **host** puts them on the
@@ -347,7 +329,7 @@ fn resolve_context_for(
                 // A sidebar pane row whose column can't be resolved is not a valid target.
                 let (ws_idx, col_idx) = locate(*pane_id)?;
                 (
-                    ContextPath(ContextPath::SIDEBAR_PANE.to_string()),
+                    ContextPath(crate::providers::workspaces::MENU_PANE.to_string()),
                     ContextTarget::SidebarPane { pane_id: *pane_id, ws_idx, col_idx },
                 )
             }
@@ -356,11 +338,11 @@ fn resolve_context_for(
                 ContextTarget::Pane { pane_id: *pane_id, hyperlink: None },
             ),
             crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => (
-                ContextPath(ContextPath::SIDEBAR_COLUMN.to_string()),
+                ContextPath(crate::providers::workspaces::MENU_COLUMN.to_string()),
                 ContextTarget::SidebarColumn { ws_idx: *ws_idx, col_idx: *col_idx },
             ),
             crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => (
-                ContextPath(ContextPath::SIDEBAR_WORKSPACE.to_string()),
+                ContextPath(crate::providers::workspaces::MENU_WORKSPACE.to_string()),
                 ContextTarget::SidebarWorkspace {
                     ws_idx: *ws_idx,
                     custom_name: ws_name(*ws_idx),
@@ -470,146 +452,6 @@ fn build_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem>
     items
 }
 
-/// Provider for [`ContextPath::SIDEBAR_PANE`] — a pane row in the sidebar tree. Its actions target
-/// **that row's** pane (by id) and column, both carried on the target.
-fn build_sidebar_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarPane {
-        pane_id,
-        ws_idx,
-        col_idx,
-    } = target
-    else {
-        return Vec::new();
-    };
-    // Read through the facade — the same selector a plugin would use.
-    let has_custom_name = ctx.state().pane_custom_name(*pane_id).is_some();
-    sidebar_pane_items(*pane_id, *ws_idx, *col_idx, has_custom_name)
-}
-
-/// Menu items for a sidebar **pane** row (target-only, so unit-testable without a ctx). Every entry
-/// acts on *that* row: the pane by id, "New pane" in the pane's own column.
-fn sidebar_pane_items(
-    pane_id: PaneId,
-    ws_idx: usize,
-    col_idx: usize,
-    has_custom_name: bool,
-) -> Vec<DropdownItem> {
-    let pane = PropValue::Int(pane_id.0 as i64);
-    let mut items = vec![
-        item_running(
-            "add_pane_to_column",
-            "New pane",
-            "add_pane_to_column",
-            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
-        ),
-        item_running(
-            "rename_pane",
-            "Rename pane",
-            "rename_pane_by_id",
-            &[("pane_id", pane.clone())],
-        ),
-    ];
-    if has_custom_name {
-        items.push(item_running(
-            "reset_pane_name",
-            "Use process name",
-            "reset_pane_name_by_id",
-            &[("pane_id", pane.clone())],
-        ));
-    }
-    items.push(
-        item_running("close", "Close pane", "close_pane_by_id", &[("pane_id", pane)]).danger(true),
-    );
-    items
-}
-
-/// Provider for [`ContextPath::SIDEBAR_COLUMN`] — a column row. "New pane" (in the column) +
-/// "New column" + "Delete column" (danger).
-fn build_sidebar_column_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarColumn { ws_idx, col_idx } = target else {
-        return Vec::new();
-    };
-    sidebar_column_items(*ws_idx, *col_idx)
-}
-
-/// Menu items for a sidebar **column** row (target-only, so unit-testable without a ctx).
-fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
-    vec![
-        item_running(
-            "add_pane_to_column",
-            "New pane",
-            "add_pane_to_column",
-            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
-        ),
-        item_running(
-            "split_horizontal",
-            "New column",
-            "add_column_to_workspace",
-            &[("ws_idx", usize_arg(ws_idx))],
-        ),
-        // NB: no "Rename column" entry — a column's name is not displayed anywhere yet (columns
-        // render as a MarkerGroup with no header/label), so renaming would have no visible effect.
-        // The rename action stays wired (RPC + handler) for when columns surface a name.
-        item_running(
-            "delete_column",
-            "Delete column",
-            "delete_column",
-            &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
-        )
-        .danger(true),
-    ]
-}
-
-/// Provider for [`ContextPath::SIDEBAR_WORKSPACE`] — a workspace row.
-fn build_sidebar_workspace_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarWorkspace {
-        ws_idx,
-        custom_name,
-    } = target
-    else {
-        return Vec::new();
-    };
-    sidebar_workspace_items(*ws_idx, custom_name.is_some())
-}
-
-/// Menu items for a sidebar **workspace** row. `has_custom_name` gates the "Use default name"
-/// reset entry — it only appears when there is a custom name to clear.
-fn sidebar_workspace_items(ws_idx: usize, has_custom_name: bool) -> Vec<DropdownItem> {
-    let mut items = vec![
-        item_running(
-            "split_horizontal",
-            "New column",
-            "add_column_to_workspace",
-            &[("ws_idx", usize_arg(ws_idx))],
-        ),
-        item("create_workspace", "New workspace"),
-        item_running(
-            "rename_workspace",
-            "Rename workspace",
-            "rename_workspace_by_idx",
-            &[("ws_idx", usize_arg(ws_idx))],
-        ),
-    ];
-    if has_custom_name {
-        items.push(item_running(
-            "reset_workspace_name",
-            "Use default name",
-            "reset_workspace_name_by_idx",
-            &[("ws_idx", usize_arg(ws_idx))],
-        ));
-    }
-    items.push(
-        item_running(
-            "delete_workspace",
-            "Delete workspace",
-            "delete_workspace",
-            &[("ws_idx", usize_arg(ws_idx))],
-        )
-        .danger(true),
-    );
-    items
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 //  Tests
 // ──────────────────────────────────────────────────────────────────────────────
@@ -698,15 +540,26 @@ mod tests {
         assert_eq!(checked, 4, "two close entries + one column + one workspace");
     }
 
+    /// **The host seeds the content pane and nothing else** (F003/P086/T365). A container's rows
+    /// are described by the component that owns them: the three row menus arrive at open time
+    /// through `Provider::context_menus`, merged by `plugin_providers_for`, exactly as a plugin's
+    /// would. The host knowing three workspace-shaped paths was the last place it enumerated
+    /// another component's row kinds.
     #[test]
-    fn registry_seeds_four_built_in_providers() {
+    fn the_registry_seeds_only_the_content_pane() {
         let r = ContextMenuRegistry::with_builtins();
         assert!(r.providers.contains_key(ContextPath::PANE));
-        assert!(r.providers.contains_key(ContextPath::SIDEBAR_PANE));
-        assert!(r.providers.contains_key(ContextPath::SIDEBAR_COLUMN));
-        assert!(r.providers.contains_key(ContextPath::SIDEBAR_WORKSPACE));
-        // One built-in per path in this phase.
         assert_eq!(r.providers.get(ContextPath::PANE).unwrap().len(), 1);
+        for owned_by_the_component in [
+            crate::providers::workspaces::MENU_PANE,
+            crate::providers::workspaces::MENU_COLUMN,
+            crate::providers::workspaces::MENU_WORKSPACE,
+        ] {
+            assert!(
+                !r.providers.contains_key(owned_by_the_component),
+                "{owned_by_the_component} is the component's to declare, not the host's to seed",
+            );
+        }
     }
 
     #[test]
@@ -909,6 +762,11 @@ mod tests {
     }
 
     use crate::providers::workspaces::WorkspaceRow;
+    // The three row menus moved into the component that owns those rows (F003/P086/T365); these
+    // tests assert on their content, so they reach for them there.
+    use crate::providers::workspaces::{
+        sidebar_column_items, sidebar_pane_items, sidebar_workspace_items,
+    };
 
     #[test]
     fn resolve_context_sidebar_items_map_to_distinct_paths() {
@@ -917,19 +775,19 @@ mod tests {
         let pane = WorkspaceRow::Pane { pane_id: PaneId(7) };
         let (path, target) =
             resolve(true, Some(&pane), None).unwrap();
-        assert_eq!(path.0, ContextPath::SIDEBAR_PANE);
+        assert_eq!(path.0, crate::providers::workspaces::MENU_PANE);
         assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7), ws_idx: 1, col_idx: 2 }));
 
         let col = WorkspaceRow::Column { ws_idx: 1, col_idx: 2 };
         let (path, target) =
             resolve(true, Some(&col), None).unwrap();
-        assert_eq!(path.0, ContextPath::SIDEBAR_COLUMN);
+        assert_eq!(path.0, crate::providers::workspaces::MENU_COLUMN);
         assert!(matches!(target, ContextTarget::SidebarColumn { ws_idx: 1, col_idx: 2 }));
 
         let ws = WorkspaceRow::Workspace { ws_idx: 3 };
         let (path, target) =
             resolve(true, Some(&ws), None).unwrap();
-        assert_eq!(path.0, ContextPath::SIDEBAR_WORKSPACE);
+        assert_eq!(path.0, crate::providers::workspaces::MENU_WORKSPACE);
         assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3, .. }));
 
         // A floating pane in the sidebar resolves to the generic pane menu.

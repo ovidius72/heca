@@ -170,7 +170,8 @@ pub enum Contribution {
 /// the provider likes — across as many paths as it likes.
 pub struct ContextMenuContribution {
     /// Where these entries appear — a dotted [`ContextPath`](crate::chrome::ContextPath):
-    /// `"pane"`, `"sidebar.workspace"`, or a path the provider itself defines.
+    /// `"pane"` (the host's own), or a path the provider defines for its rows
+    /// (`"workspaces.pane"`, `"docker.container"`) — namespaced by component, like its action ids.
     pub context_path: String,
     /// Merge order among the providers of that path (Dewey / fractional index): `[1,1,1]` lands
     /// between built-ins weighted `[1,1]` and `[1,2]`. Sorted ascending; ties keep registration
