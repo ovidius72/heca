@@ -2302,7 +2302,7 @@ ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into(
 
   > `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`, `GitCommit`, `GitMerge`,
   > `GitPullRequest`, `Terminal` (`terminal-window`), `Gear` (`gear-six`),
-  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CaretRight`, `CaretDown`, `Play`,
+  > `Search` (`magnifying-glass`), `Close` (`x`), `Check`, `CaretRight`, `CaretLeft`, `CaretDown`, `Play`,
   > `Pause`, `Stop`, `Warning`, `WarningCircle`, `Info`, `Circle`, `Lightning`, `List`,
   > `Sidebar` (`sidebar-simple`), `DotsThreeVertical`, `ArrowRight`, `ArrowLineLeft`,
   > `ArrowLineRight`, `Plus`, `Minus`, `SquareSplitVertical`, `XSquare`, `FrameCorners`, `Cards`,

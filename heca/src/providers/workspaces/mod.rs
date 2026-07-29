@@ -185,7 +185,7 @@ impl Provider for WorkspacesContainerProvider {
                 "Collapse Row",
                 "Collapse the row under the cursor, or move out to its parent.",
                 "h,Left,ArrowLeft",
-                None,
+                Some(Glyph::CaretLeft),
             ),
             act(
                 ACTIVATE_SELECTED,
