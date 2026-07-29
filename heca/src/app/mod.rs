@@ -5,6 +5,7 @@
 
 pub mod backend_factory;
 pub mod backend_store;
+pub(crate) mod conflicts;
 pub mod events;
 pub mod focus;
 pub mod git_monitor;

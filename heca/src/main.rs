@@ -52,6 +52,8 @@ struct HecaApp {
     /// Every resolved keymap layer — flat, per mode, per component kind, plus the mode triggers.
     /// One artefact, one lifetime: built from config at load and rebuilt together on reload.
     keymaps: keymap::Keymaps,
+    /// What collided while assembling the app, reported once at startup.
+    conflicts: crate::app::conflicts::Conflicts,
 }
 
 impl HecaApp {
@@ -80,11 +82,14 @@ impl HecaApp {
     fn new(event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();
-        let (modes, triggers) = build_modes(&app_config.config);
+        // Every collision — a key bound twice, an id declared twice — is collected here and
+        // reported **once**, after the components have registered too (see `resumed`).
+        let mut conflicts = crate::app::conflicts::Conflicts::default();
+        let (modes, triggers) = build_modes(&app_config.config, &mut conflicts);
         let keymaps = keymap::Keymaps {
-            flat: build_keymap(&app_config.config),
+            flat: build_keymap(&app_config.config, &mut conflicts),
             modes,
-            components: build_component_keymaps(&app_config.config),
+            components: build_component_keymaps(&app_config.config, &mut conflicts),
             triggers,
         };
 
@@ -94,6 +99,7 @@ impl HecaApp {
             event_proxy,
             registry,
             keymaps,
+            conflicts,
         }
     }
 
@@ -111,13 +117,18 @@ impl HecaApp {
                 }
             };
             self.app_config = new_config;
-            let (modes, triggers) = build_modes(&self.app_config.config);
+            // A reload re-reads the file, so it re-answers the same questions: start a fresh
+            // collection rather than accumulating the old run's collisions on top.
+            let mut conflicts = crate::app::conflicts::Conflicts::default();
+            let (modes, triggers) = build_modes(&self.app_config.config, &mut conflicts);
             self.keymaps = keymap::Keymaps {
-                flat: build_keymap(&self.app_config.config),
+                flat: build_keymap(&self.app_config.config, &mut conflicts),
                 modes,
-                components: build_component_keymaps(&self.app_config.config),
+                components: build_component_keymaps(&self.app_config.config, &mut conflicts),
                 triggers,
             };
+            conflicts.report();
+            self.conflicts = conflicts;
             // The layers were just rebuilt from a file that knows nothing about a component mounted
             // afterwards, so a reload would otherwise silently unbind every declared default.
             crate::providers::rebind_provider_defaults(state, &mut self.keymaps.components);
@@ -230,7 +241,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 &mut state,
                 &mut self.registry,
                 &mut self.keymaps.components,
+                &mut self.conflicts,
             );
+            // Everything that can register has now registered — config, built-ins and every
+            // mounted component — so this is the first moment the report can be complete.
+            self.conflicts.report();
             self.state = Some(state);
         }
     }

@@ -13,7 +13,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::actions::{ActionRegistry, register_dynamic, unregister_dynamic};
+use crate::actions::{ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic};
+use crate::app::conflicts::{ActionConflict, Conflicts};
 use crate::app::registry::bind_component_default;
 use crate::keymap::KeymapRegistry;
 use crate::app_state::AppState;
@@ -34,6 +35,7 @@ pub(crate) fn register_provider_actions(
     state: &mut AppState,
     registry: &mut ActionRegistry,
     component_keymaps: &mut HashMap<String, KeymapRegistry>,
+    conflicts: &mut Conflicts,
 ) {
     // Read the declarations first, then mutate: the providers live inside `state.chrome_host`, so
     // collecting up front is what lets the catalog and the host both be borrowed below.
@@ -41,17 +43,31 @@ pub(crate) fn register_provider_actions(
 
     for (mount, kind, metas) in declared {
         for meta in metas {
-            // The declared default joins that **kind's** layer, where the user's config already is
-            // — so a default can lose to it. See `bind_component_default`.
-            bind_component_default(component_keymaps, &kind, &meta.default_binding, &meta.name);
-            let handle = register_dynamic(
+            let id = meta.name.clone();
+            let default_binding = meta.default_binding.clone();
+            match register_dynamic(
                 registry,
                 &mut state.action_catalog,
                 meta,
                 Some(Rc::new(route_to_owner)),
-            );
-            if let Some(handles) = state.chrome_host.handles_mut(&mount) {
-                handles.keep_action(handle);
+            ) {
+                Ok(handle) => {
+                    // Only a declaration that was actually accepted gets a key: binding one to a
+                    // rejected id would leave a key that runs the built-in it collided with.
+                    bind_component_default(component_keymaps, &kind, &default_binding, &id);
+                    if let Some(handles) = state.chrome_host.handles_mut(&mount) {
+                        handles.keep_action(handle);
+                    }
+                }
+                Err(duplicate) => conflicts.action(ActionConflict {
+                    id: id.clone(),
+                    kept: match duplicate {
+                        DuplicateAction::ShadowsBuiltin => "the built-in".to_string(),
+                        DuplicateAction::ReplacedDynamic => format!("component '{kind}'"),
+                    },
+                    rejected: format!("component '{kind}' (mount '{mount}')"),
+                    shadows_builtin: matches!(duplicate, DuplicateAction::ShadowsBuiltin),
+                }),
             }
         }
     }

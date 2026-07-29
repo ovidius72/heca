@@ -6,20 +6,11 @@
 use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
+use crate::app::conflicts::{BindingConflict, Conflicts};
 use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
-
-#[derive(Clone, Debug)]
-struct BindingConflict {
-    mode: String,
-    combo: KeyCombo,
-    previous_action: ActionRef,
-    previous_source: String,
-    new_action: ActionRef,
-    new_source: String,
-}
 
 /// Resolve a config action **name** (+ its args) to what the key should be bound to.
 ///
@@ -61,12 +52,12 @@ fn bind_with_conflict_tracking(
     combo: KeyCombo,
     action: ActionRef,
     source: String,
-    conflicts: &mut Vec<BindingConflict>,
+    conflicts: &mut Conflicts,
 ) {
     if let Some(previous_action) = keymap.resolve(mode, &combo).cloned()
         && previous_action != action
     {
-        conflicts.push(BindingConflict {
+        conflicts.key(BindingConflict {
             mode: mode.to_string(),
             combo: combo.clone(),
             previous_action,
@@ -78,23 +69,6 @@ fn bind_with_conflict_tracking(
     keymap.bind(mode, combo, action);
 }
 
-fn format_combo(combo: &KeyCombo) -> String {
-    let mut parts = Vec::new();
-    if combo.ctrl {
-        parts.push("Ctrl".to_string());
-    }
-    if combo.shift {
-        parts.push("Shift".to_string());
-    }
-    if combo.alt {
-        parts.push("Alt".to_string());
-    }
-    if combo.super_ {
-        parts.push("Super".to_string());
-    }
-    parts.push(combo.key.clone());
-    parts.join("+")
-}
 
 /// What is wrong with a binding's `args` table, judged against what the action declares it takes.
 ///
@@ -129,28 +103,6 @@ fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
     }
 }
 
-fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
-    if conflicts.is_empty() || cfg!(test) {
-        return;
-    }
-
-    eprintln!(
-        "[heca] detected {} keybinding conflict(s):",
-        conflicts.len()
-    );
-    for conflict in conflicts {
-        eprintln!(
-            "[heca] {} conflict in mode '{}': '{}' => {:?} ({}) overwritten by {:?} ({})",
-            kind,
-            conflict.mode,
-            format_combo(&conflict.combo),
-            conflict.previous_action,
-            conflict.previous_source,
-            conflict.new_action,
-            conflict.new_source,
-        );
-    }
-}
 
 /// Convert a parsed [`KeyCombo`] into a renderer-agnostic `heca_grid_ui` chord
 /// (`GridKey` + `Modifiers`), or `None` for a key name grid-ui does not model. Handles both
@@ -232,9 +184,11 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
     km
 }
 
-pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
+pub fn build_keymap(
+    config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
+) -> KeymapRegistry {
     let mut keymap = KeymapRegistry::new();
-    let mut conflicts = Vec::new();
 
     let default_keys = heca_config::theme::KeysConfig::default();
     let mut merged_bindings: BTreeMap<String, heca_config::theme::BindingValue> = default_keys
@@ -260,7 +214,7 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                     KeyCombo::parse(rest),
                     action.clone(),
                     format!("[keys] {action_name}"),
-                    &mut conflicts,
+                    conflicts,
                 );
             } else {
                 bind_with_conflict_tracking(
@@ -269,7 +223,7 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                     KeyCombo::parse(trimmed),
                     action.clone(),
                     format!("[keys] {action_name}"),
-                    &mut conflicts,
+                    conflicts,
                 );
             }
         }
@@ -307,7 +261,7 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                 KeyCombo::parse(rest),
                 action,
                 format!("[[keys.command]] {}", cmd_cfg.command),
-                &mut conflicts,
+                conflicts,
             );
         } else {
             bind_with_conflict_tracking(
@@ -316,12 +270,11 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
                 KeyCombo::parse(trimmed),
                 action,
                 format!("[[keys.command]] {}", cmd_cfg.command),
-                &mut conflicts,
+                conflicts,
             );
         }
     }
 
-    log_conflicts("flat", &conflicts);
     keymap
 }
 
@@ -346,6 +299,7 @@ const UNTRIGGERED_MODES: &[&str] = &["sidebar", crate::app::input::FOCUS_LAYER];
 /// empty-string convention.
 pub fn build_component_keymaps(
     config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
 ) -> HashMap<String, KeymapRegistry> {
     let defaults = heca_config::theme::KeysConfig::default();
     let layers_of = |keys: &heca_config::theme::KeysConfig| -> BTreeMap<String, heca_config::theme::ComponentKeysConfig> {
@@ -376,7 +330,6 @@ pub fn build_component_keymaps(
         }
     }
 
-    let mut conflicts = Vec::new();
     let mut out = HashMap::new();
     for (kind, layer) in merged.into_iter() {
         let mut keymap = KeymapRegistry::new();
@@ -390,7 +343,7 @@ pub fn build_component_keymaps(
                     KeyCombo::parse(key_str.trim()),
                     action.clone(),
                     format!("[keys.{kind}] {action_name}"),
-                    &mut conflicts,
+                    conflicts,
                 );
             }
         }
@@ -402,7 +355,7 @@ pub fn build_component_keymaps(
                 KeyCombo::parse(&binding.keys),
                 action,
                 format!("[[keys.{kind}.bind]] {}", binding.action),
-                &mut conflicts,
+                conflicts,
             );
         }
         for combo in layer.unbind.keys() {
@@ -410,7 +363,6 @@ pub fn build_component_keymaps(
         }
         out.insert(kind, keymap);
     }
-    log_conflicts("component", &conflicts);
     out
 }
 
@@ -463,13 +415,13 @@ fn action_ref_names(action: &ActionRef) -> &str {
 /// Build mode keymaps and triggers from config.
 pub fn build_modes(
     config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
 ) -> (
     HashMap<String, KeymapRegistry>,
     HashMap<String, (KeyCombo, bool)>,
 ) {
     let mut mode_keymaps = HashMap::new();
     let mut mode_triggers: HashMap<String, (KeyCombo, bool)> = HashMap::new();
-    let mut conflicts = Vec::new();
 
     let default_keys = heca_config::theme::KeysConfig::default();
     let mut merged_modes: BTreeMap<String, heca_config::theme::KeyModeConfig> = default_keys
@@ -500,7 +452,7 @@ pub fn build_modes(
                 KeyCombo::parse(&binding.keys),
                 action,
                 format!("[keys.mode:{}] {}", mode_cfg.name, binding.action),
-                &mut conflicts,
+                conflicts,
             );
         }
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
@@ -521,7 +473,6 @@ pub fn build_modes(
         }
     }
 
-    log_conflicts("mode", &conflicts);
     (mode_keymaps, mode_triggers)
 }
 
@@ -974,8 +925,8 @@ mod tests {
     use super::{
         action_ref_from_config, bind_component_default, binding_arg_problems,
         build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
-        format_combo,
     };
+    use crate::app::conflicts::{Conflicts, format_combo};
     use crate::input::WmAction;
     use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
@@ -1042,7 +993,7 @@ mod tests {
     #[test]
     fn every_default_binding_still_resolves_to_a_builtin_at_load() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
         for mode in ["normal", "global"] {
             let Some(bindings) = keymap.bindings_in_mode(mode) else {
                 continue;
@@ -1390,7 +1341,7 @@ mod tests {
     fn default_font_size_modes_build_with_triggers_and_keys() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
 
         // Both modes exist, are sticky, and are entered by prefix+! / prefix+@.
         let (app_trigger, app_sticky) = mode_triggers
@@ -1452,7 +1403,7 @@ mod tests {
     #[test]
     fn default_ctrl_k_binding_stays_swap_up() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+k")),
@@ -1476,7 +1427,7 @@ mod tests {
     fn default_font_zoom_bindings_resolve_without_collision() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
 
         // Global (app-wide) branch: prefix+Ctrl+= / - / 0.
         assert_eq!(
@@ -1547,7 +1498,7 @@ mod tests {
     #[test]
     fn default_workspace_aliases_include_ctrl_p_and_ctrl_n() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("u")),
@@ -1570,7 +1521,7 @@ mod tests {
     #[test]
     fn default_sidebar_global_collapse_bindings_exist() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("(")),
@@ -1585,7 +1536,7 @@ mod tests {
     #[test]
     fn default_pane_navigation_and_palette_bindings_are_separate() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("[")),
@@ -1604,7 +1555,7 @@ mod tests {
     #[test]
     fn default_selection_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let keymap = build_keymap(&config, &mut Conflicts::default());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("s")),
@@ -1629,7 +1580,7 @@ mod tests {
     #[test]
     fn default_selection_mode_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config);
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default());
         let keymap = mode_keymaps
             .get("selection")
             .expect("selection mode exists");
@@ -1677,7 +1628,7 @@ mod tests {
     #[test]
     fn sidebar_mode_includes_arrow_aliases() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config);
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default());
         let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
@@ -1707,7 +1658,7 @@ mod tests {
     #[test]
     fn sidebar_mode_includes_mutation_bindings() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config);
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default());
         let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
@@ -1746,7 +1697,7 @@ mod tests {
             }],
         });
 
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
         let sidebar = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
@@ -1795,7 +1746,7 @@ mod tests {
             "docker",
             layer_of(&[("docker.restart_selected", "r"), ("next_pane", "n")]),
         );
-        let maps = build_component_keymaps(&config);
+        let maps = build_component_keymaps(&config, &mut Conflicts::default());
         let docker = maps.get("docker").expect("the layer is keyed by kind");
 
         match docker.resolve("docker", &KeyCombo::parse("r")) {
@@ -1826,7 +1777,7 @@ mod tests {
             }
             _ => unreachable!("just inserted"),
         };
-        let maps = build_component_keymaps(&with_layer("docker", merged));
+        let maps = build_component_keymaps(&with_layer("docker", merged), &mut Conflicts::default());
         let docker = &maps["docker"];
 
         assert!(
@@ -1864,7 +1815,7 @@ mod tests {
             None => layer.bind.push(user),
         }
 
-        let maps = build_component_keymaps(&with_layer("docker", layer));
+        let maps = build_component_keymaps(&with_layer("docker", layer), &mut Conflicts::default());
         let docker = &maps["docker"];
         match docker.resolve("docker", &KeyCombo::parse("t")) {
             Some(ActionRef::Builtin(WmAction::SpawnCommand { command, .. })) => {
@@ -1884,7 +1835,7 @@ mod tests {
     fn a_component_layer_unbinds_by_combo() {
         let mut layer = layer_of(&[("docker.stop_selected", "s")]);
         layer.unbind.insert("s".to_string(), true);
-        let maps = build_component_keymaps(&with_layer("docker", layer));
+        let maps = build_component_keymaps(&with_layer("docker", layer), &mut Conflicts::default());
         assert!(maps["docker"].resolve("docker", &KeyCombo::parse("s")).is_none());
     }
 
@@ -1940,7 +1891,7 @@ mod tests {
     #[test]
     fn the_focus_layer_ships_the_scroll_keys_and_the_way_out() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
         let focus = mode_keymaps
             .get(crate::app::input::FOCUS_LAYER)
             .expect("the focus layer is a built-in mode keymap");
@@ -1979,7 +1930,7 @@ mod tests {
             sticky: true,
             bindings: Vec::new(),
         });
-        let (_, mode_triggers) = build_modes(&config);
+        let (_, mode_triggers) = build_modes(&config, &mut Conflicts::default());
         assert!(!mode_triggers.contains_key(crate::app::input::FOCUS_LAYER));
     }
 
@@ -1997,7 +1948,7 @@ mod tests {
             }],
         });
 
-        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
         let resize = mode_keymaps.get("resize").expect("resize mode exists");
 
         assert!(resize.resolve_builtin("resize", &KeyCombo::parse("h")).is_some());

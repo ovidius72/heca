@@ -376,6 +376,15 @@ pub enum Dispatch {
 /// action is exactly how a provider is supposed to change things.
 pub type DynHandler = std::rc::Rc<dyn Fn(&mut crate::app_state::AppState, &crate::chrome::Intent)>;
 
+/// Why a name-keyed action's id was already taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DuplicateAction {
+    /// A compiled-in action owns the id. The declaration is **rejected**.
+    ShadowsBuiltin,
+    /// Another name-keyed action owned it; this one replaced it.
+    ReplacedDynamic,
+}
+
 /// RAII handle for a registered dynamic action.
 ///
 /// Held by the provider that registered the action (in `ProviderHandles`, alongside its event
@@ -404,9 +413,13 @@ pub fn register_dynamic(
     catalog: &mut ActionCatalog,
     meta: ActionMeta,
     handler: Option<DynHandler>,
-) -> ActionHandle {
+) -> Result<ActionHandle, DuplicateAction> {
     let id = meta.name.clone();
-    catalog.insert(meta);
+    // A rejected id must not get a handler either, or the key would run something whose metadata
+    // says it is a different action.
+    if let Err(dup @ DuplicateAction::ShadowsBuiltin) = catalog.insert_dynamic(meta) {
+        return Err(dup);
+    }
     match handler {
         Some(h) => {
             registry.dyn_handlers.insert(id.clone(), h);
@@ -415,7 +428,7 @@ pub fn register_dynamic(
             registry.dyn_handlers.remove(&id);
         }
     }
-    ActionHandle(id)
+    Ok(ActionHandle(id))
 }
 
 /// A **native** action declared in one place: its `WmAction` variant (dispatched by discriminant),
@@ -2217,6 +2230,28 @@ impl ActionCatalog {
         self.by_name.insert(meta.name.clone(), meta);
     }
 
+    /// Insert a **name-keyed** action's metadata, refusing to shadow a built-in.
+    ///
+    /// A built-in's id is compiled in and its label, icon, policy and confirm are what every
+    /// surface renders, so a component taking it over would silently change the meaning of a menu
+    /// entry the component has nothing to do with. `false` means the id was rejected and the
+    /// built-in still owns it; a duplicate between two *dynamic* declarers is allowed (a remount
+    /// legitimately replaces itself) but recorded, because two different components claiming one id
+    /// is a mistake either way.
+    ///
+    /// Returns whether the id was free — the caller records the collision.
+    pub(crate) fn insert_dynamic(&mut self, meta: ActionMeta) -> Result<(), DuplicateAction> {
+        if self.is_builtin(&meta.name) {
+            return Err(DuplicateAction::ShadowsBuiltin);
+        }
+        let replaced = self.by_name.contains_key(&meta.name);
+        self.insert(meta);
+        if replaced {
+            return Err(DuplicateAction::ReplacedDynamic);
+        }
+        Ok(())
+    }
+
     /// Remove a **dynamic** action's metadata. Built-ins are never removable, so a provider
     /// unmounting can't retire `close`. `true` if a dynamic entry was removed.
     pub(crate) fn remove_dynamic(&mut self, name: &str) -> bool {
@@ -2932,7 +2967,7 @@ mod tests {
             Some(std::rc::Rc::new(|_state, _intent| {})),
         );
 
-        assert_eq!(handle, ActionHandle("plugin.docker.restart".to_string()));
+        assert_eq!(handle, Ok(ActionHandle("plugin.docker.restart".to_string())));
         assert_eq!(catalog.count(), builtins + 1);
         assert_eq!(
             catalog.label("plugin.docker.restart"),
@@ -2964,7 +2999,7 @@ mod tests {
         use crate::app::interaction::ActionPolicy;
         let mut registry = ActionRegistry::new();
         let mut catalog = ActionCatalog::with_builtins();
-        register_dynamic(
+        let _ = register_dynamic(
             &mut registry,
             &mut catalog,
             dyn_meta("plugin.docker.restart", ActionPolicy::TiledOnly),
@@ -2993,7 +3028,7 @@ mod tests {
         let mut registry = ActionRegistry::new();
         let mut catalog = ActionCatalog::with_builtins();
         let before = catalog.count();
-        register_dynamic(
+        let _ = register_dynamic(
             &mut registry,
             &mut catalog,
             dyn_meta("plugin.x", ActionPolicy::Global),
@@ -3001,7 +3036,7 @@ mod tests {
         );
         let mut second = dyn_meta("plugin.x", ActionPolicy::TiledOnly);
         second.label = "Second".to_string();
-        register_dynamic(&mut registry, &mut catalog, second, None);
+        let _ = register_dynamic(&mut registry, &mut catalog, second, None);
 
         assert_eq!(catalog.count(), before + 1, "replaced, not duplicated");
         assert_eq!(catalog.label("plugin.x"), Some("Second"));
@@ -3015,7 +3050,7 @@ mod tests {
         use crate::app::interaction::ActionPolicy;
         let mut registry = ActionRegistry::new();
         let mut catalog = ActionCatalog::with_builtins();
-        register_dynamic(
+        let _ = register_dynamic(
             &mut registry,
             &mut catalog,
             dyn_meta("plugin.wasm.thing", ActionPolicy::FocusedPaneLocal),
@@ -3169,7 +3204,7 @@ mod tests {
             config_name: "plugin.docker.remove".to_string(),
             default_enabled: true,
         });
-        register_dynamic(&mut registry, &mut catalog, meta, None);
+        let _ = register_dynamic(&mut registry, &mut catalog, meta, None);
 
         let spec = catalog.confirm_spec("plugin.docker.remove").unwrap();
         assert_eq!(spec.config_name, "plugin.docker.remove");
