@@ -117,9 +117,14 @@ impl HecaApp {
                 }
             };
             self.app_config = new_config;
-            // A reload re-reads the file, so it re-answers the same questions: start a fresh
-            // collection rather than accumulating the old run's collisions on top.
-            let mut conflicts = crate::app::conflicts::Conflicts::default();
+            // A reload re-reads the **file**, so the key collisions it found are stale and are
+            // re-answered from scratch. The action-id collisions are not: components do not
+            // re-register on reload, so those are still exactly as true as they were at startup and
+            // would otherwise vanish from the report the moment the user pressed reload.
+            let mut conflicts = crate::app::conflicts::Conflicts {
+                actions: std::mem::take(&mut self.conflicts.actions),
+                ..Default::default()
+            };
             let (modes, triggers) = build_modes(&self.app_config.config, &mut conflicts);
             self.keymaps = keymap::Keymaps {
                 flat: build_keymap(&self.app_config.config, &mut conflicts),
@@ -127,11 +132,13 @@ impl HecaApp {
                 components: build_component_keymaps(&self.app_config.config, &mut conflicts),
                 triggers,
             };
-            conflicts.report();
             self.conflicts = conflicts;
             // The layers were just rebuilt from a file that knows nothing about a component mounted
             // afterwards, so a reload would otherwise silently unbind every declared default.
             crate::providers::rebind_provider_defaults(state, &mut self.keymaps.components);
+            // After the components' declared defaults are back, for the same reason the startup
+            // report waits for them: a report taken before everything has bound is not a report.
+            self.conflicts.report();
             state.theme = self.app_config.theme.clone();
             state.programs = self.app_config.config.programs.clone();
             // Appearance: opacity re-reads every frame, so updating the snapshot

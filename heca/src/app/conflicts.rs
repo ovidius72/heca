@@ -1,4 +1,4 @@
-//! **Everything that collided at startup, in one place.**
+//! **Everything that collided while assembling the app, in one place.**
 //!
 //! Two things can be said twice, and until now neither was answered well:
 //!
@@ -63,7 +63,12 @@ impl Conflicts {
         self.actions.push(conflict);
     }
 
-    /// Print the one report, at startup, after everything has registered.
+    /// Print the one report — at startup, and again after a config reload.
+    ///
+    /// **Reload re-answers only half of it.** Rebuilding the keymaps from the file makes the key
+    /// collisions fresh, but components do not re-register, so their action-id collisions are
+    /// carried over rather than recollected: they are still exactly as true as they were, and
+    /// dropping them would mean pressing reload made a real problem disappear from the report.
     ///
     /// Silent when nothing collided, and in tests — a test that builds a deliberately conflicting
     /// keymap should not spray the harness. Goes to stderr because there is no place in the UI for
@@ -73,7 +78,8 @@ impl Conflicts {
             return;
         }
         eprintln!(
-            "[heca] {} conflict(s) at startup — the last declaration wins unless stated otherwise:",
+            "[heca] {} keybinding/action conflict(s) — the last declaration wins unless stated \
+             otherwise:",
             self.keys.len() + self.actions.len()
         );
 
