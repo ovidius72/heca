@@ -936,11 +936,11 @@ fn build_workspaces_container(
     //
     // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
     // changing is enough to do that) and is untouched by the dock list scrolling around it.
-    // **Both axes.** A deep tree with long pane titles overflows sideways as readily as it does
-    // downwards, and clipping the end of a name is losing it — the row can be panned instead. The
-    // region still declines whichever axis its content fits on, so the horizontal keys do nothing
-    // until there is something to move (F003/P085/T352, user 2026-07-30).
-    let mut region = ScrollRegion::new().grow(1.0).both();
+    // Vertical only. A second axis was tried (2026-07-29) and reverted: a `Label` clips rather than
+    // overflowing, so nothing ever exceeds the width and the horizontal axis had nothing to scroll —
+    // while the extra scrollbar sat in front of the rows and took the press that starts a drag.
+    // Revisit when label truncation/wrapping is settled (AGENTS.md lists it as open).
+    let mut region = ScrollRegion::new().grow(1.0);
     // Restore through `scroll_to`, which reports with `event: None`, so the listener below can tell
     // a restore from the user actually scrolling and never writes one back as the other.
     region.scroll_to(scroll.get_untracked());
