@@ -726,6 +726,22 @@ pub struct SharedChromeState {
     /// area takes [`ScrollRegion::keyboard_target`](heca_grid_ui::ScrollRegion::keyboard_target) —
     /// and the signal outlives the retained tree, like the scroll offsets beside it.
     keyboard_target: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<bool>>>>,
+    /// The mount that held chrome focus most recently — kept after focus is released.
+    ///
+    /// It answers "which placement did the user mean?" for an action fired from somewhere with no
+    /// target of its own: the command palette, an RPC call, a script. Without it, choosing a
+    /// component's action from the palette while nothing is focused would have to guess between two
+    /// placements — see `owning_mount` (F003/P085/T353).
+    last_focused_container: Signal<Option<String>>,
+    /// **This placement's** selected row, as the row declared it (`nav_key`).
+    ///
+    /// Per mount, exactly like the scroll offset and the keyboard target beside it: two placements
+    /// of one container have two cursors. Created on first ask, and outliving the retained tree so
+    /// a rebuild restores the cursor rather than dropping it.
+    ///
+    /// F003/P085/T354 (`nav_key`) is what writes it — a row declares its identity once and the
+    /// cursor, the right-click target and (later) drag are three readers of that one declaration.
+    container_cursor: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<Option<String>>>>>,
     /// Letter → container id while a **dock pick** is open; empty means no pick.
     ///
     /// Shell-level, unlike the pane/workspace/column picks on
@@ -781,6 +797,12 @@ impl SharedChromeState {
             return;
         }
         self.focused_container.set(container.clone());
+        // Remembered past the release, so an action fired from the palette or RPC has a placement
+        // to mean when nothing currently holds focus. Only a real focus updates it — clearing does
+        // not, or the memory would be wiped by the very act it exists to survive.
+        if container.is_some() {
+            self.last_focused_container.set(container.clone());
+        }
         for (id, sig) in self.keyboard_target.borrow().iter() {
             let mine = container.as_deref() == Some(id.as_str());
             if sig.get_untracked() != mine {
@@ -804,6 +826,37 @@ impl SharedChromeState {
             .borrow_mut()
             .insert(container.to_string(), created);
         created
+    }
+
+    /// The mount that held chrome focus most recently, whether or not it still does.
+    pub fn last_focused_container(&self) -> Option<String> {
+        self.last_focused_container.get()
+    }
+
+    /// This placement's cursor signal, created on first ask.
+    ///
+    /// Keyed by **mount id** for the same reason the scroll offset is: place a container twice and
+    /// each seating gets its own cursor over the same content.
+    pub fn container_cursor(&self, container: &str) -> Signal<Option<String>> {
+        if let Some(existing) = self.container_cursor.borrow().get(container) {
+            return *existing;
+        }
+        let created = signal(None);
+        self.container_cursor
+            .borrow_mut()
+            .insert(container.to_string(), created);
+        created
+    }
+
+    /// Move a placement's cursor to the row that declared `key` (`None` clears it).
+    ///
+    /// Change-guarded, like every setter here, so republishing an unchanged cursor is free.
+    pub fn set_container_cursor(&self, container: &str, key: Option<String>) {
+        let sig = self.container_cursor(container);
+        if sig.get_untracked() == key {
+            return;
+        }
+        sig.set(key);
     }
 
     /// Borrow the dock pick candidates without cloning the Vec.
@@ -853,6 +906,8 @@ impl SharedChromeState {
             workspaces: WorkspacesContainerState::new(events),
             container_scroll: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             focused_container: signal(None),
+            last_focused_container: signal(None),
+            container_cursor: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             keyboard_target: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             dock_pick_candidates: signal(Vec::new()),
         }
@@ -1083,6 +1138,48 @@ mod tests {
             "and a third placement elsewhere is untouched",
         );
         assert_eq!(s.container_scroll("dock.a").get_untracked(), 30.0);
+    }
+
+    /// A cursor belongs to a **placement**, like the scroll offset beside it: place a container
+    /// twice and each seating points at its own row over the same content (F003/P085/T353).
+    #[test]
+    fn each_placement_has_its_own_cursor() {
+        let s = state();
+        assert_eq!(s.container_cursor("dock.a").get_untracked(), None);
+
+        s.set_container_cursor("dock.a", Some("row-7".into()));
+        assert_eq!(
+            s.container_cursor("dock.a").get_untracked(),
+            Some("row-7".to_string()),
+        );
+        assert_eq!(
+            s.container_cursor("dock.b").get_untracked(),
+            None,
+            "the other placement of the same container is untouched",
+        );
+
+        s.set_container_cursor("dock.a", None);
+        assert_eq!(s.container_cursor("dock.a").get_untracked(), None);
+    }
+
+    /// The most recently focused placement is remembered **past the release**, so an action fired
+    /// from the palette or RPC with nothing focused still has a mount to mean.
+    #[test]
+    fn the_last_focused_placement_survives_losing_focus() {
+        let s = state();
+        assert_eq!(s.last_focused_container(), None);
+
+        s.set_focused_container(Some("dock.a".into()));
+        s.set_focused_container(Some("dock.b".into()));
+        assert_eq!(s.last_focused_container(), Some("dock.b".to_string()));
+
+        s.set_focused_container(None);
+        assert_eq!(s.focused_container(), None, "focus really was released");
+        assert_eq!(
+            s.last_focused_container(),
+            Some("dock.b".to_string()),
+            "clearing focus must not wipe the memory the memory exists to outlive",
+        );
     }
 
     /// Chrome focus is a **container id**, so it does not name a side and does not move when the

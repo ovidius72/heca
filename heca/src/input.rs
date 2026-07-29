@@ -406,6 +406,18 @@ pub enum WmAction {
     ScrollToTop,
     /// Scroll to the live bottom (immediate).
     ScrollToBottom,
+    /// Scroll the focused chrome container one page **left** (F003/P085/T352).
+    ///
+    /// The four horizontal variants have no terminal half: a pane's scrollback has one axis, so
+    /// there is nothing for them to do when no dock holds chrome focus. They exist because a scroll
+    /// area in a container has two, and the vertical actions above reach it already.
+    ScrollPageLeft,
+    /// Scroll the focused chrome container one page **right**.
+    ScrollPageRight,
+    /// Jump the focused chrome container to its **left** edge.
+    ScrollToLeftEdge,
+    /// Jump the focused chrome container to its **right** edge.
+    ScrollToRightEdge,
     /// Jump the host viewport to an explicit offset in rows above the live bottom.
     /// Used by the GUI scrollbar / RPC; no default keybinding.
     ScrollToOffset {
@@ -509,6 +521,13 @@ pub enum WmAction {
         dock: Option<crate::chrome::ContainerId>,
     },
 
+    /// Give the keyboard back to the focused pane — chrome focus is released (F003/P085/T352).
+    ///
+    /// The counterpart of [`FocusDock`](Self::FocusDock), and the reason `Esc` is a *binding* in the
+    /// focus layer rather than a key this module recognises: releasing focus has to be reachable
+    /// from RPC and a menu too, not only from a key nothing else can rebind.
+    UnfocusDock,
+
     // ── Overlay control (parameterized) — plugin-ui, §2.7.2 ──
     // "Everything is an action": an overlay (modal/dropdown) is confirmed or dismissed by
     // dispatching an action carrying the overlay's id. The `OverlayHost` injects the id into
@@ -588,6 +607,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_focus" => Some(WmAction::SidebarFocus),
         // Bare: no dock named ⇒ pick one by letter. `dock = "…"` goes through `build_action`.
         "focus_dock" => Some(WmAction::FocusDock { dock: None }),
+        "unfocus_dock" => Some(WmAction::UnfocusDock),
         "sidebar_up" => Some(WmAction::SidebarUp),
         "sidebar_down" => Some(WmAction::SidebarDown),
         "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
@@ -695,6 +715,10 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "scroll_page_down" => Some(WmAction::ScrollPageDown),
         "scroll_to_top" => Some(WmAction::ScrollToTop),
         "scroll_to_bottom" => Some(WmAction::ScrollToBottom),
+        "scroll_page_left" => Some(WmAction::ScrollPageLeft),
+        "scroll_page_right" => Some(WmAction::ScrollPageRight),
+        "scroll_to_left_edge" => Some(WmAction::ScrollToLeftEdge),
+        "scroll_to_right_edge" => Some(WmAction::ScrollToRightEdge),
         // `amount` is in notches; the handler multiplies by the user-configurable
         // `terminal_wheel_scroll_lines` before scrolling.  Default = 1 notch.
         "scrollback_line_up" => Some(WmAction::ScrollbackLineUp { amount: 1 }),
@@ -1001,7 +1025,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         // Sidebar navigation (only used in sidebar mode via resolve_mode)
         // Low priority so they don't override focus bindings in normal/prefix mode.
         // Chrome focus: the dock pick and sidebar nav are the same kind of navigation.
-        WmAction::SidebarFocus | WmAction::FocusDock { .. } => 0,
+        WmAction::SidebarFocus | WmAction::FocusDock { .. } | WmAction::UnfocusDock => 0,
         WmAction::SidebarUp
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
@@ -1098,6 +1122,10 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ScrollPageDown
         | WmAction::ScrollToTop
         | WmAction::ScrollToBottom
+        | WmAction::ScrollPageLeft
+        | WmAction::ScrollPageRight
+        | WmAction::ScrollToLeftEdge
+        | WmAction::ScrollToRightEdge
         | WmAction::ScrollToOffset { .. } => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
@@ -1395,6 +1423,7 @@ mod tests {
             // Sidebar (mode-internal + global toggles)
             WmAction::SidebarFocus,
             WmAction::FocusDock { dock: None },
+            WmAction::UnfocusDock,
             WmAction::SidebarUp,
             WmAction::SidebarDown,
             WmAction::SidebarLeftNav,
@@ -1423,6 +1452,11 @@ mod tests {
             WmAction::ScrollbackToTop,
             WmAction::ScrollbackToBottom,
             WmAction::ExitScrollback,
+            // Direct scroll — the four horizontal ones reach a chrome container only
+            WmAction::ScrollPageLeft,
+            WmAction::ScrollPageRight,
+            WmAction::ScrollToLeftEdge,
+            WmAction::ScrollToRightEdge,
             // Selection (host capability, Task 02)
             WmAction::EnterSelectionMode,
             WmAction::SelectionLeft,

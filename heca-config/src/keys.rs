@@ -5,12 +5,22 @@ use std::collections::HashMap;
 //  BindingValue
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// A single binding value, either a single string or a list of key combos.
+/// A single binding value: one combo, a list of combos, or — when the key under `[keys]` names a
+/// **component kind** rather than an action — that component's whole binding layer.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BindingValue {
     Single(String),
     Many(Vec<String>),
+    /// `[keys.docker]` — the bindings that apply **only while a component of that kind holds chrome
+    /// focus**. A table, not an array, so it merges per key: overriding one binding keeps the rest
+    /// (F003/P085/T355).
+    ///
+    /// It lives in the same map as the flat action bindings because that is the shape the user
+    /// chose — `[keys.docker]`, not `[keys.component.docker]` — and a TOML table under `[keys]`
+    /// cannot be told apart from an action binding by its name alone. The app separates them by
+    /// **variant**: a table is a component layer, a string or list is an action binding.
+    Component(ComponentKeysConfig),
 }
 
 impl BindingValue {
@@ -26,8 +36,56 @@ impl BindingValue {
                 .map(|s| s.as_str())
                 .filter(|p| !p.is_empty())
                 .collect(),
+            // A component layer binds nothing at the top level; its own entries do.
+            BindingValue::Component(_) => Vec::new(),
         }
     }
+
+    /// The component layer this value carries, if it is one.
+    pub fn component(&self) -> Option<&ComponentKeysConfig> {
+        match self {
+            BindingValue::Component(c) => Some(c),
+            _ => None,
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ComponentKeysConfig
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// One component **kind's** binding layer — `[keys.<kind>]`.
+///
+/// Bindings belong to the *type*, not to a placement: write them once and every seating of that
+/// component uses them, while cursor / scroll / focus stay per mount.
+///
+/// ```toml
+/// [keys.docker]                 # a TABLE: merges per key, so overriding one keeps the rest
+/// restart_selected = "r"        # the component's own declared action
+/// next_pane        = "n"        # …or any EXISTING action id, simply bound here
+///
+/// [[keys.docker.bind]]          # the arg-carrying form; merged by `keys`, because arrays are
+/// action = "spawn_command"      #   otherwise replaced wholesale and one entry would drop the rest
+/// keys   = "t"
+/// args   = { command = "lazydocker", float = "true" }
+///
+/// [keys.docker.unbind]          # explicit removal — never null/empty-string semantics
+/// "s" = true
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ComponentKeysConfig {
+    /// `action = "key"` entries. Merged per key by the ordinary table rules.
+    #[serde(flatten)]
+    pub bindings: KeybindingMap,
+    /// `[[keys.<kind>.bind]]` — bindings that carry `args`. Merged **by `keys`**: a user entry with
+    /// the same combo replaces that default and leaves the others alone. Without that rule the
+    /// array would be replaced wholesale and binding one key would silently drop every other.
+    #[serde(default)]
+    pub bind: Vec<ModeBindingConfig>,
+    /// `[keys.<kind>.unbind]` — combos to remove from this layer, keyed by the **combo**, so it
+    /// retires a binding whatever it points at.
+    #[serde(default)]
+    pub unbind: HashMap<String, bool>,
 }
 
 /// Map of action names to their keybinding values.
@@ -162,6 +220,55 @@ impl Default for KeysConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `[keys.<kind>]` parses as a **component layer** and sits in the same map as the flat action
+    /// bindings, told apart by its variant rather than by its name (F003/P085/T355).
+    #[test]
+    fn a_named_table_under_keys_is_a_component_layer() {
+        let src = r#"
+prefix = "ctrl+b"
+focus_left = "prefix+h"
+paste_clipboard = ["Super+v", "Ctrl+Shift+v"]
+
+[keys.docker]
+restart_selected = "r"
+stop_selected = "s"
+
+[[keys.docker.bind]]
+action = "spawn_command"
+keys = "t"
+args = { command = "lazydocker" }
+
+[keys.docker.unbind]
+"s" = true
+"#;
+        // The embedded shape is `[keys]` at the top level of the file.
+        let wrapper: HashMap<String, KeysConfig> =
+            toml::from_str(&format!("[keys]\n{src}")).expect("parses");
+        let keys = &wrapper["keys"];
+
+        assert_eq!(
+            keys.bindings["focus_left"].keys(),
+            vec!["prefix+h"],
+            "a flat action binding is unaffected",
+        );
+        assert_eq!(keys.bindings["paste_clipboard"].keys().len(), 2);
+
+        let docker = keys.bindings["docker"]
+            .component()
+            .expect("a table under [keys] is a component layer");
+        assert_eq!(docker.bindings["restart_selected"].keys(), vec!["r"]);
+        assert_eq!(docker.bindings["stop_selected"].keys(), vec!["s"]);
+        assert_eq!(docker.bind.len(), 1);
+        assert_eq!(docker.bind[0].action, "spawn_command");
+        assert_eq!(docker.bind[0].keys, "t");
+        assert_eq!(docker.bind[0].args["command"], "lazydocker");
+        assert!(docker.unbind["s"]);
+        assert!(
+            keys.bindings["docker"].keys().is_empty(),
+            "a layer binds nothing at the top level; its own entries do",
+        );
+    }
 
     #[test]
     fn test_binding_value_single() {

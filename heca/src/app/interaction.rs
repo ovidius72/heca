@@ -60,6 +60,13 @@ pub(crate) enum InteractionSource {
     MouseContent,
     /// Mouse click or drag in the left sidebar.
     MouseLeftSidebar,
+    /// A mounted **component** asking the host for something from inside its `perform`
+    /// (`ProviderCx::dispatch`, F003/P085/T353).
+    ///
+    /// Its own source, not a borrowed one, because it is genuinely a different actor: the request
+    /// did not come from a device, and a component is the one caller the host must be able to judge
+    /// separately from the user driving it.
+    Provider,
     // Future sources — not implemented yet:
     // MouseRightSidebar,
     // MouseTopMenu,
@@ -351,7 +358,14 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // Chrome keyboard focus is chrome state too: it decides which dock the scroll keys reach and
         // has no effect on the pane layout, so — unlike `SidebarFocus`, which enters a nav mode that
         // moves pane focus — it stays reachable while a floating pane is active.
-        WmAction::FocusDock { .. } => ActionPolicy::Global,
+        WmAction::FocusDock { .. } | WmAction::UnfocusDock => ActionPolicy::Global,
+        // Horizontal scroll reaches a chrome container's scroll area only — chrome state, no pane
+        // layout impact — so it stays reachable while a floating pane is active, unlike the vertical
+        // four which also drive the focused pane's scrollback.
+        WmAction::ScrollPageLeft
+        | WmAction::ScrollPageRight
+        | WmAction::ScrollToLeftEdge
+        | WmAction::ScrollToRightEdge => ActionPolicy::Global,
         // Overlay control (§2.7.2): classified Global for match completeness, but never
         // actually consulted — `dispatch_intent` intercepts these before routing (they carry
         // an overlay id and resolve the `OverlayHost`, not a focus-domain-sensitive action).
@@ -556,6 +570,10 @@ fn policy_allows(
                     InteractionSource::Keyboard => false,
                     InteractionSource::MouseContent => false,
                     InteractionSource::MouseLeftSidebar => false,
+                    // A component gets no more reach than the user driving it: if the same request
+                    // would be blocked from a key while a pane is floating, asking for it from
+                    // inside `perform` must be blocked too.
+                    InteractionSource::Provider => false,
                 }
             } else {
                 true
@@ -631,6 +649,9 @@ pub(crate) fn can_focus_pane(
             InteractionSource::Keyboard => true,
             InteractionSource::MouseContent => true,
             InteractionSource::MouseLeftSidebar => true,
+            // A component asking to focus a pane is the sidebar's "activate this row" in another
+            // shape — allowed in the tiled domain like every other source.
+            InteractionSource::Provider => true,
         }
     }
 }
@@ -1370,10 +1391,21 @@ mod tests {
             }),
             ActionPolicy::Global
         );
+        assert_eq!(action_policy(&WmAction::UnfocusDock), ActionPolicy::Global);
         assert_eq!(
             action_policy(&WmAction::SidebarFocus),
             ActionPolicy::TiledOnly
         );
+        // The horizontal four reach a chrome container's scroll area only, so they follow chrome
+        // focus rather than the pane's tiled/floating domain.
+        for action in [
+            WmAction::ScrollPageLeft,
+            WmAction::ScrollPageRight,
+            WmAction::ScrollToLeftEdge,
+            WmAction::ScrollToRightEdge,
+        ] {
+            assert_eq!(action_policy(&action), ActionPolicy::Global, "{action:?}");
+        }
         assert_eq!(
             action_policy(&WmAction::OpenLink {
                 url: "https://example.com".into()

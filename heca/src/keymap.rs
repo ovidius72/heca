@@ -99,6 +99,26 @@ impl KeyCombo {
     }
 }
 
+/// **Every resolved keymap**, as one thing — the layers a keypress is matched against, in the order
+/// the input path consults them.
+///
+/// They are grouped because they are one artefact with one lifetime: all four are built from the
+/// same config at load and rebuilt together on `prefix+Shift+r`, and every consumer that needs one
+/// needs several. Threading them as four parameters had already pushed the window-event entry point
+/// past what one function should take.
+pub struct Keymaps {
+    /// Prefix (`normal`) and direct (`global`) bindings — `[keys]`.
+    pub flat: KeymapRegistry,
+    /// One per custom input mode — `[[keys.mode]]`, plus the built-in `resize` / `sidebar` /
+    /// `selection` / `focus` layers.
+    pub modes: HashMap<String, KeymapRegistry>,
+    /// One per component **kind** — `[keys.<kind>]`, consulted only while a component of that kind
+    /// holds chrome focus (F003/P085/T355).
+    pub components: HashMap<String, KeymapRegistry>,
+    /// Mode name → (trigger combo, sticky). A mode entered by focus rather than a key has none.
+    pub triggers: HashMap<String, (KeyCombo, bool)>,
+}
+
 /// What a key is bound to — a built-in action, or a **name-keyed** one resolved at press time.
 ///
 /// **The constraint that shapes this** (plugin-04 G3): config is loaded *before* providers and
@@ -182,10 +202,6 @@ impl KeymapRegistry {
 
     /// Return all bindings for a mode.
     // Transitional: will be used for config reload / RPC in Phase 5.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")
-    )]
     pub fn bindings_in_mode(&self, mode: &str) -> Option<&HashMap<KeyCombo, ActionRef>> {
         self.modes.get(mode)
     }

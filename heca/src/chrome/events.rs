@@ -81,7 +81,7 @@ impl std::str::FromStr for RegionId {
 }
 
 /// A `Copy` projection of the sidebar-nav cursor selection — a mirror of
-/// `sidebar::model::SidebarItem` without the sidebar-model coupling. Carried by
+/// `workspaces::model::WorkspaceRow` without the sidebar-model coupling. Carried by
 /// [`ChromeEvent::SidebarSelectionChanged`] and mirrored into the chrome store so
 /// the expanded sidebar can highlight the nav cursor **distinctly** from the real
 /// focused pane (`active_pane`).

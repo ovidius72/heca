@@ -10,7 +10,6 @@ mod mouse;
 mod providers;
 mod rpc;
 mod shortcut;
-mod sidebar;
 
 use app::events::AppEvent;
 use app::events::handle_window_event;
@@ -21,7 +20,7 @@ pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
     move_pane_to_workspace_column,
 };
-use app::registry::{build_keymap, build_modes, build_registry};
+use app::registry::{build_component_keymaps, build_keymap, build_modes, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app::startup::init_state as build_initial_state;
@@ -31,7 +30,6 @@ use app_state::AppState;
 use heca_config::theme::AppConfig;
 use heca_core::layout::PaneId;
 use input::WmAction;
-use std::collections::HashMap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
@@ -51,12 +49,9 @@ struct HecaApp {
     app_config: AppConfig,
     event_proxy: EventLoopProxy<AppEvent>,
     registry: actions::ActionRegistry,
-    keymap: keymap::KeymapRegistry,
-    /// Per-mode keymaps (e.g. "resize" mode bindings).
-    mode_keymaps: HashMap<String, keymap::KeymapRegistry>,
-    /// Mode triggers: name → (trigger combo, sticky).
-    /// Populated from [[keys.mode]] trigger field.
-    mode_triggers: HashMap<String, (keymap::KeyCombo, bool)>,
+    /// Every resolved keymap layer — flat, per mode, per component kind, plus the mode triggers.
+    /// One artefact, one lifetime: built from config at load and rebuilt together on reload.
+    keymaps: keymap::Keymaps,
 }
 
 impl HecaApp {
@@ -85,17 +80,20 @@ impl HecaApp {
     fn new(event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();
-        let keymap = build_keymap(&app_config.config);
-        let (mode_keymaps, mode_triggers) = build_modes(&app_config.config);
+        let (modes, triggers) = build_modes(&app_config.config);
+        let keymaps = keymap::Keymaps {
+            flat: build_keymap(&app_config.config),
+            modes,
+            components: build_component_keymaps(&app_config.config),
+            triggers,
+        };
 
         Self {
             state: None,
             app_config,
             event_proxy,
             registry,
-            keymap,
-            mode_keymaps,
-            mode_triggers,
+            keymaps,
         }
     }
 
@@ -113,10 +111,16 @@ impl HecaApp {
                 }
             };
             self.app_config = new_config;
-            self.keymap = build_keymap(&self.app_config.config);
-            let (new_mode_keymaps, new_mode_triggers) = build_modes(&self.app_config.config);
-            self.mode_keymaps = new_mode_keymaps;
-            self.mode_triggers = new_mode_triggers;
+            let (modes, triggers) = build_modes(&self.app_config.config);
+            self.keymaps = keymap::Keymaps {
+                flat: build_keymap(&self.app_config.config),
+                modes,
+                components: build_component_keymaps(&self.app_config.config),
+                triggers,
+            };
+            // The layers were just rebuilt from a file that knows nothing about a component mounted
+            // afterwards, so a reload would otherwise silently unbind every declared default.
+            crate::providers::rebind_provider_defaults(state, &mut self.keymaps.components);
             state.theme = self.app_config.theme.clone();
             state.programs = self.app_config.config.programs.clone();
             // Appearance: opacity re-reads every frame, so updating the snapshot
@@ -217,7 +221,16 @@ impl HecaApp {
 impl ApplicationHandler<AppEvent> for HecaApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
-            let state = pollster::block_on(self.init_state(event_loop));
+            let mut state = pollster::block_on(self.init_state(event_loop));
+            // Every mounted component's **declared** actions join the one catalog and registry here
+            // — after the host has its providers, before any input can reach them. This is the host
+            // half of the declaration: a component never mutates app state, so it cannot register
+            // its own (F003/P085/T353).
+            crate::providers::register_provider_actions(
+                &mut state,
+                &mut self.registry,
+                &mut self.keymaps.components,
+            );
             self.state = Some(state);
         }
     }
@@ -236,9 +249,7 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         handle_window_event(
             event_loop,
             &self.registry,
-            &self.keymap,
-            &self.mode_keymaps,
-            &self.mode_triggers,
+            &self.keymaps,
             state,
             event,
         );

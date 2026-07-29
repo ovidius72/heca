@@ -1,6 +1,4 @@
-use crate::input::WmAction;
-
-use super::SidebarTree;
+use super::WorkspaceTree;
 
 pub(crate) const ITEM_HEIGHT: f32 = 24.0;
 pub(crate) const BTN_ROW_HEIGHT: f32 = ITEM_HEIGHT;
@@ -17,7 +15,7 @@ pub(crate) const BTN_ROW_HEIGHT: f32 = ITEM_HEIGHT;
 ///
 /// Returns the flat item index, or `None` if the click missed all items.
 pub fn sidebar_hit_test(
-    tree: &SidebarTree,
+    tree: &WorkspaceTree,
     sidebar_top: f32,
     sidebar_height: f32,
     mouse_y: f32,
@@ -44,24 +42,5 @@ pub fn sidebar_hit_test(
         return tree.flat_items.get(fi).map(|_| fi);
     }
 
-    None
-}
-
-/// Check if a mouse position hits any sidebar button.
-/// Returns the button if hit, None otherwise.
-pub fn sidebar_button_hit_test(
-    tree: &SidebarTree,
-    mouse_x: f32,
-    mouse_y: f32,
-) -> Option<(usize, WmAction)> {
-    for (i, hitbox) in tree.button_hitboxes.iter().enumerate() {
-        if mouse_x >= hitbox.x
-            && mouse_x <= hitbox.x + hitbox.width
-            && mouse_y >= hitbox.y
-            && mouse_y <= hitbox.y + hitbox.height
-        {
-            return Some((i, hitbox.action.clone()));
-        }
-    }
     None
 }

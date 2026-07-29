@@ -434,6 +434,8 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "focus-dock" => Ok(WmAction::FocusDock {
             dock: parts.next().map(|s| s.to_string()),
         }),
+        // …and the way back: the keyboard returns to the focused pane.
+        "unfocus-dock" => Ok(WmAction::UnfocusDock),
         "sidebar-up" => Ok(WmAction::SidebarUp),
         "sidebar-down" => Ok(WmAction::SidebarDown),
         "sidebar-left-nav" => Ok(WmAction::SidebarLeftNav),
@@ -603,6 +605,11 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "direct-scroll-line-down" => Ok(WmAction::ScrollLineDown),
         "direct-scroll-to-top" => Ok(WmAction::ScrollToTop),
         "direct-scroll-to-bottom" => Ok(WmAction::ScrollToBottom),
+        // The horizontal four reach a focused chrome container's scroll area; a pane has one axis.
+        "direct-scroll-page-left" => Ok(WmAction::ScrollPageLeft),
+        "direct-scroll-page-right" => Ok(WmAction::ScrollPageRight),
+        "direct-scroll-to-left-edge" => Ok(WmAction::ScrollToLeftEdge),
+        "direct-scroll-to-right-edge" => Ok(WmAction::ScrollToRightEdge),
         "direct-scroll-to-offset" => {
             let rows_str = expect_arg!("rows");
             let rows = rows_str.parse::<usize>().map_err(|_| RpcError::ParseInt {

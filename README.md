@@ -239,7 +239,79 @@ nothing (it will not expand an empty sidebar to show you a blank frame).
 
 The dock can also be named, which skips the pick: `focus-dock workspaces` over RPC, or a mode binding
 carrying `args = { dock = "workspaces" }` (no flat binding form takes args yet). It is one action
-either way — the pick is only how a keyboard supplies an argument it cannot type.
+either way — the pick is only how a keyboard supplies an argument it cannot type. Aiming it at the
+dock that already has focus is the way back out, so one key both takes the keyboard and gives it
+back; `unfocus-dock` (RPC) and `Esc` do the same thing explicitly.
+
+**Focus is the mode.** While a dock holds chrome focus the keyboard is *redirected to it* — there is
+no separate mode to enter, because focus already answers where the keys go. Concretely:
+
+- unprefixed keys resolve in the **focus layer** (below) instead of being forwarded to the terminal;
+- an **unbound** key while a dock is focused does nothing — it is swallowed, never leaked into the
+  shell behind the dock;
+- `prefix+…` keeps working exactly as it does otherwise, and falls through to the focus layer when
+  the global map has no binding for the key;
+- the focused pane is **not** changed. Only the keyboard moves, so `prefix+Enter` still splits the
+  pane you last worked in;
+- the status bar shows the dock's name where it would say `NORMAL`, so a swallowed key is never
+  silent about where it went. The focus ring is the other half of that.
+
+Two layers are consulted while a dock is focused, in this order:
+
+1. **the component's own** — `[keys.<kind>]`, below;
+2. **the focus layer** — a built-in mode keymap, `[[keys.mode]] name = "focus"`, overridable in
+   `keybindings.toml` like any other. It carries what the *widgets* answer — paging and edges for
+   whatever scroll area the focused container nests — deliberately not a per-container vocabulary: a
+   scroll region behaves the same wherever it is mounted, so nothing has to declare it, and a
+   container with nothing scrollable simply declines and the key does nothing.
+
+### A component's own keys — `[keys.<kind>]`
+
+A component declares the actions only it can do and ships a default key for each. Those bindings
+live in a layer named for the component's **kind** — its type, not a placement — so writing it once
+covers every seating, while cursor, scroll position and focus stay per placement.
+
+```toml
+[keys.docker]                 # a TABLE: merges PER KEY, so overriding one keeps the rest
+restart_selected = "r"        # the component's own declared action
+next_pane        = "n"        # …or any EXISTING action id, simply bound here — never redeclared
+
+[[keys.docker.bind]]          # the arg-carrying form
+action = "spawn_command"
+keys   = "t"
+args   = { command = "lazydocker", float = "true" }
+
+[keys.docker.unbind]          # explicit removal, keyed by the combo
+"s" = true
+```
+
+**Merge rules, and why the two forms differ.** A TOML table already merges per key, so changing one
+`action = "key"` entry keeps every other default. An **array** is replaced wholesale, which for
+`[[keys.<kind>.bind]]` would mean adding one binding silently drops every shipped default — so those
+merge **by their `keys` field** instead: a keymap *is* a map from combo to action, so merging on the
+combo is the ordinary table rule applied to what the array is really keyed by. `unbind` is applied
+last and keyed by the **combo**, so it retires a binding whatever it points at.
+
+**Your config always wins.** A component's shipped default is bound at mount, and it is skipped if
+you have already put something on that key *or* rebound that action elsewhere — so a default can
+never shadow your choice, and rebinding an action does not leave it also answering to its old key.
+Binding an id whose component is not mounted is not an error: like every binding it resolves at
+press time, and simply does nothing until that component appears.
+
+| Key | Action |
+|-----|--------|
+| `PageUp` / `PageDown` | Scroll the focused dock one page up / down |
+| `Home` / `End` | Jump the focused dock to top / bottom |
+| `Alt+PageUp` / `Alt+PageDown` | Scroll the focused dock one page left / right |
+| `Alt+Home` / `Alt+End` | Jump the focused dock to its left / right edge |
+| `Esc` | Give the keyboard back to the focused pane |
+
+The bare keys are free here precisely because nothing is being forwarded to a backend. The `Shift+`
+scroll bindings under "Direct (non-prefix) keybindings" are unchanged and, while a dock is focused,
+aim at the dock too — one binding, one meaning: *scroll whatever has the keyboard*. Horizontal
+scrolling exists only here (`scroll_page_left`, `scroll_page_right`, `scroll_to_left_edge`,
+`scroll_to_right_edge`, also reachable over RPC as `direct-scroll-page-left` and friends), because a
+terminal viewport has a single axis.
 
 The default sidebar-mode bindings are defined via `[[keys.mode]] name = "sidebar"` and can be overridden in `config.toml`. The trigger field is ignored for this built-in mode because `SidebarNav` is entered via `SidebarFocus` or mouse interaction.
 
@@ -344,6 +416,10 @@ These are intercepted as global keybindings before reaching the terminal.
 They stay in Normal mode, so holding the key repeats the scroll without
 entering Selection mode. Page jumps and top/bottom jumps honor
 `terminal_scroll_animations`; line steps remain immediate.
+
+While a chrome dock holds keyboard focus these same four page/edge bindings are aimed at **the dock**
+instead of the pane — see "Chrome keyboard focus is a dock, not a side" above. The line steps
+(`Shift+Up` / `Shift+Down`) stay with the pane: a scroll area answers pages and edges, not lines.
 
 ### Scrollback GUI
 

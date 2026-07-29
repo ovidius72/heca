@@ -2,7 +2,7 @@ use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
-use crate::sidebar::SidebarTree;
+use crate::providers::workspaces::WorkspaceTree;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
@@ -684,7 +684,7 @@ pub struct AppState {
     /// `chrome::context_menu` for the full contract.
     pub overlay_origin_mode: Option<InputMode>,
     /// The sidebar tree model for workspace/pane tree navigation.
-    pub sidebar_tree: SidebarTree,
+    pub sidebar_tree: WorkspaceTree,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,

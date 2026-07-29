@@ -399,13 +399,6 @@ pub struct ActionHandle(pub String);
 /// plugin-08 forwards it to its owner). Re-registering the same id replaces the previous entry (a
 /// provider remounting). Returns the [`ActionHandle`] the provider keeps and hands back to
 /// [`unregister_dynamic`] on unmount.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "plugin-04 seam: the first registrant is T1 (chrome placement actions) / a provider; exercised by tests today"
-    )
-)]
 pub fn register_dynamic(
     registry: &mut ActionRegistry,
     catalog: &mut ActionCatalog,
@@ -455,13 +448,6 @@ pub fn register(registry: &mut ActionRegistry, catalog: &mut ActionCatalog, spec
 
 /// Retire a name-keyed action — drops both its handler and its metadata. `true` if it was
 /// registered. Built-ins cannot be retired (their names are not removable from the catalog).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "plugin-04 seam: providers retire their actions on unmount once T1 registers the first one; exercised by tests today"
-    )
-)]
 pub fn unregister_dynamic(
     registry: &mut ActionRegistry,
     catalog: &mut ActionCatalog,
@@ -640,6 +626,15 @@ impl ActionRegistry {
                 ArgKind::Text,
                 "Id of the dock to focus; omit to pick one by letter.",
             )],
+        },
+        ActionDescriptor {
+            name: "unfocus_dock",
+            label: "Release Dock Focus",
+            description: "Give the keyboard back to the focused pane, releasing chrome focus.",
+            category: ActionCategory::Chrome,
+            default_binding: "Escape",
+            icon: None,
+            args: &[],
         },
         ActionDescriptor {
             name: "sidebar_up",
@@ -1567,6 +1562,43 @@ impl ActionRegistry {
             icon: None,
             args: &[],
         },
+        // ── Horizontal scroll (a chrome container's scroll area; a pane has one axis) ──
+        ActionDescriptor {
+            name: "scroll_page_left",
+            label: "Scroll Page Left",
+            description: "Scroll the focused chrome container one page left. Does nothing when no dock holds chrome focus — a terminal viewport has no horizontal axis.",
+            category: ActionCategory::Chrome,
+            default_binding: "Alt+PageUp",
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "scroll_page_right",
+            label: "Scroll Page Right",
+            description: "Scroll the focused chrome container one page right. Does nothing when no dock holds chrome focus — a terminal viewport has no horizontal axis.",
+            category: ActionCategory::Chrome,
+            default_binding: "Alt+PageDown",
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "scroll_to_left_edge",
+            label: "Scroll to Left Edge",
+            description: "Jump the focused chrome container to its left edge. Does nothing when no dock holds chrome focus.",
+            category: ActionCategory::Chrome,
+            default_binding: "Alt+Home",
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "scroll_to_right_edge",
+            label: "Scroll to Right Edge",
+            description: "Jump the focused chrome container to its right edge. Does nothing when no dock holds chrome focus.",
+            category: ActionCategory::Chrome,
+            default_binding: "Alt+End",
+            icon: None,
+            args: &[],
+        },
         ActionDescriptor {
             name: "scroll_to_offset",
             label: "Scroll to Offset",
@@ -2067,8 +2099,11 @@ pub struct ActionMeta {
     pub description: String,
     pub category: ActionCategory,
     /// Default keybinding string (e.g. "h,ArrowLeft"); empty / "unbound" when it has none.
-    // Preserved for the command palette + RPC introspection (read in tests only for now).
-    #[cfg_attr(not(test), allow(dead_code))]
+    ///
+    /// For a **component's** declared action this is the binding it ships with: the keymap is built
+    /// from config at load, before any provider exists, so a declared default has no way in except
+    /// at mount — `bind_component_default` puts it into that kind's layer, where the user's config
+    /// already is and therefore wins (F003/P085/T355).
     pub default_binding: String,
     /// Centralized action icon — the single source of an action's [`Glyph`]. Every surface that
     /// renders this action reads it from here instead of inventing its own.

@@ -60,12 +60,27 @@ impl MountedContribution {
         self.provider.as_ref()
     }
 
+    /// The component **type** — the namespace its bindings and declared actions belong to
+    /// (`Provider::kind`, F003/P085/T353).
+    pub fn kind(&self) -> &str {
+        self.provider.kind()
+    }
+
     /// Run the provider's activation, keeping its subscription handles alive.
     /// Called by the render/app wiring (plugin-03), not in plugin-02.
     pub fn activate(&mut self, ctx: &ChromeCtx) {
         if self.handles.is_none() {
             self.handles = Some(self.provider.on_activate(ctx));
         }
+    }
+
+    /// This mount's activation handles, created empty on first ask.
+    ///
+    /// The host puts a declared action's [`ActionHandle`](crate::actions::ActionHandle) here so the
+    /// action dies with the mount, exactly as an event subscription does. Created on demand because
+    /// a provider that never implemented `on_activate` still has actions to retire.
+    pub fn handles_mut(&mut self) -> &mut ProviderHandles {
+        self.handles.get_or_insert_with(ProviderHandles::default)
     }
 }
 
@@ -268,6 +283,26 @@ impl ChromeHost {
             .ok_or(MoveError::TargetNotFound)?;
         let before = list.get(after_idx + 1).map(|m| m.id().to_string());
         self.reorder(id, before.as_deref())
+    }
+
+    /// The provider seated under `id`, across every region — how the action bridge reaches the
+    /// component that owns a declared action id (F003/P085/T353).
+    pub fn provider(&self, id: &str) -> Option<&dyn Provider> {
+        self.regions
+            .iter()
+            .flat_map(|r| r.contributions.iter())
+            .find(|m| m.id() == id)
+            .map(|m| m.provider())
+    }
+
+    /// The mount that holds the activation handles for `id`, so its declared actions can be
+    /// retired when it goes away.
+    pub fn handles_mut(&mut self, id: &str) -> Option<&mut ProviderHandles> {
+        self.regions
+            .iter_mut()
+            .flat_map(|r| r.contributions.iter_mut())
+            .find(|m| m.id() == id)
+            .map(|m| m.handles_mut())
     }
 
     /// Every mounted provider, across every region, in placement order.

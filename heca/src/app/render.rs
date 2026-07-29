@@ -51,6 +51,11 @@ fn hyperlink_decor_from(style: heca_config::appearance::HyperlinkStyle) -> Hyper
 }
 
 /// Human-readable status mode label and suffix for the status bar.
+///
+/// Chrome focus deliberately says **nothing** here (user, 2026-07-30): this bar is temporary and is
+/// being replaced, and a dock's name sitting where an input mode's word goes reads as a mode when it
+/// is not one. The affordance for "the keys are going there" is the **focus ring**, which is on the
+/// thing itself rather than in a corner.
 pub(crate) fn status_mode_parts(
     input_mode: &InputMode,
     catalog: &crate::actions::ActionCatalog,

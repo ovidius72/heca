@@ -83,7 +83,15 @@ pub struct StateView<'a> {
     state: &'a SharedChromeState,
 }
 
-impl StateView<'_> {
+impl<'a> StateView<'a> {
+    /// A view over a store held somewhere other than an [`App`] — what
+    /// [`ProviderCx`](crate::providers::ProviderCx) has during a `perform`, where the only thing
+    /// alive is an `Rc` alias of the store (no `&mut AppState` may be, since the provider lives
+    /// inside it).
+    pub fn over(state: &'a SharedChromeState) -> Self {
+        Self { state }
+    }
+
     /// This mount's own scroll offset signal, for a container that nests its own scroll area
     /// (F003/P011/T021).
     ///
@@ -116,6 +124,17 @@ impl StateView<'_> {
     /// The container holding chrome keyboard focus, if any.
     pub fn focused_container(&self) -> Option<String> {
         self.state.focused_container()
+    }
+
+    /// **This placement's** cursor: the row that declared `nav_key`, or `None`.
+    ///
+    /// Keyed by mount id like the scroll offset and the keyboard target, so two placements of one
+    /// container answer independently.
+    pub fn container_cursor(
+        &self,
+        container: &str,
+    ) -> heca_grid_ui::reactive::Signal<Option<String>> {
+        self.state.container_cursor(container)
     }
 
     /// The currently active (focused) pane, if any.

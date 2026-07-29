@@ -140,11 +140,11 @@ fn update_sidebar_drag_hover(state: &mut AppState) {
         .expect("LeftSidebar pre-populated in DragContext::default");
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1);
+        let fi = crate::providers::workspaces::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1);
         if let Some(fi) = fi {
             if matches!(
                 state.sidebar_tree.flat_items.get(fi),
-                Some(&crate::sidebar::SidebarItem::FloatingPane { .. })
+                Some(&crate::providers::workspaces::WorkspaceRow::FloatingPane { .. })
             ) {
                 left.hover_item = None;
             } else {

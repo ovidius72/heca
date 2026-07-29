@@ -1,12 +1,11 @@
 use crate::app_state::SidebarItemState;
 use crate::chrome::SidebarSelection;
-use crate::input::WmAction;
 use heca_core::layout::{PaneId, session::Session};
 
 /// A flat item in the sidebar navigation list.
 /// Built from the tree, skipping collapsed items.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SidebarItemKind {
+pub enum WorkspaceRowKind {
     Workspace,
     Column,
     Pane,
@@ -14,40 +13,40 @@ pub enum SidebarItemKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum SidebarItem {
+pub enum WorkspaceRow {
     Workspace { ws_idx: usize },
     Column { ws_idx: usize, col_idx: usize },
     Pane { pane_id: PaneId },
     FloatingPane { pane_id: PaneId, ws_idx: usize },
 }
 
-impl SidebarItem {
+impl WorkspaceRow {
     /// This row as the stable [`SidebarSelection`] the chrome store holds.
     ///
-    /// The two types say the same thing at different altitudes: `SidebarItem` is a row in
+    /// The two types say the same thing at different altitudes: `WorkspaceRow` is a row in
     /// a rebuilt-every-frame projection, `SidebarSelection` is `Copy` state that outlives
     /// the rebuild and crosses the host boundary (event payload, store value, and — later
     /// — RPC/plugin reads).
     pub fn selection(&self) -> SidebarSelection {
         match *self {
-            SidebarItem::Workspace { ws_idx } => SidebarSelection::Workspace { ws_idx },
-            SidebarItem::Column { ws_idx, col_idx } => {
+            WorkspaceRow::Workspace { ws_idx } => SidebarSelection::Workspace { ws_idx },
+            WorkspaceRow::Column { ws_idx, col_idx } => {
                 SidebarSelection::Column { ws_idx, col_idx }
             }
-            SidebarItem::Pane { pane_id } => SidebarSelection::Pane { pane_id },
-            SidebarItem::FloatingPane { pane_id, ws_idx } => {
+            WorkspaceRow::Pane { pane_id } => SidebarSelection::Pane { pane_id },
+            WorkspaceRow::FloatingPane { pane_id, ws_idx } => {
                 SidebarSelection::FloatingPane { pane_id, ws_idx }
             }
         }
     }
 
     /// Returns the kind of this sidebar item.
-    pub fn kind(&self) -> SidebarItemKind {
+    pub fn kind(&self) -> WorkspaceRowKind {
         match self {
-            SidebarItem::Workspace { .. } => SidebarItemKind::Workspace,
-            SidebarItem::Column { .. } => SidebarItemKind::Column,
-            SidebarItem::Pane { .. } => SidebarItemKind::Pane,
-            SidebarItem::FloatingPane { .. } => SidebarItemKind::FloatingPane,
+            WorkspaceRow::Workspace { .. } => WorkspaceRowKind::Workspace,
+            WorkspaceRow::Column { .. } => WorkspaceRowKind::Column,
+            WorkspaceRow::Pane { .. } => WorkspaceRowKind::Pane,
+            WorkspaceRow::FloatingPane { .. } => WorkspaceRowKind::FloatingPane,
         }
     }
 
@@ -55,7 +54,7 @@ impl SidebarItem {
 
 /// A pane entry in the sidebar tree.
 #[derive(Debug, Clone)]
-pub struct SidebarPaneEntry {
+pub struct PaneEntry {
     pub pane_id: PaneId,
     /// Process-derived title (the program hint, used for icon resolution + as the
     /// display name when no custom override is set).
@@ -72,29 +71,29 @@ pub struct SidebarPaneEntry {
 
 /// A column entry in the sidebar tree.
 #[derive(Debug, Clone)]
-pub struct SidebarColEntry {
+pub struct ColumnEntry {
     pub col_idx: usize,
     pub collapsed: bool,
-    pub panes: Vec<SidebarPaneEntry>,
+    pub panes: Vec<PaneEntry>,
 }
 
 /// A workspace entry in the sidebar tree.
 #[derive(Debug, Clone)]
-pub struct SidebarWsEntry {
+pub struct WorkspaceEntry {
     pub ws_idx: usize,
     pub name: String,
     pub collapsed: bool,
-    /// Active/visited projection (see [`SidebarPaneEntry::state`]).
+    /// Active/visited projection (see [`PaneEntry::state`]).
     #[allow(dead_code)]
     pub state: SidebarItemState,
-    pub columns: Vec<SidebarColEntry>,
-    pub floating_panes: Vec<SidebarPaneEntry>,
+    pub columns: Vec<ColumnEntry>,
+    pub floating_panes: Vec<PaneEntry>,
 }
 
 /// The sidebar tree model — mirrors the session's layout hierarchy.
 #[derive(Debug, Clone)]
-pub struct SidebarTree {
-    pub workspaces: Vec<SidebarWsEntry>,
+pub struct WorkspaceTree {
+    pub workspaces: Vec<WorkspaceEntry>,
     /// Index into the flat item list for cursor navigation.
     pub cursor: usize,
     /// Total number of selectable items in the flat list.
@@ -102,24 +101,10 @@ pub struct SidebarTree {
     /// Scroll offset for the tree view.
     pub scroll_offset: usize,
     /// Flat navigation list (built from tree, skipping collapsed items).
-    pub flat_items: Vec<SidebarItem>,
-    /// Button hitboxes for [+w], [+c], [+p] buttons (set during render).
-    pub button_hitboxes: Vec<SidebarButtonHitbox>,
+    pub flat_items: Vec<WorkspaceRow>,
 }
 
-/// Hitbox for a sidebar button.
-#[derive(Debug, Clone)]
-pub struct SidebarButtonHitbox {
-    pub action: WmAction,
-    /// Optional workspace index — used to switch workspace before dispatching.
-    pub ws_idx: Option<usize>,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl SidebarTree {
+impl WorkspaceTree {
     pub fn new() -> Self {
         Self {
             workspaces: Vec::new(),
@@ -127,7 +112,6 @@ impl SidebarTree {
             item_count: 0,
             scroll_offset: 0,
             flat_items: Vec::new(),
-            button_hitboxes: Vec::new(),
         }
     }
 
@@ -174,7 +158,7 @@ impl SidebarTree {
             // Defaults to expanded; chrome_state's collapse set is applied post-sync.
             let collapsed = false;
 
-            let mut ws_entry = SidebarWsEntry {
+            let mut ws_entry = WorkspaceEntry {
                 ws_idx,
                 name: ws
                     .name
@@ -199,7 +183,7 @@ impl SidebarTree {
                         .get(&(ws_idx, col_idx))
                         .copied()
                         .unwrap_or(false);
-                    let mut col_entry = SidebarColEntry {
+                    let mut col_entry = ColumnEntry {
                         col_idx,
                         collapsed: col_collapsed,
                         panes: Vec::with_capacity(col.panes.len()),
@@ -209,7 +193,7 @@ impl SidebarTree {
                         let is_active_pane = Some(pane.id) == focused_pane;
                         let is_visited_pane =
                             !is_active_pane && Some(pane.id) == last_visited_in_ws;
-                        col_entry.panes.push(SidebarPaneEntry {
+                        col_entry.panes.push(PaneEntry {
                             pane_id: pane.id,
                             name: pane.title.clone(),
                             custom_name: pane.custom_name.clone(),
@@ -231,7 +215,7 @@ impl SidebarTree {
                 let is_active_float = Some(float.pane.id) == focused_pane;
                 let is_visited_float =
                     !is_active_float && Some(float.pane.id) == last_visited_in_ws;
-                ws_entry.floating_panes.push(SidebarPaneEntry {
+                ws_entry.floating_panes.push(PaneEntry {
                     pane_id: float.pane.id,
                     name: float.pane.title.clone(),
                     custom_name: float.pane.custom_name.clone(),
@@ -257,20 +241,20 @@ impl SidebarTree {
         self.flat_items.clear();
 
         for ws_entry in &self.workspaces {
-            self.flat_items.push(SidebarItem::Workspace {
+            self.flat_items.push(WorkspaceRow::Workspace {
                 ws_idx: ws_entry.ws_idx,
             });
 
             if !ws_entry.collapsed {
                 for col_entry in &ws_entry.columns {
-                    self.flat_items.push(SidebarItem::Column {
+                    self.flat_items.push(WorkspaceRow::Column {
                         ws_idx: ws_entry.ws_idx,
                         col_idx: col_entry.col_idx,
                     });
 
                     if !col_entry.collapsed {
                         for pane_entry in &col_entry.panes {
-                            self.flat_items.push(SidebarItem::Pane {
+                            self.flat_items.push(WorkspaceRow::Pane {
                                 pane_id: pane_entry.pane_id,
                             });
                         }
@@ -278,7 +262,7 @@ impl SidebarTree {
                 }
 
                 for float_entry in &ws_entry.floating_panes {
-                    self.flat_items.push(SidebarItem::FloatingPane {
+                    self.flat_items.push(WorkspaceRow::FloatingPane {
                         pane_id: float_entry.pane_id,
                         ws_idx: ws_entry.ws_idx,
                     });
@@ -306,7 +290,7 @@ impl SidebarTree {
     /// not something another consumer (the host, RPC, a plugin) could hold onto. The
     /// selection names the thing itself.
     pub fn selection(&self) -> Option<SidebarSelection> {
-        self.current_item().map(SidebarItem::selection)
+        self.current_item().map(WorkspaceRow::selection)
     }
 
     /// Project the **canonical** selection from the chrome store back onto the cursor —
@@ -346,7 +330,7 @@ impl SidebarTree {
         // panes. Workspace headers stay selectable so a collapsed workspace can be
         // re-expanded with `l`.
         self.flat_items.get(idx).is_some_and(|item| {
-            matches!(item, SidebarItem::Pane { .. } | SidebarItem::Workspace { .. })
+            matches!(item, WorkspaceRow::Pane { .. } | WorkspaceRow::Workspace { .. })
         })
     }
 
@@ -402,7 +386,7 @@ impl SidebarTree {
 
     fn workspace_flat_index(&self, ws_idx: usize) -> Option<usize> {
         self.flat_items.iter().position(
-            |item| matches!(item, SidebarItem::Workspace { ws_idx: item_ws } if *item_ws == ws_idx),
+            |item| matches!(item, WorkspaceRow::Workspace { ws_idx: item_ws } if *item_ws == ws_idx),
         )
     }
 
@@ -410,7 +394,7 @@ impl SidebarTree {
         self.flat_items.iter().position(|item| {
             matches!(
                 item,
-                SidebarItem::Column {
+                WorkspaceRow::Column {
                     ws_idx: item_ws,
                     col_idx: item_col,
                 } if *item_ws == ws_idx && *item_col == col_idx
@@ -420,14 +404,14 @@ impl SidebarTree {
 
     fn current_item_in_workspace(&self, ws_idx: usize) -> bool {
         match self.current_item() {
-            Some(SidebarItem::Workspace { ws_idx: item_ws }) => *item_ws == ws_idx,
-            Some(SidebarItem::Column {
+            Some(WorkspaceRow::Workspace { ws_idx: item_ws }) => *item_ws == ws_idx,
+            Some(WorkspaceRow::Column {
                 ws_idx: item_ws, ..
             }) => *item_ws == ws_idx,
-            Some(SidebarItem::FloatingPane {
+            Some(WorkspaceRow::FloatingPane {
                 ws_idx: item_ws, ..
             }) => *item_ws == ws_idx,
-            Some(SidebarItem::Pane { pane_id }) => self
+            Some(WorkspaceRow::Pane { pane_id }) => self
                 .pane_location(*pane_id)
                 .is_some_and(|(item_ws, _)| item_ws == ws_idx),
             None => false,
@@ -436,11 +420,11 @@ impl SidebarTree {
 
     fn current_item_in_column(&self, ws_idx: usize, col_idx: usize) -> bool {
         match self.current_item() {
-            Some(SidebarItem::Column {
+            Some(WorkspaceRow::Column {
                 ws_idx: item_ws,
                 col_idx: item_col,
             }) => *item_ws == ws_idx && *item_col == col_idx,
-            Some(SidebarItem::Pane { pane_id }) => self
+            Some(WorkspaceRow::Pane { pane_id }) => self
                 .pane_location(*pane_id)
                 .is_some_and(|(item_ws, item_col)| item_ws == ws_idx && item_col == Some(col_idx)),
             _ => false,
@@ -461,7 +445,7 @@ impl SidebarTree {
         let move_cursor_to_parent = changed_ws.is_some_and(|ws_idx| {
             set.contains(&ws_idx)
                 && self.current_item_in_workspace(ws_idx)
-                && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx)
+                && !matches!(self.current_item(), Some(WorkspaceRow::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx)
         });
         for ws_entry in &mut self.workspaces {
             ws_entry.collapsed = set.contains(&ws_entry.ws_idx);
@@ -478,7 +462,7 @@ impl SidebarTree {
 
     pub fn toggle_column_collapsed(&mut self, ws_idx: usize, col_idx: usize) {
         let move_cursor_to_parent = self.current_item_in_column(ws_idx, col_idx)
-            && !matches!(self.current_item(), Some(SidebarItem::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
+            && !matches!(self.current_item(), Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
         if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
             && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
         {
@@ -508,7 +492,7 @@ impl SidebarTree {
 
     pub fn collapse_column(&mut self, ws_idx: usize, col_idx: usize) {
         let move_cursor_to_parent = self.current_item_in_column(ws_idx, col_idx)
-            && !matches!(self.current_item(), Some(SidebarItem::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
+            && !matches!(self.current_item(), Some(WorkspaceRow::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
         if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
             && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
         {
@@ -528,19 +512,19 @@ impl SidebarTree {
     pub fn toggle_expand(&mut self, chrome_state: &crate::chrome::WorkspacesContainerState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
-                SidebarItemKind::Workspace => {
-                    if let SidebarItem::Workspace { ws_idx } = item {
+                WorkspaceRowKind::Workspace => {
+                    if let WorkspaceRow::Workspace { ws_idx } = item {
                         chrome_state.toggle_ws_collapsed(ws_idx);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
-                SidebarItemKind::Column => {
-                    if let SidebarItem::Column { ws_idx, col_idx } = item {
+                WorkspaceRowKind::Column => {
+                    if let WorkspaceRow::Column { ws_idx, col_idx } = item {
                         self.toggle_column_collapsed(ws_idx, col_idx);
                     }
                 }
-                SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
+                WorkspaceRowKind::Pane | WorkspaceRowKind::FloatingPane => {}
             }
         }
     }
@@ -549,19 +533,19 @@ impl SidebarTree {
     pub fn expand(&mut self, chrome_state: &crate::chrome::WorkspacesContainerState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
-                SidebarItemKind::Workspace => {
-                    if let SidebarItem::Workspace { ws_idx } = item {
+                WorkspaceRowKind::Workspace => {
+                    if let WorkspaceRow::Workspace { ws_idx } = item {
                         chrome_state.set_ws_collapsed(ws_idx, false);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
-                SidebarItemKind::Column => {
-                    if let SidebarItem::Column { ws_idx, col_idx } = item {
+                WorkspaceRowKind::Column => {
+                    if let WorkspaceRow::Column { ws_idx, col_idx } = item {
                         self.expand_column(ws_idx, col_idx);
                     }
                 }
-                SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
+                WorkspaceRowKind::Pane | WorkspaceRowKind::FloatingPane => {}
             }
         }
     }
@@ -570,25 +554,25 @@ impl SidebarTree {
     pub fn collapse(&mut self, chrome_state: &crate::chrome::WorkspacesContainerState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
-                SidebarItemKind::Workspace => {
-                    if let SidebarItem::Workspace { ws_idx } = item {
+                WorkspaceRowKind::Workspace => {
+                    if let WorkspaceRow::Workspace { ws_idx } = item {
                         chrome_state.set_ws_collapsed(ws_idx, true);
                         let set = chrome_state.with_collapsed_ws(|s| s.clone());
                         self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
-                SidebarItemKind::Column => {
-                    if let SidebarItem::Column { ws_idx, col_idx } = item {
+                WorkspaceRowKind::Column => {
+                    if let WorkspaceRow::Column { ws_idx, col_idx } = item {
                         self.collapse_column(ws_idx, col_idx);
                     }
                 }
-                SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
+                WorkspaceRowKind::Pane | WorkspaceRowKind::FloatingPane => {}
             }
         }
     }
 
     /// Get the item at cursor, if any.
-    pub fn current_item(&self) -> Option<&SidebarItem> {
+    pub fn current_item(&self) -> Option<&WorkspaceRow> {
         self.flat_items.get(self.cursor)
     }
 }

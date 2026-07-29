@@ -300,7 +300,7 @@ fn restorable_mode(mode: InputMode) -> Option<InputMode> {
 /// produce a `(path, target)` pair that [`open_context_menu_for`] can route to the right
 /// provider.
 ///
-/// - `SidebarNav`: maps [`crate::sidebar::SidebarItem`] at the cursor to its context path
+/// - `SidebarNav`: maps [`crate::providers::workspaces::WorkspaceRow`] at the cursor to its context path
 ///   (pane→`sidebar.pane`, column→`sidebar.column`, workspace→`sidebar.workspace`,
 ///   floating-pane→`pane`).
 /// - `Normal` (and any other mode): resolves to the focused content pane (`"pane"`).
@@ -334,14 +334,14 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
 /// target. Passed as closures (rather than `&AppState`) so this mapping stays unit-testable.
 fn resolve_context_for(
     input_mode: &InputMode,
-    sidebar_item: Option<&crate::sidebar::SidebarItem>,
+    sidebar_item: Option<&crate::providers::workspaces::WorkspaceRow>,
     focused_pane: Option<PaneId>,
     locate: &dyn Fn(PaneId) -> Option<(usize, usize)>,
     ws_name: &dyn Fn(usize) -> Option<String>,
 ) -> Option<(ContextPath, ContextTarget)> {
     match input_mode {
         InputMode::SidebarNav => Some(match sidebar_item? {
-            crate::sidebar::SidebarItem::Pane { pane_id } => {
+            crate::providers::workspaces::WorkspaceRow::Pane { pane_id } => {
                 // A sidebar pane row whose column can't be resolved is not a valid target.
                 let (ws_idx, col_idx) = locate(*pane_id)?;
                 (
@@ -349,15 +349,15 @@ fn resolve_context_for(
                     ContextTarget::SidebarPane { pane_id: *pane_id, ws_idx, col_idx },
                 )
             }
-            crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => (
+            crate::providers::workspaces::WorkspaceRow::FloatingPane { pane_id, .. } => (
                 ContextPath(ContextPath::PANE.to_string()),
                 ContextTarget::Pane { pane_id: *pane_id, hyperlink: None },
             ),
-            crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => (
+            crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => (
                 ContextPath(ContextPath::SIDEBAR_COLUMN.to_string()),
                 ContextTarget::SidebarColumn { ws_idx: *ws_idx, col_idx: *col_idx },
             ),
-            crate::sidebar::SidebarItem::Workspace { ws_idx } => (
+            crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => (
                 ContextPath(ContextPath::SIDEBAR_WORKSPACE.to_string()),
                 ContextTarget::SidebarWorkspace {
                     ws_idx: *ws_idx,
@@ -617,7 +617,7 @@ mod tests {
     /// `resolve_context_for` with stub lookups: pane 7 lives at ws 1 / col 2; workspace 3 is named.
     fn resolve(
         mode: &InputMode,
-        item: Option<&crate::sidebar::SidebarItem>,
+        item: Option<&crate::providers::workspaces::WorkspaceRow>,
         focused: Option<PaneId>,
     ) -> Option<(ContextPath, ContextTarget)> {
         resolve_context_for(
@@ -847,32 +847,32 @@ mod tests {
         assert!(restorable_mode(InputMode::Prefix).is_none());
     }
 
-    use crate::sidebar::SidebarItem;
+    use crate::providers::workspaces::WorkspaceRow;
 
     #[test]
     fn resolve_context_sidebar_items_map_to_distinct_paths() {
         // Each sidebar cursor item resolves to its own context path + target, so the menu
         // content differs by where it was opened.
-        let pane = SidebarItem::Pane { pane_id: PaneId(7) };
+        let pane = WorkspaceRow::Pane { pane_id: PaneId(7) };
         let (path, target) =
             resolve(&InputMode::SidebarNav, Some(&pane), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_PANE);
         assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7), ws_idx: 1, col_idx: 2 }));
 
-        let col = SidebarItem::Column { ws_idx: 1, col_idx: 2 };
+        let col = WorkspaceRow::Column { ws_idx: 1, col_idx: 2 };
         let (path, target) =
             resolve(&InputMode::SidebarNav, Some(&col), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_COLUMN);
         assert!(matches!(target, ContextTarget::SidebarColumn { ws_idx: 1, col_idx: 2 }));
 
-        let ws = SidebarItem::Workspace { ws_idx: 3 };
+        let ws = WorkspaceRow::Workspace { ws_idx: 3 };
         let (path, target) =
             resolve(&InputMode::SidebarNav, Some(&ws), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_WORKSPACE);
         assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3, .. }));
 
         // A floating pane in the sidebar resolves to the generic pane menu.
-        let float = SidebarItem::FloatingPane { pane_id: PaneId(9), ws_idx: 0 };
+        let float = WorkspaceRow::FloatingPane { pane_id: PaneId(9), ws_idx: 0 };
         let (path, target) =
             resolve(&InputMode::SidebarNav, Some(&float), None).unwrap();
         assert_eq!(path.0, ContextPath::PANE);

@@ -151,7 +151,7 @@ impl ChromeConfig {
 
 // ── Grid-UI chrome scene builder ──────────────────────────────────────────────
 
-use crate::sidebar::{SidebarPaneEntry, SidebarTree};
+use crate::providers::workspaces::{PaneEntry, WorkspaceTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
@@ -2783,12 +2783,14 @@ pub(crate) struct ChromeSignals {
     /// iff it contains the active pane). Drives the active-workspace accent wash in
     /// place, mirroring [`col_active`](ChromeSignals::col_active).
     pub(crate) ws_active: Vec<(Vec<PaneId>, Signal<bool>)>,
-    /// Sidebar-nav cursor signals, mirroring the `*_active` families: each pane
-    /// card's nav-outline signal (by pane id), each column's (by `(ws_idx, col_idx)`),
-    /// each workspace's (by `ws_idx`). Driven from `nav_selection()` — the cursor
-    /// highlight is distinct from `active_pane`.
-    pub(crate) pane_nav: Vec<(PaneId, Signal<bool>)>,
-    pub(crate) ws_nav: Vec<(usize, Signal<bool>)>,
+    /// Every navigable row's cursor-outline signal, as `(mount, nav_key, signal)` — driven from
+    /// that **mount's** cursor (`container_cursor`), which is why the mount is part of the key.
+    ///
+    /// Generic since F003/P085/T354: this used to be two domain-keyed families (`pane_nav` by
+    /// `PaneId`, `ws_nav` by `ws_idx`), which no component outside the workspace tree could join. A
+    /// row now declares one identity (`Base::nav_key`) and this is the highlight half of it; the
+    /// cursor highlight stays distinct from `active_pane`, as it always was.
+    pub(crate) row_nav: Vec<(String, String, Signal<bool>)>,
     /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
     /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
     /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
@@ -2847,7 +2849,7 @@ fn dock_keycap(container: &str, candidates: &[(char, String)]) -> Option<String>
 }
 
 /// Find a pane's sidebar entry across all workspaces (tiled + floating).
-fn find_pane_entry(tree: &SidebarTree, pane_id: PaneId) -> Option<&SidebarPaneEntry> {
+fn find_pane_entry(tree: &WorkspaceTree, pane_id: PaneId) -> Option<&PaneEntry> {
     tree.workspaces
         .iter()
         .flat_map(|ws| {
@@ -2859,7 +2861,7 @@ fn find_pane_entry(tree: &SidebarTree, pane_id: PaneId) -> Option<&SidebarPaneEn
         .find(|pane| pane.pane_id == pane_id)
 }
 
-fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
+fn pane_fallback_name(tree: &WorkspaceTree, pane_id: PaneId) -> &str {
     find_pane_entry(tree, pane_id)
         .map(|pane| pane.name.as_str())
         .unwrap_or_else(|| unreachable!("pane {pane_id:?} must exist in sidebar tree"))
@@ -2867,7 +2869,7 @@ fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
 
 /// The pane's user-set override name (from rename), if any — wins over the process
 /// title. `None` while the pane tracks its process.
-fn pane_custom_name(tree: &SidebarTree, pane_id: PaneId) -> Option<&str> {
+fn pane_custom_name(tree: &WorkspaceTree, pane_id: PaneId) -> Option<&str> {
     find_pane_entry(tree, pane_id).and_then(|pane| pane.custom_name.as_deref())
 }
 
@@ -3036,20 +3038,16 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             changed = true;
         }
     }
-    // Project the sidebar-nav cursor selection onto each row's nav-cursor signal —
-    // distinct from `active` above, so the expanded sidebar shows both the real
-    // focus and the nav cursor while navigating.
-    let nav = state.chrome_state.workspaces.nav_selection();
-    for (pid, sig) in &retained.signals.pane_nav {
-        let v = matches!(nav, Some(SidebarSelection::Pane { pane_id }) if pane_id == *pid)
-            || matches!(nav, Some(SidebarSelection::FloatingPane { pane_id, .. }) if pane_id == *pid);
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    for (ws_idx, sig) in &retained.signals.ws_nav {
-        let v = matches!(nav, Some(SidebarSelection::Workspace { ws_idx: w }) if w == *ws_idx);
+    // Project each mount's cursor onto its rows' cursor signals — distinct from `active` above, so
+    // the expanded sidebar shows both the real focus and the cursor. Keyed by `(mount, nav_key)`,
+    // so two placements of one container light **different** rows (F003/P085/T354).
+    for (mount, key, sig) in &retained.signals.row_nav {
+        let v = state
+            .chrome_state
+            .container_cursor(mount)
+            .get_untracked()
+            .as_deref()
+            == Some(key.as_str());
         if sig.get_untracked() != v {
             sig.set(v);
             changed = true;
@@ -3446,6 +3444,30 @@ pub(crate) fn chrome_dispatch_wheel(
         .chrome_tree
         .as_mut()
         .map(|tree| heca_grid_ui::dispatch(&mut tree.root, ev) == heca_grid_ui::Handled::Yes)
+        .unwrap_or(false)
+}
+
+/// Feed a semantic [`WidgetIntent`](heca_grid_ui::WidgetIntent) into the retained chrome tree.
+///
+/// One intent goes to the **root**, not to a container the host picked: every mounted container sits
+/// inside a [`FocusScope`](heca_grid_ui::FocusScope), and only the focused one lets a
+/// `Event::Widget` into its subtree (F003/P085/T351). So the host says *what*, and the tree decides
+/// *where* — which is what keeps this working when a second dock is mounted, or the same dock is
+/// placed twice.
+///
+/// Returns `true` when something acted on it. A `false` is a legitimate answer, not a failure: a
+/// container with nothing scrollable **declines**, and the caller must not then fall through to the
+/// pane — the pane is not an outer scroll area of the sidebar.
+pub(crate) fn chrome_dispatch_widget(
+    state: &mut crate::app_state::AppState,
+    intent: heca_grid_ui::WidgetIntent,
+) -> bool {
+    state
+        .chrome_tree
+        .as_mut()
+        .map(|tree| {
+            heca_grid_ui::dispatch(&mut tree.root, &Event::Widget(intent)) == heca_grid_ui::Handled::Yes
+        })
         .unwrap_or(false)
 }
 
@@ -4095,20 +4117,20 @@ mod tests {
 
     /// A one-workspace / one-column / one-pane tree — the smallest projection that still
     /// has every level.
-    fn one_pane_tree(pane_id: u64) -> crate::sidebar::SidebarTree {
+    fn one_pane_tree(pane_id: u64) -> crate::providers::workspaces::WorkspaceTree {
         use crate::app_state::SidebarItemState;
-        use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
+        use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceTree, WorkspaceEntry};
 
-        let mut tree = SidebarTree::new();
-        tree.workspaces.push(SidebarWsEntry {
+        let mut tree = WorkspaceTree::new();
+        tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
             name: "ws1".into(),
             collapsed: false,
             state: SidebarItemState::Active,
-            columns: vec![SidebarColEntry {
+            columns: vec![ColumnEntry {
                 col_idx: 0,
                 collapsed: false,
-                panes: vec![SidebarPaneEntry {
+                panes: vec![PaneEntry {
                     pane_id: heca_core::layout::PaneId(pane_id),
                     name: "pane1".into(),
                     custom_name: None,
@@ -4125,7 +4147,7 @@ mod tests {
     /// `build` seam. These tests deliberately do **not** reach into the container's own
     /// builder — that would test a path the app no longer takes.
     fn region_body(
-        tree: &crate::sidebar::SidebarTree,
+        tree: &crate::providers::workspaces::WorkspaceTree,
         theme: &GuiTheme,
         chrome: &SharedChromeState,
         signals: &mut super::ChromeSignals,

@@ -1,20 +1,26 @@
-//! The first built-in provider — [`WorkspacesContainerProvider`] — the workspace-tree
-//! sidebar container, and the render code it owns.
+//! The **workspaces** component — its model, its rows, and the chrome contribution it builds.
 //!
-//! This is the whole point of plugin-03: the sidebar's workspace tree used to be a
-//! bespoke façade that the chrome render path built and mounted directly, bypassing the
-//! pluggable-chrome runtime entirely. It is now **a container like any other** —
-//! registered in [`ChromeHost`](crate::chrome::ChromeHost) at startup, seated in a
-//! region, and rendered because the region asked its provider for a contribution. The
-//! host no longer knows that the left sidebar happens to hold workspaces; move the
-//! container to the right region and its UI goes with it.
+//! It is a component in its own right, not a sidebar feature. It is *mounted* in a sidebar today
+//! because that is where it happens to be useful; move it to another region — or another shell
+//! entirely — and it goes with everything it needs. Nothing here names a side, and nothing outside
+//! here should name a workspace.
 //!
-//! The container body — [`build_workspaces_container`] and its
-//! [`column_view`] / [`pane_card`] rows — lives here rather than in `chrome/mod.rs`,
-//! so the provider owns its render code. What stays in `chrome` is the host-side
-//! vocabulary a container *uses*: the shell it mounts into, the drag/hint registries it
-//! registers ids in, and the shared projections (`pane_info_view`, `runtime_snapshot`)
-//! the pane headers also read.
+//! That is also why nothing in this component is called `Sidebar*` any more: the old names asserted
+//! that a workspace tree was a sidebar thing, and every reader of those names inherited the
+//! confusion (F003/P085/T356).
+
+mod hit_test;
+mod model;
+
+#[cfg(test)]
+pub(crate) use hit_test::{BTN_ROW_HEIGHT, ITEM_HEIGHT};
+pub(crate) use hit_test::sidebar_hit_test;
+pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceRow, WorkspaceTree};
+#[cfg(test)]
+pub(crate) use model::WorkspaceEntry;
+
+#[cfg(test)]
+mod model_tests;
 
 use crate::chrome::{
     alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
@@ -23,11 +29,10 @@ use crate::chrome::{
     RepaintWatch, WidgetModel, WorkspacesContainerState, CARD_META_FONT_SCALE,
 };
 use crate::providers::{ChromeCtx, Provider};
-use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
-use heca_grid_ui::builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{DragExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -83,6 +88,13 @@ impl Default for WorkspacesContainerProvider {
 impl Provider for WorkspacesContainerProvider {
     fn id(&self) -> &str {
         &self.id
+    }
+
+    /// One **type**, however many placements. `workspaces` and `workspaces.right` are two seatings
+    /// of the same component, so they share a config namespace (`[keys.workspaces]`) and one set of
+    /// declared actions, while their cursor, scroll offset and focus stay their own.
+    fn kind(&self) -> &str {
+        "workspaces"
     }
 
     fn supported_regions(&self) -> RegionSet {
@@ -161,12 +173,55 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
         theme,
         emit,
         state.workspaces(),
+        // This placement's id — the rows' cursor signals are keyed by it, so two seatings of one
+        // container light different rows (F003/P085/T354).
+        bx.container_id().to_string(),
         scroll,
         focused,
         bx.signals,
         bx.drag,
         bx.hints,
     ))
+}
+
+// ── The workspaces container's row identities (F003/P085/T354) ──
+//
+// A row declares one of these and the host derives everything that has to *name* a row from it: the
+// keyboard cursor, the right-click target, later the drag identity. They are the same identities
+// `SidebarSelection` carries today, written as strings so nothing outside this component has to
+// know a workspace from a pane — which is what lets a plugin row be pointed at at all.
+//
+// They must stay **stable across a tree rebuild**: a cursor that resets whenever a pane's git status
+// changes is not a cursor. Positions therefore never appear in a key that has an id available.
+
+/// `pane:<id>` — a pane card, tiled or floating.
+pub(crate) fn pane_nav_key(pane: PaneId) -> String {
+    format!("pane:{}", pane.0)
+}
+
+/// `ws:<idx>` — a workspace header.
+pub(crate) fn workspace_nav_key(ws_idx: usize) -> String {
+    format!("ws:{ws_idx}")
+}
+
+/// `col:<ws>:<idx>` — a column group. Positional because a column has no id of its own; it is
+/// re-derived on rebuild like every other column reference in the app.
+pub(crate) fn column_nav_key(ws_idx: usize, col_idx: usize) -> String {
+    format!("col:{ws_idx}:{col_idx}")
+}
+
+/// The nav key naming the row a [`SidebarSelection`] points at.
+///
+/// The bridge between the domain-typed selection this container still keeps and the generic cursor
+/// every row's outline now reads. It goes away with the selection itself (F003/P085/T356) — until
+/// then it is the single conversion point, so the two cannot drift.
+pub(crate) fn selection_nav_key(selection: crate::chrome::SidebarSelection) -> String {
+    use crate::chrome::SidebarSelection as S;
+    match selection {
+        S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_nav_key(pane_id),
+        S::Column { ws_idx, col_idx } => column_nav_key(ws_idx, col_idx),
+        S::Workspace { ws_idx } => workspace_nav_key(ws_idx),
+    }
 }
 
 /// A single pane **card**, styled like the showcase PANES rows: a state-tinted
@@ -177,7 +232,9 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     reason = "pane-card projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
 )]
 fn pane_card(
-    pane: &SidebarPaneEntry,
+    pane: &PaneEntry,
+    // The placement whose cursor this card's outline follows.
+    mount: &str,
     programs: &ProgramsConfig,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
@@ -388,6 +445,9 @@ fn pane_card(
         .marker(ActiveMarker::Bar)
         .active(active)
         .nav_selected(false)
+        // The row's ONE identity: the cursor, the right-click target and (later) drag are three
+        // readers of this single declaration (F003/P085/T354).
+        .nav_key(pane_nav_key(pane_id))
         .draggable(drag_id)
         .drop_target(drag_id)
         .hint_target(hint_id)
@@ -399,7 +459,8 @@ fn pane_card(
         .child(content);
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
-    signals.pane_nav.push((pane_id, card.nav_state()));
+    signals.row_nav
+        .push((mount.to_string(), pane_nav_key(pane_id), card.nav_state()));
     // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
     // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
     // events/focus/drag straight through — so the card stays a drag source + target
@@ -454,8 +515,9 @@ fn pane_card(
     reason = "column projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
 )]
 fn column_view(
-    c: &SidebarColEntry,
+    c: &ColumnEntry,
     ws_idx: usize,
+    mount: &str,
     programs: &ProgramsConfig,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
@@ -476,11 +538,13 @@ fn column_view(
     let mut col = MarkerGroup::new()
         .active(active)
         .gap(3.0)
+        .nav_key(column_nav_key(ws_idx, c.col_idx))
         .draggable(drag_id)
         .drop_target(drag_id);
     for pane in &c.panes {
         col = col.child(pane_card(
             pane,
+            mount,
             programs,
             theme,
             emit_intent,
@@ -494,6 +558,11 @@ fn column_view(
     // Bind the column bar's active signal (lit iff it holds the active pane).
     let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
     signals.col_active.push((pane_ids, col.state()));
+    signals.row_nav.push((
+        mount.to_string(),
+        column_nav_key(ws_idx, c.col_idx),
+        col.nav_state(),
+    ));
     // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can
     // stamp this column's letter over it (tinted `success`, distinct from pane/workspace
     // picks). Driven each frame in `sync_chrome_signals`.
@@ -511,7 +580,7 @@ fn column_view(
 /// sidebar shell (see `heca-sidebar-design-spec`). Each workspace is a `.frameless(true)`
 /// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
 /// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
-/// the sidebar for no user value). Pure projection of the [`SidebarTree`].
+/// the sidebar for no user value). Pure projection of the [`WorkspaceTree`].
 ///
 /// This is the **body of the `workspaces` container** — what [`build_body`], the
 /// provider's render seam, returns. It is reached only through that seam: the region
@@ -522,11 +591,13 @@ fn column_view(
     reason = "workspace-container projection threads host/runtime context + the drag and hint registries explicitly; phase-local before a larger ChromeCx refactor"
 )]
 fn build_workspaces_container(
-    tree: &SidebarTree,
+    tree: &WorkspaceTree,
     programs: &ProgramsConfig,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
+    // This placement's mount id: every row's cursor signal is registered under it.
+    mount: String,
     // This placement's own scroll offset (see `build_body`): per mount, so the same container
     // placed twice keeps two positions.
     scroll: Signal<f32>,
@@ -591,7 +662,8 @@ fn build_workspaces_container(
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
         signals.ws_active.push((ws_pane_ids, dock.active_state()));
-        signals.ws_nav.push((ws_idx, dock.nav_state()));
+        signals.row_nav
+            .push((mount.clone(), workspace_nav_key(ws_idx), dock.nav_state()));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
@@ -608,6 +680,7 @@ fn build_workspaces_container(
             cols = cols.child(column_view(
                 c,
                 ws_idx,
+                &mount,
                 programs,
                 theme,
                 emit_intent,
@@ -621,6 +694,7 @@ fn build_workspaces_container(
         for float in &ws.floating_panes {
             cols = cols.child(pane_card(
                 float,
+                &mount,
                 programs,
                 theme,
                 emit_intent,
@@ -658,7 +732,11 @@ fn build_workspaces_container(
     //
     // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
     // changing is enough to do that) and is untouched by the dock list scrolling around it.
-    let mut region = ScrollRegion::new().grow(1.0);
+    // **Both axes.** A deep tree with long pane titles overflows sideways as readily as it does
+    // downwards, and clipping the end of a name is losing it — the row can be panned instead. The
+    // region still declines whichever axis its content fits on, so the horizontal keys do nothing
+    // until there is something to move (F003/P085/T352, user 2026-07-30).
+    let mut region = ScrollRegion::new().grow(1.0).both();
     // Restore through `scroll_to`, which reports with `event: None`, so the listener below can tell
     // a restore from the user actually scrolling and never writes one back as the other.
     region.scroll_to(scroll.get_untracked());
@@ -684,24 +762,24 @@ mod tests {
         ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry,
         HintTargetRegistry, SharedChromeState,
     };
-    use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
+    use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceTree, WorkspaceEntry};
     use heca_core::layout::PaneId;
     use heca_grid_ui::theme::Theme as GuiTheme;
     use std::rc::Rc;
 
     /// One workspace, one column, one (active) pane — the smallest tree that still
     /// exercises every level of the projection.
-    fn tree() -> SidebarTree {
-        let mut tree = SidebarTree::new();
-        tree.workspaces.push(SidebarWsEntry {
+    fn tree() -> WorkspaceTree {
+        let mut tree = WorkspaceTree::new();
+        tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
             name: "ws1".into(),
             collapsed: false,
             state: SidebarItemState::Active,
-            columns: vec![SidebarColEntry {
+            columns: vec![ColumnEntry {
                 col_idx: 0,
                 collapsed: false,
-                panes: vec![SidebarPaneEntry {
+                panes: vec![PaneEntry {
                     pane_id: PaneId(1),
                     name: "pane1".into(),
                     custom_name: None,

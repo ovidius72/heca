@@ -325,6 +325,141 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     keymap
 }
 
+/// The built-in mode keymaps that are **entered by focus rather than by a key**, so they never take
+/// a trigger — see the note at the trigger site in [`build_modes`].
+const UNTRIGGERED_MODES: &[&str] = &["sidebar", crate::app::input::FOCUS_LAYER];
+
+/// Build one keymap per component **kind** from the `[keys.<kind>]` layers (F003/P085/T355).
+///
+/// Keyed by kind, not by mount: bindings belong to the component *type*, so writing them once
+/// covers every placement, while cursor / scroll / focus stay per mount.
+///
+/// **The merge rules, and why they differ between the two forms.** A TOML table merges per key
+/// already, so `[keys.<kind>]`'s plain `action = "key"` entries need nothing special — overriding
+/// one keeps the rest. An **array** is replaced wholesale, which for `[[keys.<kind>.bind]]` would
+/// mean adding one arg-carrying binding silently drops every shipped default. So those are merged
+/// **by their `keys` field**: a keymap *is* a map from combo to action, and merging on the combo is
+/// the ordinary table rule applied to the thing the array is really keyed by — not a special case.
+///
+/// `[keys.<kind>.unbind]` is applied last and keyed by the **combo**, so it retires a binding
+/// whatever it points at — the same rule as the global `[keys.unbind]`, and never a null or
+/// empty-string convention.
+pub fn build_component_keymaps(
+    config: &heca_config::theme::Config,
+) -> HashMap<String, KeymapRegistry> {
+    let defaults = heca_config::theme::KeysConfig::default();
+    let layers_of = |keys: &heca_config::theme::KeysConfig| -> BTreeMap<String, heca_config::theme::ComponentKeysConfig> {
+        keys.bindings
+            .iter()
+            .filter_map(|(name, value)| value.component().map(|c| (name.clone(), c.clone())))
+            .collect()
+    };
+
+    let mut merged = layers_of(&defaults);
+    for (kind, user) in layers_of(&config.keys) {
+        match merged.get_mut(&kind) {
+            Some(base) => {
+                // Table half: per key, so a user overriding one action keeps every other default.
+                base.bindings.extend(user.bindings);
+                // Array half: by combo, so one arg-carrying override does not drop the rest.
+                for binding in user.bind {
+                    match base.bind.iter_mut().find(|b| b.keys == binding.keys) {
+                        Some(existing) => *existing = binding,
+                        None => base.bind.push(binding),
+                    }
+                }
+                base.unbind.extend(user.unbind);
+            }
+            None => {
+                merged.insert(kind, user);
+            }
+        }
+    }
+
+    let mut conflicts = Vec::new();
+    let mut out = HashMap::new();
+    for (kind, layer) in merged.into_iter() {
+        let mut keymap = KeymapRegistry::new();
+        let no_args = HashMap::new();
+        for (action_name, value) in &layer.bindings {
+            let action = action_ref_from_config(action_name, &no_args);
+            for key_str in value.keys() {
+                bind_with_conflict_tracking(
+                    &mut keymap,
+                    &kind,
+                    KeyCombo::parse(key_str.trim()),
+                    action.clone(),
+                    format!("[keys.{kind}] {action_name}"),
+                    &mut conflicts,
+                );
+            }
+        }
+        for binding in &layer.bind {
+            let action = action_ref_from_config(&binding.action, &binding.args);
+            bind_with_conflict_tracking(
+                &mut keymap,
+                &kind,
+                KeyCombo::parse(&binding.keys),
+                action,
+                format!("[[keys.{kind}.bind]] {}", binding.action),
+                &mut conflicts,
+            );
+        }
+        for combo in layer.unbind.keys() {
+            keymap.unbind(&kind, &KeyCombo::parse(combo.trim()));
+        }
+        out.insert(kind, keymap);
+    }
+    log_conflicts("component", &conflicts);
+    out
+}
+
+/// Bind a component's **declared default** into its kind's layer, unless the user has already
+/// spoken about that key or that action (F003/P085/T355).
+///
+/// This is what finally consumes `ActionMeta.default_binding`, which has been declared and read by
+/// nothing since it was added: the keymap is built from config at load, *before* any provider
+/// exists, so a declared default has no way in except here, after the component is mounted.
+///
+/// **User config always wins, and a default never silently shadows one.** Two ways it can lose:
+/// the combo is already bound in this layer (the user put something else there), or the action id
+/// is already bound to some other combo (the user rebound it and would otherwise get both).
+pub fn bind_component_default(
+    keymaps: &mut HashMap<String, KeymapRegistry>,
+    kind: &str,
+    default_binding: &str,
+    action: &str,
+) {
+    let trimmed = default_binding.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unbound") {
+        return;
+    }
+    let layer = keymaps
+        .entry(kind.to_string())
+        .or_insert_with(KeymapRegistry::new);
+    let already_bound_elsewhere = layer
+        .bindings_in_mode(kind)
+        .is_some_and(|b| b.values().any(|a| action_ref_names(a) == action));
+    if already_bound_elsewhere {
+        return;
+    }
+    for key_str in trimmed.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let combo = KeyCombo::parse(key_str);
+        if layer.resolve(kind, &combo).is_some() {
+            continue;
+        }
+        layer.bind(kind, combo, action_ref_from_config(action, &HashMap::new()));
+    }
+}
+
+/// The action id an [`ActionRef`] names, whichever back end it resolves to.
+fn action_ref_names(action: &ActionRef) -> &str {
+    match action {
+        ActionRef::Builtin(_) => "",
+        ActionRef::Dynamic(intent) => &intent.action,
+    }
+}
+
 /// Build mode keymaps and triggers from config.
 pub fn build_modes(
     config: &heca_config::theme::Config,
@@ -369,9 +504,12 @@ pub fn build_modes(
             );
         }
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
-        // SidebarNav is entered via SidebarFocus / mouse interaction, so the
-        // built-in sidebar mode does not use a trigger entry here.
-        if mode_cfg.name != "sidebar" {
+        // These two are **entered by focus, not by a key**: `sidebar` by `sidebar_focus` or a
+        // click, `focus` by focusing a dock. A trigger would make them reachable as a plain
+        // `InputMode::Mode`, where their bindings resolve against a focus nothing is holding — a
+        // mode that looks entered and does nothing. So a trigger is refused even when a user
+        // config supplies one.
+        if !UNTRIGGERED_MODES.contains(&mode_cfg.name.as_str()) {
             let trigger_trimmed = mode_cfg.trigger.trim();
             let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
                 let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
@@ -657,6 +795,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
     registry.register(&WmAction::SidebarFocus, handle_sidebar_focus);
     registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
+    registry.register(&WmAction::UnfocusDock, handle_unfocus_dock);
     registry.register(&WmAction::SidebarUp, handle_sidebar_up);
     registry.register(&WmAction::SidebarDown, handle_sidebar_down);
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
@@ -799,6 +938,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::ScrollPageDown, handle_scroll_page_down);
     registry.register(&WmAction::ScrollToTop, handle_scroll_to_top);
     registry.register(&WmAction::ScrollToBottom, handle_scroll_to_bottom);
+    registry.register(&WmAction::ScrollPageLeft, handle_scroll_page_left);
+    registry.register(&WmAction::ScrollPageRight, handle_scroll_page_right);
+    registry.register(&WmAction::ScrollToLeftEdge, handle_scroll_to_left_edge);
+    registry.register(&WmAction::ScrollToRightEdge, handle_scroll_to_right_edge);
     registry.register(
         &WmAction::ScrollToOffset { rows: 0 },
         handle_scroll_to_offset,
@@ -829,8 +972,9 @@ pub fn build_registry() -> ActionRegistry {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_ref_from_config, binding_arg_problems, build_keymap, build_modes, build_registry,
-        build_widget_keymap, format_combo,
+        action_ref_from_config, bind_component_default, binding_arg_problems,
+        build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
+        format_combo,
     };
     use crate::input::WmAction;
     use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
@@ -1614,6 +1758,229 @@ mod tests {
             Some(&WmAction::SidebarUp)
         );
         assert!(!mode_triggers.contains_key("sidebar"));
+    }
+
+    // ── Per-kind component layers (F003/P085/T355) ──
+
+    /// Build a config carrying one `[keys.<kind>]` layer, as TOML would produce.
+    fn with_layer(kind: &str, layer: heca_config::theme::ComponentKeysConfig) -> heca_config::theme::Config {
+        let mut config = heca_config::theme::Config::default();
+        config
+            .keys
+            .bindings
+            .insert(kind.to_string(), heca_config::theme::BindingValue::Component(layer));
+        config
+    }
+
+    fn layer_of(entries: &[(&str, &str)]) -> heca_config::theme::ComponentKeysConfig {
+        heca_config::theme::ComponentKeysConfig {
+            bindings: entries
+                .iter()
+                .map(|(a, k)| {
+                    (
+                        a.to_string(),
+                        heca_config::theme::BindingValue::Single(k.to_string()),
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// A component's layer resolves under its **kind**, and binds any action id — its own or an
+    /// existing built-in it simply reuses.
+    #[test]
+    fn a_component_layer_binds_its_own_actions_and_existing_ones() {
+        let config = with_layer(
+            "docker",
+            layer_of(&[("docker.restart_selected", "r"), ("next_pane", "n")]),
+        );
+        let maps = build_component_keymaps(&config);
+        let docker = maps.get("docker").expect("the layer is keyed by kind");
+
+        match docker.resolve("docker", &KeyCombo::parse("r")) {
+            Some(ActionRef::Dynamic(intent)) => assert_eq!(intent.action, "docker.restart_selected"),
+            other => panic!("its own action resolves at press time: {other:?}"),
+        }
+        assert_eq!(
+            docker.resolve_builtin("docker", &KeyCombo::parse("n")),
+            Some(&WmAction::NextPane),
+            "an existing action is bound here, not redeclared",
+        );
+    }
+
+    /// **The table merges per key**: overriding one binding keeps every other default.
+    #[test]
+    fn overriding_one_binding_keeps_the_rest() {
+        let defaults = layer_of(&[
+            ("docker.restart_selected", "r"),
+            ("docker.stop_selected", "s"),
+        ]);
+        let mut config = with_layer("docker", defaults);
+        // What the *user's* file adds on top, merged into the same layer.
+        let user = layer_of(&[("docker.stop_selected", "x")]);
+        let merged = match config.keys.bindings.get_mut("docker") {
+            Some(heca_config::theme::BindingValue::Component(base)) => {
+                base.bindings.extend(user.bindings);
+                base.clone()
+            }
+            _ => unreachable!("just inserted"),
+        };
+        let maps = build_component_keymaps(&with_layer("docker", merged));
+        let docker = &maps["docker"];
+
+        assert!(
+            docker.resolve("docker", &KeyCombo::parse("x")).is_some(),
+            "the overridden action moved to its new key",
+        );
+        assert!(
+            docker.resolve("docker", &KeyCombo::parse("r")).is_some(),
+            "and every other default survived",
+        );
+    }
+
+    /// **The array merges by `keys`** — the rule that makes the arg-carrying form usable at all.
+    /// Replacing the array wholesale (TOML's own rule for arrays) would mean adding one binding
+    /// silently drops every shipped default.
+    #[test]
+    fn an_arg_carrying_override_replaces_only_its_own_combo() {
+        use heca_config::theme::ModeBindingConfig;
+        let bind = |action: &str, keys: &str, cmd: &str| ModeBindingConfig {
+            action: action.to_string(),
+            keys: keys.to_string(),
+            args: HashMap::from([("command".to_string(), cmd.to_string())]),
+        };
+        let mut layer = heca_config::theme::ComponentKeysConfig {
+            bind: vec![
+                bind("spawn_command", "t", "lazydocker"),
+                bind("spawn_command", "g", "lazygit"),
+            ],
+            ..Default::default()
+        };
+        // The user rebinds `t` only.
+        let user = bind("spawn_command", "t", "ctop");
+        match layer.bind.iter_mut().find(|b| b.keys == user.keys) {
+            Some(existing) => *existing = user,
+            None => layer.bind.push(user),
+        }
+
+        let maps = build_component_keymaps(&with_layer("docker", layer));
+        let docker = &maps["docker"];
+        match docker.resolve("docker", &KeyCombo::parse("t")) {
+            Some(ActionRef::Builtin(WmAction::SpawnCommand { command, .. })) => {
+                assert_eq!(command, "ctop", "exactly that combo was replaced")
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(
+            docker.resolve("docker", &KeyCombo::parse("g")).is_some(),
+            "and the other arg-carrying default survived — the whole point of merging by key",
+        );
+    }
+
+    /// `unbind` is keyed by the **combo**, so it retires a binding whatever it points at — never a
+    /// null or empty-string convention.
+    #[test]
+    fn a_component_layer_unbinds_by_combo() {
+        let mut layer = layer_of(&[("docker.stop_selected", "s")]);
+        layer.unbind.insert("s".to_string(), true);
+        let maps = build_component_keymaps(&with_layer("docker", layer));
+        assert!(maps["docker"].resolve("docker", &KeyCombo::parse("s")).is_none());
+    }
+
+    /// A **declared default** reaches the layer at mount — this is what finally consumes
+    /// `ActionMeta.default_binding` — but it loses to anything the user said.
+    #[test]
+    fn a_declared_default_binds_unless_the_user_already_spoke() {
+        let mut maps: HashMap<String, KeymapRegistry> = HashMap::new();
+
+        // Nothing in the way ⇒ the declared default lands.
+        bind_component_default(&mut maps, "docker", "r", "docker.restart_selected");
+        assert!(maps["docker"].resolve("docker", &KeyCombo::parse("r")).is_some());
+
+        // The user put something else on that key ⇒ the default does not shadow it.
+        maps.get_mut("docker").unwrap().bind(
+            "docker",
+            KeyCombo::parse("s"),
+            action_ref_from_config("close", &HashMap::new()),
+        );
+        bind_component_default(&mut maps, "docker", "s", "docker.stop_selected");
+        assert_eq!(
+            maps["docker"].resolve_builtin("docker", &KeyCombo::parse("s")),
+            Some(&WmAction::ClosePane),
+            "user config wins on that combo",
+        );
+
+        // The user rebound the action itself ⇒ it must not also get its default key.
+        let mut maps: HashMap<String, KeymapRegistry> = HashMap::new();
+        let mut layer = KeymapRegistry::new();
+        layer.bind(
+            "docker",
+            KeyCombo::parse("z"),
+            action_ref_from_config("docker.restart_selected", &HashMap::new()),
+        );
+        maps.insert("docker".to_string(), layer);
+        bind_component_default(&mut maps, "docker", "r", "docker.restart_selected");
+        assert!(
+            maps["docker"].resolve("docker", &KeyCombo::parse("r")).is_none(),
+            "a rebound action does not also answer to its shipped default",
+        );
+
+        // "unbound" / empty declares no key at all.
+        let mut maps: HashMap<String, KeymapRegistry> = HashMap::new();
+        bind_component_default(&mut maps, "docker", "unbound", "docker.quiet");
+        bind_component_default(&mut maps, "docker", "", "docker.quieter");
+        assert!(maps.get("docker").is_none_or(|l| l
+            .bindings_in_mode("docker")
+            .is_none_or(|b| b.is_empty())));
+    }
+
+    /// The focus layer ships the keys the **widgets** answer, and is never enterable by a trigger
+    /// — it is entered by focusing a dock (F003/P085/T352).
+    #[test]
+    fn the_focus_layer_ships_the_scroll_keys_and_the_way_out() {
+        let config = heca_config::theme::Config::default();
+        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let focus = mode_keymaps
+            .get(crate::app::input::FOCUS_LAYER)
+            .expect("the focus layer is a built-in mode keymap");
+
+        for (key, want) in [
+            ("PageUp", WmAction::ScrollPageUp),
+            ("PageDown", WmAction::ScrollPageDown),
+            ("Home", WmAction::ScrollToTop),
+            ("End", WmAction::ScrollToBottom),
+            ("Alt+PageUp", WmAction::ScrollPageLeft),
+            ("Alt+PageDown", WmAction::ScrollPageRight),
+            ("Alt+Home", WmAction::ScrollToLeftEdge),
+            ("Alt+End", WmAction::ScrollToRightEdge),
+            ("Escape", WmAction::UnfocusDock),
+        ] {
+            assert_eq!(
+                focus.resolve_builtin(crate::app::input::FOCUS_LAYER, &KeyCombo::parse(key)),
+                Some(&want),
+                "{key} must reach {want:?} while a dock holds the keyboard",
+            );
+        }
+        assert!(
+            !mode_triggers.contains_key(crate::app::input::FOCUS_LAYER),
+            "focus is entered by focusing a dock, never by a key",
+        );
+    }
+
+    /// …and a user trigger on it is refused, exactly as it is for `sidebar`: the mode's bindings
+    /// only mean anything while a dock is focused, so an enterable copy would be a dead mode.
+    #[test]
+    fn a_user_trigger_on_the_focus_layer_is_refused() {
+        let mut config = heca_config::theme::Config::default();
+        config.keys.mode.push(KeyModeConfig {
+            name: crate::app::input::FOCUS_LAYER.to_string(),
+            trigger: "prefix+Shift+f".to_string(),
+            sticky: true,
+            bindings: Vec::new(),
+        });
+        let (_, mode_triggers) = build_modes(&config);
+        assert!(!mode_triggers.contains_key(crate::app::input::FOCUS_LAYER));
     }
 
     #[test]
