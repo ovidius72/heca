@@ -285,14 +285,12 @@ fn plugin_providers_for(
         .collect()
 }
 
-/// Only `SidebarNav` is restorable today: opening a context menu from the sidebar returns to the
-/// sidebar after close. `Normal` is not captured (restoring Normal is a no-op, so we leave the
-/// field `None` to keep the existing behaviour unchanged). Add future restorable modes here.
-fn restorable_mode(mode: InputMode) -> Option<InputMode> {
-    match mode {
-        InputMode::SidebarNav => Some(mode),
-        _ => None,
-    }
+/// **Nothing is restorable today.** Opening a menu from a focused container used to leave and
+/// re-enter `SidebarNav`; chrome focus is not a mode, is untouched by an overlay, and is simply
+/// still there when the menu closes (F003/P086/T365). Restoring `Normal` is a no-op, so the field
+/// stays `None`. Add a future restorable mode here.
+fn restorable_mode(_mode: InputMode) -> Option<InputMode> {
+    None
 }
 
 /// Resolve the active context for a keyboard-opened context menu (`OpenContextMenu` /
@@ -307,7 +305,10 @@ fn restorable_mode(mode: InputMode) -> Option<InputMode> {
 /// - Returns `None` when there is no active target (no focused pane, no sidebar cursor).
 pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, ContextTarget)> {
     resolve_context_for(
-        &state.input_mode,
+        // **A focused container decides the context**, not a mode (F003/P086/T365). This read
+        // replaced `InputMode::SidebarNav`, whose last writer went with the `sidebar_*` built-ins:
+        // the menu follows the keyboard, and the keyboard is in a container or it is not.
+        state.chrome_state.focused_container().is_some(),
         state.chrome_state.workspaces.tree().current_item(),
         crate::app::interaction::focused_pane_id(state),
         &|pane_id| {
@@ -323,24 +324,25 @@ pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, C
     )
 }
 
-/// Pure mapping behind [`resolve_active_context`]: input mode + the active sidebar item +
-/// the focused pane → menu `(path, target)`. Split out from the `AppState` reads so the
-/// mapping is unit-testable without a full app. In `SidebarNav` the sidebar cursor decides
-/// the context (pane→`sidebar.pane`, column→`sidebar.column`, workspace→`sidebar.workspace`,
-/// floating-pane→`pane`); in any other mode the focused content pane does. Returns `None`
-/// when there is nothing to target (no sidebar cursor / no focused pane).
+/// Pure mapping behind [`resolve_active_context`]: whether a container holds the keyboard + the
+/// container's cursor row + the focused pane → menu `(path, target)`. Split out from the `AppState`
+/// reads so the mapping is unit-testable without a full app.
+///
+/// **With a container focused the cursor decides** the context (pane→`sidebar.pane`,
+/// column→`sidebar.column`, workspace→`sidebar.workspace`, floating-pane→`pane`); otherwise the
+/// focused content pane does. Returns `None` when there is nothing to target.
 /// `locate` resolves a pane to its `(ws_idx, col_idx)` and `ws_name` a workspace to its custom
 /// name — the two facts a builder cannot get from the facade, so the **host** puts them on the
 /// target. Passed as closures (rather than `&AppState`) so this mapping stays unit-testable.
 fn resolve_context_for(
-    input_mode: &InputMode,
+    container_focused: bool,
     sidebar_item: Option<&crate::providers::workspaces::WorkspaceRow>,
     focused_pane: Option<PaneId>,
     locate: &dyn Fn(PaneId) -> Option<(usize, usize)>,
     ws_name: &dyn Fn(usize) -> Option<String>,
 ) -> Option<(ContextPath, ContextTarget)> {
-    match input_mode {
-        InputMode::SidebarNav => Some(match sidebar_item? {
+    match container_focused {
+        true => Some(match sidebar_item? {
             crate::providers::workspaces::WorkspaceRow::Pane { pane_id } => {
                 // A sidebar pane row whose column can't be resolved is not a valid target.
                 let (ws_idx, col_idx) = locate(*pane_id)?;
@@ -615,13 +617,14 @@ mod tests {
     }
 
     /// `resolve_context_for` with stub lookups: pane 7 lives at ws 1 / col 2; workspace 3 is named.
+    /// `container_focused` stands where `InputMode::SidebarNav` used to (F003/P086/T365).
     fn resolve(
-        mode: &InputMode,
+        container_focused: bool,
         item: Option<&crate::providers::workspaces::WorkspaceRow>,
         focused: Option<PaneId>,
     ) -> Option<(ContextPath, ContextTarget)> {
         resolve_context_for(
-            mode,
+            container_focused,
             item,
             focused,
             &|_pane| Some((1, 2)),
@@ -885,9 +888,10 @@ mod tests {
         assert!(r.ordered_providers("no.such.path").is_empty());
     }
 
+    /// Nothing is restorable: chrome focus is not a mode, and an overlay does not take it away
+    /// (F003/P086/T365).
     #[test]
-    fn restorable_mode_only_sidebar_nav() {
-        assert!(matches!(restorable_mode(InputMode::SidebarNav), Some(InputMode::SidebarNav)));
+    fn no_mode_is_restored_after_a_menu_closes() {
         assert!(restorable_mode(InputMode::Normal).is_none());
         assert!(restorable_mode(InputMode::Prefix).is_none());
     }
@@ -900,26 +904,26 @@ mod tests {
         // content differs by where it was opened.
         let pane = WorkspaceRow::Pane { pane_id: PaneId(7) };
         let (path, target) =
-            resolve(&InputMode::SidebarNav, Some(&pane), None).unwrap();
+            resolve(true, Some(&pane), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_PANE);
         assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7), ws_idx: 1, col_idx: 2 }));
 
         let col = WorkspaceRow::Column { ws_idx: 1, col_idx: 2 };
         let (path, target) =
-            resolve(&InputMode::SidebarNav, Some(&col), None).unwrap();
+            resolve(true, Some(&col), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_COLUMN);
         assert!(matches!(target, ContextTarget::SidebarColumn { ws_idx: 1, col_idx: 2 }));
 
         let ws = WorkspaceRow::Workspace { ws_idx: 3 };
         let (path, target) =
-            resolve(&InputMode::SidebarNav, Some(&ws), None).unwrap();
+            resolve(true, Some(&ws), None).unwrap();
         assert_eq!(path.0, ContextPath::SIDEBAR_WORKSPACE);
         assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3, .. }));
 
         // A floating pane in the sidebar resolves to the generic pane menu.
         let float = WorkspaceRow::FloatingPane { pane_id: PaneId(9), ws_idx: 0 };
         let (path, target) =
-            resolve(&InputMode::SidebarNav, Some(&float), None).unwrap();
+            resolve(true, Some(&float), None).unwrap();
         assert_eq!(path.0, ContextPath::PANE);
         assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(9), hyperlink: None }));
     }
@@ -928,7 +932,7 @@ mod tests {
     fn resolve_context_non_sidebar_uses_focused_pane() {
         // Any non-sidebar mode → the focused content pane.
         let (path, target) =
-            resolve(&InputMode::Normal, None, Some(PaneId(4))).unwrap();
+            resolve(false, None, Some(PaneId(4))).unwrap();
         assert_eq!(path.0, ContextPath::PANE);
         assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(4), hyperlink: None }));
     }
@@ -936,8 +940,8 @@ mod tests {
     #[test]
     fn resolve_context_none_when_no_target() {
         // SidebarNav with no cursor item, and Normal with no focused pane, both resolve to None.
-        assert!(resolve(&InputMode::SidebarNav, None, Some(PaneId(1))).is_none());
-        assert!(resolve(&InputMode::Normal, None, None).is_none());
+        assert!(resolve(true, None, Some(PaneId(1))).is_none());
+        assert!(resolve(false, None, None).is_none());
     }
 
     #[test]

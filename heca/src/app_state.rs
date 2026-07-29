@@ -54,7 +54,6 @@ pub enum InputMode {
         focus_after: bool,
     },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
-    SidebarNav,
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
     ///
@@ -888,13 +887,14 @@ impl AppState {
         self.needs_redraw = true;
     }
 
-    /// Whether the sidebar nav cursor should be shown. True while actively navigating
-    /// (`SidebarNav`) **and** while a context menu opened *from* the sidebar is still up —
-    /// so the target row stays highlighted for the duration of the menu instead of losing
-    /// its highlight the moment the overlay takes over the input mode (context-menu-3).
-    pub fn sidebar_nav_active(&self) -> bool {
-        matches!(self.input_mode, InputMode::SidebarNav)
-            || matches!(self.overlay_origin_mode, Some(InputMode::SidebarNav))
+    /// Whether a container's cursor should be shown — **its keyboard focus**, which an overlay
+    /// does not take away (context-menu-3, F003/P086/T365).
+    ///
+    /// The row stays highlighted for the duration of a menu opened on it, instead of losing the
+    /// highlight the moment the overlay appears. It used to ask whether the app was in a mode; a
+    /// container holding the keyboard is the thing that was always meant.
+    pub fn container_cursor_visible(&self) -> bool {
+        self.chrome_state.focused_container().is_some()
     }
 
     /// Effective tab-bar (top bar) height: the default when shown, `0.0` when
@@ -1032,7 +1032,6 @@ mod tests {
     fn test_input_mode_candidates_none() {
         assert_eq!(InputMode::Normal.candidates(), None);
         assert_eq!(InputMode::Prefix.candidates(), None);
-        assert_eq!(InputMode::SidebarNav.candidates(), None);
     }
 
     #[test]

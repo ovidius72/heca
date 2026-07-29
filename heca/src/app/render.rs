@@ -86,7 +86,6 @@ pub(crate) fn status_mode_parts(
             if *focus_after { "SWAP+FOCUS" } else { "SWAP" },
             pick_suffix(),
         ),
-        InputMode::SidebarNav => ("SIDEBAR", String::new()),
         InputMode::Chord { sequence } => ("CHORD", format!(" w→{}", sequence.join("→"))),
         InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
         // The confirm now lives entirely in the Modal dialog; the status bar only

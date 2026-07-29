@@ -2955,7 +2955,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // exit. Selection-driven: it does NOT move the real focus (`active_pane`); the
     // expanded sidebar renders both, distinctly. The setter is a change-guarded
     // chokepoint, so calling it every frame is cheap.
-    if state.sidebar_nav_active() {
+    if state.container_cursor_visible() {
         let selection = state.chrome_state.workspaces.nav_selection();
         state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
     } else {

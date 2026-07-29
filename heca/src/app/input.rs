@@ -59,6 +59,23 @@ pub(crate) fn handle_keyboard_input(
     match input_mode {
         InputMode::Normal => {
             if ctx.is_prefix {
+                // Resolve the container's context **before** the Prefix transition, and stash it:
+                // `handle_prefix_mode` dispatches from Prefix, where the handler can no longer tell
+                // that a container was driving, so `prefix+>` would open the focused *pane's* menu
+                // instead of the cursor row's (context-menu-7).
+                //
+                // This lived inside the `SidebarNav` mode handler until that mode was deleted
+                // (F003/P086/T365) — it is gated on chrome focus now, which is what it always meant.
+                if state.chrome_state.focused_container().is_some()
+                    && let Some((path, target)) = crate::chrome::resolve_active_context(state)
+                {
+                    state.pending_context = Some(crate::chrome::PendingContext {
+                        path,
+                        target,
+                        // No mode to restore: the container still holds the keyboard afterwards.
+                        origin: None,
+                    });
+                }
                 state.input_mode = InputMode::Prefix;
                 state.prefix_entered_at = Some(std::time::Instant::now());
                 state.needs_redraw = true;
@@ -171,9 +188,6 @@ pub(crate) fn handle_keyboard_input(
         }
         InputMode::DockPick { candidates } => {
             handle_dock_pick_mode(registry, state, &candidates, ctx);
-        }
-        InputMode::SidebarNav => {
-            handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
         }
         InputMode::Selection => {
             handle_selection_mode(registry, mode_keymaps, state, ctx);
@@ -708,142 +722,6 @@ fn handle_dock_pick_mode(
     state.needs_redraw = true;
 }
 
-fn handle_sidebar_nav_mode(
-    registry: &ActionRegistry,
-    mode_keymaps: &HashMap<String, KeymapRegistry>,
-    state: &mut AppState,
-    ctx: KeyInputContext<'_>,
-) {
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-
-    if is_escape {
-        // Cloned out of the borrow: the dispatch below reaches back into the store, and holding a
-        // `Ref` across it would panic at runtime rather than fail to compile.
-        let cursor_row = state.chrome_state.workspaces.tree().current_item().cloned();
-        if let Some(item) = cursor_row
-            && let Some(pane_id) = sidebar_item_focus_target(&state.session, &item)
-        {
-            dispatch_action(
-                state,
-                registry,
-                InteractionSource::Keyboard,
-                &WmAction::FocusPane { pane_id },
-            );
-        }
-        release_chrome_focus(state, registry);
-        state.input_mode = InputMode::Normal;
-        state.needs_redraw = true;
-    } else if is_enter {
-        let item = state.chrome_state.workspaces.tree().current_item().cloned();
-        match item {
-            Some(crate::providers::workspaces::WorkspaceRow::Pane { pane_id })
-            | Some(crate::providers::workspaces::WorkspaceRow::FloatingPane { pane_id, .. }) => {
-                dispatch_action(
-                    state,
-                    registry,
-                    InteractionSource::Keyboard,
-                    &WmAction::FocusPane { pane_id },
-                );
-                release_chrome_focus(state, registry);
-                state.input_mode = InputMode::Normal;
-            }
-            Some(crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx })
-            | Some(crate::providers::workspaces::WorkspaceRow::Column { ws_idx, .. })
-                if ws_idx != state.session.active_workspace_idx =>
-            {
-                dispatch_action(
-                    state,
-                    registry,
-                    InteractionSource::Keyboard,
-                    &WmAction::FocusWorkspace { ws_idx },
-                );
-            }
-            _ => {}
-        }
-        state.needs_redraw = true;
-    } else if ctx.is_prefix {
-        // context-menu-7: resolve the active sidebar context BEFORE the Prefix transition
-        // (handle_prefix_mode normalises to Normal before dispatch, so the handler can't
-        // read SidebarNav). Stash the (path, target, origin) in pending_context so
-        // handle_open_context_menu can open the correct menu.
-        if let Some((path, target)) =
-            crate::chrome::resolve_active_context(state)
-        {
-            state.pending_context = Some(crate::chrome::PendingContext {
-                path,
-                target,
-                origin: Some(InputMode::SidebarNav),
-            });
-        }
-        state.input_mode = InputMode::Prefix;
-        state.prefix_entered_at = Some(std::time::Instant::now());
-        state.needs_redraw = true;
-    } else {
-        let combo = mode_combo(ctx);
-        let action = mode_keymaps
-            .get("sidebar")
-            .and_then(|mode_map| mode_map.resolve("sidebar", &combo).cloned());
-        if let Some(act) = action {
-            dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
-        }
-    }
-}
-
-/// Hand the keyboard back to the pane when sidebar nav gives it up.
-///
-/// `sidebar_focus` takes **both** the nav mode and chrome focus (they are one intent from the
-/// user's side), so leaving nav has to give both back. Releasing only the mode would leave a dock
-/// still holding the keyboard with nobody driving it, and an unbound key while a container has focus
-/// is swallowed. Goes through the action, so the release is the same one `Esc` and RPC perform.
-///
-/// **These calls belong to the legacy `SidebarNav` mode and go out with it** (F003/P085/T356 step 5).
-/// They are not the generic release: F003/P086/T364 checked whether they could go early and they
-/// cannot, because the mode is still live and nothing else releases on its exits.
-fn release_chrome_focus(state: &mut AppState, registry: &ActionRegistry) {
-    if state.chrome_state.focused_container().is_some() {
-        dispatch_action(
-            state,
-            registry,
-            InteractionSource::Keyboard,
-            &WmAction::UnfocusDock,
-        );
-    }
-}
-
-fn sidebar_item_focus_target(
-    session: &heca_core::layout::Session,
-    item: &crate::providers::workspaces::WorkspaceRow,
-) -> Option<PaneId> {
-    match item {
-        crate::providers::workspaces::WorkspaceRow::Pane { pane_id }
-        | crate::providers::workspaces::WorkspaceRow::FloatingPane { pane_id, .. } => Some(*pane_id),
-        crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => session
-            .workspaces
-            .get(*ws_idx)
-            .and_then(|ws| ws.scrolling.columns.get(*col_idx))
-            .and_then(|col| col.active_pane().or_else(|| col.panes.first()))
-            .map(|pane| pane.id),
-        crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => session
-            .workspaces
-            .get(*ws_idx)
-            .and_then(workspace_focus_target),
-    }
-}
-
-fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<PaneId> {
-    ws.active_pane()
-        .map(|pane| pane.id)
-        .or_else(|| {
-            ws.scrolling
-                .columns
-                .iter()
-                .find_map(|col| col.active_pane().or_else(|| col.panes.first()))
-                .map(|pane| pane.id)
-        })
-        .or_else(|| ws.floating_panes.first().map(|float| float.pane.id))
-}
-
 fn handle_selection_mode(
     registry: &ActionRegistry,
     mode_keymaps: &HashMap<String, KeymapRegistry>,
@@ -920,130 +798,3 @@ fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::sidebar_item_focus_target;
-    use crate::providers::workspaces::WorkspaceRow;
-    use heca_core::layout::column::Pane;
-    use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
-    use heca_core::layout::{FocusDomain, PaneId, Session, SessionId};
-
-    fn make_session() -> Session {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        session.add_pane(Pane::new(PaneId(1), "pane-1"), None, true);
-        session.add_pane(Pane::new(PaneId(2), "pane-2"), Some(0), true);
-        session.add_pane(Pane::new(PaneId(3), "pane-3"), None, true);
-        session
-    }
-
-    #[test]
-    fn workspace_focus_target_prefers_active_pane() {
-        let session = make_session();
-        let target = sidebar_item_focus_target(&session, &WorkspaceRow::Workspace { ws_idx: 0 });
-        assert_eq!(target, Some(PaneId(3)));
-    }
-
-    #[test]
-    fn column_focus_target_uses_column_active_pane() {
-        let session = make_session();
-        let target = sidebar_item_focus_target(
-            &session,
-            &WorkspaceRow::Column {
-                ws_idx: 0,
-                col_idx: 0,
-            },
-        );
-        assert_eq!(target, Some(PaneId(2)));
-    }
-
-    #[test]
-    fn floating_and_pane_items_target_their_exact_pane() {
-        let mut session = make_session();
-        let ws = session
-            .active_workspace_mut()
-            .expect("active workspace exists");
-        ws.floating_panes
-            .push(heca_core::layout::workspace::FloatingPane {
-                pane: Pane::new(PaneId(99), "float"),
-                position: Point::new(0.0, 0.0),
-                size: Size::new(200.0, 100.0),
-                is_active: false,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
-        ws.focus_domain = FocusDomain::Tiled;
-
-        assert_eq!(
-            sidebar_item_focus_target(&session, &WorkspaceRow::Pane { pane_id: PaneId(2) }),
-            Some(PaneId(2))
-        );
-        assert_eq!(
-            sidebar_item_focus_target(
-                &session,
-                &WorkspaceRow::FloatingPane {
-                    pane_id: PaneId(99),
-                    ws_idx: 0,
-                },
-            ),
-            Some(PaneId(99))
-        );
-    }
-
-    #[test]
-    fn workspace_focus_target_falls_back_to_first_floating_pane() {
-        let mut session = Session::new(
-            SessionId(1),
-            Size::new(1280.0, 800.0),
-            1.0,
-            LayoutOptions::default(),
-        );
-        let ws = session
-            .active_workspace_mut()
-            .expect("active workspace exists");
-        ws.floating_panes
-            .push(heca_core::layout::workspace::FloatingPane {
-                pane: Pane::new(PaneId(77), "float-only"),
-                position: Point::new(0.0, 0.0),
-                size: Size::new(200.0, 100.0),
-                is_active: false,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
-        ws.update_working_area(Rectangle::new(
-            Point::new(0.0, 0.0),
-            Size::new(1280.0, 800.0),
-        ));
-
-        let target = sidebar_item_focus_target(&session, &WorkspaceRow::Workspace { ws_idx: 0 });
-        assert_eq!(target, Some(PaneId(77)));
-    }
-
-    // Note: `handle_selection_mode` is not unit-tested directly because it
-    // requires a fully-constructed `AppState` (winit window + wgpu device).
-    // Its contracts are verified by:
-    //   - the `selection_model` unit tests (clear/end/SelectionState lifecycle)
-    //   - the registry integration (ClearSelection is registered and routed
-    //     through `build_registry()`)
-    //   - the keymap test `default_selection_bindings_resolve` (the
-    //     `prefix+s` binding reaches the action surface)
-    //   - the `cargo check`/`cargo clippy` builds (compile-time
-    //     exhaustiveness of the `InputMode::Selection` arm and the
-    //     `action_from_name` mapping)
-    //
-    // The two coordinator-flagged regressions are structurally prevented by
-    // the implementation:
-    //   - `handle_selection_mode`'s `ctx.is_prefix` arm sets
-    //     `state.prefix_entered_at = Some(Instant::now())` alongside the
-    //     `InputMode::Prefix` transition, so the timeout in
-    //     `lifecycle::handle_about_to_wait` is armed and the prefix mode
-    //     cannot get stuck.
-    //   - The Esc path dispatches `WmAction::ClearSelection` through
-    //     `dispatch_action(...)` instead of calling
-    //     `state.selection.clear()` directly, so the new action surface
-    //     is the only entry point for clearing the selection.
-}

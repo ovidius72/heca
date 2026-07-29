@@ -22,7 +22,6 @@ use crate::app::terminal_host::{
 use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::chrome;
 use crate::input::{FontZoomStep, SpawnKind, WmAction};
-use crate::providers::workspaces;
 use crate::{
     collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, move_pane_to_column,
     move_pane_to_workspace_column, pane_name, switch_workspace_tracked, update_session_viewport,
@@ -982,12 +981,6 @@ pub fn handle_reset_workspace_name_by_idx(state: &mut AppState, action: &WmActio
 /// `InputMode::Rename` flow.
 fn open_rename_dialog(state: &mut AppState, target: RenameTarget, current_name: String) {
     use crate::chrome::{PropValue, ViewNode, WidgetKind};
-    // Restore the originating mode (e.g. SidebarNav) after the dialog closes: capture it here
-    // (unless a caller — the keyboard path — already stashed it from the pending context) so the
-    // rename dialog participates in the same mode-restore as the context menu.
-    if state.overlay_origin_mode.is_none() && matches!(state.input_mode, InputMode::SidebarNav) {
-        state.overlay_origin_mode = Some(InputMode::SidebarNav);
-    }
     let title = match target {
         RenameTarget::Pane(_) => "Rename pane",
         RenameTarget::Column { .. } => "Rename column",
@@ -1677,20 +1670,7 @@ pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) {
         return;
     }
     state.chrome_state.set_focused_container(None);
-    if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.input_mode = InputMode::Normal;
-    }
     state.needs_redraw = true;
-}
-
-fn sidebar_selected_column_target(state: &AppState) -> Option<(usize, usize)> {
-    let item = state.chrome_state.workspaces.tree().current_item().cloned()?;
-    match item {
-        workspaces::WorkspaceRow::Column { ws_idx, col_idx } => Some((ws_idx, col_idx)),
-        workspaces::WorkspaceRow::Pane { pane_id } => find_pane_location(&state.session, pane_id)
-            .map(|(ws_idx, col_idx, _)| (ws_idx, col_idx)),
-        workspaces::WorkspaceRow::Workspace { .. } | workspaces::WorkspaceRow::FloatingPane { .. } => None,
-    }
 }
 
 fn current_active_workspace_idx(state: &AppState) -> Option<usize> {
@@ -1715,7 +1695,6 @@ fn open_confirm(
     state: &mut AppState,
     spec: crate::actions::ConfirmSpec,
     resolved: WmAction,
-    resume_sidebar: bool,
 ) {
     use crate::actions::ButtonRole;
     let title = confirm_title(state, &resolved);
@@ -1744,11 +1723,9 @@ fn open_confirm(
     }
     let buttons = spec.buttons;
     crate::chrome::open_modal(state, modal, move |state, registry, result| {
-        state.input_mode = if resume_sidebar {
-            InputMode::SidebarNav
-        } else {
-            InputMode::Normal
-        };
+        // Back to Normal, always: chrome focus is not a mode and the container still has the
+        // keyboard if it had it before (F003/P086/T365).
+        state.input_mode = InputMode::Normal;
         run_outcome(state, registry, &buttons, &resolved, &result);
         state.needs_redraw = true;
     });
@@ -1884,16 +1861,12 @@ fn run_destructive_now(state: &mut AppState, action: &WmAction) {
 /// [`ConfirmSpec`](crate::actions::ConfirmSpec): if the prompt is enabled, [`open_confirm`] raises
 /// it; otherwise the raw action runs now ([`run_destructive_now`]). The central dispatch gate
 /// ([`maybe_confirm_destructive`]) shares this same spec-driven path for directly-dispatched actions.
-pub(crate) fn request_destructive(
-    state: &mut AppState,
-    raw_action: WmAction,
-    resume_sidebar: bool,
-) {
+pub(crate) fn request_destructive(state: &mut AppState, raw_action: WmAction) {
     let spec = confirm_owner_name(&raw_action)
         .and_then(|name| state.action_catalog.confirm_spec(name).cloned());
     match spec {
         Some(spec) if confirm_enabled(state, &spec.config_name, spec.default_enabled) => {
-            open_confirm(state, spec, raw_action, resume_sidebar)
+            open_confirm(state, spec, raw_action)
         }
         _ => run_destructive_now(state, &raw_action),
     }
@@ -1932,27 +1905,20 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     if !confirm_enabled(state, &spec.config_name, spec.default_enabled) {
         return false; // disabled → let dispatch run the action raw via its handler
     }
-    let resume_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
-    open_confirm(state, spec, resolved, resume_sidebar);
+    open_confirm(state, spec, resolved);
     true
 }
 
-/// Delete the "current" column (and all its panes). The nav cursor never lands on a
-/// column (`is_navigable` stops on panes + workspaces), so `sidebar_delete_selected`
-/// can't reach one; this resolves the target column from the sidebar selection in
-/// sidebar-nav mode, or from the focused pane in normal mode, and routes through the
-/// same y/n confirm prompt.
+/// Delete the "current" column (and all its panes) — the **focused pane's** column.
+///
+/// The container's own `workspaces.delete_selected_column` handles the cursor's column
+/// (F003/P085/T356); this is the plain global binding, and it no longer branches on a mode that
+/// does not exist.
 pub fn handle_delete_current_column(state: &mut AppState, _action: &WmAction) {
-    let in_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
-    let target = if in_sidebar {
-        sidebar_selected_column_target(state)
-    } else {
-        current_tiled_column_target(state)
-    };
-    let Some((ws_idx, col_idx)) = target else {
+    let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    request_destructive(state, WmAction::DeleteColumn { ws_idx, col_idx }, in_sidebar);
+    request_destructive(state, WmAction::DeleteColumn { ws_idx, col_idx });
 }
 
 /// Apply a workspace collapse change: write the canonical `chrome_state.collapsed_ws`,
