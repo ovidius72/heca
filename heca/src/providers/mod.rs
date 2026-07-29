@@ -139,6 +139,22 @@ pub trait Provider {
     /// action that already exists, which it *binds* rather than redeclares — a component's keymap
     /// can name any action id, built-in or its own.
     ///
+    /// **The test for whether an action is yours** (user, 2026-07-29) — mechanical, and the clearest
+    /// statement of the rule:
+    ///
+    /// > **Remove this component. Does the action still make sense?**
+    /// > **Yes** → it is the app's. Bind it here; do not declare it.
+    /// > **No** → it is yours. Declare it.
+    ///
+    /// `workspaces.cursor_up` fails the test — delete the dock and there is no cursor, so no
+    /// meaning. `workspace_next` passes it: it switches the session's active workspace, which exists
+    /// whether or not anything displays it, so the workspaces dock **binds** it rather than owning
+    /// it. So do `create_workspace`, `zoom_column`, `close` and `next_pane`.
+    ///
+    /// The test also separates two actions that a name can hide: *"switch the active workspace"*
+    /// survives the deletion and is the app's; *"move my cursor to the next workspace row"* does not
+    /// and would be this component's. Same words, different owners.
+    ///
     /// **There is no generic verb set** (user decision, 2026-07-29). An inherited
     /// up/down/select/toggle vocabulary would be dead weight for a container showing one number, so
     /// an empty list is a real and common answer — hence the default. Conventional ids (`up`,
