@@ -8,7 +8,7 @@
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, InteractiveMovePhase};
-use crate::chrome::default_column_width;
+use crate::chrome::{ChromeDragItem, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
@@ -311,14 +311,10 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
         return false;
     }
 
-    let sidebar_h = sidebar_bottom - sidebar_top;
-    let fi = match crate::providers::workspaces::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, pos.1)
-    {
-        Some(fi) => fi,
-        None => return false,
-    };
-
-    let item = match state.sidebar_tree.flat_items.get(fi).cloned() {
+    // Resolved against the **retained** tree's real laid-out bounds, like every other row
+    // resolution — not by arithmetic on a fixed row height, which stopped describing this sidebar
+    // the moment its rows became widgets of varying height (F003/P085/T356).
+    let item = match crate::chrome::sidebar_item_at(state, pos) {
         Some(item) => item,
         None => return false,
     };
@@ -337,9 +333,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     let shift_held = state.modifiers.shift_key();
 
     match item {
-        crate::providers::workspaces::WorkspaceRow::Pane {
-            pane_id: target_pid,
-        } if shift_held => {
+        ChromeDragItem::Pane(target_pid) if shift_held => {
             // Swap: delegate to shared swap handler.
             // The source pane is still in the layout (interactive move keeps it there).
             crate::handlers::handle_swap_param(
@@ -362,9 +356,11 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
             };
 
             match item {
-                crate::providers::workspaces::WorkspaceRow::Pane {
-                    pane_id: target_pid,
-                } => {
+                // A **floating** pane's card resolves here too: it is a pane row like any other,
+                // and `find_pane_location` simply does not find it in the tiled layout, so it takes
+                // the same fallback the old floating-only arm did — `Session::add_pane` uses the
+                // very default width that arm spelled out, on the same workspace.
+                ChromeDragItem::Pane(target_pid) => {
                     // Move: insert source pane after the target pane.
                     if let Some((ws_idx, col_idx, pane_idx)) =
                         crate::find_pane_location(&state.session, target_pid)
@@ -389,7 +385,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                     }
                     state.focused_pane = Some(target_pid);
                 }
-                crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => {
+                ChromeDragItem::Workspace { ws: ws_idx } => {
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                         let width = state
                             .session
@@ -399,21 +395,11 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                         ws.add_pane(pane, None, true, width);
                     }
                 }
-                crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => {
+                ChromeDragItem::Column { ws: ws_idx, col: col_idx } => {
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                         let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
                         ws.scrolling
                             .add_pane_to_column(target_col, None, pane, true);
-                    }
-                }
-                crate::providers::workspaces::WorkspaceRow::FloatingPane { .. } => {
-                    let width = state
-                        .session
-                        .options
-                        .default_column_width
-                        .unwrap_or(ColumnWidth::Proportion(0.85));
-                    if let Some(ws) = state.session.workspaces.get_mut(original_ws) {
-                        ws.add_pane(pane, None, true, width);
                     }
                 }
             }

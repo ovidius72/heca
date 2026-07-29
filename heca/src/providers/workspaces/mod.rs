@@ -9,12 +9,8 @@
 //! that a workspace tree was a sidebar thing, and every reader of those names inherited the
 //! confusion (F003/P085/T356).
 
-mod hit_test;
 mod model;
 
-#[cfg(test)]
-pub(crate) use hit_test::{BTN_ROW_HEIGHT, ITEM_HEIGHT};
-pub(crate) use hit_test::sidebar_hit_test;
 pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceRow, WorkspaceTree};
 #[cfg(test)]
 pub(crate) use model::WorkspaceEntry;

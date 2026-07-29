@@ -1,6 +1,5 @@
 #![allow(clippy::module_inception)]
 
-use super::{BTN_ROW_HEIGHT, ITEM_HEIGHT};
 
 use super::*;
 use crate::app_state::SidebarItemState;
@@ -461,27 +460,6 @@ fn test_toggle_column_collapsed_by_index_updates_cursor() {
             col_idx: item_col,
         }) if *item_ws == ws_idx && *item_col == col_idx
     ));
-}
-
-#[test]
-fn test_sidebar_hit_test_expanded() {
-    let (session, _ids) = make_test_session();
-    let tree = WorkspaceTree::new();
-    // Rebuild into a fresh tree (cursor at 0)
-    let mut tree = tree;
-    tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
-
-    // sidebar_top=32, 4px padding, then [+w] button row (24px), then first flat item.
-    // First flat item starts at y = 32 + 4 + 24 = 60. Click middle of that row.
-    let fi = sidebar_hit_test(&tree, 32.0, 400.0, 60.0 + ITEM_HEIGHT / 2.0);
-    assert_eq!(fi, Some(0), "click on first line should hit flat item 0");
-
-    // Click above sidebar should miss.
-    assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 10.0), None);
-
-    // Click in the [+w] button row area should miss (returns None).
-    let btn_row = sidebar_hit_test(&tree, 32.0, 400.0, 32.0 + 4.0 + BTN_ROW_HEIGHT / 2.0);
-    assert_eq!(btn_row, None, "click on [+w] button row should miss items");
 }
 
 #[test]
