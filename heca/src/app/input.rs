@@ -786,8 +786,12 @@ fn handle_sidebar_nav_mode(
 ///
 /// `sidebar_focus` takes **both** the nav mode and chrome focus (they are one intent from the
 /// user's side), so leaving nav has to give both back. Releasing only the mode would leave a dock
-/// still holding the keyboard with nobody driving it — and with T352 that means every key is
-/// swallowed. Goes through the action, so the release is the same one `Esc` and RPC perform.
+/// still holding the keyboard with nobody driving it, and an unbound key while a container has focus
+/// is swallowed. Goes through the action, so the release is the same one `Esc` and RPC perform.
+///
+/// **These calls belong to the legacy `SidebarNav` mode and go out with it** (F003/P085/T356 step 5).
+/// They are not the generic release: F003/P086/T364 checked whether they could go early and they
+/// cannot, because the mode is still live and nothing else releases on its exits.
 fn release_chrome_focus(state: &mut AppState, registry: &ActionRegistry) {
     if state.chrome_state.focused_container().is_some() {
         dispatch_action(

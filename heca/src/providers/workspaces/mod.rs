@@ -1123,6 +1123,58 @@ mod tests {
         );
     }
 
+    /// The `Space` regression, pinned at the only level a unit test can reach (F003/P086/T364).
+    ///
+    /// The two verbs differ by **one queued intent** and nothing else: activate asks for
+    /// `unfocus_dock`, peek does not. F003/P085/T352 instead made the *host* release container focus
+    /// inside `handle_focus_pane`, so peek's `focus_pane` released it too and `j`/`k` stopped. That
+    /// rule is gone; whether the keyboard leaves is decided here, by what the user asked for.
+    ///
+    /// The end of the story — the keyboard actually staying on the dock — needs an `AppState`, which
+    /// cannot be built without a window. The user drives that half in the app.
+    #[test]
+    fn peek_and_activate_differ_only_by_the_release_they_ask_for() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+
+        // Park the cursor on the pane: the workspace row takes the `focus_workspace` arm, which
+        // never releases either way, so it cannot tell the two verbs apart.
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+        p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
+        cx.drain();
+        assert!(
+            matches!(
+                store.workspaces.tree().current_item(),
+                Some(WorkspaceRow::Pane { .. }),
+            ),
+            "the fixture's second navigable row is the pane",
+        );
+
+        p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
+        let peeked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        assert!(
+            peeked.contains(&"focus_pane".to_string()),
+            "peek still brings the pane to the front: {peeked:?}",
+        );
+        assert!(
+            !peeked.contains(&"unfocus_dock".to_string()),
+            "…and asks for no release, so j/k keep working: {peeked:?}",
+        );
+        assert_eq!(
+            store.focused_container(),
+            Some("workspaces".to_string()),
+            "peek leaves the container holding the keyboard",
+        );
+
+        p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
+        let activated: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        assert!(
+            activated.contains(&"focus_pane".to_string())
+                && activated.contains(&"unfocus_dock".to_string()),
+            "activate-and-leave asks for the release itself: {activated:?}",
+        );
+    }
+
     #[test]
     fn an_action_this_component_does_not_own_declines() {
         let store = store_with_tree("workspaces");

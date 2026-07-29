@@ -335,8 +335,13 @@ pub fn on_mouse_input(
                 return Some((action, InteractionSource::MouseLeftSidebar));
             }
 
-            // Content click → focus.
+            // Content click → focus. Everything above this point resolved inside a container or a
+            // chrome widget; reaching here means the press landed on the main region, outside every
+            // container — one of the four ways container focus ends (F003/P086/T364). The release
+            // is here, at the gesture that means it, and no longer inside `handle_focus_pane`,
+            // which cannot tell a click apart from the component's own `Space`.
             if let Some(pane_id) = hit_test_pane(state, pos) {
+                crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock);
                 return Some((
                     WmAction::FocusPane { pane_id },
                     InteractionSource::MouseContent,
@@ -416,6 +421,11 @@ pub fn on_mouse_input(
         // Focus the clicked pane so the menu's pane actions target it, then open
         // the menu in place. terminal-task-18 (context-menu open surface).
         (MouseButton::Right, ElementState::Pressed) => {
+            // NOT a release site, deliberately (F003/P086/T364). `open_context_menu_for` captures
+            // `restorable_mode(state.input_mode)` as the overlay's origin, and releasing first
+            // rewrites `SidebarNav` to `Normal` — so the menu would stop restoring sidebar nav on
+            // close. Right-click while a dock holds the keyboard is rebuilt wholesale in
+            // F003/P086/T365, once the legacy mode this depends on is gone.
             if let Some(pane_id) = hit_test_pane(state, pos) {
                 open_context_menu(state, pane_id, pos);
                 return Some((

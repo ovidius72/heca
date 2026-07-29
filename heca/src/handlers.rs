@@ -114,17 +114,18 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
     let WmAction::FocusPane { pane_id } = action else {
         return;
     };
-    // Pane focus and chrome focus are alternatives: taking one gives up the other. Focusing a pane
-    // means the keyboard goes *there*, so a dock still holding it would swallow every key the user
-    // then typed (F003/P085/T352). One rule here covers every surface — a click on a pane, a pick,
-    // an RPC call — instead of each caller remembering.
+    // Focusing a pane changes which pane is active and **nothing else**. It does not release
+    // container focus (F003/P086/T364).
     //
-    // Navigating a dock is the exception, and the only one: `sidebar_peek` walks the tree focusing
-    // each row in the main view *without* leaving the sidebar, so the keyboard has not moved. The
-    // sidebar's own exits release the focus explicitly on the way out (`app/input.rs`).
-    if !state.sidebar_nav_active() {
-        handle_unfocus_dock(state, &WmAction::UnfocusDock);
-    }
+    // F003/P085/T352 put the release here, reasoning that "the keyboard goes to the pane". That is
+    // not a property of a pane getting focus — it is a property of *what the user asked for*, and
+    // this handler cannot tell the two apart. `Space` (peek) focuses a pane and deliberately keeps
+    // the keyboard on the dock; the rule fired anyway and `j`/`k` stopped working.
+    //
+    // Every way out is now explicit at the site that means it: the component's activate-and-leave
+    // queues `unfocus_dock` itself (`providers/workspaces/mod.rs`), `Esc` releases, a click that
+    // lands outside every container releases (`mouse.rs`), and another container taking focus
+    // replaces it in `set_focused_container`.
     focus_pane_by_id(state, *pane_id);
 }
 
