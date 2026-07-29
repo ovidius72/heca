@@ -2029,7 +2029,7 @@ fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -
 
 /// The confirm config name for a raw destructive action (`None` if it isn't confirmable).
 /// The **owner action name** whose [`ActionMeta::confirm`] governs this action — not the toggle key.
-/// `ClosePane`/`ClosePaneById` are both owned by `close` (whose spec is toggle-keyed `delete_pane`).
+/// `ClosePane`/`ClosePaneById` are both owned by `close`, so they confirm identically.
 fn confirm_owner_name(action: &WmAction) -> Option<&'static str> {
     match action {
         WmAction::ClosePane | WmAction::ClosePaneById { .. } => Some("close"),
@@ -2130,8 +2130,7 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
         WmAction::DeleteWorkspace { .. } => ("delete_workspace", action.clone()),
         _ => return false,
     };
-    // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key
-    // (`delete_pane` for `close`).
+    // `name` is the owner ACTION name; its meta's confirm spec carries the toggle key.
     let Some(spec) = state.action_catalog.confirm_spec(name).cloned() else {
         return false;
     };

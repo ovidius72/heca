@@ -1060,7 +1060,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
    fail if the declaration and the `build_action()` arm disagree.
 9. Add RPC parser support in `heca/src/rpc.rs`
 9b. **Classify the interaction policy** in `action_policy()` (`heca/src/app/interaction.rs`) — the match is exhaustive, so a new variant **won't compile** until you do. (`Global` = always allowed incl. floating; `AlwaysAllowed` is a misnomer — blocked when floating. See § Interaction Policy.)
-9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` (may differ from the action name, as `close` → `delete_pane`); users toggle it under `[confirm]`.
+9c. **If it's destructive, declare a confirm** as data on its `ActionMeta.confirm` (a `ConfirmSpec`), not at the call site — the central gate then confirms it on *every* surface. The toggle key is `ConfirmSpec.config_name` — a separate field, because one spec can govern several `WmAction` variants, though every built-in uses its own action name; users toggle it under `[confirm]`.
 10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate. Metadata is discoverable via RPC introspection (`list-actions` / `describe-action <name>`, `ActionCatalog::describe_all/describe`).
 11. Document examples in `README.md` and `keybindings.default.toml`
 

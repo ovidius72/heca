@@ -681,7 +681,7 @@ mod tests {
         let json = introspect(&catalog, "describe-action close").unwrap().unwrap();
         let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info.name, "close");
-        assert_eq!(info.confirm.as_deref(), Some("delete_pane"));
+        assert_eq!(info.confirm.as_deref(), Some("close"));
         let json = introspect(&catalog, "describe-action focus_left").unwrap().unwrap();
         let info: crate::actions::ActionInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(info.policy, "tiled_only");

@@ -3780,8 +3780,9 @@ meta.confirm = Some(ConfirmSpec {
 ```
 
 The user turns it off with `[confirm] plugin.docker.remove = false`. `config_name` is the **toggle
-key**, deliberately separate from the action name — heca's own `close` action carries a spec keyed
-`delete_pane`, so `[confirm] delete_pane = false` disables the pane-close prompt.
+key**, a separate field so one spec can govern several `WmAction` variants — `ClosePane` and
+`ClosePaneById` share heca's `close` spec. No built-in needs a name of its own, so `[confirm] close =
+false` disables the pane-close prompt.
 
 > **Native-only escape hatch — `Outcome::Callback`.** A response button's outcome is normally
 > declarative (`Proceed` / `Cancel` / `Dispatch` another named action), which serializes and works

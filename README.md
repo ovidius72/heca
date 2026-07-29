@@ -833,7 +833,7 @@ name — `true` prompts (Cancel / \<action\>), `false` runs immediately:
 
 ```toml
 [confirm]
-delete_pane = true      # confirm before closing a pane
+close = true            # confirm before closing a pane
 delete_column = true    # confirm before deleting a column (and its panes)
 delete_workspace = true # confirm before deleting a workspace (and its contents)
 ```
@@ -846,7 +846,12 @@ action not listed uses its own declared default. Changes apply on
 
 > Replaces the old `[settings] confirm_close_pane` / `confirm_delete_column` /
 > `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
-> `delete_pane` / `delete_column` / `delete_workspace`.
+> `close` / `delete_column` / `delete_workspace`.
+>
+> The pane toggle was once `delete_pane`; it still works, but `close` is the name
+> now — one word for the action, its key, its label and its dialog. **Close** is
+> for the pane you work in; **Delete** stays for a column or workspace, which
+> destroys everything inside it.
 
 ### Fonts
 

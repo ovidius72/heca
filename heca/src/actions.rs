@@ -1970,10 +1970,10 @@ pub struct ActionMeta {
     /// button, a context-menu entry, RPC — confirms identically. A plugin declares its own the same
     /// way (through [`register_dynamic`]).
     ///
-    /// The confirm's toggle key is [`ConfirmSpec::config_name`], which is **not always the action's
-    /// own name**: the `close` action's spec is keyed `delete_pane` (`ClosePane` + `ClosePaneById`
-    /// confirm identically, §5.1). So the meta of `close` carries a `config_name = "delete_pane"`
-    /// spec — the field lives with the action, the toggle key stays independent.
+    /// The confirm's toggle key is [`ConfirmSpec::config_name`], a separate field so a spec **may**
+    /// be toggled under a name of its own — one spec can govern several `WmAction` variants
+    /// (`ClosePane` + `ClosePaneById` confirm identically, §5.1). Every built-in nonetheless uses
+    /// its own action name, so a user toggles `[confirm] <action> = false` and nothing else.
     pub confirm: Option<ConfirmSpec>,
 }
 
@@ -2021,10 +2021,9 @@ impl ActionCatalog {
     /// via [`builtin_policy`] — never hand-written here — so the exhaustive `match` in
     /// `interaction.rs` remains the only authority on built-in policy and the two cannot drift.
     ///
-    /// The three destructive confirm specs are attached to their **owner action's** meta:
-    /// `delete_pane` → `close`, `delete_column` → `delete_column`, `delete_workspace` →
-    /// `delete_workspace` (§5.1 — the spec's `config_name` is the toggle key, which may differ from
-    /// the action name, as it does for `close`).
+    /// The three destructive confirm specs are attached to their **owner action's** meta — `close`,
+    /// `delete_column`, `delete_workspace` — each toggled under that same name (§5.1; the spec's
+    /// `config_name` may differ from the action name, but no built-in needs it to).
     pub fn with_builtins() -> Self {
         let mut catalog = Self {
             by_name: HashMap::new(),
@@ -2101,8 +2100,8 @@ impl ActionCatalog {
         self.builtins.contains(name)
     }
 
-    /// The declarative confirmation spec for an action, by its **action name** (the owner name —
-    /// e.g. `close`, not the toggle key `delete_pane`). `None` when the action needs no prompt.
+    /// The declarative confirmation spec for an action, by its **action name** — the owner, e.g.
+    /// `close`. `None` when the action needs no prompt.
     pub fn confirm_spec(&self, action_name: &str) -> Option<&ConfirmSpec> {
         self.find(action_name).and_then(|m| m.confirm.as_ref())
     }
@@ -2396,9 +2395,14 @@ pub struct ConfirmSpec {
 /// three destructive actions — close pane / delete column / delete workspace — each get a
 /// `[Cancel] [<verb>]` forced prompt.
 ///
-/// Note the `close` row: its owner is the action `close`, but its **toggle key** (`config_name`) is
-/// `delete_pane` — `[confirm] delete_pane = false` disables it, and `ClosePane`/`ClosePaneById` both
-/// resolve to this one spec (§5.1). The owner name and the toggle key are separate on purpose.
+/// Note the `close` row: `ClosePane` and `ClosePaneById` both resolve to this **one** spec (§5.1),
+/// which is what `config_name` is for — it stays a separate field so a spec can be toggled under a
+/// name of its own. No built-in uses that freedom: every one of these is toggled by its own action
+/// name, so `[confirm] close = false` disables the pane prompt.
+///
+/// A pane is **closed**, not deleted: that is the word its id, its binding name and its label all
+/// use, and the "cannot be undone" line already carries the weight. Delete is kept for the two
+/// containers below, which are a different kind of thing.
 fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
     let mk = |config_name: &'static str, verb: &str| ConfirmSpec {
         message: "This action cannot be undone.".to_string(),
@@ -2411,7 +2415,7 @@ fn builtin_confirm_specs() -> Vec<(&'static str, ConfirmSpec)> {
         default_enabled: true,
     };
     vec![
-        ("close", mk("delete_pane", "Delete")),
+        ("close", mk("close", "Close")),
         ("delete_column", mk("delete_column", "Delete")),
         ("delete_workspace", mk("delete_workspace", "Delete")),
     ]
@@ -2919,11 +2923,11 @@ mod tests {
     #[test]
     fn builtin_confirm_specs_are_declared_for_the_destructive_actions() {
         let catalog = ActionCatalog::with_builtins();
-        // The confirm spec now lives ON the owner action's meta (action-task-C), keyed by ACTION
-        // name — not a parallel index keyed by toggle key. `close` owns the pane-delete prompt whose
-        // toggle key is `delete_pane` (the owner name and the toggle key deliberately differ, §5.1).
+        // The confirm spec lives ON the owner action's meta (action-task-C), keyed by ACTION name
+        // — not a parallel index keyed by toggle key. `config_name` stays a separate field (§5.1),
+        // but every built-in is toggled under its own name, so the two agree here.
         for (owner, toggle_key) in [
-            ("close", "delete_pane"),
+            ("close", "close"),
             ("delete_column", "delete_column"),
             ("delete_workspace", "delete_workspace"),
         ] {
@@ -2940,7 +2944,8 @@ mod tests {
             assert_eq!(spec.buttons[1].role, ButtonRole::Danger);
             assert!(matches!(spec.buttons[1].outcome, Outcome::Proceed));
         }
-        // The toggle key is NOT an action, so it is not itself a confirm-spec lookup key anymore.
+        // `delete_pane` was this spec's toggle key until the vocabulary was made to agree; it is
+        // not an action, so it is not a confirm-spec lookup key.
         assert!(catalog.confirm_spec("delete_pane").is_none());
         // Non-destructive actions carry no confirm spec.
         assert!(catalog.confirm_spec("focus_left").is_none());
