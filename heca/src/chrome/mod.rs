@@ -3450,6 +3450,16 @@ pub(crate) fn container_at(state: &crate::app_state::AppState, pos: (f32, f32)) 
     heca_grid_ui::nav::scope_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
 }
 
+/// Which **row** a point is on, by the nav key its component gave it — `None` when the point is on
+/// no row (F003/P086/T365).
+///
+/// Read off the retained tree's real laid-out bounds, the same walk the right-click target and the
+/// drag source use, so all three agree about what a point is pointing at.
+pub(crate) fn nav_key_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
+    let tree = state.chrome_tree.as_ref()?;
+    heca_grid_ui::nav_key_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
+}
+
 /// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.
 ///
 /// Without it a scrollbar thumb grabbed in the sidebar stays welded to the cursor — the widget is

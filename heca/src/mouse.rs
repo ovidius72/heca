@@ -266,8 +266,15 @@ pub fn on_mouse_input(
                     {
                         crate::handlers::handle_focus_dock(
                             state,
-                            &WmAction::FocusDock { dock: Some(container) },
+                            &WmAction::FocusDock { dock: Some(container.clone()) },
                         );
+                    }
+                    // **The cursor and the click are the same thing.** Click row 5 and `j` must go
+                    // to row 6 — so the press moves the container's cursor, not just the highlight.
+                    // A press that lands on no row leaves the cursor alone: clicking a container's
+                    // padding is not a request to move it.
+                    if let Some(key) = crate::chrome::nav_key_at(state, pos) {
+                        crate::providers::move_provider_cursor(state, &container, &key);
                     }
                 }
                 None => crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock),

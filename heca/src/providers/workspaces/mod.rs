@@ -255,6 +255,29 @@ impl Provider for WorkspacesContainerProvider {
         ]
     }
 
+    /// The host moved this placement's cursor — reconcile the tree's positional index with it.
+    ///
+    /// Resolved by **matching this component's own keys against its own rows**, rather than parsing
+    /// the key back into a selection. Parsing would have to guess: a tiled pane and a floating one
+    /// are both `pane:<id>`, and only the row knows which it is.
+    fn cursor_moved(&self, key: &str, cx: &mut ProviderCx<'_>) {
+        let state = cx.state();
+        let ws = state.workspaces();
+        // Read, then drop the borrow: `tree_mut` below takes the same `RefCell`.
+        let selection = {
+            let tree = ws.tree();
+            tree.flat_items
+                .iter()
+                .map(|row| row.selection())
+                .find(|sel| selection_nav_key(*sel) == key)
+        };
+        let Some(selection) = selection else {
+            return;
+        };
+        ws.tree_mut().apply_nav_selection(Some(selection));
+        ws.set_nav_selection(Some(selection));
+    }
+
     fn perform(&self, action: &str, _args: &Intent, cx: &mut ProviderCx<'_>) -> Handled {
         match action {
             CURSOR_UP => self.step_cursor(cx, Step::Up),
@@ -1266,6 +1289,58 @@ mod tests {
             !asked.contains(&"unfocus_dock".to_string()),
             "peek keeps the keyboard on the dock: {asked:?}",
         );
+    }
+
+    /// **The cursor and the click are the same thing** (F003/P086/T365): a click moves the tree's
+    /// own cursor, so the next `j` continues from the clicked row rather than from wherever the
+    /// cursor was before.
+    ///
+    /// The resolution matches this component's own keys against its own rows — never parses one —
+    /// so an unknown key is a no-op rather than a guess.
+    #[test]
+    fn a_click_moves_the_cursor_so_stepping_continues_from_it() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+
+        // The fixture's rows are the workspace and its one pane; aim at the pane.
+        let pane_key = pane_nav_key(PaneId(1));
+        p.cursor_moved(&pane_key, &mut cx);
+
+        assert!(
+            matches!(
+                store.workspaces.tree().current_item(),
+                Some(WorkspaceRow::Pane { pane_id: PaneId(1) }),
+            ),
+            "the tree's own cursor moved, not just the highlight",
+        );
+        assert_eq!(
+            store.workspaces.nav_selection(),
+            Some(crate::chrome::SidebarSelection::Pane { pane_id: PaneId(1) }),
+            "and the selection that survives a rebuild agrees",
+        );
+
+        // Stepping now continues from the clicked row.
+        p.perform(CURSOR_UP, &Intent::new(CURSOR_UP), &mut cx);
+        assert!(
+            matches!(
+                store.workspaces.tree().current_item(),
+                Some(WorkspaceRow::Workspace { .. }),
+            ),
+            "`k` went to the row above the one clicked",
+        );
+    }
+
+    #[test]
+    fn a_key_this_component_did_not_write_leaves_the_cursor_alone() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+        let before = store.workspaces.tree().cursor;
+
+        p.cursor_moved("docker:container:abc", &mut cx);
+
+        assert_eq!(store.workspaces.tree().cursor, before, "no guess, no move");
     }
 
     /// The `Space` regression, pinned at the only level a unit test can reach (F003/P086/T364).

@@ -21,7 +21,7 @@
 mod actions;
 pub(crate) mod workspaces;
 
-pub(crate) use actions::{bind_provider_keybindings, register_provider_actions};
+pub(crate) use actions::{bind_provider_keybindings, move_provider_cursor, register_provider_actions};
 
 use crate::chrome::{
     ChromeEvent, ChromeIntentEmitter, ChromeSubscription, ContextMenuContribution, Contribution,
@@ -48,8 +48,15 @@ pub trait Provider {
     ///
     /// Distinct from [`id`](Provider::id) on purpose (user decision, 2026-07-29): bindings and
     /// declared actions belong to the *type*, so writing them once covers every placement, while
-    /// cursor / scroll / focus belong to each *mount*. `Hero::new()` twice is two instances of one
-    /// type, not two components.
+    /// scroll position and chrome focus belong to each *mount*. `Hero::new()` twice is two instances
+    /// of one type, not two components.
+    ///
+    /// **The cursor is the component's to say.** The host keeps one per mount, which is right for a
+    /// component that navigates each placement independently — but a component whose model has a
+    /// single cursor (the workspaces tree has exactly one) must light the same row in every seating,
+    /// or two views of one thing disagree. The host brings the seatings back into step after each
+    /// provider call (`mirror_cursor_to_siblings`), so this follows the model rather than being
+    /// asserted against it (F003/P086/T365).
     ///
     /// Defaults to `id()`, which is right for a container that is only ever seated once and keeps
     /// the single-placement case free of ceremony.
@@ -144,6 +151,16 @@ pub trait Provider {
     fn actions(&self) -> Vec<crate::actions::ActionMeta> {
         Vec::new()
     }
+
+    /// The host moved this placement's cursor to `key` — a click, an RPC call, a script.
+    ///
+    /// The key is one **this component wrote** (`NavExt::nav_key`), so only it can say which row
+    /// that is; the host deliberately never parses it. Whatever the component keeps of its own — a
+    /// positional index, a domain-typed selection — reconciles here.
+    ///
+    /// Default: nothing, which is right for a component whose only cursor **is** the host's generic
+    /// one. A component that keeps no index of its own needs none of this.
+    fn cursor_moved(&self, _key: &str, _cx: &mut ProviderCx<'_>) {}
 
     /// Keys this component asks for, as `(action id, combo(s))` — **the plugin path**
     /// (F003/P086/T366).
