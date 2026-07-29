@@ -10,7 +10,6 @@ use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
-use crate::providers::workspaces::WorkspaceTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_grid_ui::install_frame_request;
@@ -305,8 +304,6 @@ pub(crate) async fn init_state(
     );
 
     let ws_count = session.workspaces.len();
-    let mut sidebar_tree = WorkspaceTree::new();
-    sidebar_tree.sync_from_session(&session, None, Some(pane_id), &vec![None; ws_count]);
 
     let terminal_layer_scratch =
         app_state::RetainedTerminalScratch::new(&device, config.format, 1, 1);
@@ -380,7 +377,6 @@ pub(crate) async fn init_state(
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
         overlay_origin_mode: None,
-        sidebar_tree,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
         hint_targets: crate::chrome::HintTargetRegistry::default(),

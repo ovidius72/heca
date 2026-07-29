@@ -2941,7 +2941,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // chokepoint, so calling it every frame is cheap.
     if state.sidebar_nav_active() {
         let selection = state.chrome_state.workspaces.nav_selection();
-        state.sidebar_tree.apply_nav_selection(selection);
+        state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
     } else {
         state.chrome_state.workspaces.set_nav_selection(None);
     }
@@ -3118,8 +3118,8 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         let runtime = runtime_snapshot(&state.chrome_state.workspaces, *pid);
         let next = pane_info_view(
             &state.programs,
-            pane_fallback_name(&state.sidebar_tree, *pid),
-            pane_custom_name(&state.sidebar_tree, *pid),
+            pane_fallback_name(&state.chrome_state.workspaces.tree(), *pid),
+            pane_custom_name(&state.chrome_state.workspaces.tree(), *pid),
             runtime.as_ref(),
             // Drive the sidebar card's `(process)` suffix live: compute the hint with the
             // real flag so a rename toggles it without a tree rebuild. Only `process_hint`
@@ -3279,9 +3279,12 @@ pub(crate) fn build_chrome_root(
     // no longer knows that the left sidebar happens to hold the workspace tree. Moving
     // the `workspaces` container to the right region (`ChromeHost::move_container`) moves
     // its UI with it, with no change here.
+    // Bound before the context so the borrow lives as long as the build does, not just as long as
+    // the argument list.
+    let tree = state.chrome_state.workspaces.tree();
     let ctx = crate::providers::ChromeCtx::for_build(
         crate::host::App::new(&state.chrome_state),
-        &state.sidebar_tree,
+        &tree,
         &state.programs,
         &theme,
         &emit_intent,
@@ -3641,7 +3644,7 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     // workspace must NOT rebuild: pane/column `active` + the status text are bound
     // signals (`sync_chrome_signals`), deliberately excluded from this signature.
     state.session.active_workspace_idx.hash(&mut hsh);
-    for ws in &state.sidebar_tree.workspaces {
+    for ws in &state.chrome_state.workspaces.tree().workspaces {
         ws.ws_idx.hash(&mut hsh);
         ws.name.hash(&mut hsh);
         ws.collapsed.hash(&mut hsh);

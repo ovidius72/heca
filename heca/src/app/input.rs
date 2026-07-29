@@ -710,7 +710,10 @@ fn handle_sidebar_nav_mode(
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
 
     if is_escape {
-        if let Some(item) = state.sidebar_tree.current_item().cloned()
+        // Cloned out of the borrow: the dispatch below reaches back into the store, and holding a
+        // `Ref` across it would panic at runtime rather than fail to compile.
+        let cursor_row = state.chrome_state.workspaces.tree().current_item().cloned();
+        if let Some(item) = cursor_row
             && let Some(pane_id) = sidebar_item_focus_target(&state.session, &item)
         {
             dispatch_action(
@@ -724,7 +727,7 @@ fn handle_sidebar_nav_mode(
         state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
     } else if is_enter {
-        let item = state.sidebar_tree.current_item().cloned();
+        let item = state.chrome_state.workspaces.tree().current_item().cloned();
         match item {
             Some(crate::providers::workspaces::WorkspaceRow::Pane { pane_id })
             | Some(crate::providers::workspaces::WorkspaceRow::FloatingPane { pane_id, .. }) => {

@@ -308,7 +308,7 @@ fn restorable_mode(mode: InputMode) -> Option<InputMode> {
 pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, ContextTarget)> {
     resolve_context_for(
         &state.input_mode,
-        state.sidebar_tree.current_item(),
+        state.chrome_state.workspaces.tree().current_item(),
         crate::app::interaction::focused_pane_id(state),
         &|pane_id| {
             crate::find_pane_location(&state.session, pane_id).map(|(ws, col, _)| (ws, col))

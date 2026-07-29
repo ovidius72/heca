@@ -130,7 +130,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     }
 
     // Sync sidebar tree from session state.
-    state.sidebar_tree.sync_from_session(
+    state.chrome_state.workspaces.tree_mut().sync_from_session(
         &state.session,
         state.last_visited_ws_idx,
         state.focused_pane,
@@ -142,11 +142,11 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .chrome_state
         .workspaces
         .with_collapsed_ws(|s| s.clone());
-    state.sidebar_tree.apply_ws_collapsed(&collapsed, None);
+    state.chrome_state.workspaces.tree_mut().apply_ws_collapsed(&collapsed, None);
     // Same for the canonical nav selection: the rebuild renumbers `flat_items`, so the
     // positional cursor is re-derived from the selection (which names its row and so
     // survives the rebuild) rather than being left pointing at whatever now sits at that
     // index. Collapse changes `flat_items` too, so this runs after `apply_ws_collapsed`.
     let selection = state.chrome_state.workspaces.nav_selection();
-    state.sidebar_tree.apply_nav_selection(selection);
+    state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
 }

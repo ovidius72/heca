@@ -1657,7 +1657,7 @@ pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) {
 /// Every sidebar-nav mutation ends here. The setter is change-guarded, so republishing an
 /// unchanged selection is free and emits nothing.
 fn publish_sidebar_selection(state: &mut AppState) {
-    let selection = state.sidebar_tree.selection();
+    let selection = state.chrome_state.workspaces.tree().selection();
     state.chrome_state.workspaces.set_nav_selection(selection);
     // …and into the **generic** per-mount cursor the rows' outlines now read (F003/P085/T354). The
     // domain-typed `nav_selection` is still canonical until F003/P085/T356 migrates the container
@@ -1672,7 +1672,7 @@ fn publish_sidebar_selection(state: &mut AppState) {
 
 pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.sidebar_tree.cursor_up();
+        state.chrome_state.workspaces.tree_mut().cursor_up();
         publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
@@ -1680,7 +1680,7 @@ pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.sidebar_tree.cursor_down();
+        state.chrome_state.workspaces.tree_mut().cursor_down();
         publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
@@ -1688,7 +1688,7 @@ pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.sidebar_tree.collapse(&state.chrome_state.workspaces);
+        state.chrome_state.workspaces.tree_mut().collapse(&state.chrome_state.workspaces);
         publish_sidebar_selection(state);
         state.needs_redraw = true;
     }
@@ -1696,7 +1696,7 @@ pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let item = state.sidebar_tree.current_item().cloned();
+        let item = state.chrome_state.workspaces.tree().current_item().cloned();
         match &item {
             // Focus goes through the focus *action*, not a hand-rolled call — the sidebar
             // decides *which* row to activate, never what focusing means.
@@ -1717,7 +1717,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 state.input_mode = InputMode::Normal;
             }
             _ => {
-                state.sidebar_tree.expand(&state.chrome_state.workspaces);
+                state.chrome_state.workspaces.tree_mut().expand(&state.chrome_state.workspaces);
             }
         }
         // Activating a leaf leaves nav mode; `sync_chrome_state` clears the selection on
@@ -1749,7 +1749,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
 /// canonical in the chrome store and re-projected onto the cursor, so the cursor stays on
 /// the row the user is pointing at rather than following the focus.
 pub fn handle_sidebar_peek(state: &mut AppState, _action: &WmAction) {
-    let Some(item) = state.sidebar_tree.current_item().cloned() else {
+    let Some(item) = state.chrome_state.workspaces.tree().current_item().cloned() else {
         return;
     };
     // Both arms go through the action's own handler rather than re-deriving the focus:
@@ -1775,14 +1775,12 @@ pub fn handle_sidebar_peek(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let item = state.sidebar_tree.current_item().cloned();
+        let item = state.chrome_state.workspaces.tree().current_item().cloned();
         match &item {
             Some(workspaces::WorkspaceRow::Pane { .. })
             | Some(workspaces::WorkspaceRow::FloatingPane { .. }) => {}
             _ => {
-                state
-                    .sidebar_tree
-                    .toggle_expand(&state.chrome_state.workspaces);
+                state.chrome_state.workspaces.tree_mut().toggle_expand(&state.chrome_state.workspaces);
             }
         }
         publish_sidebar_selection(state);
@@ -1791,22 +1789,22 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
 }
 
 fn sidebar_selected_workspace_idx(state: &AppState) -> Option<usize> {
-    let item = state.sidebar_tree.current_item()?;
+    let item = state.chrome_state.workspaces.tree().current_item().cloned()?;
     match item {
         workspaces::WorkspaceRow::Workspace { ws_idx }
         | workspaces::WorkspaceRow::Column { ws_idx, .. }
-        | workspaces::WorkspaceRow::FloatingPane { ws_idx, .. } => Some(*ws_idx),
+        | workspaces::WorkspaceRow::FloatingPane { ws_idx, .. } => Some(ws_idx),
         workspaces::WorkspaceRow::Pane { pane_id } => {
-            find_pane_location(&state.session, *pane_id).map(|(ws_idx, _, _)| ws_idx)
+            find_pane_location(&state.session, pane_id).map(|(ws_idx, _, _)| ws_idx)
         }
     }
 }
 
 fn sidebar_selected_column_target(state: &AppState) -> Option<(usize, usize)> {
-    let item = state.sidebar_tree.current_item()?;
+    let item = state.chrome_state.workspaces.tree().current_item().cloned()?;
     match item {
-        workspaces::WorkspaceRow::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
-        workspaces::WorkspaceRow::Pane { pane_id } => find_pane_location(&state.session, *pane_id)
+        workspaces::WorkspaceRow::Column { ws_idx, col_idx } => Some((ws_idx, col_idx)),
+        workspaces::WorkspaceRow::Pane { pane_id } => find_pane_location(&state.session, pane_id)
             .map(|(ws_idx, col_idx, _)| (ws_idx, col_idx)),
         workspaces::WorkspaceRow::Workspace { .. } | workspaces::WorkspaceRow::FloatingPane { .. } => None,
     }
@@ -1824,7 +1822,7 @@ fn current_tiled_column_target(state: &AppState) -> Option<(usize, usize)> {
 }
 
 fn sidebar_delete_prompt(state: &AppState) -> Option<(String, WmAction)> {
-    let item = state.sidebar_tree.current_item()?.clone();
+    let item = state.chrome_state.workspaces.tree().current_item()?.clone();
     match item {
         workspaces::WorkspaceRow::Workspace { ws_idx } => {
             let ws_label = if let Some(ws) = state.session.workspaces.get(ws_idx)
@@ -1874,7 +1872,7 @@ pub fn handle_sidebar_create_workspace(state: &mut AppState, _action: &WmAction)
         return;
     }
     if matches!(
-        state.sidebar_tree.current_item(),
+        state.chrome_state.workspaces.tree().current_item(),
         Some(workspaces::WorkspaceRow::FloatingPane { .. })
     ) {
         return;
@@ -1888,7 +1886,7 @@ pub fn handle_sidebar_create_column(state: &mut AppState, _action: &WmAction) {
         return;
     }
     if matches!(
-        state.sidebar_tree.current_item(),
+        state.chrome_state.workspaces.tree().current_item(),
         Some(workspaces::WorkspaceRow::FloatingPane { .. })
     ) {
         return;
@@ -2182,7 +2180,7 @@ pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: O
         .chrome_state
         .workspaces
         .with_collapsed_ws(|s| s.clone());
-    state.sidebar_tree.apply_ws_collapsed(&set, Some(ws_idx));
+    state.chrome_state.workspaces.tree_mut().apply_ws_collapsed(&set, Some(ws_idx));
 }
 
 pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
@@ -2213,7 +2211,7 @@ pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) 
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.sidebar_tree.collapse_column(ws_idx, col_idx);
+    state.chrome_state.workspaces.tree_mut().collapse_column(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2221,7 +2219,7 @@ pub fn handle_expand_current_column(state: &mut AppState, _action: &WmAction) {
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.sidebar_tree.expand_column(ws_idx, col_idx);
+    state.chrome_state.workspaces.tree_mut().expand_column(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 
@@ -2229,7 +2227,7 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
     let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
         return;
     };
-    state.sidebar_tree.toggle_column_collapsed(ws_idx, col_idx);
+    state.chrome_state.workspaces.tree_mut().toggle_column_collapsed(ws_idx, col_idx);
     state.needs_redraw = true;
 }
 

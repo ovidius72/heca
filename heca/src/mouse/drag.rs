@@ -88,9 +88,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
 /// Human-readable ghost-chip text for an in-flight sidebar drag.
 fn drag_ghost_label(state: &AppState, payload: &AppDragPayload) -> String {
     match payload {
-        AppDragPayload::Pane { pane_id, .. } => state
-            .sidebar_tree
-            .workspaces
+        AppDragPayload::Pane { pane_id, .. } => state.chrome_state.workspaces.tree().workspaces
             .iter()
             .flat_map(|ws| &ws.columns)
             .flat_map(|col| &col.panes)

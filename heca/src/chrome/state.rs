@@ -141,6 +141,20 @@ impl ChromeSelection {
 #[derive(Clone, Debug)]
 pub struct WorkspacesContainerState {
     events: ChromeEventBus,
+    /// **The workspaces component's own model** — its rows, its cursor, its collapse state.
+    ///
+    /// It lives here rather than on `AppState` because it belongs to the component, not to the app
+    /// (F003/P085/T356). It is not on the provider struct either: a provider is a
+    /// `Box<dyn Provider>`, so anything that wanted the model back would need `as_any` and a
+    /// downcast — host code reaching into one named component, which is the thing the pluggable
+    /// design exists to prevent. Here it is reachable through the ordinary
+    /// [`StateView`](crate::host::StateView) every provider already reads from, and through
+    /// `ProviderCx` inside `perform`.
+    ///
+    /// `RefCell` because the store is shared by clone (its signals alias), and the model is a plain
+    /// projection rebuilt from `Session` rather than a set of signals. Borrow it for as short a span
+    /// as possible — never across a call that might reach back into the store.
+    tree: std::rc::Rc<std::cell::RefCell<crate::providers::workspaces::WorkspaceTree>>,
     /// Workspaces collapsed in this container (by ws index). Read via `with_collapsed_ws`.
     pub(crate) collapsed_ws: Signal<HashSet<usize>>,
     /// Active/hovered pane in this container.
@@ -165,7 +179,7 @@ pub struct WorkspacesContainerState {
     pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
 
     /// The sidebar-nav cursor selection while in `InputMode::SidebarNav`, projected
-    /// from `AppState.sidebar_tree.current_item()`. `None` = not navigating. Drives
+    /// from the component's own model (`tree().current_item()`). `None` = not navigating. Drives
     /// the expanded sidebar's nav-cursor highlight, kept **distinct** from
     /// `active_pane` (the real session focus).
     pub(crate) nav_selection: Signal<Option<SidebarSelection>>,
@@ -182,9 +196,25 @@ pub struct WorkspacesContainerState {
 }
 
 impl WorkspacesContainerState {
+    /// Read the component's model — its rows, cursor and collapse state.
+    ///
+    /// Keep the borrow short: it is a `RefCell`, so holding one across a call that reaches back
+    /// into the store is a runtime panic rather than a compile error.
+    pub fn tree(&self) -> std::cell::Ref<'_, crate::providers::workspaces::WorkspaceTree> {
+        self.tree.borrow()
+    }
+
+    /// Mutate the component's model.
+    pub fn tree_mut(&self) -> std::cell::RefMut<'_, crate::providers::workspaces::WorkspaceTree> {
+        self.tree.borrow_mut()
+    }
+
     fn new(events: ChromeEventBus) -> Self {
         Self {
             events,
+            tree: std::rc::Rc::new(std::cell::RefCell::new(
+                crate::providers::workspaces::WorkspaceTree::new(),
+            )),
             collapsed_ws: signal(HashSet::new()),
             selection: ChromeSelection::new(),
             pick_candidates: signal(Vec::new()),

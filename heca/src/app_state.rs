@@ -2,7 +2,6 @@ use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
-use crate::providers::workspaces::WorkspaceTree;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
@@ -609,7 +608,7 @@ fn make_terminal_texture(
 /// - `input_mode` is `Normal` unless an explicit mode transition happened
 ///   (prefix key, sidebar entry, rename, etc.). Mode transitions always go
 ///   through the input dispatch, never by direct field mutation.
-/// - `sidebar_tree` is rebuilt via `sync_from_session()` after any layout
+/// - the workspaces model is rebuilt via `sync_from_session()` after any layout
 ///   or focus change that affects the sidebar projection.
 pub struct AppState {
     pub window: Arc<Window>,
@@ -683,8 +682,6 @@ pub struct AppState {
     /// overlay remains. `None` for menus opened from Normal (no-op). See
     /// `chrome::context_menu` for the full contract.
     pub overlay_origin_mode: Option<InputMode>,
-    /// The sidebar tree model for workspace/pane tree navigation.
-    pub sidebar_tree: WorkspaceTree,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
