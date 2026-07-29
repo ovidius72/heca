@@ -394,14 +394,24 @@ pub(crate) struct PendingContext {
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// An entry whose id, label and action name coincide (`zoom_column`, `float`, …).
-fn item(id: &str, label: &str) -> DropdownItem {
+///
+/// `pub(crate)` because a **component builds its own menu**: the three sidebar builders are moving
+/// into the workspaces provider (F003/P086/T365), while `build_pane_menu` stays here — the content
+/// pane is the app's own domain. These three are the shared vocabulary both sides write entries
+/// with, so they belong to neither.
+pub(crate) fn item(id: &str, label: &str) -> DropdownItem {
     DropdownItem::new(id, label)
 }
 
 /// An entry whose visual identity (`id` → icon/label) differs from what it runs. The `action` is
 /// the name [`build_action`](crate::input::build_action) resolves, and `args` are its arguments —
 /// the same pair a `config.toml` binding or an RPC command would supply.
-fn item_running(id: &str, label: &str, action: &str, args: &[(&str, PropValue)]) -> DropdownItem {
+pub(crate) fn item_running(
+    id: &str,
+    label: &str,
+    action: &str,
+    args: &[(&str, PropValue)],
+) -> DropdownItem {
     let mut intent = Intent::new(action);
     for (k, v) in args {
         intent = intent.arg(*k, v.clone());
@@ -409,7 +419,9 @@ fn item_running(id: &str, label: &str, action: &str, args: &[(&str, PropValue)])
     DropdownItem::with_intent(id, label, intent)
 }
 
-fn usize_arg(v: usize) -> PropValue {
+/// A `usize` argument as the `PropValue` an [`Intent`] carries — the form every `ws_idx` /
+/// `col_idx` menu argument takes.
+pub(crate) fn usize_arg(v: usize) -> PropValue {
     PropValue::Int(v as i64)
 }
 
