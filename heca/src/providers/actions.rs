@@ -15,7 +15,6 @@ use std::rc::Rc;
 
 use crate::actions::{ActionRegistry, DuplicateAction, register_dynamic, unregister_dynamic};
 use crate::app::conflicts::{ActionConflict, Conflicts};
-use crate::app::registry::bind_component_default;
 use crate::keymap::KeymapRegistry;
 use crate::app_state::AppState;
 use crate::chrome::Intent;
@@ -34,7 +33,6 @@ use crate::providers::ProviderCx;
 pub(crate) fn register_provider_actions(
     state: &mut AppState,
     registry: &mut ActionRegistry,
-    component_keymaps: &mut HashMap<String, KeymapRegistry>,
     conflicts: &mut Conflicts,
 ) {
     // Read the declarations first, then mutate: the providers live inside `state.chrome_host`, so
@@ -44,7 +42,6 @@ pub(crate) fn register_provider_actions(
     for (mount, kind, metas) in declared {
         for meta in metas {
             let id = meta.name.clone();
-            let default_binding = meta.default_binding.clone();
             match register_dynamic(
                 registry,
                 &mut state.action_catalog,
@@ -52,9 +49,6 @@ pub(crate) fn register_provider_actions(
                 Some(Rc::new(route_to_owner)),
             ) {
                 Ok(handle) => {
-                    // Only a declaration that was actually accepted gets a key: binding one to a
-                    // rejected id would leave a key that runs the built-in it collided with.
-                    bind_component_default(component_keymaps, &kind, &default_binding, &id);
                     if let Some(handles) = state.chrome_host.handles_mut(&mount) {
                         handles.keep_action(handle);
                     }
@@ -73,20 +67,32 @@ pub(crate) fn register_provider_actions(
     }
 }
 
-/// Re-apply every mounted component's declared default bindings after the keymaps were rebuilt
-/// from config (`prefix+Shift+r`).
+/// Bind every mounted component's **runtime-registered** keys into its layer (F003/P086/T366).
 ///
-/// A reload throws the layers away and rebuilds them from the file, which knows nothing about a
-/// component that mounted afterwards — so without this, reloading silently unbinds every declared
-/// default. Actions themselves are untouched: they live in the catalog, which a reload does not
-/// rebuild.
-pub(crate) fn rebind_provider_defaults(
+/// This is the **plugin** path, and only the plugin path. A component shipped with heca writes its
+/// keys in `keybindings.default.toml` under `[[keys.component]]`, where the user can see them next
+/// to everything else and change them; a plugin has no file in that merge, so runtime registration
+/// is its only way in. Anything in the config file wins over what is registered here.
+///
+/// Called at mount **and after a reload**: a reload throws the layers away and rebuilds them from a
+/// file that knows nothing about a plugin that mounted afterwards, so without this second call
+/// reloading would silently unbind every plugin key. Actions themselves are untouched — they live
+/// in the catalog, which a reload does not rebuild.
+pub(crate) fn bind_provider_keybindings(
     state: &AppState,
     component_keymaps: &mut HashMap<String, KeymapRegistry>,
+    index: &mut crate::keymap::BindingIndex,
 ) {
-    for (_, kind, metas) in declarations(state) {
-        for meta in metas {
-            bind_component_default(component_keymaps, &kind, &meta.default_binding, &meta.name);
+    for provider in state.chrome_host.mounted_providers() {
+        let kind = provider.kind().to_string();
+        for (action, keys) in provider.keybindings() {
+            crate::app::registry::register_component_keybinding(
+                component_keymaps,
+                index,
+                &kind,
+                &keys,
+                &action,
+            );
         }
     }
 }

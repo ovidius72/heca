@@ -35,35 +35,6 @@ pub(crate) fn format_shortcut(keys: &str, with_prefix: bool) -> String {
     }
 }
 
-/// Resolve the **display shortcut(s)** for an action by its config name — the
-/// single, centralized seam every button uses so no surface hand-picks or hardcodes
-/// a shortcut. Reads the *effective* binding: the user's override in `user` when
-/// present (so a rebind is honored — **not** the bundled default), else `defaults`,
-/// mirroring `build_keymap`'s per-action merge. An action may carry **several**
-/// bindings (`"prefix+x, prefix+X"` or a list); all are rendered and joined with
-/// `" / "`. The leader renders through [`PREFIX_SYMBOL`] (never a literal). Returns
-/// `None` when the action is unbound (caller then shows the label alone).
-///
-/// Each binding string carries whether it's a leader chord (`"prefix+x"`) or a
-/// global one (`"Alt+1"`), so a name maps to exactly what the user presses.
-pub(crate) fn shortcut_for_action(
-    name: &str,
-    user: &heca_config::keys::KeybindingMap,
-    defaults: &heca_config::keys::KeybindingMap,
-) -> Option<String> {
-    let value = user.get(name).or_else(|| defaults.get(name))?;
-    let all: Vec<String> = value
-        .keys()
-        .into_iter()
-        .map(|key| format_shortcut(key, key.starts_with("prefix+")))
-        .collect();
-    if all.is_empty() {
-        None
-    } else {
-        Some(all.join(" / "))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

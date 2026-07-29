@@ -21,7 +21,7 @@
 mod actions;
 pub(crate) mod workspaces;
 
-pub(crate) use actions::{rebind_provider_defaults, register_provider_actions};
+pub(crate) use actions::{bind_provider_keybindings, register_provider_actions};
 
 use crate::chrome::{
     ChromeEvent, ChromeIntentEmitter, ChromeSubscription, ContextMenuContribution, Contribution,
@@ -143,6 +143,22 @@ pub trait Provider {
     /// the `prefix+/` hint, and the central destructive-confirm gate — because these metas join the
     /// same [`ActionCatalog`](crate::actions::ActionCatalog) the built-ins do.
     fn actions(&self) -> Vec<crate::actions::ActionMeta> {
+        Vec::new()
+    }
+
+    /// Keys this component asks for, as `(action id, combo(s))` — **the plugin path**
+    /// (F003/P086/T366).
+    ///
+    /// **Empty for anything shipped with heca, and that is the point.** A core component writes its
+    /// keys in `keybindings.default.toml` under `[[keys.component]]`, where they sit beside every
+    /// other binding, `--keys-show` finds them, and the user edits them in one place. Declaring them
+    /// in code as well would be a second copy of the file that nothing compares against — which is
+    /// exactly what `ActionMeta::default_binding` was, and why it is gone.
+    ///
+    /// A **plugin** has no entry in that merge, so this is its only way in. Whatever the user's file
+    /// says still wins: a registration never overwrites a combo the config already bound, and never
+    /// adds a second key to an action the user has rebound.
+    fn keybindings(&self) -> Vec<(String, String)> {
         Vec::new()
     }
 
@@ -444,7 +460,6 @@ mod tests {
                 label: "Restart".into(),
                 description: "Restart the selected thing.".into(),
                 category: crate::actions::ActionCategory::Chrome,
-                default_binding: "r".into(),
                 icon: None,
                 policy: ActionPolicy::Global,
                 args: Vec::new(),

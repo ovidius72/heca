@@ -7,7 +7,7 @@ use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
 use crate::app::conflicts::{BindingConflict, Conflicts};
-use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
+use crate::keymap::{index_binding, ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
@@ -46,13 +46,53 @@ fn action_ref_from_config(name: &str, args: &HashMap<String, String>) -> ActionR
     ActionRef::Dynamic(intent)
 }
 
+/// The action id a `[[keys.component]]` entry means, and the reference to bind (F003/P086/T362).
+///
+/// **Binding names are short; the action id is `<component>.<name>`.** A user writes `cursor_up`
+/// under `name = "workspaces"` and means `workspaces.cursor_up` — they should never have to repeat
+/// the component in every line of its own block.
+///
+/// The one exception is an id heca already knows: a component **binds** existing actions rather than
+/// redeclaring them (`next_pane`, `zoom_column`), and those keep their catalog id. That is decided
+/// by whether [`action_ref_from_config`] can resolve the name at load — a built-in resolves, a
+/// component's or plugin's own name does not and becomes a `Dynamic` ref answered at press time.
+///
+/// An already-qualified name is left alone, so writing the id out in full is never wrong.
+fn component_action(
+    component: &str,
+    written: &str,
+    args: &HashMap<String, String>,
+) -> (String, ActionRef) {
+    let direct = action_ref_from_config(written, args);
+    if matches!(direct, ActionRef::Builtin(_)) || written.starts_with(&format!("{component}.")) {
+        return (written.to_string(), direct);
+    }
+    let id = format!("{component}.{written}");
+    let action = action_ref_from_config(&id, args);
+    (id, action)
+}
+
+/// What a binding was written as: which action, in which layer, under which key.
+///
+/// Carried together because the same three facts answer two questions — where to send the user when
+/// two bindings collide, and what key an action answers to ([`BindingIndex`], F003/P086/T366).
+struct Written<'a> {
+    /// The action id the binding resolves to, after any component qualification.
+    action: &'a str,
+    /// The layer, named the way the config file names it.
+    layer: &'a str,
+    /// The combo exactly as the user types it — `prefix+` and all.
+    key: &'a str,
+}
+
 fn bind_with_conflict_tracking(
     keymap: &mut KeymapRegistry,
     mode: &str,
     combo: KeyCombo,
     action: ActionRef,
-    source: String,
+    written: Written<'_>,
     conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
 ) {
     if let Some(previous_action) = keymap.resolve(mode, &combo).cloned()
         && previous_action != action
@@ -63,10 +103,78 @@ fn bind_with_conflict_tracking(
             previous_action,
             previous_source: "existing binding".to_string(),
             new_action: action.clone(),
-            new_source: source,
+            new_source: format!("{} {}", written.layer, written.action),
         });
     }
     keymap.bind(mode, combo, action);
+    index_binding(index, written.action, written.layer, written.key);
+}
+
+/// Retire a combo from a layer, and from the index with it (F003/P086/T366).
+///
+/// An `unbind` that left the index alone would have `--keys-show` and every tooltip reporting a key
+/// that no longer does anything — the exact drift the index exists to end. Matched on the parsed
+/// combo rather than the literal string, so `"Prefix+W"` retires `"prefix+w"`.
+fn unbind_and_deindex(
+    keymap: &mut KeymapRegistry,
+    mode: &str,
+    layer: &str,
+    key: &str,
+    index: &mut BindingIndex,
+) {
+    let split = |s: &str| {
+        let s = s.trim();
+        match s.strip_prefix("prefix+") {
+            Some(rest) => (true, KeyCombo::parse(rest.trim())),
+            None => (false, KeyCombo::parse(s)),
+        }
+    };
+    let target = split(key);
+    keymap.unbind(mode, &target.1);
+    for bound in index.values_mut() {
+        bound.retain(|b| b.layer != layer || split(&b.key) != target);
+    }
+    index.retain(|_, bound| !bound.is_empty());
+}
+
+/// Bind a component's **runtime-registered** key into its layer, unless the user already spoke
+/// (F003/P086/T366).
+///
+/// The plugin path — see [`bind_provider_keybindings`](crate::providers::bind_provider_keybindings)
+/// for why only a plugin uses it. **User config always wins, and a registration never silently
+/// shadows one.** Two ways it can lose: the combo is already bound in this layer (the user put
+/// something else there), or the action already answers to a key **in any layer** — the index is
+/// built from config before this runs, so an entry there means the user has spoken about this
+/// action, wherever they wrote it, and it must not also keep the key the plugin asked for.
+pub fn register_component_keybinding(
+    keymaps: &mut HashMap<String, KeymapRegistry>,
+    index: &mut BindingIndex,
+    component: &str,
+    keys: &str,
+    action: &str,
+) {
+    let trimmed = keys.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unbound") {
+        return;
+    }
+    let layer = keymaps
+        .entry(component.to_string())
+        .or_insert_with(KeymapRegistry::new);
+    if index.contains_key(action) {
+        return;
+    }
+    for key_str in trimmed.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let combo = KeyCombo::parse(key_str);
+        if layer.resolve(component, &combo).is_some() {
+            continue;
+        }
+        layer.bind(
+            component,
+            combo,
+            action_ref_from_config(action, &HashMap::new()),
+        );
+        index_binding(index, action, "plugin", key_str);
+    }
 }
 
 
@@ -187,6 +295,7 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
 pub fn build_keymap(
     config: &heca_config::theme::Config,
     conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
 ) -> KeymapRegistry {
     let mut keymap = KeymapRegistry::new();
 
@@ -206,15 +315,20 @@ pub fn build_keymap(
         let action = action_ref_from_config(action_name, &no_args);
         for key_str in value.keys() {
             let trimmed = key_str.trim();
-            if trimmed.starts_with("prefix+") {
-                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+            let written = Written {
+                action: action_name,
+                layer: "[keys]",
+                key: trimmed,
+            };
+            if let Some(rest) = trimmed.strip_prefix("prefix+") {
                 bind_with_conflict_tracking(
                     &mut keymap,
                     "normal",
-                    KeyCombo::parse(rest),
+                    KeyCombo::parse(rest.trim()),
                     action.clone(),
-                    format!("[keys] {action_name}"),
+                    written,
                     conflicts,
+                    index,
                 );
             } else {
                 bind_with_conflict_tracking(
@@ -222,8 +336,9 @@ pub fn build_keymap(
                     "global",
                     KeyCombo::parse(trimmed),
                     action.clone(),
-                    format!("[keys] {action_name}"),
+                    written,
                     conflicts,
+                    index,
                 );
             }
         }
@@ -231,14 +346,8 @@ pub fn build_keymap(
 
     for combo_str in config.keys.unbind.keys() {
         let trimmed = combo_str.trim();
-        if trimmed.starts_with("prefix+") {
-            let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-            let combo = KeyCombo::parse(rest);
-            keymap.unbind("normal", &combo);
-        } else {
-            let combo = KeyCombo::parse(trimmed);
-            keymap.unbind("global", &combo);
-        }
+        let mode = if trimmed.starts_with("prefix+") { "normal" } else { "global" };
+        unbind_and_deindex(&mut keymap, mode, "[keys]", trimmed, index);
     }
 
     for cmd_cfg in &config.keys.command {
@@ -253,15 +362,20 @@ pub fn build_keymap(
             },
         });
         let trimmed = cmd_cfg.key.trim();
-        if trimmed.starts_with("prefix+") {
-            let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+        let written = Written {
+            action: &cmd_cfg.command,
+            layer: "[[keys.command]]",
+            key: trimmed,
+        };
+        if let Some(rest) = trimmed.strip_prefix("prefix+") {
             bind_with_conflict_tracking(
                 &mut keymap,
                 "normal",
-                KeyCombo::parse(rest),
+                KeyCombo::parse(rest.trim()),
                 action,
-                format!("[[keys.command]] {}", cmd_cfg.command),
+                written,
                 conflicts,
+                index,
             );
         } else {
             bind_with_conflict_tracking(
@@ -269,8 +383,9 @@ pub fn build_keymap(
                 "global",
                 KeyCombo::parse(trimmed),
                 action,
-                format!("[[keys.command]] {}", cmd_cfg.command),
+                written,
                 conflicts,
+                index,
             );
         }
     }
@@ -282,140 +397,156 @@ pub fn build_keymap(
 /// a trigger — see the note at the trigger site in [`build_modes`].
 const UNTRIGGERED_MODES: &[&str] = &["sidebar", crate::app::input::FOCUS_LAYER];
 
-/// Build one keymap per component **kind** from the `[keys.<kind>]` layers (F003/P085/T355).
+/// Build **every** keymap layer, and the reverse index over all of them, from one config.
 ///
-/// Keyed by kind, not by mount: bindings belong to the component *type*, so writing them once
-/// covers every placement, while cursor / scroll / focus stay per mount.
+/// The single entry point, so startup and `prefix+Shift+r` cannot build a different set — and so
+/// [`Keymaps::by_action`] is filled by the same pass that binds, and can never describe a layer that
+/// was not built (F003/P086/T366).
+pub fn build_keymaps(
+    config: &heca_config::theme::Config,
+    conflicts: &mut Conflicts,
+) -> crate::keymap::Keymaps {
+    let mut by_action = BindingIndex::new();
+    let (modes, triggers) = build_modes(config, conflicts, &mut by_action);
+    crate::keymap::Keymaps {
+        flat: build_keymap(config, conflicts, &mut by_action),
+        modes,
+        components: build_component_keymaps(config, conflicts, &mut by_action),
+        triggers,
+        by_action,
+    }
+}
+
+/// Layer one `[[keys.component]]` entry over another (F003/P086/T362).
 ///
 /// **The merge rules, and why they differ between the two forms.** A TOML table merges per key
-/// already, so `[keys.<kind>]`'s plain `action = "key"` entries need nothing special — overriding
-/// one keeps the rest. An **array** is replaced wholesale, which for `[[keys.<kind>.bind]]` would
-/// mean adding one arg-carrying binding silently drops every shipped default. So those are merged
-/// **by their `keys` field**: a keymap *is* a map from combo to action, and merging on the combo is
-/// the ordinary table rule applied to the thing the array is really keyed by — not a special case.
+/// already, so the plain `action = "key"` entries need nothing special — overriding one keeps the
+/// rest. An **array** is replaced wholesale, which for `[[keys.component.bind]]` would mean adding
+/// one arg-carrying binding silently drops every shipped default. So those are merged **by their
+/// `keys` field**: a keymap *is* a map from combo to action, and merging on the combo is the
+/// ordinary table rule applied to the thing the array is really keyed by — not a special case.
 ///
-/// `[keys.<kind>.unbind]` is applied last and keyed by the **combo**, so it retires a binding
+/// `unbind` is applied last, at build time, and keyed by the **combo**, so it retires a binding
 /// whatever it points at — the same rule as the global `[keys.unbind]`, and never a null or
 /// empty-string convention.
+///
+/// Carried over verbatim from the `[keys.<kind>]` shape it replaces: only *where the entries come
+/// from* changed, never how two of them combine.
+fn layer_component_keys(
+    base: &mut heca_config::theme::ComponentKeysConfig,
+    over: heca_config::theme::ComponentKeysConfig,
+) {
+    // Identity travels with the entries so the merged layer can still say which `[[keys.component]]`
+    // a conflict came from. A base only ever takes id-less entries, so it keeps `id: None`; a
+    // placement is seeded from that base and then stamped with its own id here.
+    base.name = over.name;
+    if over.id.is_some() {
+        base.id = over.id;
+    }
+    base.bindings.extend(over.bindings);
+    for binding in over.bind {
+        match base.bind.iter_mut().find(|b| b.keys == binding.keys) {
+            Some(existing) => *existing = binding,
+            None => base.bind.push(binding),
+        }
+    }
+    base.unbind.extend(over.unbind);
+}
+
+/// Build the component binding layers from `[[keys.component]]` (F003/P086/T362).
+///
+/// **Keyed by placement, falling back to the kind.** An entry with no `id` speaks for the component
+/// *type*, so writing it once covers every seating; an entry with an `id` is layered on top of that
+/// base for one mount alone. The returned map therefore holds an entry under each component name and
+/// an entry under each placement id that config actually mentions — [`focus_layer_action`] asks for
+/// the focused mount first and falls back to its kind, so a placement nobody narrowed costs nothing.
+///
+/// [`focus_layer_action`]: crate::app::input
 pub fn build_component_keymaps(
     config: &heca_config::theme::Config,
     conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
 ) -> HashMap<String, KeymapRegistry> {
     let defaults = heca_config::theme::KeysConfig::default();
-    let layers_of = |keys: &heca_config::theme::KeysConfig| -> BTreeMap<String, heca_config::theme::ComponentKeysConfig> {
-        keys.bindings
-            .iter()
-            .filter_map(|(name, value)| value.component().map(|c| (name.clone(), c.clone())))
-            .collect()
-    };
+    let entries = || defaults.component.iter().chain(config.keys.component.iter());
 
-    let mut merged = layers_of(&defaults);
-    for (kind, user) in layers_of(&config.keys) {
-        match merged.get_mut(&kind) {
-            Some(base) => {
-                // Table half: per key, so a user overriding one action keeps every other default.
-                base.bindings.extend(user.bindings);
-                // Array half: by combo, so one arg-carrying override does not drop the rest.
-                for binding in user.bind {
-                    match base.bind.iter_mut().find(|b| b.keys == binding.keys) {
-                        Some(existing) => *existing = binding,
-                        None => base.bind.push(binding),
-                    }
-                }
-                base.unbind.extend(user.unbind);
-            }
-            None => {
-                merged.insert(kind, user);
-            }
-        }
+    // Pass 1 — the per-component base: every entry with no `id`, defaults first so the user's file
+    // layers over them. BTreeMap so the build order (and any conflict report) is deterministic.
+    let mut bases: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    for entry in entries().filter(|e| e.id.is_none()) {
+        layer_component_keys(bases.entry(entry.name.clone()).or_default(), entry.clone());
     }
 
+    // Pass 2 — the placements, each seeded from its component's finished base. Run as a second pass
+    // for exactly that reason: a narrowing entry must see the whole base, wherever it was written.
+    let mut placements: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    for entry in entries() {
+        let Some(id) = entry.id.clone() else { continue };
+        let seeded = placements
+            .entry(id)
+            .or_insert_with(|| bases.get(&entry.name).cloned().unwrap_or_default());
+        layer_component_keys(seeded, entry.clone());
+    }
+
+    // A placement id that is also a component name would otherwise be built twice; the placement is
+    // the more specific of the two and already contains the base, so it wins.
+    let bases: Vec<_> = bases
+        .into_iter()
+        .filter(|(name, _)| !placements.contains_key(name))
+        .collect();
+    let layers = bases.into_iter().chain(placements);
+
     let mut out = HashMap::new();
-    for (kind, layer) in merged.into_iter() {
+    for (layer_name, layer) in layers {
         let mut keymap = KeymapRegistry::new();
         let no_args = HashMap::new();
-        for (action_name, value) in &layer.bindings {
-            let action = action_ref_from_config(action_name, &no_args);
+        // The label a conflict is reported under: which entry the user has to go and edit.
+        // How this layer is named wherever it is reported: which `[[keys.component]]` entry the user
+        // has to go and edit.
+        let label = match layer.id.as_deref() {
+            Some(id) => format!("[[keys.component]] {}:{id}", layer.name),
+            None => format!("[[keys.component]] {}", layer.name),
+        };
+        let bind_label = format!("{label}.bind");
+        for (name, value) in &layer.bindings {
+            let (id, action) = component_action(&layer.name, name, &no_args);
             for key_str in value.keys() {
                 bind_with_conflict_tracking(
                     &mut keymap,
-                    &kind,
+                    &layer_name,
                     KeyCombo::parse(key_str.trim()),
                     action.clone(),
-                    format!("[keys.{kind}] {action_name}"),
+                    Written { action: &id, layer: &label, key: key_str.trim() },
                     conflicts,
+                    index,
                 );
             }
         }
         for binding in &layer.bind {
-            let action = action_ref_from_config(&binding.action, &binding.args);
+            let (id, action) = component_action(&layer.name, &binding.action, &binding.args);
             bind_with_conflict_tracking(
                 &mut keymap,
-                &kind,
+                &layer_name,
                 KeyCombo::parse(&binding.keys),
                 action,
-                format!("[[keys.{kind}.bind]] {}", binding.action),
+                Written { action: &id, layer: &bind_label, key: binding.keys.trim() },
                 conflicts,
+                index,
             );
         }
         for combo in layer.unbind.keys() {
-            keymap.unbind(&kind, &KeyCombo::parse(combo.trim()));
+            unbind_and_deindex(&mut keymap, &layer_name, &label, combo, index);
         }
-        out.insert(kind, keymap);
+        out.insert(layer_name, keymap);
     }
     out
-}
-
-/// Bind a component's **declared default** into its kind's layer, unless the user has already
-/// spoken about that key or that action (F003/P085/T355).
-///
-/// This is what finally consumes `ActionMeta.default_binding`, which has been declared and read by
-/// nothing since it was added: the keymap is built from config at load, *before* any provider
-/// exists, so a declared default has no way in except here, after the component is mounted.
-///
-/// **User config always wins, and a default never silently shadows one.** Two ways it can lose:
-/// the combo is already bound in this layer (the user put something else there), or the action id
-/// is already bound to some other combo (the user rebound it and would otherwise get both).
-pub fn bind_component_default(
-    keymaps: &mut HashMap<String, KeymapRegistry>,
-    kind: &str,
-    default_binding: &str,
-    action: &str,
-) {
-    let trimmed = default_binding.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unbound") {
-        return;
-    }
-    let layer = keymaps
-        .entry(kind.to_string())
-        .or_insert_with(KeymapRegistry::new);
-    let already_bound_elsewhere = layer
-        .bindings_in_mode(kind)
-        .is_some_and(|b| b.values().any(|a| action_ref_names(a) == action));
-    if already_bound_elsewhere {
-        return;
-    }
-    for key_str in trimmed.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-        let combo = KeyCombo::parse(key_str);
-        if layer.resolve(kind, &combo).is_some() {
-            continue;
-        }
-        layer.bind(kind, combo, action_ref_from_config(action, &HashMap::new()));
-    }
-}
-
-/// The action id an [`ActionRef`] names, whichever back end it resolves to.
-fn action_ref_names(action: &ActionRef) -> &str {
-    match action {
-        ActionRef::Builtin(_) => "",
-        ActionRef::Dynamic(intent) => &intent.action,
-    }
 }
 
 /// Build mode keymaps and triggers from config.
 pub fn build_modes(
     config: &heca_config::theme::Config,
     conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
 ) -> (
     HashMap<String, KeymapRegistry>,
     HashMap<String, (KeyCombo, bool)>,
@@ -442,6 +573,7 @@ pub fn build_modes(
 
     for mode_cfg in merged_modes.values() {
         let mut mode_map = KeymapRegistry::new();
+        let label = format!("[[keys.mode]] {}", mode_cfg.name);
         for binding in &mode_cfg.bindings {
             // Same rule as the flat bindings: an unresolvable name is a Dynamic ref, not a dropped
             // binding. A mode binding's `args` become the Intent's args.
@@ -451,8 +583,13 @@ pub fn build_modes(
                 &mode_cfg.name,
                 KeyCombo::parse(&binding.keys),
                 action,
-                format!("[keys.mode:{}] {}", mode_cfg.name, binding.action),
+                Written {
+                    action: &binding.action,
+                    layer: &label,
+                    key: binding.keys.trim(),
+                },
                 conflicts,
+                index,
             );
         }
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
@@ -923,12 +1060,12 @@ pub fn build_registry() -> ActionRegistry {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_ref_from_config, bind_component_default, binding_arg_problems,
+        action_ref_from_config, binding_arg_problems,
         build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
     };
     use crate::app::conflicts::{Conflicts, format_combo};
     use crate::input::WmAction;
-    use crate::keymap::{ActionRef, KeyCombo, KeymapRegistry};
+    use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry};
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
 
@@ -993,7 +1130,7 @@ mod tests {
     #[test]
     fn every_default_binding_still_resolves_to_a_builtin_at_load() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         for mode in ["normal", "global"] {
             let Some(bindings) = keymap.bindings_in_mode(mode) else {
                 continue;
@@ -1341,7 +1478,7 @@ mod tests {
     fn default_font_size_modes_build_with_triggers_and_keys() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         // Both modes exist, are sticky, and are entered by prefix+! / prefix+@.
         let (app_trigger, app_sticky) = mode_triggers
@@ -1403,7 +1540,7 @@ mod tests {
     #[test]
     fn default_ctrl_k_binding_stays_swap_up() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("Ctrl+k")),
@@ -1427,7 +1564,7 @@ mod tests {
     fn default_font_zoom_bindings_resolve_without_collision() {
         use crate::input::FontZoomStep;
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         // Global (app-wide) branch: prefix+Ctrl+= / - / 0.
         assert_eq!(
@@ -1498,7 +1635,7 @@ mod tests {
     #[test]
     fn default_workspace_aliases_include_ctrl_p_and_ctrl_n() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("u")),
@@ -1521,7 +1658,7 @@ mod tests {
     #[test]
     fn default_sidebar_global_collapse_bindings_exist() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("(")),
@@ -1536,7 +1673,7 @@ mod tests {
     #[test]
     fn default_pane_navigation_and_palette_bindings_are_separate() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("[")),
@@ -1555,7 +1692,7 @@ mod tests {
     #[test]
     fn default_selection_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config, &mut Conflicts::default());
+        let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
 
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("s")),
@@ -1580,7 +1717,7 @@ mod tests {
     #[test]
     fn default_selection_mode_bindings_resolve() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let keymap = mode_keymaps
             .get("selection")
             .expect("selection mode exists");
@@ -1628,7 +1765,7 @@ mod tests {
     #[test]
     fn sidebar_mode_includes_arrow_aliases() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
@@ -1658,7 +1795,7 @@ mod tests {
     #[test]
     fn sidebar_mode_includes_mutation_bindings() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
@@ -1697,7 +1834,7 @@ mod tests {
             }],
         });
 
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let sidebar = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
@@ -1711,20 +1848,30 @@ mod tests {
         assert!(!mode_triggers.contains_key("sidebar"));
     }
 
-    // ── Per-kind component layers (F003/P085/T355) ──
+    // ── Component layers — `[[keys.component]]` (F003/P086/T362) ──
 
-    /// Build a config carrying one `[keys.<kind>]` layer, as TOML would produce.
-    fn with_layer(kind: &str, layer: heca_config::theme::ComponentKeysConfig) -> heca_config::theme::Config {
+    /// Build a config carrying these `[[keys.component]]` entries, as TOML would produce.
+    fn with_layers(
+        layers: Vec<heca_config::theme::ComponentKeysConfig>,
+    ) -> heca_config::theme::Config {
         let mut config = heca_config::theme::Config::default();
-        config
-            .keys
-            .bindings
-            .insert(kind.to_string(), heca_config::theme::BindingValue::Component(layer));
+        config.keys.component = layers;
         config
     }
 
-    fn layer_of(entries: &[(&str, &str)]) -> heca_config::theme::ComponentKeysConfig {
+    fn with_layer(layer: heca_config::theme::ComponentKeysConfig) -> heca_config::theme::Config {
+        with_layers(vec![layer])
+    }
+
+    /// One `[[keys.component]]` entry: which component, which placement (if narrowed), its bindings.
+    fn layer_of(
+        name: &str,
+        id: Option<&str>,
+        entries: &[(&str, &str)],
+    ) -> heca_config::theme::ComponentKeysConfig {
         heca_config::theme::ComponentKeysConfig {
+            name: name.to_string(),
+            id: id.map(str::to_string),
             bindings: entries
                 .iter()
                 .map(|(a, k)| {
@@ -1738,16 +1885,17 @@ mod tests {
         }
     }
 
-    /// A component's layer resolves under its **kind**, and binds any action id — its own or an
+    /// A component's layer resolves under its **name**, and binds any action id — its own or an
     /// existing built-in it simply reuses.
     #[test]
     fn a_component_layer_binds_its_own_actions_and_existing_ones() {
-        let config = with_layer(
+        let config = with_layer(layer_of(
             "docker",
-            layer_of(&[("docker.restart_selected", "r"), ("next_pane", "n")]),
-        );
-        let maps = build_component_keymaps(&config, &mut Conflicts::default());
-        let docker = maps.get("docker").expect("the layer is keyed by kind");
+            None,
+            &[("docker.restart_selected", "r"), ("next_pane", "n")],
+        ));
+        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let docker = maps.get("docker").expect("an id-less entry is keyed by name");
 
         match docker.resolve("docker", &KeyCombo::parse("r")) {
             Some(ActionRef::Dynamic(intent)) => assert_eq!(intent.action, "docker.restart_selected"),
@@ -1760,24 +1908,19 @@ mod tests {
         );
     }
 
-    /// **The table merges per key**: overriding one binding keeps every other default.
+    /// **The table merges per key**: overriding one binding keeps every other default. Two entries
+    /// for the same component are now just two entries in the array — the builder layers them.
     #[test]
     fn overriding_one_binding_keeps_the_rest() {
-        let defaults = layer_of(&[
-            ("docker.restart_selected", "r"),
-            ("docker.stop_selected", "s"),
+        let config = with_layers(vec![
+            layer_of(
+                "docker",
+                None,
+                &[("docker.restart_selected", "r"), ("docker.stop_selected", "s")],
+            ),
+            layer_of("docker", None, &[("docker.stop_selected", "x")]),
         ]);
-        let mut config = with_layer("docker", defaults);
-        // What the *user's* file adds on top, merged into the same layer.
-        let user = layer_of(&[("docker.stop_selected", "x")]);
-        let merged = match config.keys.bindings.get_mut("docker") {
-            Some(heca_config::theme::BindingValue::Component(base)) => {
-                base.bindings.extend(user.bindings);
-                base.clone()
-            }
-            _ => unreachable!("just inserted"),
-        };
-        let maps = build_component_keymaps(&with_layer("docker", merged), &mut Conflicts::default());
+        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let docker = &maps["docker"];
 
         assert!(
@@ -1788,6 +1931,124 @@ mod tests {
             docker.resolve("docker", &KeyCombo::parse("r")).is_some(),
             "and every other default survived",
         );
+    }
+
+    /// **Binding names are short.** `cursor_up` under `name = "workspaces"` is
+    /// `workspaces.cursor_up`; a built-in keeps its catalog id, because a component binds those
+    /// rather than redeclaring them; and writing the id out in full is never wrong.
+    #[test]
+    fn a_short_name_means_the_components_own_action() {
+        let config = with_layer(layer_of(
+            "workspaces",
+            None,
+            &[
+                ("cursor_up", "k"),
+                ("next_pane", "n"),
+                ("workspaces.peek_selected", "Space"),
+            ],
+        ));
+        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let layer = &maps["workspaces"];
+
+        match layer.resolve("workspaces", &KeyCombo::parse("k")) {
+            Some(ActionRef::Dynamic(intent)) => assert_eq!(intent.action, "workspaces.cursor_up"),
+            other => panic!("a short name is qualified with the component: {other:?}"),
+        }
+        assert_eq!(
+            layer.resolve_builtin("workspaces", &KeyCombo::parse("n")),
+            Some(&WmAction::NextPane),
+            "a built-in keeps its own id — it is bound here, not redeclared",
+        );
+        match layer.resolve("workspaces", &KeyCombo::parse("Space")) {
+            Some(ActionRef::Dynamic(intent)) => {
+                assert_eq!(intent.action, "workspaces.peek_selected", "never qualified twice")
+            }
+            other => panic!("an already-qualified name is left alone: {other:?}"),
+        }
+    }
+
+    /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
+    /// and the layer — and an `unbind` must take its entry out with it (F003/P086/T366).
+    #[test]
+    fn the_index_records_the_qualified_id_and_forgets_what_is_unbound() {
+        let mut layer = layer_of("workspaces", None, &[("cursor_up", "k"), ("cursor_down", "j")]);
+        layer.unbind.insert("j".to_string(), true);
+        let mut index = BindingIndex::new();
+        build_component_keymaps(&with_layer(layer), &mut Conflicts::default(), &mut index);
+
+        let up = &index["workspaces.cursor_up"];
+        assert_eq!(up.len(), 1);
+        assert_eq!(up[0].key, "k");
+        assert_eq!(up[0].layer, "[[keys.component]] workspaces");
+        assert!(
+            !index.contains_key("workspaces.cursor_down"),
+            "a retired key must not be reported as still running the action: {index:?}",
+        );
+    }
+
+    /// The reason the shape is an array: an `id` narrows an entry to one placement, and that
+    /// placement's layer carries the id-less base underneath it — so the mount lookup alone is
+    /// enough at press time.
+    #[test]
+    fn an_id_layers_over_the_base_for_one_placement_only() {
+        let config = with_layers(vec![
+            layer_of(
+                "docker",
+                None,
+                &[("docker.restart_selected", "r"), ("docker.stop_selected", "s")],
+            ),
+            layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
+        ]);
+        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+
+        let right = &maps["docker.right"];
+        assert!(
+            right.resolve("docker.right", &KeyCombo::parse("x")).is_some(),
+            "the narrowed binding applies to this placement",
+        );
+        assert!(
+            right.resolve("docker.right", &KeyCombo::parse("r")).is_some(),
+            "and the base came with it — one lookup, no merging at press time",
+        );
+
+        let base = &maps["docker"];
+        assert!(
+            base.resolve("docker", &KeyCombo::parse("s")).is_some(),
+            "every other placement still has the base binding",
+        );
+        assert!(
+            base.resolve("docker", &KeyCombo::parse("x")).is_none(),
+            "and never sees what was written for one seating",
+        );
+    }
+
+    /// A narrowing entry sees the **whole** base, wherever it was written — which is why the build
+    /// runs the id-less entries in a first pass rather than in file order.
+    #[test]
+    fn a_placement_is_seeded_from_the_finished_base() {
+        let config = with_layers(vec![
+            layer_of("docker", Some("docker.right"), &[("docker.stop_selected", "x")]),
+            // Written *after* the placement entry, and still part of what it inherits.
+            layer_of("docker", None, &[("docker.restart_selected", "r")]),
+        ]);
+        let maps = build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        assert!(
+            maps["docker.right"]
+                .resolve("docker.right", &KeyCombo::parse("r"))
+                .is_some(),
+            "file order does not decide what a placement inherits",
+        );
+    }
+
+    /// An `id` naming a placement that will never mount is not an error: config is read before
+    /// anything mounts, so the layer is simply built and never asked for.
+    #[test]
+    fn an_id_for_a_placement_that_never_mounts_is_harmless() {
+        let mut conflicts = Conflicts::default();
+        let config = with_layer(layer_of("docker", Some("nowhere"), &[("docker.stop", "s")]));
+        let maps = build_component_keymaps(&config, &mut conflicts, &mut BindingIndex::new());
+        assert!(maps.contains_key("nowhere"));
+        assert!(conflicts.is_empty(), "nothing to report");
     }
 
     /// **The array merges by `keys`** — the rule that makes the arg-carrying form usable at all.
@@ -1801,21 +2062,26 @@ mod tests {
             keys: keys.to_string(),
             args: HashMap::from([("command".to_string(), cmd.to_string())]),
         };
-        let mut layer = heca_config::theme::ComponentKeysConfig {
+        let shipped = heca_config::theme::ComponentKeysConfig {
+            name: "docker".to_string(),
             bind: vec![
                 bind("spawn_command", "t", "lazydocker"),
                 bind("spawn_command", "g", "lazygit"),
             ],
             ..Default::default()
         };
-        // The user rebinds `t` only.
-        let user = bind("spawn_command", "t", "ctop");
-        match layer.bind.iter_mut().find(|b| b.keys == user.keys) {
-            Some(existing) => *existing = user,
-            None => layer.bind.push(user),
-        }
+        // The user rebinds `t` only, in a second entry the builder layers over the first.
+        let user = heca_config::theme::ComponentKeysConfig {
+            name: "docker".to_string(),
+            bind: vec![bind("spawn_command", "t", "ctop")],
+            ..Default::default()
+        };
 
-        let maps = build_component_keymaps(&with_layer("docker", layer), &mut Conflicts::default());
+        let maps = build_component_keymaps(
+            &with_layers(vec![shipped, user]),
+            &mut Conflicts::default(),
+            &mut BindingIndex::new(),
+        );
         let docker = &maps["docker"];
         match docker.resolve("docker", &KeyCombo::parse("t")) {
             Some(ActionRef::Builtin(WmAction::SpawnCommand { command, .. })) => {
@@ -1833,57 +2099,10 @@ mod tests {
     /// null or empty-string convention.
     #[test]
     fn a_component_layer_unbinds_by_combo() {
-        let mut layer = layer_of(&[("docker.stop_selected", "s")]);
+        let mut layer = layer_of("docker", None, &[("docker.stop_selected", "s")]);
         layer.unbind.insert("s".to_string(), true);
-        let maps = build_component_keymaps(&with_layer("docker", layer), &mut Conflicts::default());
+        let maps = build_component_keymaps(&with_layer(layer), &mut Conflicts::default(), &mut BindingIndex::new());
         assert!(maps["docker"].resolve("docker", &KeyCombo::parse("s")).is_none());
-    }
-
-    /// A **declared default** reaches the layer at mount — this is what finally consumes
-    /// `ActionMeta.default_binding` — but it loses to anything the user said.
-    #[test]
-    fn a_declared_default_binds_unless_the_user_already_spoke() {
-        let mut maps: HashMap<String, KeymapRegistry> = HashMap::new();
-
-        // Nothing in the way ⇒ the declared default lands.
-        bind_component_default(&mut maps, "docker", "r", "docker.restart_selected");
-        assert!(maps["docker"].resolve("docker", &KeyCombo::parse("r")).is_some());
-
-        // The user put something else on that key ⇒ the default does not shadow it.
-        maps.get_mut("docker").unwrap().bind(
-            "docker",
-            KeyCombo::parse("s"),
-            action_ref_from_config("close", &HashMap::new()),
-        );
-        bind_component_default(&mut maps, "docker", "s", "docker.stop_selected");
-        assert_eq!(
-            maps["docker"].resolve_builtin("docker", &KeyCombo::parse("s")),
-            Some(&WmAction::ClosePane),
-            "user config wins on that combo",
-        );
-
-        // The user rebound the action itself ⇒ it must not also get its default key.
-        let mut maps: HashMap<String, KeymapRegistry> = HashMap::new();
-        let mut layer = KeymapRegistry::new();
-        layer.bind(
-            "docker",
-            KeyCombo::parse("z"),
-            action_ref_from_config("docker.restart_selected", &HashMap::new()),
-        );
-        maps.insert("docker".to_string(), layer);
-        bind_component_default(&mut maps, "docker", "r", "docker.restart_selected");
-        assert!(
-            maps["docker"].resolve("docker", &KeyCombo::parse("r")).is_none(),
-            "a rebound action does not also answer to its shipped default",
-        );
-
-        // "unbound" / empty declares no key at all.
-        let mut maps: HashMap<String, KeymapRegistry> = HashMap::new();
-        bind_component_default(&mut maps, "docker", "unbound", "docker.quiet");
-        bind_component_default(&mut maps, "docker", "", "docker.quieter");
-        assert!(maps.get("docker").is_none_or(|l| l
-            .bindings_in_mode("docker")
-            .is_none_or(|b| b.is_empty())));
     }
 
     /// The focus layer ships the keys the **widgets** answer, and is never enterable by a trigger
@@ -1891,7 +2110,7 @@ mod tests {
     #[test]
     fn the_focus_layer_ships_the_scroll_keys_and_the_way_out() {
         let config = heca_config::theme::Config::default();
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let focus = mode_keymaps
             .get(crate::app::input::FOCUS_LAYER)
             .expect("the focus layer is a built-in mode keymap");
@@ -1930,7 +2149,7 @@ mod tests {
             sticky: true,
             bindings: Vec::new(),
         });
-        let (_, mode_triggers) = build_modes(&config, &mut Conflicts::default());
+        let (_, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         assert!(!mode_triggers.contains_key(crate::app::input::FOCUS_LAYER));
     }
 
@@ -1948,7 +2167,7 @@ mod tests {
             }],
         });
 
-        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default());
+        let (mode_keymaps, mode_triggers) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
         let resize = mode_keymaps.get("resize").expect("resize mode exists");
 
         assert!(resize.resolve_builtin("resize", &KeyCombo::parse("h")).is_some());

@@ -112,11 +112,45 @@ pub struct Keymaps {
     /// One per custom input mode — `[[keys.mode]]`, plus the built-in `resize` / `sidebar` /
     /// `selection` / `focus` layers.
     pub modes: HashMap<String, KeymapRegistry>,
-    /// One per component **kind** — `[keys.<kind>]`, consulted only while a component of that kind
-    /// holds chrome focus (F003/P085/T355).
+    /// One per component or narrowed placement — `[[keys.component]]`, consulted only while that
+    /// component holds chrome focus (F003/P086/T362).
     pub components: HashMap<String, KeymapRegistry>,
     /// Mode name → (trigger combo, sticky). A mode entered by focus rather than a key has none.
     pub triggers: HashMap<String, (KeyCombo, bool)>,
+    /// **What key runs this action**, reversed out of the maps above (F003/P086/T366).
+    pub by_action: BindingIndex,
+}
+
+/// One place a key is bound, named the way the user's file names it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BoundKey {
+    /// Which layer — `[keys]`, `[[keys.mode]] sidebar`, `[[keys.component]] workspaces`, `plugin`.
+    pub layer: String,
+    /// The combo exactly as it is typed, `prefix+` and all.
+    pub key: String,
+}
+
+/// Action id → every key bound to it, across **every** layer (F003/P086/T366).
+///
+/// **Why this and not the config file.** Reading `[keys]` answers for the flat map alone: it cannot
+/// see a `[[keys.mode]]` binding, cannot see a `[[keys.component]]` one, and can never see a key a
+/// plugin registered at runtime — which is exactly what the shortcut lookup used to do. This index
+/// is filled while each layer is built, so it sees all of them uniformly, and is rebuilt with them.
+///
+/// It replaced `ActionMeta::default_binding`, which held a *second* copy of every key already in
+/// `keybindings.default.toml` — one nothing compared against, so the two could drift silently.
+pub type BindingIndex = std::collections::BTreeMap<String, Vec<BoundKey>>;
+
+/// Record that `action` answers to `key` in `layer`, keeping the list free of duplicates.
+pub fn index_binding(index: &mut BindingIndex, action: &str, layer: &str, key: &str) {
+    let bound = BoundKey {
+        layer: layer.to_string(),
+        key: key.to_string(),
+    };
+    let entry = index.entry(action.to_string()).or_default();
+    if !entry.contains(&bound) {
+        entry.push(bound);
+    }
 }
 
 /// What a key is bound to — a built-in action, or a **name-keyed** one resolved at press time.
@@ -201,7 +235,7 @@ impl KeymapRegistry {
     }
 
     /// Return all bindings for a mode.
-    // Transitional: will be used for config reload / RPC in Phase 5.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn bindings_in_mode(&self, mode: &str) -> Option<&HashMap<KeyCombo, ActionRef>> {
         self.modes.get(mode)
     }

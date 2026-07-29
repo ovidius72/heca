@@ -20,7 +20,7 @@ pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
     move_pane_to_workspace_column,
 };
-use app::registry::{build_component_keymaps, build_keymap, build_modes, build_registry};
+use app::registry::{build_keymaps, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app::startup::init_state as build_initial_state;
@@ -85,13 +85,7 @@ impl HecaApp {
         // Every collision — a key bound twice, an id declared twice — is collected here and
         // reported **once**, after the components have registered too (see `resumed`).
         let mut conflicts = crate::app::conflicts::Conflicts::default();
-        let (modes, triggers) = build_modes(&app_config.config, &mut conflicts);
-        let keymaps = keymap::Keymaps {
-            flat: build_keymap(&app_config.config, &mut conflicts),
-            modes,
-            components: build_component_keymaps(&app_config.config, &mut conflicts),
-            triggers,
-        };
+        let keymaps = build_keymaps(&app_config.config, &mut conflicts);
 
         Self {
             state: None,
@@ -125,19 +119,17 @@ impl HecaApp {
                 actions: std::mem::take(&mut self.conflicts.actions),
                 ..Default::default()
             };
-            let (modes, triggers) = build_modes(&self.app_config.config, &mut conflicts);
-            self.keymaps = keymap::Keymaps {
-                flat: build_keymap(&self.app_config.config, &mut conflicts),
-                modes,
-                components: build_component_keymaps(&self.app_config.config, &mut conflicts),
-                triggers,
-            };
+            self.keymaps = build_keymaps(&self.app_config.config, &mut conflicts);
             self.conflicts = conflicts;
-            // The layers were just rebuilt from a file that knows nothing about a component mounted
-            // afterwards, so a reload would otherwise silently unbind every declared default.
-            crate::providers::rebind_provider_defaults(state, &mut self.keymaps.components);
-            // After the components' declared defaults are back, for the same reason the startup
-            // report waits for them: a report taken before everything has bound is not a report.
+            // The layers were just rebuilt from a file that knows nothing about a plugin mounted
+            // afterwards, so a reload would otherwise silently unbind every key it registered.
+            crate::providers::bind_provider_keybindings(
+                state,
+                &mut self.keymaps.components,
+                &mut self.keymaps.by_action,
+            );
+            // After the plugins' keys are back, for the same reason the startup report waits for
+            // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
             state.theme = self.app_config.theme.clone();
             state.programs = self.app_config.config.programs.clone();
@@ -170,7 +162,7 @@ impl HecaApp {
             crate::chrome::clear_pane_headers(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.widget_keymap = crate::app::registry::build_widget_keymap(&self.app_config.config);
-            state.action_shortcuts = crate::chrome::ActionShortcuts::from_config(&self.app_config.config);
+            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(&self.keymaps.by_action);
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
@@ -247,9 +239,18 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             crate::providers::register_provider_actions(
                 &mut state,
                 &mut self.registry,
-                &mut self.keymaps.components,
                 &mut self.conflicts,
             );
+            // Then the keys a plugin registered for them. Core components have theirs from the
+            // config file already; this is the path for anything that has no entry in it.
+            crate::providers::bind_provider_keybindings(
+                &state,
+                &mut self.keymaps.components,
+                &mut self.keymaps.by_action,
+            );
+            // Only now does every layer exist, so this is the first moment a tooltip can be told
+            // the truth about which key runs an action.
+            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(&self.keymaps.by_action);
             // Everything that can register has now registered — config, built-ins and every
             // mounted component — so this is the first moment the report can be complete.
             self.conflicts.report();
@@ -326,6 +327,12 @@ impl ApplicationHandler<AppEvent> for HecaApp {
 /// Edge scroll: auto-scroll the layout when the pointer is near the left/right
 /// edge of the content area. Returns true if scrolling is active.
 fn main() {
+    // `--keys-show` answers "what key runs this action" and exits — before the window, so a script
+    // can ask without a GPU (F003/P086/T366).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if crate::app::keys_show::run_if_requested(&args) {
+        return;
+    }
     let event_loop = EventLoop::<AppEvent>::with_user_event()
         .build()
         .expect("Failed to create event loop");

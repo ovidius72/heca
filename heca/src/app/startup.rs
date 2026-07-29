@@ -383,7 +383,9 @@ pub(crate) async fn init_state(
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
-        action_shortcuts: crate::chrome::ActionShortcuts::from_config(&app_config.config),
+        // Filled in `resumed`, from the built keymaps, once every layer — including the
+        // components' and any plugin's — has actually bound (F003/P086/T366).
+        action_shortcuts: crate::chrome::ActionShortcuts::default(),
         action_catalog: crate::actions::ActionCatalog::with_builtins(),
         context_menu_registry: crate::chrome::ContextMenuRegistry::with_builtins(),
         pending_context: None,

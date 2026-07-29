@@ -261,15 +261,23 @@ fn focus_layer_action(
     combo: &KeyCombo,
 ) -> Option<crate::keymap::ActionRef> {
     let mount = state.chrome_state.focused_container()?;
-    // **The component's own layer first** (`[keys.<kind>]`, F003/P085/T355), so a component can bind
-    // a key the host layer also uses and win — its rows are the more specific thing the key is aimed
-    // at. Keyed by `kind()`, so writing the layer once covers every placement.
-    if let Some(kind) = state.chrome_host.provider(&mount).map(|p| p.kind())
-        && let Some(action) = component_keymaps
-            .get(kind)
-            .and_then(|map| map.resolve(kind, combo))
-    {
-        return Some(action.clone());
+    // **The component's own layer first** (`[[keys.component]]`, F003/P086/T362), so a component can
+    // bind a key the host layer also uses and win — its rows are the more specific thing the key is
+    // aimed at.
+    //
+    // **This placement, then the component.** An entry that named an `id` was built into a layer
+    // under that mount id, already carrying the id-less base merged underneath it; so finding the
+    // mount means the user narrowed this seating, and missing it means they spoke about the
+    // component as a whole. Two lookups, no merging at press time.
+    let kind = state.chrome_host.provider(&mount).map(|p| p.kind());
+    for layer in [Some(mount.as_str()), kind] {
+        if let Some(layer) = layer
+            && let Some(action) = component_keymaps
+                .get(layer)
+                .and_then(|map| map.resolve(layer, combo))
+        {
+            return Some(action.clone());
+        }
     }
     // Then what the **widgets** answer for every container alike — paging, edges, releasing focus.
     mode_keymaps

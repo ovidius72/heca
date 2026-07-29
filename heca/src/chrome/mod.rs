@@ -466,21 +466,29 @@ pub(crate) struct RetainedPaneViewportWidgets {
 pub(crate) struct ActionShortcuts(std::collections::HashMap<String, String>);
 
 impl ActionShortcuts {
-    /// Resolve a display shortcut for every action that has a binding (user
-    /// override or bundled default), mirroring `build_keymap`'s merge.
-    pub(crate) fn from_config(config: &heca_config::theme::Config) -> Self {
-        let defaults = heca_config::keys::KeysConfig::default();
-        let mut map = std::collections::HashMap::new();
-        for name in defaults.bindings.keys().chain(config.keys.bindings.keys()) {
-            if map.contains_key(name) {
-                continue;
-            }
-            if let Some(s) =
-                crate::shortcut::shortcut_for_action(name, &config.keys.bindings, &defaults.bindings)
-            {
-                map.insert(name.clone(), s);
-            }
-        }
+    /// Resolve a display shortcut for every action the **built keymaps** bind (F003/P086/T366).
+    ///
+    /// Built from [`Keymaps::by_action`](crate::keymap::Keymaps::by_action) rather than from the
+    /// config file, because the file is only part of the answer: reading `[keys]` alone missed every
+    /// `[[keys.mode]]` binding, would miss every `[[keys.component]]` one, and could never see a key
+    /// a plugin registered at runtime. A tooltip that says nothing for a key the user can actually
+    /// press is the bug this closes.
+    ///
+    /// An action bound in several layers shows all of them, joined — a component's `j` and a mode's
+    /// `j` are both real, and picking the first would be a guess.
+    pub(crate) fn from_index(index: &crate::keymap::BindingIndex) -> Self {
+        let map = index
+            .iter()
+            .filter_map(|(action, bound)| {
+                let keys: Vec<String> = bound
+                    .iter()
+                    .map(|b| {
+                        crate::shortcut::format_shortcut(&b.key, b.key.starts_with("prefix+"))
+                    })
+                    .collect();
+                (!keys.is_empty()).then(|| (action.clone(), keys.join(" / ")))
+            })
+            .collect();
         Self(map)
     }
 

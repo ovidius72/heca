@@ -91,7 +91,8 @@ impl Provider for WorkspacesContainerProvider {
     }
 
     /// One **type**, however many placements. `workspaces` and `workspaces.right` are two seatings
-    /// of the same component, so they share a config namespace (`[keys.workspaces]`) and one set of
+    /// of the same component, so they share a config namespace (`[[keys.component]] name = "workspaces"`)
+    /// and one set of
     /// declared actions, while their cursor, scroll offset and focus stay their own.
     fn kind(&self) -> &str {
         "workspaces"
@@ -146,18 +147,17 @@ impl Provider for WorkspacesContainerProvider {
     /// Everything here is selection-dependent — "the row the cursor is on" is a fact no other
     /// component and no built-in can know. Anything that is *not* selection-dependent is missing on
     /// purpose: `zoom_column`, `close`, `next_pane` already exist, and this component **binds**
-    /// them in `[keys.workspaces]` rather than redeclaring them.
+    /// them in `[[keys.component]]` rather than redeclaring them.
     ///
     /// The cursor moves are its own actions, not host facilities: only this component knows that
     /// its rows are workspaces, columns and panes, and therefore what "next" means among them. A
     /// component showing a single number has no cursor and declares none of this.
     fn actions(&self) -> Vec<ActionMeta> {
-        let act = |name: &str, label: &str, description: &str, key: &str, icon| ActionMeta {
+        let act = |name: &str, label: &str, description: &str, icon| ActionMeta {
             name: name.to_string(),
             label: label.to_string(),
             description: description.to_string(),
             category: ActionCategory::Navigation,
-            default_binding: key.to_string(),
             icon,
             // Chrome state: the cursor is not the pane layout, so these stay reachable while a
             // floating pane is active — the dock is still there to be driven.
@@ -170,42 +170,36 @@ impl Provider for WorkspacesContainerProvider {
                 CURSOR_UP,
                 "Cursor Up",
                 "Move the workspaces cursor to the previous row.",
-                "k,Up,ArrowUp",
                 Some(Glyph::CaretUp),
             ),
             act(
                 CURSOR_DOWN,
                 "Cursor Down",
                 "Move the workspaces cursor to the next row.",
-                "j,Down,ArrowDown",
                 Some(Glyph::CaretDown),
             ),
             act(
                 COLLAPSE_ROW,
                 "Collapse Row",
                 "Collapse the row under the cursor, or move out to its parent.",
-                "h,Left,ArrowLeft",
                 Some(Glyph::CaretLeft),
             ),
             act(
                 ACTIVATE_SELECTED,
                 "Activate Row",
                 "Expand a structural row, or focus the pane under the cursor and leave the dock.",
-                "l,Right,ArrowRight,Enter",
                 Some(Glyph::CaretRight),
             ),
             act(
                 PEEK_SELECTED,
                 "Peek Row",
                 "Focus what the cursor points at without leaving the dock.",
-                "Space",
                 None,
             ),
             act(
                 TOGGLE_SELECTED,
                 "Expand / Collapse Row",
                 "Fold or unfold the structural row under the cursor.",
-                "Tab",
                 None,
             ),
         ]
@@ -1046,17 +1040,6 @@ mod tests {
             assert!(
                 !declared.iter().any(|n| n == existing),
                 "{existing} already exists — bind it, do not redeclare it",
-            );
-        }
-    }
-
-    #[test]
-    fn every_declared_action_ships_a_default_key() {
-        for meta in WorkspacesContainerProvider::new().actions() {
-            assert!(
-                !meta.default_binding.trim().is_empty(),
-                "{} ships no key, so nothing would reach it while the dock is focused",
-                meta.name,
             );
         }
     }

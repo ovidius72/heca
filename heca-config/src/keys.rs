@@ -5,22 +5,12 @@ use std::collections::HashMap;
 //  BindingValue
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// A single binding value: one combo, a list of combos, or — when the key under `[keys]` names a
-/// **component kind** rather than an action — that component's whole binding layer.
+/// A single binding value: one combo, or a list of combos.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BindingValue {
     Single(String),
     Many(Vec<String>),
-    /// `[keys.docker]` — the bindings that apply **only while a component of that kind holds chrome
-    /// focus**. A table, not an array, so it merges per key: overriding one binding keeps the rest
-    /// (F003/P085/T355).
-    ///
-    /// It lives in the same map as the flat action bindings because that is the shape the user
-    /// chose — `[keys.docker]`, not `[keys.component.docker]` — and a TOML table under `[keys]`
-    /// cannot be told apart from an action binding by its name alone. The app separates them by
-    /// **variant**: a table is a component layer, a string or list is an action binding.
-    Component(ComponentKeysConfig),
 }
 
 impl BindingValue {
@@ -36,16 +26,6 @@ impl BindingValue {
                 .map(|s| s.as_str())
                 .filter(|p| !p.is_empty())
                 .collect(),
-            // A component layer binds nothing at the top level; its own entries do.
-            BindingValue::Component(_) => Vec::new(),
-        }
-    }
-
-    /// The component layer this value carries, if it is one.
-    pub fn component(&self) -> Option<&ComponentKeysConfig> {
-        match self {
-            BindingValue::Component(c) => Some(c),
-            _ => None,
         }
     }
 }
@@ -54,35 +34,54 @@ impl BindingValue {
 //  ComponentKeysConfig
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// One component **kind's** binding layer — `[keys.<kind>]`.
+/// One component's binding layer — `[[keys.component]]` (F003/P086/T362).
 ///
-/// Bindings belong to the *type*, not to a placement: write them once and every seating of that
-/// component uses them, while cursor / scroll / focus stay per mount.
+/// The component is named by the **`name` field**, and an optional **`id`** narrows the entry to one
+/// placement. An entry with no `id` applies to every seating of that component; an entry with one is
+/// layered on top for that placement alone, so two mounts of the same component can differ.
 ///
 /// ```toml
-/// [keys.docker]                 # a TABLE: merges per key, so overriding one keeps the rest
+/// [[keys.component]]
+/// name      = "docker"          # a FIELD, never the table name
 /// restart_selected = "r"        # the component's own declared action
 /// next_pane        = "n"        # …or any EXISTING action id, simply bound here
 ///
-/// [[keys.docker.bind]]          # the arg-carrying form; merged by `keys`, because arrays are
+/// [[keys.component]]
+/// name = "docker"
+/// id   = "docker.right"         # this placement only, layered over the entry above
+/// restart_selected = "R"
+///
+/// [[keys.component.bind]]       # the arg-carrying form; merged by `keys`, because arrays are
 /// action = "spawn_command"      #   otherwise replaced wholesale and one entry would drop the rest
 /// keys   = "t"
 /// args   = { command = "lazydocker", float = "true" }
 ///
-/// [keys.docker.unbind]          # explicit removal — never null/empty-string semantics
+/// [keys.component.unbind]       # explicit removal — never null/empty-string semantics
 /// "s" = true
 /// ```
+///
+/// **Why the name is a field.** F003/P085/T355 shipped `[keys.<kind>]`, where the component's name
+/// *was* the table name. Nothing under `[keys]` could then be told apart by name — a table might be
+/// a component or an action binding — so the parser guessed from the value's **shape**. That breaks
+/// the day a component is called `unbind` or `widgets`. An array of tables removes the guess and
+/// reads like `[[keys.command]]` and `[[keys.mode]]`, which were already this shape.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ComponentKeysConfig {
+    /// Which component — matched against the provider's `kind()`.
+    pub name: String,
+    /// Which placement, when the entry is meant for only one — matched against the mount id.
+    /// Absent means every placement of `name`.
+    #[serde(default)]
+    pub id: Option<String>,
     /// `action = "key"` entries. Merged per key by the ordinary table rules.
     #[serde(flatten)]
     pub bindings: KeybindingMap,
-    /// `[[keys.<kind>.bind]]` — bindings that carry `args`. Merged **by `keys`**: a user entry with
-    /// the same combo replaces that default and leaves the others alone. Without that rule the
+    /// `[[keys.component.bind]]` — bindings that carry `args`. Merged **by `keys`**: a user entry
+    /// with the same combo replaces that default and leaves the others alone. Without that rule the
     /// array would be replaced wholesale and binding one key would silently drop every other.
     #[serde(default)]
     pub bind: Vec<ModeBindingConfig>,
-    /// `[keys.<kind>.unbind]` — combos to remove from this layer, keyed by the **combo**, so it
+    /// `[keys.component.unbind]` — combos to remove from this layer, keyed by the **combo**, so it
     /// retires a binding whatever it points at.
     #[serde(default)]
     pub unbind: HashMap<String, bool>,
@@ -199,6 +198,11 @@ pub struct KeysConfig {
     /// Custom input modes.
     #[serde(default)]
     pub mode: Vec<KeyModeConfig>,
+    /// Per-component binding layers — `[[keys.component]]`, consulted only while that component
+    /// holds chrome focus (F003/P086/T362). An entry names its component in `name` and may narrow
+    /// itself to one placement with `id`.
+    #[serde(default)]
+    pub component: Vec<ComponentKeysConfig>,
 }
 
 fn default_prefix_key() -> String {
@@ -221,25 +225,26 @@ impl Default for KeysConfig {
 mod tests {
     use super::*;
 
-    /// `[keys.<kind>]` parses as a **component layer** and sits in the same map as the flat action
-    /// bindings, told apart by its variant rather than by its name (F003/P085/T355).
+    /// `[[keys.component]]` carries the component's name as a **field**, so nothing under `[keys]`
+    /// is interpreted by its table name any more (F003/P086/T362).
     #[test]
-    fn a_named_table_under_keys_is_a_component_layer() {
+    fn a_component_layer_names_itself_in_a_field() {
         let src = r#"
 prefix = "ctrl+b"
 focus_left = "prefix+h"
 paste_clipboard = ["Super+v", "Ctrl+Shift+v"]
 
-[keys.docker]
+[[keys.component]]
+name = "docker"
 restart_selected = "r"
 stop_selected = "s"
 
-[[keys.docker.bind]]
+[[keys.component.bind]]
 action = "spawn_command"
 keys = "t"
 args = { command = "lazydocker" }
 
-[keys.docker.unbind]
+[keys.component.unbind]
 "s" = true
 "#;
         // The embedded shape is `[keys]` at the top level of the file.
@@ -253,10 +258,14 @@ args = { command = "lazydocker" }
             "a flat action binding is unaffected",
         );
         assert_eq!(keys.bindings["paste_clipboard"].keys().len(), 2);
+        assert!(
+            !keys.bindings.contains_key("docker"),
+            "a component no longer occupies a name in the flat binding map",
+        );
 
-        let docker = keys.bindings["docker"]
-            .component()
-            .expect("a table under [keys] is a component layer");
+        let docker = &keys.component[0];
+        assert_eq!(docker.name, "docker");
+        assert_eq!(docker.id, None, "no id ⇒ every placement");
         assert_eq!(docker.bindings["restart_selected"].keys(), vec!["r"]);
         assert_eq!(docker.bindings["stop_selected"].keys(), vec!["s"]);
         assert_eq!(docker.bind.len(), 1);
@@ -264,10 +273,53 @@ args = { command = "lazydocker" }
         assert_eq!(docker.bind[0].keys, "t");
         assert_eq!(docker.bind[0].args["command"], "lazydocker");
         assert!(docker.unbind["s"]);
-        assert!(
-            keys.bindings["docker"].keys().is_empty(),
-            "a layer binds nothing at the top level; its own entries do",
+    }
+
+    /// The reason for the array form: a second entry with an `id` speaks for one placement only.
+    #[test]
+    fn an_id_narrows_an_entry_to_one_placement() {
+        let src = r#"
+[[keys.component]]
+name = "workspaces"
+next_item = "j"
+
+[[keys.component]]
+name = "workspaces"
+id = "workspaces.right"
+next_item = "n"
+"#;
+        let wrapper: HashMap<String, KeysConfig> =
+            toml::from_str(&format!("[keys]\n{src}")).expect("parses");
+        let component = &wrapper["keys"].component;
+
+        assert_eq!(component.len(), 2, "both entries survive — an array, not a table");
+        assert_eq!(component[0].id, None);
+        assert_eq!(component[1].id.as_deref(), Some("workspaces.right"));
+        assert_eq!(
+            component[0].name, component[1].name,
+            "the same component named twice is exactly what the id is for",
         );
+    }
+
+    /// A component may be called `unbind` or `widgets` — the names that would have collided with a
+    /// config keyword under the old `[keys.<kind>]` shape.
+    #[test]
+    fn a_component_may_take_a_name_that_is_also_a_config_keyword() {
+        let src = r#"
+[keys.unbind]
+"prefix+w" = true
+
+[[keys.component]]
+name = "unbind"
+do_thing = "u"
+"#;
+        let wrapper: HashMap<String, KeysConfig> =
+            toml::from_str(&format!("[keys]\n{src}")).expect("parses");
+        let keys = &wrapper["keys"];
+
+        assert!(keys.unbind["prefix+w"], "the real [keys.unbind] is untouched");
+        assert_eq!(keys.component[0].name, "unbind");
+        assert_eq!(keys.component[0].bindings["do_thing"].keys(), vec!["u"]);
     }
 
     #[test]

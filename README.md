@@ -258,45 +258,76 @@ no separate mode to enter, because focus already answers where the keys go. Conc
 
 Two layers are consulted while a dock is focused, in this order:
 
-1. **the component's own** — `[keys.<kind>]`, below;
+1. **the component's own** — `[[keys.component]]`, below (this placement first, then the
+   component as a whole);
 2. **the focus layer** — a built-in mode keymap, `[[keys.mode]] name = "focus"`, overridable in
    `keybindings.toml` like any other. It carries what the *widgets* answer — paging and edges for
    whatever scroll area the focused container nests — deliberately not a per-container vocabulary: a
    scroll region behaves the same wherever it is mounted, so nothing has to declare it, and a
    container with nothing scrollable simply declines and the key does nothing.
 
-### A component's own keys — `[keys.<kind>]`
+### A component's own keys — `[[keys.component]]`
 
-A component declares the actions only it can do and ships a default key for each. Those bindings
-live in a layer named for the component's **kind** — its type, not a placement — so writing it once
-covers every seating, while cursor, scroll position and focus stay per placement.
+A component declares the actions only it can do; the keys for them live in a `[[keys.component]]`
+entry. `name` says which component — a **field**, not the table name, so a component may be called
+`unbind` or `widgets` without colliding with a config keyword. An optional `id` narrows the entry to
+one placement, layered over the id-less one, so two seatings can differ while cursor, scroll position
+and focus are per placement anyway.
+
+Binding names are **short**: under `name = "docker"`, `restart_selected` means the action id
+`docker.restart_selected`. You never repeat the component on every line of its own block. An id heca
+already knows keeps its own name — a component *binds* existing actions rather than redeclaring them.
 
 ```toml
-[keys.docker]                 # a TABLE: merges PER KEY, so overriding one keeps the rest
-restart_selected = "r"        # the component's own declared action
-next_pane        = "n"        # …or any EXISTING action id, simply bound here — never redeclared
+[[keys.component]]
+name             = "docker"
+restart_selected = "r"        # → docker.restart_selected
+next_pane        = "n"        # …an EXISTING action id, simply bound here — never redeclared
 
-[[keys.docker.bind]]          # the arg-carrying form
+[[keys.component]]            # the same component, one placement only
+name = "docker"
+id   = "docker.right"
+restart_selected = "R"        # everything else is inherited from the entry above
+
+[[keys.component.bind]]       # the arg-carrying form
 action = "spawn_command"
 keys   = "t"
 args   = { command = "lazydocker", float = "true" }
 
-[keys.docker.unbind]          # explicit removal, keyed by the combo
+[keys.component.unbind]       # explicit removal, keyed by the combo
 "s" = true
 ```
 
 **Merge rules, and why the two forms differ.** A TOML table already merges per key, so changing one
 `action = "key"` entry keeps every other default. An **array** is replaced wholesale, which for
-`[[keys.<kind>.bind]]` would mean adding one binding silently drops every shipped default — so those
-merge **by their `keys` field** instead: a keymap *is* a map from combo to action, so merging on the
-combo is the ordinary table rule applied to what the array is really keyed by. `unbind` is applied
+`[[keys.component.bind]]` would mean adding one binding silently drops every shipped default — so
+those merge **by their `keys` field** instead: a keymap *is* a map from combo to action, so merging on
+the combo is the ordinary table rule applied to what the array is really keyed by. `unbind` is applied
 last and keyed by the **combo**, so it retires a binding whatever it points at.
 
-**Your config always wins.** A component's shipped default is bound at mount, and it is skipped if
-you have already put something on that key *or* rebound that action elsewhere — so a default can
-never shadow your choice, and rebinding an action does not leave it also answering to its old key.
-Binding an id whose component is not mounted is not an error: like every binding it resolves at
-press time, and simply does nothing until that component appears.
+**Where the defaults are.** heca's own components ship their keys in `keybindings.default.toml`, in
+this same shape, at the bottom of the file — one place a key is written and one place to change it. A
+**plugin** has no entry in that merge, so it registers its keys at runtime instead; whatever your
+config says still wins, and a registration never overwrites a combo you bound or gives a rebound
+action a second key. Binding an id whose component is not mounted is not an error: like every binding
+it resolves at press time, and simply does nothing until that component appears. Nor is an `id` for a
+placement that never exists.
+
+### Finding a key — `heca --keys-show`
+
+Keys are no longer all in one file, so reading config can no longer answer "what runs this action":
+a mode's keys are in `[[keys.mode]]`, a component's in `[[keys.component]]`, and a plugin's are in no
+file at all. `heca --keys-show` prints every binding name, the key it resolves to and the layer it
+came from — read out of the **built keymaps**, so it sees all of them alike. `--json` emits the same
+three facts per line for scripting.
+
+```
+$ heca --keys-show
+BINDING                       KEY              LAYER
+close                         prefix+x         [keys]
+workspaces.cursor_down        j                [[keys.component]] workspaces
+docker.restart                r                plugin
+```
 
 | Key | Action |
 |-----|--------|
