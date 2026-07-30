@@ -1068,11 +1068,16 @@ content shifted past the edge with no scrollbar to bring it back.
   and an outer whole-page region only scrolls when no descendant did.
 - **Scrollbar thumbs** (built-in): auto-shown per overflowing axis; **draggable**.
   A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
-  grip bar), in a wider invisible **grab lane** (16px) so the thin 8px thumb is
+  grip bar), in a wider invisible **grab lane** (16px) so the thin 5px thumb is
   easy to click. Radius from `Theme::control_radius()`, color from `theme.accent`
-  (nothing hardcoded). Each bar reserves a **gutter**: content is clipped short of
-  the lane so no content sits under a thumb, and each bar's track stops short of
-  the other's gutter so they never overlap in the corner.
+  (nothing hardcoded). Each bar reserves a **gutter equal to the whole grab lane**, and each bar's
+  track stops short of the other's gutter so they never overlap in the corner.
+  **The hit area never reaches outside the reserved gutter** — it used to reserve 7px while grabbing
+  across 16, so 9px of lane sat on the row beside it and one pixel belonged to two widgets. A host
+  cannot arbitrate that: a press there was both "grab the thumb" and "start dragging this row", and
+  the workaround (let whichever widget consumes the press win) stopped rows being draggable at all.
+  If you add a hit area wider than what your widget drew, widen the reservation with it
+  (F003/P085/T368).
 - **The bar takes layout space, it is not drawn over content.** When an axis overflows, the region
   reserves the bar's lane as padding on that side, so a child is laid out **beside** the bar and
   keeps its rounded corner. Clipping alone was not enough and looked wrong: a card laid out full
@@ -1080,9 +1085,9 @@ content shifted past the edge with no scrollbar to bring it back.
   space it has. The reservation takes `max(existing padding, gutter)` rather than the sum — where the
   padding is already roomy the bar simply sits in it and both sides stay even. It is applied after
   layout and lands on the next pass, like a classic scrollbar, and it cannot oscillate: narrowing
-  content only ever makes it taller. `SCROLLBAR_W` is the visible thickness and the number to turn if
-  the bar claims too much room; `THUMB_HIT_W` is the (much wider) grab target, so a slim bar stays
-  just as easy to hit.
+  content only ever makes it taller. `SCROLLBAR_W` is the visible thickness — turn it to make the bar
+  look thinner; `THUMB_HIT_W` is the grab target **and** the space reserved, so it is the one to turn
+  if the bar claims too much room. The clearance between bar and content is what is left over (11px).
 - **The lane belongs to the scrollbar.** A move over it is consumed, so the row *behind* the bar does
   not light up as hovered. The whole lane, not just the thumb — a press in the track pages, so the
   track is part of the control, not content.
@@ -1181,7 +1186,7 @@ relative to siblings, which a container cannot see and should not have to.
 > `flex: 1 1 0`); then the free space is the whole region, and the two measure 296px
 > each. `Layout` has no `flex_basis`, so that zero is written as a height today.
 > **Do not copy that into new code** — expressing a proportion by writing a fixed
-> measure is wrong, and F004/P006/T010 exists to give the library one `share(n)`
+> measure is wrong, and **P052(F004)/T350** exists to give the library one `share(n)`
 > setter with the trio behind it.
 
 ### Using one — the whole surface
@@ -2507,6 +2512,24 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 - **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the
   wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
   the look in place without rebuilding the tree.
+
+> **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
+> heca and nothing drags, that is why. **Two different features claim it, and they are not the same
+> thing:**
+>
+> - the frame as a **container** — drag the whole dock into another chrome region. The actions for
+>   this already exist (`chrome.container.move_to_region` and friends); only the mouse surface is
+>   missing. **`P079(F004)`**, task `J5592` ("DockFrame gets the drag handle it was specified with").
+> - the frame as a **row inside** a container — reorder it in the list. heca mounts one frameless
+>   `DockFrame` per workspace row, so this is the drag the grip actually sits beside.
+>   **`P030(F006)`** (app-05, workspace drag-to-reorder), which still needs its own action and drop
+>   logic.
+>
+> The grip is left in place deliberately as a placeholder for those two (user, 2026-07-30).
+>
+> **Phase ids in prose are worth distrusting.** Phase numbers are global, not per-feature — F004's
+> phases are `P019`, `P052`, `P079` — so a hand-written `F004/P009` names nothing. Every id in this
+> paragraph came from asking the planner; do the same rather than inferring one.
 
 **Native:**
 

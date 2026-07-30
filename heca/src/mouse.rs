@@ -267,16 +267,20 @@ pub fn on_mouse_input(
                 return None;
             }
 
-            // The retained chrome tree gets first refusal, because the sidebar now holds real
-            // widgets whose gestures overlap the rows behind them: a press on the scrollbar thumb
-            // is inside the pane card's bounds too, and resolving by geometry first would read it
-            // as a click on that pane. A widget that consumes the press has spoken for it.
-            if crate::chrome::chrome_dispatch_press(state, pos) {
-                return None;
-            }
-
-            // Resolve the drag source. For draggable items we defer any click
-            // effect until release if the drag threshold is not crossed.
+            // **A draggable row is asked about first** (F003/P085/T368). A row consumes a press the
+            // moment it arrives (`Row` activates on mouse-down), so giving the retained tree first
+            // refusal meant a pane card always claimed the press and the drag below was never
+            // reached — panes stopped being draggable while columns, whose `MarkerGroup` consumes
+            // nothing, kept working.
+            //
+            // The order was that way round because a scrollbar's *grab lane* used to reach 9px over
+            // the rows beside it, so resolving by geometry read a press meant for the thumb as a
+            // press on the pane behind it. That overlap is gone — a scroll region now reserves the
+            // whole lane, so the lane and the rows occupy different pixels — which is what makes
+            // asking geometry first correct again rather than merely convenient.
+            //
+            // For a draggable item the click effect is deferred to release (`pending_click_action`),
+            // so a press that never crosses the drag threshold still focuses the pane.
             let drag_source = crate::chrome::sidebar_drag_source(state, pos);
 
             // Sidebar pane press → start drag-detection, resolving the source pane
@@ -325,6 +329,13 @@ pub fn on_mouse_input(
                     left.source_item = source_item;
                 }
                 state.mouse.drag_ctx.set_active(DragSurfaceId::LeftSidebar);
+                return None;
+            }
+
+            // Nothing draggable here, so the retained tree has the press: a scrollbar thumb, a
+            // collapse caret, a button. It comes *after* the drag question now (see above) — the
+            // two can no longer be asking about the same pixel.
+            if crate::chrome::chrome_dispatch_press(state, pos) {
                 return None;
             }
 

@@ -1692,7 +1692,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 
 ## 15. What the widget library provides
 
-> **Planner:** F004/P001–P009 · all widgets built
+> **Planner:** feature **F004** · all widgets built
 
 ## 3. Drag-and-Drop — build on the **shipped** framework (`heca-grid-ui/src/drag/`)
 
@@ -1733,7 +1733,7 @@ The closed `DragSurfaceId` / `DragItemKind` enums are **correct for built-in sur
 
 ## 16. Drag and drop — the shipped framework
 
-> **Planner:** F004/P009 (gridui-08) — NOT BUILT: hooks
+> **Planner:** **P079(F004)** (gridui-08) — NOT BUILT: hooks
 
 ## 4. Shared state strategy (the flexible, plugin-ready pattern)
 
@@ -1790,10 +1790,13 @@ The G1–G8 list that stood here is gone. Every item in it was **built**: `Grid`
 `ItemGroup`, `DockFrame`, `ChromeRegion`, the drag-and-drop framework (`heca-grid-ui/src/drag/`),
 `ScrollRegion` and `Tag` all ship today. The list was written 2026-06-09, was never updated, and
 used ids (G1…G8) that nothing else in the project refers to — only G7 ever had a counterpart in the
-planner (`F004/P001`, gridui-01).
+planner (**P019(F004)**, gridui-01).
 
 **The planner is the only record of what is planned or done.** Anything still open on the grid-ui
-side lives under feature **F004** as phases `F004/P001`–`F004/P008`. Do not track work here.
+side lives under feature **F004**. Do not track work here. **Phase numbers are global, not
+per-feature**: F004's phases are `P019`, `P052`, `P079`… so there is no such thing as `F004/P001`, and
+a hand-written `F00x/P00y` in prose is almost certainly invented. Ask the planner
+(`planner-phase-show <shortId or title>`) and paste the ref it gives back.
 
 ## 7. Open questions (resolved + remaining)
 
@@ -1858,7 +1861,7 @@ Status is the planner's, read 2026-07-26.
 | Phase 4 — built-in provider system | **F003/P004** (plugin-03) | done |
 | Phase 5 — workspaces container migration | **F003/P004** | done |
 | Phase 6 — dynamic action registry | **F003/P003** (plugin-04) | done |
-| Phase 7 — grid-ui widget expansion | **F004** | widgets all built; F004/P001–P009 hold what is left |
+| Phase 7 — grid-ui widget expansion | **F004** | widgets all built; the open F004 phases hold what is left |
 | Phase 7.5 — transparency and blur | **F005** (Compositor Frost) | base merged, tuning deferred |
 | Phase 8 — overlay / modal / dropdown host APIs | **F003/P008** (plugin-05) | planned |
 | Phase 8.1 — placeholder variables | **F003/P002** (plugin-06) | planned |
@@ -1887,7 +1890,7 @@ are the one exception — see the note at the top of Part II.)
 | "Adding a `WidgetKind` is host-side work — the widget, a mapper arm, the docs" | Still true that plugins cannot invent widgets. It does **not** require a fixed enum — a host-filled registry satisfies the same rule in one step. Part I R5. |
 | "Until a first-class `Table` exists, a table is composed" | Still true. **F003/P011/T007** deferred 2026-07-26: no consumer. |
 | Collapsed icon rail, `RailCell` per item, rail flavours (§15) | **Dropped 2026-07-11.** A region is Expanded or Hidden. `RailCell` and `KeyHint` still ship; nothing mounts a rail. See the planner (F003/P020). |
-| "G1–G8" task ids (§19 references them) | **Removed 2026-07-26.** All eight were built. Only G7 ever had a planner id (F004/P001). |
+| "G1–G8" task ids (§19 references them) | **Removed 2026-07-26.** All eight were built. Only G7 ever had a planner id (**P019(F004)**, gridui-01). |
 | Open questions: icon font, `Grid` surface detail (§19) | Both shipped. `Icon` and `Grid` are live widgets. |
 | `Column::new()` / `Row::new()` as the layout boxes | **Renamed 2026-07-27 (F003/P017/T006).** The vocabulary's boxes are `VStack` / `HStack`; `Row` is now the **clickable, selectable** widget it always was in `heca-grid-ui`. Examples in both parts use the new names. |
 | `Label::new(..).variant(Variant::Heading)` (§3 SDK sketch) | **Never existed.** `Label` has no `variant` builder. A heading is `size: header` (`ViewSize::Header`). Corrected in place 2026-07-27. |
@@ -1902,7 +1905,7 @@ are the one exception — see the note at the top of Part II.)
 
 Found by auditing this file against the planner on 2026-07-26. Both now exist:
 
-- **Dragging a container between regions** → **F004/P009** (gridui-08). The framework ships, but
+- **Dragging a container between regions** → **P079(F004)** (gridui-08). The framework ships, but
   `DragSurfaceId` has one variant (`LeftSidebar`), `DockFrame` has no drag handle, and
   `ChromeRegion` receives nothing. The plugin escape hatch (`DragItemKind::Custom`,
   `DragSurfaceId::Plugin`) is folded into the same phase.

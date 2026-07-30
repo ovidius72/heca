@@ -1473,7 +1473,7 @@ impl Component for RepaintWatch {
 ///
 /// **Do not copy this trio into new code.** It is the same debt [`with_share`] carries and for the
 /// same reason — `Layout` has no `flex_basis`, so a zero base size has to be written as a height,
-/// which is a fixed measure standing in for a proportion. F004/P006/T010 replaces both with one
+/// which is a fixed measure standing in for a proportion. P052(F004)/T350 replaces both with one
 /// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
 /// then, rather than each caller rediscovering the combination.
 fn pass_box_down(node: &mut dyn Component) {
