@@ -675,12 +675,6 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
-    /// Mode to restore when the last overlay closes (context-menu mode-restore). Set by
-    /// `chrome::context_menu::open_context_menu_for` when a context menu opens from a
-    /// non-Normal mode (e.g. `SidebarNav`); restored by `chrome::overlay::resolve` when no
-    /// overlay remains. `None` for menus opened from Normal (no-op). See
-    /// `chrome::context_menu` for the full contract.
-    pub overlay_origin_mode: Option<InputMode>,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
@@ -724,14 +718,6 @@ pub struct AppState {
     /// mouse right-click and the keyboard `OpenContextMenu` resolve through it via
     /// `chrome::context_menu::open_context_menu_for`.
     pub context_menu_registry: crate::chrome::ContextMenuRegistry,
-    /// Carries the active sidebar target through the `Prefix` → `Normal` dispatch transition
-    /// (context-menu-7). Set by the sidebar prefix arm in `handle_sidebar_nav_mode` before the
-    /// mode transition (which normalises to `Normal`, losing `SidebarNav`); the next dispatched
-    /// action consumes it to act on the sidebar cursor item instead of the focused pane:
-    /// `handle_open_context_menu` (open the menu for it), `handle_rename_pane` /
-    /// `handle_rename_workspace` (rename it). `None` outside the sidebar; cleared on any
-    /// non-consuming prefix exit so it can never go stale.
-    pub pending_context: Option<crate::chrome::PendingContext>,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.

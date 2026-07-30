@@ -108,83 +108,79 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
         ContextTarget::Pane { pane_id, hyperlink },
         heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
         InteractionSource::MouseContent,
-        None,
     );
 }
 
-/// Open the pane context menu for the **focused** pane — the keyboard / RPC entry point
-/// (`OpenContextMenu` / `prefix+>`). Anchored at the **center of the app window** (not the
-/// cursor): a keyboard-opened menu has no pointer target, so it stays centered on screen. No
-/// "Open link" entry (no target cell). No-op when no pane is focused.
-/// context-menu-3 item 3.2 (anchor decision locked 2026-07-09: center of app window, superseding
-/// the earlier "center of focused widget" draft).
-pub(crate) fn open_focused_context_menu(state: &mut AppState) {
-    use crate::app::interaction::InteractionSource;
-    use crate::chrome::{ContextPath, ContextTarget};
-    if let Some(pane_id) = crate::app::interaction::focused_pane_id(state) {
-        let (cx, cy) = window_center_logical(state);
-        crate::chrome::open_context_menu_for(
-            state,
-            ContextPath::PANE,
-            ContextTarget::Pane { pane_id, hyperlink: None },
-            heca_core::layout::Point::new(cx as f64, cy as f64),
-            InteractionSource::Keyboard,
-            None,
-        );
+/// **A click inside a container focuses it; one outside every container releases** — and it moves
+/// that container's cursor to the row it landed on (F003/P086/T365).
+///
+/// Resolved from the retained tree's real bounds, so it works for any container — a plugin's
+/// included — with nothing declared, and it is the generic form of the release the content path
+/// used to do on its own (F003/P086/T364): "no container under the point" covers a pane, the top
+/// bar and empty space alike.
+///
+/// Shared by both buttons: a right-click aims the keyboard exactly as a left-click does, so the
+/// menu it opens describes the row the keyboard is now on.
+fn aim_keyboard_at_click(state: &mut AppState, pos: (f32, f32)) {
+    match crate::chrome::container_at(state, pos) {
+        Some(container) => {
+            if state.chrome_state.focused_container().as_deref() != Some(container.as_str()) {
+                crate::handlers::handle_focus_dock(
+                    state,
+                    &WmAction::FocusDock { dock: Some(container.clone()) },
+                );
+            }
+            // **The cursor and the click are the same thing.** Click row 5 and `j` must go to row
+            // 6 — so the press moves the container's cursor, not just the highlight. A press that
+            // lands on no row leaves the cursor alone: clicking a container's padding is not a
+            // request to move it.
+            if let Some(key) = crate::chrome::nav_key_at(state, pos) {
+                crate::providers::move_provider_cursor(state, &container, &key);
+            }
+        }
+        None => crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock),
     }
 }
 
-/// Open the right-click context menu for a sidebar `item` (pane / column / workspace) at `pos`:
-/// **add / remove** entries acting on that explicit target, built as a [`DropdownSpec`] and pushed
-/// via [`open_dropdown`](crate::chrome::open_dropdown) (same host-owned overlay path as the
-/// content-pane menu — icons from the action registry, dispatch through the central confirm gate).
-/// Delete entries are styled `danger`. Resolves against the expanded grid sidebar only (see
-/// [`crate::chrome::sidebar_item_at`]).
-fn open_sidebar_context_menu(
-    state: &mut AppState,
-    item: crate::chrome::ChromeDragItem,
-    pos: (f32, f32),
-) {
+/// Open the right-click menu for the **container row** under `pos`, if there is one
+/// (F003/P086/T365).
+///
+/// Generic, and that is the whole change: the row is named by the container under the point and the
+/// `nav_key` that row declared, and the *component* says which menu path describes it. This used to
+/// map a `ChromeDragItem` — `Pane | Column | Workspace` — onto one of three workspace-shaped
+/// targets, so it worked for exactly one component's rows, in one sidebar, and a Docker row could
+/// not be right-clicked at all. Nothing here now knows what kind of rows exist.
+///
+/// Returns whether a menu was opened: a press inside a container that lands on no row (its padding,
+/// a gap between rows) opens nothing, exactly as before.
+fn open_row_context_menu(state: &mut AppState, pos: (f32, f32)) -> bool {
     use crate::app::interaction::InteractionSource;
     use crate::chrome::ContextTarget;
-    // Map the sidebar drag-item (from the chrome hit-test) to its context-menu `(path, target)`;
-    // the sidebar provider for each path builds the add/delete entries acting on that target.
-    let (path, target) = match item {
-        crate::chrome::ChromeDragItem::Pane(pane_id) => {
-            // The host resolves the row's column here, so the menu builder (a plugin's included)
-            // never needs the session to target "this pane's column".
-            let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, pane_id)
-            else {
-                return;
-            };
-            (
-                crate::providers::workspaces::MENU_PANE,
-                ContextTarget::SidebarPane { pane_id, ws_idx, col_idx },
-            )
-        }
-        crate::chrome::ChromeDragItem::Column { ws, col } => {
-            (crate::providers::workspaces::MENU_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
-        }
-        crate::chrome::ChromeDragItem::Workspace { ws } => (
-            crate::providers::workspaces::MENU_WORKSPACE,
-            ContextTarget::SidebarWorkspace {
-                ws_idx: ws,
-                custom_name: state
-                    .session
-                    .workspaces
-                    .get(ws)
-                    .and_then(|w| w.name.clone()),
-            },
-        ),
+    let Some(container) = crate::chrome::container_at(state, pos) else {
+        return false;
+    };
+    let Some(key) = crate::chrome::nav_key_at(state, pos) else {
+        return false;
+    };
+    // Scoped: the facade borrows the store, and opening the menu needs `&mut AppState`.
+    let path = {
+        let ctx = crate::providers::ChromeCtx::new(crate::host::App::new(&state.chrome_state));
+        state
+            .chrome_host
+            .provider(&container)
+            .and_then(|p| p.context_path(&key, &ctx))
+    };
+    let Some(path) = path else {
+        return false;
     };
     crate::chrome::open_context_menu_for(
         state,
-        path,
-        target,
+        &path,
+        ContextTarget::Row { container, key },
         heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
         InteractionSource::MouseLeftSidebar,
-        None,
     );
+    true
 }
 
 /// Sync the current drag mode with modifier state changes.
@@ -248,37 +244,11 @@ pub fn on_mouse_input(
                 return None;
             }
 
-            // **A click inside a container focuses it; one outside every container releases**
-            // (F003/P086/T365). Resolved from the retained tree's real bounds, so it works for any
-            // container — a plugin's included — with nothing declared.
-            //
             // First, and deliberately independent of whether a widget then consumes the press: a
             // click on a scrollbar thumb is still a click *in* that container and must focus it.
             // Each of the branches below returns early, so doing this later would mean repeating it
             // in every one of them and still missing the paths that consume.
-            //
-            // This is also the generic form of the release the left-press content path did on its
-            // own (F003/P086/T364): "no container under the point" covers a pane, the top bar and
-            // empty space alike.
-            match crate::chrome::container_at(state, pos) {
-                Some(container) => {
-                    if state.chrome_state.focused_container().as_deref() != Some(container.as_str())
-                    {
-                        crate::handlers::handle_focus_dock(
-                            state,
-                            &WmAction::FocusDock { dock: Some(container.clone()) },
-                        );
-                    }
-                    // **The cursor and the click are the same thing.** Click row 5 and `j` must go
-                    // to row 6 — so the press moves the container's cursor, not just the highlight.
-                    // A press that lands on no row leaves the cursor alone: clicking a container's
-                    // padding is not a request to move it.
-                    if let Some(key) = crate::chrome::nav_key_at(state, pos) {
-                        crate::providers::move_provider_cursor(state, &container, &key);
-                    }
-                }
-                None => crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock),
-            }
+            aim_keyboard_at_click(state, pos);
 
             // Right sidebar chrome click (e.g. the collapse toggle). The right sidebar
             // has no drag surface yet (app-task-21); dispatch the press into the retained
@@ -435,26 +405,20 @@ pub fn on_mouse_input(
         (MouseButton::Right, ElementState::Released) if resize::on_release(state) => {
             return None;
         }
-        // Right-click on a sidebar item (pane / column / workspace) → its add/remove
-        // context menu, anchored on the clicked item. Checked before the content
-        // path since the sidebar sits outside the pane area anyway.
-        (MouseButton::Right, ElementState::Pressed)
-            if crate::chrome::sidebar_item_at(state, pos).is_some() =>
-        {
-            if let Some(item) = crate::chrome::sidebar_item_at(state, pos) {
-                open_sidebar_context_menu(state, item, pos);
-            }
-            return None;
-        }
-        // Right-click on a content pane (not on a resize divider) → context menu.
-        // Focus the clicked pane so the menu's pane actions target it, then open
-        // the menu in place. terminal-task-18 (context-menu open surface).
+        // Right-click → the menu for whatever is under the cursor: a container's row, else the
+        // content pane. **A right-click aims the keyboard the same way a left-click does**
+        // (F003/P086/T365): clicking a container's row focuses that container, and clicking
+        // outside every container releases it — so the menu that opens describes the same thing
+        // the keyboard is now on.
+        //
+        // Aiming the keyboard first used to be impossible here: opening a menu captured the input
+        // mode to restore afterwards, and moving focus first would have rewritten what it captured.
+        // Nothing is restored any more, so the constraint went with it.
         (MouseButton::Right, ElementState::Pressed) => {
-            // NOT a release site, deliberately (F003/P086/T364). `open_context_menu_for` captures
-            // `restorable_mode(state.input_mode)` as the overlay's origin, and releasing first
-            // rewrites `SidebarNav` to `Normal` — so the menu would stop restoring sidebar nav on
-            // close. Right-click while a dock holds the keyboard is rebuilt wholesale in
-            // F003/P086/T365, once the legacy mode this depends on is gone.
+            aim_keyboard_at_click(state, pos);
+            if open_row_context_menu(state, pos) {
+                return None;
+            }
             if let Some(pane_id) = hit_test_pane(state, pos) {
                 open_context_menu(state, pane_id, pos);
                 return Some((

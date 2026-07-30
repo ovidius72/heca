@@ -433,16 +433,9 @@ pub(crate) fn resolve(
     state.overlays.forms.remove(&overlay);
     state.layers.remove(overlay.0);
     state.needs_redraw = true;
-    // Context-menu mode-restore (context-menu-6): if this was the last overlay and a mode was
-    // recorded as the origin (e.g. a menu opened from `SidebarNav`), return to it. Done BEFORE
-    // the completion runs so a follow-up overlay (e.g. a destructive-confirm prompt) opens with
-    // the origin already restored, and so the origin is consumed before the completion might
-    // push a new overlay. `None` origin (menu opened from Normal) is a no-op — unchanged.
-    if top_modal(state).is_none()
-        && let Some(mode) = state.overlay_origin_mode.take()
-    {
-        state.input_mode = mode;
-    }
+    // **No mode is restored** (F003/P086/T365). A container's keyboard focus is not a mode, an
+    // overlay never takes it away, and it is simply still there when the overlay closes — so there
+    // is nothing to put back and no origin to record.
 
     if let Some(comp) = completion {
         comp(state, registry, result);

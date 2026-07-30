@@ -81,7 +81,16 @@ pub struct ColumnEntry {
 #[derive(Debug, Clone)]
 pub struct WorkspaceEntry {
     pub ws_idx: usize,
+    /// The **displayed** label — the user's name if there is one, else the computed default.
     pub name: String,
+    /// The user-set name, if any — `None` when `name` is the computed default.
+    ///
+    /// The pair mirrors [`PaneEntry`]'s `name` / `custom_name`, and for the same reason: the
+    /// projection has to keep *whether* a name was chosen, not just what is drawn. Without it the
+    /// component cannot tell a renamed workspace from a default one, so its own menu could not
+    /// decide whether there is a name to clear — and the host had to resolve that from the session
+    /// and hand it over on the context target (F003/P086/T365).
+    pub custom_name: Option<String>,
     pub collapsed: bool,
     /// Active/visited projection (see [`PaneEntry::state`]).
     #[allow(dead_code)]
@@ -181,6 +190,7 @@ impl WorkspaceTree {
                     .name
                     .clone()
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
+                custom_name: ws.name.clone(),
                 collapsed,
                 state,
                 columns: Vec::with_capacity(ws.scrolling.columns.len()),

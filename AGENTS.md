@@ -261,7 +261,8 @@ pub enum InputMode {
     Prefix,           // Waiting for action key after prefix
     PaneSelect { candidates: Vec<(char, u64)> },  // Quick-select overlay
     PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },  // Quick-swap overlay
-    SidebarNav,       // Sidebar tree navigation
+    // (No sidebar mode: a container's keyboard focus is a CONTAINER ID in the chrome store,
+    //  not an input mode — see § 2.10/2.11 of docs/chrome-and-ui.md.)
     Rename { target, buffer },  // Text input for renaming
     Chord { sequence },  // Multi-key chord (e.g., w → digit)
     Mode { name },     // Custom mode (resize, etc.)
@@ -1261,7 +1262,7 @@ These were clarified in detail with `/grill-me`; do not casually re-decide them:
 - `j/k` and `Up/Down` move sidebar cursor only.
 - Main scrolling/focus state does **not** auto-follow sidebar cursor movement.
 - `h/l` and `Left/Right` are tree-navigation keys on structural rows.
-- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and exits `SidebarNav`.
+- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and hands the keyboard back to it (`Space` peeks — it focuses the pane and keeps the keyboard on the container).
 - `Esc` exits sidebar mode and focuses contextual content.
 - Sidebar-mode mutation keys are sidebar-only.
 - Global prefix collapse actions use **active main-view state**, not sidebar selection.

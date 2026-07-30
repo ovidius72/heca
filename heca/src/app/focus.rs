@@ -97,21 +97,23 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
-    // **The dock cursor follows the active pane** (user decision, 2026-07-29).
+    // **The dock cursor follows the active pane — when the active pane CHANGES** (user decision,
+    // 2026-07-29; the second half added 2026-07-30, F003/P086/T365).
     //
     // The cursor points at "where you are", so when a pane becomes active you are there — a `prefix+q`
     // pick that leaves the dock highlighting the pane you came *from* is just wrong. Only the active
     // marker followed before, and nothing pushed this direction at all.
     //
-    // It could not yank the cursor mid-navigation: while the dock has the keyboard, nothing else is
-    // moving pane focus, and the component's own cursor moves publish the same selection anyway.
+    // But `sync_focus` runs after **every** layout change, not only after a focus change, so writing
+    // the cursor unconditionally yanked it back to the active pane on any of them: rename a pane your
+    // cursor is on but which is not the active one, and the outline jumped to the active row the
+    // moment the rename applied. Nothing there moved focus — so nothing should have moved the cursor.
     //
     // Both halves are written because both are read: the domain-typed `nav_selection` is what the
     // tree re-derives its positional cursor from after a rebuild (`apply_nav_selection`, below), and
     // the per-mount `container_cursor` is what the row outlines draw from (F003/P085/T354). The
     // setters are change-guarded, so an unchanged selection costs nothing and emits nothing.
-    if let Some(pane_id) = state.focused_pane {
-        let selection = crate::chrome::SidebarSelection::Pane { pane_id };
+    if let Some(selection) = cursor_follow(prev_focused, state.focused_pane) {
         state.chrome_state.workspaces.set_nav_selection(Some(selection));
         let key = crate::providers::workspaces::selection_nav_key(selection);
         // Every seating of the component, since each keeps its own cursor.
@@ -179,4 +181,54 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // index. Collapse changes `flat_items` too, so this runs after `apply_ws_collapsed`.
     let selection = state.chrome_state.workspaces.nav_selection();
     state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
+}
+
+/// Where a dock's cursor should move after a focus sync: to the newly active pane, and **only when
+/// the active pane actually changed**.
+///
+/// Split out from [`sync_focus`] so the rule is testable at all — `sync_focus` needs an `AppState`,
+/// which cannot be constructed without a window (F003/P086/T365).
+fn cursor_follow(
+    prev: Option<PaneId>,
+    now: Option<PaneId>,
+) -> Option<crate::chrome::SidebarSelection> {
+    let pane_id = now.filter(|_| prev != now)?;
+    Some(crate::chrome::SidebarSelection::Pane { pane_id })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cursor_follow;
+    use crate::chrome::SidebarSelection;
+    use heca_core::layout::PaneId;
+
+    /// A new active pane pulls the cursor to it — the `prefix+q` case: picking a pane must not
+    /// leave the dock outlining the one you came from.
+    #[test]
+    fn the_cursor_follows_a_pane_that_just_became_active() {
+        assert_eq!(
+            cursor_follow(Some(PaneId(1)), Some(PaneId(2))),
+            Some(SidebarSelection::Pane { pane_id: PaneId(2) }),
+        );
+        // …including the first sync, where nothing was active before.
+        assert_eq!(
+            cursor_follow(None, Some(PaneId(1))),
+            Some(SidebarSelection::Pane { pane_id: PaneId(1) }),
+        );
+    }
+
+    /// **An unchanged active pane moves nothing.** `sync_focus` runs after every layout change, so
+    /// writing the cursor unconditionally yanked it to the active row on changes that never touched
+    /// focus — renaming a pane the cursor was on, but which was not the active one, was the report.
+    #[test]
+    fn a_layout_change_that_did_not_move_focus_leaves_the_cursor_alone() {
+        assert_eq!(cursor_follow(Some(PaneId(3)), Some(PaneId(3))), None);
+        assert_eq!(cursor_follow(None, None), None);
+    }
+
+    /// Nothing active leaves the cursor where the user put it, rather than clearing it.
+    #[test]
+    fn losing_the_active_pane_does_not_clear_the_cursor() {
+        assert_eq!(cursor_follow(Some(PaneId(1)), None), None);
+    }
 }

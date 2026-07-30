@@ -218,11 +218,11 @@ mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0
 | Command | Default Binding | Description |
 |---------|----------------|-------------|
 | Create workspace | `w` | Create new workspace with a pane |
-| Rename workspace | `Shift+W` | Rename current workspace |
-| Rename pane | `$` | Rename active pane |
+| Rename workspace | `Shift+W` | Rename the **active** workspace (a focused container's cursor row has its own key — see below) |
+| Rename pane | `$` | Rename the **focused** pane (likewise) |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
-| Sidebar focus | `e` | Focus the navigable dock and enter sidebar navigation mode |
+| Sidebar focus | `e` | Give the keyboard to the workspaces dock |
 | Focus dock | `Shift+E` | Letters over every dock; press one to give it keyboard focus |
 | Collapse current workspace | `<` | Collapse the active workspace tree row (UI only) |
 | Collapse current column | `(` | Collapse the focused tiled column tree row (UI only) |
@@ -313,6 +313,29 @@ action a second key. Binding an id whose component is not mounted is not an erro
 it resolves at press time, and simply does nothing until that component appears. Nor is an `id` for a
 placement that never exists.
 
+### The workspaces dock's own keys
+
+heca's own workspaces component ships these in `keybindings.default.toml`. They apply **only while
+that dock holds the keyboard** (`prefix+e`, or click it), so they need no prefix and no mode.
+
+| Key | Action | What it acts on |
+|-----|--------|-----------------|
+| `k` / `j` (also `Up`/`Down`) | `cursor_up` / `cursor_down` | the dock's own cursor |
+| `h` (also `Left`) | `collapse_row` | fold the row, or step out to its parent |
+| `l` / `Enter` (also `Right`) | `activate_selected` | focus the row **and hand the keyboard back** |
+| `Space` | `peek_selected` | focus the row, **keep** the keyboard on the dock |
+| `Tab` | `toggle_selected` | fold / unfold a structural row |
+| `w` / `p` / `c` | `create_workspace` / `create_pane` / `create_column` | a new one where the cursor is |
+| `r` | `rename_selected` | rename the row under the cursor — a pane or a workspace |
+| `x` | `delete_selected` | delete the row under the cursor |
+| `Shift+X` | `delete_selected_column` | the cursor's whole column |
+| `z` | `zoom_selected` | zoom / unzoom the cursor's column |
+
+The cursor-row verbs (`r`, `x`, …) are the **component's**, because "the row my cursor is on" is a
+fact nothing outside the component can know. The app's own `prefix+$` / `prefix+Shift+w` are a
+different question — the focused pane and the active workspace — and keep that meaning wherever the
+keyboard is. Everything else here **binds an action that already exists** rather than redeclaring it.
+
 ### Two keys every container has for free
 
 A container does not have to declare anything to be usable:
@@ -361,30 +384,22 @@ scrolling exists only here (`scroll_page_left`, `scroll_page_right`, `scroll_to_
 `scroll_to_right_edge`, also reachable over RPC as `direct-scroll-page-left` and friends), because a
 terminal viewport has a single axis.
 
-The default sidebar-mode bindings are defined via `[[keys.mode]] name = "sidebar"` and can be overridden in `config.toml`. The trigger field is ignored for this built-in mode because `SidebarNav` is entered via `SidebarFocus` or mouse interaction.
+### Navigating the workspaces dock
 
-Sidebar-mode mutation keys (`w`, `c`, `v`, `z`, `d`) only work while in sidebar navigation mode and act on the selected sidebar row. Global collapse bindings (`<` and `(`) act on the active main-view workspace/column and do not open the sidebar.
+**There is no sidebar mode.** Which dock the keyboard is aimed at is a *container id* held in the
+chrome store, not an input mode, so nothing has to be entered or left: `prefix+e` (or a click) gives
+the keyboard to the workspaces dock, `Esc` gives it back, and while it is there the dock's own keys
+apply — [the table above](#the-workspaces-docks-own-keys), rebindable in `[[keys.component]]`.
 
-### Sidebar Navigation Mode
+`l` / `Right` / `Enter` focus the row **and hand the keyboard back**; `Space` focuses it **and keeps
+the keyboard on the dock**, so you can keep walking with `j`/`k` and preview each row. The mutation
+keys act on the row the cursor is on; the global collapse bindings (`<` and `(`) act on the active
+main-view workspace/column instead and do not touch the dock.
 
-When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree sidebar):
-
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Move cursor down / up |
-| `Up` / `Down` | Move cursor up / down |
-| `h` / `l` | Collapse / expand tree node |
-| `Left` / `Right` | Collapse / expand tree node |
-| `Space` | **Peek** — focus the selected pane/workspace but **stay in sidebar mode**, so you can keep walking the tree with `j`/`k` and preview each row (`sidebar_peek`) |
-| `Tab` | Toggle collapse of the selected row |
-| `w` / `c` / `v` / `z` / `d` | Sidebar-only mutation keys (create workspace/column, split pane, zoom, delete) |
-| `b` | Toggle the left sidebar |
-| `Enter` | Activate selected item (focus pane/workspace) **and leave** sidebar mode |
-| `Escape` | Exit sidebar mode |
-
-`l` / `Right` / `Enter` focus **and leave**; `Space` focuses **and stays**. Both are
-ordinary actions (`sidebar_right_nav` / `sidebar_peek`), so either can be rebound in
-`keybindings.toml`.
+**A click does the same thing as a key.** Clicking anywhere in a container gives it the keyboard and
+moves its cursor to the row you clicked — so `j` continues from there — and clicking outside every
+container gives the keyboard back. Right-clicking a row opens that row's menu, and aims the keyboard
+the same way first.
 
 ### Terminal Scrollback & Selection
 

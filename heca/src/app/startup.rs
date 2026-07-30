@@ -376,7 +376,6 @@ pub(crate) async fn init_state(
         needs_redraw: true,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
-        overlay_origin_mode: None,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
         hint_targets: crate::chrome::HintTargetRegistry::default(),
@@ -388,7 +387,6 @@ pub(crate) async fn init_state(
         action_shortcuts: crate::chrome::ActionShortcuts::default(),
         action_catalog: crate::actions::ActionCatalog::with_builtins(),
         context_menu_registry: crate::chrome::ContextMenuRegistry::with_builtins(),
-        pending_context: None,
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state,
         chrome_host,

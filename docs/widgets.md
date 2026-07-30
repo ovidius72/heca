@@ -1270,9 +1270,9 @@ the widget's default** (vertical) rather than failing. `.horizontal()` /
 of the same setting. **Styling is still host-side**: the app builds the framed
 region and mounts a realized subtree inside it.
 
-> **Real-app integration (sidebar):** selection is container-owned, not widget
-> state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
-> `SidebarNav` cursor handler (selection-driven) calls
+> **Real-app integration (a mounted container):** selection is container-owned, not widget
+> state. Mount the container's rows (DockFrames + rows) inside a `ScrollRegion`; the
+> component's own cursor action (`workspaces.cursor_up`/`cursor_down`, selection-driven) calls
 > `region.ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving
 > the cursor to keep it on screen. The row's visual state stays container-driven
 > via `Item::marker`/`state`. Keyboard *scrolling* of the region is separate: it
@@ -2061,6 +2061,27 @@ row that nothing can activate should not look like a control.
 > and this widget had no declarative spelling at all. The boxes are now `HStack` / `VStack`, and
 > `Row` means the same thing in the model as it does in `heca-grid-ui`. `.highlight(Color)` and
 > `.attention_color(Color)` are still host-only; they become props with F003/P017/T7.
+
+> **A native row's click is a NAME too (F003/P086/T365).** `.on_activate` takes a closure, so it is
+> tempting for host code to write one that does the thing directly — and then that gesture is
+> reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
+> keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
+> exactly as a described node does**, and `heca`'s `named_press` wires both ends from the one
+> declaration — the mirror of `realize`'s `press_intent`:
+>
+> ```rust
+> // declarative (heca-view-realize)              native (heca/src/chrome)
+> if let Some((id, carrier)) =                    let (id, press) =
+>     press_intent(node, hints) { … }                 named_press(intent, emit, hints);
+> row.hint_target(id)                             row.hint_target(id)
+>    .on_activate(move || emit(carrier.clone()))     .on_activate(press);
+> ```
+>
+> **Each item kind declares its own**, and nothing is inherited or forced: in the workspaces
+> component a pane row declares `focus_pane { pane_id }`, a workspace row `focus_workspace { ws_idx }`,
+> and a column row declares none — a real answer, not a gap. Both of those **bind actions that
+> already exist** rather than inventing new ones: apply the ownership test (*remove the component;
+> does the action still make sense?*) before declaring a new id for a click.
 
 ```rust
 let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radius())
@@ -3310,17 +3331,39 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 
 > **Context-aware content (`ContextMenuRegistry`).** Which entries appear is resolved from **where**
 > the menu is opened: a dotted **`ContextPath`** (`"pane"` — the host's own — plus whatever a
-> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + an opaque
-> **`ContextTarget"`**. The host resolves the path
-> from the click / keyboard focus (`resolve_active_context`), looks up all providers registered for
-> it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a plugin inserts entries between
-> built-ins. Same menu widget; different content per context.
+> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + a **`ContextTarget`**.
+> The host resolves the path from the click / keyboard focus (`resolve_active_context`), looks up all
+> providers registered for it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a
+> plugin inserts entries between built-ins. Same menu widget; different content per context.
+>
+> **A target names a row; it does not describe it (F003/P086/T365).** `ContextTarget` has two arms:
+> `Pane { pane_id, hyperlink }` for a content pane — the app's own domain — and
+> **`Row { container, key }`** for a row of any mounted container, where `container` is the *mount
+> id* and `key` is the `nav_key` that row declared. That is everything the host knows, and it never
+> parses a key. It used to carry three workspace-shaped variants pre-filled with facts the host had
+> looked up (a pane's column, a workspace's custom name), which is precisely why a Docker row could
+> not be right-clicked at all: there was no variant for it, and adding one meant the host learning
+> what Docker is.
+>
+> Two calls make it work, and both belong to the component:
+>
+> ```rust
+> // 1. "Which of my menus describes this row?" — matched against its own rows, never parsed.
+> fn context_path(&self, key: &str, ctx: &ChromeCtx<'_>) -> Option<String>;
+>
+> // 2. …and its builder resolves the same key against its own model for the facts it needs.
+> ContextMenuContribution { context_path, weight, build: Rc<dyn Fn(&ChromeCtx, &ContextTarget)> }
+> ```
+>
+> A component seated **twice** is asked for every menu twice, so a builder must answer for its own
+> placement (`Row { container, .. } if container == self.id()`) and return `vec![]` otherwise —
+> without that guard every entry appears twice in the merged menu.
 >
 > **From a plugin.** A plugin never draws the menu — it either attaches entries declaratively on a
 > `ViewNode` (`.on_context([ item("restart","Restart"), … ])`), or registers a
-> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }`. On
-> right-click / keyboard-open the host opens the (merged) menu, owns z-order / focus / Esc /
-> click-outside, and returns the chosen entry as an **intent**. See
+> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }` plus a
+> `context_path` for its row keys. On right-click / keyboard-open the host opens the (merged) menu,
+> owns z-order / focus / Esc / click-outside, and returns the chosen entry as an **intent**. See
 > **[chrome-and-ui.md](chrome-and-ui.md) → "Context menus & KeyHint"**.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style

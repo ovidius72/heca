@@ -8,13 +8,11 @@
 //! for a given context, so a plugin only declares *where* (`context_path`) and *what*
 //! (`build`); it never decides *when* to open.
 //!
-//! Mode-restore: when a menu is opened from a non-Normal mode (e.g. `SidebarNav`), the host
-//! records the origin mode in [`AppState::overlay_origin_mode`] and restores it when the last
-//! overlay closes (see `chrome::overlay::resolve`). So opening a context menu from the sidebar
-//! and dismissing/selecting returns the user to the sidebar, not to Normal.
+//! Nothing is restored when a menu closes: a container's keyboard focus is not a mode, an overlay
+//! never takes it away, and it is still there afterwards (F003/P086/T365).
 
 use crate::app::interaction::InteractionSource;
-use crate::app_state::{AppState, InputMode};
+use crate::app_state::AppState;
 use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec, Intent, PropValue};
 use crate::host::App;
 use crate::providers::ChromeCtx;
@@ -34,14 +32,17 @@ impl ContextPath {
     pub const PANE: &'static str = "pane";
 }
 
-/// Opaque target data a provider's `build` receives — **the facts about the thing the menu was
-/// opened on**. The host fills it from the hit-test (mouse) or the active context (keyboard);
-/// providers match the arm they handle and return `vec![]` for any other.
+/// What the menu was opened on. The host fills it from the hit-test (mouse) or from the focused
+/// container's cursor (keyboard); providers match the arm they handle and return `vec![]` for any
+/// other.
 ///
-/// The target carries what only the host can resolve (a sidebar pane's column, a workspace's custom
-/// name), precisely so a **plugin** builder does not need the session to write a useful menu: it
-/// reads the target for *what was clicked* and `ChromeCtx` for *the app's state*. A builder never
-/// sees `AppState`.
+/// **Two arms, and the second one is generic** (F003/P086/T365). A row is named the way its
+/// component named it — the container it is in and the `nav_key` the row declared — and nothing
+/// else. It used to carry three workspace-shaped variants filled with facts the *host* had
+/// resolved (a pane's column, a workspace's custom name), which is why a Docker row could not be
+/// right-clicked at all: there was no variant for it and no way to add one without the host
+/// learning what Docker is. The component that wrote the key is the one that reads it back, against
+/// its own model, so those facts are its own to look up.
 #[derive(Clone, Debug)]
 pub enum ContextTarget {
     /// A content pane. `hyperlink` is `Some(url)` only for the mouse path (the clicked cell);
@@ -50,52 +51,12 @@ pub enum ContextTarget {
         pane_id: PaneId,
         hyperlink: Option<String>,
     },
-    /// A pane row in the sidebar tree. `ws_idx`/`col_idx` are the pane's location, resolved by the
-    /// host — so the menu's "New pane" lands in *this* pane's column without the builder touching
-    /// the session.
-    SidebarPane {
-        pane_id: PaneId,
-        ws_idx: usize,
-        col_idx: usize,
-    },
-    /// A column row in the sidebar tree.
-    SidebarColumn {
-        ws_idx: usize,
-        col_idx: usize,
-    },
-    /// A workspace row in the sidebar tree. `custom_name` is the user-set name, if any — the menu
-    /// offers "Use default name" only when there is one to clear.
-    SidebarWorkspace {
-        ws_idx: usize,
-        custom_name: Option<String>,
-    },
-}
-
-impl ContextTarget {
-    /// The pane this target refers to, if any (a content/sidebar pane). `None` for column
-    /// and workspace targets. Used to retarget pane actions (rename/close) to the item the
-    /// menu / sidebar cursor is on.
-    pub(crate) fn pane_id(&self) -> Option<PaneId> {
-        match self {
-            ContextTarget::Pane { pane_id, .. }
-            | ContextTarget::SidebarPane { pane_id, .. } => Some(*pane_id),
-            _ => None,
-        }
-    }
-
-    /// The workspace index this target belongs to, if resolvable. Direct for workspace/column
-    /// targets; for a pane target it is resolved from the pane's location in `state`. Used to
-    /// retarget workspace actions (rename) to the item the sidebar cursor is on.
-    pub(crate) fn ws_idx(&self, state: &AppState) -> Option<usize> {
-        match self {
-            ContextTarget::SidebarWorkspace { ws_idx, .. }
-            | ContextTarget::SidebarColumn { ws_idx, .. }
-            | ContextTarget::SidebarPane { ws_idx, .. } => Some(*ws_idx),
-            ContextTarget::Pane { pane_id, .. } => {
-                crate::find_pane_location(&state.session, *pane_id).map(|(ws, _, _)| ws)
-            }
-        }
-    }
+    /// A **row of a mounted container**: which placement it is in, and the key that row declared
+    /// (`NavExt::nav_key`). Opaque to the host — it never parses one.
+    ///
+    /// `container` is the **mount id**, not the component type, so a component seated twice can
+    /// tell which of its seatings was clicked and answer for that one only.
+    Row { container: String, key: String },
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -206,22 +167,16 @@ impl ContextMenuRegistry {
 /// → [`open_dropdown`] (the host-owned overlay). Both the mouse right-click and the keyboard
 /// `OpenContextMenu` route here.
 ///
-/// `origin` is the input mode to restore when the last overlay closes (mode-restore). The mouse
-/// path passes `None` (capture the current mode only if it is restorable, e.g. `SidebarNav`);
-/// the keyboard-from-mode path passes it explicitly. The origin is recorded only when no overlay
-/// is already open (a stacked overlay — e.g. a confirm prompt on top of the menu — keeps the
-/// origin already recorded for the menu).
+/// **No mode is restored when it closes** (F003/P086/T365): chrome focus is not a mode, an overlay
+/// does not take it away, and it is simply still there afterwards — so there is nothing to record
+/// and no `origin` parameter to pass.
 pub(crate) fn open_context_menu_for(
     state: &mut AppState,
     path: &str,
     target: ContextTarget,
     anchor: Point,
     source: InteractionSource,
-    origin: Option<InputMode>,
 ) {
-    if state.overlay_origin_mode.is_none() {
-        state.overlay_origin_mode = origin.or_else(|| restorable_mode(state.input_mode.clone()));
-    }
     // Providers — built-in and plugin alike — build against the host facade, never `AppState`. An
     // observe-only context is right here: building a menu reads state, it never renders.
     let ctx = ChromeCtx::new(App::new(&state.chrome_state));
@@ -267,108 +222,67 @@ fn plugin_providers_for(
         .collect()
 }
 
-/// **Nothing is restorable today.** Opening a menu from a focused container used to leave and
-/// re-enter `SidebarNav`; chrome focus is not a mode, is untouched by an overlay, and is simply
-/// still there when the menu closes (F003/P086/T365). Restoring `Normal` is a no-op, so the field
-/// stays `None`. Add a future restorable mode here.
-fn restorable_mode(_mode: InputMode) -> Option<InputMode> {
-    None
-}
-
 /// Resolve the active context for a keyboard-opened context menu (`OpenContextMenu` /
-/// `prefix+>`). Reads the current [`InputMode`] and the sidebar cursor / focused pane to
-/// produce a `(path, target)` pair that [`open_context_menu_for`] can route to the right
-/// provider.
+/// `prefix+>`): the focused container's cursor row, or the focused content pane.
 ///
-/// - `SidebarNav`: maps [`crate::providers::workspaces::WorkspaceRow`] at the cursor to its context path
-///   (pane→`workspaces.pane`, column→`workspaces.column`, workspace→`workspaces.workspace`,
-///   floating-pane→`pane`).
-/// - `Normal` (and any other mode): resolves to the focused content pane (`"pane"`).
-/// - Returns `None` when there is no active target (no focused pane, no sidebar cursor).
+/// **A focused container decides the context**, not a mode (F003/P086/T365) — the menu follows the
+/// keyboard, and the keyboard is in a container or it is not. The row is named by
+/// `(container, nav_key)` and its **component** says which menu path describes it
+/// ([`Provider::context_path`](crate::providers::Provider::context_path)), so the host resolves a
+/// menu for a Docker row exactly as it does for a workspace row, knowing neither.
+///
+/// Returns `None` when there is nothing to target (no cursor in the focused container, or no
+/// focused pane outside one).
 pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, ContextTarget)> {
+    let container = state.chrome_state.focused_container();
+    let cursor = container
+        .as_deref()
+        .and_then(|mount| {
+            use heca_grid_ui::reactive::SignalGet as _;
+            state.chrome_state.container_cursor(mount).get()
+        });
     resolve_context_for(
-        // **A focused container decides the context**, not a mode (F003/P086/T365). This read
-        // replaced `InputMode::SidebarNav`, whose last writer went with the `sidebar_*` built-ins:
-        // the menu follows the keyboard, and the keyboard is in a container or it is not.
-        state.chrome_state.focused_container().is_some(),
-        state.chrome_state.workspaces.tree().current_item(),
+        container.as_deref(),
+        cursor.as_deref(),
         crate::app::interaction::focused_pane_id(state),
-        &|pane_id| {
-            crate::find_pane_location(&state.session, pane_id).map(|(ws, col, _)| (ws, col))
-        },
-        &|ws_idx| {
+        &|mount, key| {
+            let ctx = crate::providers::ChromeCtx::new(App::new(&state.chrome_state));
             state
-                .session
-                .workspaces
-                .get(ws_idx)
-                .and_then(|ws| ws.name.clone())
+                .chrome_host
+                .provider(mount)
+                .and_then(|p| p.context_path(key, &ctx))
         },
     )
 }
 
-/// Pure mapping behind [`resolve_active_context`]: whether a container holds the keyboard + the
-/// container's cursor row + the focused pane → menu `(path, target)`. Split out from the `AppState`
-/// reads so the mapping is unit-testable without a full app.
+/// Pure mapping behind [`resolve_active_context`]: the focused container + its cursor row + the
+/// focused pane → menu `(path, target)`. Split out from the `AppState` reads so the mapping is
+/// unit-testable without a full app.
 ///
-/// **With a container focused the cursor decides** the context (pane→`workspaces.pane`,
-/// column→`workspaces.column`, workspace→`workspaces.workspace`, floating-pane→`pane`); otherwise the
-/// focused content pane does. Returns `None` when there is nothing to target.
-/// `locate` resolves a pane to its `(ws_idx, col_idx)` and `ws_name` a workspace to its custom
-/// name — the two facts a builder cannot get from the facade, so the **host** puts them on the
-/// target. Passed as closures (rather than `&AppState`) so this mapping stays unit-testable.
+/// `path_for` is the mounted component's answer for one of **its own** row keys; a component that
+/// names no menu for that row (or is not mounted) yields no menu rather than a guessed one.
 fn resolve_context_for(
-    container_focused: bool,
-    sidebar_item: Option<&crate::providers::workspaces::WorkspaceRow>,
+    container: Option<&str>,
+    cursor: Option<&str>,
     focused_pane: Option<PaneId>,
-    locate: &dyn Fn(PaneId) -> Option<(usize, usize)>,
-    ws_name: &dyn Fn(usize) -> Option<String>,
+    path_for: &dyn Fn(&str, &str) -> Option<String>,
 ) -> Option<(ContextPath, ContextTarget)> {
-    match container_focused {
-        true => Some(match sidebar_item? {
-            crate::providers::workspaces::WorkspaceRow::Pane { pane_id } => {
-                // A sidebar pane row whose column can't be resolved is not a valid target.
-                let (ws_idx, col_idx) = locate(*pane_id)?;
-                (
-                    ContextPath(crate::providers::workspaces::MENU_PANE.to_string()),
-                    ContextTarget::SidebarPane { pane_id: *pane_id, ws_idx, col_idx },
-                )
-            }
-            crate::providers::workspaces::WorkspaceRow::FloatingPane { pane_id, .. } => (
-                ContextPath(ContextPath::PANE.to_string()),
-                ContextTarget::Pane { pane_id: *pane_id, hyperlink: None },
-            ),
-            crate::providers::workspaces::WorkspaceRow::Column { ws_idx, col_idx } => (
-                ContextPath(crate::providers::workspaces::MENU_COLUMN.to_string()),
-                ContextTarget::SidebarColumn { ws_idx: *ws_idx, col_idx: *col_idx },
-            ),
-            crate::providers::workspaces::WorkspaceRow::Workspace { ws_idx } => (
-                ContextPath(crate::providers::workspaces::MENU_WORKSPACE.to_string()),
-                ContextTarget::SidebarWorkspace {
-                    ws_idx: *ws_idx,
-                    custom_name: ws_name(*ws_idx),
+    match container {
+        Some(container) => {
+            let key = cursor?;
+            Some((
+                ContextPath(path_for(container, key)?),
+                ContextTarget::Row {
+                    container: container.to_string(),
+                    key: key.to_string(),
                 },
-            ),
-        }),
-        _ => Some((
+            ))
+        }
+        None => Some((
             ContextPath(ContextPath::PANE.to_string()),
             ContextTarget::Pane { pane_id: focused_pane?, hyperlink: None },
         )),
     }
-}
-
-/// Carries a context-menu target through the `Prefix` → `Normal` dispatch transition.
-///
-/// When the user presses `prefix+>` in `SidebarNav`, the prefix arm in
-/// `handle_sidebar_nav_mode` resolves the active context and stashes it here *before*
-/// transitioning to `Prefix` mode. `handle_prefix_mode` then normalises the input mode to
-/// `Normal` before dispatching `OpenContextMenu`, so the handler cannot read `SidebarNav`.
-/// `PendingContext` bridges that gap: the handler consumes it and opens the correct menu.
-#[derive(Clone, Debug)]
-pub(crate) struct PendingContext {
-    pub path: ContextPath,
-    pub target: ContextTarget,
-    /// The mode to restore after the menu closes (e.g. `Some(SidebarNav)`).
-    pub origin: Option<InputMode>,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -470,29 +384,16 @@ mod tests {
         ChromeCtx::new(App::new(store))
     }
 
-    /// `resolve_context_for` with stub lookups: pane 7 lives at ws 1 / col 2; workspace 3 is named.
-    /// `container_focused` stands where `InputMode::SidebarNav` used to (F003/P086/T365).
+    /// `resolve_context_for` with a stub component: it names `row:*` keys `stub.row` and knows
+    /// nothing else — which is all the host is allowed to know about a row (F003/P086/T365).
     fn resolve(
-        container_focused: bool,
-        item: Option<&crate::providers::workspaces::WorkspaceRow>,
+        container: Option<&str>,
+        cursor: Option<&str>,
         focused: Option<PaneId>,
     ) -> Option<(ContextPath, ContextTarget)> {
-        resolve_context_for(
-            container_focused,
-            item,
-            focused,
-            &|_pane| Some((1, 2)),
-            &|ws| (ws == 3).then(|| "My WS".to_string()),
-        )
-    }
-
-    fn build_sidebar_pane_menu_items(
-        pane_id: PaneId,
-        ws_idx: usize,
-        col_idx: usize,
-        has_custom_name: bool,
-    ) -> Vec<DropdownItem> {
-        sidebar_pane_items(pane_id, ws_idx, col_idx, has_custom_name)
+        resolve_context_for(container, cursor, focused, &|_mount, key| {
+            key.starts_with("row:").then(|| "stub.row".to_string())
+        })
     }
 
     /// **A destructive entry uses the same verb as the action it names** (F003/P086/T370).
@@ -514,9 +415,9 @@ mod tests {
         let catalog = crate::actions::ActionCatalog::with_builtins();
         let mut every_item = Vec::new();
         every_item.extend(pane_action_items(true));
-        every_item.extend(sidebar_pane_items(PaneId(1), 0, 0, true));
-        every_item.extend(sidebar_column_items(0, 0));
-        every_item.extend(sidebar_workspace_items(0, true));
+        every_item.extend(pane_row_items(PaneId(1), Some((0, 0)), true));
+        every_item.extend(column_row_items(0, 0));
+        every_item.extend(workspace_row_items(0, true));
 
         let verb = |s: &str| s.split_whitespace().next().unwrap_or("").to_lowercase();
         let mut checked = 0;
@@ -594,12 +495,12 @@ mod tests {
         );
         // "Use default name" only when the workspace has a custom name.
         assert!(
-            sidebar_workspace_items(0, true)
+            workspace_row_items(0, true)
                 .iter()
                 .any(|i| i.id == "reset_workspace_name")
         );
         assert!(
-            !sidebar_workspace_items(0, false)
+            !workspace_row_items(0, false)
                 .iter()
                 .any(|i| i.id == "reset_workspace_name")
         );
@@ -631,7 +532,7 @@ mod tests {
     /// all, since the intent is a NAME, not a closed-enum variant.
     #[test]
     fn an_entry_identity_and_the_action_it_runs_are_separate() {
-        let items = build_sidebar_pane_menu_items(PaneId(7), 2, 3, false);
+        let items = pane_row_items(PaneId(7), Some((2, 3)), false);
         let delete = items.iter().find(|i| i.id == "close").unwrap();
         assert_eq!(delete.label, "Close pane");
         assert!(delete.danger);
@@ -639,7 +540,7 @@ mod tests {
         assert_eq!(delete.intent.action, "close_pane_by_id");
         assert_eq!(delete.intent.args.get("pane_id"), Some(&PropValue::Int(7)));
 
-        // "New pane" targets THIS pane's column — the location the host put on the target.
+        // "New pane" targets THIS pane's column — which the component looked up in its own model.
         let new_pane = items.iter().find(|i| i.id == "add_pane_to_column").unwrap();
         assert_eq!(new_pane.intent.action, "add_pane_to_column");
         assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(2)));
@@ -652,9 +553,9 @@ mod tests {
     #[test]
     fn every_builtin_menu_entry_resolves_to_a_real_action() {
         let mut all = pane_action_items(true);
-        all.extend(build_sidebar_pane_menu_items(PaneId(1), 0, 0, true));
-        all.extend(sidebar_column_items(0, 0));
-        all.extend(sidebar_workspace_items(0, true));
+        all.extend(pane_row_items(PaneId(1), Some((0, 0)), true));
+        all.extend(column_row_items(0, 0));
+        all.extend(workspace_row_items(0, true));
         all.push(item_running(
             "open_link",
             "Open link",
@@ -694,14 +595,14 @@ mod tests {
         let mut r = ContextMenuRegistry::default();
         // Two "built-ins" at [1,1] and [1,2] …
         r.register(
-            "sidebar.workspace",
+            "docker.container",
             vec![1, 1],
             std::rc::Rc::new(|_c: &ChromeCtx, _t: &ContextTarget| {
                 vec![DropdownItem::new("first", "First")]
             }),
         );
         r.register(
-            "sidebar.workspace",
+            "docker.container",
             vec![1, 2],
             std::rc::Rc::new(|_c: &ChromeCtx, _t: &ContextTarget| {
                 vec![DropdownItem::new("last", "Last")]
@@ -711,20 +612,21 @@ mod tests {
         let plugin = vec![ContextMenuProvider {
             weight: vec![1, 1, 1],
             build: std::rc::Rc::new(|_c: &ChromeCtx, t: &ContextTarget| {
-                let ContextTarget::SidebarWorkspace { ws_idx, .. } = t else {
+                let ContextTarget::Row { key, .. } = t else {
                     return Vec::new();
                 };
                 vec![DropdownItem::with_intent(
                     "docker.restart",
                     "Restart",
-                    // A name-keyed action of the PLUGIN's — there is no WmAction for this.
+                    // A name-keyed action of the PLUGIN's — there is no WmAction for this, and the
+                    // row is named by the key the plugin itself wrote.
                     Intent::new("plugin.docker.restart")
-                        .arg("ws_idx", PropValue::Int(*ws_idx as i64)),
+                        .arg("container", PropValue::Text(key.clone())),
                 )]
             }),
         }];
 
-        let mut ordered = r.ordered_providers("sidebar.workspace");
+        let mut ordered = r.ordered_providers("docker.container");
         ordered.extend(plugin);
         ordered.sort_by(|a, b| a.weight.cmp(&b.weight));
         let order: Vec<Vec<i64>> = ordered.iter().map(|p| p.weight.clone()).collect();
@@ -735,11 +637,17 @@ mod tests {
         );
 
         // And its entry dispatches the plugin's own action, with the target's data.
-        let target = ContextTarget::SidebarWorkspace { ws_idx: 4, custom_name: None };
+        let target = ContextTarget::Row {
+            container: "docker".into(),
+            key: "container:nginx".into(),
+        };
         let entry = (ordered[1].build)(&test_ctx(), &target).remove(0);
         assert_eq!(entry.id, "docker.restart");
         assert_eq!(entry.intent.action, "plugin.docker.restart");
-        assert_eq!(entry.intent.args.get("ws_idx"), Some(&PropValue::Int(4)));
+        assert_eq!(
+            entry.intent.args.get("container"),
+            Some(&PropValue::Text("container:nginx".into())),
+        );
         assert!(
             crate::input::action_from_name(&entry.intent.action).is_none(),
             "the plugin's action has no WmAction variant — which is exactly why an \
@@ -753,65 +661,43 @@ mod tests {
         assert!(r.ordered_providers("no.such.path").is_empty());
     }
 
-    /// Nothing is restorable: chrome focus is not a mode, and an overlay does not take it away
-    /// (F003/P086/T365).
-    #[test]
-    fn no_mode_is_restored_after_a_menu_closes() {
-        assert!(restorable_mode(InputMode::Normal).is_none());
-        assert!(restorable_mode(InputMode::Prefix).is_none());
-    }
-
-    use crate::providers::workspaces::WorkspaceRow;
     // The three row menus moved into the component that owns those rows (F003/P086/T365); these
     // tests assert on their content, so they reach for them there.
-    use crate::providers::workspaces::{
-        sidebar_column_items, sidebar_pane_items, sidebar_workspace_items,
-    };
+    use crate::providers::workspaces::{column_row_items, pane_row_items, workspace_row_items};
 
+    /// **The host names a row and asks its component what it is** (F003/P086/T365). It produces the
+    /// container + the key the row declared, and takes the path back — knowing neither that panes
+    /// exist nor that this component has three kinds of row.
     #[test]
-    fn resolve_context_sidebar_items_map_to_distinct_paths() {
-        // Each sidebar cursor item resolves to its own context path + target, so the menu
-        // content differs by where it was opened.
-        let pane = WorkspaceRow::Pane { pane_id: PaneId(7) };
-        let (path, target) =
-            resolve(true, Some(&pane), None).unwrap();
-        assert_eq!(path.0, crate::providers::workspaces::MENU_PANE);
-        assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7), ws_idx: 1, col_idx: 2 }));
+    fn a_focused_container_targets_its_cursor_row() {
+        let (path, target) = resolve(Some("dock.left"), Some("row:7"), None).unwrap();
+        assert_eq!(path.0, "stub.row", "the component named the menu, not the host");
+        let ContextTarget::Row { container, key } = target else {
+            panic!("a container's row is a Row target");
+        };
+        assert_eq!((container.as_str(), key.as_str()), ("dock.left", "row:7"));
+    }
 
-        let col = WorkspaceRow::Column { ws_idx: 1, col_idx: 2 };
-        let (path, target) =
-            resolve(true, Some(&col), None).unwrap();
-        assert_eq!(path.0, crate::providers::workspaces::MENU_COLUMN);
-        assert!(matches!(target, ContextTarget::SidebarColumn { ws_idx: 1, col_idx: 2 }));
-
-        let ws = WorkspaceRow::Workspace { ws_idx: 3 };
-        let (path, target) =
-            resolve(true, Some(&ws), None).unwrap();
-        assert_eq!(path.0, crate::providers::workspaces::MENU_WORKSPACE);
-        assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3, .. }));
-
-        // A floating pane in the sidebar resolves to the generic pane menu.
-        let float = WorkspaceRow::FloatingPane { pane_id: PaneId(9), ws_idx: 0 };
-        let (path, target) =
-            resolve(true, Some(&float), None).unwrap();
-        assert_eq!(path.0, ContextPath::PANE);
-        assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(9), hyperlink: None }));
+    /// A key the component does not recognise — a stale cursor, another placement's row — yields no
+    /// menu rather than a wrong one.
+    #[test]
+    fn a_row_its_component_does_not_name_opens_nothing() {
+        assert!(resolve(Some("dock.left"), Some("who:knows"), Some(PaneId(4))).is_none());
     }
 
     #[test]
-    fn resolve_context_non_sidebar_uses_focused_pane() {
-        // Any non-sidebar mode → the focused content pane.
-        let (path, target) =
-            resolve(false, None, Some(PaneId(4))).unwrap();
+    fn outside_every_container_the_focused_pane_is_the_target() {
+        let (path, target) = resolve(None, None, Some(PaneId(4))).unwrap();
         assert_eq!(path.0, ContextPath::PANE);
         assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(4), hyperlink: None }));
     }
 
     #[test]
     fn resolve_context_none_when_no_target() {
-        // SidebarNav with no cursor item, and Normal with no focused pane, both resolve to None.
-        assert!(resolve(true, None, Some(PaneId(1))).is_none());
-        assert!(resolve(false, None, None).is_none());
+        // A focused container with no cursor, and no container with no focused pane: nothing to
+        // describe either way.
+        assert!(resolve(Some("dock.left"), None, Some(PaneId(1))).is_none());
+        assert!(resolve(None, None, None).is_none());
     }
 
     #[test]
@@ -819,8 +705,8 @@ mod tests {
         // The content each context produces is distinct — proving the menu adapts to where
         // it is opened (pane vs sidebar column vs sidebar workspace).
         let pane = pane_action_items(true);
-        let col = sidebar_column_items(0, 0);
-        let ws = sidebar_workspace_items(0, true);
+        let col = column_row_items(0, 0);
+        let ws = workspace_row_items(0, true);
         let labels = |v: &[DropdownItem]| v.iter().map(|i| i.label.clone()).collect::<Vec<_>>();
         let has = |v: &[DropdownItem], s: &str| v.iter().any(|i| i.label == s);
 

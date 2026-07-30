@@ -42,7 +42,7 @@ pub(crate) use overlay::{
 #[allow(unused_imports)]
 pub(crate) use context_menu::{
     open_context_menu_for, resolve_active_context, ContextMenuProvider, ContextMenuRegistry,
-    ContextPath, ContextTarget, PendingContext,
+    ContextPath, ContextTarget,
 };
 pub use context_menu::MenuBuild;
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
@@ -2783,6 +2783,40 @@ impl HintTargets for ViewHintTargets<'_> {
     }
 }
 
+/// Wire a row's **named** gesture: the hint-target id to attach and the closure to hand
+/// `on_activate`, both carrying the one [`Intent`] (F003/P086/T365).
+///
+/// This is `realize`'s `press_intent` for native code — deliberately the same two lines, so the two
+/// authoring paths produce the same wiring:
+///
+/// ```ignore
+/// // declarative (heca-view-realize):        native (here):
+/// if let Some((id, carrier)) =               let (id, press) =
+///     press_intent(node, hints) { … }            named_press(intent, emit, hints);
+/// row.hint_target(id)                        row.hint_target(id)
+///    .on_activate(move || emit(carrier))        .on_activate(press)
+/// ```
+///
+/// **Why a name and not a closure.** A closure is reachable from exactly one place: the click that
+/// captured it. An `Intent` is an action id plus arguments, so the same gesture answers a click, a
+/// `prefix+/` pick, a menu entry, a keybinding and an RPC call, is routed by the action's own
+/// policy, and passes the destructive-confirm gate — none of which a closure can be. It is also the
+/// only form that crosses a plugin boundary, so a native row and a WASM row declare their clicks
+/// the same way.
+pub(crate) fn named_press(
+    intent: Intent,
+    emit: &ChromeIntentEmitter,
+    hints: &mut HintTargetRegistry,
+) -> (heca_grid_ui::HintTargetId, impl Fn() + 'static) {
+    let id = ViewHintTargets(hints).register(intent.clone());
+    let emit = emit.clone();
+    (id, move || {
+        emit(crate::app::interaction::InteractionIntent::View(
+            intent.clone(),
+        ))
+    })
+}
+
 /// Handles to the retained chrome tree's **value** signals — the state that changes
 /// without a structural change (pane/column selection + status text). Collected
 /// during [`build_chrome_root`] and pushed each frame by [`sync_chrome_signals`], so
@@ -2949,12 +2983,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // the selection: whatever they write into the store moves the cursor on the next
     // frame.
     //
-    // The selection lives while actually navigating (`SidebarNav`) *or* while a context
-    // menu opened from the sidebar is up (`sidebar_nav_active`), so the highlight shows
-    // during navigation, stays on the target row while its menu is open, and clears on
-    // exit. Selection-driven: it does NOT move the real focus (`active_pane`); the
-    // expanded sidebar renders both, distinctly. The setter is a change-guarded
-    // chokepoint, so calling it every frame is cheap.
+    // The selection lives exactly as long as a container holds the keyboard
+    // (`container_cursor_visible`) — including while a menu opened on one of its rows is up, since
+    // an overlay does not take chrome focus away. Selection-driven: it does NOT move the real
+    // focus (`active_pane`); the container renders both, distinctly. The setter is a
+    // change-guarded chokepoint, so calling it every frame is cheap.
     if state.container_cursor_visible() {
         let selection = state.chrome_state.workspaces.nav_selection();
         state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
@@ -4164,6 +4197,7 @@ mod tests {
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
             name: "ws1".into(),
+            custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {

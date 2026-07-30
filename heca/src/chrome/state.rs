@@ -178,8 +178,8 @@ pub struct WorkspacesContainerState {
     /// Per-pane reactive mirror of canonical runtime metadata.
     pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
 
-    /// The sidebar-nav cursor selection while in `InputMode::SidebarNav`, projected
-    /// from the component's own model (`tree().current_item()`). `None` = not navigating. Drives
+    /// The workspaces cursor selection, projected from the component's own model
+    /// (`tree().current_item()`). `None` = nothing selected. Drives
     /// the expanded sidebar's nav-cursor highlight, kept **distinct** from
     /// `active_pane` (the real session focus).
     pub(crate) nav_selection: Signal<Option<SidebarSelection>>,

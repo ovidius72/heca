@@ -125,6 +125,25 @@ pub trait Provider {
         Vec::new()
     }
 
+    /// Which context-menu path describes the row `key` — **the component naming its own row kinds**
+    /// (F003/P086/T365).
+    ///
+    /// The host resolves *which row* was right-clicked (the container under the point, the
+    /// `nav_key` on it) and *when* to open a menu; it cannot know that `pane:7` is a pane and
+    /// `ws:2` a workspace, and must not learn. So it asks the component that wrote the key, gets
+    /// back a path, and looks that path up in the registry exactly as it does for any other. A
+    /// Docker dock answering `"docker.container"` gets a right-click menu with no host code.
+    ///
+    /// Answer by **matching the key against your own rows**, never by parsing it: a tiled pane and
+    /// a floating one are both `pane:<id>`, and only the row knows which it is.
+    ///
+    /// Default `None` — a component whose rows have no menu, which is most of them. The key is one
+    /// this component wrote, so an unrecognised one (a stale cursor, another placement's row) is
+    /// also `None`, and no menu opens rather than a wrong one.
+    fn context_path(&self, _key: &str, _ctx: &ChromeCtx<'_>) -> Option<String> {
+        None
+    }
+
     /// Subscribe to events / register actions on activation. The returned
     /// [`ProviderHandles`] are held by the host while the provider is mounted and
     /// dropped (unsubscribing) on unmount. Default: no subscriptions.

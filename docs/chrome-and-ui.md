@@ -384,6 +384,8 @@ untrusted input and is treated that way.
 | 2026-07-26 | **Appearance is overridable.** The theme is the default, not a wall. Replaces the old "styling is not a property" rule in `AGENTS.md` and in the chrome plan §2.6.1 rule C. |
 | 2026-07-26 | A plugin written in another language may use functions; the plugin kit turns them into references. No change to the boundary. |
 | 2026-07-26 | The closed widget list is about plugins not inventing widgets. It does not require a fixed enum — a host-filled registry satisfies it. |
+| 2026-07-30 | A context target **names** a row (container + `nav_key`); the component that wrote the key resolves it. The host enumerates no row kinds. (§2.11) |
+| 2026-07-30 | A row's click, double-click and right-click are **named intents**, declared per item kind — never closures — so click, picker, menu, key and RPC are one path. (§2.11) |
 
 
 ---
@@ -999,6 +1001,43 @@ mounted it does **nothing** rather than expanding a region to show an empty fram
 **Per placement, not per kind.** Both the focus target and the keyboard-target signals are keyed by
 **mount id**, like the scroll offsets: the same container can be seated twice and only one of the two
 can hold focus.
+
+## 2.11 A row is named, not described — the mouse and the menu — decided 2026-07-30 (F003/P086/T365)
+
+**The host resolves *which* row; the component says *what* it is.** A right-click, like a left-click,
+resolves to `(container under the point, the row's `nav_key`)` off the retained tree's real bounds.
+That pair — `ContextTarget::Row { container, key }` — is all the host carries, and it never parses a
+key. Two component-side calls complete it:
+
+- **`Provider::context_path(key, ctx) -> Option<String>`** — which of my menus describes this row.
+  Answered by *matching the key against my own rows*, never by parsing it: a tiled pane and a
+  floating one are both `pane:<id>`, and only the row knows which it is. `None` (an unknown key, a
+  component with no row menus) opens nothing rather than something wrong.
+- **the menu builder** — resolves the same key against the component's own model for the facts the
+  entries need. A pane's column comes from the component's tree; a workspace's custom name from its
+  own projection.
+
+This replaces three workspace-shaped `ContextTarget` variants that the **host** filled in (`ws_idx`,
+`col_idx`, `custom_name`) — the last place the host enumerated another component's row kinds, and the
+reason a plugin's row could not be right-clicked at all. A component seated twice is asked for every
+menu twice, so a builder answers for its own **mount id** and returns nothing for another's.
+
+**A click is a name, not a closure.** Each item kind declares its gestures as an `Intent` (an action
+id plus arguments), so the click, the `prefix+/` pick, a menu entry, a keybinding and RPC all reach
+the same thing, routed by that action's own policy and passing the destructive-confirm gate. Native
+code wires it with `named_press`, the mirror of `realize`'s `press_intent` — one declaration, both
+ends. Nothing is inherited between kinds, and a kind with no gesture declares none.
+
+**Nothing is restored when an overlay closes.** A menu opened from a focused container used to leave
+and re-enter `SidebarNav`; a container's keyboard focus is not a mode and an overlay never takes it
+away, so `overlay_origin_mode`, `restorable_mode` and the `PendingContext` that carried a target
+across the `Prefix` transition are all gone.
+
+**An app action is not bent at a container's cursor.** `prefix+$` / `prefix+Shift+w` mean the focused
+pane and the active workspace wherever the keyboard is; renaming *the row under the cursor* is the
+component's own verb (`workspaces.rename_selected`, `r`), beside `delete_selected` (`x`) — the same
+ownership test that keeps `create_workspace` and `zoom_column` out of a component's declarations
+(user decision, 2026-07-30).
 
 ---
 
@@ -1854,6 +1893,8 @@ are the one exception — see the note at the top of Part II.)
 | `Label::new(..).variant(Variant::Heading)` (§3 SDK sketch) | **Never existed.** `Label` has no `variant` builder. A heading is `size: header` (`ViewSize::Header`). Corrected in place 2026-07-27. |
 | `Variant::Danger` on a `Button` (§3 SDK sketches) | **Never existed.** The button vocabulary is `Primary`/`Secondary`/`Destructive`/`Outline`/`Ghost`/`Link`; the destructive one is `Destructive`. Corrected in place 2026-07-27. |
 | "No dedicated `Panel` widget — a bare panel is a plain `Surface`" | **Built 2026-07-27 (F003/P017/T008).** `Panel` is its own widget with a real title. It was the reason the published panel example described something unbuildable. |
+| A context menu's target carries host-resolved facts about a row (§4, `ContextTarget`) | **Replaced 2026-07-30 (F003/P086/T365).** A target names a row — `Row { container, key }` — and its component reads its own model for the facts. See §2.11. |
+| Mode-restore: a menu opened from a non-Normal mode returns to it (§4 intro, `overlay_origin_mode`) | **Gone 2026-07-30.** Chrome focus is not a mode and an overlay does not take it away, so there is nothing to restore. See §2.11. |
 | Any "Status:" line anywhere in Part II | The planner is the record. Ignore them. |
 
 ## 22. Work that is designed here but was tracked nowhere

@@ -94,9 +94,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     if should_timeout {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        // Prefix timed out without opening a menu — drop any stashed sidebar context
-        // so a later OpenContextMenu can't read a stale one (context-menu-7).
-        state.pending_context = None;
         state.mark_full_redraw();
     }
 

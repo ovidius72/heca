@@ -108,10 +108,6 @@ pub(crate) enum InteractionIntent {
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
     FocusPane { pane_id: PaneId },
-    /// Focus a specific workspace (from a sidebar click or the hint picker).
-    ///
-    /// Dispatched to `WmAction::FocusWorkspace` in `dispatch_action`.
-    FocusWorkspace { ws_idx: usize },
     /// Toggle a specific workspace header's collapsed state from the sidebar.
     ToggleWorkspaceCollapsed { ws_idx: usize },
     /// Start dragging a sidebar item (no WmAction equivalent).
@@ -460,14 +456,6 @@ pub(crate) fn route_interaction_for_session(
                 RouteDecision::Allow(intent)
             }
         }
-        InteractionIntent::FocusWorkspace { .. } => {
-            // Workspace switching: blocked when floating.
-            if is_floating_domain(session) {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(intent)
-            }
-        }
         InteractionIntent::ToggleWorkspaceCollapsed { .. } => {
             if is_floating_domain(session) {
                 RouteDecision::Block
@@ -727,9 +715,6 @@ pub(crate) fn dispatch_intent(
         }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
             registry.execute(&WmAction::FocusPane { pane_id }, state);
-        }
-        RouteDecision::Allow(InteractionIntent::FocusWorkspace { ws_idx }) => {
-            registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
         }
         RouteDecision::Allow(InteractionIntent::ToggleWorkspaceCollapsed { ws_idx }) => {
             crate::handlers::apply_ws_collapse(state, ws_idx, None);
@@ -1084,7 +1069,6 @@ mod tests {
             InteractionIntent::FocusPane {
                 pane_id: PaneId(99),
             },
-            InteractionIntent::FocusWorkspace { ws_idx: 0 },
             InteractionIntent::StartSidebarDrag {
                 pane_id: PaneId(42),
             },

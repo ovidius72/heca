@@ -2,7 +2,7 @@
 
 **Status:** 🚧 `in-progress`
 **Created:** 2026-07-29T09:34:17.295Z
-**Updated:** 2026-07-29T18:40:52.896Z
+**Updated:** 2026-07-30T08:12:52.482Z
 
 Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
 
@@ -475,15 +475,15 @@ the same thing.
 - Whole workspace green, clippy 0 warnings. **The USER drives it in the app.**
 
 **Checklist:**
-- [ ] DONE — scope_key/scope_at in heca-grid-ui; a click inside a container focuses it, outside releases it; documented in docs/widgets.md (12ef6ac)
-- [ ] DONE — the click moves the container's cursor to the clicked row, via Provider::cursor_moved; every seating of a component shows the same cursor (24043d4)
-- [ ] DONE — a focused container decides the context menu instead of InputMode::SidebarNav; that mode and its dead handlers deleted (ba52150)
-- [ ] DONE — item(), item_running() and usize_arg() are pub(crate): shared menu-entry vocabulary, since the sidebar builders move out and build_pane_menu stays (edfef48)
-- [ ] DONE — the three row menus moved into the component as Provider::context_menus; paths are workspaces.pane / .column / .workspace; ContextPath::SIDEBAR_* and their with_builtins registrations deleted; ContextPath::PANE stays host-owned; stale sidebar.* references swept from app_state.rs, contribution.rs and docs/widgets.md (05f3ac4)
-- [ ] ContextTarget::Row { container, key } replaces SidebarPane/SidebarColumn/SidebarWorkspace. NOTE: with the builders now living inside the component, the host-resolved facts those variants carry (ws_idx, col_idx, custom_name) are redundant — the component reads its own model. Check ContextTarget::pane_id() (:84) and ws_idx() (:95), which retarget pane/workspace actions and have callers outside the menu code. The ChromeDragItem match in mouse.rs:143 goes with it.
-- [ ] Named gestures per item kind: row clicks still run an unnamed closure (.on_activate), so RPC, menus and plugins cannot reach them; ViewNode already carries events { press -> Intent } and the native builder needs the same shape
-- [ ] Rebuild the right-click content path (mouse.rs:455), which deliberately does not release container focus; the restorable_mode constraint that forced that is gone, and its comment is stale
-- [ ] Clear the 9 remaining SidebarNav mentions, all in comments (mouse.rs:455, app_state.rs:680/729, chrome/state.rs:181, chrome/mod.rs:2952)
+- [x] DONE — scope_key/scope_at in heca-grid-ui; a click inside a container focuses it, outside releases it; documented in docs/widgets.md (12ef6ac)
+- [x] DONE — the click moves the container's cursor to the clicked row, via Provider::cursor_moved; every seating of a component shows the same cursor (24043d4)
+- [x] DONE — a focused container decides the context menu instead of InputMode::SidebarNav; that mode and its dead handlers deleted (ba52150)
+- [x] DONE — item(), item_running() and usize_arg() are pub(crate): shared menu-entry vocabulary, since the sidebar builders move out and build_pane_menu stays (edfef48)
+- [x] DONE — the three row menus moved into the component as Provider::context_menus; paths are workspaces.pane / .column / .workspace; ContextPath::SIDEBAR_* and their with_builtins registrations deleted; ContextPath::PANE stays host-owned; stale sidebar.* references swept from app_state.rs, contribution.rs and docs/widgets.md (05f3ac4)
+- [x] ContextTarget::Row { container, key } replaces SidebarPane/SidebarColumn/SidebarWorkspace. NOTE: with the builders now living inside the component, the host-resolved facts those variants carry (ws_idx, col_idx, custom_name) are redundant — the component reads its own model. Check ContextTarget::pane_id() (:84) and ws_idx() (:95), which retarget pane/workspace actions and have callers outside the menu code. The ChromeDragItem match in mouse.rs:143 goes with it.
+- [x] Named gestures per item kind: row clicks still run an unnamed closure (.on_activate), so RPC, menus and plugins cannot reach them; ViewNode already carries events { press -> Intent } and the native builder needs the same shape
+- [x] Rebuild the right-click content path (mouse.rs:455), which deliberately does not release container focus; the restorable_mode constraint that forced that is gone, and its comment is stale
+- [x] Clear the 9 remaining SidebarNav mentions, all in comments (mouse.rs:455, app_state.rs:680/729, chrome/state.rs:181, chrome/mod.rs:2952)
 
 ### ✅ 872713aa-1c7c-48c5-ac8c-d0561866eca7 — T366 — Delete default_binding; a key comes from the built keymaps, and heca --keys-show prints them
 
