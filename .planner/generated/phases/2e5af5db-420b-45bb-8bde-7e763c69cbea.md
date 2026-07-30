@@ -1,8 +1,8 @@
 # 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
 
-**Status:** 🚧 `in-progress`
+**Status:** ✅ `done`
 **Created:** 2026-07-29T09:34:17.295Z
-**Updated:** 2026-07-30T08:38:22.130Z
+**Updated:** 2026-07-30T09:17:43.793Z
 
 Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
 
@@ -568,9 +568,9 @@ Core components' keys moved into `keybindings.default.toml` under `[[keys.compon
 WHAT THIS UNBLOCKS
 F003/P085/T356 steps 3 and 5 — tracked by F003/P086/T369, which is now free to run once F003/P086/T363 lands `global_focus`/`Esc`.
 
-### 📋 ec4ff2d9-f5d6-4ae1-b5ca-cda6fb0fd47c — T367 — The chrome context stops handing every component the workspaces model
+### ✅ ec4ff2d9-f5d6-4ae1-b5ca-cda6fb0fd47c — T367 — The chrome context stops handing every component the workspaces model
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 # What
 
@@ -823,9 +823,9 @@ COMPAT
 PROCESS NOTE FOR THE NEXT SESSION
 The user stopped this task twice for writing code while a question was still open. **When a question is on the table — theirs or mine — reply in prose and wait for the answer.** A defect report on just-shipped work is not authorisation either: say what is wrong and what the fix would be, then wait.
 
-### 📋 195bc451-0ad1-402e-996a-c2ec28b28955 — T371 — The focus domain has four states, not two — and an overlay that covers the panes is one of them
+### ✅ 195bc451-0ad1-402e-996a-c2ec28b28955 — T371 — The focus domain has four states, not two — and an overlay that covers the panes is one of them
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 # Why
 
@@ -919,9 +919,9 @@ Everything then falls out of rules that already exist:
 - `route_interaction_for_session` is still a pure, unit-tested function.
 - Whole workspace green, clippy 0 warnings. **The USER drives it in the app.**
 
-### 📋 9ba34c54-cdc5-4225-9a7a-41eb356239b1 — T372 — RPC can only reach built-ins — a component's or plugin's declared action has no path in
+### ✅ 9ba34c54-cdc5-4225-9a7a-41eb356239b1 — T372 — RPC can only reach built-ins — a component's or plugin's declared action has no path in
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 # Why
 

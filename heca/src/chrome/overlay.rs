@@ -336,16 +336,20 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
     let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
 
-    // A menu **captures input** (`modal`) but covers a corner, not the panes: it is anchored at the
-    // cursor and sized to its entries. So it does not put the app in `Domain::Overlay` — the row it
-    // describes stays visible behind it, and its own entries dispatch through the ordinary policy
-    // path (F003/P086/T371).
+    // A menu **captures input and demands a choice**, so it covers for policy purposes even though
+    // its panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Its own entries
+    // are unaffected — they dispatch `SubmitOverlay`, which is intercepted before routing.
+    //
+    // Without this, the prefix sequence that deliberately falls through the overlay key path
+    // (`app/events.rs`, so `prefix+/` can still pick an entry) reaches the router and runs:
+    // `prefix+x` with a menu open raised the close-pane confirm, which the blanket `top_modal` rule
+    // this replaced had prevented (found by the user, 2026-07-30).
     state.layers.insert(
         id.0,
         LayerBand::Overlay,
         LayerKind::OnDemand,
         true,
-        false,
+        true,
         Box::new(menu),
     );
 

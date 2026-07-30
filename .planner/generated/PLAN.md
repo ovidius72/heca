@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-30T08:16:42.585Z
+**Last updated:** 2026-07-30T09:17:43.823Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -937,13 +937,13 @@ Status: 🚧 `in-progress`
 
 **Tasks:** 6/11
 
-### 🚧 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
+### ✅ 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
 
 Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
-**Tasks:** 7/10
+**Tasks:** 10/10
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P048 — agents-01: Agent status tracking and sounds
 

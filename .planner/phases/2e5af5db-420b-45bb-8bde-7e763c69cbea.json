@@ -216,19 +216,28 @@
       "priority": 6,
       "shortName": "the-chrome-context-stops-handi",
       "title": "The chrome context stops handing every component the workspaces model",
-      "status": "planned",
+      "status": "done",
       "description": "# What\n\n`ChromeCtx::for_build` takes the **workspace tree** and passes it to every component's build hook.\nA Docker dock, a notes dock, a label showing one number — all receive a workspaces model they have no\nuse for, through the one context that is supposed to be component-agnostic.\n\nThis is the single most component-specific thing in the shared contract, and it is in the middle of\nthe seam every component uses.\n\n# Current state\n\n```rust\n// heca/src/providers/mod.rs\npub fn for_build(\n    app: App,\n    tree: &'a WorkspaceTree,      // ← one component's model, for everybody\n    programs: &'a ProgramsConfig,\n    theme: &'a GuiTheme,\n    emit: &'a ChromeIntentEmitter,\n) -> Self\n```\n\n- `RenderInputs { tree, programs, theme, emit }` (`heca/src/providers/mod.rs`) and `ChromeCtx::tree()`\n  expose it.\n- The one caller that needs it is `build_body` in `heca/src/providers/workspaces/mod.rs`, which\n  immediately projects it into rows.\n- The tree now lives on `WorkspacesContainerState` (F003/P085/T356 step 1), reachable as\n  `ctx.state().workspaces().tree()` — so the component can read its **own** model without the host\n  threading it in.\n- `programs` has the same smell one level down: the program catalog is a workspaces/pane concern, not\n  every component's.\n\n# Steps\n\n1. Drop `tree` from `RenderInputs` / `for_build` / `ChromeCtx::tree()`; the workspaces component\n   reads its model from its own state instead.\n2. Look at `programs` with the same question: does a component that is not about panes need it? If\n   not, it moves the same way — the workspaces state already mirrors per-pane runtime\n   (`PaneRuntimeSignals` in `heca/src/chrome/state.rs`).\n3. What is left in the context should be true for **any** component: the host facade, the theme, and\n   the intent sink. Write that rule into the type's doc comment so the next addition has to justify\n   itself against it.\n4. Check `BuildCx` (`heca/src/chrome/mod.rs`) the same way — it carries the signal / drag / hint\n   registries, which are genuinely host-owned and generic, plus `container_id`. That one looks right;\n   confirm rather than assume.\n\n# Edge cases\n\n- A context built to read metadata rather than render (`ChromeCtx::new`) already has no render\n  inputs — that stays.\n- The workspaces build hook must keep working with the tree borrowed from the store, and the borrow\n  must not be held across anything that reaches back into the store (it is a `RefCell`).\n\n# Acceptance\n\n- Nothing in `ChromeCtx` names a workspace, a column or a pane.\n- A component that knows nothing about panes can be built with the same context.\n- Whole workspace green, clippy 0 warnings.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ec4ff2d9-f5d6-4ae1-b5ca-cda6fb0fd47c-check-001-planned-done",
+          "date": "2026-07-30T09:17:39.256Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-30T09:17:39.256Z",
+      "completedAt": "2026-07-30T09:17:39.256Z",
       "createdAt": "2026-07-29T09:36:31.547Z",
-      "updatedAt": "2026-07-29T09:36:31.547Z"
+      "updatedAt": "2026-07-30T09:17:39.256Z"
     },
     {
       "id": "756e787b-3a0d-4c42-8007-88562969d12b",
@@ -291,19 +300,28 @@
       "priority": 101,
       "shortName": "the-focus-domain-has-four-stat",
       "title": "The focus domain has four states, not two — and an overlay that covers the panes is one of them",
-      "status": "planned",
+      "status": "done",
       "description": "# Why\n\n`ActionPolicy` is judged on the wrong axis, and a plugin overlay is what makes it obvious.\n\n`policy_allows` (`heca/src/app/interaction.rs:536`) takes `&Session` and nothing else, and\n`FocusDomain` is `Tiled | Floating`, read off the active workspace (`is_floating_domain`, `:591`).\nSo the six policy values can only ever answer **\"is a pane floating?\"**. They cannot see:\n\n- **container focus** — it lives in `chrome_state`, not the session;\n- **overlays** — they live in `state.layers`.\n\nEverything else was handled *outside* the policy system by ad-hoc checks:\n\n- `route_interaction` (`:431`) blocks **everything** while `top_modal` is up — total, and blunt.\n- For a focused container there is **no gate at all**. Component actions happen to be unreachable by\n  keyboard unless the dock is focused, because their keys live in a layer only consulted then — but\n  that is a property of key *routing*, not a declared rule. The palette, RPC and context menus reach\n  them from anywhere. That is exactly how F003/P085/T356 shipped five mutations as\n  `ActionPolicy::Global` with nothing to catch it.\n\n**The user's case (2026-07-29):** a plugin opens a non-modal overlay covering the scrolling area and\nthe scrollbars. Today nothing stops `prefix+Enter` adding a pane you cannot see, or `zoom`/`close`\nacting on panes underneath. A modal overlay is already safe by the blunt rule above; a non-modal one\nis not.\n\n# ✅ AGREED — a domain, not a new policy value\n\nPolicy says **what kind of act this is** (`TiledOnly`, `FocusedPaneLocal`, `WorkspaceLevel`) and is\nalready fine. Domain says **what owns the screen right now**, and is the half that is under-modelled.\n\n| domain | meaning |\n|---|---|\n| `Tiled` | a pane has the keyboard |\n| `Floating` | a floating pane is active |\n| **`Container`** | a dock has the keyboard |\n| **`Overlay`** | something covers the tiled area |\n\nEverything then falls out of rules that already exist:\n\n- `TiledOnly` blocks in `Floating` **and** `Overlay` — the user's `prefix+Enter` case, solved with no\n  plugin declaring anything about actions it does not own.\n- **`ActionPolicy::ContainerFocused`** — allowed only in the `Container` domain. This is what every\n  component action actually means, and it makes the palette/RPC path safe for free. It was first\n  proposed as a standalone policy value; under this framing it is one row in the same table, not a\n  special case.\n- A plugin overlay declares **its coverage** — does it obscure the tiled area, yes or no. One flag on\n  the overlay. **A plugin must never declare policy for actions it does not own**, or every plugin\n  ends up knowing about `split_horizontal`.\n\n# Steps\n\n1. Widen `FocusDomain` (or introduce an app-level `Domain` beside it) to the four states. Container\n   focus comes from `chrome_state.focused_container()`, overlay from `state.layers`.\n2. Compute the domain in `route_interaction` from `&AppState` and **pass the value** into\n   `route_interaction_for_session`. Keep that function pure — it is session-only today \"extracted for\n   testability\" and must stay testable; it just needs the truth handed to it.\n3. Add `ActionPolicy::ContainerFocused` and move the component-declared actions onto it where it is\n   more accurate than `TiledOnly` (`heca/src/providers/workspaces/mod.rs`, the `mutates` group).\n4. Give an overlay a **covers-the-tiled-area** flag; derive the `Overlay` domain from it.\n5. Retire the `top_modal → Block` special case in `route_interaction` once the domain covers it —\n   a modal is simply an overlay with coverage.\n6. Export `ActionPolicy` beyond `pub(crate)`. It is documented as \"**private** to the interaction\n   module\", so a plugin outside the crate cannot name the thing it is required to declare.\n\n# What is NOT in scope\n\n- **Config-assignable policy.** Discussed and rejected 2026-07-29: policy is a correctness property\n  the action's author knows and the user does not; setting it in config unlocks misbehaviour, not a\n  feature. Named policy sets were considered too — a set assigned per component still has to name\n  actions inside it, so the indirection buys nothing until several components share one rule. If a\n  concrete case appears, the defensible version is **deny-only**: config may make an action more\n  restricted, never less, and a loosening attempt is refused with a startup report line.\n- **Dynamic availability** (\"a row is selected\", \"the daemon is up\") is already solved: `perform`\n  returns `Handled::No` and a silent decline is a real answer. Policy is static domain gating; the\n  two must not be conflated.\n\n# Edge cases\n\n- Container focus **and** a floating pane at once: the container has the keyboard, so `Container`\n  wins for keyboard-sourced interactions. Decide explicitly rather than by match order.\n- An overlay that covers only part of the screen (a dropdown, a tooltip) is **not** `Overlay` — the\n  flag is about the tiled area specifically.\n- `Global` must keep meaning \"always\", including `Overlay`, or `reload_config` stops working.\n\n# Acceptance\n\n- A non-modal overlay covering the panes blocks `prefix+Enter`, zoom and close, with no plugin code.\n- A component action declaring `ContainerFocused` cannot be run from the palette or RPC while its\n  container does not hold focus.\n- `route_interaction_for_session` is still a pure, unit-tested function.\n- Whole workspace green, clippy 0 warnings. **The USER drives it in the app.**",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "195bc451-0ad1-402e-996a-c2ec28b28955-check-001-in-progress-done",
+          "date": "2026-07-30T09:17:35.994Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-30T09:13:28.106Z",
+      "completedAt": "2026-07-30T09:17:35.994Z",
       "createdAt": "2026-07-29T14:17:11.024Z",
-      "updatedAt": "2026-07-29T14:17:11.024Z"
+      "updatedAt": "2026-07-30T09:17:35.994Z"
     },
     {
       "id": "9ba34c54-cdc5-4225-9a7a-41eb356239b1",
@@ -313,27 +331,42 @@
       "priority": 102,
       "shortName": "rpc-can-only-reach-built-ins-a",
       "title": "RPC can only reach built-ins — a component's or plugin's declared action has no path in",
-      "status": "planned",
+      "status": "done",
       "description": "# Why\n\n`parse_rpc_command` (`heca/src/rpc.rs:146`) returns a **`WmAction`** — a closed enum. A component's or\nplugin's declared action is not a variant of it and never can be: that is the whole reason\n[`ActionRef::Dynamic`] and name-keyed dispatch exist. So **no component or plugin action is reachable\nby RPC at all**, today.\n\nThat contradicts what the contract promises. `Provider::actions`'s own doc says the declaration alone\nbuys \"the palette entry, the icon and label, `describe-action` and **RPC**\" — and `describe-action`\ndoes work, because it reads the catalog. *Running* the action does not.\n\n**How it surfaced.** F003/P085/T356 removed the twelve `sidebar-*` RPC commands along with the\nbuilt-ins they named. Their replacements are the workspaces component's declared actions\n(`workspaces.cursor_up`, `workspaces.delete_selected`, …), which this parser cannot express — so a\ncapability that a script could drive is now unreachable. The comment at the site says so and\n`test_sidebar_commands` asserts the old names are gone. The gap is **not** specific to those twelve:\nit is every component and plugin action.\n\n# What already exists to build on\n\nThe dispatch half is done. `dispatch_view_intent` (`heca/src/app/interaction.rs`) already resolves a\nname **either** to a built-in (via `build_action` / `action_from_name`, args and all) **or** to a\nname-keyed action registered at runtime, and routes both through the same `policy_allows`. It takes an\n`Intent` — an action name plus args — which is exactly what an RPC caller has.\n\nSo what is missing is a **parse** path that can yield an `Intent`, not another `WmAction`.\n\n# Steps\n\n1. Give the RPC surface a generic command — `action <name> [key=value …]` — that builds an `Intent`\n   rather than a `WmAction`.\n2. Return a type that can carry either: `enum RpcCommand { Builtin(WmAction), Intent(Intent) }`, or\n   have the parser produce an `Intent` for **every** command and let the existing built-in resolution\n   in `dispatch_view_intent` do the rest. The second is smaller and removes a whole parallel\n   vocabulary, but it changes `parse_rpc_command`'s signature, which many tests assert on.\n3. Judge args against the declaration, as the other doors do — `report_arg_problems` already exists\n   and is what makes a misspelled argument say so instead of silently defaulting.\n4. `--keys-show` has the same shape of answer for keys; consider whether `list-actions` should mark\n   which actions RPC can actually run, so the gap cannot silently reappear.\n\n# Edge cases\n\n- An action whose component is **not mounted**: not an error. Like a binding, it resolves at call\n  time and simply does nothing — but RPC should say so in its reply rather than succeeding silently.\n- Policy still applies: a `TiledOnly` action called over RPC while a float owns the domain is blocked,\n  exactly as a keypress would be.\n- The removed `sidebar-*` command names must **not** come back as aliases; their replacements are the\n  component's action ids.\n\n# Acceptance\n\n- `heca action workspaces.cursor_down` moves the dock cursor.\n- A plugin action registered at runtime is callable the same way, with args.\n- Calling an action whose component is unmounted reports that, rather than reporting success.\n- Whole workspace green, clippy 0 warnings.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "9ba34c54-cdc5-4225-9a7a-41eb356239b1-check-001-planned-done",
+          "date": "2026-07-30T09:17:43.793Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-30T09:17:43.793Z",
+      "completedAt": "2026-07-30T09:17:43.793Z",
       "createdAt": "2026-07-29T15:21:41.103Z",
-      "updatedAt": "2026-07-29T15:21:41.103Z"
+      "updatedAt": "2026-07-30T09:17:43.793Z"
     }
   ],
   "createdAt": "2026-07-29T09:34:17.295Z",
-  "updatedAt": "2026-07-30T08:38:22.130Z",
-  "handoff": "# Session handoff — 2026-07-30\n\n## State\n\n**Merged.** PR #252 landed on `main` as merge commit `71da4e5`; the `feat/action-arg-declaration`\nbranch is deleted, local and remote. You are on **`main`**, tree clean, **1063 tests, clippy 0\nwarnings** — verified after the merge, not before it.\n\nStart the next piece of work from `main` on a fresh branch. Nothing is in flight.\n\n**P086 is 6/10 tasks done.** F003/P085/T356 closed with it.\n\n| task | state |\n|---|---|\n| T362 `[[keys.component]]` | ✅ |\n| T363 `global_focus` + `Esc` | ✅ |\n| T364 container focus survives pane focus | ✅ |\n| T366 delete `default_binding`, `--keys-show` | ✅ |\n| T369 → F003/P085/T356 | ✅ |\n| T370 the Close vocabulary | ✅ |\n| **T365 the mouse + context menus** | **in progress — 5/9 checklist items done** |\n| T367 `ChromeCtx` stops handing everyone the workspaces model | planned |\n| T371 the four-state focus domain | planned |\n| T372 RPC cannot reach a component's actions | planned |\n\n## Where to resume\n\n**T365's checklist is the authority — read it, not this section.** Four items left, each carrying\nfile:line:\n\n1. **`ContextTarget::Row { container, key }`** replaces `SidebarPane`/`SidebarColumn`/\n   `SidebarWorkspace`. The builders now live *inside* the component, so the host-resolved facts those\n   variants carry (`ws_idx`, `col_idx`, `custom_name`) are redundant — the component reads its own\n   model. `ContextTarget::pane_id()` and `ws_idx()` have callers outside the menu code.\n2. **Named gestures per item kind** — row clicks still run an unnamed `.on_activate` closure, so RPC,\n   menus and plugins cannot reach them. `ViewNode` already has `events { press → Intent }`; the\n   native builder needs the same shape.\n3. **The right-click content path** (`heca/src/mouse.rs`, the `MouseButton::Right` arm) — the\n   `restorable_mode` constraint that forced it not to release focus is gone; its comment is stale.\n4. **Nine `SidebarNav` mentions**, comments only, no code.\n\nT367, T371 and T372 are independent of T365 and of each other. T371 is the one that unlocks the\nplugin-overlay case the user raised (a non-modal overlay covering the panes must block\n`prefix+Enter`).\n\n## The rules this phase settled — do not re-litigate\n\n- **The ownership test** (now in `Provider::actions`'s doc): *remove the component; does the action\n  still make sense?* Yes → the app's, the component **binds** it. No → the component's, it\n  **declares** it. This is why `create_workspace`, `zoom_column` and `workspace_next` are not\n  declared, and it separates two actions one name can hide (*switch the active workspace* is the\n  app's; *move my cursor to the next workspace row* would be the component's, and does not exist).\n- **A container's context menu is the component's**, never the host's. The host seeds `pane` only.\n- **Paths and action ids are namespaced by component**, never by location — `workspaces.pane`, not\n  `sidebar.pane`. Same defect `SidebarTree` and `sidebar_*` had.\n- **Keys are flat at the container level**; the component decides meaning from the row the cursor is\n  on. Binding names are short (`cursor_up`); the action id is `<component>.<name>`.\n- **Policy is per action, not per component.** A shared default in one closure silently made eleven\n  actions `Global`. The cursor is chrome state (`Global`); every mutation is `TiledOnly`.\n- **Policy is not config-assignable** (proposed, analysed, rejected). It is a correctness property the\n  action's author knows and the user does not. If a real case appears, the defensible form is\n  **deny-only**: config may restrict further, never loosen, and a loosening attempt is reported.\n- **The cursor is the component's to say.** The host keeps one per mount, but a component whose model\n  has a single cursor must light the same row in every seating; `mirror_cursor_to_siblings` follows\n  the model rather than asserting against it.\n\n## Traps that cost time — worth reading before touching keys or wording\n\n- **A component's short binding name that matches a built-in resolves to the built-in.** Config is\n  built before providers register, so nothing can know better. It silently made\n  `workspaces.create_workspace` dead, and left `delete_column` bound to a built-in needing args a key\n  cannot supply — the startup report caught the second. Hence `delete_selected_column`.\n- **`WorkspacesContainerState::tree()` is a `RefCell`.** End the borrow before any call that reaches\n  back into the store, or it panics at runtime instead of failing to compile.\n- **`AppState` cannot be constructed in a test** — one site, `heca/src/app/startup.rs`, needs a\n  window. Nothing at the `handle_*` level is unit-testable. Put assertions on the component through\n  `ProviderCx`, or extract a pure function (`placement_for`, `scope_at`, `confirm_title_for` were all\n  split out for exactly this), and expect the user to drive the rest in the app.\n- **User-facing wording has four independent sources** — `ActionDescriptor.label`,\n  `ConfirmSpec.buttons[].label`, `confirm_title`, and hand-written `DropdownItem` labels. Changing a\n  verb means touching all four; T370 needed three passes to learn that, each time found by the user\n  reading the app.\n- **Deleting a mode is not mechanical.** `InputMode::SidebarNav` looked inert; it still had a *writer*\n  on the prefix path, and removing the mode killed the only caller of a fix made minutes earlier.\n  Delete the variant and let the compiler find everything.\n- **Do not put `rg` after a heredoc in one shell command.** With no path argument it reads stdin and\n  hangs forever; two processes sat for five hours this session.\n- Repo rule: **never run `cargo fmt`**. Rust-skill review → clippy → commit, and **wait for the\n  user's approval before committing**.\n\n## Process — the user stopped this session twice for it\n\n**When a question is open — theirs or mine — reply in prose and wait.** A conditional (\"if we choose\nX then Y\"), a \"right?\", or an offered alternative all mean the decision is still open. A bug report on\njust-shipped work is not authorisation either: say what is wrong and what the fix would be, then wait.\n\nLand **one verifiable slice at a time** and let the user drive it in the app before committing. When a\nchange cannot be finished in the budget left, revert to green rather than leave a broken tree — and\nrecord what the attempt measured so the next attempt starts from it.\n",
+  "updatedAt": "2026-07-30T09:17:43.793Z",
+  "handoff": "",
   "handoffUpdatedAt": "2026-07-29T22:40:10.367Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/2e5af5db-420b-45bb-8bde-7e763c69cbea-2026-07-30T09-13-28-103Z.md",
+      "clearedAt": "2026-07-30T09:13:28.103Z",
+      "reason": "task-started"
+    }
+  ],
   "statusLog": [
     {
       "id": "f1117999-ed5b-4055-bdbd-ae78d354f27d",
@@ -341,6 +374,14 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "6ee13b38-f701-4078-b937-5dd637a2e582",
+      "date": "2026-07-30T09:17:43.796Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ]

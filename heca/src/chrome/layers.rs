@@ -185,8 +185,19 @@ impl LayerRegistry {
 
     /// Is the tiled area covered by any visible layer? The input to `Domain::Overlay`
     /// (F003/P086/T371).
+    ///
+    /// **A `modal` layer counts whether or not it declared coverage** — it captures the keyboard and
+    /// demands a choice, so acting on the panes behind it is refused by construction. Derived here
+    /// rather than trusted at each `insert`, because a call site that passes `false` for a modal
+    /// re-opens exactly one hole: the prefix sequence deliberately falls through the overlay key
+    /// path (`app/events.rs`, so `prefix+/` can pick a menu entry), reaches the router, and runs.
+    /// `prefix+x` with a context menu open raising the close-pane confirm was that hole (user,
+    /// 2026-07-30). The declared flag is what a **non-modal** overlay — a plugin panel over the
+    /// scrolling area — uses to get the same protection.
     pub(crate) fn content_covered(&self) -> bool {
-        self.layers.iter().any(|l| l.visible && l.covers_content)
+        self.layers
+            .iter()
+            .any(|l| l.visible && (l.covers_content || l.modal))
     }
 
     /// The currently-visible layers, in **front → back** order (highest band first, then
@@ -242,6 +253,22 @@ mod tests {
 
     fn empty_root() -> Box<dyn Component> {
         Box::new(Flex::row())
+    }
+
+    /// **A modal covers whatever it declared** — the property no call site can get wrong
+    /// (F003/P086/T371). A layer that captures the keyboard and demands a choice must refuse acts on
+    /// the panes behind it; the alternative is trusting a `bool` at every `insert`, and the one that
+    /// passed `false` let `prefix+x` raise the close-pane confirm with a context menu open (user,
+    /// 2026-07-30).
+    #[test]
+    fn a_modal_covers_the_content_even_if_it_says_otherwise() {
+        let mut reg = LayerRegistry::default();
+        // Deliberately declaring `false`, as the dropdown path once did.
+        reg.insert(LayerId(7), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        assert!(
+            reg.content_covered(),
+            "capturing input IS coverage, whatever the flag says",
+        );
     }
 
     /// The one input `Domain::Overlay` reads: a *visible* covering layer, and only that
