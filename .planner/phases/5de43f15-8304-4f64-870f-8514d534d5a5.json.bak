@@ -316,23 +316,32 @@
       "priority": 11,
       "shortName": "regression-dragging-a-pane-in",
       "title": "REGRESSION: dragging a pane in the sidebar stopped working; dragging a column still works",
-      "status": "in-progress",
+      "status": "done",
       "description": "# The bug\n\nReported by the user in the app, 2026-07-29, after this session's commits. **Dragging a pane card in\nthe sidebar does nothing. Dragging a column still works.** It worked before the session.\n\nConfirmed still broken after `866f7da` (the `.both()` scroll-axis revert), so the second scroll axis\nis **not** the cause.\n\n# What is already ruled out\n\n- **A widget swallowing the press.** That would break column drag too. It does not.\n- **The pane card's drag declaration.** `git diff 163f327..HEAD` on\n  `heca/src/providers/workspaces/mod.rs` shows no change to `.draggable(drag_id)`,\n  `.drop_target(drag_id)` or `drag.register(ChromeDragItem::Pane(..))`. The card still declares\n  itself exactly as before.\n- **The four deleted surface functions** (`contains`, `item_at`, `can_accept`, `update_hover` in\n  `heca/src/mouse/surface_left.rs`, plus their dispatchers in `target.rs`). Their dispatchers carried\n  `#[expect(dead_code)]`, which clippy verifies is *fulfilled* — so they were provably unreachable\n  before deletion. Look here last.\n\n# Where to look, in order\n\n1. **`drag::source_at` resolution** (`heca-grid-ui/src/drag/resolve.rs:105`). It walks children\n   last-added-first and descends before testing the parent, so the deepest drag source under the\n   point wins. A pane card sits **inside** the column's `MarkerGroup`, and both are drag sources. If\n   the pane is no longer reached, the column answers instead — which is exactly the symptom. What is\n   new on that path is `.nav_key(..)` on both (`bfa8296`), and the `FocusScope`/`KeyHint` wrappers\n   from earlier phases. Check `skip()` in that file: it skips a subtree whose `visible` is false or\n   whose `style.layout.hidden` is set.\n2. **`heca/src/mouse.rs:272-278`** — `chrome_dispatch_press` returns early when a widget consumed the\n   press, *before* `sidebar_drag_source` is called at `:278`. A `Row` has `on_activate` and consumes;\n   a `MarkerGroup` does not. That asymmetry matches the symptom exactly. This ordering pre-dates the\n   session, so if it is the cause, something else changed what the `Row` does with a press.\n3. **`heca/src/mouse/drag.rs:92`** — `handle_sidebar_drag_starting` reads the workspaces model, which\n   moved into a `RefCell` in `51d7874` (`state.chrome_state.workspaces.tree()`). A borrow held across\n   a call that reaches back into the store panics; a borrow taken and dropped is fine. Verify the\n   drag-label build there is not silently failing.\n\n# How to reproduce and bisect\n\nThe session's commits, oldest first: `3bfe4f6`, `69b4158`, `bfa8296`, `51d7874`, `898ca40`,\n`a71d737`, `aa73bbe`, `050f1f9`, `866f7da`. `git bisect` against \"drag a pane card in the left\nsidebar\" will name the commit in three or four steps; `bfa8296` (retained-tree row resolution) and\n`51d7874` (the model move) are the two that touched this area.\n\n# Acceptance\n\n- Dragging a pane card in the sidebar moves/reorders it as it did before the session.\n- Dragging a column still works.\n- A regression test that fails without the fix — `drag::source_at` over a built tree with a pane\n  inside a column is unit-testable in `heca-grid-ui` without a window.\n- **The USER drives it in the app** — this is a pointer gesture; no unit test verifies it end to end.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cc8f8280-93df-439d-8104-bc8a9031a362-check-001-in-progress-done",
+          "date": "2026-07-30T10:03:51.114Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-30T09:40:33.411Z",
-      "completedAt": "",
+      "completedAt": "2026-07-30T10:03:51.114Z",
       "createdAt": "2026-07-29T10:29:02.938Z",
-      "updatedAt": "2026-07-30T09:40:33.411Z"
+      "updatedAt": "2026-07-30T10:03:51.114Z"
     }
   ],
   "createdAt": "2026-07-28T12:21:31.986Z",
-  "updatedAt": "2026-07-30T09:40:33.411Z",
+  "updatedAt": "2026-07-30T10:03:51.114Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-07-29T09:58:23.721Z",
   "handoffReadAt": "",
@@ -348,5 +357,14 @@
       "reason": "task-started"
     }
   ],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "75739b4b-b910-4846-ac1c-a03bfb1f4d93",
+      "date": "2026-07-30T09:40:33.414Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }
