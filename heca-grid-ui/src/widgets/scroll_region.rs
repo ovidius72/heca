@@ -48,13 +48,11 @@ use heca_core::layout::{Point, Rectangle, Size};
 
 /// Visible scrollbar thumb width (logical px).
 ///
-/// This is the *visible* thickness only, and the space the region reserves beside its content is
-/// this plus [`SCROLLBAR_PAD`] — so it is the number to turn if the bar is claiming too much room.
-/// The **grab** target is [`THUMB_HIT_W`] and is deliberately much wider, so a slimmer bar stays
-/// exactly as easy to hit.
+/// The *visible* thickness only. The space the region reserves beside its content is the **grab
+/// lane** ([`THUMB_HIT_W`]), which is wider so a slim bar stays easy to hit — so this is the number
+/// to turn to make the bar look thinner, and `THUMB_HIT_W` the one to turn if it is claiming too
+/// much room. The clearance between bar and content is whatever is left over (11px today).
 const SCROLLBAR_W: f64 = 5.0;
-/// Gap between the scrollbar and the **content** it sits beside.
-const SCROLLBAR_PAD: f64 = 2.0;
 /// Gap between the scrollbar and the region's own **outer edge**.
 ///
 /// Zero: the bar sits hard against the edge, and the whole gutter it reserves becomes clearance on
@@ -70,11 +68,21 @@ const SCROLLBAR_EDGE_INSET: f64 = 0.0;
 const THUMB_HIT_W: f64 = 16.0;
 /// Minimum thumb height so a very long list still has a grabbable thumb.
 const MIN_THUMB: f64 = 24.0;
-/// Space reserved along an edge for a visible scrollbar (the lane the thumb sits
-/// in): the thumb plus its padding on both sides. Content is clipped short of it,
-/// and the *perpendicular* track stops before it, so a bar never overlaps content
-/// or the other bar in the corner.
-const SCROLLBAR_GUTTER: f64 = SCROLLBAR_W + SCROLLBAR_PAD + SCROLLBAR_EDGE_INSET;
+/// Space reserved along an edge for a visible scrollbar: **the whole grab lane**. Content is laid
+/// out and clipped short of it, and the *perpendicular* track stops before it, so a bar never
+/// overlaps content or the other bar in the corner.
+///
+/// It is [`THUMB_HIT_W`], not the visible thickness, because **a widget's hit area must stay inside
+/// the box it reserved**. Reserving only the visible bar plus a 2px pad (7px) while grabbing across
+/// 16px left 9px where one pixel belonged to two widgets: the lane, and the row it was painted over.
+/// A host cannot arbitrate that — asking "who owns this pixel?" would couple every press path to
+/// this widget's internals — and the consequence was concrete: dragging the scrollbar dragged the
+/// row behind it, and the press order changed to avoid it stopped rows being draggable at all
+/// (F003/P085/T368).
+///
+/// The cost is that content is 9px narrower beside a *visible* bar. Nothing is reserved when the
+/// region does not overflow, so a list that fits keeps its full width.
+const SCROLLBAR_GUTTER: f64 = THUMB_HIT_W;
 /// Wheel step as a fraction of the viewport height per "line" of delta. The
 /// winit wheel delta is already in lines, so one notch (delta ≈ 1) scrolls ~10%
 /// of the viewport — gentle in a small sidebar, scales up for a tall one. (The
@@ -1295,6 +1303,34 @@ mod tests {
             y += h;
         }
         r
+    }
+
+    /// **The grab lane stays inside the space the bar reserved** (F003/P085/T368).
+    ///
+    /// The reserved strip is what content is laid out and clipped short of; the lane is where a
+    /// press counts as grabbing the thumb. While the lane was wider than the strip, 9px of it sat on
+    /// the row beside it and one pixel belonged to two widgets — so a press there was ambiguous, and
+    /// the host could only pick a winner by knowing this widget's internals. Nothing outside can fix
+    /// that; keeping the hit area inside the reserved box is the widget's own job.
+    #[test]
+    fn the_grab_lane_does_not_reach_over_the_content() {
+        // Three 60px children in a 100px viewport ⇒ it overflows, so the bar shows.
+        let r = region_with_children(&[60.0, 60.0, 60.0]);
+        assert!(r.v_overflow(), "the fixture must overflow for a bar to exist");
+
+        let lane = r.thumb_hit_rect().expect("a scrollable region has a grab lane");
+        let content_right = r.base.bounds.loc.x + r.base.bounds.size.w - SCROLLBAR_GUTTER;
+        assert!(
+            lane.loc.x >= content_right,
+            "the lane starts at {} but content runs to {} — {}px belong to both",
+            lane.loc.x,
+            content_right,
+            content_right - lane.loc.x,
+        );
+        // The painted bar is inside its own lane too, hard against the outer edge.
+        let thumb = r.thumb_rect().expect("scrollable ⇒ a thumb");
+        assert!(thumb.loc.x >= lane.loc.x);
+        assert!(thumb.loc.x + thumb.size.w <= lane.loc.x + lane.size.w);
     }
 
     /// A keyboard page moves by most of a viewport, and the region clamps its own ends.

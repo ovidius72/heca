@@ -261,7 +261,8 @@ pub enum InputMode {
     Prefix,           // Waiting for action key after prefix
     PaneSelect { candidates: Vec<(char, u64)> },  // Quick-select overlay
     PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },  // Quick-swap overlay
-    SidebarNav,       // Sidebar tree navigation
+    // (No sidebar mode: a container's keyboard focus is a CONTAINER ID in the chrome store,
+    //  not an input mode — see § 2.10/2.11 of docs/chrome-and-ui.md.)
     Rename { target, buffer },  // Text input for renaming
     Chord { sequence },  // Multi-key chord (e.g., w → digit)
     Mode { name },     // Custom mode (resize, etc.)
@@ -306,7 +307,25 @@ User input → InteractionIntent → route_interaction() → RouteDecision
 
 **Rule: every `WmAction` variant MUST be classified in `action_policy()`.** The match is exhaustive (no wildcard) and verified by the `action_policy_covers_all_variants` test. Adding a `WmAction` without classifying it = compile error.
 
-**The 6 `ActionPolicy` variants** (and what they mean for the Floating domain):
+**Two axes, not one (F003/P086/T371).** `ActionPolicy` says *what kind of act this is*; **`Domain`**
+says *what owns the screen right now*. The domain has **four** states, computed in `domain_for()`
+from the whole `AppState` and handed to the (still pure, still unit-tested) router:
+
+| `Domain` | when |
+|---|---|
+| `Tiled` | a pane has the keyboard |
+| `Floating` | a floating pane is active |
+| `Container` | a **dock** has the keyboard (keyboard/provider sources; a mouse click is judged by what it landed on) |
+| `Overlay` | a layer **covers the tiled area** — `DynamicLayer::covers_content` |
+
+`Overlay` permits **only** `Global`, which is what stops `prefix+Enter` adding a pane behind a
+plugin's overlay — the plugin declares only that its overlay obscures the panes, never which actions
+may run. It replaced a blunt "a modal blocks everything" check that sat *outside* the policy system
+and could not see a non-modal overlay at all. `Container` permits everything `Tiled` does **plus**
+`ContainerFocused`, so a focused dock never stops `prefix+Enter` splitting the pane you last worked
+in.
+
+**The 7 `ActionPolicy` variants** (and what they mean for the Floating domain):
 
 | Policy | Tiled | Floating | Examples |
 |--------|-------|----------|----------|
@@ -316,6 +335,7 @@ User input → InteractionIntent → route_interaction() → RouteDecision
 | `FocusedPaneLocal` | Allow | **Allow** | `Float`, `ClosePane`, `ClosePaneById`, `RenamePane`, `RenameTarget`, `Selection*` (`EnterSelectionMode`, `Selection*`, `ClearSelection`, `CopySelection`, `PasteClipboard`, `BeginSelection`, `ToggleSelectionEndpoint`) — operate on the focused pane in either domain |
 | `WorkspaceLevel` | Allow | Block | `WorkspaceNext/Prev`, `FocusWorkspace`, `CreateWorkspace`, `RenameWorkspace`, `DeleteWorkspace` |
 | `SourceDependent` | Allow | depends | `FocusPane` — allowed only if it targets the active floating pane |
+| `ContainerFocused` | **Block** | Block | a component's own cursor verbs (`workspaces.delete_selected`, `rename_selected`, …) — allowed **only** in `Domain::Container`. This is what keeps "delete the row my cursor is on" out of the command palette and RPC while the dock is not being driven |
 
 **Floating-domain policy:** when `FocusDomain::Floating` is active, only `FocusedPaneLocal` + `Global` actions pass from `Keyboard`/`MouseContent`/`MouseLeftSidebar`. Everything else is blocked. The only escape from floating is `prefix+f` (Float toggle) or `ClosePane`.
 
@@ -1261,7 +1281,7 @@ These were clarified in detail with `/grill-me`; do not casually re-decide them:
 - `j/k` and `Up/Down` move sidebar cursor only.
 - Main scrolling/focus state does **not** auto-follow sidebar cursor movement.
 - `h/l` and `Left/Right` are tree-navigation keys on structural rows.
-- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and exits `SidebarNav`.
+- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and hands the keyboard back to it (`Space` peeks — it focuses the pane and keeps the keyboard on the container).
 - `Esc` exits sidebar mode and focuses contextual content.
 - Sidebar-mode mutation keys are sidebar-only.
 - Global prefix collapse actions use **active main-view state**, not sidebar selection.

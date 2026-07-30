@@ -34,7 +34,8 @@ pub use overlay::OverlayId;
 #[allow(unused_imports)]
 pub(crate) use overlay::{
     collect_form as collect_overlay_form, open_dropdown, open_modal, resolve as resolve_overlay,
-    top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
+    content_covered, top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec,
+    OverlayHost,
 };
 // Context-menu resolution: ContextPath + ContextTarget + ContextMenuRegistry + the unified
 // `open_context_menu_for`. Built-in providers seeded at startup; a provider attaches its own
@@ -42,7 +43,7 @@ pub(crate) use overlay::{
 #[allow(unused_imports)]
 pub(crate) use context_menu::{
     open_context_menu_for, resolve_active_context, ContextMenuProvider, ContextMenuRegistry,
-    ContextPath, ContextTarget, PendingContext,
+    ContextPath, ContextTarget,
 };
 pub use context_menu::MenuBuild;
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
@@ -1472,7 +1473,7 @@ impl Component for RepaintWatch {
 ///
 /// **Do not copy this trio into new code.** It is the same debt [`with_share`] carries and for the
 /// same reason — `Layout` has no `flex_basis`, so a zero base size has to be written as a height,
-/// which is a fixed measure standing in for a proportion. F004/P006/T010 replaces both with one
+/// which is a fixed measure standing in for a proportion. P052(F004)/T350 replaces both with one
 /// `share(n)` setter in the library; this exists so a *transparent* wrapper stays transparent until
 /// then, rather than each caller rediscovering the combination.
 fn pass_box_down(node: &mut dyn Component) {
@@ -2783,6 +2784,40 @@ impl HintTargets for ViewHintTargets<'_> {
     }
 }
 
+/// Wire a row's **named** gesture: the hint-target id to attach and the closure to hand
+/// `on_activate`, both carrying the one [`Intent`] (F003/P086/T365).
+///
+/// This is `realize`'s `press_intent` for native code — deliberately the same two lines, so the two
+/// authoring paths produce the same wiring:
+///
+/// ```ignore
+/// // declarative (heca-view-realize):        native (here):
+/// if let Some((id, carrier)) =               let (id, press) =
+///     press_intent(node, hints) { … }            named_press(intent, emit, hints);
+/// row.hint_target(id)                        row.hint_target(id)
+///    .on_activate(move || emit(carrier))        .on_activate(press)
+/// ```
+///
+/// **Why a name and not a closure.** A closure is reachable from exactly one place: the click that
+/// captured it. An `Intent` is an action id plus arguments, so the same gesture answers a click, a
+/// `prefix+/` pick, a menu entry, a keybinding and an RPC call, is routed by the action's own
+/// policy, and passes the destructive-confirm gate — none of which a closure can be. It is also the
+/// only form that crosses a plugin boundary, so a native row and a WASM row declare their clicks
+/// the same way.
+pub(crate) fn named_press(
+    intent: Intent,
+    emit: &ChromeIntentEmitter,
+    hints: &mut HintTargetRegistry,
+) -> (heca_grid_ui::HintTargetId, impl Fn() + 'static) {
+    let id = ViewHintTargets(hints).register(intent.clone());
+    let emit = emit.clone();
+    (id, move || {
+        emit(crate::app::interaction::InteractionIntent::View(
+            intent.clone(),
+        ))
+    })
+}
+
 /// Handles to the retained chrome tree's **value** signals — the state that changes
 /// without a structural change (pane/column selection + status text). Collected
 /// during [`build_chrome_root`] and pushed each frame by [`sync_chrome_signals`], so
@@ -2942,6 +2977,13 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_show_cwd(state.pane_show_cwd);
+    // The program catalog is this component's, not the shared context's (F003/P086/T367). Mirrored
+    // here like the display flags above, so `prefix+Shift+r` reaches it; guarded on `Rc` identity,
+    // which is exactly what a reload replaces.
+    state
+        .chrome_state
+        .workspaces
+        .set_programs(state.programs.clone());
     // Sidebar-nav selection: the **store owns it**. The nav handlers
     // publish into it (`publish_sidebar_selection`), and here it is projected back onto
     // the tree's positional `cursor` — which `sync_from_session` rebuilds from scratch, so
@@ -2949,12 +2991,11 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     // the selection: whatever they write into the store moves the cursor on the next
     // frame.
     //
-    // The selection lives while actually navigating (`SidebarNav`) *or* while a context
-    // menu opened from the sidebar is up (`sidebar_nav_active`), so the highlight shows
-    // during navigation, stays on the target row while its menu is open, and clears on
-    // exit. Selection-driven: it does NOT move the real focus (`active_pane`); the
-    // expanded sidebar renders both, distinctly. The setter is a change-guarded
-    // chokepoint, so calling it every frame is cheap.
+    // The selection lives exactly as long as a container holds the keyboard
+    // (`container_cursor_visible`) — including while a menu opened on one of its rows is up, since
+    // an overlay does not take chrome focus away. Selection-driven: it does NOT move the real
+    // focus (`active_pane`); the container renders both, distinctly. The setter is a
+    // change-guarded chokepoint, so calling it every frame is cheap.
     if state.container_cursor_visible() {
         let selection = state.chrome_state.workspaces.nav_selection();
         state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
@@ -3295,13 +3336,12 @@ pub(crate) fn build_chrome_root(
     // no longer knows that the left sidebar happens to hold the workspace tree. Moving
     // the `workspaces` container to the right region (`ChromeHost::move_container`) moves
     // its UI with it, with no change here.
-    // Bound before the context so the borrow lives as long as the build does, not just as long as
-    // the argument list.
-    let tree = state.chrome_state.workspaces.tree();
+    //
+    // The context carries only what every component needs — the frame's theme and the intent sink
+    // (F003/P086/T367). A component's own model is its own to read, so the host no longer borrows
+    // one component's tree here on everybody's behalf.
     let ctx = crate::providers::ChromeCtx::for_build(
         crate::host::App::new(&state.chrome_state),
-        &tree,
-        &state.programs,
         &theme,
         &emit_intent,
     );
@@ -4164,6 +4204,7 @@ mod tests {
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
             name: "ws1".into(),
+            custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {
@@ -4196,11 +4237,11 @@ mod tests {
         let mut host = super::ChromeHost::new(chrome.events());
         host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
         let emit: super::ChromeIntentEmitter = Rc::new(|_| {});
-        let programs = heca_config::programs::ProgramsConfig::default();
+        // The component reads its model from its own state, so the fixture puts it there rather
+        // than handing it to the context (F003/P086/T367).
+        *chrome.workspaces.tree_mut() = tree.clone();
         let ctx = crate::providers::ChromeCtx::for_build(
             crate::host::App::new(chrome),
-            tree,
-            &programs,
             theme,
             &emit,
         );

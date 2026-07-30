@@ -1,7 +1,7 @@
 {
   "id": "eef184fb-863e-476f-8839-0dff37443acf",
   "number": 8,
-  "shortId": "FNK8M",
+  "shortId": "",
   "priority": 0,
   "name": "🤖 AI Agent Integration",
   "description": "Integrazione agenti AI: `AgentDriver` trait e registry, built-in drivers (Claude/Codex/pi), status agent nei pane e suoni di transizione. Feature parcheggiata e dipendente dalle fasi iniziali di Pluggable Chrome.",
@@ -23,6 +23,7 @@
     "88b87a32-ff00-4044-9a32-c575e3ed5401",
     "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
   ],
+  "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
   "updatedAt": "2026-07-01T19:58:10.784796Z"
 }

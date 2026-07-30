@@ -11,10 +11,23 @@
 //! the header toggles an `expanded` [`Signal`] and (optionally) reports it via
 //! [`on_toggle`](DockFrame::on_toggle); collapsing hides the body via
 //! `style.hidden` (`display: none`), so it folds out of layout entirely. The
-//! drag-handle grip is a visual affordance only — wiring it to the shipped
-//! `drag/` framework is G6's job (see [`child`](DockFrame::child) seam).
+//! drag-handle grip is **drawn but wired to nothing** (see [`child`](DockFrame::child) seam).
 //!
-//! **Rail mode (G5 seam, now built).** A Dock hosted in a
+//! **Two different drags will use it, and they are not the same feature** — worth knowing before
+//! reading it as one (user, 2026-07-30):
+//!
+//! - the frame as a **container**: drag the whole dock into another chrome region. The host's
+//!   actions for this already exist (`chrome.container.move_to_region` and friends); only the mouse
+//!   surface is missing — **P079(F004)**, task `J5592` "DockFrame gets the drag handle it was
+//!   specified with".
+//! - the frame as a **row inside** a container: reorder it within the list. heca mounts one frameless
+//!   `DockFrame` per workspace row, so this is the drag its grip sits next to — **P030(F006)**
+//!   (app-05, workspace drag-to-reorder), which still needs its own action and drop logic.
+//!
+//! Until one of them wires a drag, the grip promises something nothing does. It is left in place
+//! deliberately, as a placeholder for those phases.
+//!
+//! **Rail mode (built).** A Dock hosted in a
 //! [`ChromeRegion`](super::ChromeRegion) can collapse to an **icon rail**. Bind
 //! the region's [`RegionMode`](super::RegionMode) signal with
 //! [`rail`](DockFrame::rail): while the region is in
@@ -34,7 +47,8 @@ use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 /// Chevron glyphs for expanded / collapsed states.
 const CHEVRON_OPEN: &str = "▾";
 const CHEVRON_CLOSED: &str = "▸";
-/// Drag-handle grip glyph shown at the start of the title bar (G6 wires the drag).
+/// Drag-handle grip glyph shown at the start of the title bar. Unwired — see the module docs for
+/// which two phases claim it.
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: f32 = 8.0;
@@ -179,7 +193,7 @@ impl DockFrame {
         self
     }
 
-    /// Append body content (folds away when collapsed). This is also the seam G6
+    /// Append body content (folds away when collapsed). This is also the seam P079(F004)
     /// uses to make the frame draggable via the shipped `drag/` framework.
     #[heca_grid_ui_macros::host_only("composed content — a description uses `children`")]
     pub fn child(mut self, c: impl Component + 'static) -> Self {

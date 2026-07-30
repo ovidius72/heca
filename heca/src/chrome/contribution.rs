@@ -65,6 +65,25 @@ pub struct BuildCx<'a> {
     pub(crate) hints: &'a mut HintTargetRegistry,
 }
 
+// **Checked against "is this true for ANY component?" on 2026-07-30 (F003/P086/T367), and two of
+// the four are not yet.** Recorded here rather than assumed:
+//
+// - `container_id` and `hints` are generic. A mount id is a mount id, and a hint target is an
+//   opaque id mapped to an `InteractionIntent`.
+// - **`signals` (`ChromeSignals`) is workspace-shaped.** Every family but `row_nav` is keyed by
+//   `PaneId` / `ws_idx` / `col_idx` (`pane_active`, `col_active`, `ws_active`, `pane_hint`,
+//   `ws_hint`, `col_hint`, `pane_info`), so a Docker dock has nowhere to register a value that
+//   updates without a rebuild. `row_nav` shows the shape the rest wants: keyed by
+//   `(mount, nav_key)`, which any component can name.
+// - **`drag` (`DragItemRegistry`) is workspace-shaped** for the same reason: `ChromeDragItem` is a
+//   closed `Pane | Column | Workspace`, which is why the phase lists "a Docker row cannot be
+//   dragged or dropped at all".
+//
+// Both are the phase's own open rows, not this task's: T367's contract is `ChromeCtx`. Whoever
+// takes them should follow `row_nav` — a row already declares one identity (`nav_key`), and that is
+// the key both registries want.
+
+
 impl<'a> BuildCx<'a> {
     /// Borrow the host's per-build registries for one container build.
     pub(crate) fn new(

@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-29T17:49:33.150Z
+**Last updated:** 2026-07-30T09:40:33.442Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -107,7 +107,6 @@ Status: 🚧 `in-progress`
 - 📋 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (0/5 tasks)
 - 📋 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
-- 🚧 **2e5af5db-420b-45bb-8bde-7e763c69cbea** P086 — A component declares its keys, its mouse and its focus — generically, for any component (6/10 tasks)
 
 ### 🚧 cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -938,13 +937,13 @@ Status: 🚧 `in-progress`
 
 **Tasks:** 6/11
 
-### 🚧 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
+### ✅ 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
 
 Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
-**Tasks:** 6/10
+**Tasks:** 10/10
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P048 — agents-01: Agent status tracking and sounds
 

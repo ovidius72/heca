@@ -1068,11 +1068,16 @@ content shifted past the edge with no scrollbar to bring it back.
   and an outer whole-page region only scrolls when no descendant did.
 - **Scrollbar thumbs** (built-in): auto-shown per overflowing axis; **draggable**.
   A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
-  grip bar), in a wider invisible **grab lane** (16px) so the thin 8px thumb is
+  grip bar), in a wider invisible **grab lane** (16px) so the thin 5px thumb is
   easy to click. Radius from `Theme::control_radius()`, color from `theme.accent`
-  (nothing hardcoded). Each bar reserves a **gutter**: content is clipped short of
-  the lane so no content sits under a thumb, and each bar's track stops short of
-  the other's gutter so they never overlap in the corner.
+  (nothing hardcoded). Each bar reserves a **gutter equal to the whole grab lane**, and each bar's
+  track stops short of the other's gutter so they never overlap in the corner.
+  **The hit area never reaches outside the reserved gutter** — it used to reserve 7px while grabbing
+  across 16, so 9px of lane sat on the row beside it and one pixel belonged to two widgets. A host
+  cannot arbitrate that: a press there was both "grab the thumb" and "start dragging this row", and
+  the workaround (let whichever widget consumes the press win) stopped rows being draggable at all.
+  If you add a hit area wider than what your widget drew, widen the reservation with it
+  (F003/P085/T368).
 - **The bar takes layout space, it is not drawn over content.** When an axis overflows, the region
   reserves the bar's lane as padding on that side, so a child is laid out **beside** the bar and
   keeps its rounded corner. Clipping alone was not enough and looked wrong: a card laid out full
@@ -1080,9 +1085,9 @@ content shifted past the edge with no scrollbar to bring it back.
   space it has. The reservation takes `max(existing padding, gutter)` rather than the sum — where the
   padding is already roomy the bar simply sits in it and both sides stay even. It is applied after
   layout and lands on the next pass, like a classic scrollbar, and it cannot oscillate: narrowing
-  content only ever makes it taller. `SCROLLBAR_W` is the visible thickness and the number to turn if
-  the bar claims too much room; `THUMB_HIT_W` is the (much wider) grab target, so a slim bar stays
-  just as easy to hit.
+  content only ever makes it taller. `SCROLLBAR_W` is the visible thickness — turn it to make the bar
+  look thinner; `THUMB_HIT_W` is the grab target **and** the space reserved, so it is the one to turn
+  if the bar claims too much room. The clearance between bar and content is what is left over (11px).
 - **The lane belongs to the scrollbar.** A move over it is consumed, so the row *behind* the bar does
   not light up as hovered. The whole lane, not just the thumb — a press in the track pages, so the
   track is part of the control, not content.
@@ -1181,7 +1186,7 @@ relative to siblings, which a container cannot see and should not have to.
 > `flex: 1 1 0`); then the free space is the whole region, and the two measure 296px
 > each. `Layout` has no `flex_basis`, so that zero is written as a height today.
 > **Do not copy that into new code** — expressing a proportion by writing a fixed
-> measure is wrong, and F004/P006/T010 exists to give the library one `share(n)`
+> measure is wrong, and **P052(F004)/T350** exists to give the library one `share(n)`
 > setter with the trio behind it.
 
 ### Using one — the whole surface
@@ -1270,9 +1275,9 @@ the widget's default** (vertical) rather than failing. `.horizontal()` /
 of the same setting. **Styling is still host-side**: the app builds the framed
 region and mounts a realized subtree inside it.
 
-> **Real-app integration (sidebar):** selection is container-owned, not widget
-> state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
-> `SidebarNav` cursor handler (selection-driven) calls
+> **Real-app integration (a mounted container):** selection is container-owned, not widget
+> state. Mount the container's rows (DockFrames + rows) inside a `ScrollRegion`; the
+> component's own cursor action (`workspaces.cursor_up`/`cursor_down`, selection-driven) calls
 > `region.ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving
 > the cursor to keep it on screen. The row's visual state stays container-driven
 > via `Item::marker`/`state`. Keyboard *scrolling* of the region is separate: it
@@ -2038,6 +2043,16 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
   background under the selection overlay.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
+
+> **`active` and `nav_selected` are two different questions, and only one of them follows focus.**
+> `active` is "this row *is* the focused thing"; `nav_selected` is "this is where the container's
+> cursor is", which the user moves with the keyboard or a click and which is theirs to keep. In
+> `heca` the cursor is pulled to the newly active row **only when the active one actually changes**
+> (`cursor_follow`, `heca/src/app/focus.rs`). The rule is easy to get wrong in the other direction:
+> the sync that writes it runs after *every* layout change, so writing it unconditionally moved the
+> user's cursor on changes that touched no focus at all — renaming a row that was not the active one
+> was the report that found it. If you add a "the cursor should follow X" rule, guard it on X having
+> changed, and put it beside that one.
 - **Attention**: when the host sets the bound `attention` signal `true`, the row flashes a few
   times (see [`Attention`](#attention)) and consumes the signal. The host plays any **sound** —
   the library is audio-free.
@@ -2061,6 +2076,27 @@ row that nothing can activate should not look like a control.
 > and this widget had no declarative spelling at all. The boxes are now `HStack` / `VStack`, and
 > `Row` means the same thing in the model as it does in `heca-grid-ui`. `.highlight(Color)` and
 > `.attention_color(Color)` are still host-only; they become props with F003/P017/T7.
+
+> **A native row's click is a NAME too (F003/P086/T365).** `.on_activate` takes a closure, so it is
+> tempting for host code to write one that does the thing directly — and then that gesture is
+> reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
+> keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
+> exactly as a described node does**, and `heca`'s `named_press` wires both ends from the one
+> declaration — the mirror of `realize`'s `press_intent`:
+>
+> ```rust
+> // declarative (heca-view-realize)              native (heca/src/chrome)
+> if let Some((id, carrier)) =                    let (id, press) =
+>     press_intent(node, hints) { … }                 named_press(intent, emit, hints);
+> row.hint_target(id)                             row.hint_target(id)
+>    .on_activate(move || emit(carrier.clone()))     .on_activate(press);
+> ```
+>
+> **Each item kind declares its own**, and nothing is inherited or forced: in the workspaces
+> component a pane row declares `focus_pane { pane_id }`, a workspace row `focus_workspace { ws_idx }`,
+> and a column row declares none — a real answer, not a gap. Both of those **bind actions that
+> already exist** rather than inventing new ones: apply the ownership test (*remove the component;
+> does the action still make sense?*) before declaring a new id for a click.
 
 ```rust
 let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radius())
@@ -2476,6 +2512,24 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 - **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the
   wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
   the look in place without rebuilding the tree.
+
+> **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
+> heca and nothing drags, that is why. **Two different features claim it, and they are not the same
+> thing:**
+>
+> - the frame as a **container** — drag the whole dock into another chrome region. The actions for
+>   this already exist (`chrome.container.move_to_region` and friends); only the mouse surface is
+>   missing. **`P079(F004)`**, task `J5592` ("DockFrame gets the drag handle it was specified with").
+> - the frame as a **row inside** a container — reorder it in the list. heca mounts one frameless
+>   `DockFrame` per workspace row, so this is the drag the grip actually sits beside.
+>   **`P030(F006)`** (app-05, workspace drag-to-reorder), which still needs its own action and drop
+>   logic.
+>
+> The grip is left in place deliberately as a placeholder for those two (user, 2026-07-30).
+>
+> **Phase ids in prose are worth distrusting.** Phase numbers are global, not per-feature — F004's
+> phases are `P019`, `P052`, `P079` — so a hand-written `F004/P009` names nothing. Every id in this
+> paragraph came from asking the planner; do the same rather than inferring one.
 
 **Native:**
 
@@ -3310,17 +3364,46 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 
 > **Context-aware content (`ContextMenuRegistry`).** Which entries appear is resolved from **where**
 > the menu is opened: a dotted **`ContextPath`** (`"pane"` — the host's own — plus whatever a
-> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + an opaque
-> **`ContextTarget"`**. The host resolves the path
-> from the click / keyboard focus (`resolve_active_context`), looks up all providers registered for
-> it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a plugin inserts entries between
-> built-ins. Same menu widget; different content per context.
+> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + a **`ContextTarget`**.
+> The host resolves the path from the click / keyboard focus (`resolve_active_context`), looks up all
+> providers registered for it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a
+> plugin inserts entries between built-ins. Same menu widget; different content per context.
+>
+> **A target names a row; it does not describe it (F003/P086/T365).** `ContextTarget` has two arms:
+> `Pane { pane_id, hyperlink }` for a content pane — the app's own domain — and
+> **`Row { container, key }`** for a row of any mounted container, where `container` is the *mount
+> id* and `key` is the `nav_key` that row declared. That is everything the host knows, and it never
+> parses a key. It used to carry three workspace-shaped variants pre-filled with facts the host had
+> looked up (a pane's column, a workspace's custom name), which is precisely why a Docker row could
+> not be right-clicked at all: there was no variant for it, and adding one meant the host learning
+> what Docker is.
+>
+> Two calls make it work, and both belong to the component:
+>
+> ```rust
+> // 1. "Which of my menus describes this row?" — matched against its own rows, never parsed.
+> fn context_path(&self, key: &str, ctx: &ChromeCtx<'_>) -> Option<String>;
+>
+> // 2. …and its builder resolves the same key against its own model for the facts it needs.
+> ContextMenuContribution { context_path, weight, build: Rc<dyn Fn(&ChromeCtx, &ContextTarget)> }
+> ```
+>
+> A component seated **twice** is asked for every menu twice, so a builder must answer for its own
+> placement (`Row { container, .. } if container == self.id()`) and return `vec![]` otherwise —
+> without that guard every entry appears twice in the merged menu.
+>
+> **The general hazard (worth reading before you write the next one).** Anything that walks
+> `ChromeHost::mounted_providers()` and *merges* what it gets back is asking a **type** a question
+> and receiving one answer per **seating**. With one placement on screen the duplication is
+> invisible, which is exactly how this shipped. Either key the answer by mount id (as the menus,
+> the cursor, the scroll offset and the keyboard target all do) or de-duplicate by `kind()`; and
+> when in doubt, seat the component twice — it is the cheapest way to find the next one.
 >
 > **From a plugin.** A plugin never draws the menu — it either attaches entries declaratively on a
 > `ViewNode` (`.on_context([ item("restart","Restart"), … ])`), or registers a
-> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }`. On
-> right-click / keyboard-open the host opens the (merged) menu, owns z-order / focus / Esc /
-> click-outside, and returns the chosen entry as an **intent**. See
+> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }` plus a
+> `context_path` for its row keys. On right-click / keyboard-open the host opens the (merged) menu,
+> owns z-order / focus / Esc / click-outside, and returns the chosen entry as an **intent**. See
 > **[chrome-and-ui.md](chrome-and-ui.md) → "Context menus & KeyHint"**.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style

@@ -73,6 +73,23 @@ pub(crate) struct DynamicLayer {
     pub(crate) kind: LayerKind,
     /// Captures the context while active — suppresses everything beneath it.
     pub(crate) modal: bool,
+    /// **Does it cover the tiled area?** (F003/P086/T371.)
+    ///
+    /// The one thing an overlay declares about the app underneath it, and the only input
+    /// `Domain::Overlay` needs: while something covers the panes, acting on them is refused. A
+    /// modal covers by definition; a **non-modal** overlay — a plugin panel over the scrolling
+    /// area — declares it, and gets the same protection the blunt "a modal blocks everything" rule
+    /// could never give it. A dropdown or a tooltip covers a corner, not the panes, and says
+    /// `false`.
+    ///
+    /// It is deliberately **not** a policy: a plugin declares what its own overlay obscures, never
+    /// what may run while it is up. Otherwise every plugin would end up naming `split_horizontal`.
+    ///
+    /// **Every `modal` layer sets this**, because a modal captures input and demands a decision —
+    /// that is what "a modal is an overlay with coverage" means, and it is what preserves the
+    /// blanket block the router used to apply while one was open. The flag earns its keep on the
+    /// **non-modal** overlays that had no protection at all.
+    pub(crate) covers_content: bool,
     /// Whether it participates this frame. `Persistent` layers start visible; `OnDemand`
     /// layers start hidden and are shown via [`LayerRegistry::show`].
     pub(crate) visible: bool,
@@ -98,6 +115,7 @@ impl LayerRegistry {
         band: LayerBand,
         kind: LayerKind,
         modal: bool,
+        covers_content: bool,
         root: Box<dyn Component>,
     ) -> LayerId {
         let id = LayerId(self.next);
@@ -107,6 +125,7 @@ impl LayerRegistry {
             band,
             kind,
             modal,
+            covers_content,
             visible: matches!(kind, LayerKind::Persistent),
             root,
         });
@@ -131,6 +150,7 @@ impl LayerRegistry {
         band: LayerBand,
         kind: LayerKind,
         modal: bool,
+        covers_content: bool,
         root: Box<dyn Component>,
     ) {
         self.layers.push(DynamicLayer {
@@ -138,6 +158,7 @@ impl LayerRegistry {
             band,
             kind,
             modal,
+            covers_content,
             visible: true,
             root,
         });
@@ -160,6 +181,23 @@ impl LayerRegistry {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.visible = false;
         }
+    }
+
+    /// Is the tiled area covered by any visible layer? The input to `Domain::Overlay`
+    /// (F003/P086/T371).
+    ///
+    /// **A `modal` layer counts whether or not it declared coverage** — it captures the keyboard and
+    /// demands a choice, so acting on the panes behind it is refused by construction. Derived here
+    /// rather than trusted at each `insert`, because a call site that passes `false` for a modal
+    /// re-opens exactly one hole: the prefix sequence deliberately falls through the overlay key
+    /// path (`app/events.rs`, so `prefix+/` can pick a menu entry), reaches the router, and runs.
+    /// `prefix+x` with a context menu open raising the close-pane confirm was that hole (user,
+    /// 2026-07-30). The declared flag is what a **non-modal** overlay — a plugin panel over the
+    /// scrolling area — uses to get the same protection.
+    pub(crate) fn content_covered(&self) -> bool {
+        self.layers
+            .iter()
+            .any(|l| l.visible && (l.covers_content || l.modal))
     }
 
     /// The currently-visible layers, in **front → back** order (highest band first, then
@@ -217,11 +255,44 @@ mod tests {
         Box::new(Flex::row())
     }
 
+    /// **A modal covers whatever it declared** — the property no call site can get wrong
+    /// (F003/P086/T371). A layer that captures the keyboard and demands a choice must refuse acts on
+    /// the panes behind it; the alternative is trusting a `bool` at every `insert`, and the one that
+    /// passed `false` let `prefix+x` raise the close-pane confirm with a context menu open (user,
+    /// 2026-07-30).
+    #[test]
+    fn a_modal_covers_the_content_even_if_it_says_otherwise() {
+        let mut reg = LayerRegistry::default();
+        // Deliberately declaring `false`, as the dropdown path once did.
+        reg.insert(LayerId(7), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        assert!(
+            reg.content_covered(),
+            "capturing input IS coverage, whatever the flag says",
+        );
+    }
+
+    /// The one input `Domain::Overlay` reads: a *visible* covering layer, and only that
+    /// (F003/P086/T371). A layer that covers but is hidden is not covering anything.
+    #[test]
+    fn coverage_is_reported_only_while_the_layer_is_visible() {
+        let mut reg = LayerRegistry::default();
+        let corner = reg.add(LayerBand::Overlay, LayerKind::Persistent, false, false, empty_root());
+        assert!(!reg.content_covered(), "a non-covering layer covers nothing");
+
+        let over = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        assert!(!reg.content_covered(), "on-demand starts hidden");
+        reg.show(over);
+        assert!(reg.content_covered(), "shown, and it covers the panes");
+        reg.hide(over);
+        assert!(!reg.content_covered());
+        reg.remove(corner);
+    }
+
     #[test]
     fn on_demand_starts_hidden_persistent_starts_visible() {
         let mut reg = LayerRegistry::default();
-        let a = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, empty_root());
-        let b = reg.add(LayerBand::Content, LayerKind::Persistent, false, empty_root());
+        let a = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        let b = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
         let vis: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
         assert_eq!(vis, vec![b], "on-demand hidden until shown; persistent visible");
         reg.show(a);
@@ -235,9 +306,9 @@ mod tests {
     #[test]
     fn band_orders_front_to_back() {
         let mut reg = LayerRegistry::default();
-        let content = reg.add(LayerBand::Content, LayerKind::Persistent, false, empty_root());
-        let modal = reg.add(LayerBand::Modal, LayerKind::Persistent, true, empty_root());
-        let overlay = reg.add(LayerBand::Overlay, LayerKind::Persistent, false, empty_root());
+        let content = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
+        let modal = reg.add(LayerBand::Modal, LayerKind::Persistent, true, false, empty_root());
+        let overlay = reg.add(LayerBand::Overlay, LayerKind::Persistent, false, false, empty_root());
         let order: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
         assert_eq!(order, vec![modal, overlay, content], "Modal > Overlay > Content");
     }

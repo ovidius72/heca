@@ -20,8 +20,9 @@
 //! given the region's [`mode_signal`](ChromeRegion::mode_signal) via
 //! [`DockFrame::rail`](super::DockFrame::rail) draws icon-only while the region is
 //! [`RegionMode::CollapsedRail`]. Left as documented seams: **scrolling** an
-//! overflowing region needs the renderer's `PushClip`/`PopClip` (G7);
-//! **Dock-level drop targets** wire onto the shipped `drag/` framework (G6).
+//! overflowing region needs the renderer's `PushClip`/`PopClip` (shipped with `ScrollRegion`,
+//! P019(F004));
+//! **Dock-level drop targets** wire onto the shipped `drag/` framework — P079(F004).
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component};

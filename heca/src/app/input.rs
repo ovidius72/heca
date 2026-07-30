@@ -59,23 +59,10 @@ pub(crate) fn handle_keyboard_input(
     match input_mode {
         InputMode::Normal => {
             if ctx.is_prefix {
-                // Resolve the container's context **before** the Prefix transition, and stash it:
-                // `handle_prefix_mode` dispatches from Prefix, where the handler can no longer tell
-                // that a container was driving, so `prefix+>` would open the focused *pane's* menu
-                // instead of the cursor row's (context-menu-7).
-                //
-                // This lived inside the `SidebarNav` mode handler until that mode was deleted
-                // (F003/P086/T365) — it is gated on chrome focus now, which is what it always meant.
-                if state.chrome_state.focused_container().is_some()
-                    && let Some((path, target)) = crate::chrome::resolve_active_context(state)
-                {
-                    state.pending_context = Some(crate::chrome::PendingContext {
-                        path,
-                        target,
-                        // No mode to restore: the container still holds the keyboard afterwards.
-                        origin: None,
-                    });
-                }
+                // Nothing is stashed across the transition any more (F003/P086/T365): the context
+                // a menu opens for is the focused container's cursor row, and chrome focus is not
+                // a mode — the transition to `Prefix` does not touch it — so `handle_open_context_menu`
+                // resolves it for itself when the action actually runs.
                 state.input_mode = InputMode::Prefix;
                 state.prefix_entered_at = Some(std::time::Instant::now());
                 state.needs_redraw = true;
@@ -312,9 +299,6 @@ fn handle_prefix_mode(
     if ctx.is_prefix {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        // Leaving Prefix without opening a menu: drop any sidebar context stashed by the
-        // SidebarNav prefix arm so a later OpenContextMenu can't pick up a stale one (context-menu-7).
-        state.pending_context = None;
         // The double-prefix literal passthrough is for a pane that is *taking text*. While a dock
         // holds the keyboard nothing is, so sending a literal `Ctrl+B` to a pane the user is not
         // typing in is a surprise rather than a passthrough (F003/P085/T352).
@@ -359,8 +343,6 @@ fn handle_prefix_mode(
     if let Some((mode_name, _sticky)) = entered_mode {
         state.input_mode = InputMode::Mode { name: mode_name };
         state.prefix_entered_at = None;
-        // Entering a custom mode instead of a menu — abandon any pending sidebar context.
-        state.pending_context = None;
         state.needs_redraw = true;
         return;
     }
@@ -377,13 +359,9 @@ fn handle_prefix_mode(
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
         dispatch_action_ref(state, registry, InteractionSource::Keyboard, act);
-        // A pending sidebar context (context-menu-7) is consumed by handle_open_context_menu
-        // during dispatch; clear any leftover so a later OpenContextMenu can't read a stale one.
-        state.pending_context = None;
     } else if !ctx.key_text.is_empty() {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        state.pending_context = None;
     }
 }
 

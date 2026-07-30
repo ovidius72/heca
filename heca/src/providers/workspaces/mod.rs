@@ -175,8 +175,13 @@ impl Provider for WorkspacesContainerProvider {
         // Chrome state: the cursor is not the pane layout, so these stay reachable while a floating
         // pane is active — the dock is still there to be driven.
         let cursor = ActionPolicy::Global;
-        // Everything that changes the tiled layout. Blocked while floating, as before.
-        let mutates = ActionPolicy::TiledOnly;
+        // Everything that acts on **the row the cursor is on**, which is only a question worth
+        // asking while this dock has the keyboard (F003/P086/T371). They declared `TiledOnly`, which
+        // was true but not the point: it blocked them while floating and left them reachable from
+        // the command palette and RPC with the dock unfocused, acting on a cursor the user cannot
+        // see. `ContainerFocused` says what they mean; `Container` still permits the tiled actions
+        // beside them, so `prefix+Enter` keeps splitting the pane you last worked in.
+        let mutates = ActionPolicy::ContainerFocused;
         vec![
             act(
                 CURSOR_UP,
@@ -235,6 +240,13 @@ impl Provider for WorkspacesContainerProvider {
                 mutates,
             ),
             act(
+                RENAME_SELECTED,
+                "Rename Row",
+                "Rename what the cursor is on — a pane or a workspace.",
+                Some(Glyph::NotePencil),
+                mutates,
+            ),
+            act(
                 DELETE_SELECTED,
                 "Delete Row",
                 "Delete what the cursor is on — a pane or a workspace.",
@@ -258,31 +270,57 @@ impl Provider for WorkspacesContainerProvider {
         ]
     }
 
+    /// The menus for this component's own row kinds.
+    ///
+    /// Each builder is **bound to this placement**: it answers for a target naming *this* mount and
+    /// returns nothing for any other. Both seatings are mounted, so both are asked for every menu;
+    /// without the guard each entry appeared twice in every row menu on screen (F003/P086/T365).
+    fn context_menus(&self, _ctx: &ChromeCtx<'_>) -> Vec<ContextMenuContribution> {
+        let menu = |path: &str, build: fn(&ChromeCtx, &str) -> Vec<DropdownItem>| {
+            let mount = self.id.clone();
+            ContextMenuContribution {
+                context_path: path.to_string(),
+                weight: vec![1],
+                build: std::rc::Rc::new(move |ctx: &ChromeCtx, target: &ContextTarget| {
+                    match target {
+                        ContextTarget::Row { container, key } if *container == mount => {
+                            build(ctx, key)
+                        }
+                        _ => Vec::new(),
+                    }
+                }),
+            }
+        };
+        vec![
+            menu(MENU_PANE, build_pane_row_menu),
+            menu(MENU_COLUMN, build_column_row_menu),
+            menu(MENU_WORKSPACE, build_workspace_row_menu),
+        ]
+    }
+
+    /// Which of this component's three row menus describes `key`.
+    ///
+    /// Matched against its own rows, never parsed — the same resolution [`cursor_moved`] uses, and
+    /// for the same reason: a tiled pane and a floating one are both `pane:<id>`, and only the row
+    /// knows which it is. A floating pane row is still a **pane row of this component**, so it gets
+    /// this component's pane menu (minus the entries that need a column) rather than the host's
+    /// content-pane menu.
+    fn context_path(&self, key: &str, ctx: &ChromeCtx<'_>) -> Option<String> {
+        let state = ctx.state();
+        let tree = state.workspaces().tree();
+        let path = match row_at_key(&tree, key)? {
+            WorkspaceRow::Pane { .. } | WorkspaceRow::FloatingPane { .. } => MENU_PANE,
+            WorkspaceRow::Column { .. } => MENU_COLUMN,
+            WorkspaceRow::Workspace { .. } => MENU_WORKSPACE,
+        };
+        Some(path.to_string())
+    }
+
     /// The host moved this placement's cursor — reconcile the tree's positional index with it.
     ///
     /// Resolved by **matching this component's own keys against its own rows**, rather than parsing
     /// the key back into a selection. Parsing would have to guess: a tiled pane and a floating one
     /// are both `pane:<id>`, and only the row knows which it is.
-    fn context_menus(&self, _ctx: &ChromeCtx<'_>) -> Vec<ContextMenuContribution> {
-        vec![
-            ContextMenuContribution {
-                context_path: MENU_PANE.to_string(),
-                weight: vec![1],
-                build: std::rc::Rc::new(build_sidebar_pane_menu),
-            },
-            ContextMenuContribution {
-                context_path: MENU_COLUMN.to_string(),
-                weight: vec![1],
-                build: std::rc::Rc::new(build_sidebar_column_menu),
-            },
-            ContextMenuContribution {
-                context_path: MENU_WORKSPACE.to_string(),
-                weight: vec![1],
-                build: std::rc::Rc::new(build_sidebar_workspace_menu),
-            },
-        ]
-    }
-
     fn cursor_moved(&self, key: &str, cx: &mut ProviderCx<'_>) {
         let state = cx.state();
         let ws = state.workspaces();
@@ -313,7 +351,8 @@ impl Provider for WorkspacesContainerProvider {
             CREATE_PANE => self.at_column(cx, "add_pane_to_column"),
             ZOOM_SELECTED => self.at_column(cx, "zoom_column_at_index"),
             DELETE_COLUMN => self.at_column(cx, "delete_column"),
-            DELETE_SELECTED => self.delete_selected(cx),
+            DELETE_SELECTED => self.on_selected_row(cx, RowVerb::Delete),
+            RENAME_SELECTED => self.on_selected_row(cx, RowVerb::Rename),
             _ => Handled::No,
         }
     }
@@ -327,11 +366,17 @@ const COLLAPSE_ROW: &str = "workspaces.collapse_row";
 const ACTIVATE_SELECTED: &str = "workspaces.activate_selected";
 const PEEK_SELECTED: &str = "workspaces.peek_selected";
 const TOGGLE_SELECTED: &str = "workspaces.toggle_selected";
-// The mutations, moved off `InputMode::SidebarNav` (F003/P085/T356). Each resolves the cursor to a
+// The mutations, moved off the app's built-ins (F003/P085/T356). Each resolves the cursor to a
 // target and dispatches an EXISTING parameterized action — none of them reimplements anything.
 const CREATE_COLUMN: &str = "workspaces.create_column";
 const CREATE_PANE: &str = "workspaces.create_pane";
 const DELETE_SELECTED: &str = "workspaces.delete_selected";
+// Renaming the row the cursor is on. The app's own `rename_pane` / `rename_workspace` mean the
+// *focused* pane and the *active* workspace, which is a different question — the host used to bend
+// them at the cursor by reading the row off a stashed context target, i.e. by resolving facts about
+// a row it cannot see (F003/P086/T365, user decision 2026-07-30). Cursor-dependent ⇒ this
+// component's, like `delete_selected` beside it.
+const RENAME_SELECTED: &str = "workspaces.rename_selected";
 const DELETE_COLUMN: &str = "workspaces.delete_selected_column";
 const ZOOM_SELECTED: &str = "workspaces.zoom_selected";
 
@@ -350,6 +395,14 @@ enum Activate {
     AndLeave,
     /// `Space` — focus the row in the main view but keep driving the dock.
     AndStay,
+}
+
+/// What to do to the row under the cursor. Both verbs resolve the same way — the row decides
+/// whether the by-id action is the pane's or the workspace's — so they share one arm.
+#[derive(Clone, Copy)]
+enum RowVerb {
+    Rename,
+    Delete,
 }
 
 impl WorkspacesContainerProvider {
@@ -503,36 +556,44 @@ impl WorkspacesContainerProvider {
         Handled::Yes
     }
 
-    /// Delete what the cursor is **on** — a pane or a workspace.
+    /// Act on what the cursor is **on** — a pane or a workspace — with the by-id action for
+    /// whichever it is.
     ///
     /// Never a column: the cursor does not land on one (`WorkspaceTree::is_navigable`), which is why
-    /// `workspaces.delete_column` is a separate verb rather than a case here.
+    /// `workspaces.delete_selected_column` is a separate verb rather than a case here.
     ///
-    /// Both go out as ordinary dispatches, so the central destructive gate raises the same confirm
-    /// it does for a keybinding, a header button or an RPC call — the component neither asks nor can
-    /// skip it.
-    fn delete_selected(&self, cx: &mut ProviderCx<'_>) -> Handled {
+    /// Every one goes out as an ordinary dispatch, so the central destructive gate raises the same
+    /// confirm it does for a keybinding, a header button or an RPC call — the component neither asks
+    /// nor can skip it.
+    fn on_selected_row(&self, cx: &mut ProviderCx<'_>, verb: RowVerb) -> Handled {
         let row = {
             let state = cx.state();
             state.workspaces().tree().current_item().cloned()
         };
-        match row {
-            Some(WorkspaceRow::Pane { pane_id }) | Some(WorkspaceRow::FloatingPane { pane_id, .. }) => {
-                cx.dispatch(
-                    "close_pane_by_id",
-                    PropMap::from([("pane_id".to_string(), PropValue::Int(pane_id.0 as i64))]),
-                );
-                Handled::Yes
+        // `(action, argument name, argument value)` — the row decides which of the two by-id
+        // actions the verb means, and what to aim it at.
+        let (action, arg, value) = match (verb, row) {
+            (RowVerb::Delete, Some(WorkspaceRow::Pane { pane_id }))
+            | (RowVerb::Delete, Some(WorkspaceRow::FloatingPane { pane_id, .. })) => {
+                ("close_pane_by_id", "pane_id", pane_id.0 as i64)
             }
-            Some(WorkspaceRow::Workspace { ws_idx }) => {
-                cx.dispatch(
-                    "delete_workspace",
-                    PropMap::from([("ws_idx".to_string(), PropValue::Int(ws_idx as i64))]),
-                );
-                Handled::Yes
+            (RowVerb::Rename, Some(WorkspaceRow::Pane { pane_id }))
+            | (RowVerb::Rename, Some(WorkspaceRow::FloatingPane { pane_id, .. })) => {
+                ("rename_pane_by_id", "pane_id", pane_id.0 as i64)
             }
-            Some(WorkspaceRow::Column { .. }) | None => Handled::No,
-        }
+            (RowVerb::Delete, Some(WorkspaceRow::Workspace { ws_idx })) => {
+                ("delete_workspace", "ws_idx", ws_idx as i64)
+            }
+            (RowVerb::Rename, Some(WorkspaceRow::Workspace { ws_idx })) => {
+                ("rename_workspace_by_idx", "ws_idx", ws_idx as i64)
+            }
+            (_, Some(WorkspaceRow::Column { .. })) | (_, None) => return Handled::No,
+        };
+        cx.dispatch(
+            action,
+            PropMap::from([(arg.to_string(), PropValue::Int(value))]),
+        );
+        Handled::Yes
     }
 
     /// Publish the cursor into the store: the generic per-mount cursor the row outlines read, and —
@@ -558,12 +619,15 @@ impl WorkspacesContainerProvider {
 /// the body is an empty column. That is a real state — a host may build a
 /// contribution just to read its metadata — not an error, so it does not panic.
 fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
-    let (Some(tree), Some(programs), Some(theme), Some(emit)) =
-        (ctx.tree(), ctx.programs(), ctx.theme(), ctx.emit_intent())
-    else {
+    let (Some(theme), Some(emit)) = (ctx.theme(), ctx.emit_intent()) else {
         return Box::new(Flex::column());
     };
     let state = ctx.state();
+    // **This component's model and catalog come from its own state** (F003/P086/T367) — the shared
+    // context carries only what is true for any component. The borrow is a `RefCell`: it lasts for
+    // the projection, which reads the store but never writes back into it.
+    let tree = state.workspaces().tree();
+    let programs = state.workspaces().programs();
     // The three registries are borrowed as *disjoint* fields, which is exactly why they
     // are plain fields on `BuildCx` and not accessor methods: `bx.signals()` three times
     // in one call would be three overlapping `&mut *bx` borrows.
@@ -574,8 +638,8 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // the same reason: only one of two placements can hold focus.
     let focused = state.container_keyboard_target(bx.container_id());
     Box::new(build_workspaces_container(
-        tree,
-        programs,
+        &tree,
+        &programs,
         theme,
         emit,
         state.workspaces(),
@@ -614,6 +678,27 @@ pub(crate) fn workspace_nav_key(ws_idx: usize) -> String {
 /// re-derived on rebuild like every other column reference in the app.
 pub(crate) fn column_nav_key(ws_idx: usize, col_idx: usize) -> String {
     format!("col:{ws_idx}:{col_idx}")
+}
+
+// ── What each row kind does when you press it (F003/P086/T365) ──
+//
+// **Each item kind declares its own click, by name.** A workspace row and a pane row genuinely do
+// different things, so neither inherits from the other and nothing is forced on a kind that has no
+// gesture — a column row declares none, and that is a real answer.
+//
+// A name, not a closure: the same declaration answers the click, the `prefix+/` pick, a menu entry,
+// a keybinding and RPC, and is routed by that action's own policy. Both of these **bind actions
+// that already exist** — focusing a pane means the same thing with or without this component, so by
+// the ownership test they are the app's and this component only points at them.
+
+/// Pressing a **pane row** focuses that pane.
+fn pane_row_press(pane_id: PaneId) -> Intent {
+    Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id.0 as i64))
+}
+
+/// Pressing a **workspace row** makes that workspace active.
+fn workspace_row_press(ws_idx: usize) -> Intent {
+    Intent::new("focus_workspace").arg("ws_idx", PropValue::Int(ws_idx as i64))
 }
 
 /// The nav key naming the row a [`SidebarSelection`] points at.
@@ -670,8 +755,9 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
-    // Hint target: the universal picker (`prefix+/`) focuses this pane by its letter.
-    let hint_id = hints.register(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
+    // This row kind's declared click, by name: the click below and the universal picker
+    // (`prefix+/`) fire the one intent, and so can a menu entry or RPC (F003/P086/T365).
+    let (hint_id, press) = crate::chrome::named_press(pane_row_press(pane_id), emit_intent, hints);
     let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
     let icon_signal = icon_widget.glyph_signal();
     let active_title_label = Label::new(info.title.clone())
@@ -819,7 +905,6 @@ fn pane_card(
         )
         .child(Flex::row().align(Align::Center).child(icon_widget))
         .child(title_area);
-    let emit = emit_intent.clone();
     // One column: the name row, then the optional cwd and git rows (each 2px-indented and
     // added only when shown, mirroring the git row). A card with only the name row lays
     // out exactly like the former single-row layout — a one-child column adds no gap.
@@ -857,11 +942,8 @@ fn pane_card(
         .draggable(drag_id)
         .drop_target(drag_id)
         .hint_target(hint_id)
-        // On click/Enter the card records its pane id in the host sink; the app reads
-        // it after dispatch and focuses that pane (read-via-signal / write-via-action).
-        .on_activate(move || {
-            emit(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
-        })
+        // Click / Enter / Space run the row's declared gesture — the same intent the picker fires.
+        .on_activate(press)
         .child(content);
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
@@ -1074,11 +1156,13 @@ fn build_workspaces_container(
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
         dock = dock.drop_target(drag.register(ChromeDragItem::Workspace { ws: ws_idx }));
-        // Hint target: the universal picker (`prefix+/`) can focus this workspace by
-        // its letter. The keycap is stamped over the dock's bounds by `paint_hint_targets`.
-        dock = dock.hint_target(hints.register(
-            crate::app::interaction::InteractionIntent::FocusWorkspace { ws_idx },
-        ));
+        // This row kind's declared gesture, by name — the universal picker (`prefix+/`) fires it
+        // and stamps the keycap over the dock's bounds (`paint_hint_targets`). The header's own
+        // disclosure caret keeps its `on_toggle` above: folding a section is the widget's control,
+        // not the row's gesture, and nothing forces a kind to declare one it does not have.
+        dock = dock.hint_target(
+            crate::chrome::named_press(workspace_row_press(ws_idx), emit_intent, hints).0,
+        );
         // Columns stacked with a clear gap between them (the gap + bar mark each
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
@@ -1175,45 +1259,63 @@ pub(crate) const MENU_COLUMN: &str = "workspaces.column";
 /// A workspace row of this component.
 pub(crate) const MENU_WORKSPACE: &str = "workspaces.workspace";
 
-/// Provider for [`MENU_PANE`] — a pane row in the sidebar tree. Its actions target
-/// **that row's** pane (by id) and column, both carried on the target.
-fn build_sidebar_pane_menu(ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarPane {
-        pane_id,
-        ws_idx,
-        col_idx,
-    } = target
-    else {
+/// The row this component's `key` names, or `None` for a key it did not write.
+///
+/// **Matched, never parsed** — the one resolution every reader of a key goes through here (the
+/// cursor, the menu path, the menu itself), so they cannot disagree about what a key points at.
+fn row_at_key(tree: &WorkspaceTree, key: &str) -> Option<WorkspaceRow> {
+    tree.flat_items
+        .iter()
+        .find(|row| selection_nav_key(row.selection()) == key)
+        .cloned()
+}
+
+/// Provider for [`MENU_PANE`] — a pane row. Every entry acts on **that row's** pane, resolved from
+/// this component's own model: the pane's id from the row, its column from
+/// [`WorkspaceTree::locate_pane`]. A **floating** pane is in no column, so the entries that need one
+/// are absent rather than aimed at a guess.
+fn build_pane_row_menu(ctx: &ChromeCtx, key: &str) -> Vec<DropdownItem> {
+    let state = ctx.state();
+    // Read, then drop the borrow: `pane_custom_name` reaches back into the store.
+    let located = {
+        let tree = state.workspaces().tree();
+        match row_at_key(&tree, key) {
+            Some(WorkspaceRow::Pane { pane_id }) => Some((pane_id, tree.locate_pane(pane_id))),
+            Some(WorkspaceRow::FloatingPane { pane_id, .. }) => Some((pane_id, None)),
+            _ => None,
+        }
+    };
+    let Some((pane_id, column)) = located else {
         return Vec::new();
     };
     // Read through the facade — the same selector a plugin would use.
-    let has_custom_name = ctx.state().pane_custom_name(*pane_id).is_some();
-    sidebar_pane_items(*pane_id, *ws_idx, *col_idx, has_custom_name)
+    let has_custom_name = state.pane_custom_name(pane_id).is_some();
+    pane_row_items(pane_id, column, has_custom_name)
 }
 
-/// Menu items for a sidebar **pane** row (target-only, so unit-testable without a ctx). Every entry
-/// acts on *that* row: the pane by id, "New pane" in the pane's own column.
-pub(crate) fn sidebar_pane_items(
+/// Menu items for a **pane** row (facts-only, so unit-testable without a ctx). Every entry acts on
+/// *that* row: the pane by id, "New pane" in the pane's own column when it has one.
+pub(crate) fn pane_row_items(
     pane_id: PaneId,
-    ws_idx: usize,
-    col_idx: usize,
+    column: Option<(usize, usize)>,
     has_custom_name: bool,
 ) -> Vec<DropdownItem> {
     let pane = PropValue::Int(pane_id.0 as i64);
-    let mut items = vec![
-        item_running(
+    let mut items = Vec::new();
+    if let Some((ws_idx, col_idx)) = column {
+        items.push(item_running(
             "add_pane_to_column",
             "New pane",
             "add_pane_to_column",
             &[("ws_idx", usize_arg(ws_idx)), ("col_idx", usize_arg(col_idx))],
-        ),
-        item_running(
-            "rename_pane",
-            "Rename pane",
-            "rename_pane_by_id",
-            &[("pane_id", pane.clone())],
-        ),
-    ];
+        ));
+    }
+    items.push(item_running(
+        "rename_pane",
+        "Rename pane",
+        "rename_pane_by_id",
+        &[("pane_id", pane.clone())],
+    ));
     if has_custom_name {
         items.push(item_running(
             "reset_pane_name",
@@ -1230,15 +1332,17 @@ pub(crate) fn sidebar_pane_items(
 
 /// Provider for [`MENU_COLUMN`] — a column row. "New pane" (in the column) +
 /// "New column" + "Delete column" (danger).
-fn build_sidebar_column_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarColumn { ws_idx, col_idx } = target else {
+fn build_column_row_menu(ctx: &ChromeCtx, key: &str) -> Vec<DropdownItem> {
+    let state = ctx.state();
+    let tree = state.workspaces().tree();
+    let Some(WorkspaceRow::Column { ws_idx, col_idx }) = row_at_key(&tree, key) else {
         return Vec::new();
     };
-    sidebar_column_items(*ws_idx, *col_idx)
+    column_row_items(ws_idx, col_idx)
 }
 
-/// Menu items for a sidebar **column** row (target-only, so unit-testable without a ctx).
-pub(crate) fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
+/// Menu items for a **column** row (facts-only, so unit-testable without a ctx).
+pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
     vec![
         item_running(
             "add_pane_to_column",
@@ -1265,21 +1369,26 @@ pub(crate) fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<Dropdow
     ]
 }
 
-/// Provider for [`MENU_WORKSPACE`] — a workspace row.
-fn build_sidebar_workspace_menu(_ctx: &ChromeCtx, target: &ContextTarget) -> Vec<DropdownItem> {
-    let ContextTarget::SidebarWorkspace {
-        ws_idx,
-        custom_name,
-    } = target
-    else {
+/// Provider for [`MENU_WORKSPACE`] — a workspace row. Whether the workspace has a name to clear is
+/// read off this component's own projection ([`WorkspaceEntry::custom_name`]), which is why the
+/// projection keeps it: the host used to resolve it from the session and put it on the target.
+fn build_workspace_row_menu(ctx: &ChromeCtx, key: &str) -> Vec<DropdownItem> {
+    let state = ctx.state();
+    let tree = state.workspaces().tree();
+    let Some(WorkspaceRow::Workspace { ws_idx }) = row_at_key(&tree, key) else {
         return Vec::new();
     };
-    sidebar_workspace_items(*ws_idx, custom_name.is_some())
+    let has_custom_name = tree
+        .workspaces
+        .iter()
+        .find(|ws| ws.ws_idx == ws_idx)
+        .is_some_and(|ws| ws.custom_name.is_some());
+    workspace_row_items(ws_idx, has_custom_name)
 }
 
-/// Menu items for a sidebar **workspace** row. `has_custom_name` gates the "Use default name"
+/// Menu items for a **workspace** row. `has_custom_name` gates the "Use default name"
 /// reset entry — it only appears when there is a custom name to clear.
-pub(crate) fn sidebar_workspace_items(ws_idx: usize, has_custom_name: bool) -> Vec<DropdownItem> {
+pub(crate) fn workspace_row_items(ws_idx: usize, has_custom_name: bool) -> Vec<DropdownItem> {
     let mut items = vec![
         item_running(
             "split_horizontal",
@@ -1335,6 +1444,7 @@ mod tests {
         tree.workspaces.push(WorkspaceEntry {
             ws_idx: 0,
             name: "ws1".into(),
+            custom_name: None,
             collapsed: false,
             state: SidebarItemState::Active,
             columns: vec![ColumnEntry {
@@ -1363,6 +1473,23 @@ mod tests {
             Contribution::Container(c) => c,
             _ => panic!("the workspaces provider contributes a Container"),
         }
+    }
+
+    /// The same tree with a **floating** pane beside the tiled one, and a renamed workspace — the
+    /// two facts the row menus have to read off this component's own model.
+    fn tree_with_a_floating_pane() -> WorkspaceTree {
+        let mut tree = tree();
+        let ws = &mut tree.workspaces[0];
+        ws.name = "My WS".into();
+        ws.custom_name = Some("My WS".into());
+        ws.floating_panes.push(PaneEntry {
+            pane_id: PaneId(9),
+            name: "float".into(),
+            custom_name: None,
+            state: SidebarItemState::None,
+        });
+        tree.sync_flat_items();
+        tree
     }
 
     /// A store whose model is the little tree above, with `mount` holding the keyboard.
@@ -1573,6 +1700,129 @@ mod tests {
         );
     }
 
+    // ── This component's row menus (F003/P086/T365) ──
+
+    /// A facade over a store — what a menu builder and `context_path` receive.
+    fn ctx_over(store: &SharedChromeState) -> ChromeCtx<'_> {
+        ChromeCtx::new(crate::host::App::new(store))
+    }
+
+    /// **The component names its own row kinds.** The host produces a container + a key and gets a
+    /// menu path back; it never learns that panes, columns and workspaces exist. A floating pane is
+    /// a pane row of this component, so it gets this component's pane menu.
+    #[test]
+    fn every_row_kind_names_its_own_menu() {
+        let store = store();
+        *store.workspaces.tree_mut() = tree_with_a_floating_pane();
+        let p = WorkspacesContainerProvider::new();
+        let ctx = ctx_over(&store);
+
+        for (key, expected) in [
+            (pane_nav_key(PaneId(1)), MENU_PANE),
+            (pane_nav_key(PaneId(9)), MENU_PANE),
+            (column_nav_key(0, 0), MENU_COLUMN),
+            (workspace_nav_key(0), MENU_WORKSPACE),
+        ] {
+            assert_eq!(p.context_path(&key, &ctx).as_deref(), Some(expected), "{key}");
+        }
+        assert_eq!(
+            p.context_path("docker:container:abc", &ctx),
+            None,
+            "a key this component did not write names no menu of its own — and no menu opens, \
+             rather than a wrong one",
+        );
+    }
+
+    /// **A builder answers for its own placement only.** Both seatings are mounted, so both are
+    /// asked for every menu; without the guard every entry appeared twice in every row menu.
+    #[test]
+    fn a_placements_menu_ignores_another_placements_row() {
+        let store = store();
+        *store.workspaces.tree_mut() = tree_with_a_floating_pane();
+        let left = WorkspacesContainerProvider::new();
+        let ctx = ctx_over(&store);
+        let menu = left
+            .context_menus(&ctx)
+            .into_iter()
+            .find(|c| c.context_path == MENU_PANE)
+            .expect("the component declares a pane-row menu");
+
+        let mine = ContextTarget::Row {
+            container: "workspaces".into(),
+            key: pane_nav_key(PaneId(1)),
+        };
+        let the_other_seatings = ContextTarget::Row {
+            container: "workspaces.right".into(),
+            key: pane_nav_key(PaneId(1)),
+        };
+        assert!(!(menu.build)(&ctx, &mine).is_empty());
+        assert!((menu.build)(&ctx, &the_other_seatings).is_empty());
+        // …and a content-pane target is not this component's business either.
+        assert!((menu.build)(
+            &ctx,
+            &ContextTarget::Pane { pane_id: PaneId(1), hyperlink: None },
+        )
+        .is_empty());
+    }
+
+    /// The facts the host used to resolve and hand over are read from this component's own model:
+    /// the pane's column (absent for a floating pane, which is in none) and whether the workspace
+    /// has a name to clear.
+    #[test]
+    fn a_row_menu_reads_the_components_own_model() {
+        let store = store();
+        *store.workspaces.tree_mut() = tree_with_a_floating_pane();
+        let ctx = ctx_over(&store);
+
+        let tiled = build_pane_row_menu(&ctx, &pane_nav_key(PaneId(1)));
+        let new_pane = tiled
+            .iter()
+            .find(|i| i.id == "add_pane_to_column")
+            .expect("a tiled pane is in a column");
+        assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(0)));
+        assert_eq!(new_pane.intent.args.get("col_idx"), Some(&PropValue::Int(0)));
+
+        let floating = build_pane_row_menu(&ctx, &pane_nav_key(PaneId(9)));
+        assert!(
+            !floating.iter().any(|i| i.id == "add_pane_to_column"),
+            "a floating pane is in no column, so the entry that needs one is absent rather than \
+             aimed at a guess: {:?}",
+            floating.iter().map(|i| &i.id).collect::<Vec<_>>(),
+        );
+        assert!(floating.iter().any(|i| i.id == "close"), "it is still closable");
+
+        let ws = build_workspace_row_menu(&ctx, &workspace_nav_key(0));
+        assert!(
+            ws.iter().any(|i| i.id == "reset_workspace_name"),
+            "the workspace was renamed, so there is a name to clear",
+        );
+    }
+
+    /// Renaming the row the cursor is on is **this component's** verb (user decision, 2026-07-30):
+    /// it resolves the cursor and dispatches the by-id action for whichever kind of row it is. The
+    /// app's `rename_pane` / `rename_workspace` keep meaning the focused pane / active workspace.
+    #[test]
+    fn rename_selected_targets_the_cursor_row_by_id() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+        let intent = Intent::new(RENAME_SELECTED);
+
+        // The fixture's first row is the workspace header.
+        assert_eq!(p.perform(RENAME_SELECTED, &intent, &mut cx), Handled::Yes);
+        let asked = cx.drain();
+        assert_eq!(asked[0].action, "rename_workspace_by_idx");
+        assert_eq!(asked[0].args.get("ws_idx"), Some(&PropValue::Int(0)));
+
+        // Step onto the pane row and the same key means that pane.
+        p.perform(CURSOR_DOWN, &Intent::new(CURSOR_DOWN), &mut cx);
+        cx.drain();
+        assert_eq!(p.perform(RENAME_SELECTED, &intent, &mut cx), Handled::Yes);
+        let asked = cx.drain();
+        assert_eq!(asked[0].action, "rename_pane_by_id");
+        assert_eq!(asked[0].args.get("pane_id"), Some(&PropValue::Int(1)));
+    }
+
     #[test]
     fn an_action_this_component_does_not_own_declines() {
         let store = store_with_tree("workspaces");
@@ -1635,19 +1885,13 @@ mod tests {
         // drag and hint ids the interactive rows need, allocated in the host's
         // registries.
         let p = WorkspacesContainerProvider::new();
-        let tree = tree();
         let theme = GuiTheme::default();
-        let programs = heca_config::programs::ProgramsConfig::default();
         let emit: ChromeIntentEmitter = Rc::new(|_| {});
         let store = store();
+        // The model is the component's own, read off its state — not handed in by the host.
+        *store.workspaces.tree_mut() = tree();
 
-        let ctx = ChromeCtx::for_build(
-            crate::host::App::new(&store),
-            &tree,
-            &programs,
-            &theme,
-            &emit,
-        );
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
         let c = container(&p, &ctx);
 
         let mut signals = ChromeSignals::default();
@@ -1669,6 +1913,49 @@ mod tests {
         assert_eq!(hints.checkpoint(), 2);
         // The active pane's card bound its `active` signal for per-frame updates.
         assert_eq!(signals.pane_active.len(), 1);
+    }
+
+    /// **A row's click is a NAME** (F003/P086/T365). Every gesture the built body registers is a
+    /// view intent — an action id plus arguments — so the click, the `prefix+/` pick, a menu entry
+    /// and RPC all reach the same thing. It used to be a closure emitting a host-side variant, which
+    /// only the click could ever run.
+    #[test]
+    fn a_rows_gesture_is_a_named_intent_not_a_closure() {
+        use crate::app::interaction::InteractionIntent;
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let store = store();
+        *store.workspaces.tree_mut() = tree();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
+        let c = container(&p, &ctx);
+
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut hints = HintTargetRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag, &mut hints);
+        let _body = (c.build)(&ctx, &mut bx);
+
+        let declared: Vec<(String, Option<PropValue>)> = (0..hints.checkpoint())
+            .filter_map(|i| hints.get(heca_grid_ui::HintTargetId::new(i)))
+            .map(|intent| match intent {
+                InteractionIntent::View(vi) => (
+                    vi.action.clone(),
+                    vi.args.values().next().cloned(),
+                ),
+                other => panic!("a row's gesture must be a named intent, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            declared,
+            vec![
+                // Registration order: the workspace row, then the pane rows inside it.
+                ("focus_workspace".to_string(), Some(PropValue::Int(0))),
+                ("focus_pane".to_string(), Some(PropValue::Int(1))),
+            ],
+            "the pane row and the workspace row each declared their own click, by name, \
+             carrying that row's own target",
+        );
     }
 
     #[test]

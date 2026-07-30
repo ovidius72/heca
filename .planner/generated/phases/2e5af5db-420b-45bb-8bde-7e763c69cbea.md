@@ -1,8 +1,8 @@
 # 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
 
-**Status:** 🚧 `in-progress`
+**Status:** ✅ `done`
 **Created:** 2026-07-29T09:34:17.295Z
-**Updated:** 2026-07-29T18:40:52.896Z
+**Updated:** 2026-07-30T09:17:43.793Z
 
 Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
 
@@ -405,9 +405,9 @@ Written, then reverted. `open_context_menu_for` (`heca/src/chrome/context_menu.r
 FOR WHOEVER WRITES THE NEXT HOST-LEVEL FOCUS RULE
 `AppState` is constructed in exactly one place — `heca/src/app/startup.rs:346` — and needs a window. There is no test constructor in the tree, so nothing at the `handle_*` level is unit-testable and T352's rule shipped with no test that could have caught it. Put the assertion on the component through `ProviderCx` (no window needed), and expect the user to drive the rest in the app.
 
-### 🚧 2086fbfc-1d37-4e4a-af69-536692ca12cf — T365 — The mouse: clicking a container focuses it, and each item kind declares its own click
+### ✅ 2086fbfc-1d37-4e4a-af69-536692ca12cf — T365 — The mouse: clicking a container focuses it, and each item kind declares its own click
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
 # What
 
@@ -475,15 +475,15 @@ the same thing.
 - Whole workspace green, clippy 0 warnings. **The USER drives it in the app.**
 
 **Checklist:**
-- [ ] DONE — scope_key/scope_at in heca-grid-ui; a click inside a container focuses it, outside releases it; documented in docs/widgets.md (12ef6ac)
-- [ ] DONE — the click moves the container's cursor to the clicked row, via Provider::cursor_moved; every seating of a component shows the same cursor (24043d4)
-- [ ] DONE — a focused container decides the context menu instead of InputMode::SidebarNav; that mode and its dead handlers deleted (ba52150)
-- [ ] DONE — item(), item_running() and usize_arg() are pub(crate): shared menu-entry vocabulary, since the sidebar builders move out and build_pane_menu stays (edfef48)
-- [ ] DONE — the three row menus moved into the component as Provider::context_menus; paths are workspaces.pane / .column / .workspace; ContextPath::SIDEBAR_* and their with_builtins registrations deleted; ContextPath::PANE stays host-owned; stale sidebar.* references swept from app_state.rs, contribution.rs and docs/widgets.md (05f3ac4)
-- [ ] ContextTarget::Row { container, key } replaces SidebarPane/SidebarColumn/SidebarWorkspace. NOTE: with the builders now living inside the component, the host-resolved facts those variants carry (ws_idx, col_idx, custom_name) are redundant — the component reads its own model. Check ContextTarget::pane_id() (:84) and ws_idx() (:95), which retarget pane/workspace actions and have callers outside the menu code. The ChromeDragItem match in mouse.rs:143 goes with it.
-- [ ] Named gestures per item kind: row clicks still run an unnamed closure (.on_activate), so RPC, menus and plugins cannot reach them; ViewNode already carries events { press -> Intent } and the native builder needs the same shape
-- [ ] Rebuild the right-click content path (mouse.rs:455), which deliberately does not release container focus; the restorable_mode constraint that forced that is gone, and its comment is stale
-- [ ] Clear the 9 remaining SidebarNav mentions, all in comments (mouse.rs:455, app_state.rs:680/729, chrome/state.rs:181, chrome/mod.rs:2952)
+- [x] DONE — scope_key/scope_at in heca-grid-ui; a click inside a container focuses it, outside releases it; documented in docs/widgets.md (12ef6ac)
+- [x] DONE — the click moves the container's cursor to the clicked row, via Provider::cursor_moved; every seating of a component shows the same cursor (24043d4)
+- [x] DONE — a focused container decides the context menu instead of InputMode::SidebarNav; that mode and its dead handlers deleted (ba52150)
+- [x] DONE — item(), item_running() and usize_arg() are pub(crate): shared menu-entry vocabulary, since the sidebar builders move out and build_pane_menu stays (edfef48)
+- [x] DONE — the three row menus moved into the component as Provider::context_menus; paths are workspaces.pane / .column / .workspace; ContextPath::SIDEBAR_* and their with_builtins registrations deleted; ContextPath::PANE stays host-owned; stale sidebar.* references swept from app_state.rs, contribution.rs and docs/widgets.md (05f3ac4)
+- [x] ContextTarget::Row { container, key } replaces SidebarPane/SidebarColumn/SidebarWorkspace. NOTE: with the builders now living inside the component, the host-resolved facts those variants carry (ws_idx, col_idx, custom_name) are redundant — the component reads its own model. Check ContextTarget::pane_id() (:84) and ws_idx() (:95), which retarget pane/workspace actions and have callers outside the menu code. The ChromeDragItem match in mouse.rs:143 goes with it.
+- [x] Named gestures per item kind: row clicks still run an unnamed closure (.on_activate), so RPC, menus and plugins cannot reach them; ViewNode already carries events { press -> Intent } and the native builder needs the same shape
+- [x] Rebuild the right-click content path (mouse.rs:455), which deliberately does not release container focus; the restorable_mode constraint that forced that is gone, and its comment is stale
+- [x] Clear the 9 remaining SidebarNav mentions, all in comments (mouse.rs:455, app_state.rs:680/729, chrome/state.rs:181, chrome/mod.rs:2952)
 
 ### ✅ 872713aa-1c7c-48c5-ac8c-d0561866eca7 — T366 — Delete default_binding; a key comes from the built keymaps, and heca --keys-show prints them
 
@@ -568,9 +568,9 @@ Core components' keys moved into `keybindings.default.toml` under `[[keys.compon
 WHAT THIS UNBLOCKS
 F003/P085/T356 steps 3 and 5 — tracked by F003/P086/T369, which is now free to run once F003/P086/T363 lands `global_focus`/`Esc`.
 
-### 📋 ec4ff2d9-f5d6-4ae1-b5ca-cda6fb0fd47c — T367 — The chrome context stops handing every component the workspaces model
+### ✅ ec4ff2d9-f5d6-4ae1-b5ca-cda6fb0fd47c — T367 — The chrome context stops handing every component the workspaces model
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 # What
 
@@ -823,9 +823,9 @@ COMPAT
 PROCESS NOTE FOR THE NEXT SESSION
 The user stopped this task twice for writing code while a question was still open. **When a question is on the table — theirs or mine — reply in prose and wait for the answer.** A defect report on just-shipped work is not authorisation either: say what is wrong and what the fix would be, then wait.
 
-### 📋 195bc451-0ad1-402e-996a-c2ec28b28955 — T371 — The focus domain has four states, not two — and an overlay that covers the panes is one of them
+### ✅ 195bc451-0ad1-402e-996a-c2ec28b28955 — T371 — The focus domain has four states, not two — and an overlay that covers the panes is one of them
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 # Why
 
@@ -919,9 +919,9 @@ Everything then falls out of rules that already exist:
 - `route_interaction_for_session` is still a pure, unit-tested function.
 - Whole workspace green, clippy 0 warnings. **The USER drives it in the app.**
 
-### 📋 9ba34c54-cdc5-4225-9a7a-41eb356239b1 — T372 — RPC can only reach built-ins — a component's or plugin's declared action has no path in
+### ✅ 9ba34c54-cdc5-4225-9a7a-41eb356239b1 — T372 — RPC can only reach built-ins — a component's or plugin's declared action has no path in
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 # Why
 

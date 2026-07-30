@@ -226,24 +226,23 @@ pub fn handle_zoom_column_at_index(state: &mut AppState, action: &WmAction) {
 
 /// Open the context menu for the active context (keyboard / RPC entry, `prefix+>`).
 ///
-/// When a `pending_context` was stashed by the sidebar prefix arm (context-menu-7), it is
-/// consumed here — the menu opens for the sidebar item that was selected when the prefix was
-/// pressed, and `overlay_origin_mode` is set so the user returns to `SidebarNav` after close.
-/// Otherwise falls back to the focused content pane (Normal mode).
+/// A focused container's cursor row wins; otherwise the focused content pane. **Resolved here, at
+/// dispatch time** (F003/P086/T365) — it used to be resolved before the `Prefix` transition and
+/// stashed in `pending_context`, because the mode the handler ran in could no longer say a
+/// container had been driving. Chrome focus is not a mode and the transition does not touch it, so
+/// there is nothing left to carry across and the stash is gone.
 pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
-    if let Some(pending) = state.pending_context.take() {
-        let (cx, cy) = crate::mouse::window_center_logical(state);
-        crate::chrome::open_context_menu_for(
-            state,
-            &pending.path.0,
-            pending.target,
-            heca_core::layout::Point::new(cx as f64, cy as f64),
-            crate::app::interaction::InteractionSource::Keyboard,
-            pending.origin,
-        );
-    } else {
-        crate::mouse::open_focused_context_menu(state);
-    }
+    let Some((path, target)) = crate::chrome::resolve_active_context(state) else {
+        return;
+    };
+    let (cx, cy) = crate::mouse::window_center_logical(state);
+    crate::chrome::open_context_menu_for(
+        state,
+        &path.0,
+        target,
+        heca_core::layout::Point::new(cx as f64, cy as f64),
+        crate::app::interaction::InteractionSource::Keyboard,
+    );
 }
 
 /// Pan the horizontal view left/right by a quarter of the viewport, to reach
@@ -1035,18 +1034,15 @@ fn enter_pane_rename(state: &mut AppState, pane_id: PaneId) {
     open_rename_dialog(state, RenameTarget::Pane(pane_id), current_name);
 }
 
+/// Rename the **focused** pane — and only ever that (F003/P086/T365, user decision 2026-07-30).
+///
+/// It used to mean the cursor's row while a dock held the keyboard, by reading a pane id off a
+/// context target the host had stashed — the host resolving a fact about a row only the component
+/// that drew it can see. Renaming the row under the cursor is that component's own verb now
+/// (`workspaces.rename_selected`, bound to `r`), so this key keeps one meaning wherever the
+/// keyboard is.
 pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
-    // Sidebar-aware: a `prefix+$` pressed while navigating the sidebar stashes the cursor
-    // context (context-menu-7); rename that pane. Otherwise rename the focused pane.
-    let pending = state.pending_context.take();
-    // Preserve the originating mode (SidebarNav) so the rename dialog restores it on close.
-    if let Some(origin) = pending.as_ref().and_then(|p| p.origin.clone()) {
-        state.overlay_origin_mode = Some(origin);
-    }
-    let pane_id = pending
-        .and_then(|p| p.target.pane_id())
-        .or_else(|| focused_pane_id(state));
-    if let Some(pane_id) = pane_id {
+    if let Some(pane_id) = focused_pane_id(state) {
         enter_pane_rename(state, pane_id);
     }
 }
@@ -1510,18 +1506,10 @@ fn enter_workspace_rename(state: &mut AppState, ws_idx: usize) {
     open_rename_dialog(state, RenameTarget::Workspace(ws_idx), current_name);
 }
 
+/// Rename the **active** workspace — the counterpart of [`handle_rename_pane`], and unbent for the
+/// same reason: the cursor's row belongs to `workspaces.rename_selected` (`r`).
 pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
-    // Sidebar-aware: `prefix+Shift+w` while navigating the sidebar renames the cursor's
-    // workspace; otherwise the active workspace.
-    let pending = state.pending_context.take();
-    // Preserve the originating mode (SidebarNav) so the rename dialog restores it on close.
-    if let Some(origin) = pending.as_ref().and_then(|p| p.origin.clone()) {
-        state.overlay_origin_mode = Some(origin);
-    }
-    let ws_idx = pending
-        .and_then(|p| p.target.ws_idx(state))
-        .unwrap_or(state.session.active_workspace_idx);
-    enter_workspace_rename(state, ws_idx);
+    enter_workspace_rename(state, state.session.active_workspace_idx);
 }
 
 /// Enter rename mode for a specific workspace by index — the context-menu / RPC entry point
@@ -1663,8 +1651,7 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
 /// this clears is the redirection.
 ///
 /// A no-op when no dock is focused, so `Esc` in the focus layer and an RPC call are both safe to
-/// repeat. `SidebarNav` is left behind too when it is what put the focus there, otherwise the mode
-/// would go on claiming keys for a dock that no longer has any.
+/// repeat.
 pub fn handle_unfocus_dock(state: &mut AppState, _action: &WmAction) {
     if state.chrome_state.focused_container().is_none() {
         return;

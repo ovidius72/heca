@@ -150,6 +150,12 @@ pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
     state.layers.top_modal_id().map(OverlayId)
 }
 
+/// Is the tiled area covered by an overlay? The one input `Domain::Overlay` needs
+/// (F003/P086/T371) — see [`DynamicLayer::covers_content`](crate::chrome::layers::DynamicLayer).
+pub(crate) fn content_covered(state: &AppState) -> bool {
+    state.layers.content_covered()
+}
+
 /// Open a modal: realize its body + inject id-carrying action buttons, push it as a
 /// `Modal`-band layer, and register `completion` to run when it resolves. Returns the
 /// [`OverlayId`] (RPC keeps it to drive `SubmitOverlay`/`CloseOverlay`).
@@ -184,10 +190,14 @@ pub(crate) fn open_modal(
         &state.action_shortcuts,
         &mut forms,
     );
+    // A modal **covers the tiled area** by definition: it scrims the app and demands a decision,
+    // so nothing may act on the panes behind it (F003/P086/T371). That is the same protection the
+    // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
     state.layers.insert(
         id.0,
         LayerBand::Modal,
         LayerKind::OnDemand,
+        true,
         true,
         root,
     );
@@ -326,9 +336,22 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
     let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
 
-    state
-        .layers
-        .insert(id.0, LayerBand::Overlay, LayerKind::OnDemand, true, Box::new(menu));
+    // A menu **captures input and demands a choice**, so it covers for policy purposes even though
+    // its panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Its own entries
+    // are unaffected — they dispatch `SubmitOverlay`, which is intercepted before routing.
+    //
+    // Without this, the prefix sequence that deliberately falls through the overlay key path
+    // (`app/events.rs`, so `prefix+/` can still pick an entry) reaches the router and runs:
+    // `prefix+x` with a menu open raised the close-pane confirm, which the blanket `top_modal` rule
+    // this replaced had prevented (found by the user, 2026-07-30).
+    state.layers.insert(
+        id.0,
+        LayerBand::Overlay,
+        LayerKind::OnDemand,
+        true,
+        true,
+        Box::new(menu),
+    );
 
     let items = spec.items;
     state.overlays.completions.insert(
@@ -433,16 +456,9 @@ pub(crate) fn resolve(
     state.overlays.forms.remove(&overlay);
     state.layers.remove(overlay.0);
     state.needs_redraw = true;
-    // Context-menu mode-restore (context-menu-6): if this was the last overlay and a mode was
-    // recorded as the origin (e.g. a menu opened from `SidebarNav`), return to it. Done BEFORE
-    // the completion runs so a follow-up overlay (e.g. a destructive-confirm prompt) opens with
-    // the origin already restored, and so the origin is consumed before the completion might
-    // push a new overlay. `None` origin (menu opened from Normal) is a no-op — unchanged.
-    if top_modal(state).is_none()
-        && let Some(mode) = state.overlay_origin_mode.take()
-    {
-        state.input_mode = mode;
-    }
+    // **No mode is restored** (F003/P086/T365). A container's keyboard focus is not a mode, an
+    // overlay never takes it away, and it is simply still there when the overlay closes — so there
+    // is nothing to put back and no origin to record.
 
     if let Some(comp) = completion {
         comp(state, registry, result);

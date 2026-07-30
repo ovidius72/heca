@@ -57,6 +57,13 @@ pub enum RpcError {
     },
     /// The app is not yet initialized (no state available).
     NotInitialized,
+    /// The action exists but its [`ActionPolicy`](crate::app::interaction::ActionPolicy) does not
+    /// permit it in the current domain — a `TiledOnly` call while a float owns the screen, a
+    /// component's cursor verb while its dock is not being driven (F003/P086/T372).
+    Blocked(String),
+    /// Declared, but nothing here can run it: its component is not mounted, or it belongs to a
+    /// plugin across a boundary that does not exist yet. **Not** silent success.
+    NotRunnable(String),
 }
 
 impl std::fmt::Display for RpcError {
@@ -65,6 +72,12 @@ impl std::fmt::Display for RpcError {
             RpcError::UnknownCommand(cmd) => write!(f, "unknown command: {cmd}"),
             RpcError::MissingArgument { cmd, arg } => {
                 write!(f, "command '{cmd}' missing argument: {arg}")
+            }
+            RpcError::Blocked(name) => {
+                write!(f, "action '{name}' is not allowed right now")
+            }
+            RpcError::NotRunnable(name) => {
+                write!(f, "action '{name}' has no runnable owner (component not mounted?)")
             }
             RpcError::MissingSeparator { cmd } => {
                 write!(f, "command '{cmd}' missing '--' separator before command")
@@ -141,6 +154,58 @@ pub fn introspect(
 
 fn to_json<T: serde::Serialize>(value: &T, cmd: &str) -> Result<String, RpcError> {
     serde_json::to_string(value).map_err(|e| RpcError::UnknownCommand(format!("{cmd}: {e}")))
+}
+
+/// What an RPC line resolved to.
+///
+/// **Two vocabularies, one door** (F003/P086/T372). Every named built-in command keeps its own
+/// spelling (`focus-left`, `resize …`) and still parses to a `WmAction`. Anything a *component or
+/// plugin* declared has no `WmAction` variant and never can — that is why name-keyed actions exist —
+/// so it arrives through the generic `action` verb as an [`Intent`], which is an action id plus
+/// arguments: exactly what `dispatch_view_intent` already resolves and policy-routes for a click, a
+/// key or a menu entry.
+pub enum RpcCommand {
+    /// A built-in command with its own RPC spelling.
+    Builtin(WmAction),
+    /// `action <name> [key=value …]` — any action in the catalog, by id.
+    Intent(crate::chrome::Intent),
+}
+
+/// Parse one RPC line into either vocabulary.
+///
+/// The generic verb is tried first and everything else falls through to
+/// [`parse_rpc_command`] unchanged, so no existing command changes shape.
+///
+/// ```text
+/// action workspaces.cursor_down
+/// action close_pane_by_id pane_id=7
+/// ```
+///
+/// Arguments are `key=value` pairs in any order, judged against the action's **declaration** on
+/// dispatch (`report_arg_problems`), so a misspelled one says so instead of silently defaulting —
+/// the same treatment a menu entry's args get.
+pub fn parse_rpc(input: &str) -> Result<RpcCommand, RpcError> {
+    let trimmed = input.trim();
+    let mut parts = trimmed.split_whitespace();
+    if parts.next().map(str::to_lowercase).as_deref() != Some("action") {
+        return parse_rpc_command(trimmed).map(RpcCommand::Builtin);
+    }
+    let name = parts.next().ok_or_else(|| RpcError::MissingArgument {
+        cmd: "action".to_string(),
+        arg: "name".to_string(),
+    })?;
+    let mut intent = crate::chrome::Intent::new(name);
+    for pair in parts {
+        // A bare word is a caller mistake worth naming: silently ignoring it is how a typo becomes
+        // "the action ran but did nothing".
+        let (key, value) = pair.split_once('=').ok_or_else(|| {
+            RpcError::UnknownCommand(format!(
+                "action {name}: expected key=value, got '{pair}'"
+            ))
+        })?;
+        intent = intent.arg(key, crate::chrome::PropValue::Text(value.to_string()));
+    }
+    Ok(RpcCommand::Intent(intent))
 }
 
 pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
@@ -989,6 +1054,56 @@ mod tests {
             Ok(WmAction::FocusDock { dock: None }),
             "bare ⇒ the same letter pick a bare keybinding opens",
         );
+    }
+
+    /// **A component's action is reachable at last** (F003/P086/T372). The parser cannot express one
+    /// as a `WmAction` — there is no variant and never can be — so the generic verb yields an
+    /// `Intent`, which is what the click / key / menu path already dispatches.
+    #[test]
+    fn the_action_verb_reaches_what_no_wmaction_can() {
+        let RpcCommand::Intent(intent) = parse_rpc("action workspaces.cursor_down").unwrap() else {
+            panic!("a component's action is an Intent, not a WmAction");
+        };
+        assert_eq!(intent.action, "workspaces.cursor_down");
+        assert!(intent.args.is_empty());
+        // It is a real declared action, not just a string that parsed.
+        assert!(
+            crate::input::action_from_name("workspaces.cursor_down").is_none(),
+            "…and it is precisely NOT a built-in, which is the whole point",
+        );
+
+        // Arguments are key=value, in any order.
+        let RpcCommand::Intent(intent) = parse_rpc("action close_pane_by_id pane_id=7").unwrap()
+        else {
+            panic!("the verb always yields an Intent");
+        };
+        assert_eq!(
+            intent.args.get("pane_id"),
+            Some(&crate::chrome::PropValue::Text("7".into())),
+        );
+    }
+
+    /// A built-in keeps its own spelling — the generic verb is an addition, not a replacement.
+    #[test]
+    fn a_builtin_command_still_parses_to_its_action() {
+        let RpcCommand::Builtin(action) = parse_rpc("focus-left").unwrap() else {
+            panic!("a named built-in command still parses to its WmAction");
+        };
+        assert_eq!(action, WmAction::FocusLeft);
+    }
+
+    /// A bare word where an argument belongs is a caller mistake worth naming: quietly dropping it
+    /// is how a typo becomes "the action ran and did nothing".
+    #[test]
+    fn a_malformed_argument_is_reported_rather_than_dropped() {
+        assert!(matches!(
+            parse_rpc("action workspaces.cursor_down oops"),
+            Err(RpcError::UnknownCommand(_)),
+        ));
+        assert!(matches!(
+            parse_rpc("action"),
+            Err(RpcError::MissingArgument { .. }),
+        ));
     }
 
     #[test]
