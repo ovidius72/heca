@@ -193,6 +193,16 @@ pub struct WorkspacesContainerState {
     /// `[settings] pane_show_cwd`; projected in `sync_chrome_state`, read by `pane_card`.
     /// Carried here for the same reason as `pane_renamed_add_process_name`.
     pub(crate) pane_show_cwd: Signal<bool>,
+    /// The program catalog (`[program]`) — icons and display names for running processes.
+    ///
+    /// **This component's, not every component's** (F003/P086/T367). It used to ride on
+    /// `ChromeCtx`, so a Docker dock, a notes dock and a label showing one number were all handed a
+    /// catalog of pane programs through the one context that is supposed to be component-agnostic.
+    /// A component that renders processes reads it from its own state, like its model beside it.
+    ///
+    /// An `Rc` because a `Signal` read clones, and this is a whole parsed config; mirrored from
+    /// `AppState` in `sync_chrome_state`, so a `prefix+Shift+r` reload reaches it.
+    pub(crate) programs: Signal<std::rc::Rc<heca_config::programs::ProgramsConfig>>,
 }
 
 impl WorkspacesContainerState {
@@ -228,6 +238,10 @@ impl WorkspacesContainerState {
             pane_renamed_add_process_name: signal(true),
             // Matches the `[settings] pane_show_cwd` default (`false`).
             pane_show_cwd: signal(false),
+            // The embedded defaults until `sync_chrome_state` mirrors the loaded config.
+            programs: signal(std::rc::Rc::new(
+                heca_config::programs::ProgramsConfig::default(),
+            )),
         }
     }
 
@@ -244,6 +258,11 @@ impl WorkspacesContainerState {
     /// a reactive paint closure.
     pub fn pane_renamed_add_process_name(&self) -> bool {
         self.pane_renamed_add_process_name.get_untracked()
+    }
+    /// The program catalog this component resolves process icons and names through. Read untracked —
+    /// consumed while building the retained tree, not inside a reactive paint closure.
+    pub fn programs(&self) -> std::rc::Rc<heca_config::programs::ProgramsConfig> {
+        self.programs.get_untracked()
     }
     /// Whether the sidebar pane card shows a cwd row. Read untracked — consumed by
     /// `pane_card` at tree-build time.
@@ -364,6 +383,15 @@ impl WorkspacesContainerState {
             return;
         }
         self.pane_show_cwd.set(on);
+    }
+    /// Mirror the program catalog into the store. Called from `sync_chrome_state`, so a config
+    /// reload reaches the component; guarded on the `Rc` identity, which is what changes when a
+    /// reload replaces the catalog, so an unchanged one costs a pointer comparison.
+    pub fn set_programs(&self, programs: std::rc::Rc<heca_config::programs::ProgramsConfig>) {
+        if std::rc::Rc::ptr_eq(&self.programs.get_untracked(), &programs) {
+            return;
+        }
+        self.programs.set(programs);
     }
     pub fn set_pick_candidates(&self, candidates: Vec<(char, PaneId)>) {
         if self.pick_candidates.get_untracked() == candidates {

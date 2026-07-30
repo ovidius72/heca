@@ -175,8 +175,13 @@ impl Provider for WorkspacesContainerProvider {
         // Chrome state: the cursor is not the pane layout, so these stay reachable while a floating
         // pane is active — the dock is still there to be driven.
         let cursor = ActionPolicy::Global;
-        // Everything that changes the tiled layout. Blocked while floating, as before.
-        let mutates = ActionPolicy::TiledOnly;
+        // Everything that acts on **the row the cursor is on**, which is only a question worth
+        // asking while this dock has the keyboard (F003/P086/T371). They declared `TiledOnly`, which
+        // was true but not the point: it blocked them while floating and left them reachable from
+        // the command palette and RPC with the dock unfocused, acting on a cursor the user cannot
+        // see. `ContainerFocused` says what they mean; `Container` still permits the tiled actions
+        // beside them, so `prefix+Enter` keeps splitting the pane you last worked in.
+        let mutates = ActionPolicy::ContainerFocused;
         vec![
             act(
                 CURSOR_UP,
@@ -614,12 +619,15 @@ impl WorkspacesContainerProvider {
 /// the body is an empty column. That is a real state — a host may build a
 /// contribution just to read its metadata — not an error, so it does not panic.
 fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
-    let (Some(tree), Some(programs), Some(theme), Some(emit)) =
-        (ctx.tree(), ctx.programs(), ctx.theme(), ctx.emit_intent())
-    else {
+    let (Some(theme), Some(emit)) = (ctx.theme(), ctx.emit_intent()) else {
         return Box::new(Flex::column());
     };
     let state = ctx.state();
+    // **This component's model and catalog come from its own state** (F003/P086/T367) — the shared
+    // context carries only what is true for any component. The borrow is a `RefCell`: it lasts for
+    // the projection, which reads the store but never writes back into it.
+    let tree = state.workspaces().tree();
+    let programs = state.workspaces().programs();
     // The three registries are borrowed as *disjoint* fields, which is exactly why they
     // are plain fields on `BuildCx` and not accessor methods: `bx.signals()` three times
     // in one call would be three overlapping `&mut *bx` borrows.
@@ -630,8 +638,8 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // the same reason: only one of two placements can hold focus.
     let focused = state.container_keyboard_target(bx.container_id());
     Box::new(build_workspaces_container(
-        tree,
-        programs,
+        &tree,
+        &programs,
         theme,
         emit,
         state.workspaces(),
@@ -1877,19 +1885,13 @@ mod tests {
         // drag and hint ids the interactive rows need, allocated in the host's
         // registries.
         let p = WorkspacesContainerProvider::new();
-        let tree = tree();
         let theme = GuiTheme::default();
-        let programs = heca_config::programs::ProgramsConfig::default();
         let emit: ChromeIntentEmitter = Rc::new(|_| {});
         let store = store();
+        // The model is the component's own, read off its state — not handed in by the host.
+        *store.workspaces.tree_mut() = tree();
 
-        let ctx = ChromeCtx::for_build(
-            crate::host::App::new(&store),
-            &tree,
-            &programs,
-            &theme,
-            &emit,
-        );
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
         let c = container(&p, &ctx);
 
         let mut signals = ChromeSignals::default();
@@ -1921,12 +1923,11 @@ mod tests {
     fn a_rows_gesture_is_a_named_intent_not_a_closure() {
         use crate::app::interaction::InteractionIntent;
         let p = WorkspacesContainerProvider::new();
-        let tree = tree();
         let theme = GuiTheme::default();
-        let programs = heca_config::programs::ProgramsConfig::default();
         let emit: ChromeIntentEmitter = Rc::new(|_| {});
         let store = store();
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &tree, &programs, &theme, &emit);
+        *store.workspaces.tree_mut() = tree();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
         let c = container(&p, &ctx);
 
         let mut signals = ChromeSignals::default();

@@ -67,11 +67,16 @@ pub(crate) enum InteractionSource {
     /// did not come from a device, and a component is the one caller the host must be able to judge
     /// separately from the user driving it.
     Provider,
+    /// A scripted call over the RPC surface (F003/P086/T372).
+    ///
+    /// Its own source for the same reason `Provider` is: a script is a different actor from a
+    /// device, and it is judged by the same policy as everyone else — a `TiledOnly` action called
+    /// while a float owns the domain is blocked, exactly as the keypress would be.
+    Rpc,
     // Future sources — not implemented yet:
     // MouseRightSidebar,
     // MouseTopMenu,
     // MouseStatusBar,
-    // Rpc,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -144,14 +149,70 @@ pub(crate) enum RouteDecision {
 // Action policy (private — only used internally by the router)
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// **What owns the screen right now** — the axis a policy is judged against (F003/P086/T371).
+///
+/// The other half of the pair: [`ActionPolicy`] says *what kind of act this is*, `Domain` says
+/// *what the app is currently doing*. Both are needed, and only the policy half was modelled:
+/// `FocusDomain` is `Tiled | Floating`, read off the session, so the six policy values could only
+/// ever answer "is a pane floating?". A focused container lives in `chrome_state` and an overlay in
+/// `state.layers`, so neither was visible to policy at all — they were handled by ad-hoc checks
+/// beside it (a blunt "block everything while a modal is up") or not at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Domain {
+    /// A pane has the keyboard — the ordinary case.
+    Tiled,
+    /// A floating pane is active.
+    Floating,
+    /// A **dock** has the keyboard.
+    Container,
+    /// Something **covers the tiled area**: a modal, or a plugin overlay that declared it obscures
+    /// the panes. Acting on panes you cannot see is the thing this exists to stop.
+    Overlay,
+}
+
+/// Which domain the app is in for an interaction from `source`.
+///
+/// **Coverage first, then the keyboard, then the session.** Decided explicitly rather than left to
+/// match order (F003/P086/T371):
+///
+/// - an overlay that covers the tiled area wins over everything — whatever else is true, the panes
+///   are not what the user is looking at;
+/// - a container holding the keyboard decides for **keyboard-driven** interactions (a key, or a
+///   component's own `perform`), even with a floating pane active: the user is driving the dock. A
+///   mouse click lands *on* something, so it is judged by what it landed on, not by where the
+///   keyboard happens to be;
+/// - otherwise the session's own `Tiled | Floating`.
+pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
+    if crate::chrome::content_covered(state) {
+        return Domain::Overlay;
+    }
+    let keyboard_driven = matches!(
+        source,
+        InteractionSource::Keyboard | InteractionSource::Provider
+    );
+    if keyboard_driven && state.chrome_state.focused_container().is_some() {
+        return Domain::Container;
+    }
+    session_domain(&state.session)
+}
+
+/// The session's own half of the domain — what [`FocusDomain`] already says.
+pub(crate) fn session_domain(session: &heca_core::layout::Session) -> Domain {
+    match is_floating_domain(session) {
+        true => Domain::Floating,
+        false => Domain::Tiled,
+    }
+}
+
 /// Policy classification for a WM action.
 ///
-/// This determines how the action behaves under different focus domains.
-/// It is **private** to the interaction module — callers should use
-/// `dispatch_action()` or `route_interaction()` and never check policy
-/// directly.
+/// This determines how the action behaves under different [`Domain`]s. Callers should use
+/// `dispatch_action()` or `route_interaction()` and never check policy directly — it is `pub`
+/// only because a component **declares** one on every action it registers
+/// (`ActionMeta::policy`), and a plugin outside this crate must be able to name what it is
+/// required to declare (F003/P086/T371 step 6; the plugin-facing crate itself is F003/P017/T9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ActionPolicy {
+pub enum ActionPolicy {
     /// True global app action — always allowed in EVERY focus domain, including
     /// Floating. Reserved for actions with no tiled/floating layout impact
     /// (e.g. `ReloadConfig`). Distinct from [`AlwaysAllowed`](Self::AlwaysAllowed),
@@ -169,6 +230,14 @@ pub(crate) enum ActionPolicy {
     WorkspaceLevel,
     /// Policy depends on the interaction source.
     SourceDependent,
+    /// Only while **that component's container holds the keyboard** — what a component's
+    /// selection-dependent actions actually mean (F003/P086/T371).
+    ///
+    /// "Delete the row my cursor is on" is not a request anyone should be able to make from the
+    /// command palette or over RPC while the dock is not being driven; it only had no gate because
+    /// its *keys* live in a layer consulted only when the dock is focused, which is a property of
+    /// key routing, not a declared rule. This is the rule.
+    ContainerFocused,
 }
 
 /// Classify a WM action into its policy category.
@@ -397,80 +466,77 @@ pub(crate) fn action_allowed_when_floating(action: &WmAction) -> bool {
 
 /// Decide whether an interaction is allowed under the current state.
 ///
-/// Two policy layers, outermost first:
-/// 1. **Overlay-capture policy** — while a modal overlay (a confirm `Dialog`, a context menu /
-///    dropdown) owns input, every interaction is **Blocked** here. This is what stops a stray
-///    keybinding / mouse / RPC (e.g. `prefix+e`, `prefix+>`, focus/split) from driving the app
-///    behind an open dialog. Overlay *control* (`SubmitOverlay` / `CloseOverlay`) never reaches
-///    here — it is intercepted in [`dispatch_intent`] before routing — and the overlay's own
-///    Esc / Space / Enter / nav reach the widget through the widget-keymap path, not the WM action
-///    system. This is state-level (which overlay is open), so it lives here rather than in the
-///    session-only [`route_interaction_for_session`].
-/// 2. **Focus-domain policy** — delegated to [`route_interaction_for_session`] with
-///    `state.session`: when `FocusDomain::Floating` is active, only `FocusedPaneLocal` actions
-///    are allowed from keyboard/mouse sources.
+/// **One layer, two inputs**: the interaction's [`ActionPolicy`] (what kind of act it is) judged
+/// against the current [`Domain`] (what owns the screen). Everything the router used to special-case
+/// beside the policy system is a domain now (F003/P086/T371):
+///
+/// - a modal used to be a blunt "block everything" check right here; it is an overlay that **covers
+///   the tiled area**, so `Domain::Overlay` blocks the same things — and a *non-modal* plugin
+///   overlay that covers the panes gets the same protection, which the old check could not give it;
+/// - a focused container had **no gate at all** — its actions were merely hard to reach by key —
+///   and is now `Domain::Container`, the only domain `ActionPolicy::ContainerFocused` permits.
+///
+/// Overlay *control* (`SubmitOverlay` / `CloseOverlay`) never reaches here — it is intercepted in
+/// [`dispatch_intent`] before routing — and an overlay's own Esc / Enter / nav reach the widget
+/// through the widget-keymap path, not the WM action system.
 pub(crate) fn route_interaction(
     state: &AppState,
     source: InteractionSource,
     intent: InteractionIntent,
 ) -> RouteDecision {
-    if crate::chrome::top_modal(state).is_some() {
-        return RouteDecision::Block;
-    }
-    route_interaction_for_session(&state.session, source, intent)
+    route_in_domain(&state.session, domain_for(state, source), source, intent)
 }
 
-/// Session-only routing logic, extracted for testability.
+/// The core policy function — **pure**, so it stays unit-testable without an `AppState` (which
+/// cannot be built without a window). [`route_interaction`] computes the [`Domain`] and hands it
+/// the truth rather than re-deriving it here.
 ///
-/// This is the core policy function. `route_interaction()` delegates here,
-/// passing `state.session`. Tests call this directly.
+/// `session` is still needed beside the domain: `SourceDependent` asks *which* pane is the active
+/// floating one, which is a fact about the session, not about the domain.
 ///
-/// # Floating domain policy
+/// # What each domain permits
 ///
-/// When `FocusDomain::Floating` is active, only `FocusedPaneLocal` actions
-/// (Float/Unfloat, ClosePane, RenamePane) are allowed. Everything else is
-/// blocked — tiled layout actions, sidebar, workspace switching, command
-/// palette, mouse drag, and pane selection overlays.
+/// | policy | `Tiled` | `Floating` | `Container` | `Overlay` |
+/// |---|---|---|---|---|
+/// | `Global` | ✓ | ✓ | ✓ | ✓ |
+/// | `AlwaysAllowed` | ✓ | ✗ | ✓ | ✗ |
+/// | `FocusedPaneLocal` | ✓ | ✓ | ✓ | ✗ |
+/// | `TiledOnly` | ✓ | ✗ | ✓ | ✗ |
+/// | `WorkspaceLevel` | ✓ | ✗ | ✓ | ✗ |
+/// | `ContainerFocused` | ✗ | ✗ | ✓ | ✗ |
+/// | `SourceDependent` | ✓ | the active floating pane only | ✓ | ✗ |
 ///
-/// The only escape from floating is `prefix+f` (Float toggle) or closing the
-/// floating pane (ClosePane).
-pub(crate) fn route_interaction_for_session(
+/// `Container` permits what `Tiled` does **plus** `ContainerFocused`: a dock holding the keyboard
+/// does not stop `prefix+Enter` from splitting the pane you last worked in, which is the rule the
+/// phase settled. `Overlay` permits only `Global`, so `reload_config` keeps working and nothing
+/// touches panes the user cannot see.
+pub(crate) fn route_in_domain(
     session: &heca_core::layout::Session,
+    domain: Domain,
     source: InteractionSource,
     intent: InteractionIntent,
 ) -> RouteDecision {
+    // The three carrier intents below are the mouse's own vocabulary — focus this pane, fold this
+    // workspace, start this drag. None of them is meaningful while a floating pane owns the domain
+    // or while something covers the panes, and each has always said so; `blocked_domain` is that
+    // one condition written once instead of three times.
+    let blocked_domain = matches!(domain, Domain::Floating | Domain::Overlay);
     match &intent {
-        InteractionIntent::ActivateAction(action) => route_action(session, source, action),
+        InteractionIntent::ActivateAction(action) => route_action(session, domain, source, action),
         // Defensive: `dispatch_intent` expands this into FocusPane + the action before
         // routing, so the router should not normally see it. If it does, route by the
         // inner action's policy (the focus half is always benign).
         InteractionIntent::FocusPaneThenAction { action, .. } => {
-            route_action(session, source, action)
+            route_action(session, domain, source, action)
         }
-        InteractionIntent::FocusPane { .. } => {
-            // FocusPane from mouse content/sidebar: blocked when floating.
-            // Only the active floating pane can receive focus in floating domain.
-            if is_floating_domain(session) {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(intent)
-            }
-        }
-        InteractionIntent::ToggleWorkspaceCollapsed { .. } => {
-            if is_floating_domain(session) {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(intent)
-            }
-        }
-        InteractionIntent::StartSidebarDrag { .. } => {
-            // Sidebar drag: blocked when floating.
-            if is_floating_domain(session) {
-                RouteDecision::Block
-            } else {
-                RouteDecision::Allow(intent)
-            }
-        }
+        // FocusPane from mouse content/sidebar: only the active floating pane can receive focus in
+        // the floating domain, and nothing behind an overlay can.
+        InteractionIntent::FocusPane { .. }
+        | InteractionIntent::ToggleWorkspaceCollapsed { .. }
+        | InteractionIntent::StartSidebarDrag { .. } => match blocked_domain {
+            true => RouteDecision::Block,
+            false => RouteDecision::Allow(intent),
+        },
         // A View intent is a pass-through here: it carries only an action *name*, so its
         // real focus-domain policy is applied when `dispatch_view_intent` resolves it to a
         // `WmAction` and re-dispatches through `dispatch_action` (which routes it).
@@ -481,10 +547,11 @@ pub(crate) fn route_interaction_for_session(
 /// Route a WmAction based on the current focus domain and interaction source.
 fn route_action(
     session: &heca_core::layout::Session,
+    domain: Domain,
     source: InteractionSource,
     action: &WmAction,
 ) -> RouteDecision {
-    if policy_allows(session, source, action_policy(action), Some(action)) {
+    if policy_allows(session, domain, source, action_policy(action), Some(action)) {
         RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
     } else {
         RouteDecision::Block
@@ -505,11 +572,19 @@ fn route_action(
 /// cannot introspect.
 fn policy_allows(
     session: &heca_core::layout::Session,
+    domain: Domain,
     source: InteractionSource,
     policy: ActionPolicy,
     action: Option<&WmAction>,
 ) -> bool {
-    let floating = is_floating_domain(session);
+    // Nothing but a true global act reaches past something covering the panes — acting on what the
+    // user cannot see is the whole reason this domain exists (F003/P086/T371). It replaces the
+    // blunt "a modal blocks everything" check the router did before policy was consulted at all,
+    // and unlike that one it also covers a non-modal overlay that declared it obscures the panes.
+    if domain == Domain::Overlay {
+        return policy == ActionPolicy::Global;
+    }
+    let floating = domain == Domain::Floating;
 
     match policy {
         // True global app actions (ReloadConfig) — allowed in every focus domain, including
@@ -523,6 +598,10 @@ fn policy_allows(
         ActionPolicy::FocusedPaneLocal => true,
         ActionPolicy::TiledOnly => !floating,
         ActionPolicy::WorkspaceLevel => !floating,
+        // A component's own selection-dependent verb: only while a dock is being driven. This is
+        // what makes the palette and RPC paths safe without the component declaring anything about
+        // where it can be reached from.
+        ActionPolicy::ContainerFocused => domain == Domain::Container,
         ActionPolicy::SourceDependent => {
             // FocusPane: allowed if it targets the active floating pane, otherwise blocked.
             if let Some(WmAction::FocusPane { pane_id }) = action {
@@ -545,6 +624,8 @@ fn policy_allows(
                     // would be blocked from a key while a pane is floating, asking for it from
                     // inside `perform` must be blocked too.
                     InteractionSource::Provider => false,
+                    // Nor does a script (F003/P086/T372).
+                    InteractionSource::Rpc => false,
                 }
             } else {
                 true
@@ -621,8 +702,8 @@ pub(crate) fn can_focus_pane(
             InteractionSource::MouseContent => true,
             InteractionSource::MouseLeftSidebar => true,
             // A component asking to focus a pane is the sidebar's "activate this row" in another
-            // shape — allowed in the tiled domain like every other source.
-            InteractionSource::Provider => true,
+            // shape — allowed in the tiled domain like every other source, as is a script's.
+            InteractionSource::Provider | InteractionSource::Rpc => true,
         }
     }
 }
@@ -796,12 +877,12 @@ pub(crate) fn dispatch_action_ref(
 /// built-in **parameterized** variant is constructed from them via
 /// [`build_action`](crate::input::build_action) — so `{"action":"resize","args":{…}}` produces the
 /// very same `WmAction` a config binding would. Unit built-ins ignore args, as they always did.
-fn dispatch_view_intent(
+pub(crate) fn dispatch_view_intent(
     state: &mut AppState,
     registry: &ActionRegistry,
     source: InteractionSource,
     intent: &ViewIntent,
-) {
+) -> IntentOutcome {
     // 0. Judge the args against what the action DECLARES it takes, and say what is wrong. Without
     //    this the two failures below are indistinguishable and both silent: a misspelled required
     //    argument makes `build_action` return `None` (so the intent looks like an unknown action),
@@ -816,7 +897,7 @@ fn dispatch_view_intent(
         .or_else(|| crate::input::action_from_name(&intent.action));
     if let Some(action) = builtin {
         dispatch_action(state, registry, source, &action);
-        return;
+        return IntentOutcome::Ran;
     }
 
     // 2. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
@@ -828,18 +909,26 @@ fn dispatch_view_intent(
             "[heca] interaction: view intent '{}' did not resolve to a known action",
             intent.action
         );
-        return;
+        return IntentOutcome::Unknown;
     };
 
-    if crate::chrome::top_modal(state).is_some()
-        || !policy_allows(&state.session, source, policy, None)
-    {
+    // The same gate the built-in path takes through `route_action` — a component's or plugin's
+    // action is judged by identical rules, on the same domain (F003/P086/T371). The `top_modal`
+    // check that used to sit here is gone: a modal covers the tiled area, which `Domain::Overlay`
+    // already refuses.
+    if !policy_allows(
+        &state.session,
+        domain_for(state, source),
+        source,
+        policy,
+        None,
+    ) {
         #[cfg(debug_assertions)]
         eprintln!(
             "[heca] interaction: blocked dynamic action '{}' from {source:?}",
             intent.action
         );
-        return;
+        return IntentOutcome::Blocked;
     }
     if !registry.execute_dynamic(&intent.action, state, intent) {
         // Declared but host-unrunnable (`Dispatch::Declarative`): its owner lives across the plugin
@@ -849,7 +938,27 @@ fn dispatch_view_intent(
             "[heca] interaction: action '{}' is declared but has no host handler",
             intent.action
         );
+        return IntentOutcome::NotRunnable;
     }
+    IntentOutcome::Ran
+}
+
+/// What became of a dispatched intent — the answer a **scripted** caller needs (F003/P086/T372).
+///
+/// A click can afford to fail silently; a script cannot be told "ok" when nothing happened. The
+/// three failures are genuinely different: a name nothing knows, a name the domain refuses right
+/// now, and an action whose owner is not mounted (or lives across the plugin boundary).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IntentOutcome {
+    /// Dispatched — a built-in ran, or a name-keyed handler did.
+    Ran,
+    /// No such action, in the built-ins or the catalog.
+    Unknown,
+    /// Known, but its policy does not permit it in the current domain.
+    Blocked,
+    /// Declared, but nothing here can run it: its component is not mounted, or it is a plugin's to
+    /// run across a boundary that does not exist yet.
+    NotRunnable,
 }
 
 /// Report a dispatched intent's argument mistakes against the action's declared
@@ -930,8 +1039,9 @@ mod tests {
             WmAction::SidebarLeft,
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -950,8 +1060,9 @@ mod tests {
     #[test]
     fn view_intent_passes_through_router() {
         let session = test_session();
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             InteractionIntent::View(ViewIntent::new("focus_left")),
         );
@@ -982,8 +1093,9 @@ mod tests {
             WmAction::OpenLinkAtCaret,
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1023,8 +1135,9 @@ mod tests {
             },
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1045,8 +1158,9 @@ mod tests {
 
         let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane, WmAction::OpenContextMenu];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1074,8 +1188,9 @@ mod tests {
             },
         ];
         for intent in &intents {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 intent.clone(),
             );
@@ -1084,6 +1199,95 @@ mod tests {
                 "Floating domain should block {:?} but got {:?}",
                 intent,
                 decision,
+            );
+        }
+    }
+
+    /// **The user's case** (2026-07-29): a plugin opens a non-modal overlay over the scrolling area,
+    /// and `prefix+Enter` must not add a pane behind it. No plugin declares anything about
+    /// `split_horizontal` — it declares that its overlay covers the panes, and every `TiledOnly`
+    /// act falls away with no further rule (F003/P086/T371).
+    #[test]
+    fn an_overlay_covering_the_panes_blocks_acting_on_them() {
+        let session = test_session();
+        for action in [
+            WmAction::SplitHorizontal,
+            WmAction::ZoomColumn,
+            WmAction::ClosePane,
+            WmAction::FocusLeft,
+            WmAction::CreateWorkspace,
+        ] {
+            let decision = route_in_domain(
+                &session,
+                Domain::Overlay,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Block),
+                "{action:?} must not reach a pane the user cannot see, got {decision:?}",
+            );
+        }
+        // …and a true global act still gets through, or a covered screen would also mean no
+        // `reload_config`.
+        assert!(matches!(
+            route_in_domain(
+                &session,
+                Domain::Overlay,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(WmAction::ReloadConfig),
+            ),
+            RouteDecision::Allow(_),
+        ));
+    }
+
+    /// A component's cursor verb is reachable **only while its dock is being driven** — which is
+    /// what closes the palette/RPC hole those actions had (F003/P086/T371).
+    #[test]
+    fn a_container_focused_action_needs_a_focused_container() {
+        let session = test_session();
+        assert!(policy_allows(
+            &session,
+            Domain::Container,
+            InteractionSource::Keyboard,
+            ActionPolicy::ContainerFocused,
+            None,
+        ));
+        for domain in [Domain::Tiled, Domain::Floating, Domain::Overlay] {
+            assert!(
+                !policy_allows(
+                    &session,
+                    domain,
+                    InteractionSource::Keyboard,
+                    ActionPolicy::ContainerFocused,
+                    None,
+                ),
+                "{domain:?} is not a dock being driven",
+            );
+        }
+    }
+
+    /// A dock holding the keyboard does not stop the app's own tiled actions — the phase's rule
+    /// that `prefix+…` keeps working while a container is focused, expressed as a domain.
+    #[test]
+    fn a_focused_container_still_permits_the_tiled_actions() {
+        let session = test_session();
+        for policy in [
+            ActionPolicy::TiledOnly,
+            ActionPolicy::WorkspaceLevel,
+            ActionPolicy::AlwaysAllowed,
+            ActionPolicy::FocusedPaneLocal,
+            ActionPolicy::Global,
+        ] {
+            assert!(
+                policy_allows(
+                    &session,
+                    Domain::Container,
+                    InteractionSource::Keyboard,
+                    policy,
+                    None,
+                ),
+                "{policy:?} should still run while a dock has the keyboard",
             );
         }
     }
@@ -1383,6 +1587,7 @@ mod tests {
         // Tiled: allowed.
         assert!(policy_allows(
             &session,
+            Domain::Tiled,
             InteractionSource::Keyboard,
             ActionPolicy::TiledOnly,
             None
@@ -1391,6 +1596,7 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         assert!(!policy_allows(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             ActionPolicy::TiledOnly,
             None
@@ -1406,6 +1612,7 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         assert!(policy_allows(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             ActionPolicy::Global,
             None
@@ -1413,6 +1620,7 @@ mod tests {
         assert!(
             !policy_allows(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 ActionPolicy::AlwaysAllowed,
                 None
@@ -1429,6 +1637,7 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         assert!(!policy_allows(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             ActionPolicy::SourceDependent,
             None
@@ -1487,8 +1696,9 @@ mod tests {
 
         // MouseContent FocusPane should be blocked when floating
         // (only the active floating pane could receive focus, and this targets a tiled pane)
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::MouseContent,
             InteractionIntent::ActivateAction(WmAction::FocusPane {
                 pane_id: PaneId(99),
@@ -1514,8 +1724,9 @@ mod tests {
         ];
         for action in &actions {
             // Test via MouseLeftSidebar source (same result as Keyboard, but testing the source explicitly)
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::MouseLeftSidebar,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1629,8 +1840,9 @@ mod tests {
         ws.focus_domain = FocusDomain::Floating;
 
         // FocusPane targeting the active floating pane should be allowed from Keyboard.
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             InteractionIntent::ActivateAction(WmAction::FocusPane {
                 pane_id: PaneId(99),
@@ -1650,8 +1862,9 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
         // FocusPane targeting tiled pane (ID 1) should be blocked.
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(1) }),
         );
@@ -1668,8 +1881,9 @@ mod tests {
         let mut session = test_session();
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::MouseContent,
             InteractionIntent::FocusPane { pane_id: PaneId(1) },
         );
@@ -1689,8 +1903,9 @@ mod tests {
             WmAction::SidebarRight,
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::MouseLeftSidebar,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1707,8 +1922,9 @@ mod tests {
     #[test]
     fn tiled_content_focus_pane_allowed_via_mouse_content() {
         let session = test_session();
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::MouseContent,
             InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(1) }),
         );
@@ -1732,8 +1948,9 @@ mod tests {
             WmAction::FocusDown,
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1756,8 +1973,9 @@ mod tests {
             WmAction::CreateWorkspace,
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1789,8 +2007,9 @@ mod tests {
             },
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1812,8 +2031,9 @@ mod tests {
         let mut session = test_session();
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
-        let decision = route_interaction_for_session(
+        let decision = route_in_domain(
             &session,
+            session_domain(&session),
             InteractionSource::Keyboard,
             InteractionIntent::ActivateAction(WmAction::ReloadConfig),
         );
@@ -1862,8 +2082,9 @@ mod tests {
             WmAction::PasteClipboard,
         ];
         for action in &actions {
-            let decision = route_interaction_for_session(
+            let decision = route_in_domain(
                 &session,
+                session_domain(&session),
                 InteractionSource::Keyboard,
                 InteractionIntent::ActivateAction(action.clone()),
             );
@@ -1903,8 +2124,9 @@ mod tests {
 
         for source in &sources {
             for action in &actions {
-                let decision = route_interaction_for_session(
+                let decision = route_in_domain(
                     &session,
+                    session_domain(&session),
                     *source,
                     InteractionIntent::ActivateAction(action.clone()),
                 );

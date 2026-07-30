@@ -29,7 +29,6 @@ use app::terminal_metrics::refresh_terminal_cell_size;
 use app_state::AppState;
 use heca_config::theme::AppConfig;
 use heca_core::layout::PaneId;
-use input::WmAction;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
@@ -58,14 +57,40 @@ struct HecaApp {
 
 impl HecaApp {
     /// Parse and execute an RPC command string.
-    /// Returns the parsed action on success, or an error on failure.
+    ///
+    /// **Both vocabularies, one gate** (F003/P086/T372): a named built-in command and the generic
+    /// `action <name> [key=value …]` verb both go out as an `Intent` through the same
+    /// `dispatch_view_intent` a click, a key and a menu entry use. So a component's or plugin's
+    /// declared action is callable at last — and everything a script asks for is judged by the same
+    /// policy in the same domain, instead of the old direct `registry.execute`, which was the one
+    /// door that skipped the router.
+    ///
+    /// The reply says what became of it, because a script cannot be told "ok" when nothing ran: an
+    /// unknown name, an action the current domain refuses, and one whose component is not mounted
+    /// are three different answers.
     // Transitional: will be used by the RPC server / socket listener in Phase 5.
     #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
-    pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<WmAction, rpc::RpcError> {
+    pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<(), rpc::RpcError> {
+        use crate::app::interaction::{
+            dispatch_action, dispatch_view_intent, InteractionSource, IntentOutcome,
+        };
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
-        let action = rpc::parse_rpc_command(cmd)?;
-        self.registry.execute(&action, state);
-        Ok(action)
+        match rpc::parse_rpc(cmd)? {
+            // A built-in keeps its own spelling and its `WmAction`; what changes is that it is now
+            // **routed** rather than executed directly.
+            rpc::RpcCommand::Builtin(action) => {
+                dispatch_action(state, &self.registry, InteractionSource::Rpc, &action);
+                Ok(())
+            }
+            rpc::RpcCommand::Intent(intent) => {
+                match dispatch_view_intent(state, &self.registry, InteractionSource::Rpc, &intent) {
+                    IntentOutcome::Ran => Ok(()),
+                    IntentOutcome::Unknown => Err(rpc::RpcError::UnknownCommand(intent.action)),
+                    IntentOutcome::Blocked => Err(rpc::RpcError::Blocked(intent.action)),
+                    IntentOutcome::NotRunnable => Err(rpc::RpcError::NotRunnable(intent.action)),
+                }
+            }
+        }
     }
 
     /// Answer an action-metadata **introspection** query (`list-actions` / `describe-action <name>`)
@@ -132,7 +157,7 @@ impl HecaApp {
             // them: a report taken before everything has bound is not a report.
             self.conflicts.report();
             state.theme = self.app_config.theme.clone();
-            state.programs = self.app_config.config.programs.clone();
+            state.programs = std::rc::Rc::new(self.app_config.config.programs.clone());
             // Appearance: opacity re-reads every frame, so updating the snapshot
             // makes `transparency` (the amount) live-reload. The OS vibrancy
             // material is applied once at startup and NOT re-applied here — doing

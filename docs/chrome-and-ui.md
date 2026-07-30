@@ -1895,6 +1895,7 @@ are the one exception — see the note at the top of Part II.)
 | "No dedicated `Panel` widget — a bare panel is a plain `Surface`" | **Built 2026-07-27 (F003/P017/T008).** `Panel` is its own widget with a real title. It was the reason the published panel example described something unbuildable. |
 | A context menu's target carries host-resolved facts about a row (§4, `ContextTarget`) | **Replaced 2026-07-30 (F003/P086/T365).** A target names a row — `Row { container, key }` — and its component reads its own model for the facts. See §2.11. |
 | Mode-restore: a menu opened from a non-Normal mode returns to it (§4 intro, `overlay_origin_mode`) | **Gone 2026-07-30.** Chrome focus is not a mode and an overlay does not take it away, so there is nothing to restore. See §2.11. |
+| `ChromeCtx` carries the frame's render inputs `tree()` / `programs()` (§7, "The two halves of the seam") | **Removed 2026-07-30 (F003/P086/T367).** Both were one component's — a workspaces model and a pane-program catalog handed to every component through the contract they share. The context carries `theme()` and `emit_intent()`; a component's model lives on its own state. |
 | Any "Status:" line anywhere in Part II | The planner is the record. Ignore them. |
 
 ## 22. Work that is designed here but was tracked nowhere

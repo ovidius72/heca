@@ -2114,6 +2114,7 @@ impl ActionInfo {
             ActionPolicy::FocusedPaneLocal => "focused_pane_local",
             ActionPolicy::WorkspaceLevel => "workspace_level",
             ActionPolicy::SourceDependent => "source_dependent",
+            ActionPolicy::ContainerFocused => "container_focused",
         };
         Self {
             name: m.name.clone(),

@@ -1315,6 +1315,22 @@ The `describe-action <name>` introspection command lists an action's arguments, 
 are required — including the ones a provider or plugin contributed. See
 **[docs/widgets.md → Discovering actions at runtime](docs/widgets.md#discovering-actions-at-runtime--introspection)**.
 
+**Running one over RPC — `action <name> [key=value …]`.** Every named built-in keeps its own RPC
+spelling (`focus-left`, `resize target=column axis=x amount=-50`), but a component's or plugin's
+declared action has no such spelling and never can: it is not a variant of any enum. The generic
+verb takes any action **id** instead, so the whole catalog is reachable:
+
+```
+action workspaces.cursor_down          # a component's own verb
+action close_pane_by_id pane_id=7      # a built-in, by id, with arguments
+```
+
+Arguments are judged against the action's declaration, so a misspelled one says so rather than
+silently defaulting. A call is policy-routed exactly like a keypress — a `tiled_only` action is
+refused while a floating pane owns the screen, and a component's cursor verb is refused unless that
+dock holds the keyboard. And an action whose component is **not mounted** is reported as such rather
+than answered with success.
+
 **Passing `None` instead of a handler** registers a *declarative* action: it has an id, metadata and a
 policy, and it appears in menus and introspection, but the host cannot run it — it is forwarded to its
 owner across the plugin boundary (this is how WASM plugin actions will work).
@@ -1332,6 +1348,15 @@ Not every action is allowed in every context. heca tracks a per-workspace **focu
 - **Global app actions** — `reload_config` (hot-reload always works, even with a floating pane open).
 
 Blocked while floating: focus/split/resize/swap/move, sidebar navigation, workspace switching, command palette, spawn, and pane select/swap overlays. The only ways to leave the floating domain are `prefix+f` (toggle float) or closing the floating pane.
+
+**An overlay that covers the panes blocks the same things.** Whether an action may run is judged
+against what owns the screen: a pane (`Tiled`), a floating pane (`Floating`), a **dock** holding the
+keyboard (`Container`), or something **covering the tiled area** (`Overlay`) — a confirm dialog, or a
+plugin panel that declared it obscures the panes. In that last one only truly global actions
+(`reload_config`) get through, so nothing splits, zooms or closes a pane you cannot see. A focused
+dock changes nothing about the app's own keys: `prefix+Enter` still splits the pane you last worked
+in — what it adds is that a component's own cursor verbs (`r`, `x`, …) are reachable *only* while its
+dock is being driven, from a key, the command palette or RPC alike.
 
 **The action flow:**
 

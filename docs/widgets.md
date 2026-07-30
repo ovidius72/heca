@@ -2038,6 +2038,16 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
   background under the selection overlay.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
+
+> **`active` and `nav_selected` are two different questions, and only one of them follows focus.**
+> `active` is "this row *is* the focused thing"; `nav_selected` is "this is where the container's
+> cursor is", which the user moves with the keyboard or a click and which is theirs to keep. In
+> `heca` the cursor is pulled to the newly active row **only when the active one actually changes**
+> (`cursor_follow`, `heca/src/app/focus.rs`). The rule is easy to get wrong in the other direction:
+> the sync that writes it runs after *every* layout change, so writing it unconditionally moved the
+> user's cursor on changes that touched no focus at all — renaming a row that was not the active one
+> was the report that found it. If you add a "the cursor should follow X" rule, guard it on X having
+> changed, and put it beside that one.
 - **Attention**: when the host sets the bound `attention` signal `true`, the row flashes a few
   times (see [`Attention`](#attention)) and consumes the signal. The host plays any **sound** —
   the library is audio-free.
@@ -3358,6 +3368,13 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 > A component seated **twice** is asked for every menu twice, so a builder must answer for its own
 > placement (`Row { container, .. } if container == self.id()`) and return `vec![]` otherwise —
 > without that guard every entry appears twice in the merged menu.
+>
+> **The general hazard (worth reading before you write the next one).** Anything that walks
+> `ChromeHost::mounted_providers()` and *merges* what it gets back is asking a **type** a question
+> and receiving one answer per **seating**. With one placement on screen the duplication is
+> invisible, which is exactly how this shipped. Either key the answer by mount id (as the menus,
+> the cursor, the scroll offset and the keyboard target all do) or de-duplicate by `kind()`; and
+> when in doubt, seat the component twice — it is the cheapest way to find the next one.
 >
 > **From a plugin.** A plugin never draws the menu — it either attaches entries declaratively on a
 > `ViewNode` (`.on_context([ item("restart","Restart"), … ])`), or registers a

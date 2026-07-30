@@ -28,8 +28,6 @@ use crate::chrome::{
     RegionId, RegionSet,
 };
 use crate::host::{App, StateView};
-use crate::providers::workspaces::WorkspaceTree;
-use heca_config::programs::ProgramsConfig;
 use heca_grid_ui::theme::Theme as GuiTheme;
 
 pub use workspaces::WorkspacesContainerProvider;
@@ -358,10 +356,16 @@ impl<'a> ProviderCx<'a> {
 /// The read-only host inputs a container body is projected from. Present only on a
 /// context built for a render pass ([`ChromeCtx::for_build`]); a context built to
 /// merely observe ([`ChromeCtx::new`], e.g. at [`Provider::on_activate`]) has none,
-/// because there is no frame in flight to read a theme or a tree from.
+/// because there is no frame in flight to read a theme from.
+///
+/// **Everything here must be true for ANY component** (F003/P086/T367). The frame's theme and the
+/// intent sink are: every component paints in the current theme and reports what the user did. A
+/// component's *model* is not, and neither is anything derived from one domain — those live on that
+/// component's own state, where only it can see them. This carried the **workspace tree** and the
+/// **program catalog** until 2026-07-30, so a Docker dock, a notes dock and a label showing one
+/// number were each handed a workspaces model through the one context they all share. A new field
+/// here has to answer the same question first.
 struct RenderInputs<'a> {
-    tree: &'a WorkspaceTree,
-    programs: &'a ProgramsConfig,
     theme: &'a GuiTheme,
     emit: &'a ChromeIntentEmitter,
 }
@@ -396,21 +400,10 @@ impl<'a> ChromeCtx<'a> {
 
     /// A context for a **render pass**, carrying the frame's read-only inputs so a
     /// container's `build` closure can project them. Built by the chrome render path.
-    pub fn for_build(
-        app: App,
-        tree: &'a WorkspaceTree,
-        programs: &'a ProgramsConfig,
-        theme: &'a GuiTheme,
-        emit: &'a ChromeIntentEmitter,
-    ) -> Self {
+    pub fn for_build(app: App, theme: &'a GuiTheme, emit: &'a ChromeIntentEmitter) -> Self {
         Self {
             app,
-            render: Some(RenderInputs {
-                tree,
-                programs,
-                theme,
-                emit,
-            }),
+            render: Some(RenderInputs { theme, emit }),
         }
     }
 
@@ -431,18 +424,6 @@ impl<'a> ChromeCtx<'a> {
     /// Read-only state selectors (`app.state.*`).
     pub fn state(&self) -> StateView<'_> {
         self.app.state()
-    }
-
-    /// The workspace/column/pane projection this frame renders, or `None` outside a
-    /// render pass.
-    pub fn tree(&self) -> Option<&WorkspaceTree> {
-        self.render.as_ref().map(|r| r.tree)
-    }
-
-    /// The program catalog (icons + display names for running processes), or `None`
-    /// outside a render pass.
-    pub fn programs(&self) -> Option<&ProgramsConfig> {
-        self.render.as_ref().map(|r| r.programs)
     }
 
     /// The resolved grid-ui [`Theme`](heca_grid_ui::theme::Theme) for this frame, or
@@ -552,8 +533,24 @@ mod tests {
         fn default_region(&self) -> RegionId {
             RegionId::RightSidebar
         }
+        /// A body built from **nothing but the shared context** — one label, no model, no catalog.
         fn build_contribution(&self, _ctx: &ChromeCtx<'_>) -> Contribution {
-            unimplemented!("declares nothing, renders nothing here")
+            Contribution::Container(crate::chrome::ContainerContribution {
+                id: self.id().to_string(),
+                title: self.title().to_string(),
+                supported_regions: self.supported_regions(),
+                default_region: self.default_region(),
+                default_order: self.default_order(),
+                movable: self.movable(),
+                collapsible: self.collapsible(),
+                grow: self.grow(),
+                build: Box::new(|ctx: &ChromeCtx<'_>, _bx: &mut crate::chrome::BuildCx<'_>| {
+                    // The theme is there for anyone; nothing else is needed to render a number.
+                    let _theme = ctx.theme().expect("a render pass carries the frame's theme");
+                    Box::new(heca_grid_ui::widgets::Label::new("42"))
+                        as crate::chrome::WidgetModel
+                }),
+            })
         }
     }
 
@@ -576,6 +573,33 @@ mod tests {
             quiet.perform("anything", &Intent::new("anything"), &mut cx),
             Handled::No,
         );
+    }
+
+    /// **A component that knows nothing about panes builds with the same context** (F003/P086/T367).
+    ///
+    /// `ChromeCtx::for_build` used to carry the workspace tree and the program catalog, so this
+    /// dock — which shows one number — was handed another component's model through the contract
+    /// they share. The context now carries only the frame's theme and the intent sink; a component's
+    /// own model lives on its own state, where only it can see it.
+    #[test]
+    fn the_shared_context_carries_nothing_of_one_components_domain() {
+        let store = store();
+        let theme = heca_grid_ui::theme::Theme::default();
+        let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
+
+        let Contribution::Container(c) = Quiet.build_contribution(&ctx) else {
+            panic!("the quiet dock contributes a container");
+        };
+        let mut signals = crate::chrome::ChromeSignals::default();
+        let mut drag = crate::chrome::DragItemRegistry::default();
+        let mut hints = crate::chrome::HintTargetRegistry::default();
+        let mut bx = crate::chrome::BuildCx::new("quiet", &mut signals, &mut drag, &mut hints);
+        let body = (c.build)(&ctx, &mut bx);
+
+        assert!(body.base().children.is_empty(), "one label, no rows");
+        assert!(drag.items().is_empty(), "…and it registered nothing host-side");
+        assert_eq!(hints.checkpoint(), 0);
     }
 
     #[test]

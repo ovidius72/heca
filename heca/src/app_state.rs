@@ -642,7 +642,10 @@ pub struct AppState {
     pub backends: BackendStore,
     pub theme: Theme,
     /// Resolved program catalog copied from config and refreshed on reload.
-    pub programs: ProgramsConfig,
+    /// The program catalog (`[program]`), behind an `Rc` so mirroring it into the chrome store is a
+    /// pointer clone and the store can tell "unchanged" from "reloaded" by identity
+    /// (F003/P086/T367).
+    pub programs: std::rc::Rc<ProgramsConfig>,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
     /// Structured font configuration (families + sizes), decoupled from the color

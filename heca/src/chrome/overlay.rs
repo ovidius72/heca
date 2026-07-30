@@ -150,6 +150,12 @@ pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
     state.layers.top_modal_id().map(OverlayId)
 }
 
+/// Is the tiled area covered by an overlay? The one input `Domain::Overlay` needs
+/// (F003/P086/T371) — see [`DynamicLayer::covers_content`](crate::chrome::layers::DynamicLayer).
+pub(crate) fn content_covered(state: &AppState) -> bool {
+    state.layers.content_covered()
+}
+
 /// Open a modal: realize its body + inject id-carrying action buttons, push it as a
 /// `Modal`-band layer, and register `completion` to run when it resolves. Returns the
 /// [`OverlayId`] (RPC keeps it to drive `SubmitOverlay`/`CloseOverlay`).
@@ -184,10 +190,14 @@ pub(crate) fn open_modal(
         &state.action_shortcuts,
         &mut forms,
     );
+    // A modal **covers the tiled area** by definition: it scrims the app and demands a decision,
+    // so nothing may act on the panes behind it (F003/P086/T371). That is the same protection the
+    // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
     state.layers.insert(
         id.0,
         LayerBand::Modal,
         LayerKind::OnDemand,
+        true,
         true,
         root,
     );
@@ -326,9 +336,18 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
     let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
 
-    state
-        .layers
-        .insert(id.0, LayerBand::Overlay, LayerKind::OnDemand, true, Box::new(menu));
+    // A menu **captures input** (`modal`) but covers a corner, not the panes: it is anchored at the
+    // cursor and sized to its entries. So it does not put the app in `Domain::Overlay` — the row it
+    // describes stays visible behind it, and its own entries dispatch through the ordinary policy
+    // path (F003/P086/T371).
+    state.layers.insert(
+        id.0,
+        LayerBand::Overlay,
+        LayerKind::OnDemand,
+        true,
+        false,
+        Box::new(menu),
+    );
 
     let items = spec.items;
     state.overlays.completions.insert(

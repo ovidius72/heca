@@ -2,7 +2,7 @@
 
 **Status:** 🚧 `in-progress`
 **Created:** 2026-07-29T09:34:17.295Z
-**Updated:** 2026-07-30T08:12:52.482Z
+**Updated:** 2026-07-30T08:38:22.130Z
 
 Agreed 2026-07-29: [[keys.component]], always-present container defaults, per-item mouse declarations, default_binding removed, and a chrome context that stops handing every component the workspaces model.
 
@@ -405,9 +405,9 @@ Written, then reverted. `open_context_menu_for` (`heca/src/chrome/context_menu.r
 FOR WHOEVER WRITES THE NEXT HOST-LEVEL FOCUS RULE
 `AppState` is constructed in exactly one place — `heca/src/app/startup.rs:346` — and needs a window. There is no test constructor in the tree, so nothing at the `handle_*` level is unit-testable and T352's rule shipped with no test that could have caught it. Put the assertion on the component through `ProviderCx` (no window needed), and expect the user to drive the rest in the app.
 
-### 🚧 2086fbfc-1d37-4e4a-af69-536692ca12cf — T365 — The mouse: clicking a container focuses it, and each item kind declares its own click
+### ✅ 2086fbfc-1d37-4e4a-af69-536692ca12cf — T365 — The mouse: clicking a container focuses it, and each item kind declares its own click
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
 # What
 

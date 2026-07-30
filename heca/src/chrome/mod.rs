@@ -34,7 +34,8 @@ pub use overlay::OverlayId;
 #[allow(unused_imports)]
 pub(crate) use overlay::{
     collect_form as collect_overlay_form, open_dropdown, open_modal, resolve as resolve_overlay,
-    top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
+    content_covered, top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec,
+    OverlayHost,
 };
 // Context-menu resolution: ContextPath + ContextTarget + ContextMenuRegistry + the unified
 // `open_context_menu_for`. Built-in providers seeded at startup; a provider attaches its own
@@ -2976,6 +2977,13 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_pane_show_cwd(state.pane_show_cwd);
+    // The program catalog is this component's, not the shared context's (F003/P086/T367). Mirrored
+    // here like the display flags above, so `prefix+Shift+r` reaches it; guarded on `Rc` identity,
+    // which is exactly what a reload replaces.
+    state
+        .chrome_state
+        .workspaces
+        .set_programs(state.programs.clone());
     // Sidebar-nav selection: the **store owns it**. The nav handlers
     // publish into it (`publish_sidebar_selection`), and here it is projected back onto
     // the tree's positional `cursor` — which `sync_from_session` rebuilds from scratch, so
@@ -3328,13 +3336,12 @@ pub(crate) fn build_chrome_root(
     // no longer knows that the left sidebar happens to hold the workspace tree. Moving
     // the `workspaces` container to the right region (`ChromeHost::move_container`) moves
     // its UI with it, with no change here.
-    // Bound before the context so the borrow lives as long as the build does, not just as long as
-    // the argument list.
-    let tree = state.chrome_state.workspaces.tree();
+    //
+    // The context carries only what every component needs — the frame's theme and the intent sink
+    // (F003/P086/T367). A component's own model is its own to read, so the host no longer borrows
+    // one component's tree here on everybody's behalf.
     let ctx = crate::providers::ChromeCtx::for_build(
         crate::host::App::new(&state.chrome_state),
-        &tree,
-        &state.programs,
         &theme,
         &emit_intent,
     );
@@ -4230,11 +4237,11 @@ mod tests {
         let mut host = super::ChromeHost::new(chrome.events());
         host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
         let emit: super::ChromeIntentEmitter = Rc::new(|_| {});
-        let programs = heca_config::programs::ProgramsConfig::default();
+        // The component reads its model from its own state, so the fixture puts it there rather
+        // than handing it to the context (F003/P086/T367).
+        *chrome.workspaces.tree_mut() = tree.clone();
         let ctx = crate::providers::ChromeCtx::for_build(
             crate::host::App::new(chrome),
-            tree,
-            &programs,
             theme,
             &emit,
         );
