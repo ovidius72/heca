@@ -305,8 +305,8 @@ pub enum TextAlign {
     End,
 }
 
-/// Which embedded font family a text run is shaped with: the default monospace
-/// text face, or the icon glyph font ([`Icon`](crate::widgets::Icon)).
+/// Which embedded font family a text run is shaped with — **three faces, three jobs**. A widget
+/// names the role; the host maps it to a family, so nothing here knows a font's name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FontRole {
     /// The theme's monospace text family (default).
@@ -314,6 +314,15 @@ pub enum FontRole {
     Text,
     /// The embedded icon font (Phosphor); the codepoint is a glyph.
     Icon,
+    /// The embedded **Nerd Font** ([`NfIcon`](crate::widgets::NfIcon)); the codepoint is one of its
+    /// glyphs.
+    ///
+    /// A third role rather than a variant of `Icon` because it is a different font with a different
+    /// job: Phosphor is the app's pictogram set, the Nerd Font supplies the glyphs Phosphor has none
+    /// of — keyboard keys above all (`⇧`, `⌘`, `⎋`), which is why a keycap uses it. The alternative
+    /// was drawing those as plain text in the UI face, and the UI face has no `⌃ ⌥ ⌘ ⎋`: they render
+    /// as tofu. Verified against the embedded font's cmap, not assumed.
+    NerdFont,
 }
 
 /// The **font style** of a text run: what the shaper does to the glyphs.

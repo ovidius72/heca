@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-30T10:03:51.152Z
+**Last updated:** 2026-08-03T14:50:00.497Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -37,6 +37,11 @@ Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colon
 - Ogni azione utente deve passare per ActionRegistry e KeymapRegistry, con keybinding configurabili.
 - Nessun hardcode di colori, keybinding o stile: leggere da Theme/config.
 - Ogni capability significativa deve essere raggiungibile da mouse/UI, keyboard/action e RPC quando appropriato.
+- PRE-FLIGHT before any UI code, answered in writing: (1) which existing widget/function/action does this — name it; (2) if none, which planner task covers it — search the PIECES, not just the feature, and quote the id; (3) if neither, it is a proposal, not a commit — and it gets filed in the planner, never left in a prose list.
+- WIDGET vs COMPONENT — capability decides, not size. If it can be built inside heca-grid-ui it is a widget and lives there (a UI library also ships Dialog, Select, ContextMenu, CommandPalette). A COMPONENT composes widgets AND binds an app concept (Intent, action name, drag id, hint target id, chrome signal, nav_key) and lives in heca/src/components/. A composition that binds none of those is a widget in the wrong crate.
+- Composition inside heca-grid-ui is REAL CHILDREN in Base.children — the framework walks them (layout, paint, capture/bubble). ViewNode describes a tree as DATA for plugins/config/RPC and is realized ABOVE the library; it is unavailable inside grid-ui (heca-view-realize depends on heca-grid-ui). Hand-painting a composition is never the answer.
+- A component takes plain data plus the seams it binds (Intent/emitter, &mut BuildCx, an action NAME, the theme) and NEVER &AppState — AppState needs a window, so a component taking it cannot be tested. Every component ships one headless unit test asserting the built tree or the painted scene, never a flag.
+- Never re-compose an existing shape inline in chrome/, a provider, the sidebar or a plugin. Import the component; if you need a variation, add a builder to it. Copying a composition is how a row shape becomes unreachable outside the file that drew it.
 
 ## Workflow Rules
 
@@ -192,7 +197,7 @@ Sistema notifiche configurabile per Heca. V1 implementa notifiche in-app tramite
 Status: 📋 `planned`
 
 **Phases:**
-- 📋 **03b297bb-a915-4712-a6b4-dc688dc7ddc5** P055 — notification-06: Routing + Additional Producers (0/7 tasks)
+- 📋 **03b297bb-a915-4712-a6b4-dc688dc7ddc5** P055 — notification-06: Routing + Additional Producers (0/8 tasks)
 - 📋 **93379c9a-43b7-43eb-8988-be505251fe79** P056 — notification-02: Store + Lifecycle (0/9 tasks)
 - 📋 **461b88ca-5faa-4bea-8734-6c98587f115d** P057 — notification-09: Tests + Documentation (0/8 tasks)
 - 📋 **949d48a4-6001-42b2-a12c-25ba69a95c24** P058 — notification-08: Toast Keyboard Hint Integration (0/4 tasks)
@@ -214,6 +219,55 @@ Status: 📋 `planned`
 - 📋 **dcf9ff70-cf6e-416e-8e46-8cc36b4ec233** P071 — Notification (0/2 tasks)
 - 📋 **6d582a8a-3b10-4157-8009-2b2db2825e29** P072 — Actions/Keybindings (0/4 tasks)
 - 📄 **13be12b1-e912-4117-88bb-6ac85e230bcf** P073 — WhichKey Like Modal (0/0 tasks)
+
+### 📋 873f81ba-ce7c-4bcc-90ed-27a25a742285 — F011 — 🧱 Component Breakout
+
+# Component Breakout
+
+**App-level UI is written inline where it is used, so nothing can be reused by name.** Every composed shape — a dock row, a pane header, an action button — exists only inside the one function that needed it. The bricks are shared (grid-ui widgets); the walls are not. The moment a second dock (F003/P085/T359) or a plugin wants the same row, the only route is to read that provider and copy it.
+
+**The rule this feature applies is NOT written here.** Widget-vs-component, how a component is built, how it is used, and the pre-flight that precedes any UI code are **project-level global rules** (planner project `globalRules`) and AGENTS.md § 0/0b. They govern every feature, not this one — a second copy here would drift and would imply the rule expires when the feature closes. This feature is only the **work**: create the folder, extract the compositions, test them, delete the inline copies.
+
+# Current state — the inline compositions, by file
+
+**`heca/src/providers/workspaces/mod.rs`** (35 composition sites)
+- `pane_card()` :728 — the dock's pane row. **Eleven parameters**: entry, mount, programs, theme, emit, active pane, container state, and the three `BuildCx` registries. Registers a drag source/target, a hint target, a nav key, an active marker, info segments and badges. This is the row a second dock and every plugin needs, and it is unreachable outside this file.
+- `column_view()` :1008 — the column row, same shape, separately written.
+- `build_workspaces_container()` :1084, `build_body()` :624 — the tree body.
+
+**`heca/src/chrome/mod.rs`** (30 composition sites, 4960 lines — host logic and UI composition in one file)
+- `build_pane_info_bar()` :323 — icon+text segments with a hand-rolled overflow budget (:391) that measures with its own `char_w = font * 0.6`, a copy of `MONO_ADVANCE_RATIO`, and left-ellipsises one segment via `truncate_path_left()` :286.
+- `build_pane_header()` :782 — title + action buttons, each wired by hand through the two-step recipe AGENTS documents (`action_tooltip()` :521 + `hints.register(...)`).
+- `build_pane_viewport_widgets()` :906, `build_region_content()` :1623, `build_sidebar_shell()` :1699, `build_chrome_root()` :3336.
+
+**Already-shared app seams — the shape the rest should have**: `open_modal()` / `open_dropdown()` (`heca/src/chrome/overlay.rs` :162/:303) — every menu and confirm dialog goes through one builder; `action_tooltip()` composes every button's tip identically; `realize()` turns a described tree into widgets for anyone.
+
+# Goals
+
+1. **`heca/src/components/`** — the one home for reusable app-level compositions.
+2. **Named components built from grid-ui widgets** — no hand-painting, no re-deriving a measure, a hit-test or a scroll offset a widget already owns.
+3. **A unit test per component**, headless — which is what the project rule "never `&AppState`" exists *for*.
+4. **Replace every inline copy** with the component, in the same task that extracts it — an extraction with the old code still in place is two sources of truth.
+
+# Behaviors to preserve
+
+- **Pixel-identical output.** Every one of these is a visual surface the maintainer verifies by hand; an extraction that changes the look is a regression, not a refactor.
+- Theme-driven styling only — no hardcoded size/padding/alpha/colour survives the move.
+- Host id registration keeps going through `BuildCx`, and hint ids stay **monotonic** across trees (`HintTargetRegistry`, the `remove_range` contract).
+- Action wiring keeps going through the central path: the action's **name** resolves its icon, shortcut and tooltip — a component never spells a shortcut or picks a glyph itself.
+- Drag/drop, nav keys and per-mount cursors keep their current semantics (`nav_key`, `container_cursor`, `ChromeDragItem`).
+
+# Dependencies
+
+Some extractions are blocked on the library owning what it should: `Label` truncation (recorded as an open gap in AGENTS.md, never filed as a task — the pane info bar's budget fitter cannot move cleanly until it exists) and a second line on `Item`. Those are **grid-ui** work (F004), not this feature; file and land them there first where a phase says so.
+
+Status: 📋 `planned`
+
+**Phases:**
+- 📋 **66b0de41-be11-474f-badf-f2b9b934eaf9** P087 — The seam: components/ and the first extraction (0/2 tasks)
+- 📋 **65a7a9a7-741e-4f42-b40f-5dc8a784c2e9** P088 — The dock row — the shape a second dock and every plugin needs (0/1 tasks)
+- 📋 **26f801e6-3338-4548-994b-f5a7c916a1a8** P089 — The pane header and the info bar come out of chrome/mod.rs (0/2 tasks)
+- 📋 **839f99ba-5604-47a5-bb43-1968ee9cf697** P090 — The rule holds: no new inline composition (0/1 tasks)
 
 ---
 ## Requirements
@@ -488,6 +542,38 @@ Status: 📋 `planned`
 
 **Tasks:** 0/2
 
+### 📋 66b0de41-be11-474f-badf-f2b9b934eaf9 — P087 — The seam: components/ and the first extraction
+
+Create heca/src/components/, fix the contract and the test pattern, and prove both on the highest-frequency composition — the chrome action button.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/2
+
+### 📋 65a7a9a7-741e-4f42-b40f-5dc8a784c2e9 — P088 — The dock row — the shape a second dock and every plugin needs
+
+Extract pane_card / column_view out of the workspaces provider into named row components, and make the workspaces dock the first consumer.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/1
+
+### 📋 26f801e6-3338-4548-994b-f5a7c916a1a8 — P089 — The pane header and the info bar come out of chrome/mod.rs
+
+Extract the header (title + action buttons) and the segment bar (icons + text + overflow) into components, deleting the hand-rolled measure and truncation with them.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/2
+
+### 📋 839f99ba-5604-47a5-bb43-1968ee9cf697 — P090 — The rule holds: no new inline composition
+
+Write the widget-vs-component boundary into AGENTS and docs, and make "an app file composing widgets inline" something a check can see rather than something a reviewer must notice.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/1
+
 ### ✅ 06906105-3054-4bda-9751-04902e03aefe — P001 — theming-02: Migrate heca-config to heca-theme
 
 Aggiungere `heca-theme` come dipendenza, rimuovere il codice colore legacy e aggiornare loader/default theme.
@@ -737,6 +823,14 @@ Status: 🚧 `in-progress`
 
 **Tasks:** 3/5
 
+### 🚧 1b6f739f-8774-4da2-af4f-5f88d0514507 — P091 — gridui-11: Text fits its box — Label truncation and Item's second line
+
+The library's missing text capability, recorded as an open gap in AGENTS for months and worked around four separate times.
+
+Status: 🚧 `in-progress`
+
+**Tasks:** 0/3
+
 ### 📋 099e2eb5-30be-4f3c-ab57-a4f111cdc44c — P021 — plugin-06: Placeholder token system
 
 Token `${var}` per pane/column/workspace metadata in chrome e config.
@@ -959,7 +1053,7 @@ Choke point `notify`, routing per app/system/none e producer aggiuntivi.
 
 Status: 📋 `planned`
 
-**Tasks:** 0/7
+**Tasks:** 0/8
 
 ### 📋 93379c9a-43b7-43eb-8988-be505251fe79 — P056 — notification-02: Store + Lifecycle
 

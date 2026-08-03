@@ -14,6 +14,10 @@ bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 heca-theme = { path = "../heca-theme" }
+# Reads the embedded faces' cmap so `tests/font_coverage.rs` can prove every glyph the widgets name
+# is actually in the font. Already in the tree (cosmic-text → fontdb → ttf-parser), so it adds a
+# test, not a dependency.
+ttf-parser = "0.25"
 # The showcase renders a described tree beside its hand-built twin. Both crates sit below this one,
 # which is the point of F003/P017/T009 — while `realize` was inside the `heca` binary no example
 # could call it, so nothing declarative could be looked at outside the app.

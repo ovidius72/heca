@@ -10,6 +10,7 @@ mod focus;
 mod host;
 mod layers;
 mod overlay;
+mod palette;
 mod state;
 // Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
@@ -46,6 +47,9 @@ pub(crate) use context_menu::{
     ContextPath, ContextTarget,
 };
 pub use context_menu::MenuBuild;
+// The command palette: every registered action, searchable, dispatched through the one door
+// (F003/P085/T358).
+pub(crate) use palette::open_command_palette;
 pub use contribution::{ContextMenuContribution, Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 // Chrome keyboard focus: which dock the keyboard is aimed at (F003/P011/T020).
@@ -463,8 +467,20 @@ pub(crate) struct RetainedPaneViewportWidgets {
 /// shortcut up by the name of the action it triggers, so the choice is never
 /// hand-made by a caller or plugin. The leader renders through the central
 /// [`PREFIX_SYMBOL`](crate::shortcut) seam, uniform across the app.
+/// **The bindings, not a sentence** (F003/P085/T358). One entry per binding, in the index's order —
+/// an action bound in two layers has two — and each stored as the **raw** config key
+/// (`"prefix+Shift+e"`), spelled for display on read.
+///
+/// It used to store one pre-joined display string, which decided for every surface at once. That is
+/// what left the command palette unable to draw keycaps: a surface that wants a line joins, a
+/// surface that wants a chip per key cannot un-join — and the two want different spellings anyway
+/// (a keycap draws a Nerd Font `⇧`, a tooltip has to write `Shift`).
 #[derive(Clone, Default, PartialEq)]
-pub(crate) struct ActionShortcuts(std::collections::HashMap<String, String>);
+pub(crate) struct ActionShortcuts {
+    by_action: std::collections::HashMap<String, Vec<String>>,
+    /// How [`get`](ActionShortcuts::get) spells a binding for a **text** surface.
+    style: crate::shortcut::KeyStyle,
+}
 
 impl ActionShortcuts {
     /// Resolve a display shortcut for every action the **built keymaps** bind (F003/P086/T366).
@@ -475,27 +491,63 @@ impl ActionShortcuts {
     /// a plugin registered at runtime. A tooltip that says nothing for a key the user can actually
     /// press is the bug this closes.
     ///
-    /// An action bound in several layers shows all of them, joined — a component's `j` and a mode's
-    /// `j` are both real, and picking the first would be a guess.
-    pub(crate) fn from_index(index: &crate::keymap::BindingIndex) -> Self {
-        let map = index
+    /// An action bound in several layers keeps all of them — a component's `j` and a mode's `j` are
+    /// both real, and picking the first would be a guess.
+    ///
+    /// `style` is how [`get`](Self::get) spells a binding for a text surface — the optional
+    /// spelling switch, chosen once here rather than at each of the call sites that render a tip.
+    /// Keycaps are unaffected: they read [`chords`](Self::chords) and draw glyphs.
+    pub(crate) fn from_index(
+        index: &crate::keymap::BindingIndex,
+        style: crate::shortcut::KeyStyle,
+    ) -> Self {
+        let by_action = index
             .iter()
             .filter_map(|(action, bound)| {
-                let keys: Vec<String> = bound
-                    .iter()
-                    .map(|b| {
-                        crate::shortcut::format_shortcut(&b.key, b.key.starts_with("prefix+"))
-                    })
-                    .collect();
-                (!keys.is_empty()).then(|| (action.clone(), keys.join(" / ")))
+                // **One entry per distinct key.** A config can bind the same physical key twice
+                // under two spellings — the shipped default did: `cursor_up = "k,Up,ArrowUp"`, and
+                // `Up` and `ArrowUp` both parse to `GridKey::ArrowUp` — and the index keeps both,
+                // correctly, because it records what was written. A surface showing them draws the
+                // same keycap twice. Deduped here rather than in the config, because a user's own
+                // file can do it too and their config is not ours to police.
+                let mut keys: Vec<String> = Vec::new();
+                let mut seen: Vec<Vec<heca_grid_ui::widgets::KeyCap>> = Vec::new();
+                for b in bound {
+                    // Compared as **caps**, not as text: the caps come from the one key table, which
+                    // maps `up` and `arrowup` (and `enter`/`return`) to a single glyph — so two
+                    // spellings of one key collapse in every display style, while two genuinely
+                    // different keys stay two.
+                    let caps = crate::shortcut::chord_caps(&b.key);
+                    if !seen.contains(&caps) {
+                        seen.push(caps);
+                        keys.push(b.key.clone());
+                    }
+                }
+                (!keys.is_empty()).then(|| (action.clone(), keys))
             })
             .collect();
-        Self(map)
+        Self { by_action, style }
     }
 
-    /// The display shortcut for `action_name`, or `None` when unbound.
-    pub(crate) fn get(&self, action_name: &str) -> Option<&str> {
-        self.0.get(action_name).map(String::as_str)
+    /// Every binding of `action_name` as its **raw config key**, in the index's order — empty when
+    /// unbound. What a surface drawing keycaps reads, through
+    /// [`chord_caps`](crate::shortcut::chord_caps).
+    pub(crate) fn chords(&self, action_name: &str) -> &[String] {
+        self.by_action.get(action_name).map_or(&[], Vec::as_slice)
+    }
+
+    /// The display shortcut for `action_name` as **one line** (several joined with ` / `), or `None`
+    /// when unbound — what a tooltip, which has a single line, shows.
+    pub(crate) fn get(&self, action_name: &str) -> Option<String> {
+        let keys = self.by_action.get(action_name)?;
+        let line = keys
+            .iter()
+            .map(|k| {
+                crate::shortcut::format_shortcut_styled(k, k.starts_with("prefix+"), self.style)
+            })
+            .collect::<Vec<_>>()
+            .join(" / ");
+        (!line.is_empty()).then_some(line)
     }
 }
 
@@ -714,10 +766,10 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     // re-truncate the location segment.
     let w_bucket = (avail_w / 16.0) as i32;
     // Tooltip hints for the configured actions (so a rebind rebuilds the tips).
-    let hints: Vec<&str> = content
+    let hints: Vec<String> = content
         .actions
         .iter()
-        .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or(""))
+        .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or_default())
         .collect();
     format!(
         "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",

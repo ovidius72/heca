@@ -1126,6 +1126,25 @@ impl<'a> PaintCx<'a> {
         self.icon_glowing(rect, glyph, color, size, None);
     }
 
+    /// Draw a **Nerd Font** glyph — the counterpart of [`icon`](PaintCx::icon) for the app's second
+    /// glyph set ([`NfIcon`](crate::widgets::NfIcon)), which supplies what Phosphor has none of:
+    /// keyboard keys. `glyph` is the codepoint as a string.
+    pub fn nf_icon(&mut self, rect: Rectangle, glyph: &str, color: Color, size: f32) {
+        if self.culled(rect) {
+            return;
+        }
+        self.scene.push(DrawCommand::Text(TextCmd {
+            rect: self.placed(rect),
+            text: glyph.to_string(),
+            color,
+            size,
+            align: TextAlign::Center,
+            style: TextStyle::REGULAR,
+            font: FontRole::NerdFont,
+            glow: None,
+        }));
+    }
+
     /// [`icon`](PaintCx::icon) with an additive halo behind the glyph.
     ///
     /// This is the glyph counterpart of a surface's glow, and it goes through the

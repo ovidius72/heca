@@ -144,6 +144,15 @@ pub fn enqueue_scene(
             DrawCommand::Scanline(s) => draw_scanlines(grid, s),
             DrawCommand::Text(t) => {
                 let (x, y, w, h) = xywh(&t.rect);
+                // The scene names a **role**; which family that is lives here, so no widget knows a
+                // font's name. `Icon` has its own flag (the icon family is resolved inside the text
+                // renderer); `NerdFont` rides the per-run family override the terminal path already
+                // uses, so it needed no new plumbing.
+                let (icon, family) = match t.font {
+                    FontRole::Text => (false, None),
+                    FontRole::Icon => (true, None),
+                    FontRole::NerdFont => (false, Some(crate::font::NERD_FONT_FAMILY)),
+                };
                 text.queue_text_in_box(
                     &t.text,
                     x,
@@ -155,7 +164,8 @@ pub fn enqueue_scene(
                     t.style.bold,
                     t.style.italic,
                     t.align,
-                    t.font == FontRole::Icon,
+                    icon,
+                    family,
                     // The scene asks for a halo declaratively; the text renderer
                     // decides how to realize it (see `TextGlow`).
                     t.glow.map(|g| crate::text::TextGlow {

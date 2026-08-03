@@ -1,0 +1,77 @@
+{
+  "id": "66b0de41-be11-474f-badf-f2b9b934eaf9",
+  "featureId": "873f81ba-ce7c-4bcc-90ed-27a25a742285",
+  "number": 87,
+  "shortId": "E3D3Y",
+  "priority": 1,
+  "slug": "the-seam-components-and-the-first-extraction",
+  "title": "The seam: components/ and the first extraction",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Create heca/src/components/, fix the contract and the test pattern, and prove both on the highest-frequency composition — the chrome action button.",
+  "description": "The folder plus the two rules that decide everything after it, proven on one real extraction rather than asserted in a doc.\n\n## What exists\n\nThere is no `heca/src/components/`. App-level composition lives in `heca/src/chrome/mod.rs` (4960 lines) and inside providers.\n\nThe **chrome action button** is the highest-frequency inline composition and the best first subject, because AGENTS already documents it as a two-step recipe every caller repeats by hand (AGENTS § \"Chrome buttons → action, tooltip, KeyHint\"):\n\n1. `action_tooltip(button, action_name, label, &state.action_shortcuts)` — `heca/src/chrome/mod.rs:521` — composes `\"<label>  <shortcut>\"` from the action's **name**.\n2. `hints.register(InteractionIntent::…)` + `.hint_target(id)` + `.on_click(move || emit(…))` — the same intent registered twice, once for the pick and once for the click.\n\nCall sites doing this by hand include `build_pane_header()` :782 (per configured `PaneAction`, via `pane_action_spec()` :549), `sidebar_toggle_button`, and the overlay's action buttons (`heca/src/chrome/overlay.rs:431`, which already funnels through `action_tooltip`).\n\n## The contract to fix here\n\n- A component takes **plain data plus the app seams it binds** — `Intent` / `ChromeIntentEmitter`, `&mut BuildCx` (drag, hints, signals), an action **name**, a theme. **Never `&AppState`**: it cannot be constructed in a test (it needs a window), so a component that takes it is a component that cannot be tested. Same split that made `route_in_domain`, `cursor_follow` and `resolve_context_for` testable.\n- A component **never** spells a shortcut, picks a glyph, or hardcodes a measure. Name the action; the catalog and `ActionShortcuts` answer.\n- If a proposed component binds **no** app concept, it is a widget in the wrong crate — send it to `heca-grid-ui` instead.\n\n## Test pattern to establish\n\nHeadless, asserting the built tree or the painted scene — not a flag. Follow `heca/src/providers/mod.rs::the_shared_context_carries_nothing_of_one_components_domain` (builds through `ChromeCtx::for_build`, asserts children and what the host registries received) and `heca-grid-ui/tests/phase_a.rs` (paint into a `Scene`, assert `DrawCommand`s). For the action button, assert: the tooltip carries the action's live shortcut, a hint target was registered, and click + pick carry the **same** intent.\n\n## Behaviors to preserve\n\nIdentical pixels; identical hint ids (monotonic, ranges still removed on rebuild); identical tooltip text; the existing `pane_action_spec` mapping of `PaneAction` → (glyph, action, label, focus-first) stays the single source of what a header button is.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "1c359f48-7df4-4d73-80e1-0a6552dd1846"
+  ],
+  "tasks": [
+    {
+      "id": "1c359f48-7df4-4d73-80e1-0a6552dd1846",
+      "phaseId": "66b0de41-be11-474f-badf-f2b9b934eaf9",
+      "number": 373,
+      "shortId": "PVLTV",
+      "priority": 1,
+      "shortName": "heca-src-components-exists-wit",
+      "title": "heca/src/components/ exists, with the contract and the test pattern in its module doc",
+      "status": "planned",
+      "description": "The folder and its rules, before anything moves into it — so the first extraction has something to be correct against.\n\n## What exists\n\nNothing. App-level composition lives in `heca/src/chrome/mod.rs` (4960 lines) and inside providers. `heca/src/main.rs` declares the module list (`mod actions; mod app; mod chrome; …`) — `mod components;` joins it there.\n\n## What to build\n\n`heca/src/components/mod.rs` whose module doc states the contract that the project `globalRules` and AGENTS § 0b define, in the terms of this codebase:\n\n- what may live here (composes widgets **and** binds an app concept: `Intent`, an action **name**, a drag id, a hint target id, a chrome signal, a `nav_key`) versus what belongs in `heca-grid-ui`;\n- the signature rule: plain data + the seams (`Intent` / `ChromeIntentEmitter`, `&mut BuildCx`, an action name, `&GuiTheme`) and **never `&AppState`** — it needs a window, so it cannot exist in a test;\n- what a component returns: a `Component` / `WidgetModel` built from library widgets — no `paint`, no measure, no hit-test, no scroll offset;\n- the test rule: one headless test per component.\n\nNothing else in this task. An empty folder with a written contract is the point; the proof follows in the next task.\n\n## Edge cases\n\n- `main.rs` is a binary crate — the module must be reachable from `chrome/` and `providers/` (both already `crate::`-rooted), so plain `pub(crate)` items are enough; nothing here is part of a public API.\n- Do **not** create a `components/` module inside `heca-grid-ui`. The library's own compositions (`Dialog`, `Select`, `CommandPalette`) are widgets and stay where they are.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1c359f48-7df4-4d73-80e1-0a6552dd1846-check-001-mod-components-declared-in-main-rs",
+          "number": 1,
+          "title": "mod components; declared in main.rs",
+          "checked": false
+        },
+        {
+          "id": "1c359f48-7df4-4d73-80e1-0a6552dd1846-check-002-module-doc-states-what-belongs-here-vs-grid-ui-the-signature-rule-never-appstate-what-it-returns-the-test-rule",
+          "number": 2,
+          "title": "module doc states: what belongs here vs grid-ui, the signature rule (never &AppState), what it returns, the test rule",
+          "checked": false
+        },
+        {
+          "id": "1c359f48-7df4-4d73-80e1-0a6552dd1846-check-003-no-component-moved-yet-that-is-the-next-task",
+          "number": 3,
+          "title": "no component moved yet — that is the next task",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-30T13:37:32.074Z",
+      "updatedAt": "2026-07-30T13:37:32.074Z"
+    }
+  ],
+  "createdAt": "2026-07-30T13:27:19.410Z",
+  "updatedAt": "2026-07-30T13:37:32.074Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

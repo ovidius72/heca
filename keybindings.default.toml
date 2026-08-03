@@ -628,10 +628,10 @@ name              = "workspaces"
 # The same keystroke `sidebar_focus` used to own. It is a plain container key now: nothing
 # app-side knows this dock exists, and a second component asks for its own the same way.
 global_focus      = "prefix+e"
-cursor_up         = "k,Up,ArrowUp"
-cursor_down       = "j,Down,ArrowDown"
-collapse_row      = "h,Left,ArrowLeft"
-activate_selected = "l,Right,ArrowRight,Enter"
+cursor_up         = "k,ArrowUp"
+cursor_down       = "j,ArrowDown"
+collapse_row      = "h,ArrowLeft"
+activate_selected = "l,ArrowRight,Enter"
 peek_selected     = "Space"
 toggle_selected   = "Tab"
 # The mutations. Each acts on the row the cursor is on, so they need no prefix and no mode — the

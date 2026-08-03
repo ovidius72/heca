@@ -23,6 +23,7 @@ mod focus_scope;
 mod gauge;
 mod grid;
 mod icon;
+mod nf_icon;
 mod icon_button;
 mod input;
 mod item;
@@ -73,12 +74,16 @@ pub use focus_scope::FocusScope;
 pub use gauge::Gauge;
 pub use grid::Grid;
 pub use icon::{Glyph, Icon};
+pub use nf_icon::{NfGlyph, NfIcon};
 pub use icon_button::IconButton;
 pub use input::Input;
 pub use item::{ActiveMarker, Item};
 pub use item_group::ItemGroup;
-pub use key_hint::{HintPlacement, KeyHint, KeycapVariant, keycap_size, paint_keycap};
-pub use label::Label;
+pub use key_hint::{
+    HintPlacement, KeyCap, KeyHint, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap,
+    paint_keycap_nf,
+};
+pub use label::{Ellipsis, Label};
 pub use marker_group::MarkerGroup;
 pub use pane::{Pane, PaneFrame};
 pub use progress::ProgressBar;

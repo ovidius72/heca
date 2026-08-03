@@ -82,12 +82,43 @@ impl HecaApp {
                 dispatch_action(state, &self.registry, InteractionSource::Rpc, &action);
                 Ok(())
             }
-            rpc::RpcCommand::Intent(intent) => {
-                match dispatch_view_intent(state, &self.registry, InteractionSource::Rpc, &intent) {
+            rpc::RpcCommand::Intent { intent, dock } => {
+                // **Which placement, and does it need the keyboard?** (F003/P085/T358)
+                //
+                // `--dock` names the seating outright. Without it, an action a *component* declared
+                // still has to land somewhere, and `owning_mount` is the one rule that says where —
+                // the same answer a click inside the component and a palette entry get.
+                //
+                // Either way the call goes through focus-then-act, so a component's
+                // `ContainerFocused` verb ("act on the row my cursor is on") is reachable from a
+                // script without the script first faking a keypress: the container is focused, as
+                // the user would have done, and the action is then judged by the ordinary policy.
+                // A built-in has no owner and is dispatched straight, exactly as before.
+                let container = dock.or_else(|| {
+                    state
+                        .action_catalog
+                        .find(&intent.action)
+                        .and_then(|m| m.owner.as_ref())
+                        .and_then(|_| crate::providers::owning_mount(state, &intent.action))
+                });
+                let outcome = match container {
+                    Some(container) => crate::app::interaction::focus_container_then_action(
+                        state,
+                        &self.registry,
+                        InteractionSource::Rpc,
+                        &container,
+                        &intent,
+                    ),
+                    None => {
+                        dispatch_view_intent(state, &self.registry, InteractionSource::Rpc, &intent)
+                    }
+                };
+                match outcome {
                     IntentOutcome::Ran => Ok(()),
                     IntentOutcome::Unknown => Err(rpc::RpcError::UnknownCommand(intent.action)),
                     IntentOutcome::Blocked => Err(rpc::RpcError::Blocked(intent.action)),
                     IntentOutcome::NotRunnable => Err(rpc::RpcError::NotRunnable(intent.action)),
+                    IntentOutcome::MissingArgs => Err(rpc::RpcError::MissingArgs(intent.action)),
                 }
             }
         }
@@ -164,6 +195,9 @@ impl HecaApp {
             // so would stack another container/effect view each reload. Changing
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
+            // Re-read on reload like the rest: change the setting, press reload, the next palette
+            // opens at the new size.
+            state.command_palette_size = self.app_config.config.settings.command_palette_size;
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();
@@ -187,7 +221,10 @@ impl HecaApp {
             crate::chrome::clear_pane_headers(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.widget_keymap = crate::app::registry::build_widget_keymap(&self.app_config.config);
-            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(&self.keymaps.by_action);
+            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(
+                &self.keymaps.by_action,
+                crate::shortcut::KeyStyle::Compact,
+            );
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
@@ -275,7 +312,10 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             );
             // Only now does every layer exist, so this is the first moment a tooltip can be told
             // the truth about which key runs an action.
-            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(&self.keymaps.by_action);
+            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(
+                &self.keymaps.by_action,
+                crate::shortcut::KeyStyle::Compact,
+            );
             // Everything that can register has now registered — config, built-ins and every
             // mounted component — so this is the first moment the report can be complete.
             self.conflicts.report();

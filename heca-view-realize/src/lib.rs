@@ -1864,6 +1864,30 @@ mod tests {
             "text align reached the label",
         );
 
+        // Truncation is a described property too: a plugin's label must be able to fit its box
+        // without the plugin measuring anything. `Start` and `End` keep opposite halves, so the two
+        // paint differently the moment the box is too small for the text.
+        // The label is wrapped in a narrow container, because that is the only way truncation is
+        // ever reached: a `Label` sizes itself from its text, and the cut happens when the layout
+        // hands it less than that. A width prop on the label itself would be overwritten by its own
+        // remeasure.
+        let cut = |mode: heca_view::ViewEllipsis| {
+            painted(
+                &ViewNode::new(WidgetKind::HStack)
+                    .prop("width", PropValue::Int(60))
+                    .child(
+                        ViewNode::new(WidgetKind::Label)
+                            .text("projects/heca/src/widgets")
+                            .prop("truncate", mode.into()),
+                    ),
+            )
+        };
+        assert_ne!(
+            cut(heca_view::ViewEllipsis::Start),
+            cut(heca_view::ViewEllipsis::End),
+            "truncate reached the label — and the two ends keep different halves",
+        );
+
         let checkbox = |side: ViewLabelSide| {
             painted(
                 &ViewNode::new(WidgetKind::Checkbox)

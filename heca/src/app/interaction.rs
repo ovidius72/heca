@@ -109,6 +109,23 @@ pub(crate) enum InteractionIntent {
         pane_id: PaneId,
         action: Box<WmAction>,
     },
+    /// Focus a mounted **container**, then run an action on it — the container half of
+    /// [`FocusPaneThenAction`](Self::FocusPaneThenAction), and the way the palette and RPC reach a
+    /// component's own verbs (F003/P085/T358).
+    ///
+    /// A component's selection-dependent actions declare
+    /// [`ActionPolicy::ContainerFocused`](ActionPolicy::ContainerFocused), so "delete the row my
+    /// cursor is on" is refused unless that dock is the one being driven. That is the rule, not an
+    /// obstacle to route around: this intent **satisfies** it rather than bypassing it — it focuses
+    /// the container first, exactly as the user would, and the action is then judged by the ordinary
+    /// policy in the ordinary domain. Every half is routed on its own.
+    ///
+    /// `container` is a **mount id** (resolved by `owning_mount` / an explicit `--dock`), so a
+    /// component seated twice is acted on in the seating the caller meant.
+    FocusContainerThenAction {
+        container: String,
+        action: ViewIntent,
+    },
     /// Focus a specific pane (from sidebar click, content click, or RPC).
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
@@ -177,10 +194,13 @@ pub(crate) enum Domain {
 ///
 /// - an overlay that covers the tiled area wins over everything — whatever else is true, the panes
 ///   are not what the user is looking at;
-/// - a container holding the keyboard decides for **keyboard-driven** interactions (a key, or a
-///   component's own `perform`), even with a floating pane active: the user is driving the dock. A
-///   mouse click lands *on* something, so it is judged by what it landed on, not by where the
-///   keyboard happens to be;
+/// - a container holding the keyboard decides for **keyboard-driven** interactions (a key, a
+///   component's own `perform`, or a script), even with a floating pane active: the user is driving
+///   the dock. A mouse click lands *on* something, so it is judged by what it landed on, not by
+///   where the keyboard happens to be — and a script lands on nothing, which is precisely why it
+///   belongs with the keys rather than with the clicks (F003/P085/T358). Without this, a component's
+///   `ContainerFocused` verb was unreachable over RPC *even with its dock focused*, so the door T371
+///   closed had no key;
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
     if crate::chrome::content_covered(state) {
@@ -188,7 +208,7 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
     }
     let keyboard_driven = matches!(
         source,
-        InteractionSource::Keyboard | InteractionSource::Provider
+        InteractionSource::Keyboard | InteractionSource::Provider | InteractionSource::Rpc
     );
     if keyboard_driven && state.chrome_state.focused_container().is_some() {
         return Domain::Container;
@@ -529,6 +549,9 @@ pub(crate) fn route_in_domain(
         InteractionIntent::FocusPaneThenAction { action, .. } => {
             route_action(session, domain, source, action)
         }
+        // Likewise expanded before routing. Defensively it is a `View` intent: the name resolves to
+        // its real policy when `dispatch_view_intent` looks it up.
+        InteractionIntent::FocusContainerThenAction { .. } => RouteDecision::Allow(intent),
         // FocusPane from mouse content/sidebar: only the active floating pane can receive focus in
         // the floating domain, and nothing behind an overlay can.
         InteractionIntent::FocusPane { .. }
@@ -762,6 +785,14 @@ pub(crate) fn dispatch_intent(
         return;
     }
 
+    // The container half of the same composite. Its outcome is dropped here — a click and a menu
+    // pick have nowhere to report one — while RPC calls the same function for the answer.
+    if let InteractionIntent::FocusContainerThenAction { container, action } = &intent {
+        let (container, action) = (container.clone(), action.clone());
+        focus_container_then_action(state, registry, source, &container, &action);
+        return;
+    }
+
     // Composite: focus the pane, then run the action — each half policy-routed on its
     // own (mirrors what an active-targeted pane button does across two events on click).
     if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {
@@ -788,8 +819,11 @@ pub(crate) fn dispatch_intent(
                 registry.execute(&act, state);
             }
         }
-        // Expanded to FocusPane + the action above (before routing), so this is
-        // unreachable in practice; handle it defensively as focus-then-act.
+        // Both composites are expanded before routing, so neither reaches here in practice;
+        // handled defensively as focus-then-act rather than silently dropped.
+        RouteDecision::Allow(InteractionIntent::FocusContainerThenAction { container, action }) => {
+            focus_container_then_action(state, registry, source, &container, &action);
+        }
         RouteDecision::Allow(InteractionIntent::FocusPaneThenAction { pane_id, action }) => {
             registry.execute(&WmAction::FocusPane { pane_id }, state);
             registry.execute(&action, state);
@@ -814,6 +848,43 @@ pub(crate) fn dispatch_intent(
             eprintln!("[heca] interaction: blocked intent from {:?}", source);
         }
     }
+}
+
+/// Focus `container`, then dispatch `action` at it — the one implementation behind
+/// [`InteractionIntent::FocusContainerThenAction`], shared by the palette and RPC
+/// (F003/P085/T358).
+///
+/// **The focus half is skipped when that container already holds the keyboard**, and this is not an
+/// optimization: `focus_dock` aimed at the focused dock is deliberately a *toggle* (it is the way
+/// back out, F003/P085/T352), so focusing unconditionally would release the keyboard and leave the
+/// action to be refused by the very policy this exists to satisfy.
+///
+/// Returns what became of the **action** — the focus half is a means, not the answer a caller asked
+/// for. A container that is not mounted is [`IntentOutcome::NotRunnable`]: nothing is focused and
+/// nothing runs, rather than the action falling through to whatever else declares that name.
+pub(crate) fn focus_container_then_action(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    source: InteractionSource,
+    container: &str,
+    action: &ViewIntent,
+) -> IntentOutcome {
+    if state.chrome_host.provider(container).is_none() {
+        #[cfg(debug_assertions)]
+        eprintln!("[heca] interaction: no container mounted as '{container}'");
+        return IntentOutcome::NotRunnable;
+    }
+    if state.chrome_state.focused_container().as_deref() != Some(container) {
+        dispatch_action(
+            state,
+            registry,
+            source,
+            &WmAction::FocusDock {
+                dock: Some(container.to_string()),
+            },
+        );
+    }
+    dispatch_view_intent(state, registry, source, action)
 }
 
 pub(crate) fn dispatch_action(
@@ -900,6 +971,20 @@ pub(crate) fn dispatch_view_intent(
         return IntentOutcome::Ran;
     }
 
+    // A built-in the caller could not build is an **arity** failure, and saying so is the whole
+    // point: without this it fell through to the name-keyed branch below, where the catalog does
+    // hold its metadata, no dynamic handler exists, and the answer came back `NotRunnable` —
+    // "component not mounted?" about one of the app's own compiled-in actions. `heca action
+    // add_pane_to_column` said that; the palette listing it said nothing at all (F003/P085/T358).
+    if state.action_catalog.is_builtin(&intent.action) {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[heca] interaction: '{}' is a built-in whose required arguments were not supplied",
+            intent.action
+        );
+        return IntentOutcome::MissingArgs;
+    }
+
     // 2. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
     //    built-in path reaches through `route_action`, so a plugin action is judged by identical
     //    rules.
@@ -956,6 +1041,11 @@ pub(crate) enum IntentOutcome {
     Unknown,
     /// Known, but its policy does not permit it in the current domain.
     Blocked,
+    /// A **built-in whose required arguments were not supplied** — `close_pane_by_id` with no
+    /// `pane_id`, `add_pane_to_column` with no column. Its own answer, because the caller's mistake
+    /// is fixable and none of the other three say what is wrong: the name is real, the domain has
+    /// no opinion, and the action is perfectly runnable with arguments (F003/P085/T358).
+    MissingArgs,
     /// Declared, but nothing here can run it: its component is not mounted, or it is a plugin's to
     /// run across a boundary that does not exist yet.
     NotRunnable,
@@ -1263,6 +1353,67 @@ mod tests {
                     None,
                 ),
                 "{domain:?} is not a dock being driven",
+            );
+        }
+    }
+
+    /// **A script is judged like a key, not like a click** (F003/P085/T358).
+    ///
+    /// A click lands *on* something and is judged by what it landed on; a script lands on nothing,
+    /// so where the keyboard is *is* the context. Without this, `heca action workspaces.delete_row`
+    /// was refused even with the workspaces dock focused — the policy T371 introduced had no door at
+    /// all from RPC, which is what `FocusContainerThenAction` exists to open.
+    #[test]
+    fn a_script_is_judged_where_the_keyboard_is() {
+        let session = test_session();
+        for source in [
+            InteractionSource::Rpc,
+            InteractionSource::Keyboard,
+            InteractionSource::Provider,
+        ] {
+            assert!(
+                policy_allows(
+                    &session,
+                    Domain::Container,
+                    source,
+                    ActionPolicy::ContainerFocused,
+                    None,
+                ),
+                "{source:?} drives the focused dock",
+            );
+        }
+        // And it buys a script nothing else: with no dock focused it is refused exactly as a
+        // keypress is, which is why focusing first is the composite's job and not a special case.
+        assert!(!policy_allows(
+            &session,
+            Domain::Tiled,
+            InteractionSource::Rpc,
+            ActionPolicy::ContainerFocused,
+            None,
+        ));
+    }
+
+    /// The composite is expanded before routing, so the router only ever sees it defensively — and
+    /// passes it through, because the action half carries a *name* whose real policy is read when
+    /// `dispatch_view_intent` resolves it.
+    #[test]
+    fn the_focus_container_composite_passes_through_the_router() {
+        let session = test_session();
+        for domain in [Domain::Tiled, Domain::Container, Domain::Overlay] {
+            assert!(
+                matches!(
+                    route_in_domain(
+                        &session,
+                        domain,
+                        InteractionSource::Keyboard,
+                        InteractionIntent::FocusContainerThenAction {
+                            container: "workspaces".to_string(),
+                            action: ViewIntent::new("workspaces.delete_row"),
+                        },
+                    ),
+                    RouteDecision::Allow(InteractionIntent::FocusContainerThenAction { .. }),
+                ),
+                "{domain:?}: the name is judged on resolution, not here",
             );
         }
     }

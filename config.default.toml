@@ -15,6 +15,11 @@
 
 # ─────────────────────────────────────────────────────────────────────────────
 [settings]
+
+# Command palette size: "small" (560px, 6 rows), "normal" (700px, 8 rows) or
+# "large" (1000px, 12 rows). Width and row count only — the text is the same size at
+# every setting. On a small screen the window wins: the panel never exceeds 92% of it.
+command_palette_size = "normal"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Color theme by name. Built-ins: "grid_tron" (default), "grid_ares", "mocha",

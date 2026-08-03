@@ -37,7 +37,7 @@
       "shortName": "verify-nerdfont-license",
       "title": "Verify Nerd Font license",
       "status": "planned",
-      "description": "Verificare la licenza della font usata per i glyph Nerd Font.",
+      "description": "Verificare la licenza della font usata per i glyph Nerd Font.\n\n## Answered (2026-07-30, F003/P085/T358)\n\nThe Nerd Font the app uses for glyphs is the one it **already ships**: `heca-renderer/assets/MapleMonoNormal-NF-Regular.ttf` (+ the Bold face), embedded as the default terminal face long before this phase. Its licence sits beside it — `heca-renderer/assets/MAPLE-OFL.txt`, **SIL Open Font License 1.1**, which permits embedding and redistribution in a binary.\n\nSo there is nothing to re-verify unless a **second**, different Nerd Font is introduced — which T090 deliberately avoided by reusing this one.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -48,7 +48,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.646Z",
-      "updatedAt": "2026-07-01T18:13:27.646Z"
+      "updatedAt": "2026-07-30T12:01:29.950Z"
     },
     {
       "id": "00a749da-995d-4012-8ab4-787b5f330987",
@@ -59,7 +59,7 @@
       "shortName": "build-nficon",
       "title": "Build NfIcon widget with NfGlyph enum",
       "status": "planned",
-      "description": "Widget icon con enum di glyph semanticamente nominati.",
+      "description": "Widget icon con enum di glyph semanticamente nominati.\n\n## Partially landed early, in F003/P085/T358 (2026-07-30)\n\nThe command palette's keycaps needed key glyphs, and neither existing face could give them: Phosphor has **no keyboard glyphs at all**, and the UI face (Geist Mono) has no `⌃ ⌥ ⌘ ⎋ ⇞ ⇟`. So the core of this task was built there:\n\n- **`FontRole::NerdFont`** (`heca-grid-ui/src/scene.rs`) — a third role beside `Text`/`Icon`. The renderer maps it to `font::NERD_FONT_FAMILY` in `heca-renderer/src/scene.rs`, riding the per-run family override the terminal path already had, so `text.rs` needed no new plumbing.\n- **`NfGlyph` + `NfIcon`** (`heca-grid-ui/src/widgets/nf_icon.rs`) — single-layer (a Nerd Font glyph is one codepoint, not a duotone pair), same color-inheritance contract as `Icon`.\n- **`PaintCx::nf_icon`**, and `paint_keycap_nf` / `KeyCap::Nf` so a keycap can draw one.\n- **Showcase gallery** (`NfGlyph::ALL` with name + codepoint) and a `docs/widgets.md` § NfIcon.\n\n**No second font was embedded** (see T098): the app already ships **Maple Mono Normal NF** as the terminal face — a real Nerd Font, loaded unconditionally at renderer init and addressed by family name, so a user's own terminal font cannot take the glyphs away from the UI.\n\n### What is left for this task\n\n`NfGlyph` currently covers **the keyboard set only** — Shift, Control, Option, Command, CapsLock, Enter, Escape, Tab, Space, Backspace, ArrowUp/Down/Left/Right. T103 (wire NfIcon into the program catalog) needs the **program/devicon** glyphs, which are not in the enum yet. Adding one = variant + `codepoint()` + `name()` + `ALL`.\n\n### The trap for whoever adds glyphs\n\n`heca-renderer/tests/font_coverage.rs` proves every codepoint is **in** the embedded font (a missing one would render as tofu, which no other test can see). It **cannot** prove a name matches its picture: the font names its glyphs `uniF0636`. The five `nf-md-apple_keyboard_*` codepoints were read off the Material block's alphabetical order (caps, command, control, option, shift = F0632..F0636) and **must be confirmed by eye in the showcase gallery** — same caveat `Glyph::CaretLeft` carries. If one is off by one it is a one-character fix.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -70,7 +70,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "updatedAt": "2026-07-30T12:01:22.270Z"
     },
     {
       "id": "adce30df-62ce-4a23-900a-097fec336df5",
@@ -81,7 +81,7 @@
       "shortName": "embed-nerdfont-ranges",
       "title": "Embed Nerd Font glyph ranges",
       "status": "planned",
-      "description": "Embedding dei range di glyph usati.",
+      "description": "Embedding dei range di glyph usati.\n\n## Reconsidered (2026-07-30, F003/P085/T358)\n\n**Nothing new needs embedding today.** The app already ships a full Nerd Font — Maple Mono Normal NF, the default terminal face — loaded unconditionally at renderer init (`heca-renderer/src/text.rs`) and now addressed by family name for chrome glyphs too (`font::NERD_FONT_FAMILY`, `FontRole::NerdFont`). Every glyph `NfGlyph` names was verified present in its `cmap`.\n\nSo this task is really about **subsetting**, not embedding: the face carries ~12k codepoints and the app uses a handful outside the terminal. That is a binary-size question to answer on its own evidence (how much of it the terminal itself needs — a terminal genuinely wants the whole NF range, which may leave nothing to strip), not a prerequisite for `NfIcon`.\n\nWhoever picks this up: measure first, and check whether subsetting the terminal face breaks a user's powerline/devicon prompt before touching anything.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -92,7 +92,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "updatedAt": "2026-07-30T12:01:39.024Z"
     },
     {
       "id": "eff958f7-1129-4b46-8730-92b0aaf385ef",
@@ -118,9 +118,19 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.494Z",
+  "updatedAt": "2026-07-30T12:01:39.024Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "f50a4767-dcc5-40f1-9b4d-6454ba63045a",
+      "date": "2026-07-30T12:01:22.272Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ]
 }

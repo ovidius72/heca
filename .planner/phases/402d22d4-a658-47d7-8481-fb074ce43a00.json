@@ -38,7 +38,7 @@
       "shortName": "button-shortcut-api",
       "title": "button-shortcut-1: Button::shortcut(char) + accelerator dispatch",
       "status": "planned",
-      "description": "`Button::shortcut(char)` → composed `Icon(NerdFont ⌃) + Label(letter)` trailing slot rendered **inside** the button (via the content-slot refactor from `viewnode-task-2`). `Ctrl+<c>` self-submit + `FocusManager::deliver_accelerator`.\n\nBLOCKED on:\n- `viewnode-task-2` (Button content-slot refactor — must land first).\n- `gridui-03` `NfIcon` (NerdFont embedding — the accelerator icon uses NerdFont; Phosphor caret was judged ugly). `Glyph::CaretUp` (0xe13c) stays in the enum but the accelerator uses NerdFont.\n\nFiles: `heca-grid-ui/src/widgets/button.rs` (shortcut API + trailing slot), `heca-grid-ui/src/component.rs` / `FocusManager` (`deliver_accelerator`).\n\nBehaviors to preserve: existing Button variants/sizes/labels unchanged; theme-driven styling; the accelerator is an additive trailing slot (empty by default → no layout shift). Update `docs/widgets.md` + showcase.",
+      "description": "`Button::shortcut(char)` → composed `Icon(NerdFont ⌃) + Label(letter)` trailing slot rendered **inside** the button (via the content-slot refactor from `viewnode-task-2`). `Ctrl+<c>` self-submit + `FocusManager::deliver_accelerator`.\n\nBLOCKED on:\n- `viewnode-task-2` (Button content-slot refactor — must land first).\n- ~~`gridui-03` `NfIcon`~~ — **unblocked 2026-07-30** (F003/P085/T358): `NfIcon` + `NfGlyph` + `FontRole::NerdFont` exist, and `NfGlyph::Control` is the ⌃ this task wanted. `Glyph::CaretUp` (0xe13c) stays in the enum but the accelerator uses NerdFont, as decided.\n\nFiles: `heca-grid-ui/src/widgets/button.rs` (shortcut API + trailing slot), `heca-grid-ui/src/component.rs` / `FocusManager` (`deliver_accelerator`).\n\nBehaviors to preserve: existing Button variants/sizes/labels unchanged; theme-driven styling; the accelerator is an additive trailing slot (empty by default → no layout shift). Update `docs/widgets.md` + showcase.\n\n**Reuse, do not re-derive:** a key token → glyph mapping already exists in one place (`heca/src/shortcut.rs::chord_caps` + `KEY_GLYPHS`), and the chip itself is `KeyCap` / `paint_keycap_nf`. A `Button::shortcut` that spells its own accelerator would be the second table.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -49,7 +49,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-13T15:30:01.843Z",
-      "updatedAt": "2026-07-13T15:30:01.843Z"
+      "updatedAt": "2026-07-30T12:01:56.375Z"
     },
     {
       "id": "760365ea-80cb-4b5c-99de-ffe1b63f8eb3",
@@ -75,9 +75,19 @@
     }
   ],
   "createdAt": "2026-07-13T15:29:44.427Z",
-  "updatedAt": "2026-07-27T11:40:15.494Z",
+  "updatedAt": "2026-07-30T12:01:56.375Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "d003f2fb-72a8-45c1-869b-faf6316514d5",
+      "date": "2026-07-30T12:01:56.377Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ]
 }

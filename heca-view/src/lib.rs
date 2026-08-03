@@ -296,6 +296,19 @@ pub enum ViewTextAlign {
     End,
 }
 
+/// Which end of a label is cut when its text does not fit — mirrors grid-ui `Ellipsis` (`Label`).
+///
+/// Two, because the two kinds of text read from opposite ends: a label is identified by its
+/// beginning, a path by its end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewEllipsis {
+    /// Keep the head, cut the tail.
+    End,
+    /// Keep the tail, cut the head — what a path needs.
+    Start,
+}
+
 /// The snake_case name a fixed value set travels under, and the conversion into a property value.
 ///
 /// One macro rather than six copies: the name is what crosses to the widget, and every mirror
@@ -336,6 +349,7 @@ value_set! {
     ViewLabelSide { Right => "right", Left => "left" }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
     ViewTextAlign { Start => "start", Center => "center", End => "end" }
+    ViewEllipsis { End => "end", Start => "start" }
     ViewJustify {
         Start => "start",
         Center => "center",
@@ -482,7 +496,6 @@ pub enum ViewGlyph {
     PlusCircle,
     FolderSimpleMinus,
     FolderSimplePlus,
-    PlusSquare,
     StackPlus,
     StackMinus,
     ColumnsPlusLeft,
@@ -564,7 +577,6 @@ glyph_set! {
     PlusCircle => "plus_circle",
     FolderSimpleMinus => "folder_simple_minus",
     FolderSimplePlus => "folder_simple_plus",
-    PlusSquare => "plus_square",
     StackPlus => "stack_plus",
     StackMinus => "stack_minus",
     ColumnsPlusLeft => "columns_plus_left",

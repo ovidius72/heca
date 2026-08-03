@@ -878,6 +878,38 @@ So `OverlayHost` is the overlay-level API built **on** the `LayerRegistry` (see 
 the planner (F003/P019) §9): `open_modal` realizes the `ViewNode` body + injected action
 buttons and pushes a `Modal`-band layer; its buttons dispatch overlay-control actions.
 
+### 2.7.3 The command palette is a view of the catalog — decided 2026-07-30 (F003/P085/T358)
+
+`prefix+p` opens `heca-grid-ui`'s `CommandPalette` as an `Overlay`-band layer
+(`chrome/palette.rs`), built exactly like `open_dropdown`: the chosen entry comes back as a
+`SubmitOverlay`, resolved by the overlay host, and dispatched through the one door.
+
+- **It lists everything registered** — the app's built-ins and every mounted component's actions.
+  Registration follows mounting, so an unmounted component's actions do not exist to be listed;
+  there is no filter to write and none to forget.
+- **Every row is read from the action's metadata**: icon, label, description, and the live shortcut
+  from `ActionShortcuts`. A new plugin action, a rebind or a relabelled built-in reaches the palette
+  without a line being written in `palette.rs`. Never hand-write a palette entry.
+- **A component's entry is scoped by its component's own `title()`** (`"Workspaces › Delete Row"`)
+  and carries `FocusContainerThenAction`, so choosing it focuses that placement and then performs —
+  which is how it satisfies `ActionPolicy::ContainerFocused` rather than bypassing it (see AGENTS §
+  "A blocked door needs a key"). The focused component's actions sort first; **nothing is hidden**.
+- **Which placement** an entry means is `owning_mount`, resolved **once at open**, not per keystroke
+  — the widget re-filters on every character, and re-deriving the owner in that loop would make the
+  answer depend on how fast someone types.
+- **It offers only what it can actually run**: an action with a **required argument** is not listed.
+  A palette hands over a name and nothing else, so `add_pane_to_column` (which needs `ws_idx` +
+  `col_idx`) looked like a working command and did nothing. Those thirty-seven built-ins are the
+  *targeted* forms — for a header button, a menu entry, a drag, an RPC line with arguments — while
+  the unit form of the same act is listed. The rule reads the `args` every action already declares,
+  so it cannot drift; it is **arity, not policy** (what the domain permits is judged at dispatch).
+- A selection-dependent action chosen with nothing selected declines silently after focusing. A
+  later optional `can_perform(&self, id) -> bool` would drive a disabled entry (menu entries already
+  have an enabled state) — deliberately not built yet.
+- **Bindings are keycaps, stacked**: one row of chips per binding (`[λ] [⇧] [e]`), right-aligned in
+  a column reserved across the whole list. Keys with a picture use Nerd Font glyphs (`NfGlyph`); the
+  rest are text. See AGENTS § "Two surfaces, two spellings, one table".
+
 ---
 
 

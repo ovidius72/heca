@@ -21,7 +21,9 @@
 mod actions;
 pub(crate) mod workspaces;
 
-pub(crate) use actions::{bind_provider_keybindings, move_provider_cursor, register_provider_actions};
+pub(crate) use actions::{
+    bind_provider_keybindings, move_provider_cursor, owning_mount, register_provider_actions,
+};
 
 use crate::chrome::{
     ChromeEvent, ChromeIntentEmitter, ChromeSubscription, ContextMenuContribution, Contribution,
@@ -492,6 +494,8 @@ mod tests {
                 label: "Restart".into(),
                 description: "Restart the selected thing.".into(),
                 category: crate::actions::ActionCategory::Chrome,
+                // The host stamps the owner at registration; a component never writes it.
+                owner: None,
                 icon: None,
                 policy: ActionPolicy::Global,
                 args: Vec::new(),

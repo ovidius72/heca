@@ -1,0 +1,89 @@
+{
+  "id": "65a7a9a7-741e-4f42-b40f-5dc8a784c2e9",
+  "featureId": "873f81ba-ce7c-4bcc-90ed-27a25a742285",
+  "number": 88,
+  "shortId": "LPVBP",
+  "priority": 2,
+  "slug": "the-dock-row-the-shape-a-second-dock-and-every-plugin-needs",
+  "title": "The dock row — the shape a second dock and every plugin needs",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Extract pane_card / column_view out of the workspaces provider into named row components, and make the workspaces dock the first consumer.",
+  "description": "The row that only one file can build today, made a thing with a name — **before** F003/P085/T359 puts a second container on screen and it gets copied instead.\n\n## What exists\n\n`heca/src/providers/workspaces/mod.rs`:\n- `pane_card()` :728 — the dock's pane row, **eleven parameters** (entry, mount, programs, theme, emit, active pane, container state, signals, drag, hints). It registers a drag source **and** drop target (`drag.register(ChromeDragItem::Pane(..))`), a hint target, a `nav_key`, an active marker driven by a signal, the info segments and the badges.\n- `column_view()` :1008 — the column row: the same shape written separately, with a `MarkerGroup` grip as its drag source.\n- `build_workspaces_container()` :1084 and `build_body()` :624 assemble them.\n\nNothing of this is reachable from outside that file. A Docker dock — the phase's own worked example — cannot draw a row that looks or behaves like heca's.\n\n## What to build\n\nRow components in `heca/src/components/`, taking plain data + the seams (`Intent`, emitter, `&mut BuildCx`) — **not** `&AppState`, not the workspaces model. The row must be able to say:\n- what it shows (leading glyph, label, trailing badges/segments),\n- what it *is* for navigation (`nav_key`), for selection (the active/cursor signal, per mount), for drag (a payload the registry keys), and for the context menu (`ContextTarget::Row { container, key }`),\n- what a press means (a named `Intent`, per item kind — never inherited between kinds; see the settled rule in F003/P085/P086).\n\nThe workspaces provider becomes its **first consumer** in the same task: `pane_card` and `column_view` are deleted, not left beside the new component.\n\n## Watch for\n\n- `ChromeDragItem` is a closed `Pane | Column | Workspace` (`heca/src/chrome/contribution.rs` records this as workspace-shaped) — a generic row cannot key its drag payload through it as-is. F003/P085/T360 (`58SE7`) is the open row about keying registries by `(mount, nav_key)` the way `row_nav` already is. Land that first or the component will be workspaces-shaped by construction.\n- `Row` and `Item` **activate on mouse-down and report the press handled** — any press-consuming row fights drag detection (the whole of F003/P086/T368). Check the press order in `heca/src/mouse.rs` before changing a row's press behaviour.\n- Per-mount cursors mirror across seatings of one component (`mirror_cursor_to_siblings`, `heca/src/providers/actions.rs:115`) — the row reads its state per `(mount, nav_key)`, never a global.\n\n## Behaviors to preserve\n\nPixel-identical rows; drag and drop unchanged (source **and** target); hint ids monotonic; the active outline still driven by a signal rather than a rebuild.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "d84a25a6-d14b-417b-9f22-6befb67770b6"
+  ],
+  "tasks": [
+    {
+      "id": "d84a25a6-d14b-417b-9f22-6befb67770b6",
+      "phaseId": "65a7a9a7-741e-4f42-b40f-5dc8a784c2e9",
+      "number": 375,
+      "shortId": "PFE6A",
+      "priority": 1,
+      "shortName": "the-dock-row-one-component-and",
+      "title": "The dock row: one component, and the workspaces provider is its first consumer",
+      "status": "planned",
+      "description": "The row that only one file can build today, given a name — before F003/P085/T359 puts a second container on screen and it gets copied instead.\n\n## What exists\n\n`heca/src/providers/workspaces/mod.rs`:\n- `pane_card()` :728 — **eleven parameters** (entry, mount, programs, theme, emit, active pane, container state, signals, drag, hints). It registers a drag source **and** drop target (`drag.register(ChromeDragItem::Pane(id))`), a hint target, a `nav_key`, an active marker bound to a signal (so the selection flips **in place**, without a tree rebuild — `sync_chrome_signals`), the info segments and the badges.\n- `column_view()` :1008 — the same shape written separately, with a `MarkerGroup` grip as its drag source.\n- Nav keys are already the row's declared identity: `pane_nav_key` :671, `workspace_nav_key` :676, `column_nav_key` :682, and the press intents are named per kind (`pane_row_press` :698, `workspace_row_press` :703) — F003/P086's settled rule that a click is a named `Intent` **declared per item kind**, never inherited.\n\nNothing of this is reachable from outside that file. A Docker dock — the phase's own worked example — cannot draw a row that looks or behaves like heca's.\n\n## What to build\n\nA row component in `heca/src/components/` taking plain data + the seams, **not** `&AppState` and **not** the workspaces model. It must express, generically:\n- what it shows — leading glyph, label, trailing badges/segments;\n- what it **is**: its `nav_key` (cursor, context target, drag identity), the per-`(mount, nav_key)` active/cursor signal it binds, and whether it is a drag source and/or drop target;\n- what a press means — a named `Intent` supplied by the caller, per item kind; a kind with no gesture supplies none.\n\n`pane_card` and `column_view` are **deleted** in this task, not left beside it.\n\n## Blocked on / watch for\n\n- **`ChromeDragItem` is a closed `Pane | Column | Workspace`** — `heca/src/chrome/contribution.rs` records it as workspace-shaped, which is why \"a Docker row cannot be dragged or dropped at all\". F003/P085/T360 (`58SE7`) is the open row about keying the registries by `(mount, nav_key)` the way `row_nav` already is. **Land that first**, or this component is workspaces-shaped by construction.\n- **`Row`/`Item` activate on mouse-down and report the press handled** — a press-consuming row fights drag detection; that was the whole of F003/P086/T368. Check the press order in `heca/src/mouse.rs` before changing press behaviour.\n- Cursors mirror across seatings of one component (`mirror_cursor_to_siblings`, `heca/src/providers/actions.rs:115`): the row reads its state per `(mount, nav_key)`, never a global.\n\n## Test\n\nBuild the row headlessly and assert: the drag registry received a source (and a target) for it; a hint target was registered; the `nav_key` is on the node (`collect_nav_keys` / `nav_key_at`); the press intent is the one supplied and nothing is inherited by a kind that declared none; the active outline follows the signal without a rebuild.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d84a25a6-d14b-417b-9f22-6befb67770b6-check-001-blocked-check-58se7-registries-keyed-by-mount-nav-key-landed-or-the-component-is-workspaces-shaped",
+          "number": 1,
+          "title": "blocked-check: 58SE7 (registries keyed by (mount, nav_key)) landed, or the component is workspaces-shaped",
+          "checked": false
+        },
+        {
+          "id": "d84a25a6-d14b-417b-9f22-6befb67770b6-check-002-row-component-shows-is-nav-key-cursor-signal-drag-source-target-does-named-intent-per-kind",
+          "number": 2,
+          "title": "row component: shows / is (nav_key, cursor signal, drag source+target) / does (named Intent per kind)",
+          "checked": false
+        },
+        {
+          "id": "d84a25a6-d14b-417b-9f22-6befb67770b6-check-003-workspaces-pane-card-and-column-view-deleted-provider-consumes-the-component",
+          "number": 3,
+          "title": "workspaces pane_card and column_view deleted, provider consumes the component",
+          "checked": false
+        },
+        {
+          "id": "d84a25a6-d14b-417b-9f22-6befb67770b6-check-004-headless-test-drag-ids-hint-id-nav-key-per-kind-press-intent-signal-driven-active-state",
+          "number": 4,
+          "title": "headless test: drag ids, hint id, nav_key, per-kind press intent, signal-driven active state",
+          "checked": false
+        },
+        {
+          "id": "d84a25a6-d14b-417b-9f22-6befb67770b6-check-005-press-order-re-checked-against-mouse-rs-so-drag-detection-still-starts-t368",
+          "number": 5,
+          "title": "press order re-checked against mouse.rs so drag detection still starts (T368)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-30T13:38:14.127Z",
+      "updatedAt": "2026-07-30T13:38:14.127Z"
+    }
+  ],
+  "createdAt": "2026-07-30T13:27:40.358Z",
+  "updatedAt": "2026-07-30T13:38:14.127Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

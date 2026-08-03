@@ -648,6 +648,9 @@ pub struct AppState {
     pub programs: std::rc::Rc<ProgramsConfig>,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
+    /// How roomy the command palette is (`[settings] command_palette_size`). Re-read on reload, so
+    /// changing it and pressing reload resizes the next palette.
+    pub command_palette_size: heca_config::settings::PaletteSize,
     /// Structured font configuration (families + sizes), decoupled from the color
     /// theme. Read at the same choke points that previously read `theme.font_*`.
     /// Refreshed on `prefix+Shift+r` reload.
