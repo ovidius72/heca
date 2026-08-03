@@ -3694,6 +3694,51 @@ fn the_palette_size_is_capped_by_the_window() {
     }
 }
 
+/// **The panel fits the window.** The row count is capped by what the window can actually hold, and
+/// a row is two lines when described and taller again with stacked bindings — a nominal one-line
+/// estimate over-counted and the list ran off the bottom.
+#[test]
+fn the_palette_never_runs_off_a_short_window() {
+    use heca_grid_ui::widgets::KeyCap;
+    use heca_grid_ui::{Command, CommandPalette, Component, WidgetSize};
+    let theme = Theme::default();
+    let cap = |s: &str| KeyCap::Text(s.to_string());
+    let mut p = CommandPalette::new().panel_size(WidgetSize::Large);
+    for i in 0..40 {
+        p = p.command(
+            Command::new(format!("Command {i}"), || {})
+                .description("What this command does, at some length.")
+                .keys([cap("λ"), cap("a")])
+                .keys([cap("λ"), cap("b")]),
+        );
+    }
+    let p = p.open(true);
+
+    for viewport in [Size::new(1280.0, 900.0), Size::new(1280.0, 480.0), Size::new(900.0, 320.0)] {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(viewport);
+            p.paint(&mut cx);
+        }
+        // The panel is the tallest painted rect that is not the full-viewport scrim.
+        let bottom = scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) if r.rect.size.w < viewport.w => {
+                    Some(r.rect.loc.y + r.rect.size.h)
+                }
+                _ => None,
+            })
+            .fold(0.0f64, f64::max);
+        assert!(
+            bottom <= viewport.h + 0.5,
+            "at {}x{} the panel reached {bottom}px — past the bottom of the window",
+            viewport.w,
+            viewport.h,
+        );
+    }
+}
+
 /// Filtering matches the **label**. A description explains a command the user has already found;
 /// ranking on it would surface a command whose label the query never mentioned.
 #[test]

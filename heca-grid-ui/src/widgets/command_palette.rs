@@ -287,13 +287,13 @@ impl CommandPalette {
             return;
         }
         self.selected = (self.selected + 1).min(n - 1);
-        self.follow_selection(n);
+        self.follow_selection();
     }
 
     /// Move the selection up (Ctrl+K / ↑).
     pub fn select_prev(&mut self) {
         self.selected = self.selected.saturating_sub(1);
-        self.follow_selection(self.results().len());
+        self.follow_selection();
     }
 
     /// Run the selected command (fires its callback) and close.
@@ -306,8 +306,8 @@ impl CommandPalette {
     }
 
     /// Keep `selected` within the visible scroll window.
-    fn follow_selection(&mut self, n: usize) {
-        let visible = self.visible_rows(n);
+    fn follow_selection(&mut self) {
+        let visible = self.visible_rows(&self.results());
         if self.selected < self.scroll {
             self.scroll = self.selected;
         } else if self.selected >= self.scroll + visible {
@@ -315,22 +315,35 @@ impl CommandPalette {
         }
     }
 
-    fn visible_rows(&self, n: usize) -> usize {
+    /// How many rows the panel shows: the size variant's count, **and never more than the window
+    /// can hold**.
+    ///
+    /// It measures the rows it would actually draw, from `scroll` onward, instead of dividing the
+    /// room by a nominal row height. A row is two lines when the list is described and taller again
+    /// when an action carries several bindings, so a one-line estimate over-counted and the panel ran
+    /// off the bottom of a short window — which is what this looked like in the app.
+    fn visible_rows(&self, results: &[Match]) -> usize {
         let (_, max_rows) = panel_metrics(self.panel_size);
-        // …and never more rows than the window can hold: the list plus the query line must fit under
-        // the panel's top offset. Without this a tall variant on a short screen runs off the bottom.
         let vp = self.viewport.get();
-        let fits = match vp.h.is_finite() {
-            true => {
-                let line = self.line_h();
-                let chrome = 3.0 * PAD + line + 2.0 * QUERY_PAD_Y;
-                let room = (vp.h * (1.0 - TOP_FRAC) - chrome).max(0.0);
-                let row = line + 2.0 * ROW_PAD_Y;
-                ((room / row).floor().max(1.0)) as usize
+        if !vp.h.is_finite() {
+            return results.len().clamp(1, max_rows);
+        }
+        // Everything the panel spends before the first row: its own padding above and below the
+        // query line, the query line itself, and the padding under the list.
+        let chrome = 3.0 * PAD + self.line_h() + 2.0 * QUERY_PAD_Y;
+        let mut room = (vp.h * (1.0 - TOP_FRAC) - chrome).max(0.0);
+        let mut fits = 0usize;
+        for m in results.iter().skip(self.scroll).take(max_rows) {
+            let h = self.row_h(&self.commands[m.cmd]);
+            if h > room && fits > 0 {
+                break;
             }
-            false => max_rows,
-        };
-        n.clamp(1, max_rows.min(fits).max(1))
+            room -= h;
+            fits += 1;
+        }
+        // Always at least one row: a window too short for even that is better showing a clipped row
+        // than an empty panel.
+        results.len().clamp(1, fits.max(1))
     }
 
     fn line_h(&self) -> f64 {
@@ -377,7 +390,7 @@ impl CommandPalette {
             .iter()
             .enumerate()
             .skip(self.scroll)
-            .take(self.visible_rows(results.len()));
+            .take(self.visible_rows(results));
         for (ri, m) in window {
             let h = self.row_h(&self.commands[m.cmd]);
             out.push((
@@ -434,7 +447,7 @@ impl CommandPalette {
         let line = self.line_h();
         let query_h = line + 2.0 * QUERY_PAD_Y;
         let n_results = results.len();
-        let visible = self.visible_rows(n_results.max(1));
+        let visible = self.visible_rows(results);
         // The panel is as tall as the rows it will actually show — summed, since a row with two
         // bindings is taller than one with none.
         let empty_row = line + 2.0 * ROW_PAD_Y;
