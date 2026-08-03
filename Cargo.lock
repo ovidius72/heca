@@ -1274,6 +1274,7 @@ dependencies = [
  "heca-view-realize",
  "naga",
  "pollster",
+ "ttf-parser",
  "wgpu",
  "winit",
 ]

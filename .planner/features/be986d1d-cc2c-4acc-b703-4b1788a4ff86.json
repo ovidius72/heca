@@ -1,7 +1,7 @@
 {
   "id": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
   "number": 2,
-  "shortId": "",
+  "shortId": "HQW43",
   "priority": 0,
   "name": "🖥️ Terminal Platform Completion",
   "description": "Completamento della piattaforma terminale: damage preservation, dirty-region rendering, viewport scrollback host-managed, policy ligature, hook protocolli terminali, test backend/renderer, pane-shell hosting contract, text selection, clipboard/paste/OSC 52, UX terminale, image protocols e per-pane font zoom.",

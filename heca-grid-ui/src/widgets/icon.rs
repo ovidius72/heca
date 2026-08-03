@@ -86,7 +86,6 @@ pub enum Glyph {
     PlusCircle,
     FolderSimpleMinus,
     FolderSimplePlus,
-    PlusSquare,
     StackPlus,
     StackMinus,
     ColumnsPlusLeft,
@@ -115,7 +114,7 @@ impl Glyph {
         Glyph::ArrowLineRight, Glyph::Plus, Glyph::Minus, Glyph::SquareSplitVertical,
         Glyph::XSquare, Glyph::FrameCorners, Glyph::Cards, Glyph::Pencil,
         Glyph::NotePencil, Glyph::Backspace, Glyph::Trash, Glyph::XCircle,
-        Glyph::PlusCircle, Glyph::FolderSimpleMinus, Glyph::FolderSimplePlus, Glyph::PlusSquare,
+        Glyph::PlusCircle, Glyph::FolderSimpleMinus, Glyph::FolderSimplePlus,
         Glyph::StackPlus, Glyph::StackMinus, Glyph::ColumnsPlusLeft, Glyph::ColumnsPlusRight,
         Glyph::SquareHalf, Glyph::SquareSplitHorizontal, Glyph::SquareHalfBottom,
     ];
@@ -170,7 +169,6 @@ impl Glyph {
             Glyph::PlusCircle => 0xe3d6,             // plus-circle
             Glyph::FolderSimpleMinus => 0xe25c,      // folder-simple-minus
             Glyph::FolderSimplePlus => 0xe25e,       // folder-simple-plus
-            Glyph::PlusSquare => 0xed4a,             // plus-square
             Glyph::StackPlus => 0xedf6,              // stack-plus
             Glyph::StackMinus => 0xedf4,             // stack-minus
             Glyph::ColumnsPlusLeft => 0xe544,        // columns-plus-left

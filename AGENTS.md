@@ -5,9 +5,80 @@
 
 ---
 
-## ⛔ STOP — read this before writing code (the two mistakes that get work rejected)
+## ⛔ STOP — read this before writing code (the mistakes that get work rejected)
 
-These are made over and over. **Violating either = redo.**
+These are made over and over. **Violating any = redo.**
+
+### 0. THE PRE-FLIGHT — three answers, written down, BEFORE the first line of code.
+
+Not a mindset. Three questions with written answers, in the task or the PR body. No answer = you are
+reinventing something, and it will be rejected.
+
+1. **Which existing widget / function / action does this?** Name it. `Item` is a row with a leading
+   and a trailing slot. `Row` is the selection shell. `ScrollRegion` owns scrolling and its window.
+   `Input` owns text editing and its shortcuts. `Label` owns text. Search `docs/widgets.md` and run
+   the showcase — do not go by memory, including your own from earlier in the session.
+2. **If none exists — which planner task covers it?** Search the planner (`planner-task-list`,
+   grep the phases) for the *pieces*, not just the feature you were asked for. Quote the id. Half of
+   what looks unbuilt is already planned, sometimes with the design decided (`NfIcon` was P029/T090,
+   with the font choice already settled in P074/T273).
+3. **If neither — it is a proposal, not a commit.** Say what and why, get the OK, then build it. And
+   **file it in the planner**, not in a prose list: this file's own "open gaps" section is how
+   `Label` truncation stayed open long enough for FOUR separate hand-rolled truncations to be
+   written around it. A gap in a doc is never scheduled. A gap in the planner gets done.
+
+**The tell you are about to fail this**: you are writing `paint`, a measure, a hit-test, a scroll
+offset, or an event-forwarding `match` inside a widget or the app. Every one of those is some
+existing widget's job. Stop and answer the three questions.
+
+### 0b. WIDGET vs COMPONENT — where a thing lives, and how it is built (F011)
+
+**Widget** — `heca-grid-ui`. Primitive, generic, self-contained, complete on its own: `Input`,
+`Label`, `Item`, `Row`, `ItemGroup`, `ScrollRegion`, `Choice`, `Button`, `Icon`, `KeyHint`. Put it in
+a tree and it works, with **no host wiring**. A UI library also ships composed ones — `Dialog`,
+`Select`, `ContextMenu`, `CommandPalette` — so the test is capability, not size:
+**if it can be built inside grid-ui, it belongs in grid-ui.**
+
+**Component** — `heca/src/components/`. A composition of widgets that **also binds an app concept**:
+an `Intent`, an action **name**, a drag id, a hint target id, a chrome signal, a `nav_key`. That
+binding is the *only* thing that justifies leaving the library. A composition that binds none of them
+is a widget in the wrong crate — move it down, don't keep it up here.
+
+#### How composition works in each place — this is the part that gets guessed wrong
+
+- **Inside grid-ui: real children, in Rust.** Every widget owns `Base.children`, and the framework
+  walks them — `LayoutEngine` lays out, paint recurses, events capture/bubble. `Dialog` is built this
+  way; `Select` and `Tabs` were refactored onto composed `Choice` children. So a composed widget is
+  `Flex::column().child(Input::new()).child(ScrollRegion::new()…)` — **nothing is hand-painted, and
+  `ViewNode` is neither needed nor available**: `heca-view-realize` depends on `heca-grid-ui`, so the
+  reverse is a dependency cycle.
+- **`ViewNode` is for describing a tree as DATA** — plugins, config, RPC — and `realize()` turns it
+  into widgets *above* the library. An app-level component may build itself either way: directly from
+  widgets, or by describing a `ViewNode` and realizing it. Both are fine; hand-painting is not.
+
+#### How to write a component
+
+1. **Signature: plain data + the seams it binds.** `Intent` / `ChromeIntentEmitter`, `&mut BuildCx`
+   (drag, hints, signals), an action **name**, a theme. **Never `&AppState`** — it needs a window, so
+   it cannot exist in a test, and a component that takes it is a component nobody can test. Same
+   split that made `route_in_domain`, `cursor_follow` and `resolve_context_for` testable.
+2. **Return a `Component`** (`impl Component` / `WidgetModel`) built from library widgets. No `paint`,
+   no measure, no hit-test, no scroll offset — those belong to the widget that owns them.
+3. **Name the action, never the styling.** The icon comes from `ActionCatalog::icon`, the shortcut
+   from `ActionShortcuts`, the tooltip from `action_tooltip`, every colour/size from the `Theme`.
+4. **Register host ids through `BuildCx`** — drag ids, hint ids, signals — so they stay monotonic and
+   are released with the tree that made them.
+5. **One unit test per component**, headless, asserting the built tree or the painted scene — not a
+   flag. Pattern: `providers/mod.rs::the_shared_context_carries_nothing_of_one_components_domain`
+   (build through `ChromeCtx::for_build`, assert children + what the registries received), or
+   `heca-grid-ui/tests/phase_a.rs` (paint into a `Scene`, assert `DrawCommand`s).
+
+#### How to use one
+
+Import it from `crate::components`. **Never re-compose the same shape inline** in `chrome/`, a
+provider, the sidebar or a plugin — that is how one row shape became unreachable outside the file
+that drew it. Need a variation? Add a builder to the component. Copying it is the bug this rule
+exists to stop.
 
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
 - **Before building ANY UI**, look at what already exists:

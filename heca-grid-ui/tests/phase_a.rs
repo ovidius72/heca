@@ -77,6 +77,144 @@ fn label_signal_drives_text() {
     assert_eq!(sig.get_untracked(), "OFFLINE");
 }
 
+/// A truncating label is cut **to its box**, at the end it was told to cut — and the untruncating
+/// default is untouched, or every layout in the app would shift at once.
+#[test]
+fn label_truncates_to_its_box_at_the_end_it_was_given() {
+    use heca_grid_ui::Ellipsis;
+    let theme = Theme::default();
+    // Paint a label into a box `cells` characters wide and report what was drawn.
+    let drawn = |label: Label, cells: f64| {
+        let mut label = label;
+        // Lay out FIRST: the engine resolves the inherited font, and the cell the label cuts on is
+        // derived from that font — measuring the box with the pre-layout one is off by a character.
+        LayoutEngine::new().compute(&mut label, Size::new(400.0, 40.0));
+        let font = label.base().font as f64;
+        let w = cells * font * 0.6; // MONO_ADVANCE_RATIO — the same cell the label measures with
+        label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(w, 40.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            label.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .expect("a label paints its text")
+    };
+
+    let path = "projects/heca/src/widgets";
+    // Wide enough ⇒ untouched, whichever end it would cut.
+    assert_eq!(drawn(Label::new(path).truncate(Ellipsis::End), 40.0), path);
+    // Narrow ⇒ cut, and the ellipsis marks which end went.
+    let end = drawn(Label::new(path).truncate(Ellipsis::End), 10.0);
+    assert!(end.starts_with("projects") && end.ends_with('…'), "{end:?}");
+    assert!(end.chars().count() <= 10, "cut to the box: {end:?}");
+    let start = drawn(Label::new(path).truncate(Ellipsis::Start), 10.0);
+    assert!(
+        start.starts_with('…') && start.ends_with("widgets"),
+        "a path keeps its tail — the only part anyone reads: {start:?}",
+    );
+    // Degenerate boxes still say something rather than panicking.
+    assert_eq!(drawn(Label::new(path).truncate(Ellipsis::End), 1.0), "…");
+
+    // **The default is untouched.** No truncate ⇒ the full string is drawn even in a tiny box, and
+    // the label keeps its natural width (it does not opt into shrinking).
+    assert_eq!(drawn(Label::new(path), 10.0), path);
+    let plain = Label::new(path);
+    assert!(
+        plain.base().style.layout.flex_shrink.is_none()
+            && plain.base().style.layout.min_width.is_none(),
+        "an ordinary label must not become shrinkable",
+    );
+    let cut = Label::new(path).truncate(Ellipsis::End);
+    assert_eq!(cut.base().style.layout.flex_shrink, Some(1.0));
+    assert!(
+        cut.base().style.layout.min_width.is_some(),
+        "a truncating label must be allowed below its content width, or it just overflows",
+    );
+}
+
+/// **The container shrinks it.** The paint-time cut is only ever reached if the layout can hand the
+/// label less than its natural width — so this is the test that matters: a real `Flex` too narrow
+/// for the text, laid out by the engine, with nothing set by hand.
+#[test]
+fn a_truncating_label_shrinks_inside_a_container_that_is_too_narrow() {
+    use heca_grid_ui::Ellipsis;
+    let theme = Theme::default();
+    let text = "projects/heca/src/widgets/label.rs";
+    let paint_in_row = |label: Label| {
+        let mut row = Flex::row().width(Length::Px(120.0)).height(Length::Px(40.0)).child(label);
+        LayoutEngine::new().compute(&mut row, Size::new(120.0, 40.0));
+        let child_w = row.base().children[0].base().bounds.size.w;
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            row.paint(&mut cx);
+        }
+        let drawn = scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .expect("the label paints");
+        (child_w, drawn)
+    };
+
+    let (w, drawn) = paint_in_row(Label::new(text).truncate(Ellipsis::End));
+    assert!(
+        w <= 120.5,
+        "a truncating label must accept the box it is given, got {w}px in a 120px row",
+    );
+    assert!(
+        drawn.ends_with('…') && drawn.chars().count() < text.chars().count(),
+        "…and cut its text to it: {drawn:?}",
+    );
+
+    // The untruncating default is unchanged: it keeps its natural width and overflows, exactly as
+    // every existing label in the app does today.
+    let (w_plain, plain) = paint_in_row(Label::new(text));
+    assert_eq!(plain, text, "an ordinary label still draws its whole string");
+    assert!(
+        w_plain > 120.5,
+        "…and still keeps its natural width ({w_plain}px), so no existing layout moves",
+    );
+}
+
+/// A rule under a truncated label spans the **drawn** glyphs, not the width the full string wanted.
+#[test]
+fn label_decorations_follow_a_truncated_run() {
+    use heca_grid_ui::Ellipsis;
+    let theme = Theme::default();
+    let mut label = Label::new("projects/heca/src/widgets")
+        .truncate(Ellipsis::End)
+        .underline(true);
+    LayoutEngine::new().compute(&mut label, Size::new(400.0, 40.0));
+    let w = 10.0 * label.base().font as f64 * 0.6;
+    label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(w, 40.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        label.paint(&mut cx);
+    }
+    let rule = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Rect(r) => Some(r.rect),
+            _ => None,
+        })
+        .expect("the underline is painted");
+    assert!(
+        rule.size.w <= w + 0.5,
+        "the rule spans the cut run ({}), not the full string's width",
+        rule.size.w,
+    );
+}
+
 #[test]
 fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
     let theme = Theme::default();
@@ -2947,7 +3085,9 @@ fn key_hint_overlays_letter_only_when_set() {
         for c in scene.iter() {
             if let DrawCommand::Text(t) = c {
                 match t.font {
-                    FontRole::Icon => icons += 1,
+                    // Both glyph faces count as an icon run here: this test is about how many
+                    // glyphs vs words a KeyHint paints, not which font supplied them.
+                    FontRole::Icon | FontRole::NerdFont => icons += 1,
                     FontRole::Text => texts.push(t.text.clone()),
                 }
             }
@@ -3226,6 +3366,348 @@ fn command_palette_navigates_via_menu_nav() {
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuUp));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), 2, "MenuDown ×2 then MenuUp lands on the 2nd command (Close pane)");
+}
+
+/// A description is a **second line under its label**, and it makes every row two lines high — the
+/// measured thing, because a row-height rule that only the paint knows would misplace every click.
+#[test]
+fn command_palette_describes_a_command_on_a_second_line() {
+    use heca_grid_ui::{Command, CommandPalette, Component};
+    let theme = Theme::default();
+    let p = CommandPalette::new()
+        .command(
+            Command::new("Split pane right", || {})
+                .description("New column to the right of the active pane."),
+        )
+        .command(Command::new("Close pane", || {}).description("Close the focused pane."))
+        .open(true);
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+        p.paint(&mut cx);
+    }
+    let runs: Vec<(String, Rectangle)> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.rect)),
+            _ => None,
+        })
+        .collect();
+    let at = |text: &str| {
+        runs.iter()
+            .find(|(t, _)| t == text)
+            .unwrap_or_else(|| panic!("{text:?} is painted, got {runs:?}"))
+            .1
+    };
+    let label = at("Split pane right");
+    let description = at("New column to the right of the active pane.");
+    assert!(
+        description.loc.y > label.loc.y,
+        "the description sits under its label, not beside it",
+    );
+    assert_eq!(
+        description.loc.x, label.loc.x,
+        "…and is indented to it, so the two read as one block",
+    );
+    // The next row starts a full two lines down: one row = label line + description line + padding.
+    let next_label = at("Close pane");
+    let line = description.loc.y - label.loc.y;
+    assert!(
+        next_label.loc.y - label.loc.y > 2.0 * line,
+        "a described list gives every row two lines: rows are {}px apart, one line is {line}px",
+        next_label.loc.y - label.loc.y,
+    );
+}
+
+/// **An action bound three times draws three rows of caps**, and every row of the list reserves the
+/// same width for them — so the chips form a column instead of tracking each label's length.
+#[test]
+fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
+    use heca_grid_ui::widgets::{KeyCap, NfGlyph};
+    use heca_grid_ui::{Command, CommandPalette, Component};
+    let theme = Theme::default();
+    let cap = |s: &str| KeyCap::Text(s.to_string());
+    let p = CommandPalette::new()
+        .command(
+            Command::new("Focus Dock", || {})
+                .description("Give chrome keyboard focus to a dock.")
+                .keys([cap("λ"), KeyCap::Nf(NfGlyph::Shift), cap("e")])
+                .keys([cap("λ"), cap("e")])
+                .keys([KeyCap::Nf(NfGlyph::Control), cap("e")]),
+        )
+        .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
+        .open(true);
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+        p.paint(&mut cx);
+    }
+    // A cap is a small bordered chip. The size bound is what tells it apart from the panel's own
+    // border, the query line and the selected row's outline, which are all bordered and all span
+    // the panel.
+    let chips: Vec<Rectangle> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r)
+                if r.border.is_some() && r.rect.size.w < 60.0 && r.rect.size.h < 30.0 =>
+            {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+        .collect();
+    // Three chords of 3 + 2 + 2 caps = 7 chips (plus the panel/query/selection chrome, which is why
+    // this asserts on the ROWS the chips occupy rather than an exact count).
+    let mut rows: Vec<f64> = chips.iter().map(|r| (r.loc.y * 10.0).round() / 10.0).collect();
+    rows.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    rows.dedup();
+    assert!(
+        rows.len() >= 3,
+        "three bindings ⇒ three stacked rows of caps, got rows at {rows:?}",
+    );
+    // The label of the *second* command must stop before the column the caps occupy, or text and
+    // chips would overlap on a narrow row.
+    let leftmost_chip = chips.iter().map(|r| r.loc.x).fold(f64::MAX, f64::min);
+    let label = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) if t.text == "Reload Config" => Some(t.rect),
+            _ => None,
+        })
+        .expect("the second command is painted");
+    assert!(
+        label.loc.x + label.size.w <= leftmost_chip,
+        "the label box ({}) runs into the reserved shortcut column ({leftmost_chip})",
+        label.loc.x + label.size.w,
+    );
+}
+
+/// **A row is as tall as its own content.** One action bound three times must not charge every
+/// other row for three lines — that is a hundred rows of empty space for one command's sake.
+#[test]
+fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
+    use heca_grid_ui::widgets::KeyCap;
+    use heca_grid_ui::{Command, CommandPalette, Component};
+    let theme = Theme::default();
+    let cap = |s: &str| KeyCap::Text(s.to_string());
+    let p = CommandPalette::new()
+        .command(
+            Command::new("Paste Clipboard", || {})
+                .description("Paste the clipboard.")
+                .keys([cap("⌘"), cap("v")])
+                .keys([cap("^"), cap("⇧"), cap("v")])
+                .keys([cap("λ"), cap("⇧"), cap("p")]),
+        )
+        .command(Command::new("Close Pane", || {}).description("Close the focused pane."))
+        .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
+        .open(true);
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+        p.paint(&mut cx);
+    }
+    let label_y = |text: &str| {
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) if t.text == text => Some(t.rect.loc.y),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{text} is painted"))
+    };
+    // The three-binding row is tall; the two plain rows after it are not — so the gap between the
+    // two plain rows is strictly smaller than the gap the tall one takes.
+    let tall_gap = label_y("Close Pane") - label_y("Paste Clipboard");
+    let plain_gap = label_y("Reload Config") - label_y("Close Pane");
+    assert!(
+        plain_gap < tall_gap,
+        "a row with no bindings ({plain_gap}px) must be shorter than one with three ({tall_gap}px)",
+    );
+}
+
+/// A long description is **cut to its box**, not drawn under the keycaps and out of the panel.
+#[test]
+fn command_palette_truncates_text_that_would_reach_the_shortcut_column() {
+    use heca_grid_ui::widgets::KeyCap;
+    use heca_grid_ui::{Command, CommandPalette, Component};
+    let theme = Theme::default();
+    let long = "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.";
+    let p = CommandPalette::new()
+        .command(
+            Command::new("Focus Dock", || {})
+                .description(long)
+                .keys([KeyCap::Text("λ".into()), KeyCap::Text("e".into())]),
+        )
+        .open(true);
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+        p.paint(&mut cx);
+    }
+    let drawn: Vec<(String, Rectangle)> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.rect)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !drawn.iter().any(|(t, _)| t == long),
+        "the full description was drawn — it does not fit beside the keycaps",
+    );
+    let (cut, _) = drawn
+        .iter()
+        .find(|(t, _)| t.starts_with("Give chrome keyboard"))
+        .expect("a truncated description is drawn");
+    assert!(cut.ends_with('…'), "a cut description says so: {cut:?}");
+    assert!(cut.chars().count() < long.chars().count());
+}
+
+/// The query field is a real [`Input`], so the configurable `[keys.widgets]` **edit** intents reach
+/// it — `edit_select_all` (Ctrl+a), `edit_delete_back` (Ctrl+h), `edit_delete_to_line_start`
+/// (Ctrl+u). The palette answers four nav intents and **forwards the rest to the field**; swallowing
+/// them was why typing in the palette had none of the editing every other field has.
+#[test]
+fn command_palette_query_takes_the_edit_intents() {
+    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
+    let (r1, r2) = (ran.clone(), ran.clone());
+    let mut p = CommandPalette::new()
+        .command(Command::new("Close pane", move || r1.set(1)))
+        .command(Command::new("Toggle sidebar", move || r2.set(2)))
+        .open(true);
+
+    // Type a query that matches only "Close pane", then select-all + type over it: the field must
+    // replace the selection, leaving "tog" → "Toggle sidebar".
+    for c in "close".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::EditSelectAll));
+    for c in "tog".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), 2, "Ctrl+a selected the whole query so typing replaced it");
+
+    // Ctrl+u (delete to line start) clears a query back to everything.
+    let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
+    let r = ran.clone();
+    let mut p = CommandPalette::new()
+        .command(Command::new("Close pane", move || r.set(1)))
+        .open(true);
+    for c in "zzz".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::EditDeleteToLineStart));
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), 1, "Ctrl+u emptied the query, so the only command matched again");
+}
+
+/// **The icon column is reserved for every row.** A list where some commands carry a glyph and some
+/// do not must still read as one column of text — indenting only the iconed rows left the others
+/// starting at the panel edge.
+#[test]
+fn command_palette_reserves_the_icon_column_even_for_a_command_without_one() {
+    use heca_grid_ui::{Command, CommandPalette, Component, Glyph};
+    let theme = Theme::default();
+    let p = CommandPalette::new()
+        .command(Command::new("With Icon", || {}).icon(Glyph::Search))
+        .command(Command::new("Without Icon", || {}))
+        .open(true);
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+        p.paint(&mut cx);
+    }
+    let x_of = |text: &str| {
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) if t.text == text => Some(t.rect.loc.x),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{text} is painted"))
+    };
+    assert_eq!(
+        x_of("With Icon"),
+        x_of("Without Icon"),
+        "both labels start in the same column, icon or no icon",
+    );
+}
+
+/// **A size is a maximum, not a demand.** `large` asks for an 850px panel; a small window still
+/// wins, because a panel wider than the screen is worse than a narrow one.
+#[test]
+fn the_palette_size_is_capped_by_the_window() {
+    use heca_grid_ui::{Command, CommandPalette, Component, WidgetSize};
+    let theme = Theme::default();
+    let panel_w = |size: WidgetSize, viewport: Size| {
+        let p = CommandPalette::new()
+            .panel_size(size)
+            .command(Command::new("Close Pane", || {}))
+            .open(true);
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(viewport);
+            p.paint(&mut cx);
+        }
+        // The panel is the widest painted rect that is NOT the full-viewport scrim.
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) if r.rect.size.w < viewport.w => Some(r.rect.size.w),
+                _ => None,
+            })
+            .fold(0.0f64, f64::max)
+    };
+
+    let roomy = Size::new(1800.0, 1000.0);
+    let small = panel_w(WidgetSize::Small, roomy);
+    let normal = panel_w(WidgetSize::Normal, roomy);
+    let large = panel_w(WidgetSize::Large, roomy);
+    assert!(
+        small < normal && normal < large,
+        "each size is roomier than the last: {small} / {normal} / {large}",
+    );
+    assert!(large <= 850.5, "large caps at 850px, got {large}");
+
+    // On a narrow window every size collapses to what fits, and none touches the edges.
+    let narrow = Size::new(480.0, 700.0);
+    for size in [WidgetSize::Small, WidgetSize::Normal, WidgetSize::Large] {
+        let w = panel_w(size, narrow);
+        assert!(
+            w <= narrow.w * 0.92 + 0.5,
+            "{size:?} took {w}px of a 480px window — a panel must never reach the edges",
+        );
+    }
+}
+
+/// Filtering matches the **label**. A description explains a command the user has already found;
+/// ranking on it would surface a command whose label the query never mentioned.
+#[test]
+fn command_palette_filters_on_the_label_not_the_description() {
+    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
+    let (r1, r2) = (ran.clone(), ran.clone());
+    let mut p = CommandPalette::new()
+        .command(Command::new("Close pane", move || r1.set(1)).description("Splits nothing."))
+        .command(Command::new("Split pane", move || r2.set(2)).description("Adds a column."))
+        .open(true);
+
+    for c in "split".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(
+        ran.get(),
+        2,
+        "'split' found the command called Split pane, not the one whose description says 'Splits'",
+    );
 }
 
 #[test]

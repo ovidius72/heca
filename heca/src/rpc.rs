@@ -25,6 +25,13 @@
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
 //!   command-palette
+//!   action <name> [--dock <container_id>] [key=value …]
+//!     (the generic verb: any action in the catalog by id, built-in or a component's own.
+//!      `--dock` names WHICH placement of a component the call is aimed at; without it the
+//!      host resolves the owner — the focused seating, else the last focused, else the only one)
+//!   list-actions | describe-action <name>
+//!     (metadata queries, answered as JSON; `owner` names the component that declared each
+//!      action, or is null for one of the app's own)
 //!   spawn-command [--kind terminal|app|plugin] [--float] [--close-pane]
 //!     [--keep-on-error] [--keep-on-success] -- <command...>
 //!   enter-selection-mode | clear-selection | copy-selection | paste-clipboard
@@ -64,6 +71,9 @@ pub enum RpcError {
     /// Declared, but nothing here can run it: its component is not mounted, or it belongs to a
     /// plugin across a boundary that does not exist yet. **Not** silent success.
     NotRunnable(String),
+    /// A built-in called without the arguments it declares as required — `describe-action <name>`
+    /// lists them (F003/P085/T358).
+    MissingArgs(String),
 }
 
 impl std::fmt::Display for RpcError {
@@ -79,6 +89,10 @@ impl std::fmt::Display for RpcError {
             RpcError::NotRunnable(name) => {
                 write!(f, "action '{name}' has no runnable owner (component not mounted?)")
             }
+            RpcError::MissingArgs(name) => write!(
+                f,
+                "action '{name}' needs arguments it was not given — see 'describe-action {name}'"
+            ),
             RpcError::MissingSeparator { cmd } => {
                 write!(f, "command '{cmd}' missing '--' separator before command")
             }
@@ -167,8 +181,17 @@ fn to_json<T: serde::Serialize>(value: &T, cmd: &str) -> Result<String, RpcError
 pub enum RpcCommand {
     /// A built-in command with its own RPC spelling.
     Builtin(WmAction),
-    /// `action <name> [key=value …]` — any action in the catalog, by id.
-    Intent(crate::chrome::Intent),
+    /// `action <name> [--dock <id>] [key=value …]` — any action in the catalog, by id.
+    Intent {
+        intent: crate::chrome::Intent,
+        /// `--dock <id>`: **which placement** the call is aimed at (F003/P085/T358).
+        ///
+        /// Without it the host resolves the owner itself (`owning_mount`: the focused seating, else
+        /// the last focused, else the only one) — which is the right answer whenever there is one
+        /// obvious answer. A component seated twice has no such answer, and a script must not have
+        /// to focus a dock by hand and hope, so it can name the seating outright.
+        dock: Option<String>,
+    },
 }
 
 /// Parse one RPC line into either vocabulary.
@@ -178,12 +201,17 @@ pub enum RpcCommand {
 ///
 /// ```text
 /// action workspaces.cursor_down
+/// action docker.stop_selected --dock docker.right
 /// action close_pane_by_id pane_id=7
 /// ```
 ///
 /// Arguments are `key=value` pairs in any order, judged against the action's **declaration** on
 /// dispatch (`report_arg_problems`), so a misspelled one says so instead of silently defaulting —
 /// the same treatment a menu entry's args get.
+///
+/// `--dock <id>` is not one of them: it does not reach the action at all. It answers the host's
+/// question of *which placement* the call is aimed at, so it is parsed out here rather than handed
+/// to a component that has no business knowing which of its seatings a script meant.
 pub fn parse_rpc(input: &str) -> Result<RpcCommand, RpcError> {
     let trimmed = input.trim();
     let mut parts = trimmed.split_whitespace();
@@ -195,17 +223,30 @@ pub fn parse_rpc(input: &str) -> Result<RpcCommand, RpcError> {
         arg: "name".to_string(),
     })?;
     let mut intent = crate::chrome::Intent::new(name);
-    for pair in parts {
+    let mut dock = None;
+    let mut rest = parts.peekable();
+    while let Some(part) = rest.next() {
+        if part == "--dock" {
+            dock = Some(
+                rest.next()
+                    .ok_or_else(|| RpcError::MissingArgument {
+                        cmd: format!("action {name}"),
+                        arg: "--dock <id>".to_string(),
+                    })?
+                    .to_string(),
+            );
+            continue;
+        }
         // A bare word is a caller mistake worth naming: silently ignoring it is how a typo becomes
         // "the action ran but did nothing".
-        let (key, value) = pair.split_once('=').ok_or_else(|| {
+        let (key, value) = part.split_once('=').ok_or_else(|| {
             RpcError::UnknownCommand(format!(
-                "action {name}: expected key=value, got '{pair}'"
+                "action {name}: expected key=value, got '{part}'"
             ))
         })?;
         intent = intent.arg(key, crate::chrome::PropValue::Text(value.to_string()));
     }
-    Ok(RpcCommand::Intent(intent))
+    Ok(RpcCommand::Intent { intent, dock })
 }
 
 pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
@@ -1061,11 +1102,13 @@ mod tests {
     /// `Intent`, which is what the click / key / menu path already dispatches.
     #[test]
     fn the_action_verb_reaches_what_no_wmaction_can() {
-        let RpcCommand::Intent(intent) = parse_rpc("action workspaces.cursor_down").unwrap() else {
+        let RpcCommand::Intent { intent, dock } = parse_rpc("action workspaces.cursor_down").unwrap()
+        else {
             panic!("a component's action is an Intent, not a WmAction");
         };
         assert_eq!(intent.action, "workspaces.cursor_down");
         assert!(intent.args.is_empty());
+        assert_eq!(dock, None, "unnamed ⇒ the host resolves the owner itself");
         // It is a real declared action, not just a string that parsed.
         assert!(
             crate::input::action_from_name("workspaces.cursor_down").is_none(),
@@ -1073,13 +1116,51 @@ mod tests {
         );
 
         // Arguments are key=value, in any order.
-        let RpcCommand::Intent(intent) = parse_rpc("action close_pane_by_id pane_id=7").unwrap()
+        let RpcCommand::Intent { intent, .. } = parse_rpc("action close_pane_by_id pane_id=7").unwrap()
         else {
             panic!("the verb always yields an Intent");
         };
         assert_eq!(
             intent.args.get("pane_id"),
             Some(&crate::chrome::PropValue::Text("7".into())),
+        );
+    }
+
+    /// `--dock` names **which seating** a script means, and is not passed to the action: the
+    /// component author never sees it, because which of its placements a caller meant is the host's
+    /// question, not theirs (F003/P085/T358).
+    #[test]
+    fn the_dock_flag_targets_a_placement_and_never_reaches_the_action() {
+        let RpcCommand::Intent { intent, dock } =
+            parse_rpc("action docker.stop_selected --dock docker.right name=web").unwrap()
+        else {
+            panic!("the verb always yields an Intent");
+        };
+        assert_eq!(dock.as_deref(), Some("docker.right"));
+        assert_eq!(intent.action, "docker.stop_selected");
+        assert_eq!(
+            intent.args.get("name"),
+            Some(&crate::chrome::PropValue::Text("web".into())),
+            "the action's own arguments are untouched…",
+        );
+        assert!(
+            !intent.args.contains_key("dock") && !intent.args.contains_key("--dock"),
+            "…and the placement is not one of them",
+        );
+        // Order does not matter, and the flag needs its value.
+        let RpcCommand::Intent { dock, .. } =
+            parse_rpc("action docker.stop_selected name=web --dock docker.left").unwrap()
+        else {
+            panic!("the verb always yields an Intent");
+        };
+        assert_eq!(dock.as_deref(), Some("docker.left"));
+        assert_eq!(
+            parse_rpc("action docker.stop_selected --dock").err(),
+            Some(RpcError::MissingArgument {
+                cmd: "action docker.stop_selected".to_string(),
+                arg: "--dock <id>".to_string(),
+            }),
+            "a flag with nothing after it is a mistake worth naming",
         );
     }
 

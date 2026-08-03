@@ -41,8 +41,12 @@ pub(crate) fn register_provider_actions(
     let declared = declarations(state);
 
     for (mount, kind, metas) in declared {
-        for meta in metas {
+        for mut meta in metas {
             let id = meta.name.clone();
+            // Who declared it is the **host's** answer, not the component's: stamped here from the
+            // provider actually being registered, so an author can neither claim another
+            // component's name nor forget to say their own (F003/P085/T358).
+            meta.owner = Some(kind.clone());
             match register_dynamic(
                 registry,
                 &mut state.action_catalog,
@@ -259,7 +263,11 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
 ///
 /// `None` when nothing mounted declares it: the component that owned the action is gone, and the
 /// call declines rather than guessing.
-fn owning_mount(state: &AppState, action: &str) -> Option<String> {
+///
+/// `pub(crate)` because it is the rule for **which placement a call means**, wherever the call comes
+/// from — the `perform` bridge below, a palette entry, an RPC line without `--dock` (F003/P085/T358).
+/// Written once so those three cannot answer it differently.
+pub(crate) fn owning_mount(state: &AppState, action: &str) -> Option<String> {
     let declares = |mount: &str| {
         state
             .chrome_host

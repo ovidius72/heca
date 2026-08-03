@@ -25,6 +25,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
 
@@ -2378,6 +2379,45 @@ ViewNode::new(WidgetKind::Icon).prop("icon", PropValue::Glyph("git_branch".into(
   > `FolderSimplePlus`, `PlusSquare`, `StackPlus`, `StackMinus`, `ColumnsPlusLeft`,
   > `ColumnsPlusRight`, `SquareHalf`, `SquareSplitHorizontal`, `SquareHalfBottom`
 
+### NfIcon
+
+A single glyph from the embedded **Nerd Font** — the app's *second* glyph set, and **single-layer**
+(a Nerd Font glyph is one codepoint, not a duotone pair).
+
+**Three faces, three jobs** — `FontRole` names which one a text run is shaped with:
+
+| role | face | for |
+|---|---|---|
+| `Text` | Geist Mono | all UI text |
+| `Icon` | Phosphor Duotone | [`Icon`](#icon) — the pictogram set |
+| `NerdFont` | Maple Mono NF (also the terminal face) | `NfIcon` — what Phosphor has none of |
+
+**Why a second set at all.** Phosphor has **no keyboard glyphs whatsoever**, and the UI face has
+`⇧ ↑ ↓ ← → ⏎ ␣ ⇥ ⌫ ⌦` but **not `⌃ ⌥ ⌘ ⎋ ⇞ ⇟`** — so a shortcut spelled as plain text renders half
+its keys as empty boxes. Both facts are measured, not assumed:
+`heca-renderer/tests/font_coverage.rs` reads the embedded faces' `cmap` and fails if any named glyph
+is missing (and if the UI face ever *gains* the four, it says so, so the decision can be revisited).
+
+The font is the one already embedded for the terminal — a real Nerd Font, shipped in the binary, so
+a glyph looks identical on every platform. It is addressed **by family name** and loaded
+unconditionally at renderer init, so a user configuring their own terminal font cannot take the
+glyphs out from under the UI.
+
+- **Construct**: `NfIcon::new(NfGlyph)`; `.size(px)`, `.color(Color)` (inherits the enclosing
+  control's content color when unset, like [`Icon`](#icon)).
+- **`NfGlyph`**: the curated **keyboard set** — `Shift`, `Control`, `Option`, `Command`, `CapsLock`,
+  `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `ArrowUp/Down/Left/Right`. `NfGlyph::ALL` is the
+  authoritative list; the showcase renders it as a gallery with each name and codepoint.
+- **Adding one**: add the variant, its codepoint in `codepoint()`, its `name()`, and the variant to
+  `ALL`. The coverage test proves the codepoint is *in* the font; **it cannot prove the name matches
+  the picture** — Nerd Font glyphs are named `uniF0636` in the file, so the five
+  `nf-md-apple_keyboard_*` codepoints are read off the Material block's alphabetical order and
+  **confirmed by eye in the showcase gallery**. Same caveat `Glyph::CaretLeft` carries.
+- **Keycaps**: `KeyCap::Nf(NfGlyph)` draws one inside the shared keycap chip
+  (`paint_keycap_nf`) — the path the [command palette](#commandpalette) uses. A glyph char passed to
+  the plain `paint_keycap` would be shaped in the **UI** face, which does not have it: a silent
+  empty box. That is why the two are separate entry points.
+
 ```rust
 Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);
 // A standalone glyph that should read as lit:
@@ -3272,7 +3312,24 @@ query has an uppercase letter), ranked, with matched characters highlighted in t
 Selecting a command fires its callback and closes.
 
 - **Construct**: `CommandPalette::new()`; add commands with `.command(Command::new(label, on_run)
-  .icon(Glyph)?.key("⌘K")?)`; `.placeholder(text)`, `.open(bool)`.
+  .description(text)?.icon(Glyph)?.keys([KeyCap…])*)`; `.placeholder(text)`, `.open(bool)`.
+- **Bindings**: `.keys([KeyCap])` adds **one binding**, drawn as a row of keycap chips
+  (`[λ] [⇧] [e]`) through the shared `paint_keycap` primitive — never hand-drawn. Call it once per
+  binding: a second call **stacks** a second row under the first, so an action bound three times
+  shows three rows and the row grows to fit (one height for the whole list, as above). Every row
+  reserves the **same** width for chips — the widest chord in the list — so they form a column
+  instead of tracking each label's length, and the label box stops short of it.
+- **`KeyCap`**: `Nf(NfGlyph)` for a key with a picture (shift, control, option, command, escape,
+  tab, space, backspace, the arrows), `Text(String)` for anything else (a letter, `]`, `F5`, the
+  `λ` prefix). Two cases because the two are drawn in **different faces** — see
+  [`NfIcon`](#nficon). The app builds them from a binding in one place
+  (`heca/src/shortcut.rs::chord_caps`).
+- **Description**: an optional muted **second line** under the label. As soon as **any** command has
+  one, every row in the list is two lines high — one row height for the whole list, because
+  `row_rect` is what the paint, the hover-select and the click hit-test all share, and per-row
+  heights would make that a running sum in three places. Filtering still matches the **label** only:
+  a description explains a command the user has already found, and ranking on it would surface a
+  command whose label the query never mentioned.
 - **Accessor**: `.open_signal() -> Signal<bool>` — bind a chord (e.g. Ctrl+K) to open it.
 - **Occlusion**: while open, `overlay_occludes(pos)` is `true` for **every** point (it grabs the
   viewport: typing, nav, outside-click dismiss), so a host must not synthesize page-level actions
@@ -3285,7 +3342,12 @@ Selecting a command fires its callback and closes.
 
 ```rust
 let palette = CommandPalette::new()
-    .command(Command::new("Split pane", || wm.split()).icon(Glyph::Sidebar).key("⌥⌘S"))
+    .command(
+        Command::new("Split pane", || wm.split())
+            .description("New column to the right of the active pane.")
+            .icon(Glyph::Sidebar)
+            .key("⌥⌘S"),
+    )
     .command(Command::new("Close pane", || wm.close()).key("⌘W"));
 let open = palette.open_signal();
 // host: on Ctrl+K → open.set(true); add `palette` to the tree

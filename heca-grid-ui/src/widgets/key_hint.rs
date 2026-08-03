@@ -62,12 +62,21 @@ const KEYCAP_GLOW: f32 = 0.45;
 /// that are not part of a component tree (e.g. terminal hyperlink spans) without
 /// duplicating the formula.
 pub fn keycap_size(font: f32, text: &str) -> Size {
+    keycap_size_cells(font, text.chars().count().max(1))
+}
+
+/// [`keycap_size`] for a **Nerd Font** keycap — one square cell, whatever the glyph.
+pub fn keycap_size_nf(font: f32) -> Size {
+    keycap_size_cells(font, 1)
+}
+
+/// The chip size for `cells` character cells of content — the one formula both callers share.
+fn keycap_size_cells(font: f32, cells: usize) -> Size {
     let font64 = font as f64;
     let pad_x = (font * PAD_X_FRAC) as f64;
     let pad_y = (font * PAD_Y_FRAC) as f64;
-    let glyphs = text.chars().count().max(1) as f64;
     let w =
-        (glyphs * (font * GLYPH_ADVANCE_FRAC) as f64 + 2.0 * pad_x).max(font64 + 2.0 * pad_y);
+        (cells as f64 * (font * GLYPH_ADVANCE_FRAC) as f64 + 2.0 * pad_x).max(font64 + 2.0 * pad_y);
     let h = font64 + 2.0 * pad_y;
     Size::new(w, h)
 }
@@ -107,6 +116,98 @@ pub fn paint_keycap(
     if text.is_empty() {
         return;
     }
+    paint_keycap_content(cx, cap, KeycapContent::Text(text), font, color, variant);
+}
+
+/// [`paint_keycap`] for a **Nerd Font** glyph — a shift/command/escape key drawn as its own picture
+/// rather than spelled out (`NfGlyph`).
+///
+/// A separate entry point rather than a `&str` a caller could pass a glyph char in: the codepoint
+/// has to be shaped with the Nerd Font family, and that is a property of the *run*, not of the
+/// string. Passing the char to [`paint_keycap`] would shape it with the UI face, which does not have
+/// it — a silent empty box.
+pub fn paint_keycap_nf(
+    cx: &mut PaintCx,
+    cap: Rectangle,
+    glyph: super::NfGlyph,
+    font: f32,
+    color: Option<Color>,
+    variant: KeycapVariant,
+) {
+    paint_keycap_content(cx, cap, KeycapContent::Nf(glyph), font, color, variant);
+}
+
+/// What is drawn inside a keycap chip: a string in the UI face, or a Nerd Font glyph.
+#[derive(Clone, Copy)]
+enum KeycapContent<'a> {
+    Text(&'a str),
+    Nf(super::NfGlyph),
+}
+
+impl KeycapContent<'_> {
+    /// Draw the content centered in `cap`, in the face it belongs to.
+    fn paint(self, cx: &mut PaintCx, cap: Rectangle, color: Color, font: f32) {
+        match self {
+            KeycapContent::Text(t) => {
+                cx.text(cap, t, color, font, TextAlign::Center, TextStyle::BOLD)
+            }
+            KeycapContent::Nf(g) => {
+                if let Some(c) = g.char() {
+                    cx.nf_icon(cap, &c.to_string(), color, font);
+                }
+            }
+        }
+    }
+
+}
+
+/// One cap of a keyboard chord: a **Nerd Font key glyph** where the key has a picture (shift,
+/// command, escape, the arrows), the literal text where it does not (`h`, `]`, `F5`).
+///
+/// Two cases and not one, because the two are drawn in different faces — see [`paint_keycap_nf`].
+/// A caller builds a chord as a `Vec<KeyCap>` (`[λ] [⇧] [e]`) and the widget draws the chips.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KeyCap {
+    /// A key with a glyph in the embedded Nerd Font.
+    Nf(super::NfGlyph),
+    /// A key spelled out — a letter, a digit, a punctuation key, or a named key with no glyph.
+    Text(String),
+}
+
+impl KeyCap {
+    /// The chip size for this cap at `font`.
+    pub fn size(&self, font: f32) -> Size {
+        match self {
+            KeyCap::Nf(_) => keycap_size_nf(font),
+            KeyCap::Text(t) => keycap_size(font, t),
+        }
+    }
+
+    /// Draw this cap at `cap`, in the face it belongs to.
+    pub fn paint(
+        &self,
+        cx: &mut PaintCx,
+        cap: Rectangle,
+        font: f32,
+        color: Option<Color>,
+        variant: KeycapVariant,
+    ) {
+        match self {
+            KeyCap::Nf(g) => paint_keycap_nf(cx, cap, *g, font, color, variant),
+            KeyCap::Text(t) => paint_keycap(cx, cap, t, font, color, variant),
+        }
+    }
+}
+
+/// The shared chip: the surface (per [`KeycapVariant`]) plus whatever sits in it.
+fn paint_keycap_content(
+    cx: &mut PaintCx,
+    cap: Rectangle,
+    content: KeycapContent<'_>,
+    font: f32,
+    color: Option<Color>,
+    variant: KeycapVariant,
+) {
     let (accent, glow_c, background, ctrl_radius, keycap_alpha) = {
         let t = cx.theme();
         (
@@ -139,7 +240,7 @@ pub fn paint_keycap(
             );
             // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
             cx.rect(cap, keycap_c.with_alpha(keycap_alpha), None, radius, None);
-            cx.text(cap, text, background, font, TextAlign::Center, TextStyle::BOLD);
+            content.paint(cx, cap, background, font);
         }
         KeycapVariant::Bordered => {
             // Outline-only chip: **no fill** (empty interior) + a full-strength **accent** border
@@ -148,7 +249,7 @@ pub fn paint_keycap(
             // keycaps on an already-dark owned surface (a menu panel).
             let border = cx.border(keycap_c);
             cx.rect(cap, Color::TRANSPARENT, border, radius, None);
-            cx.text(cap, text, keycap_c, font, TextAlign::Center, TextStyle::BOLD);
+            content.paint(cx, cap, keycap_c, font);
         }
     }
 }

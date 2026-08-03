@@ -1,0 +1,170 @@
+{
+  "id": "1b6f739f-8774-4da2-af4f-5f88d0514507",
+  "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
+  "number": 91,
+  "shortId": "DUEHY",
+  "priority": 12,
+  "slug": "gridui-11-text-fits-its-box-label-truncation-and-item-s-second-line",
+  "title": "gridui-11: Text fits its box — Label truncation and Item's second line",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "The library's missing text capability, recorded as an open gap in AGENTS for months and worked around four separate times.",
+  "description": "Two small widget capabilities that four call sites have been hand-rolling because the library never had them.\n\n## Why it exists\n\nAGENTS.md records it plainly: *\"truncation/ellipsis + wrapping (a long label overflows its box today)\"* — in a **prose list of open gaps, never filed as a task**, which is precisely how it stayed open while four hand-written truncations grew around it:\n\n- `heca/src/chrome/mod.rs:286` `truncate_path_left` (start-ellipsis, keeps the tail — paths);\n- `heca/src/chrome/mod.rs:391` the pane info bar's overflow budget, measuring with its own `char_w = font * 0.6` (a hand-copy of `MONO_ADVANCE_RATIO`);\n- `heca/src/chrome/mod.rs:1428` `truncate_sidebar_git_branch` (a fixed char cap);\n- the command palette's `fit()` (F003/P085/T358).\n\n`heca/src/providers/workspaces/mod.rs:1231` even carries a comment deferring to *\"when label truncation/wrapping is settled\"*.\n\n## What already exists — nothing new is needed underneath\n\n- `Label::remeasure` sizes itself `chars × font × MONO_ADVANCE_RATIO` wide and `font × MONO_LINE_RATIO` tall, and `paint` draws into `base.bounds`. Fitting to the box is therefore a paint-time cut against the same measure the layout used.\n- `Layout::flex_shrink` and `min_size` exist (taffy 0.7), and `style.rs:423` documents `Px(0.0)` as the way to let a node go below its content size — so \"may be given less than its natural width\" needs no engine change.\n- `Item` **already composes**: its label is a real `Label` child (index 1) between two slot `Flex`es, and its own doc says the label \"can be swapped or extended without touching `Item::paint`\". The second line is another `Label`, never text drawn by `Item`.\n\n## Scope\n\n`Label` gains truncation (End and Start ellipsis) and `Item` gains a description line. **Both stay in `heca-grid-ui`** — a widget is what can be built there, and these can. The four app-side copies are deleted by F011/P089/T376, which is blocked on this.\n\n## Behaviors to preserve\n\nExisting labels are unaffected unless they opt in — a `Label` with no truncation set keeps its current natural size and overflow behaviour, or every layout in the app shifts at once. `Item`'s row height only changes when a description is present. Measure stays the shared `MONO_ADVANCE_RATIO` (a Phase-A approximation until cosmic-text shaping lands — centralising it here is what makes that a one-place fix later).",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "4845ea12-be54-4cae-9e0c-059252d2b65f",
+    "3019641b-6df6-4f5f-b3fe-e1c54c490117"
+  ],
+  "tasks": [
+    {
+      "id": "4845ea12-be54-4cae-9e0c-059252d2b65f",
+      "phaseId": "1b6f739f-8774-4da2-af4f-5f88d0514507",
+      "number": 379,
+      "shortId": "7FWRN",
+      "priority": 1,
+      "shortName": "label-fits-its-box-truncate-en",
+      "title": "Label fits its box — .truncate(End | Start), measured once",
+      "status": "in-progress",
+      "description": "The capability four call sites have been hand-writing.\n\n## What exists\n\n`heca-grid-ui/src/widgets/label.rs`:\n- `remeasure()` sets `width = chars × font × MONO_ADVANCE_RATIO`, `height = font × MONO_LINE_RATIO` — the label's **natural** size.\n- `paint()` draws `self.text` into `self.base.bounds` with the resolved colour/align/style, then draws decorations over the **run** (`run_rect()`), not the box.\n- Builders today: `align`, `color`, `bold`, `italic`, `underline`, `strikethrough`, `font_size`, `font_scale`, `text_signal`.\n\n`heca-grid-ui/src/style.rs`: `Layout::flex_shrink` (`None` ⇒ `0.0`) and `min_size`, with `Px(0.0)` documented at :423 as the way to allow shrinking below content size.\n\n## What to build\n\n`Label::truncate(Ellipsis)` where `Ellipsis` is `End` (labels, descriptions — cut the tail) or `Start` (paths, git branches — keep the tail, cut the head). Two behaviours together, and the second is the one that makes it work:\n\n1. **Layout**: a truncating label declares itself shrinkable — `flex_shrink = 1.0` and `min_size.width = Px(0.0)` — so the engine may hand it less than its natural width. Without this it keeps its full width and simply overflows, and the paint-time cut never triggers. This is the same trap as F003/P067's `flex_grow` lesson: a size that cannot shrink does not participate.\n2. **Paint**: fit the text to `bounds.size.w` using the *same* `MONO_ADVANCE_RATIO` cell the measure used, cutting from the end or the start and appending/prepending `…`. Cells `0` ⇒ nothing, `1` ⇒ `…` alone.\n\n`run_rect()` must follow the **drawn** text, or an underline/strikethrough would span the untruncated width.\n\n## Edge cases\n\n- Not truncating (the default) leaves `remeasure`, layout and paint exactly as they are — no existing label may move.\n- A signal-driven text that changes still re-measures; the cut is computed at paint from the current bounds, so it follows a resize with no rebuild.\n- Multi-byte text: count **chars**, never bytes (`truncate_path_left` already does).\n\n## Test (assert the drawn thing)\n\nPaint into a `Scene` and read the `DrawCommand::Text`: wide box ⇒ the full string; narrow box ⇒ a shorter string ending (or starting) in `…`; `Start` keeps the tail — `…/deep/path` — and `End` keeps the head. A test asserting only a flag is the F004 lesson repeated (a `grow` flag once passed while the layout was visibly broken); assert the text and the run rect.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-001-ellipsis-end-start-label-truncate-mode-builder",
+          "number": 1,
+          "title": "Ellipsis { End, Start } + Label::truncate(mode) builder",
+          "checked": false
+        },
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-002-truncating-label-declares-flex-shrink-min-size-width-px-0-so-the-engine-can-give-it-less",
+          "number": 2,
+          "title": "truncating label declares flex_shrink + min_size.width = Px(0) so the engine can give it less",
+          "checked": false
+        },
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-003-paint-fits-to-bounds-size-w-on-the-mono-advance-ratio-cell-0-cells-nothing-1",
+          "number": 3,
+          "title": "paint fits to bounds.size.w on the MONO_ADVANCE_RATIO cell; 0 cells ⇒ nothing, 1 ⇒ …",
+          "checked": false
+        },
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-004-run-rect-follows-the-drawn-text-so-decorations-do-not-span-the-untruncated-width",
+          "number": 4,
+          "title": "run_rect follows the DRAWN text so decorations do not span the untruncated width",
+          "checked": false
+        },
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-005-default-no-truncate-leaves-measure-layout-paint-byte-identical",
+          "number": 5,
+          "title": "default (no truncate) leaves measure/layout/paint byte-identical",
+          "checked": false
+        },
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-006-scene-test-wide-vs-narrow-end-keeps-the-head-start-keeps-the-tail-chars-not-bytes",
+          "number": 6,
+          "title": "scene test: wide vs narrow, End keeps the head, Start keeps the tail, chars not bytes",
+          "checked": false
+        },
+        {
+          "id": "4845ea12-be54-4cae-9e0c-059252d2b65f-check-007-docs-widgets-md-label-documents-it-the-agents-open-gap-line-is-struck",
+          "number": 7,
+          "title": "docs/widgets.md § Label documents it; the AGENTS open-gap line is struck",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-30T13:43:56.495Z",
+      "completedAt": "",
+      "createdAt": "2026-07-30T13:43:21.768Z",
+      "updatedAt": "2026-07-30T13:43:56.495Z"
+    },
+    {
+      "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117",
+      "phaseId": "1b6f739f-8774-4da2-af4f-5f88d0514507",
+      "number": 380,
+      "shortId": "29F9C",
+      "priority": 2,
+      "shortName": "item-gains-a-description-line",
+      "title": "Item gains a description line — a second Label, not painted text",
+      "status": "in-progress",
+      "description": "The row's second line, composed the way the row already composes its first.\n\n## What exists\n\n`heca-grid-ui/src/widgets/item.rs` builds three children in `Item::new` (:117-122) and names their indices:\n\n```\nconst LEADING: usize = 0;   // Flex::empty() slot\n// 1 = the label — `Label::new(label).align(TextAlign::Start).grow(1.0)`\nconst TRAILING: usize = 2;  // Flex::empty() slot\n```\n\nwith the doc: *\"The label is a real `Label` child (not text drawn by `Item`), so the row is composed like every other widget: the engine lays the three out, each paints itself, and the label can be swapped or extended **without touching `Item::paint`**.\"* That is the seam this task uses — the description is another `Label`, and `Item::paint` is not touched.\n\nConstants that will need to follow the row's height: `ROW_H` (38.0), `FONT_SIZE` (15.0), the selection pill inset `SEL_INSET`, the active bar `ACTIVE_BAR_FRAC`.\n\n## What to build\n\n`Item::description(text)`: the label child becomes a `Flex::column` of the title `Label` and a muted description `Label` (theme `muted`, smaller `font_scale`), and the row grows to two lines **only when a description is set**. Slots stay vertically centred against the whole row; the active bar and the selection pill scale with the row rather than assuming `ROW_H`.\n\nPair it with `Label::truncate` (T379) so a long description cuts instead of overflowing — the palette rows are the first consumer, via F011.\n\n## Edge cases\n\n- **No description ⇒ nothing changes**: same height, same paint, same measure. Every existing `Item` in the sidebar, menus and `Select` options must be pixel-identical.\n- `label_signal()` keeps addressing the **title**; a description signal is separate if one is needed later (not now — no consumer).\n- The description must not steal the row's activation: it is a plain child, and `on_activate` stays the row's.\n\n## Test\n\nBuild an `Item` with and without a description, run `LayoutEngine`, and assert: the two-line row is taller than the one-line row by one line; both labels are children of the label column with the description **below** the title and left-aligned to it; the leading/trailing slots stay centred; a description-less `Item` measures exactly as it does today (guard against a silent global row-height change).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-001-item-description-text-label-child-becomes-a-flex-column-of-title-muted-description-label",
+          "number": 1,
+          "title": "Item::description(text) — label child becomes a Flex::column of title + muted description Label",
+          "checked": false
+        },
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-002-row-height-grows-only-when-a-description-is-set-selection-pill-and-active-bar-scale-with-the-row-no-row-h-assumption",
+          "number": 2,
+          "title": "row height grows ONLY when a description is set; selection pill and active bar scale with the row (no ROW_H assumption)",
+          "checked": false
+        },
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-003-slots-stay-vertically-centred-against-the-full-row",
+          "number": 3,
+          "title": "slots stay vertically centred against the full row",
+          "checked": false
+        },
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-004-item-paint-untouched-the-composition-seam-its-own-docs-promise",
+          "number": 4,
+          "title": "Item::paint untouched — the composition seam its own docs promise",
+          "checked": false
+        },
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-005-test-heights-with-without-description-below-and-aligned-to-the-title-slots-centred-no-description-item-unchanged",
+          "number": 5,
+          "title": "test: heights with/without, description below and aligned to the title, slots centred, no-description Item unchanged",
+          "checked": false
+        },
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-006-docs-widgets-md-item-documents-it",
+          "number": 6,
+          "title": "docs/widgets.md § Item documents it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-30T13:54:39.563Z",
+      "completedAt": "",
+      "createdAt": "2026-07-30T13:43:45.665Z",
+      "updatedAt": "2026-07-30T13:54:39.563Z"
+    }
+  ],
+  "createdAt": "2026-07-30T13:42:04.394Z",
+  "updatedAt": "2026-07-30T13:54:39.563Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "a2910dde-d0f2-44e5-8434-0efa27e4287b",
+      "date": "2026-07-30T13:43:56.496Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
+}

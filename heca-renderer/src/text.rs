@@ -860,6 +860,9 @@ impl TextRenderer {
         italic: bool,
         align: TextAlign,
         icon: bool,
+        // Family override for this run — `None` shapes with the theme's text family. The Nerd Font
+        // role arrives here (see `scene.rs`); the terminal path already used the same field.
+        family: Option<&str>,
         glow: Option<TextGlow>,
     ) {
         self.commands.push(TextCommand {
@@ -882,7 +885,7 @@ impl TextRenderer {
             centered: true,
             line_box: false,
             icon,
-            font_family: None,
+            font_family: family.map(str::to_string),
             clip: self.current_clip,
             glow,
             run: None,

@@ -371,7 +371,10 @@ do_thing = "u"
             .iter()
             .find(|c| c.name == "workspaces")
             .expect("the workspaces component ships its keys here");
-        assert_eq!(ws.bindings["cursor_down"].keys(), vec!["j", "Down", "ArrowDown"]);
+        // One spelling per key: `Down` and `ArrowDown` are the same physical key (both parse to
+        // `GridKey::ArrowDown`), so binding both bound it twice and every surface that renders the
+        // shortcut drew the same cap twice (2026-07-30).
+        assert_eq!(ws.bindings["cursor_down"].keys(), vec!["j", "ArrowDown"]);
         assert_eq!(ws.bindings["peek_selected"].keys(), vec!["Space"]);
         assert_eq!(
             ws.bindings["global_focus"].keys(),

@@ -143,6 +143,21 @@ pub struct OverlayHost {
     forms: HashMap<OverlayId, FormBindings>,
 }
 
+impl OverlayHost {
+    /// Register what runs when overlay `id` resolves.
+    ///
+    /// The map itself stays private: a completion is only ever *installed* beside the layer that
+    /// will resolve it, and only ever *run* by [`resolve`], which removes it. This is the door for
+    /// an overlay built outside this module (the command palette, F003/P085/T358).
+    pub(crate) fn on_resolve(
+        &mut self,
+        id: OverlayId,
+        completion: impl FnOnce(&mut AppState, &ActionRegistry, ModalResult) + 'static,
+    ) {
+        self.completions.insert(id, Box::new(completion));
+    }
+}
+
 /// The front-most open **modal** overlay — the one capturing input — if any. The input path
 /// routes keyboard/pointer to its layer root (a self-contained [`Dialog`](heca_grid_ui::Dialog))
 /// and swallows everything else while it's up.

@@ -1972,8 +1972,13 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 
 // ── System ──
 
+/// Open the command palette: every registered action, searchable (F003/P085/T358).
+///
+/// The rows are read from the one [`ActionCatalog`](crate::actions::ActionCatalog) at open time, so
+/// this handler names nothing — a new plugin action, a rebind or a relabelled built-in is in the
+/// list without a change here. See [`crate::chrome::open_command_palette`].
 pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
-    state.needs_redraw = true;
+    crate::chrome::open_command_palette(state);
 }
 
 // ── External commands ──

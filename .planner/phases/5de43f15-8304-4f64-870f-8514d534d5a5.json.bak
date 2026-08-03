@@ -250,7 +250,7 @@
       "priority": 8,
       "shortName": "palette-and-rpc-reach-a-compon",
       "title": "Palette and RPC reach a component's actions from anywhere: FocusContainerThenAction",
-      "status": "planned",
+      "status": "in-progress",
       "description": "# What\n\nA declared action must be usable without first focusing its component by hand — from the command\npalette, from RPC, from a menu — while still meaning something (a selection-dependent action needs its\ncomponent to be the focused one).\n\n# ✅ DECIDED (user question 2026-07-29: \"what will the command palette discover?\")\n\n**Everything registered, and registration follows mounting.** A component's actions enter the catalog\non mount and are retired with it (`ProviderHandles` + `unregister_dynamic`), so an action for a\ncomponent that is not mounted simply does not exist — no filtering needed, it falls out.\n\n**Mounted but unfocused: still shown.** Choosing one focuses its component and then performs, using the\nprecedent already in the codebase for exactly this problem: pane-header buttons whose action needs the\npane focused register `InteractionIntent::FocusPaneThenAction { pane_id, action }`, which\n`dispatch_intent` expands into focus-then-act (`heca/src/app/interaction.rs`, and see AGENTS §\n\"Active-targeted buttons must focus first\").\n\n# Steps\n\n1. `InteractionIntent::FocusContainerThenAction { container, action }`, expanded in `dispatch_intent`\n   into `FocusDock { dock } ` + the action — mirroring `FocusPaneThenAction` exactly.\n2. Palette entries for component actions carry it, and are labelled with their scope:\n   `\"Containers › Restart Container\"` — the component's `title()` + the action's `label`, both already\n   in metadata. The focused component's actions sort first; nothing is hidden.\n3. **Which instance**, when a kind is mounted twice: the last-focused instance of that kind, else the\n   first mounted. One rule, written down once (`owning_mount`, shared with the `perform` bridge) rather\n   than decided per call site.\n4. RPC: the same resolution, plus an explicit override for scripts — `--dock docker.right` — so a script\n   can target a specific placement without focusing it first.\n5. `list-actions` / `describe-action` include component actions with their owner, so introspection shows\n   who owns what.\n\n# Edge cases\n\n- A selection-dependent action chosen from the palette with nothing selected: `perform` declines\n  silently after focusing. Acceptable for now; a later optional `can_perform(&self, id) -> bool` would\n  drive a disabled entry (menu entries already have an enabled state). **Do not build it now.**\n- An action id whose component was unmounted between the palette opening and the choice: resolve to\n  nothing and say so, rather than dispatching into the void.\n\n# Acceptance\n\n- Searching the palette finds `Restart Container` while the Docker dock is mounted and unfocused;\n  choosing it focuses that dock and restarts.\n- `heca action docker.stop_selected` works from a script, with `--dock` to disambiguate two placements.\n- Whole workspace green, clippy 0 warnings.",
       "notes": "",
       "statusLog": [],
@@ -259,10 +259,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-30T10:14:46.366Z",
       "completedAt": "",
       "createdAt": "2026-07-28T12:25:38.894Z",
-      "updatedAt": "2026-07-28T12:25:38.894Z"
+      "updatedAt": "2026-07-30T12:02:19.896Z"
     },
     {
       "id": "93e90146-83e1-453d-a443-05dc03b325bd",
@@ -341,11 +341,16 @@
     }
   ],
   "createdAt": "2026-07-28T12:21:31.986Z",
-  "updatedAt": "2026-07-30T10:03:51.114Z",
+  "updatedAt": "2026-07-30T12:02:19.896Z",
   "handoff": "",
-  "handoffUpdatedAt": "2026-07-29T09:58:23.721Z",
+  "handoffUpdatedAt": "2026-07-30T10:08:51.162Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/5de43f15-8304-4f64-870f-8514d534d5a5-2026-07-30T10-14-46-364Z.md",
+      "clearedAt": "2026-07-30T10:14:46.364Z",
+      "reason": "task-started"
+    },
     {
       "file": "handoff-archive/5de43f15-8304-4f64-870f-8514d534d5a5-2026-07-30T09-40-33-409Z.md",
       "clearedAt": "2026-07-30T09:40:33.409Z",

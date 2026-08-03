@@ -17,19 +17,24 @@
 //! configurable keys. Open/close is a host-owned [`Signal<bool>`](crate::reactive::Signal).
 
 use crate::builders::LayoutExt;
+use crate::style::WidgetSize;
 use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, WidgetIntent};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::widgets::{paint_panel_chrome, Glyph, Input, PanelChrome, PanelElevation};
+use crate::widgets::{paint_panel_chrome, Glyph, Input, KeyCap, KeycapVariant, PanelChrome, PanelElevation};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 
 /// One command in a [`CommandPalette`].
 pub struct Command {
     label: String,
+    description: Option<String>,
     icon: Option<Glyph>,
-    key: Option<String>,
+    /// One entry per **binding**, each a chord of caps (`[λ] [⇧] [e]`). Several bindings stack, one
+    /// per line — an action bound twice really is bound twice, and joining them into `"λ h / λ ←"`
+    /// was both wider than the label and impossible to draw as chips.
+    chords: Vec<Vec<KeyCap>>,
     on_run: Box<dyn Fn()>,
 }
 
@@ -39,10 +44,21 @@ impl Command {
     pub fn new(label: impl Into<String>, on_run: impl Fn() + 'static) -> Self {
         Self {
             label: label.into(),
+            description: None,
             icon: None,
-            key: None,
+            chords: Vec::new(),
             on_run: Box::new(on_run),
         }
+    }
+
+    /// An optional second line, muted — what the command does.
+    ///
+    /// Filtering still matches the **label** only: the description explains a command the user has
+    /// already found, and matching it would rank a command whose label the query never mentioned.
+    #[heca_grid_ui_macros::prop]
+    pub fn description(mut self, text: impl Into<String>) -> Self {
+        self.description = Some(text.into());
+        self
     }
 
     /// An optional leading icon.
@@ -52,10 +68,17 @@ impl Command {
         self
     }
 
-    /// An optional right-aligned keybinding hint (e.g. `"⌘K"`).
-    #[heca_grid_ui_macros::prop]
-    pub fn key(mut self, hint: impl Into<String>) -> Self {
-        self.key = Some(hint.into());
+    /// Add one **binding**, as the caps of its chord — `[Text("λ"), Nf(Shift), Text("e")]` draws
+    /// `[λ] [⇧] [e]`, right-aligned in the list's reserved shortcut column.
+    ///
+    /// Call it once per binding: a second call stacks a second row of chips under the first, rather
+    /// than replacing it or running the two together on one line.
+    #[heca_grid_ui_macros::host_only("a composed value, not a scalar")]
+    pub fn keys(mut self, chord: impl IntoIterator<Item = KeyCap>) -> Self {
+        let chord: Vec<KeyCap> = chord.into_iter().collect();
+        if !chord.is_empty() {
+            self.chords.push(chord);
+        }
         self
     }
 }
@@ -70,7 +93,9 @@ struct Match {
 /// Panel width as a fraction of the viewport, with absolute bounds.
 const PANEL_W_FRAC: f64 = 0.55;
 const PANEL_MIN_W: f64 = 360.0;
-const PANEL_MAX_W: f64 = 600.0;
+/// The **most** of the window a panel may ever take, so it never touches the edges — the guard that
+/// makes a small screen safe. Applied after the size variant's cap, and it wins.
+const PANEL_VIEWPORT_FRAC: f64 = 0.92;
 /// Panel top offset as a fraction of the viewport height (palettes sit high).
 const TOP_FRAC: f64 = 0.12;
 /// Panel inner padding.
@@ -82,8 +107,28 @@ const ROW_PAD_Y: f64 = 6.0;
 const ROW_PAD_X: f64 = 10.0;
 /// Gap between an icon and the label.
 const ICON_GAP: f64 = 10.0;
-/// Maximum result rows shown at once (the list scrolls beyond this).
-const MAX_VISIBLE: usize = 8;
+/// Command icon size as a fraction of the row font — a touch larger than the text, so the glyph
+/// reads as the row's subject rather than as punctuation beside it.
+const ICON_FONT_MUL: f32 = 1.3;
+/// Gap between two keycap chips of one chord.
+const CAP_GAP: f64 = 3.0;
+/// Minimum gap between a label and the reserved shortcut column.
+const SHORTCUT_GAP: f64 = 16.0;
+/// Keycap font as a fraction of the row font — a chip reads as an annotation, not as content.
+const KEYCAP_FONT_MUL: f32 = 0.85;
+/// What a [`WidgetSize`] means for the panel: how wide it may get, and how many rows it shows.
+///
+/// The caller picks a **semantic** size (a `[settings] command_palette_size` of `small` / `normal` /
+/// `large`); the widget owns the pixels, per the styling contract. Deliberately **width and row
+/// count only** — the text stays at reading size at every variant, which is why this is a small
+/// table here rather than `Style::size`, whose font scaling would cascade to the whole panel.
+const fn panel_metrics(size: WidgetSize) -> (f64, usize) {
+    match size {
+        WidgetSize::Small => (560.0, 6),
+        WidgetSize::Normal => (700.0, 8),
+        WidgetSize::Large | WidgetSize::Header => (850.0, 10),
+    }
+}
 
 /// Fuzzy subsequence match. Returns `(score, matched_indices)` if every query
 /// char appears in order in `text`. Higher score = better (consecutive,
@@ -138,6 +183,9 @@ pub struct CommandPalette {
     selected: usize,
     scroll: usize,
     placeholder: String,
+    /// How roomy the panel is — width and row count, never font. Set from the app's
+    /// `[settings] command_palette_size`.
+    panel_size: WidgetSize,
     open: Signal<bool>,
     modifiers: Modifiers,
     viewport: Cell<Size>,
@@ -156,6 +204,7 @@ impl CommandPalette {
             selected: 0,
             scroll: 0,
             placeholder: "Type a command…".to_string(),
+            panel_size: WidgetSize::Normal,
             open: signal(false),
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
@@ -167,6 +216,19 @@ impl CommandPalette {
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
         self.commands.push(c);
+        self
+    }
+
+    /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
+    /// rows it shows**, and nothing else — the text stays at reading size at every size, which is why
+    /// this is its own property rather than [`LayoutExt::size`](crate::builders::LayoutExt::size),
+    /// whose font scaling would cascade through the whole panel.
+    ///
+    /// Whatever the variant, the panel never exceeds [`PANEL_VIEWPORT_FRAC`] of the window, so a
+    /// small screen is safe by construction.
+    #[heca_grid_ui_macros::prop]
+    pub fn panel_size(mut self, size: WidgetSize) -> Self {
+        self.panel_size = size;
         self
     }
 
@@ -255,11 +317,103 @@ impl CommandPalette {
     }
 
     fn visible_rows(&self, n: usize) -> usize {
-        n.clamp(1, MAX_VISIBLE)
+        let (_, max_rows) = panel_metrics(self.panel_size);
+        // …and never more rows than the window can hold: the list plus the query line must fit under
+        // the panel's top offset. Without this a tall variant on a short screen runs off the bottom.
+        let vp = self.viewport.get();
+        let fits = match vp.h.is_finite() {
+            true => {
+                let line = self.line_h();
+                let chrome = 3.0 * PAD + line + 2.0 * QUERY_PAD_Y;
+                let room = (vp.h * (1.0 - TOP_FRAC) - chrome).max(0.0);
+                let row = line + 2.0 * ROW_PAD_Y;
+                ((room / row).floor().max(1.0)) as usize
+            }
+            false => max_rows,
+        };
+        n.clamp(1, max_rows.min(fits).max(1))
     }
 
     fn line_h(&self) -> f64 {
         (self.base.font * MONO_LINE_RATIO) as f64
+    }
+
+    /// Does any command carry a description? Then **every** row is two lines high.
+    ///
+    /// One height for the whole list, not per row: `row_rect` is the same rectangle the paint, the
+    /// hover-select and the click hit-test all compute, and rows of differing heights would make
+    /// that an index-dependent running sum in three places. A described list simply leaves the
+    /// second line of an undescribed row empty.
+    fn two_line_rows(&self) -> bool {
+        self.commands.iter().any(|c| c.description.is_some())
+    }
+
+    /// How many lines **this** row needs: its text (label, plus a description if the list has any)
+    /// or its stack of bindings, whichever is taller.
+    ///
+    /// Per row, **not** one height for the list. The uniform version was simpler — `row_rect` is
+    /// shared by the paint, the hover-select and the click hit-test, and one height makes it
+    /// arithmetic instead of a running sum — but it charges every row for the worst row: one action
+    /// bound three times (`paste_clipboard` is) made all 100 rows three lines tall, which is exactly
+    /// the vertical sprawl this fixes. The running sum lives in [`row_rects`](Self::row_rects) and
+    /// all three callers read it there, so it is still written once.
+    fn row_lines(&self, cmd: &Command) -> usize {
+        let text = if self.two_line_rows() { 2 } else { 1 };
+        text.max(cmd.chords.len()).max(1)
+    }
+
+    /// Height of one result row.
+    fn row_h(&self, cmd: &Command) -> f64 {
+        self.line_h() * self.row_lines(cmd) as f64 + 2.0 * ROW_PAD_Y
+    }
+
+    /// The rectangle of every **visible** row, paired with its index in `results`.
+    ///
+    /// The one place row geometry is computed. Paint draws these, hover-select and the click
+    /// hit-test read them — so a row can never be drawn in one place and clicked in another.
+    fn row_rects(&self, results: &[Match], panel: Rectangle, list_top: f64) -> Vec<(usize, Rectangle)> {
+        let mut out = Vec::new();
+        let mut y = list_top;
+        let window = results
+            .iter()
+            .enumerate()
+            .skip(self.scroll)
+            .take(self.visible_rows(results.len()));
+        for (ri, m) in window {
+            let h = self.row_h(&self.commands[m.cmd]);
+            out.push((
+                ri,
+                Rectangle::new(
+                    Point::new(panel.loc.x + PAD, y),
+                    Size::new(panel.size.w - 2.0 * PAD, h),
+                ),
+            ));
+            y += h;
+        }
+        out
+    }
+
+    /// Width of one chord's chips, laid end to end.
+    fn chord_w(&self, chord: &[KeyCap]) -> f64 {
+        let font = self.keycap_font();
+        let caps: f64 = chord.iter().map(|c| c.size(font).w).sum();
+        caps + CAP_GAP * chord.len().saturating_sub(1) as f64
+    }
+
+    /// The width **reserved on the right of every row** for bindings — the widest chord in the whole
+    /// list, so the labels of all rows end at the same place and the chips line up in a column
+    /// instead of tracking each label's length.
+    fn shortcut_col_w(&self) -> f64 {
+        self.commands
+            .iter()
+            .flat_map(|c| c.chords.iter())
+            .map(|chord| self.chord_w(chord))
+            .fold(0.0, f64::max)
+    }
+
+    /// Keycap chips are drawn a touch smaller than the row text, like the context menu's quick-pick.
+    fn keycap_font(&self) -> f32 {
+        self.base.font * KEYCAP_FONT_MUL
     }
 
     fn close(&mut self) {
@@ -276,24 +430,34 @@ impl CommandPalette {
     }
 
     /// Panel + query + first-row geometry for the current viewport + result count.
-    fn layout(&self, n_results: usize) -> (Rectangle, Rectangle, f64, f64, usize) {
+    fn layout(&self, results: &[Match]) -> (Rectangle, Rectangle, f64) {
         let vp = self.viewport.get();
         let line = self.line_h();
         let query_h = line + 2.0 * QUERY_PAD_Y;
-        let row_h = line + 2.0 * ROW_PAD_Y;
+        let n_results = results.len();
         let visible = self.visible_rows(n_results.max(1));
-        let list_h = if n_results == 0 {
-            row_h
-        } else {
-            visible as f64 * row_h
+        // The panel is as tall as the rows it will actually show — summed, since a row with two
+        // bindings is taller than one with none.
+        let empty_row = line + 2.0 * ROW_PAD_Y;
+        let list_h = match n_results {
+            0 => empty_row,
+            _ => results
+                .iter()
+                .skip(self.scroll)
+                .take(visible)
+                .map(|m| self.row_h(&self.commands[m.cmd]))
+                .sum(),
         };
 
-        let cap = if vp.w.is_finite() {
-            (vp.w * PANEL_W_FRAC).clamp(PANEL_MIN_W, PANEL_MAX_W)
-        } else {
-            PANEL_MAX_W
+        let (max_w, _) = panel_metrics(self.panel_size);
+        let panel_w = match vp.w.is_finite() {
+            // The variant's cap, then the window's: a small screen wins over any setting, and the
+            // floor yields too rather than pushing the panel off the edges.
+            true => (vp.w * PANEL_W_FRAC)
+                .clamp(PANEL_MIN_W, max_w)
+                .min(vp.w * PANEL_VIEWPORT_FRAC),
+            false => max_w,
         };
-        let panel_w = cap;
         let panel_h = PAD + query_h + PAD + list_h + PAD;
         let (vw, vh) = if vp.w.is_finite() {
             (vp.w, vp.h)
@@ -308,20 +472,26 @@ impl CommandPalette {
             Size::new(panel_w - 2.0 * PAD, query_h),
         );
         let list_top = query.loc.y + query_h + PAD;
-        (panel, query, list_top, row_h, visible)
+        (panel, query, list_top)
     }
 
-    fn row_rect(
-        &self,
-        panel: Rectangle,
-        list_top: f64,
-        row_h: f64,
-        visible_idx: usize,
-    ) -> Rectangle {
-        Rectangle::new(
-            Point::new(panel.loc.x + PAD, list_top + visible_idx as f64 * row_h),
-            Size::new(panel.size.w - 2.0 * PAD, row_h),
-        )
+    /// Cut `text` to what fits in `width`, ending in an ellipsis when it does not.
+    ///
+    /// A row's text has a hard right edge — the reserved shortcut column — and nothing clipped it:
+    /// a long description simply ran under the keycaps and out of the panel. Measured in monospace
+    /// cells, the way every other widget here measures text (`MONO_ADVANCE_RATIO`) and the same
+    /// advance this widget already uses to place the match highlights, so the cut lands where the
+    /// glyph does.
+    fn fit(text: &str, width: f64, adv: f64) -> String {
+        let cells = (width / adv).floor().max(0.0) as usize;
+        if text.chars().count() <= cells {
+            return text.to_string();
+        }
+        match cells {
+            0 => String::new(),
+            1 => "…".to_string(),
+            _ => text.chars().take(cells - 1).collect::<String>() + "…",
+        }
     }
 }
 
@@ -374,8 +544,12 @@ impl Component for CommandPalette {
         };
         let font = self.base.font;
         let adv = (font * MONO_ADVANCE_RATIO) as f64;
+        let line = self.line_h();
+        let two_line = self.two_line_rows();
+        // Measured once for the whole list, not per row — that is what makes the chips a column.
+        let shortcut_col = self.shortcut_col_w();
         let results = self.results();
-        let (panel, query, list_top, row_h, visible) = self.layout(results.len());
+        let (panel, query, list_top) = self.layout(&results);
         // Remember the panel so the idle caret blink can damage just this rect.
         self.panel.set(panel);
 
@@ -432,12 +606,10 @@ impl Component for CommandPalette {
                 );
             }
 
-            // Result rows (the visible scroll window).
-            for vi in 0..visible {
-                let ri = self.scroll + vi;
-                let Some(m) = results.get(ri) else { break };
+            // Result rows (the visible scroll window), from the one geometry helper.
+            for (ri, row) in self.row_rects(&results, panel, list_top) {
+                let m = &results[ri];
                 let cmd = &self.commands[m.cmd];
-                let row = self.row_rect(panel, list_top, row_h, vi);
                 let is_sel = ri == self.selected;
                 if is_sel {
                     let row_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
@@ -454,32 +626,50 @@ impl Component for CommandPalette {
                         None,
                     );
                 }
-                // Icon (optional).
-                let mut text_x = row.loc.x + ROW_PAD_X;
-                if let Some(g) = cmd.icon {
-                    if let Some(ch) = g.primary_char() {
-                        let isz = font * 1.05;
-                        let irect = Rectangle::new(
-                            Point::new(text_x, row.loc.y),
-                            Size::new(isz as f64, row.size.h),
-                        );
-                        cx.icon(
-                            irect,
-                            &ch.to_string(),
-                            if is_sel { accent } else { muted },
-                            isz,
-                        );
-                    }
-                    text_x += font as f64 * 1.05 + ICON_GAP;
+                // The line the label, its match highlights, the icon and the shortcut all share.
+                // In a one-line list that is the whole row (unchanged); in a described list it is
+                // the top line, with the description under it — so every element of the row keeps
+                // one vertical rule instead of each re-deriving it.
+                let first_line = match two_line {
+                    true => Rectangle::new(
+                        Point::new(row.loc.x, row.loc.y + ROW_PAD_Y),
+                        Size::new(row.size.w, line),
+                    ),
+                    false => row,
+                };
+                // Icon. The column is reserved **whether or not this row has one**, so a list where
+                // some commands carry a glyph and some do not still reads as one column of text —
+                // indenting only the iconed rows left the others starting at the panel edge.
+                let icon_x = row.loc.x + ROW_PAD_X;
+                let isz = font * ICON_FONT_MUL;
+                let text_x = icon_x + isz as f64 + ICON_GAP;
+                if let Some(ch) = cmd.icon.and_then(|g| g.primary_char()) {
+                    let irect = Rectangle::new(
+                        Point::new(icon_x, first_line.loc.y),
+                        Size::new(isz as f64, first_line.size.h),
+                    );
+                    cx.icon(
+                        irect,
+                        &ch.to_string(),
+                        if is_sel { accent } else { muted },
+                        isz,
+                    );
                 }
-                // Label, then over-draw matched chars in accent.
+                // Label, then over-draw matched chars in accent. Its box stops short of the reserved
+                // shortcut column, so text and chips can never share a pixel.
+                let text_w = (row.loc.x + row.size.w - ROW_PAD_X - shortcut_col - SHORTCUT_GAP
+                    - text_x)
+                    .max(0.0);
                 let lbl_rect = Rectangle::new(
-                    Point::new(text_x, row.loc.y),
-                    Size::new(row.size.w, row.size.h),
+                    Point::new(text_x, first_line.loc.y),
+                    Size::new(text_w, first_line.size.h),
                 );
+                // Cut to the box rather than trusting it: `cx.text` draws the run it is given, so a
+                // long label ran straight under the keycaps and out of the panel.
+                let label = Self::fit(&cmd.label, text_w, adv);
                 cx.text(
                     lbl_rect,
-                    &cmd.label,
+                    &label,
                     if is_sel {
                         foreground
                     } else {
@@ -489,23 +679,52 @@ impl Component for CommandPalette {
                     TextAlign::Start,
                     TextStyle::REGULAR,
                 );
+                // Highlights follow the **drawn** text: an index past the cut has no glyph to
+                // over-draw, and painting it anyway would stamp a letter onto the ellipsis.
                 for &hi in &m.hits {
-                    if let Some(ch) = cmd.label.chars().nth(hi) {
+                    if let Some(ch) = label.chars().nth(hi) {
                         let hx = text_x + hi as f64 * adv;
                         let hrect = Rectangle::new(
-                            Point::new(hx, row.loc.y),
-                            Size::new(adv + 2.0, row.size.h),
+                            Point::new(hx, first_line.loc.y),
+                            Size::new(adv + 2.0, first_line.size.h),
                         );
                         cx.text(hrect, &ch.to_string(), accent, font, TextAlign::Start, TextStyle::BOLD);
                     }
                 }
-                // Keybinding hint (optional), right-aligned.
-                if let Some(k) = &cmd.key {
-                    let krect = Rectangle::new(
-                        Point::new(row.loc.x, row.loc.y),
-                        Size::new(row.size.w - ROW_PAD_X, row.size.h),
+                // Bindings: one row of keycap chips per binding, stacked down the row, each
+                // right-aligned to the same reserved column so every command's chips line up.
+                let cap_font = self.keycap_font();
+                let right_edge = row.loc.x + row.size.w - ROW_PAD_X;
+                for (ci, chord) in cmd.chords.iter().enumerate() {
+                    let line_top = first_line.loc.y + ci as f64 * line;
+                    let mut x = right_edge - self.chord_w(chord);
+                    for cap in chord {
+                        let cs = cap.size(cap_font);
+                        let chip = Rectangle::new(
+                            Point::new(x, line_top + (line - cs.h) / 2.0),
+                            cs,
+                        );
+                        // The bordered chip — the same primitive the context-menu quick-pick draws,
+                        // never hand-rolled here.
+                        cap.paint(
+                            cx,
+                            chip,
+                            cap_font,
+                            Some(if is_sel { accent } else { muted }),
+                            KeycapVariant::Bordered,
+                        );
+                        x += cs.w + CAP_GAP;
+                    }
+                }
+                // Description (optional), muted, on the second line — indented to the label so the
+                // two read as one block.
+                if let Some(desc) = &cmd.description {
+                    let drect = Rectangle::new(
+                        Point::new(text_x, first_line.loc.y + line),
+                        Size::new(text_w, line),
                     );
-                    cx.text(krect, k, muted, font, TextAlign::End, TextStyle::REGULAR);
+                    let desc = Self::fit(desc, text_w, adv);
+                    cx.text(drect, &desc, muted, font, TextAlign::Start, TextStyle::REGULAR);
                 }
             }
         });
@@ -550,7 +769,21 @@ impl Component for CommandPalette {
                     self.select_prev();
                     Handled::Yes
                 }
-                _ => Handled::No,
+                // **Everything else goes to the query field** — `Edit*` above all
+                // (`edit_select_all`, `edit_delete_back`, `edit_delete_to_line_start`), which
+                // `Input` already implements. Forwarded rather than listed, so an intent added to
+                // the vocabulary later reaches the field without a change here; the palette owns
+                // only the four it answers above. This is the same **field-first** rule
+                // [`Dialog`](super::Dialog) applies through its `FocusManager` — the palette's query
+                // lives off-tree, so it forwards by hand.
+                _ => {
+                    let before = self.query_text();
+                    let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
+                    if self.query_text() != before {
+                        self.on_query_changed();
+                    }
+                    handled
+                }
             },
             Event::Key { pressed: true, .. } => {
                 // The query field owns editing keys (typing, selection, char/word/line delete,
@@ -568,13 +801,9 @@ impl Component for CommandPalette {
             Event::PointerMoved { pos } => {
                 // Hover-select a row.
                 let results = self.results();
-                let (panel, _q, list_top, row_h, visible) = self.layout(results.len());
-                for vi in 0..visible {
-                    let ri = self.scroll + vi;
-                    if ri >= results.len() {
-                        break;
-                    }
-                    if self.row_rect(panel, list_top, row_h, vi).contains(*pos) {
+                let (panel, _q, list_top) = self.layout(&results);
+                for (ri, row) in self.row_rects(&results, panel, list_top) {
+                    if row.contains(*pos) {
                         self.selected = ri;
                         break;
                     }
@@ -583,7 +812,7 @@ impl Component for CommandPalette {
             }
             Event::PointerPressed { pos } => {
                 let results = self.results();
-                let (panel, query_rect, list_top, row_h, visible) = self.layout(results.len());
+                let (panel, query_rect, list_top) = self.layout(&results);
                 // A click on the query line places the caret / selects (the Input
                 // needs its current bounds + font to hit-test the char position).
                 if query_rect.contains(*pos) {
@@ -595,12 +824,8 @@ impl Component for CommandPalette {
                     return Handled::Yes;
                 }
                 let mut ran = false;
-                for vi in 0..visible {
-                    let ri = self.scroll + vi;
-                    if ri >= results.len() {
-                        break;
-                    }
-                    if self.row_rect(panel, list_top, row_h, vi).contains(*pos) {
+                for (ri, row) in self.row_rects(&results, panel, list_top) {
+                    if row.contains(*pos) {
                         self.selected = ri;
                         self.run_selected();
                         ran = true;

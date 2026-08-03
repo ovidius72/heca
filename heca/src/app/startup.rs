@@ -366,6 +366,7 @@ pub(crate) async fn init_state(
         theme: app_config.theme.clone(),
         programs: std::rc::Rc::new(app_config.config.programs.clone()),
         appearance,
+        command_palette_size: app_config.config.settings.command_palette_size,
         font_config: app_config.config.font.clone(),
         terminal_cell_size,
         has_animated_images: false,

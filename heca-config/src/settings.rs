@@ -107,6 +107,24 @@ fn default_show_chrome_region() -> bool {
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// How roomy the command palette is — `small` / `normal` / `large`, as in Zed.
+///
+/// It decides the panel's **maximum width and how many rows it shows**, not the text size: the
+/// palette is read at the same size whatever its width. On a screen too small for the chosen
+/// variant the window wins — the panel is capped at a fraction of the viewport, so `large` on a
+/// laptop is simply as large as fits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaletteSize {
+    /// 560px, 6 rows.
+    Small,
+    /// 700px, 8 rows.
+    #[default]
+    Normal,
+    /// 850px, 10 rows.
+    Large,
+}
+
 /// User-configurable settings that control behaviour and appearance.
 ///
 /// Font family/size configuration has moved out of `[settings]` into the
@@ -118,6 +136,9 @@ pub struct SettingsConfig {
     pub theme: String,
     #[serde(default = "default_mouse")]
     pub mouse: bool,
+    /// How roomy the command palette is (`small` / `normal` / `large`).
+    #[serde(default, alias = "command-palette-size")]
+    pub command_palette_size: PaletteSize,
     #[serde(default = "default_window_width")]
     pub window_width: u32,
     #[serde(default = "default_window_height")]
@@ -242,6 +263,7 @@ impl Default for SettingsConfig {
         Self {
             theme: default_theme(),
             mouse: default_mouse(),
+            command_palette_size: PaletteSize::default(),
             window_width: default_window_width(),
             window_height: default_window_height(),
             terminal_foreground: None,

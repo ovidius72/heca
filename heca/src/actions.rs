@@ -50,7 +50,18 @@ impl ActionCategory {
             ActionCategory::System => "System",
         }
     }
+
 }
+
+/// The glyph an action shows when it declares none of its own — **one neutral mark, for every
+/// action**.
+///
+/// A per-*category* fallback was tried first and removed the same day (2026-07-30): it filled every
+/// row, but then all four `focus_*` actions wore the same arrow, every `Layout` action the same
+/// split, and a glyph that looks specific while meaning only "this is a Navigation action" reads as
+/// wrong rather than as generic. A plain dot claims nothing. An action that wants meaning declares
+/// its own icon, which always wins.
+pub const GENERIC_ACTION_ICON: Glyph = Glyph::Circle;
 
 /// The type of one action argument — what a supplied value has to look like.
 ///
@@ -562,7 +573,7 @@ impl ActionRegistry {
             label: "Focus Column Left",
             description: "Move focus to the column on the left.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::CaretLeft),
             args: &[],
         },
         ActionDescriptor {
@@ -570,7 +581,7 @@ impl ActionRegistry {
             label: "Focus Column Right",
             description: "Move focus to the column on the right.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::CaretRight),
             args: &[],
         },
         ActionDescriptor {
@@ -578,7 +589,7 @@ impl ActionRegistry {
             label: "Focus Pane Up",
             description: "Move focus to the pane above in the current column.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::CaretUp),
             args: &[],
         },
         ActionDescriptor {
@@ -586,7 +597,7 @@ impl ActionRegistry {
             label: "Focus Pane Down",
             description: "Move focus to the pane below in the current column.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::CaretDown),
             args: &[],
         },
         ActionDescriptor {
@@ -594,7 +605,7 @@ impl ActionRegistry {
             label: "Next Pane in Column",
             description: "Cycle focus forward through panes in the active column.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::ArrowLineRight),
             args: &[],
         },
         ActionDescriptor {
@@ -602,7 +613,7 @@ impl ActionRegistry {
             label: "Previous Pane in Column",
             description: "Cycle focus backward through panes in the active column.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::ArrowLineLeft),
             args: &[],
         },
         ActionDescriptor {
@@ -633,7 +644,7 @@ impl ActionRegistry {
             label: "Next Workspace",
             description: "Switch to the next workspace.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::CaretDown),
             args: &[],
         },
         ActionDescriptor {
@@ -641,12 +652,12 @@ impl ActionRegistry {
             label: "Previous Workspace",
             description: "Switch to the previous workspace.",
             category: ActionCategory::Navigation,
-            icon: None,
+            icon: Some(Glyph::CaretUp),
             args: &[],
         },
         ActionDescriptor {
             name: "focus_toggle_local",
-            label: "Toggle Focus Local",
+            label: "Last Pane",
             description: "Toggle between current and last-focused pane in the same workspace.",
             category: ActionCategory::Navigation,
             icon: None,
@@ -654,7 +665,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "focus_toggle_global",
-            label: "Toggle Focus Global",
+            label: "Last Workspace",
             description: "Toggle between current and last-visited workspace.",
             category: ActionCategory::Navigation,
             icon: None,
@@ -663,7 +674,7 @@ impl ActionRegistry {
         // ── Layout ──
         ActionDescriptor {
             name: "split_horizontal",
-            label: "New Column (Horizontal Split)",
+            label: "New Column",
             description: "Create a new column to the right.",
             category: ActionCategory::Layout,
             // New column opens to the right (see the description); ColumnsPlusLeft stays
@@ -673,7 +684,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "split_vertical",
-            label: "New Pane in Column (Vertical Split)",
+            label: "New Pane",
             description: "Add a new pane below the current one in the same column.",
             category: ActionCategory::Layout,
             icon: Some(Glyph::SquareHalfBottom),
@@ -685,7 +696,7 @@ impl ActionRegistry {
             // `split_vertical` which splits the active column). Menu/button-only, so no
             // binding; the "+" button still shows the `v` hint via `pane_action_name`.
             name: "add_pane_to_column",
-            label: "New Pane in Column",
+            label: "Add Pane to Column",
             description: "Add a new pane to this column.",
             category: ActionCategory::Layout,
             icon: Some(Glyph::FolderSimplePlus),
@@ -731,7 +742,7 @@ impl ActionRegistry {
             label: "Increase Column Width",
             description: "Widen the active column.",
             category: ActionCategory::Layout,
-            icon: None,
+            icon: Some(Glyph::Plus),
             args: &[],
         },
         ActionDescriptor {
@@ -739,7 +750,7 @@ impl ActionRegistry {
             label: "Decrease Column Width",
             description: "Narrow the active column.",
             category: ActionCategory::Layout,
-            icon: None,
+            icon: Some(Glyph::Minus),
             args: &[],
         },
         ActionDescriptor {
@@ -747,7 +758,7 @@ impl ActionRegistry {
             label: "Increase Pane Height",
             description: "Tallens the active pane within its column.",
             category: ActionCategory::Layout,
-            icon: None,
+            icon: Some(Glyph::StackPlus),
             args: &[],
         },
         ActionDescriptor {
@@ -755,13 +766,13 @@ impl ActionRegistry {
             label: "Decrease Pane Height",
             description: "Shortens the active pane within its column.",
             category: ActionCategory::Layout,
-            icon: None,
+            icon: Some(Glyph::StackMinus),
             args: &[],
         },
         // ── Font zoom ──
         ActionDescriptor {
             name: "app_font_increase",
-            label: "App Font Bigger (Everything)",
+            label: "Increase App Font",
             description: "Increase the whole-app font: chrome/UI and every terminal pane.",
             category: ActionCategory::System,
             icon: None,
@@ -769,7 +780,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "app_font_decrease",
-            label: "App Font Smaller (Everything)",
+            label: "Decrease App Font",
             description: "Decrease the whole-app font: chrome/UI and every terminal pane.",
             category: ActionCategory::System,
             icon: None,
@@ -777,7 +788,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "app_font_reset",
-            label: "App Font Reset (Everything)",
+            label: "Reset App Font",
             description: "Reset the whole-app font to the configured sizes.",
             category: ActionCategory::System,
             icon: None,
@@ -785,7 +796,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "pane_terminal_font_increase",
-            label: "Terminal Font Bigger (Pane)",
+            label: "Increase Terminal Font",
             description: "Increase the focused pane's terminal font size.",
             category: ActionCategory::Pane,
             icon: None,
@@ -793,7 +804,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "pane_terminal_font_decrease",
-            label: "Terminal Font Smaller (Pane)",
+            label: "Decrease Terminal Font",
             description: "Decrease the focused pane's terminal font size.",
             category: ActionCategory::Pane,
             icon: None,
@@ -801,7 +812,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "pane_terminal_font_reset",
-            label: "Terminal Font Reset (Pane)",
+            label: "Reset Terminal Font",
             description: "Reset the focused pane to follow the app-wide font size.",
             category: ActionCategory::Pane,
             icon: None,
@@ -919,7 +930,7 @@ impl ActionRegistry {
             label: "Follow Link",
             description: "Press a letter to open the link.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::GitBranch),
             args: &[],
         },
         // Pick-mode prompts (`description`) double as the in-progress pick text shown
@@ -1044,7 +1055,7 @@ impl ActionRegistry {
             label: "Toggle Left Sidebar",
             description: "Show or hide the left sidebar.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
@@ -1052,7 +1063,7 @@ impl ActionRegistry {
             label: "Toggle Right Sidebar",
             description: "Show or hide the right sidebar.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         // Chrome region show/hide mounted-gate (sidebar-fu-6). Unbound by default
@@ -1062,7 +1073,7 @@ impl ActionRegistry {
             label: "Show Left Sidebar",
             description: "Mount (show) the left sidebar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
@@ -1070,15 +1081,15 @@ impl ActionRegistry {
             label: "Hide Left Sidebar",
             description: "Unmount (hide) the left sidebar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
             name: "toggle_left_sidebar",
-            label: "Toggle Left Sidebar (show/hide)",
+            label: "Toggle Left Sidebar Region",
             description: "Mount or unmount the left sidebar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
@@ -1086,7 +1097,7 @@ impl ActionRegistry {
             label: "Show Right Sidebar",
             description: "Mount (show) the right sidebar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
@@ -1094,15 +1105,15 @@ impl ActionRegistry {
             label: "Hide Right Sidebar",
             description: "Unmount (hide) the right sidebar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
             name: "toggle_right_sidebar",
-            label: "Toggle Right Sidebar (show/hide)",
+            label: "Toggle Right Sidebar Region",
             description: "Mount or unmount the right sidebar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Sidebar),
             args: &[],
         },
         ActionDescriptor {
@@ -1110,7 +1121,7 @@ impl ActionRegistry {
             label: "Show Top Bar",
             description: "Mount (show) the top bar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::NotePencil),
             args: &[],
         },
         ActionDescriptor {
@@ -1118,15 +1129,15 @@ impl ActionRegistry {
             label: "Hide Top Bar",
             description: "Unmount (hide) the top bar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::NotePencil),
             args: &[],
         },
         ActionDescriptor {
             name: "toggle_top_bar",
-            label: "Toggle Top Bar (show/hide)",
+            label: "Toggle Top Bar Region",
             description: "Mount or unmount the top bar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::NotePencil),
             args: &[],
         },
         ActionDescriptor {
@@ -1134,7 +1145,7 @@ impl ActionRegistry {
             label: "Show Bottom Bar",
             description: "Mount (show) the bottom bar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Pencil),
             args: &[],
         },
         ActionDescriptor {
@@ -1142,15 +1153,15 @@ impl ActionRegistry {
             label: "Hide Bottom Bar",
             description: "Unmount (hide) the bottom bar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::Pencil),
             args: &[],
         },
         ActionDescriptor {
             name: "toggle_bottom_bar",
-            label: "Toggle Bottom Bar (show/hide)",
+            label: "Toggle Bottom Bar Region",
             description: "Mount or unmount the bottom bar region.",
             category: ActionCategory::Chrome,
-            icon: None,
+            icon: Some(Glyph::PlusCircle),
             args: &[],
         },
         // ── Chrome container placement (plugin-04/T1) ──
@@ -1211,7 +1222,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "collapse_current_workspace",
-            label: "Collapse Current Workspace Row",
+            label: "Collapse Workspace Row",
             description: "Collapse the active workspace row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             icon: None,
@@ -1219,7 +1230,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "expand_current_workspace",
-            label: "Expand Current Workspace Row",
+            label: "Expand Workspace Row",
             description: "Expand the active workspace row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             icon: None,
@@ -1227,7 +1238,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "toggle_current_workspace_collapsed",
-            label: "Toggle Current Workspace Row",
+            label: "Toggle Workspace Row",
             description: "Toggle the active workspace row collapsed state in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             icon: None,
@@ -1235,7 +1246,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "collapse_current_column",
-            label: "Collapse Current Column Row",
+            label: "Collapse Column Row",
             description: "Collapse the focused tiled column row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             icon: None,
@@ -1243,7 +1254,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "expand_current_column",
-            label: "Expand Current Column Row",
+            label: "Expand Column Row",
             description: "Expand the focused tiled column row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             icon: None,
@@ -1251,7 +1262,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "toggle_current_column_collapsed",
-            label: "Toggle Current Column Row",
+            label: "Toggle Column Row",
             description: "Toggle the focused tiled column row collapsed state in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             icon: None,
@@ -1261,9 +1272,9 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "command_palette",
             label: "Command Palette",
-            description: "Open the command palette (not yet implemented).",
+            description: "Search every action — the app's and every mounted component's — and run one.",
             category: ActionCategory::System,
-            icon: None,
+            icon: Some(Glyph::Search),
             args: &[],
         },
         ActionDescriptor {
@@ -1271,7 +1282,7 @@ impl ActionRegistry {
             label: "Reload Config",
             description: "Reload keymaps, theme, and settings from config.toml without restarting.",
             category: ActionCategory::System,
-            icon: None,
+            icon: Some(Glyph::Gear),
             args: &[],
         },
         // ── Scrollback (host terminal viewport) ──
@@ -1312,7 +1323,7 @@ impl ActionRegistry {
             label: "Scrollback to Top",
             description: "Jump the terminal viewport to the top of scrollback history.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::CaretUp),
             args: &[],
         },
         ActionDescriptor {
@@ -1320,7 +1331,7 @@ impl ActionRegistry {
             label: "Scrollback to Bottom",
             description: "Snap the terminal viewport to the live bottom (latest output).",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::CaretDown),
             args: &[],
         },
         ActionDescriptor {
@@ -1328,7 +1339,7 @@ impl ActionRegistry {
             label: "Exit Scrollback",
             description: "Snap to the live bottom, clear selection, and exit selection mode.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::XCircle),
             args: &[],
         },
         // ── Direct scroll (non-prefix, no selection mode entry) ──
@@ -1369,7 +1380,7 @@ impl ActionRegistry {
             label: "Scroll to Top",
             description: "Jump the terminal viewport to the top of scrollback history immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::CaretUp),
             args: &[],
         },
         ActionDescriptor {
@@ -1377,7 +1388,7 @@ impl ActionRegistry {
             label: "Scroll to Bottom",
             description: "Snap the terminal viewport to the live bottom immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::CaretDown),
             args: &[],
         },
         // ── Horizontal scroll (a chrome container's scroll area; a pane has one axis) ──
@@ -1507,7 +1518,7 @@ impl ActionRegistry {
             label: "Open Link at Caret",
             description: "Open the hyperlink under the selection caret.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::GitBranch),
             args: &[],
         },
         ActionDescriptor {
@@ -1523,7 +1534,7 @@ impl ActionRegistry {
             label: "Next Search Match",
             description: "Jump to the next scrollback-search match.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::Search),
             args: &[],
         },
         ActionDescriptor {
@@ -1531,7 +1542,7 @@ impl ActionRegistry {
             label: "Previous Search Match",
             description: "Jump to the previous scrollback-search match.",
             category: ActionCategory::Pane,
-            icon: None,
+            icon: Some(Glyph::CaretDown),
             args: &[],
         },
 
@@ -1539,15 +1550,15 @@ impl ActionRegistry {
         // action-task-E went looking for actions the catalog could not see.
         ActionDescriptor {
             name: "move_column_up",
-            label: "Move Column Up",
+            label: "Move Column to Workspace Above",
             description: "Move the focused column one position earlier.",
             category: ActionCategory::Layout,
-            icon: None,
+            icon: Some(Glyph::CaretUp),
             args: &[],
         },
         ActionDescriptor {
             name: "move_column_down",
-            label: "Move Column Down",
+            label: "Move Column to Workspace Below",
             description: "Move the focused column one position later.",
             category: ActionCategory::Layout,
             icon: None,
@@ -1765,7 +1776,7 @@ impl ActionRegistry {
         },
         ActionDescriptor {
             name: "add_column_to_workspace",
-            label: "New Column in Workspace",
+            label: "Add Column to Workspace",
             description: "Add a column to a specific workspace.",
             category: ActionCategory::Layout,
             icon: Some(Glyph::FolderSimplePlus),
@@ -1869,6 +1880,18 @@ pub struct ActionMeta {
     pub label: String,
     pub description: String,
     pub category: ActionCategory,
+    /// The **component** that declared this action — its `kind()`, e.g. `"workspaces"`. `None` for
+    /// a built-in, which belongs to the app itself (F003/P085/T358).
+    ///
+    /// The *kind*, never a mount id: a component seated twice declares its actions once, and which
+    /// **placement** a given call lands on is decided per call by `owning_mount`, not fixed at
+    /// registration. It is stamped by the host in `register_provider_actions`, not written by the
+    /// component — an author cannot claim to be someone else, and cannot forget.
+    ///
+    /// It is what lets the palette label an entry with its scope, and `list-actions` say who owns
+    /// what instead of returning one flat list in which a component's verbs are indistinguishable
+    /// from the app's.
+    pub owner: Option<String>,
     /// Centralized action icon — the single source of an action's [`Glyph`]. Every surface that
     /// renders this action reads it from here instead of inventing its own.
     pub icon: Option<Glyph>,
@@ -1953,6 +1976,8 @@ impl ActionCatalog {
                 label: d.label.to_string(),
                 description: d.description.to_string(),
                 category: d.category,
+                // The app's own — a built-in belongs to no component.
+                owner: None,
                 icon: d.icon,
                 policy: builtin_policy(d.name, &args),
                 args,
@@ -2035,14 +2060,24 @@ impl ActionCatalog {
 
     /// The icon [`Glyph`] for an action, by name — the single source of action iconography
     /// (pane-action bar, context menu, command palette all resolve through here).
+    ///
+    /// **Every action has one**: its own if it declared one, else [`GENERIC_ACTION_ICON`] — so no
+    /// surface has to decide what to do with a blank. `None` only for a name nothing knows.
     pub fn icon(&self, name: &str) -> Option<Glyph> {
-        self.find(name).and_then(|m| m.icon)
+        self.find(name).map(|m| m.icon.unwrap_or(GENERIC_ACTION_ICON))
     }
 
     /// The human-readable label for an action, by name — so a caller names the action
     /// rather than re-spelling the label.
     pub fn label(&self, name: &str) -> Option<&str> {
         self.find(name).map(|m| m.label.as_str())
+    }
+
+    /// Every action's metadata, in stable order — what a surface that **renders** actions walks
+    /// (the command palette). Distinct from [`describe_all`](Self::describe_all), which projects to
+    /// the serializable [`ActionInfo`] for the wire and drops the `Glyph`.
+    pub(crate) fn all(&self) -> impl Iterator<Item = &ActionMeta> + '_ {
+        self.order.iter().filter_map(|n| self.by_name.get(n))
     }
 
     /// All actions in a given category, in stable order.
@@ -2095,6 +2130,10 @@ pub struct ActionInfo {
     pub description: String,
     pub category: String,
     pub policy: String,
+    /// The component that declared this action (its `kind()`), or `None` for one of the app's own
+    /// built-ins — so a tool discovering a running heca can tell whose verb it is looking at
+    /// (F003/P085/T358).
+    pub owner: Option<String>,
     /// The arguments the action takes, in declaration order — what a caller has to supply to build
     /// it. Empty when it takes none. Without this a tool could discover an action's *name* and
     /// still have no way to learn how to call it.
@@ -2122,6 +2161,7 @@ impl ActionInfo {
             description: m.description.clone(),
             category: m.category.label().to_string(),
             policy: policy.to_string(),
+            owner: m.owner.clone(),
             args: m.args.clone(),
             confirm: m.confirm.as_ref().map(|c| c.config_name.clone()),
         }
@@ -2689,6 +2729,7 @@ mod tests {
             label: "Restart Container".to_string(),
             description: "Restart the selected Docker container.".to_string(),
             category: ActionCategory::System,
+            owner: None,
             icon: Some(Glyph::Trash),
             policy,
             args: Vec::new(),
@@ -2736,6 +2777,58 @@ mod tests {
             Some(Dispatch::Native)
         );
         assert_eq!(registry.dispatch_of(&catalog, "nope.not.a.thing"), None);
+    }
+
+    /// **Every action renders with an icon** — its own, or the one generic mark.
+    ///
+    /// A per-category fallback was tried first and removed the same day: it filled every row, but
+    /// all four `focus_*` then wore the same arrow, which reads as a wrong meaning rather than as
+    /// no meaning. A plain circle claims nothing.
+    #[test]
+    fn an_action_without_its_own_icon_shows_the_generic_mark() {
+        let catalog = ActionCatalog::with_builtins();
+        assert_eq!(
+            catalog.icon("close"),
+            Some(Glyph::FolderSimpleMinus),
+            "an action that declares its own keeps it",
+        );
+        assert_eq!(
+            catalog.icon("focus_toggle_local"),
+            Some(GENERIC_ACTION_ICON),
+            "…and one that declares none shows the generic mark, not a family glyph",
+        );
+        assert!(
+            catalog.all().all(|m| catalog.icon(&m.name).is_some()),
+            "no catalogued action may render blank",
+        );
+        assert_eq!(catalog.icon("nope.not.a.thing"), None, "only an unknown name has none");
+    }
+
+    /// **Introspection says whose verb it is** (F003/P085/T358). Without an owner, `list-actions`
+    /// returns one flat list in which a component's actions are indistinguishable from the app's,
+    /// and a tool has no way to group or scope them.
+    #[test]
+    fn introspection_names_the_component_that_declared_an_action() {
+        use crate::app::interaction::ActionPolicy;
+        let mut registry = ActionRegistry::new();
+        let mut catalog = ActionCatalog::with_builtins();
+        let mut meta = dyn_meta("docker.restart_selected", ActionPolicy::ContainerFocused);
+        // What `register_provider_actions` stamps from the provider being registered.
+        meta.owner = Some("docker".to_string());
+        let _ = register_dynamic(&mut registry, &mut catalog, meta, None);
+
+        let info = catalog
+            .describe("docker.restart_selected")
+            .expect("a declared action is describable");
+        assert_eq!(info.owner.as_deref(), Some("docker"));
+        assert_eq!(
+            catalog.describe("close").and_then(|i| i.owner),
+            None,
+            "a built-in belongs to the app itself",
+        );
+        // And it survives the wire form, which is the only reason it exists.
+        let json = serde_json::to_string(&info).expect("ActionInfo is serializable");
+        assert!(json.contains("\"owner\":\"docker\""), "{json}");
     }
 
     /// `unregister` (the provider unmounting and dropping its handle) retires BOTH halves — the

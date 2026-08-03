@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
 use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, Rectangle, Scene, Size};
+use heca_grid_ui::widgets::{KeyCap, NfGlyph, NfIcon};
 use heca_view::build::{self, Parent as _, Style as _};
 use heca_view::{Intent, PropValue, ViewNode};
 use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
@@ -355,36 +356,44 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .placeholder("Type a command…   (↑/↓ · Ctrl+J/K · Enter)")
         .command(
             Command::new("Split pane right", || println!("[showcase] split right"))
+                .description("New column to the right of the active pane.")
                 .icon(Glyph::Sidebar)
-                .key("⌥⌘→"),
+                .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Nf(NfGlyph::Enter)]),
         )
         .command(
             Command::new("Close pane", || println!("[showcase] close pane"))
+                .description("Close the focused pane.")
                 .icon(Glyph::Close)
-                .key("⌘W"),
+                .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Text("x".into())]),
         )
         .command(
             Command::new("Toggle sidebar", || println!("[showcase] toggle sidebar"))
+                .description("Show or hide the sidebar region.")
                 .icon(Glyph::Sidebar)
-                .key("⌘B"),
+                .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Nf(NfGlyph::Shift), KeyCap::Text("b".into())])
+                .keys([KeyCap::Text(PREFIX_SYMBOL.into()), KeyCap::Text("b".into())]),
         )
         .command(
             Command::new("New terminal", || println!("[showcase] new terminal"))
+                .description("Spawn a shell in a new pane.")
                 .icon(Glyph::Terminal),
         )
         .command(
             Command::new("Search files", || println!("[showcase] search files"))
+                .description("Fuzzy-find a file in the project.")
                 .icon(Glyph::Search)
-                .key("⌘P"),
+                .keys([KeyCap::Nf(NfGlyph::Control), KeyCap::Text("p".into())]),
         )
         .command(
             Command::new("Git: commit", || println!("[showcase] git commit"))
+                .description("Commit the staged changes.")
                 .icon(Glyph::GitCommit),
         )
         .command(
             Command::new("Settings", || println!("[showcase] settings"))
+                .description("Open the configuration file.")
                 .icon(Glyph::Gear)
-                .key("⌘,"),
+                .keys([KeyCap::Nf(NfGlyph::Command), KeyCap::Text(",".into())]),
         );
     let palette_open = palette.open_signal();
 
@@ -1181,6 +1190,41 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             let mut grid = Flex::column().gap(18.0);
             let mut row = Flex::row().gap(8.0).align(Align::Start);
             for (i, &glyph) in Glyph::ALL.iter().enumerate() {
+                if i > 0 && i % PER_ROW == 0 {
+                    grid = grid.child(row);
+                    row = Flex::row().gap(8.0).align(Align::Start);
+                }
+                row = row.child(cell(glyph));
+            }
+            grid.child(row)
+        })
+        // Nerd Font keyboard glyphs (F003/P085/T358 · P029/T090): the SECOND icon set, iterated
+        // from `NfGlyph::ALL`. Phosphor above has no keyboard glyphs at all and the UI face has no
+        // ⌃ ⌥ ⌘ ⎋, so a keycap draws from here.
+        //
+        // **This gallery is the confirmation surface.** A test proves each codepoint is IN the
+        // embedded font (`heca-renderer/tests/font_coverage.rs`); nothing can prove a codepoint
+        // draws the key it is named after, because the font names its glyphs `uniF0636`. The five
+        // apple_keyboard ones are read off the Material block's alphabetical order — look at them
+        // here, and if one is off by one it is a one-character fix in `NfGlyph::codepoint`.
+        .child(caption("NfIcon — Nerd Font keyboard set (confirm each name matches its picture)"))
+        .child({
+            const PER_ROW: usize = 7;
+            let cell = |glyph: NfGlyph| {
+                Flex::column()
+                    .gap(6.0)
+                    .align(Align::Center)
+                    .width(Length::Px(124.0))
+                    .child(NfIcon::new(glyph).color(theme.colors.foreground).size(26.0))
+                    .child(
+                        Label::new(format!("{}  U+{:05X}", glyph.name(), glyph.codepoint()))
+                            .font_scale(0.58)
+                            .color(theme.colors.muted),
+                    )
+            };
+            let mut grid = Flex::column().gap(18.0);
+            let mut row = Flex::row().gap(8.0).align(Align::Start);
+            for (i, &glyph) in NfGlyph::ALL.iter().enumerate() {
                 if i > 0 && i % PER_ROW == 0 {
                     grid = grid.child(row);
                     row = Flex::row().gap(8.0).align(Align::Start);

@@ -32,6 +32,19 @@ const UNDERLINE_OFFSET_RATIO: f32 = 0.42;
 /// box centre).
 const STRIKE_OFFSET_RATIO: f32 = 0.06;
 
+/// Which end of a label is cut when the text does not fit its box.
+///
+/// Two, because the two kinds of text read from opposite ends: a **label** is identified by its
+/// beginning (`Move focus to the column…`), a **path** by its end (`…/projects/heca/src`). Cutting
+/// a path at the tail throws away the only part anyone reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
+pub enum Ellipsis {
+    /// Keep the head, cut the tail: `Move focus to the col…`.
+    End,
+    /// Keep the tail, cut the head: `…/heca/src`.
+    Start,
+}
+
 /// A text label. Its content is a [`Signal`], so updating it marks the label
 /// dirty and triggers a repaint.
 ///
@@ -57,6 +70,9 @@ pub struct Label {
     underline: Signal<bool>,
     /// A rule through the text — drawn by this widget, not shaped.
     strikethrough: Signal<bool>,
+    /// Cut the text to its box instead of overflowing it. `None` (the default) is the historical
+    /// behaviour: the label keeps its natural width and a container that cannot hold it overflows.
+    truncate: Option<Ellipsis>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -76,9 +92,63 @@ impl Label {
             italic: signal(false),
             underline: signal(false),
             strikethrough: signal(false),
+            truncate: None,
         };
         label.remeasure();
         label
+    }
+
+    /// Cut the text to fit its box, with the ellipsis at `mode`'s end.
+    ///
+    /// **Two halves, and the second is the one that makes it work.** Cutting at paint time is only
+    /// reached if the layout can hand the label *less* than its natural width, so a truncating label
+    /// also declares itself shrinkable (`flex_shrink = 1.0`, `min_width = 0`). Without that it keeps
+    /// its full measured width and simply overflows — the same trap `flex_grow` had: a size that
+    /// cannot shrink does not participate in the squeeze.
+    ///
+    /// The cut uses the **same** monospace cell the measure does ([`MONO_ADVANCE_RATIO`]), so the
+    /// text ends exactly where the box does, and it is recomputed from the current bounds at every
+    /// paint — a resize re-cuts with no rebuild.
+    #[heca_grid_ui_macros::prop]
+    pub fn truncate(mut self, mode: Ellipsis) -> Self {
+        self.truncate = Some(mode);
+        self.base.style.layout.flex_shrink = Some(1.0);
+        self.base.style.layout.min_width = Some(Length::Px(0.0));
+        self
+    }
+
+    /// The text as it will actually be drawn: the whole string, or the cut that fits `bounds`.
+    ///
+    /// The single answer to "what is on screen", so the glyphs, the run rect the decorations follow,
+    /// and any test all agree.
+    fn drawn_text(&self) -> String {
+        let text = self.text.get_untracked();
+        let Some(mode) = self.truncate else {
+            return text;
+        };
+        let cell = (self.base.font * MONO_ADVANCE_RATIO) as f64;
+        if cell <= 0.0 {
+            return text;
+        }
+        // The epsilon is not cosmetic: a box sized to an exact number of cells divides to
+        // `n - 0.0000001` in f64 and would floor to one cell short, cutting text that fits.
+        let cells = (self.base.bounds.size.w / cell + 1e-6).floor().max(0.0) as usize;
+        let len = text.chars().count();
+        if len <= cells {
+            return text;
+        }
+        match cells {
+            0 => String::new(),
+            1 => "…".to_string(),
+            n => match mode {
+                Ellipsis::End => text.chars().take(n - 1).collect::<String>() + "…",
+                // Count from the tail: keep the LAST n-1 chars, which is the half a path needs.
+                Ellipsis::Start => {
+                    let tail: String = text.chars().skip(len - (n - 1)).collect();
+                    format!("…{tail}")
+                }
+            },
+        }
     }
 
     /// Text horizontal alignment.
@@ -159,7 +229,9 @@ impl Label {
     fn run_rect(&self) -> Rectangle {
         let bounds = self.base.bounds;
         let font = self.base.font as f64;
-        let chars = self.text.get_untracked().chars().count() as f64;
+        // The **drawn** text, not the full string: a rule under a truncated label must span the
+        // glyphs that are actually there, ellipsis included.
+        let chars = self.drawn_text().chars().count() as f64;
         let width = (chars * font * MONO_ADVANCE_RATIO as f64).min(bounds.size.w);
         let x = match self.align {
             TextAlign::Start => bounds.loc.x,
@@ -231,7 +303,7 @@ impl Component for Label {
             .unwrap_or_else(|| cx.theme().colors.foreground);
         cx.text(
             self.base.bounds,
-            &self.text.get_untracked(),
+            &self.drawn_text(),
             color,
             self.base.font,
             self.align,

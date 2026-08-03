@@ -25,20 +25,20 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "35f3891d-a670-4bc7-a9d2-9405c602566f",
-    "771b4aef-b174-438a-977e-cc2308084632"
+    "a43f300a-2162-40ac-9b86-ca16ad006c90",
+    "760365ea-80cb-4b5c-99de-ffe1b63f8eb3"
   ],
   "tasks": [
     {
-      "id": "35f3891d-a670-4bc7-a9d2-9405c602566f",
-      "phaseId": "87939acb-c177-4c6b-b4d7-2df14c25390d",
-      "number": 165,
-      "shortId": "AAC5C",
+      "id": "a43f300a-2162-40ac-9b86-ca16ad006c90",
+      "phaseId": "402d22d4-a658-47d7-8481-fb074ce43a00",
+      "number": 273,
+      "shortId": "5AU6N",
       "priority": 1,
-      "shortName": "read-buffer-rpc",
-      "title": "Read buffer content via RPC",
+      "shortName": "button-shortcut-api",
+      "title": "button-shortcut-1: Button::shortcut(char) + accelerator dispatch",
       "status": "planned",
-      "description": "Leggere il contenuto del buffer Neovim via RPC.",
+      "description": "`Button::shortcut(char)` → composed `Icon(NerdFont ⌃) + Label(letter)` trailing slot rendered **inside** the button (via the content-slot refactor from `viewnode-task-2`). `Ctrl+<c>` self-submit + `FocusManager::deliver_accelerator`.\n\nBLOCKED on:\n- `viewnode-task-2` (Button content-slot refactor — must land first).\n- ~~`gridui-03` `NfIcon`~~ — **unblocked 2026-07-30** (F003/P085/T358): `NfIcon` + `NfGlyph` + `FontRole::NerdFont` exist, and `NfGlyph::Control` is the ⌃ this task wanted. `Glyph::CaretUp` (0xe13c) stays in the enum but the accelerator uses NerdFont, as decided.\n\nFiles: `heca-grid-ui/src/widgets/button.rs` (shortcut API + trailing slot), `heca-grid-ui/src/component.rs` / `FocusManager` (`deliver_accelerator`).\n\nBehaviors to preserve: existing Button variants/sizes/labels unchanged; theme-driven styling; the accelerator is an additive trailing slot (empty by default → no layout shift). Update `docs/widgets.md` + showcase.\n\n**Reuse, do not re-derive:** a key token → glyph mapping already exists in one place (`heca/src/shortcut.rs::chord_caps` + `KEY_GLYPHS`), and the chip itself is `KeyCap` / `paint_keycap_nf`. A `Button::shortcut` that spells its own accelerator would be the second table.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -48,19 +48,19 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.598Z",
-      "updatedAt": "2026-07-01T18:15:25.598Z"
+      "createdAt": "2026-07-13T15:30:01.843Z",
+      "updatedAt": "2026-07-30T12:01:56.375Z"
     },
     {
-      "id": "771b4aef-b174-438a-977e-cc2308084632",
-      "phaseId": "aa6c3a49-f3a4-4330-876d-4156745e1ade",
-      "number": 166,
-      "shortId": "VS8QX",
+      "id": "760365ea-80cb-4b5c-99de-ffe1b63f8eb3",
+      "phaseId": "402d22d4-a658-47d7-8481-fb074ce43a00",
+      "number": 276,
+      "shortId": "RP42W",
       "priority": 2,
-      "shortName": "image-anchor-buffer",
-      "title": "Image anchor to buffer and window",
+      "shortName": "modal-shortcut-prop",
+      "title": "button-shortcut-2: ModalAction.shortcut prop in confirm builder",
       "status": "planned",
-      "description": "Ancorare le immagini a buffer/finestra con scroll tracking.",
+      "description": "`ModalAction.shortcut` prop set by the confirm builder: `n` = cancel, `y` = proceed (so confirm dialogs get in-button accelerator letters for free once `button-shortcut-1` lands).\n\nFiles: confirm-dialog builder (`heca/src/chrome/...`), `ModalAction`/`ViewNode` prop wiring.\n\nBehaviors to preserve: confirm dialog semantics (Delete Pane? / Delete &lt;custom&gt?; verb \"Delete\"; disabled-OK-when-empty guard stays); the shortcut is additive metadata the Button reads to render its trailing accelerator slot. Update `docs/widgets.md`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -70,14 +70,15 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.598Z",
-      "updatedAt": "2026-07-01T18:15:25.598Z"
+      "createdAt": "2026-07-13T15:30:01.845Z",
+      "updatedAt": "2026-07-13T15:30:01.845Z"
     }
   ],
   "createdAt": "2026-07-13T15:29:44.427Z",
-  "updatedAt": "2026-07-27T11:40:15.494Z",
+  "updatedAt": "2026-07-30T12:01:56.375Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

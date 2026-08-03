@@ -43,7 +43,7 @@
 //! which is the defect this whole phase exists to remove.
 
 use crate::{
-    Intent, PropMap, PropValue, ViewAlign, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
+    Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
     ViewNode, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewSize, ViewTextAlign, ViewVariant,
     WidgetKind,
 };
@@ -565,6 +565,11 @@ impl Label {
     /// How the text sits in its box.
     pub fn align_text(self, a: ViewTextAlign) -> Self {
         self.prop("align", a)
+    }
+    /// Cut the text to fit its box, with the ellipsis at this end. Unset ⇒ the text keeps its
+    /// natural width and a container too small for it overflows.
+    pub fn truncate(self, mode: ViewEllipsis) -> Self {
+        self.prop("truncate", mode)
     }
     /// Text colour: a theme token name or a literal.
     pub fn color(self, colour: &str) -> Self {

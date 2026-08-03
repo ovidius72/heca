@@ -1,7 +1,7 @@
 {
   "id": "b5d04826-7fd8-4094-ace5-96dc93b825a0",
   "number": 5,
-  "shortId": "",
+  "shortId": "AC96Y",
   "priority": 0,
   "name": "🌫️ Compositor Frost",
   "description": "Lavoro sulla pipeline z=0 per fondo frosted/blurred: gradient background, cached blur, integrazione pipeline, tuning visivo e ship review finale. La pipeline base è merged, restano tuning e review finale.",
