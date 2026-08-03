@@ -3666,7 +3666,10 @@ fn the_palette_size_is_capped_by_the_window() {
             .fold(0.0f64, f64::max)
     };
 
-    let roomy = Size::new(1800.0, 1000.0);
+    // An ORDINARY window, not a huge one: the sizes used to be capped by a viewport fraction, so
+    // they were identical below ~1550px and the setting did nothing on a normal screen. Testing at
+    // 1800px hid exactly that.
+    let roomy = Size::new(1280.0, 900.0);
     let small = panel_w(WidgetSize::Small, roomy);
     let normal = panel_w(WidgetSize::Normal, roomy);
     let large = panel_w(WidgetSize::Large, roomy);
@@ -3674,7 +3677,11 @@ fn the_palette_size_is_capped_by_the_window() {
         small < normal && normal < large,
         "each size is roomier than the last: {small} / {normal} / {large}",
     );
-    assert!(large <= 850.5, "large caps at 850px, got {large}");
+    assert!(large <= 1000.5, "large caps at 1000px, got {large}");
+    assert!(
+        (small - 560.0).abs() < 0.5 && (normal - 700.0).abs() < 0.5,
+        "each size is its own width when the window has room: {small} / {normal}",
+    );
 
     // On a narrow window every size collapses to what fits, and none touches the edges.
     let narrow = Size::new(480.0, 700.0);

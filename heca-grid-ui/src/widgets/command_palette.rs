@@ -90,8 +90,7 @@ struct Match {
     hits: Vec<usize>,
 }
 
-/// Panel width as a fraction of the viewport, with absolute bounds.
-const PANEL_W_FRAC: f64 = 0.55;
+/// Narrowest the panel is allowed to be — and it yields to a window narrower than itself.
 const PANEL_MIN_W: f64 = 360.0;
 /// The **most** of the window a panel may ever take, so it never touches the edges — the guard that
 /// makes a small screen safe. Applied after the size variant's cap, and it wins.
@@ -126,7 +125,7 @@ const fn panel_metrics(size: WidgetSize) -> (f64, usize) {
     match size {
         WidgetSize::Small => (560.0, 6),
         WidgetSize::Normal => (700.0, 8),
-        WidgetSize::Large | WidgetSize::Header => (850.0, 10),
+        WidgetSize::Large | WidgetSize::Header => (1000.0, 12),
     }
 }
 
@@ -449,14 +448,20 @@ impl CommandPalette {
                 .sum(),
         };
 
-        let (max_w, _) = panel_metrics(self.panel_size);
+        let (want_w, _) = panel_metrics(self.panel_size);
         let panel_w = match vp.w.is_finite() {
-            // The variant's cap, then the window's: a small screen wins over any setting, and the
-            // floor yields too rather than pushing the panel off the edges.
-            true => (vp.w * PANEL_W_FRAC)
-                .clamp(PANEL_MIN_W, max_w)
-                .min(vp.w * PANEL_VIEWPORT_FRAC),
-            false => max_w,
+            // **The size decides the width; the window only takes it away.** It used to be a
+            // fraction of the viewport merely *capped* by the size, which made `normal` and `large`
+            // identical on any window narrower than ~1550px — the fraction was below both caps, so
+            // the setting did nothing on an ordinary screen.
+            //
+            // The floor yields to the window too: on a screen narrower than `PANEL_MIN_W` the panel
+            // is as wide as fits rather than hanging off the edges.
+            true => {
+                let room = vp.w * PANEL_VIEWPORT_FRAC;
+                want_w.min(room).max(PANEL_MIN_W.min(room))
+            }
+            false => want_w,
         };
         let panel_h = PAD + query_h + PAD + list_h + PAD;
         let (vw, vh) = if vp.w.is_finite() {

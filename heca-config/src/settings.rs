@@ -121,7 +121,7 @@ pub enum PaletteSize {
     /// 700px, 8 rows.
     #[default]
     Normal,
-    /// 850px, 10 rows.
+    /// 1000px, 12 rows.
     Large,
 }
 
