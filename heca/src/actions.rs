@@ -632,6 +632,33 @@ impl ActionRegistry {
             )],
         },
         ActionDescriptor {
+            name: "clear_search_history",
+            label: "Clear Search History",
+            description: "Forget the past queries the command palette remembers.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // OPTIONAL: bare forgets every search surface, which is what a key or a palette entry
+            // means; a caller that knows which surface it wants names it. A *required* argument
+            // would keep it out of the palette entirely.
+            args: &[ArgDescriptor::optional(
+                "scope",
+                ArgKind::Text,
+                "Which search surface to forget; omit for all of them.",
+            )],
+        },
+        ActionDescriptor {
+            name: "clear_search_ranking",
+            label: "Clear Search Ranking",
+            description: "Forget which commands you use, so the palette stops ordering by habit.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[ArgDescriptor::optional(
+                "scope",
+                ArgKind::Text,
+                "Which search surface to forget; omit for all of them.",
+            )],
+        },
+        ActionDescriptor {
             name: "unfocus_dock",
             label: "Release Dock Focus",
             description: "Give the keyboard back to the focused pane, releasing chrome focus.",

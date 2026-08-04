@@ -667,6 +667,10 @@ pub struct AppState {
     /// The store revision last written to disk, so a save happens exactly when something new was
     /// recorded — see [`crate::search_state::persist_if_changed`].
     pub search_saved_revision: u64,
+    /// What this instance last agreed the history file said. A save applies **our delta** on top of
+    /// whatever is on disk now, so another heca window's runs are merged rather than discarded —
+    /// and that delta is only computable against this.
+    pub search_baseline: crate::search_state::Baseline,
     /// Structured font configuration (families + sizes), decoupled from the color
     /// theme. Read at the same choke points that previously read `theme.font_*`.
     /// Refreshed on `prefix+Shift+r` reload.

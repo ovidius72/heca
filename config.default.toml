@@ -38,6 +38,12 @@ search_case = "smart"
 # on macOS) — delete it any time and you lose nothing but the convenience. Set
 # false on a shared or recorded machine: the file is then neither written nor read.
 search_history = true
+
+# How much each search surface remembers. `search_history_size` is past queries
+# (what Ctrl+p walks); `search_usage_size` is how many commands' usage counts are
+# kept to order the list. Both are per surface, not totals.
+search_history_size = 50
+search_usage_size = 500
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Color theme by name. Built-ins: "grid_tron" (default), "grid_ares", "mocha",

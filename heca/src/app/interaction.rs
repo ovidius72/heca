@@ -413,6 +413,11 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
         WmAction::ReloadConfig => ActionPolicy::Global,
+        // Forgetting a search memory touches no layout and no pane, so there is no domain in which
+        // it should be refused.
+        WmAction::ClearSearchHistory { .. } | WmAction::ClearSearchRanking { .. } => {
+            ActionPolicy::Global
+        }
         // Opening a URL launches the OS handler — no layout impact, must work from
         // any focus domain (a link in a floating pane opens too).
         WmAction::OpenLink { .. } => ActionPolicy::Global,

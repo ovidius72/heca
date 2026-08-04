@@ -527,6 +527,12 @@ before running.
   it whenever you like — you lose nothing but the convenience — or set
   `search_history = false` to keep nothing at all. `search_history_size` and
   `search_usage_size` decide how much is kept.
+- **Several heca windows share it** without trampling each other: a save merges with
+  what is already on disk rather than replacing it, the way neovim's shada file
+  works. Two windows both using a command each add to its count.
+- **Forget it whenever you like.** `Clear Search History` drops the queries you have
+  typed, `Clear Search Ranking` drops what heca has learned about your habits — both
+  from the palette itself, or over RPC.
 - The selected row shows its full description, wrapped, and the rows below make room
   for it as you move.
 
