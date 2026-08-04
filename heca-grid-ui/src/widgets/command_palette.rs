@@ -97,6 +97,16 @@ const PANEL_MIN_W: f64 = 360.0;
 const PANEL_VIEWPORT_FRAC: f64 = 0.92;
 /// Panel top offset as a fraction of the viewport height (palettes sit high).
 const TOP_FRAC: f64 = 0.12;
+/// Room kept clear **below** the panel, as a fraction of the viewport height. `TOP_FRAC` is an
+/// offset, not a margin: it guards the top and says nothing about the bottom, which is how the list
+/// came to fill the window down to its last pixel and the final row ended up flush against the
+/// screen edge.
+///
+/// Deliberately **wider than the gap [`PANEL_VIEWPORT_FRAC`] leaves at the sides** (4%). Matching
+/// the sides was tried first and still read as touching: the panel's bottom edge landed on the top
+/// of the bottom pane, so the gap disappeared into a boundary that was already there instead of
+/// separating the panel from it.
+const BOTTOM_FRAC: f64 = 0.08;
 /// Panel inner padding.
 const PAD: f64 = 12.0;
 /// Vertical padding inside the query line and each result row.
@@ -316,7 +326,7 @@ impl CommandPalette {
     }
 
     /// How many rows the panel shows: the size variant's count, **and never more than the window
-    /// can hold**.
+    /// can hold with [`BOTTOM_FRAC`] still clear beneath it**.
     ///
     /// It measures the rows it would actually draw, from `scroll` onward, instead of dividing the
     /// room by a nominal row height. A row is two lines when the list is described and taller again
@@ -331,7 +341,9 @@ impl CommandPalette {
         // Everything the panel spends before the first row: its own padding above and below the
         // query line, the query line itself, and the padding under the list.
         let chrome = 3.0 * PAD + self.line_h() + 2.0 * QUERY_PAD_Y;
-        let mut room = (vp.h * (1.0 - TOP_FRAC) - chrome).max(0.0);
+        // The panel starts at `vh * TOP_FRAC`, so filling the remaining `1 - TOP_FRAC` put its
+        // bottom exactly on the window's edge. `BOTTOM_FRAC` is the room kept clear under it.
+        let mut room = (vp.h * (1.0 - TOP_FRAC - BOTTOM_FRAC) - chrome).max(0.0);
         let mut fits = 0usize;
         for m in results.iter().skip(self.scroll).take(max_rows) {
             let h = self.row_h(&self.commands[m.cmd]);

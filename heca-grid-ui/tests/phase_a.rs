@@ -3694,9 +3694,14 @@ fn the_palette_size_is_capped_by_the_window() {
     }
 }
 
-/// **The panel fits the window.** The row count is capped by what the window can actually hold, and
-/// a row is two lines when described and taller again with stacked bindings — a nominal one-line
-/// estimate over-counted and the list ran off the bottom.
+/// **The panel fits the window, with room left under it.** The row count is capped by what the
+/// window can actually hold, and a row is two lines when described and taller again with stacked
+/// bindings — a nominal one-line estimate over-counted and the list ran off the bottom.
+///
+/// It asserts a **gap**, not `bottom <= viewport.h`: a panel resting exactly on the screen edge
+/// passes the second and that is what shipped. And it **sweeps** the height rather than sampling
+/// it — the flush case only appears where the room divides evenly into rows, so 1280x577 left
+/// 0.76px under the panel while the three sampled viewports left 23px to 69px and looked fine.
 #[test]
 fn the_palette_never_runs_off_a_short_window() {
     use heca_grid_ui::widgets::KeyCap;
@@ -3714,28 +3719,36 @@ fn the_palette_never_runs_off_a_short_window() {
     }
     let p = p.open(true);
 
-    for viewport in [Size::new(1280.0, 900.0), Size::new(1280.0, 480.0), Size::new(900.0, 320.0)] {
-        let mut scene = Scene::new();
-        {
-            let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(viewport);
-            p.paint(&mut cx);
+    // The room kept clear beneath the panel, as a fraction of the window height — wider than the
+    // gap at its sides, since a bottom edge resting on a pane boundary still reads as touching.
+    const MIN_GAP_FRAC: f64 = 0.08;
+    for w in [1280.0, 900.0] {
+        for h in 260..=1000 {
+            let viewport = Size::new(w, f64::from(h));
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(viewport);
+                p.paint(&mut cx);
+            }
+            // The panel is the tallest painted rect that is not the full-viewport scrim.
+            let bottom = scene
+                .iter()
+                .filter_map(|c| match c {
+                    DrawCommand::Rect(r) if r.rect.size.w < viewport.w => {
+                        Some(r.rect.loc.y + r.rect.size.h)
+                    }
+                    _ => None,
+                })
+                .fold(0.0f64, f64::max);
+            let gap = viewport.h - bottom;
+            let want = viewport.h * MIN_GAP_FRAC;
+            assert!(
+                gap >= want - 0.5,
+                "at {}x{} the panel reached {bottom}px, leaving {gap}px under it — it needs {want}px",
+                viewport.w,
+                viewport.h,
+            );
         }
-        // The panel is the tallest painted rect that is not the full-viewport scrim.
-        let bottom = scene
-            .iter()
-            .filter_map(|c| match c {
-                DrawCommand::Rect(r) if r.rect.size.w < viewport.w => {
-                    Some(r.rect.loc.y + r.rect.size.h)
-                }
-                _ => None,
-            })
-            .fold(0.0f64, f64::max);
-        assert!(
-            bottom <= viewport.h + 0.5,
-            "at {}x{} the panel reached {bottom}px — past the bottom of the window",
-            viewport.w,
-            viewport.h,
-        );
     }
 }
 
