@@ -604,6 +604,19 @@ pub trait Component {
     /// without per-widget wiring. Default: no-op.
     fn remeasure(&mut self) {}
 
+    /// Text whose **height depends on the width the engine resolves** — return `Some` and the
+    /// layout pass hands this node to taffy's measure path instead of a fixed size.
+    ///
+    /// [`remeasure`](Self::remeasure) cannot express this: it runs *before* layout, so it has no
+    /// width to wrap into and can only report a size it already knows. A wrapping
+    /// [`Label`](crate::widgets::Label) is the one widget that needs the difference; everything
+    /// else measures itself and returns `None` (the default).
+    ///
+    /// Only consulted for **leaves** — a widget with children is sized by them.
+    fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
+        None
+    }
+
     /// Called by the layout engine **after** this node's bounds (and all its
     /// descendants' bounds) have been (re)computed and written to `Base::bounds`.
     /// Post-order: children fire before the parent. Default: no-op. Override to

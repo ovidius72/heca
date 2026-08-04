@@ -16,13 +16,14 @@
 //! [`run_selected`](CommandPalette::run_selected)) so a host can bind its own
 //! configurable keys. Open/close is a host-owned [`Signal<bool>`](crate::reactive::Signal).
 
-use crate::builders::LayoutExt;
+use crate::builders::{LayoutExt, Parent};
 use crate::style::WidgetSize;
 use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, WidgetIntent};
-use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
+use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign, TextStyle};
-use crate::widgets::{paint_panel_chrome, Glyph, Input, KeyCap, KeycapVariant, PanelChrome, PanelElevation};
+use crate::style::{Direction, Length};
+use crate::widgets::{paint_panel_chrome, Ellipsis, Flex, Glyph, Input, KeyCap, KeycapVariant, Label, PanelChrome, PanelElevation};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 
@@ -201,6 +202,21 @@ pub struct CommandPalette {
     /// Panel rect cached at paint, so the caret blink can damage just the panel
     /// (the palette paints on the overlay layer, away from its layout `bounds`).
     panel: Cell<Rectangle>,
+    /// Each row's **measured** height, captured post-layout while the children are still at their
+    /// natural, engine-computed sizes — the same trick [`Select`](super::Select) uses.
+    ///
+    /// This is what makes a wrapping description reflow the list: the palette no longer computes a
+    /// row's height from a line count, it reads what the engine measured, so a description that
+    /// wrapped onto three lines moves the rows below it without a line of arithmetic here.
+    natural_h: Vec<f64>,
+    /// The marks signal of each row's title label, so the match highlights can be moved on every
+    /// keystroke without rebuilding a hundred labels.
+    title_marks: Vec<Signal<Vec<usize>>>,
+    /// The wrap signal of each row's description, where it has one. **Only the selected row's
+    /// description reflows**; the rest are cut to one line, which is what keeps the list from
+    /// exploding to three lines a row and is why this is per-row state rather than a build-time
+    /// property.
+    desc_wrap: Vec<Option<Signal<bool>>>,
 }
 
 impl CommandPalette {
@@ -218,14 +234,43 @@ impl CommandPalette {
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
+            natural_h: Vec::new(),
+            title_marks: Vec::new(),
+            desc_wrap: Vec::new(),
         }
     }
 
     /// Add a command.
+    ///
+    /// Its text becomes **real children** — a title [`Label`] and, when the command has one, a
+    /// description `Label` — so the cut, the reflow and the match marks are the label's properties
+    /// rather than three things painted by hand here. The icon, the keycap chips and the selection
+    /// chrome stay drawn by the palette: the chips already go through the shared keycap primitive,
+    /// and the rest is panel chrome, not text.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
     pub fn command(mut self, c: Command) -> Self {
+        let title = Label::new(c.label.clone()).truncate(Ellipsis::End);
+        self.title_marks.push(title.marks_signal());
+        let mut column = Flex::column().child(title);
+        self.desc_wrap.push(None);
+        if let Some(desc) = &c.description {
+            // Cut by default, reflowed while selected — `sync_wrap` flips it. Because the height is
+            // measured, the reflow moves every row below it.
+            let d = Label::new(desc.clone())
+                .truncate(Ellipsis::End)
+                .wrap(false)
+                .muted(true);
+            *self.desc_wrap.last_mut().expect("just pushed") = Some(d.wrap_signal());
+            column = column.child(d);
+        }
+        self.base.children.push(Box::new(column));
         self.commands.push(c);
         self
+    }
+
+    /// The text column of row `i` — the child holding its title and description.
+    fn row_child(&self, i: usize) -> &dyn Component {
+        self.base.children[i].as_ref()
     }
 
     /// How roomy the panel is: `Small` / `Normal` / `Large` decide its **maximum width and how many
@@ -250,8 +295,10 @@ impl CommandPalette {
 
     /// Set the initial open state.
     #[heca_grid_ui_macros::prop]
-    pub fn open(self, open: bool) -> Self {
+    pub fn open(mut self, open: bool) -> Self {
         self.open.set(open);
+        // Mark the matches for the (empty) query now, so the first paint is not a frame behind.
+        self.sync_marks();
         self
     }
 
@@ -298,12 +345,14 @@ impl CommandPalette {
         }
         self.selected = (self.selected + 1).min(n - 1);
         self.follow_selection();
+        self.sync_wrap();
     }
 
     /// Move the selection up (Ctrl+K / ↑).
     pub fn select_prev(&mut self) {
         self.selected = self.selected.saturating_sub(1);
         self.follow_selection();
+        self.sync_wrap();
     }
 
     /// Run the selected command (fires its callback) and close.
@@ -346,7 +395,7 @@ impl CommandPalette {
         let mut room = (vp.h * (1.0 - TOP_FRAC - BOTTOM_FRAC) - chrome).max(0.0);
         let mut fits = 0usize;
         for m in results.iter().skip(self.scroll).take(max_rows) {
-            let h = self.row_h(&self.commands[m.cmd]);
+            let h = self.row_h(m.cmd);
             if h > room && fits > 0 {
                 break;
             }
@@ -386,9 +435,114 @@ impl CommandPalette {
         text.max(cmd.chords.len()).max(1)
     }
 
-    /// Height of one result row.
-    fn row_h(&self, cmd: &Command) -> f64 {
-        self.line_h() * self.row_lines(cmd) as f64 + 2.0 * ROW_PAD_Y
+    /// Height of one result row — **measured**, not computed.
+    ///
+    /// The text column is a real child, so its height already accounts for a description that
+    /// wrapped onto three lines; reading it here is the whole of the reflow. Before the first layout
+    /// pass — the palette opens and paints in the same frame — it falls back to the font-derived
+    /// estimate, exactly as [`Select`](super::Select) does with its own rows.
+    fn row_h(&self, cmd: usize) -> f64 {
+        let measured = self.natural_h.get(cmd).copied().unwrap_or(0.0);
+        let text_h = if measured > 0.0 {
+            measured
+        } else {
+            self.line_h() * self.row_lines(&self.commands[cmd]) as f64
+        };
+        // A row bound three times is taller than its text: the chips stack one per line.
+        let chips_h = self.line_h() * self.commands[cmd].chords.len().max(1) as f64;
+        text_h.max(chips_h) + 2.0 * ROW_PAD_Y
+    }
+
+    /// The panel's width for the current viewport — extracted from [`layout`](Self::layout) because
+    /// [`remeasure`](Component::remeasure) needs it too, and the two must never disagree about how
+    /// wide the text is allowed to be.
+    fn panel_w(&self) -> f64 {
+        let (want_w, _) = panel_metrics(self.panel_size);
+        let vp = self.viewport.get();
+        if !vp.w.is_finite() {
+            return want_w;
+        }
+        let room = vp.w * PANEL_VIEWPORT_FRAC;
+        want_w.min(room).max(PANEL_MIN_W.min(room))
+    }
+
+    /// The icon column's width — reserved whether or not a row has an icon.
+    fn icon_col(&self) -> f64 {
+        (self.base.font * ICON_FONT_MUL) as f64 + ICON_GAP
+    }
+
+    /// The width the row text is laid out at: the panel's inside, less the icon column and the
+    /// reserved shortcut column. **The labels cut and wrap against exactly this**, because it is the
+    /// width the engine gives the text children in `remeasure`.
+    fn text_w(&self) -> f64 {
+        (self.panel_w()
+            - 2.0 * PAD
+            - 2.0 * ROW_PAD_X
+            - self.icon_col()
+            - self.shortcut_col_w()
+            - SHORTCUT_GAP)
+            .max(0.0)
+    }
+
+    /// Move each visible row's text column into its slot in the panel, and collapse the rest.
+    ///
+    /// The engine lays the children out in the palette's own flow and measures them there; it cannot
+    /// place them in an overlay panel, because a taffy node sits where its parent puts it. So this
+    /// bakes an **absolute** target into each child's bounds — the same thing
+    /// [`Select::place_options`](super::Select) does, and idempotent for the same reason: re-running
+    /// it never compounds an offset.
+    ///
+    /// Rows outside the visible window collapse to zero size, so no stale rect is left behind.
+    fn place_rows(&mut self) {
+        let results = self.results();
+        let (panel, _query, list_top) = self.layout(&results);
+        let dx = panel.loc.x + PAD + ROW_PAD_X + self.icon_col();
+        let mut targets: Vec<Option<Rectangle>> = vec![None; self.base.children.len()];
+        for (ri, row) in self.row_rects(&results, panel, list_top) {
+            let cmd = results[ri].cmd;
+            let h = self.base.children[cmd].base().bounds.size.h;
+            targets[cmd] = Some(Rectangle::new(
+                Point::new(dx, row.loc.y + ROW_PAD_Y),
+                Size::new(self.text_w(), h),
+            ));
+        }
+        for (i, target) in targets.into_iter().enumerate() {
+            let Some(target) = target else {
+                self.base.children[i].base_mut().bounds.size = Size::new(0.0, 0.0);
+                continue;
+            };
+            let child = self.base.children[i].as_mut();
+            let d = (
+                target.loc.x - child.base().bounds.loc.x,
+                target.loc.y - child.base().bounds.loc.y,
+            );
+            if d.0 != 0.0 || d.1 != 0.0 {
+                crate::component::shift_subtree(child, d.0, d.1);
+            }
+            child.base_mut().bounds = target;
+        }
+    }
+
+    /// Move the match marks onto the labels that matched. Cheap enough per keystroke: it writes a
+    /// signal per row rather than rebuilding a hundred labels.
+    /// Reflow the selected row's description and cut every other. Called wherever the selection can
+    /// move, because the reflow **is** the selection's visual: the row grows and the rest slide down.
+    fn sync_wrap(&mut self) {
+        let selected = self.results().get(self.selected).map(|m| m.cmd);
+        for (i, wrap) in self.desc_wrap.iter().enumerate() {
+            if let Some(wrap) = wrap {
+                wrap.set(Some(i) == selected);
+            }
+        }
+    }
+
+    fn sync_marks(&mut self) {
+        for signal in &self.title_marks {
+            signal.set(Vec::new());
+        }
+        for m in self.results() {
+            self.title_marks[m.cmd].set(m.hits.clone());
+        }
     }
 
     /// The rectangle of every **visible** row, paired with its index in `results`.
@@ -404,7 +558,7 @@ impl CommandPalette {
             .skip(self.scroll)
             .take(self.visible_rows(results));
         for (ri, m) in window {
-            let h = self.row_h(&self.commands[m.cmd]);
+            let h = self.row_h(m.cmd);
             out.push((
                 ri,
                 Rectangle::new(
@@ -447,10 +601,12 @@ impl CommandPalette {
         self.scroll = 0;
     }
 
-    /// Reset the filter/selection whenever the query changes.
+    /// Reset the filter/selection whenever the query changes, and move the marks with it.
     fn on_query_changed(&mut self) {
         self.selected = 0;
         self.scroll = 0;
+        self.sync_marks();
+        self.sync_wrap();
     }
 
     /// Panel + query + first-row geometry for the current viewport + result count.
@@ -469,25 +625,13 @@ impl CommandPalette {
                 .iter()
                 .skip(self.scroll)
                 .take(visible)
-                .map(|m| self.row_h(&self.commands[m.cmd]))
+                .map(|m| self.row_h(m.cmd))
                 .sum(),
         };
 
-        let (want_w, _) = panel_metrics(self.panel_size);
-        let panel_w = match vp.w.is_finite() {
-            // **The size decides the width; the window only takes it away.** It used to be a
-            // fraction of the viewport merely *capped* by the size, which made `normal` and `large`
-            // identical on any window narrower than ~1550px — the fraction was below both caps, so
-            // the setting did nothing on an ordinary screen.
-            //
-            // The floor yields to the window too: on a screen narrower than `PANEL_MIN_W` the panel
-            // is as wide as fits rather than hanging off the edges.
-            true => {
-                let room = vp.w * PANEL_VIEWPORT_FRAC;
-                want_w.min(room).max(PANEL_MIN_W.min(room))
-            }
-            false => want_w,
-        };
+        // **The size decides the width; the window only takes it away** — see `panel_w`, which
+        // `remeasure` shares so the text is laid out at the width it will be drawn at.
+        let panel_w = self.panel_w();
         let panel_h = PAD + query_h + PAD + list_h + PAD;
         let (vw, vh) = if vp.w.is_finite() {
             (vp.w, vp.h)
@@ -505,24 +649,6 @@ impl CommandPalette {
         (panel, query, list_top)
     }
 
-    /// Cut `text` to what fits in `width`, ending in an ellipsis when it does not.
-    ///
-    /// A row's text has a hard right edge — the reserved shortcut column — and nothing clipped it:
-    /// a long description simply ran under the keycaps and out of the panel. Measured in monospace
-    /// cells, the way every other widget here measures text (`MONO_ADVANCE_RATIO`) and the same
-    /// advance this widget already uses to place the match highlights, so the cut lands where the
-    /// glyph does.
-    fn fit(text: &str, width: f64, adv: f64) -> String {
-        let cells = (width / adv).floor().max(0.0) as usize;
-        if text.chars().count() <= cells {
-            return text.to_string();
-        }
-        match cells {
-            0 => String::new(),
-            1 => "…".to_string(),
-            _ => text.chars().take(cells - 1).collect::<String>() + "…",
-        }
-    }
 }
 
 impl Default for CommandPalette {
@@ -573,11 +699,7 @@ impl Component for CommandPalette {
             )
         };
         let font = self.base.font;
-        let adv = (font * MONO_ADVANCE_RATIO) as f64;
         let line = self.line_h();
-        let two_line = self.two_line_rows();
-        // Measured once for the whole list, not per row — that is what makes the chips a column.
-        let shortcut_col = self.shortcut_col_w();
         let results = self.results();
         let (panel, query, list_top) = self.layout(&results);
         // Remember the panel so the idle caret blink can damage just this rect.
@@ -660,19 +782,15 @@ impl Component for CommandPalette {
                 // In a one-line list that is the whole row (unchanged); in a described list it is
                 // the top line, with the description under it — so every element of the row keeps
                 // one vertical rule instead of each re-deriving it.
-                let first_line = match two_line {
-                    true => Rectangle::new(
-                        Point::new(row.loc.x, row.loc.y + ROW_PAD_Y),
-                        Size::new(row.size.w, line),
-                    ),
-                    false => row,
-                };
+                let first_line = Rectangle::new(
+                    Point::new(row.loc.x, row.loc.y + ROW_PAD_Y),
+                    Size::new(row.size.w, line),
+                );
                 // Icon. The column is reserved **whether or not this row has one**, so a list where
                 // some commands carry a glyph and some do not still reads as one column of text —
                 // indenting only the iconed rows left the others starting at the panel edge.
                 let icon_x = row.loc.x + ROW_PAD_X;
                 let isz = font * ICON_FONT_MUL;
-                let text_x = icon_x + isz as f64 + ICON_GAP;
                 if let Some(ch) = cmd.icon.and_then(|g| g.primary_char()) {
                     let irect = Rectangle::new(
                         Point::new(icon_x, first_line.loc.y),
@@ -685,42 +803,17 @@ impl Component for CommandPalette {
                         isz,
                     );
                 }
-                // Label, then over-draw matched chars in accent. Its box stops short of the reserved
-                // shortcut column, so text and chips can never share a pixel.
-                let text_w = (row.loc.x + row.size.w - ROW_PAD_X - shortcut_col - SHORTCUT_GAP
-                    - text_x)
-                    .max(0.0);
-                let lbl_rect = Rectangle::new(
-                    Point::new(text_x, first_line.loc.y),
-                    Size::new(text_w, first_line.size.h),
-                );
-                // Cut to the box rather than trusting it: `cx.text` draws the run it is given, so a
-                // long label ran straight under the keycaps and out of the panel.
-                let label = Self::fit(&cmd.label, text_w, adv);
-                cx.text(
-                    lbl_rect,
-                    &label,
-                    if is_sel {
-                        foreground
-                    } else {
-                        muted.lerp(foreground, 0.7)
-                    },
-                    font,
-                    TextAlign::Start,
-                    TextStyle::REGULAR,
-                );
-                // Highlights follow the **drawn** text: an index past the cut has no glyph to
-                // over-draw, and painting it anyway would stamp a letter onto the ellipsis.
-                for &hi in &m.hits {
-                    if let Some(ch) = label.chars().nth(hi) {
-                        let hx = text_x + hi as f64 * adv;
-                        let hrect = Rectangle::new(
-                            Point::new(hx, first_line.loc.y),
-                            Size::new(adv + 2.0, first_line.size.h),
-                        );
-                        cx.text(hrect, &ch.to_string(), accent, font, TextAlign::Start, TextStyle::BOLD);
-                    }
-                }
+                // **The row's text is a child.** A title `Label` (cut to its box, its match
+                // marks a property) over an optional description `Label` (wrapped) — placed by
+                // `place_rows` and painted here under the row's content colour, so both track the
+                // selection without either being told what a selection is. Truncation, wrapping and
+                // the marks are the label's; this widget draws no text.
+                let content = if is_sel {
+                    foreground
+                } else {
+                    muted.lerp(foreground, 0.7)
+                };
+                cx.with_content_color(content, |cx| self.row_child(m.cmd).paint(cx));
                 // Bindings: one row of keycap chips per binding, stacked down the row, each
                 // right-aligned to the same reserved column so every command's chips line up.
                 let cap_font = self.keycap_font();
@@ -746,24 +839,58 @@ impl Component for CommandPalette {
                         x += cs.w + CAP_GAP;
                     }
                 }
-                // Description (optional), muted, on the second line — indented to the label so the
-                // two read as one block.
-                if let Some(desc) = &cmd.description {
-                    let drect = Rectangle::new(
-                        Point::new(text_x, first_line.loc.y + line),
-                        Size::new(text_w, line),
-                    );
-                    let desc = Self::fit(desc, text_w, adv);
-                    cx.text(drect, &desc, muted, font, TextAlign::Start, TextStyle::REGULAR);
-                }
             }
         });
     }
 
     /// Owns its walk. While open it grabs the viewport — typing, nav and outside-click dismissal —
-    /// and its command rows are drawn from data, not mounted as children.
+    /// and it paints its row children itself, in the overlay panel it positions them into.
     fn routes_own_subtree(&self) -> bool {
         true
+    }
+
+    /// Lay the row text out at **the width it will be drawn at**, in a column.
+    ///
+    /// This is what makes a description wrap correctly: the engine measures each text child against
+    /// this width, so the line count it reports is the line count that will be painted. The viewport
+    /// is the one cached at the last paint, so the very first frame falls back to the size variant's
+    /// nominal width and settles on the next — the same one-frame settle `Select` documents for its
+    /// measured rows.
+    fn remeasure(&mut self) {
+        // Reflow the selected row **before** the children are measured. `build` calls this on a node
+        // and only then descends into its children, so a wrap flipped here is the wrap they measure
+        // with — flipping it after layout would show the previous selection's shape for a frame.
+        self.sync_wrap();
+        // The palette **fills the viewport**, like every other layer root, so `on_layout` can read
+        // its own size and learn the viewport from the layout pass rather than waiting for a paint.
+        self.base.style.layout.direction = Direction::Column;
+        self.base.style.layout.width = Length::Pct(1.0);
+        self.base.style.layout.height = Length::Pct(1.0);
+        // The text children carry the width instead: the engine measures each against the width it
+        // will be drawn at, so the line count it reports is the line count that gets painted.
+        let w = self.text_w() as f32;
+        for child in self.base.children.iter_mut() {
+            child.base_mut().style.layout.width = Length::Px(w);
+        }
+    }
+
+    /// Layout just reset every row to its natural position and size: re-read the measured heights
+    /// from it, then place the rows into the panel again.
+    fn on_layout(&mut self) {
+        // The root fills the viewport, so this is the viewport — known one whole frame earlier than
+        // the paint that used to be the only source. Without it the first frame after the palette
+        // opens places its rows against a fallback panel and the text lands off the panel.
+        let size = self.base.bounds.size;
+        if size.w > 0.0 && size.h > 0.0 && size.w.is_finite() && size.h.is_finite() {
+            self.viewport.set(size);
+        }
+        self.natural_h = self
+            .base
+            .children
+            .iter()
+            .map(|c| c.base().bounds.size.h)
+            .collect();
+        self.place_rows();
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -832,11 +959,16 @@ impl Component for CommandPalette {
                 // Hover-select a row.
                 let results = self.results();
                 let (panel, _q, list_top) = self.layout(&results);
+                let mut moved = false;
                 for (ri, row) in self.row_rects(&results, panel, list_top) {
                     if row.contains(*pos) {
+                        moved = self.selected != ri;
                         self.selected = ri;
                         break;
                     }
+                }
+                if moved {
+                    self.sync_wrap();
                 }
                 Handled::Yes
             }

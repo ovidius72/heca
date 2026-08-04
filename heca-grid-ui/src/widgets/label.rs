@@ -15,7 +15,7 @@
 use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
-use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
+use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO, mono_cells, wrap_indexed};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{TextAlign, TextStyle};
 use crate::style::Length;
@@ -73,6 +73,25 @@ pub struct Label {
     /// Cut the text to its box instead of overflowing it. `None` (the default) is the historical
     /// behaviour: the label keeps its natural width and a container that cannot hold it overflows.
     truncate: Option<Ellipsis>,
+    /// Reflow the text onto as many lines as its width needs. Wins over
+    /// [`truncate`](Self::truncate) when both are set.
+    ///
+    /// A [`Signal`] for the same reason [`bold`](Self::bold) is: an enclosing widget drives it from
+    /// state. A list that reflows only its *selected* row flips this as the cursor moves, and it
+    /// changes the label's **measure**, so the next layout pass re-measures it — which is exactly
+    /// what makes the rows below shift.
+    wrap: Signal<bool>,
+    /// Character indices **in the source text** to draw as marks — a fuzzy match's hits. Empty (the
+    /// default) means one text run, exactly as before marks existed.
+    ///
+    /// A [`Signal`] for the same reason [`bold`](Self::bold) is: an enclosing widget drives it from
+    /// state. A search surface re-marks its rows on every keystroke, and rebuilding a hundred labels
+    /// per character to change a colour is not a rebuild anyone can afford.
+    marks: Signal<Vec<usize>>,
+    /// The mark colour. Unset ⇒ the theme accent.
+    mark_color: Option<Color>,
+    /// Draw in the theme's muted colour — secondary text (a description under a title).
+    muted: bool,
 }
 
 #[heca_grid_ui_macros::props]
@@ -93,6 +112,10 @@ impl Label {
             underline: signal(false),
             strikethrough: signal(false),
             truncate: None,
+            wrap: signal(false),
+            marks: signal(Vec::new()),
+            mark_color: None,
+            muted: false,
         };
         label.remeasure();
         label
@@ -114,41 +137,159 @@ impl Label {
         self.truncate = Some(mode);
         self.base.style.layout.flex_shrink = Some(1.0);
         self.base.style.layout.min_width = Some(Length::Px(0.0));
+        self.remeasure();
         self
     }
 
-    /// The text as it will actually be drawn: the whole string, or the cut that fits `bounds`.
+    /// Reflow the text onto as many lines as it needs, breaking on **word** boundaries.
     ///
-    /// The single answer to "what is on screen", so the glyphs, the run rect the decorations follow,
-    /// and any test all agree.
-    fn drawn_text(&self) -> String {
+    /// The hard half is that this changes the *measure*, not just the paint. Truncation cuts
+    /// against a box the engine has already decided; a wrapped label's **height is a function of
+    /// its resolved width**, which no fixed size can express. So a wrapping label reports no height
+    /// of its own and is measured through taffy's measure path instead
+    /// ([`Component::measure_text`](crate::component::Component::measure_text)) — the first widget
+    /// in this crate to need it.
+    ///
+    /// Like [`truncate`](Self::truncate) it declares itself shrinkable (`flex_shrink = 1`,
+    /// `min_width = 0`): a label that cannot be handed less than its natural width never wraps,
+    /// because there is never less width to wrap into. It still *asks* for its full single-line
+    /// width — taffy's max-content answer — so a wrapping label in a roomy parent looks exactly
+    /// like a plain one.
+    ///
+    /// Mutually exclusive with `truncate`: a label either cuts or reflows, and the last of the two
+    /// setters called wins.
+    #[heca_grid_ui_macros::prop]
+    pub fn wrap(mut self, wrap: bool) -> Self {
+        self.wrap.set(wrap);
+        // Shrinkable either way: a label that cannot be handed less than its natural width neither
+        // wraps nor cuts, because there is never less width to work in.
+        self.base.style.layout.flex_shrink = Some(1.0);
+        self.base.style.layout.min_width = Some(Length::Px(0.0));
+        self.remeasure();
+        self
+    }
+
+    /// The wrap signal — reflow the label in place, without rebuilding it. Flipping it changes the
+    /// label's measure, so the next layout pass re-measures and everything below it moves.
+    pub fn wrap_signal(&self) -> Signal<bool> {
+        self.wrap
+    }
+
+    /// Draw these **source character indices** as marks — accented and bold — leaving the rest of
+    /// the text in the label's own colour. A fuzzy match's hits, drawn by the widget that owns the
+    /// text instead of over-painted by whoever did the matching.
+    ///
+    /// The indices are into the **source** string, and stay correct through a cut or a reflow: a
+    /// truncated label drops the marks whose characters went and shifts the survivors, and a wrapped
+    /// one carries them to the line the character landed on. An index past the end of the text is
+    /// ignored — a caller's indices and a signal-driven text can disagree for a frame.
+    ///
+    /// Empty (the default) means the label paints exactly one text run, as it always has.
+    #[heca_grid_ui_macros::host_only("a list of indices, not a scalar")]
+    pub fn marks(self, indices: impl IntoIterator<Item = usize>) -> Self {
+        self.marks.set(indices.into_iter().collect());
+        self
+    }
+
+    /// The marks signal — re-mark the label in place, without rebuilding it. A search surface uses
+    /// this to move the highlights as the query changes.
+    pub fn marks_signal(&self) -> Signal<Vec<usize>> {
+        self.marks
+    }
+
+    /// Draw in the theme's **muted** colour — secondary text, like a description under a title.
+    ///
+    /// Separate from [`color`](Self::color) because the theme is only resolved at paint: a caller
+    /// building a tree cannot name the muted colour, and hardcoding one would not follow a theme
+    /// change. Ignored when an explicit colour is set.
+    #[heca_grid_ui_macros::prop]
+    pub fn muted(mut self, muted: bool) -> Self {
+        self.muted = muted;
+        self
+    }
+
+    /// The colour marked characters are drawn in. Unset ⇒ the theme accent.
+    #[heca_grid_ui_macros::prop]
+    pub fn mark_color(mut self, color: Color) -> Self {
+        self.mark_color = Some(color);
+        self
+    }
+
+    /// Is this drawn character marked? A character the label added itself (the ellipsis) carries no
+    /// source index and is never marked.
+    fn is_marked(&self, marks: &[usize], source: Option<usize>) -> bool {
+        source.is_some_and(|i| marks.contains(&i))
+    }
+
+    /// The width of one monospace cell at the resolved font.
+    fn cell(&self) -> f64 {
+        (self.base.font * MONO_ADVANCE_RATIO) as f64
+    }
+
+    /// The height of one line at the resolved font.
+    fn line_h(&self) -> f64 {
+        (self.base.font * MONO_LINE_RATIO) as f64
+    }
+
+    /// The lines as they will actually be drawn: one for a plain or truncated label, as many as the
+    /// box needs for a wrapped one.
+    ///
+    /// The single answer to "what is on screen", so the glyphs, the rects the decorations follow,
+    /// and any test all agree. The wrap is recomputed from the current bounds at every paint, using
+    /// the same [`wrap_lines`] the layout measure used to decide the height — two spellings would
+    /// put the text on a different number of lines than the box was sized for.
+    fn drawn_lines(&self) -> Vec<String> {
+        self.drawn_indexed()
+            .into_iter()
+            .map(|line| line.into_iter().map(|(c, _)| c).collect())
+            .collect()
+    }
+
+    /// The drawn lines, each character paired with **its index in the source text** — `None` for a
+    /// character the label added itself, which is only ever the ellipsis.
+    ///
+    /// The one place the cut and the reflow are applied, so the glyphs, the runs the decorations
+    /// follow and the marks cannot disagree. The index is what lets a mark survive either
+    /// transformation: a cut drops the marks whose characters went and shifts the survivors by
+    /// construction, and a reflow carries each to the line its character landed on.
+    fn drawn_indexed(&self) -> Vec<Vec<(char, Option<usize>)>> {
         let text = self.text.get_untracked();
-        let Some(mode) = self.truncate else {
-            return text;
+        let cells = mono_cells(self.base.bounds.size.w, self.cell());
+        if self.wrap.get_untracked() {
+            return wrap_indexed(&text, cells)
+                .into_iter()
+                .map(|line| line.into_iter().map(|(c, i)| (c, Some(i))).collect())
+                .collect();
+        }
+        let whole = |chars: &[char]| -> Vec<(char, Option<usize>)> {
+            chars.iter().enumerate().map(|(i, &c)| (c, Some(i))).collect()
         };
-        let cell = (self.base.font * MONO_ADVANCE_RATIO) as f64;
-        if cell <= 0.0 {
-            return text;
+        let chars: Vec<char> = text.chars().collect();
+        let Some(mode) = self.truncate else {
+            return vec![whole(&chars)];
+        };
+        if chars.len() <= cells {
+            return vec![whole(&chars)];
         }
-        // The epsilon is not cosmetic: a box sized to an exact number of cells divides to
-        // `n - 0.0000001` in f64 and would floor to one cell short, cutting text that fits.
-        let cells = (self.base.bounds.size.w / cell + 1e-6).floor().max(0.0) as usize;
-        let len = text.chars().count();
-        if len <= cells {
-            return text;
-        }
-        match cells {
-            0 => String::new(),
-            1 => "…".to_string(),
+        let cut = match cells {
+            0 => Vec::new(),
+            1 => vec![('…', None)],
             n => match mode {
-                Ellipsis::End => text.chars().take(n - 1).collect::<String>() + "…",
+                Ellipsis::End => whole(&chars[..n - 1])
+                    .into_iter()
+                    .chain(std::iter::once(('…', None)))
+                    .collect(),
                 // Count from the tail: keep the LAST n-1 chars, which is the half a path needs.
+                // Their source indices come with them, so a mark still lands on its own character.
                 Ellipsis::Start => {
-                    let tail: String = text.chars().skip(len - (n - 1)).collect();
-                    format!("…{tail}")
+                    let from = chars.len() - (n - 1);
+                    std::iter::once(('…', None))
+                        .chain((from..chars.len()).map(|i| (chars[i], Some(i))))
+                        .collect()
                 }
             },
-        }
+        };
+        vec![cut]
     }
 
     /// Text horizontal alignment.
@@ -220,25 +361,42 @@ impl Label {
         self.strikethrough
     }
 
-    /// The rect of the **text run itself** inside the label's bounds — the decorations' reference.
+    /// The rect of each **text run itself** inside the label's bounds — the decorations' reference,
+    /// and the box each line is drawn into.
     ///
     /// The label's box can be wider than its text (a stretched parent), and `align` decides where
-    /// the run sits in it, so a decoration must follow the run rather than span the box. Width comes
-    /// from the same monospace measure `remeasure` uses, which is what keeps rule and glyphs in
+    /// each run sits in it, so a decoration must follow the run rather than span the box. Widths
+    /// come from the same monospace measure the layout uses, which is what keeps rule and glyphs in
     /// agreement.
-    fn run_rect(&self) -> Rectangle {
+    ///
+    /// **One rect per drawn line**, so a wrapped label's underline follows each line instead of one
+    /// rule spanning the tallest box. A single-line label returns one rect covering its whole
+    /// height — unchanged from before wrapping existed.
+    fn run_rects(&self) -> Vec<Rectangle> {
         let bounds = self.base.bounds;
         let font = self.base.font as f64;
-        // The **drawn** text, not the full string: a rule under a truncated label must span the
-        // glyphs that are actually there, ellipsis included.
-        let chars = self.drawn_text().chars().count() as f64;
-        let width = (chars * font * MONO_ADVANCE_RATIO as f64).min(bounds.size.w);
-        let x = match self.align {
-            TextAlign::Start => bounds.loc.x,
-            TextAlign::Center => bounds.loc.x + (bounds.size.w - width) / 2.0,
-            TextAlign::End => bounds.loc.x + bounds.size.w - width,
-        };
-        Rectangle::new(Point::new(x, bounds.loc.y), Size::new(width, bounds.size.h))
+        // A wrapped label's box is N lines tall, so a run is one line; a plain label's run is its
+        // whole box, which is what keeps a stretched single-line label centring as it always did.
+        let line_h = if self.wrap.get_untracked() { self.line_h() } else { bounds.size.h };
+        self.drawn_lines()
+            .iter()
+            .enumerate()
+            .map(|(i, line)| {
+                // The **drawn** text, not the full string: a rule under a truncated label must span
+                // the glyphs that are actually there, ellipsis included.
+                let chars = line.chars().count() as f64;
+                let width = (chars * font * MONO_ADVANCE_RATIO as f64).min(bounds.size.w);
+                let x = match self.align {
+                    TextAlign::Start => bounds.loc.x,
+                    TextAlign::Center => bounds.loc.x + (bounds.size.w - width) / 2.0,
+                    TextAlign::End => bounds.loc.x + bounds.size.w - width,
+                };
+                Rectangle::new(
+                    Point::new(x, bounds.loc.y + i as f64 * line_h),
+                    Size::new(width, line_h),
+                )
+            })
+            .collect()
     }
 
     /// Explicit font size in logical px — overrides the inherited theme font.
@@ -283,10 +441,39 @@ impl Component for Label {
     fn remeasure(&mut self) {
         let text = self.text.get_untracked();
         self.seen_text = text.clone();
-        let chars = text.chars().count() as f32;
         let fs = self.base.font;
+        if self.wrap.get_untracked() {
+            // **Deliberately no size.** A wrapped label's height is a function of the width it is
+            // resolved to, which this method runs too early to know — writing the one-line height
+            // here would have taffy believe it, and the extra lines would paint outside the box.
+            // `measure_text` answers instead, once the width exists.
+            self.base.style.layout.width = Length::Auto;
+            self.base.style.layout.height = Length::Auto;
+            return;
+        }
+        if self.truncate.is_some() {
+            // **No definite width either.** A fixed natural width cannot be taken away on the cross
+            // axis of a column, so a cutting label put in one simply overflowed its container and
+            // never cut at all. `auto` + the measure path lets the box it is given decide, which is
+            // the whole contract of truncation; the height is still exactly one line.
+            self.base.style.layout.width = Length::Auto;
+            self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
+            return;
+        }
+        let chars = text.chars().count() as f32;
         self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
         self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
+    }
+
+    /// A wrapping label is the one widget measured from its resolved width (see
+    /// [`wrap`](Label::wrap)); every other case is sized by `remeasure` above.
+    fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
+        let wrap = self.wrap.get_untracked();
+        (wrap || self.truncate.is_some()).then(|| crate::layout::TextMeasure {
+            text: self.text.get_untracked(),
+            font: self.base.font,
+            wrap,
+        })
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -299,48 +486,96 @@ impl Component for Label {
         // hover sweep / disabled fade) with no wiring between the two widgets.
         let color = self
             .color
+            .or_else(|| self.muted.then(|| cx.theme().colors.muted))
             .or_else(|| cx.content_color())
             .unwrap_or_else(|| cx.theme().colors.foreground);
-        cx.text(
-            self.base.bounds,
-            &self.drawn_text(),
-            color,
-            self.base.font,
-            self.align,
-            TextStyle::REGULAR
-                .bold(self.bold.get_untracked())
-                .italic(self.italic.get_untracked()),
-        );
+        let style = TextStyle::REGULAR
+            .bold(self.bold.get_untracked())
+            .italic(self.italic.get_untracked());
+        let lines = self.drawn_indexed();
+        let bounds = self.base.bounds;
+        let runs = self.run_rects();
+        let mark_color = self.mark_color.unwrap_or_else(|| cx.theme().colors.accent);
+        let marks = self.marks.get_untracked();
+        let wrapping = self.wrap.get_untracked();
+        // A plain label draws into its whole box, exactly as before — the alignment and vertical
+        // centring the renderer applies are unchanged. A wrapped one draws each line into its own
+        // one-line slice, stacked from the top of the box.
+        for (i, line) in lines.iter().enumerate() {
+            let box_ = if wrapping {
+                Rectangle::new(
+                    Point::new(bounds.loc.x, bounds.loc.y + i as f64 * self.line_h()),
+                    Size::new(bounds.size.w, self.line_h()),
+                )
+            } else {
+                bounds
+            };
+            if marks.is_empty() {
+                // **One run, as always.** An unmarked label must not be split into pieces: the
+                // renderer shapes a run at a time, and slicing every label into characters would
+                // cost the whole tree for a feature almost nothing uses.
+                let text: String = line.iter().map(|(c, _)| *c).collect();
+                cx.text(box_, &text, color, self.base.font, self.align, style);
+                continue;
+            }
+            // Marked: draw runs of same-markedness, each placed by hand from the line's aligned
+            // origin. `run_rects` already resolved where the text sits inside the box for this
+            // `align`, so each piece is drawn at `Start` from there rather than re-deriving it.
+            let origin = runs.get(i).map_or(box_.loc.x, |r| r.loc.x);
+            let cell = self.cell();
+            let mut col = 0usize;
+            while col < line.len() {
+                let marked = self.is_marked(&marks, line[col].1);
+                let start = col;
+                while col < line.len() && self.is_marked(&marks, line[col].1) == marked {
+                    col += 1;
+                }
+                let piece: String = line[start..col].iter().map(|(c, _)| *c).collect();
+                let rect = Rectangle::new(
+                    Point::new(origin + start as f64 * cell, box_.loc.y),
+                    Size::new((col - start) as f64 * cell, box_.size.h),
+                );
+                cx.text(
+                    rect,
+                    &piece,
+                    if marked { mark_color } else { color },
+                    self.base.font,
+                    TextAlign::Start,
+                    if marked { style.bold(true) } else { style },
+                );
+            }
+        }
 
-        // Decorations. Drawn here, in the same resolved color as the glyphs, over the *run* (not the
-        // box — the run is where the text actually is; see `run_rect`). An empty label has a
-        // zero-width run and so draws nothing.
+        // Decorations. Drawn here, in the same resolved color as the glyphs, over the *runs* (not
+        // the box — a run is where the text actually is; see `run_rects`), one per drawn line. An
+        // empty label has a zero-width run and so draws nothing.
         let underline = self.underline.get_untracked();
         let strikethrough = self.strikethrough.get_untracked();
         if !(underline || strikethrough) {
             return;
         }
-        let run = self.run_rect();
-        if run.size.w <= 0.0 {
-            return;
-        }
         let font = self.base.font;
         let thickness = (font * DECORATION_RATIO).max(1.0) as f64;
-        let mid_y = run.loc.y + run.size.h / 2.0;
-        let mut rule = |y: f64| {
-            cx.rect(
-                Rectangle::new(Point::new(run.loc.x, y), Size::new(run.size.w, thickness)),
-                color,
-                None,
-                0.0,
-                None,
-            );
-        };
-        if underline {
-            rule(mid_y + (font * UNDERLINE_OFFSET_RATIO) as f64);
-        }
-        if strikethrough {
-            rule(mid_y - (font * STRIKE_OFFSET_RATIO) as f64 - thickness / 2.0);
+        for run in self.run_rects() {
+            if run.size.w <= 0.0 {
+                continue;
+            }
+            let mid_y = run.loc.y + run.size.h / 2.0;
+            let mut rule = |y: f64| {
+                cx.rect(
+                    Rectangle::new(Point::new(run.loc.x, y), Size::new(run.size.w, thickness)),
+                    color,
+                    None,
+                    0.0,
+                    None,
+                );
+            };
+            if underline {
+                rule(mid_y + (font * UNDERLINE_OFFSET_RATIO) as f64);
+            }
+            if strikethrough {
+                rule(mid_y - (font * STRIKE_OFFSET_RATIO) as f64 - thickness / 2.0);
+            }
         }
     }
 

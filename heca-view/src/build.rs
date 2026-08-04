@@ -571,9 +571,22 @@ impl Label {
     pub fn truncate(self, mode: ViewEllipsis) -> Self {
         self.prop("truncate", mode)
     }
+    /// Reflow the text onto as many lines as its width needs, breaking on word boundaries.
+    /// Mutually exclusive with [`truncate`](Self::truncate) — a label either cuts or wraps.
+    pub fn wrap(self, on: bool) -> Self {
+        self.prop("wrap", on)
+    }
     /// Text colour: a theme token name or a literal.
     pub fn color(self, colour: &str) -> Self {
         self.prop("color", PropValue::Color(colour.to_string()))
+    }
+    /// Draw in the theme's muted colour — secondary text, like a description under a title.
+    pub fn muted(self, on: bool) -> Self {
+        self.prop("muted", on)
+    }
+    /// The colour matched characters are drawn in. Unset ⇒ the theme accent.
+    pub fn mark_color(self, colour: &str) -> Self {
+        self.prop("mark_color", PropValue::Color(colour.to_string()))
     }
     /// Heavier weight.
     pub fn bold(self, on: bool) -> Self {

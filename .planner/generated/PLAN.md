@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-04T07:40:10.422Z
+**Last updated:** 2026-08-04T08:52:29.980Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -823,13 +823,13 @@ Status: 🚧 `in-progress`
 
 **Tasks:** 3/5
 
-### 🚧 1b6f739f-8774-4da2-af4f-5f88d0514507 — P091 — gridui-11: Text fits its box — Label truncation and Item's second line
+### ✅ 1b6f739f-8774-4da2-af4f-5f88d0514507 — P091 — gridui-11: Text fits its box — Label truncation and Item's second line
 
 The library's missing text capability, recorded as an open gap in AGENTS for months and worked around four separate times.
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
-**Tasks:** 2/4
+**Tasks:** 5/6
 
 ### 📋 9a4fa5f5-62a8-4243-85ab-de8edaed21e8 — P092 — gridui-12: Fuzzy search, frecency ranking and per-scope query history — one reusable seam
 
