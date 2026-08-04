@@ -9,6 +9,7 @@
 //! [`Style`]: crate::style::Style
 
 use crate::component::Component;
+use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO, mono_cells, wrap_lines};
 use crate::style::WidgetSize;
 use heca_core::layout::{Point, Rectangle, Size};
 use taffy::prelude::*;
@@ -17,9 +18,27 @@ use taffy::prelude::*;
 /// default theme's `font_size`.
 pub(crate) const DEFAULT_BASE_FONT: f32 = 15.0;
 
+/// Text whose **height depends on the width the engine offers it** — a wrapping label.
+///
+/// A widget returns one from [`Component::measure_text`] and the engine attaches it to that node as
+/// taffy's node context, so taffy can ask for the height *after* it has resolved the width. It
+/// carries the text and the font **by value**: the measure runs while taffy owns the tree, so it
+/// cannot reach back into the component, and a self-contained context is what makes that a
+/// non-issue rather than a lifetime fight.
+///
+/// Every other widget measures itself in [`Component::remeasure`] and needs none of this — a fixed
+/// size is not a function of the width it is given.
+#[derive(Debug, Clone)]
+pub struct TextMeasure {
+    /// The text to wrap.
+    pub text: String,
+    /// The resolved font size, already inherited and size-variant scaled by the layout pass.
+    pub font: f32,
+}
+
 /// Computes layout for a component tree using `taffy`.
 pub struct LayoutEngine {
-    tree: TaffyTree<()>,
+    tree: TaffyTree<TextMeasure>,
     /// Base font size widgets inherit unless they set their own `style.font_size`.
     base_font: f32,
 }
@@ -51,7 +70,7 @@ impl LayoutEngine {
             height: AvailableSpace::Definite(available.h as f32),
         };
         self.tree
-            .compute_layout(node, space)
+            .compute_layout_with_measure(node, space, measure_text_node)
             .expect("taffy layout should not fail for a well-formed tree");
         // Taffy lays the root out inside the space it is given, so the root has no
         // parent box to be offset within and its margin is dropped. Apply it here, or
@@ -120,10 +139,18 @@ impl LayoutEngine {
             // Children inherit this node's effective variant unless they chose their own.
             child_nodes.push(self.build(child.as_mut(), size));
         }
-        let node = self
-            .tree
-            .new_with_children(style, &child_nodes)
-            .expect("taffy node creation should succeed");
+        // A leaf that measures itself from the width it is offered gets taffy's node context; a
+        // widget with children is laid out by its children and never measures its own text.
+        let node = match c.measure_text() {
+            Some(ctx) if child_nodes.is_empty() => self
+                .tree
+                .new_leaf_with_context(style, ctx)
+                .expect("taffy leaf creation should succeed"),
+            _ => self
+                .tree
+                .new_with_children(style, &child_nodes)
+                .expect("taffy node creation should succeed"),
+        };
         c.base_mut().node = Some(node);
         node
     }
@@ -149,6 +176,55 @@ impl LayoutEngine {
         // computed, so a widget can reset layout-derived state (e.g. a scroll
         // viewport clears the shift baked into its children's bounds).
         c.on_layout();
+    }
+}
+
+/// Taffy's measure callback: how tall is this text in the width being offered?
+///
+/// Called only for nodes carrying a [`TextMeasure`], and only while taffy is resolving them — which
+/// is the whole point: the width is known here and nowhere earlier.
+///
+/// The three width questions taffy asks are answered separately, because a wrapping label has three
+/// honest answers. Collapsing them onto the definite case makes a label in an `auto`-sized parent
+/// measure one line and then paint three.
+fn measure_text_node(
+    known: taffy::Size<Option<f32>>,
+    available: taffy::Size<AvailableSpace>,
+    _node: taffy::NodeId,
+    ctx: Option<&mut TextMeasure>,
+    _style: &taffy::Style,
+) -> taffy::Size<f32> {
+    let Some(ctx) = ctx else {
+        return taffy::Size::ZERO;
+    };
+    let cell = (ctx.font * MONO_ADVANCE_RATIO) as f64;
+    let line = ctx.font * MONO_LINE_RATIO;
+    // One line, uncut — what the label would ask for if nothing constrained it.
+    let natural = ctx.text.chars().count() as f64 * cell;
+    let width = match (known.width, available.width) {
+        // The engine already resolved a width: wrap into exactly that.
+        (Some(w), _) => w as f64,
+        (None, AvailableSpace::Definite(w)) => w as f64,
+        // "How wide would you like to be?" — one line.
+        (None, AvailableSpace::MaxContent) => natural,
+        // "How narrow can you get without overflowing?" — the longest word, since that is the one
+        // thing wrapping cannot break down further (a longer-than-a-line word is hard-broken, so it
+        // never sets the floor).
+        (None, AvailableSpace::MinContent) => {
+            ctx.text
+                .split_whitespace()
+                .map(|w| w.chars().count())
+                .max()
+                .unwrap_or(0) as f64
+                * cell
+        }
+    };
+    let lines = wrap_lines(&ctx.text, mono_cells(width, cell)).len().max(1);
+    taffy::Size {
+        // Never wider than the text actually is: a short label in a wide box keeps its own width,
+        // so `align` still has room to place it — the same measure a non-wrapping label reports.
+        width: width.min(natural) as f32,
+        height: line * lines as f32,
     }
 }
 

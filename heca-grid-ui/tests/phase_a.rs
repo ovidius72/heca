@@ -215,6 +215,250 @@ fn label_decorations_follow_a_truncated_run() {
     );
 }
 
+/// Paint a wrapping label inside a column `width` px wide and report the lines drawn (in paint
+/// order, with their y), the height the layout gave the label, and how many monospace cells fit —
+/// **read from the font the engine resolved**, not from the default. The label inherits a
+/// size-variant-scaled font, so a hardcoded 15px cell measures the box a character wide.
+fn wrapped(text: &str, width: f64) -> (Vec<(String, f64)>, f64, usize) {
+    let theme = Theme::default();
+    let mut col = Flex::column()
+        .width(Length::Px(width as f32))
+        .child(Label::new(text).wrap(true));
+    LayoutEngine::new().compute(&mut col, Size::new(800.0, 600.0));
+    let label = col.base().children[0].base();
+    let height = label.bounds.size.h;
+    let cells = (label.bounds.size.w / (label.font as f64 * 0.6)) as usize; // MONO_ADVANCE_RATIO
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        col.paint(&mut cx);
+    }
+    let lines = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.rect.loc.y)),
+            _ => None,
+        })
+        .collect();
+    (lines, height, cells)
+}
+
+/// **The measure follows the width.** A wrapped label is the one widget whose height cannot be known
+/// before layout, so this asserts the two halves together: the lines actually drawn, and the box the
+/// engine sized for them. A test that checked only a `wrap` flag would pass with the text painted
+/// outside its own bounds.
+#[test]
+fn a_wrapping_label_reflows_and_its_height_follows_its_width() {
+    let text = "the quick brown fox jumps over the lazy dog";
+
+    // Roomy: one line, one line's height — a wrapping label in a wide box looks like a plain one.
+    let (wide, wide_h, _) = wrapped(text, 600.0);
+    assert_eq!(wide.len(), 1, "nothing to wrap at 600px: {wide:?}");
+    assert_eq!(wide[0].0, text);
+
+    // Narrow: several lines, stacked downward, and the height is exactly that many lines.
+    let (narrow, narrow_h, cells) = wrapped(text, 120.0);
+    assert!(narrow.len() > 1, "120px must force a wrap, got {narrow:?}");
+    assert!(
+        narrow.windows(2).all(|p| p[1].1 > p[0].1),
+        "each line sits below the last: {narrow:?}",
+    );
+    // Taffy rounds each box to whole pixels, so allow a pixel of slack rather than exact equality.
+    assert!(
+        (narrow_h - wide_h * narrow.len() as f64).abs() <= 1.5,
+        "{} lines must measure about {} px, got {narrow_h}",
+        narrow.len(),
+        wide_h * narrow.len() as f64,
+    );
+
+    // The text survives the break: same words, same order, nothing dropped or duplicated.
+    let rejoined: Vec<&str> = narrow.iter().flat_map(|(l, _)| l.split(' ')).collect();
+    assert_eq!(rejoined.join(" "), text, "wrapping is not allowed to lose text");
+
+    // Every line fits the box it was measured against.
+    for (line, _) in &narrow {
+        assert!(line.chars().count() <= cells, "{line:?} overflows {cells} cells");
+    }
+}
+
+/// A word longer than the line is **hard-broken**, not allowed to overflow. A path or a URL with no
+/// spaces is common enough that refusing to break it means refusing to fit at all.
+#[test]
+fn a_wrapping_label_hard_breaks_a_word_too_long_for_the_line() {
+    let word = "supercalifragilisticexpialidocious";
+    let (lines, _, cells) = wrapped(word, 120.0);
+    assert!(lines.len() > 1, "an unbreakable word must still be broken: {lines:?}");
+    for (line, _) in &lines {
+        assert!(line.chars().count() <= cells, "{line:?} overflows {cells} cells");
+    }
+    assert_eq!(
+        lines.iter().map(|(l, _)| l.as_str()).collect::<String>(),
+        word,
+        "the pieces must still spell the word",
+    );
+}
+
+/// **Nothing else moves.** A label that sets neither `wrap` nor `truncate` keeps the fixed
+/// single-line measure every existing layout in the app depends on — the measure path must be
+/// reachable only by opting in.
+#[test]
+fn a_plain_label_is_untouched_by_the_measure_path() {
+    use heca_grid_ui::style::Length as L;
+    let plain = Label::new("some text");
+    assert!(
+        matches!(plain.base().style.layout.height, L::Px(_)),
+        "a plain label still reports its own height, not `auto`",
+    );
+    assert!(plain.measure_text().is_none(), "…and is not handed to taffy's measure path");
+
+    let wrapping = Label::new("some text").wrap(true);
+    assert!(
+        matches!(wrapping.base().style.layout.height, L::Auto),
+        "a wrapping label must report no height of its own, or taffy believes the one-line answer",
+    );
+    assert!(wrapping.measure_text().is_some());
+    assert_eq!(wrapping.base().style.layout.flex_shrink, Some(1.0));
+    assert!(
+        wrapping.base().style.layout.min_width.is_some(),
+        "a label that cannot be handed less than its natural width never wraps",
+    );
+}
+
+/// Paint `label` in a box `cells` characters wide and report the text runs it drew, with colours.
+fn runs_of(label: Label, cells: f64) -> Vec<(String, Color)> {
+    let theme = Theme::default();
+    let mut label = label;
+    // Lay out first: the cell the label marks against comes from the font the engine resolves.
+    LayoutEngine::new().compute(&mut label, Size::new(400.0, 40.0));
+    let w = cells * label.base().font as f64 * 0.6;
+    label.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(w, 40.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        label.paint(&mut cx);
+    }
+    scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.color)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// **Marks are the widget's, not the caller's.** The matched characters come out in the mark colour
+/// and the rest in the label's — and an unmarked label is still one single run, because splitting
+/// every label into pieces would cost the whole tree for a feature almost nothing uses.
+#[test]
+fn a_label_marks_the_characters_it_was_given() {
+    let mark = Color::rgb(255, 0, 0);
+
+    // No marks ⇒ exactly one run, unchanged.
+    let plain = runs_of(Label::new("close pane"), 40.0);
+    assert_eq!(plain.len(), 1, "an unmarked label is one run: {plain:?}");
+
+    // Marked ⇒ the runs alternate, the marked ones in the mark colour, and the pieces still spell
+    // the whole string in order.
+    let marked = runs_of(Label::new("close pane").marks([0, 1, 6]).mark_color(mark), 40.0);
+    let spelled: String = marked.iter().map(|(t, _)| t.as_str()).collect();
+    assert_eq!(spelled, "close pane", "the pieces must still spell the text");
+    let in_mark: String = marked
+        .iter()
+        .filter(|(_, c)| *c == mark)
+        .map(|(t, _)| t.as_str())
+        .collect();
+    assert_eq!(in_mark, "clp", "exactly the marked characters are accented: {marked:?}");
+}
+
+/// A mark follows **its character** through a cut. `Ellipsis::Start` drops the head, so every
+/// surviving index shifts — counting through the drawn string instead would stamp the accent onto
+/// whatever letter happened to land there.
+#[test]
+fn marks_survive_a_truncation_at_either_end() {
+    use heca_grid_ui::Ellipsis;
+    let mark = Color::rgb(255, 0, 0);
+    let text = "projects/heca/src";
+    // Mark the final three characters, "src" — indices 14, 15, 16.
+    let marks = [14usize, 15, 16];
+
+    // Cutting the head keeps them: they are the tail the ellipsis preserved.
+    let start = runs_of(
+        Label::new(text).truncate(Ellipsis::Start).marks(marks).mark_color(mark),
+        10.0,
+    );
+    let kept: String = start.iter().filter(|(_, c)| *c == mark).map(|(t, _)| t.as_str()).collect();
+    assert_eq!(kept, "src", "the marks moved with their characters: {start:?}");
+
+    // Cutting the tail throws those characters away, so nothing is marked — and nothing is stamped
+    // onto the ellipsis.
+    let end = runs_of(
+        Label::new(text).truncate(Ellipsis::End).marks(marks).mark_color(mark),
+        10.0,
+    );
+    assert!(
+        !end.iter().any(|(_, c)| *c == mark),
+        "characters that were cut cannot still be marked: {end:?}",
+    );
+}
+
+/// A mark follows its character across a **reflow** too: wrapping collapses whitespace, so counting
+/// through the wrapped output would drift a character per line break.
+#[test]
+fn marks_survive_a_wrap() {
+    let theme = Theme::default();
+    let mark = Color::rgb(255, 0, 0);
+    let text = "the quick brown fox jumps over the lazy dog";
+    // "lazy" occupies indices 35..39 — and it is on the last wrapped line, which is the point:
+    // counting through the wrapped output would have drifted by the collapsed line breaks.
+    let marks: Vec<usize> = (35..39).collect();
+    let mut col = Flex::column()
+        .width(Length::Px(120.0))
+        .child(Label::new(text).wrap(true).marks(marks).mark_color(mark));
+    LayoutEngine::new().compute(&mut col, Size::new(800.0, 600.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        col.paint(&mut cx);
+    }
+    let accented: String = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) if t.color == mark => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(accented, "lazy", "the mark landed on the line its characters wrapped to");
+}
+
+/// A wrapped label's rules follow **each line**, not one rule spanning the whole box.
+#[test]
+fn decorations_follow_every_wrapped_line() {
+    let theme = Theme::default();
+    let mut col = Flex::column()
+        .width(Length::Px(120.0))
+        .child(Label::new("the quick brown fox jumps over the lazy dog").wrap(true).underline(true));
+    LayoutEngine::new().compute(&mut col, Size::new(800.0, 600.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        col.paint(&mut cx);
+    }
+    let texts = scene.iter().filter(|c| matches!(c, DrawCommand::Text(_))).count();
+    let rules: Vec<Rectangle> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.rect.size.h < 4.0 => Some(r.rect),
+            _ => None,
+        })
+        .collect();
+    assert!(texts > 1, "the fixture must actually wrap");
+    assert_eq!(rules.len(), texts, "one rule per drawn line, not one for the box");
+    assert!(
+        rules.windows(2).all(|p| p[1].loc.y > p[0].loc.y),
+        "each rule sits under its own line: {rules:?}",
+    );
+}
+
 #[test]
 fn label_weight_and_slant_are_font_attributes_decorations_are_rects() {
     let theme = Theme::default();
