@@ -1,7 +1,7 @@
 {
   "id": "cd083ad1-8310-4368-981b-d14c73c20d96",
   "number": 4,
-  "shortId": "SR75L",
+  "shortId": "",
   "priority": 0,
   "name": "📐 Grid-UI Widget Library",
   "description": "Espansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pane shell header/tabs, icon widget Nerd Font, showcase coverage con visual regression, bloom/custom draw effects, widget aggiuntivi e cleanup del crate.",
@@ -29,8 +29,8 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "5612e571-43cb-45df-b159-1f6de894414b",
-      "date": "2026-07-30T13:43:56.531Z",
+      "id": "8c536f5b-6f72-4944-ab9f-4a8130e579da",
+      "date": "2026-08-04T07:40:10.401Z",
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
