@@ -3618,7 +3618,7 @@ fn command_palette_navigates_via_menu_nav() {
 fn command_palette_describes_a_command_on_a_second_line() {
     use heca_grid_ui::{Command, CommandPalette, Component};
     let theme = Theme::default();
-    let p = CommandPalette::new()
+    let mut p = CommandPalette::new()
         .command(
             Command::new("Split pane right", || {})
                 .description("New column to the right of the active pane."),
@@ -3626,6 +3626,7 @@ fn command_palette_describes_a_command_on_a_second_line() {
         .command(Command::new("Close pane", || {}).description("Close the focused pane."))
         .open(true);
 
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
@@ -3672,7 +3673,7 @@ fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
     use heca_grid_ui::{Command, CommandPalette, Component};
     let theme = Theme::default();
     let cap = |s: &str| KeyCap::Text(s.to_string());
-    let p = CommandPalette::new()
+    let mut p = CommandPalette::new()
         .command(
             Command::new("Focus Dock", || {})
                 .description("Give chrome keyboard focus to a dock.")
@@ -3683,6 +3684,7 @@ fn command_palette_stacks_a_binding_per_row_in_a_reserved_column() {
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
         .open(true);
 
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
@@ -3736,7 +3738,7 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
     use heca_grid_ui::{Command, CommandPalette, Component};
     let theme = Theme::default();
     let cap = |s: &str| KeyCap::Text(s.to_string());
-    let p = CommandPalette::new()
+    let mut p = CommandPalette::new()
         .command(
             Command::new("Paste Clipboard", || {})
                 .description("Paste the clipboard.")
@@ -3748,6 +3750,7 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
         .command(Command::new("Reload Config", || {}).description("Re-read config.toml."))
         .open(true);
 
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
@@ -3772,21 +3775,29 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
     );
 }
 
-/// A long description is **cut to its box**, not drawn under the keycaps and out of the panel.
+/// A long description **reflows while its row is selected, and is cut when it is not**.
+///
+/// Both halves matter. Cutting every description hides what the row does; wrapping every one turns a
+/// ten-row list into a wall of text and pushes the rest off the panel. So the selected row reflows —
+/// and because its height is *measured*, the rows below it move down, which is the whole reason the
+/// label's height had to become a function of its width.
 #[test]
-fn command_palette_truncates_text_that_would_reach_the_shortcut_column() {
+fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
     use heca_grid_ui::widgets::KeyCap;
     use heca_grid_ui::{Command, CommandPalette, Component};
     let theme = Theme::default();
     let long = "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.";
-    let p = CommandPalette::new()
+    let other = "Re-read config.toml and apply every change without restarting the compositor.";
+    let mut p = CommandPalette::new()
         .command(
             Command::new("Focus Dock", || {})
                 .description(long)
                 .keys([KeyCap::Text("λ".into()), KeyCap::Text("e".into())]),
         )
+        .command(Command::new("Reload Config", || {}).description(other))
         .open(true);
 
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
@@ -3799,16 +3810,38 @@ fn command_palette_truncates_text_that_would_reach_the_shortcut_column() {
             _ => None,
         })
         .collect();
-    assert!(
-        !drawn.iter().any(|(t, _)| t == long),
-        "the full description was drawn — it does not fit beside the keycaps",
-    );
-    let (cut, _) = drawn
+
+    // The selected row (the first) reflowed: several lines, none of them ellipsised, and the words
+    // all survive in order.
+    let lines: Vec<&(String, Rectangle)> = drawn
         .iter()
-        .find(|(t, _)| t.starts_with("Give chrome keyboard"))
-        .expect("a truncated description is drawn");
-    assert!(cut.ends_with('…'), "a cut description says so: {cut:?}");
-    assert!(cut.chars().count() < long.chars().count());
+        // Longer than a keycap: a single-cap chip like "e" is also a substring of the description.
+        .filter(|(t, _)| t.trim().chars().count() > 2 && long.contains(t.trim()))
+        .collect();
+    assert!(lines.len() > 1, "the selected description reflows, got {drawn:?}");
+    assert!(
+        lines.iter().all(|(t, _)| !t.ends_with('…')),
+        "a reflowed description is not also cut: {lines:?}",
+    );
+    let rejoined: Vec<&str> = lines.iter().flat_map(|(t, _)| t.split(' ')).collect();
+    assert_eq!(rejoined.join(" "), long, "reflowing must not lose text");
+    assert!(
+        lines.windows(2).all(|p| p[1].1.loc.y > p[0].1.loc.y),
+        "its lines stack downward",
+    );
+
+    // The unselected row is cut to one line — and sits **below** the reflowed block, which is the
+    // reflow pushing it down.
+    let (cut, cut_rect) = drawn
+        .iter()
+        .find(|(t, _)| t.starts_with("Re-read config"))
+        .expect("the second description is drawn");
+    assert!(cut.ends_with('…'), "an unselected description is cut: {cut:?}");
+    let lowest_selected_line = lines.iter().map(|(_, r)| r.loc.y).fold(0.0_f64, f64::max);
+    assert!(
+        cut_rect.loc.y > lowest_selected_line,
+        "the row below starts under the whole reflowed block, not under its first line",
+    );
 }
 
 /// The query field is a real [`Input`], so the configurable `[keys.widgets]` **edit** intents reach
@@ -3858,11 +3891,12 @@ fn command_palette_query_takes_the_edit_intents() {
 fn command_palette_reserves_the_icon_column_even_for_a_command_without_one() {
     use heca_grid_ui::{Command, CommandPalette, Component, Glyph};
     let theme = Theme::default();
-    let p = CommandPalette::new()
+    let mut p = CommandPalette::new()
         .command(Command::new("With Icon", || {}).icon(Glyph::Search))
         .command(Command::new("Without Icon", || {}))
         .open(true);
 
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
@@ -3891,10 +3925,11 @@ fn the_palette_size_is_capped_by_the_window() {
     use heca_grid_ui::{Command, CommandPalette, Component, WidgetSize};
     let theme = Theme::default();
     let panel_w = |size: WidgetSize, viewport: Size| {
-        let p = CommandPalette::new()
+        let mut p = CommandPalette::new()
             .panel_size(size)
             .command(Command::new("Close Pane", || {}))
             .open(true);
+        LayoutEngine::new().compute(&mut p, viewport);
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(viewport);
@@ -3961,7 +3996,7 @@ fn the_palette_never_runs_off_a_short_window() {
                 .keys([cap("λ"), cap("b")]),
         );
     }
-    let p = p.open(true);
+    let mut p = p.open(true);
 
     // The room kept clear beneath the panel, as a fraction of the window height — wider than the
     // gap at its sides, since a bottom edge resting on a pane boundary still reads as touching.
@@ -3969,6 +4004,7 @@ fn the_palette_never_runs_off_a_short_window() {
     for w in [1280.0, 900.0] {
         for h in 260..=1000 {
             let viewport = Size::new(w, f64::from(h));
+            LayoutEngine::new().compute(&mut p, viewport);
             let mut scene = Scene::new();
             {
                 let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(viewport);
@@ -4299,6 +4335,7 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
             p = p.border(c, w);
         }
         LayoutEngine::new().compute(&mut p, Size::new(200.0, 200.0));
+        LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, theme);
@@ -4350,6 +4387,7 @@ fn bordered_pane_border_width_override_is_independent_of_theme() {
             p = p.border(c, 0.0);
         }
         LayoutEngine::new().compute(&mut p, Size::new(200.0, 200.0));
+        LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, theme);

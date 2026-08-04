@@ -34,6 +34,9 @@ pub struct TextMeasure {
     pub text: String,
     /// The resolved font size, already inherited and size-variant scaled by the layout pass.
     pub font: f32,
+    /// Does the text reflow? A wrapping text answers with as many lines as the width needs; a
+    /// cutting one is always **one** line and simply accepts whatever width it is given.
+    pub wrap: bool,
 }
 
 /// Computes layout for a component tree using `taffy`.
@@ -219,7 +222,13 @@ fn measure_text_node(
                 * cell
         }
     };
-    let lines = wrap_lines(&ctx.text, mono_cells(width, cell)).len().max(1);
+    // A cutting label is one line whatever happens to it — it is the *width* it accepts, not the
+    // height. Only a wrapping one turns width into height.
+    let lines = if ctx.wrap {
+        wrap_lines(&ctx.text, mono_cells(width, cell)).len().max(1)
+    } else {
+        1
+    };
     taffy::Size {
         // Never wider than the text actually is: a short label in a wide box keeps its own width,
         // so `align` still has room to place it — the same measure a non-wrapping label reports.

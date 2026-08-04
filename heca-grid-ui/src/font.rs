@@ -64,15 +64,24 @@ pub const MONO_LINE_RATIO: f32 = 1.4;
 
 /// How many monospace cells fit in `width`.
 ///
-/// The epsilon is not cosmetic: a box sized to an exact number of cells divides to `n - 0.0000001`
-/// in f64 and floors one short, dropping a character that fits. Every text fit in this crate goes
-/// through it, so the cut, the wrap and the measure all agree on where the box ends.
+/// **The slack is not cosmetic, and half a pixel is not enough of it.** Two different roundings bite
+/// here. An exact multiple of the cell divides to `n - 0.0000001` in f64 and floors one short. Worse,
+/// taffy rounds every computed box to whole pixels, so a label measured at its own natural width of
+/// 105.3px is handed back 105.0 — and a label that cannot fit its own text cuts it, putting an
+/// ellipsis on a string that was never too long. That was a real, visible defect: `Reload Config`
+/// drew as `Reload Conf…` in a panel with 450px to spare.
+///
+/// So the slack is **half a pixel**, which is exactly what taffy's rounding can take away. It cannot
+/// gain a cell that does not fit: half a pixel is a fraction of any legible cell.
 pub fn mono_cells(width: f64, cell: f64) -> usize {
     if cell <= 0.0 {
         return 0;
     }
-    (width / cell + 1e-6).floor().max(0.0) as usize
+    ((width + PIXEL_ROUNDING_SLACK) / cell).floor().max(0.0) as usize
 }
+
+/// What a whole-pixel rounding of a layout box can take away from a measured width.
+const PIXEL_ROUNDING_SLACK: f64 = 0.5;
 
 /// Break `text` into the lines that fit `cells` monospace cells, on **word** boundaries.
 ///

@@ -580,6 +580,10 @@ impl Label {
     pub fn color(self, colour: &str) -> Self {
         self.prop("color", PropValue::Color(colour.to_string()))
     }
+    /// Draw in the theme's muted colour — secondary text, like a description under a title.
+    pub fn muted(self, on: bool) -> Self {
+        self.prop("muted", on)
+    }
     /// The colour matched characters are drawn in. Unset ⇒ the theme accent.
     pub fn mark_color(self, colour: &str) -> Self {
         self.prop("mark_color", PropValue::Color(colour.to_string()))

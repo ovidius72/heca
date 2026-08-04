@@ -73,14 +73,25 @@ pub struct Label {
     /// Cut the text to its box instead of overflowing it. `None` (the default) is the historical
     /// behaviour: the label keeps its natural width and a container that cannot hold it overflows.
     truncate: Option<Ellipsis>,
-    /// Reflow the text onto as many lines as its width needs. Mutually exclusive with
-    /// [`truncate`](Self::truncate) — a label either cuts or wraps.
-    wrap: bool,
+    /// Reflow the text onto as many lines as its width needs. Wins over
+    /// [`truncate`](Self::truncate) when both are set.
+    ///
+    /// A [`Signal`] for the same reason [`bold`](Self::bold) is: an enclosing widget drives it from
+    /// state. A list that reflows only its *selected* row flips this as the cursor moves, and it
+    /// changes the label's **measure**, so the next layout pass re-measures it — which is exactly
+    /// what makes the rows below shift.
+    wrap: Signal<bool>,
     /// Character indices **in the source text** to draw as marks — a fuzzy match's hits. Empty (the
     /// default) means one text run, exactly as before marks existed.
-    marks: Vec<usize>,
+    ///
+    /// A [`Signal`] for the same reason [`bold`](Self::bold) is: an enclosing widget drives it from
+    /// state. A search surface re-marks its rows on every keystroke, and rebuilding a hundred labels
+    /// per character to change a colour is not a rebuild anyone can afford.
+    marks: Signal<Vec<usize>>,
     /// The mark colour. Unset ⇒ the theme accent.
     mark_color: Option<Color>,
+    /// Draw in the theme's muted colour — secondary text (a description under a title).
+    muted: bool,
 }
 
 #[heca_grid_ui_macros::props]
@@ -101,9 +112,10 @@ impl Label {
             underline: signal(false),
             strikethrough: signal(false),
             truncate: None,
-            wrap: false,
-            marks: Vec::new(),
+            wrap: signal(false),
+            marks: signal(Vec::new()),
             mark_color: None,
+            muted: false,
         };
         label.remeasure();
         label
@@ -123,7 +135,6 @@ impl Label {
     #[heca_grid_ui_macros::prop]
     pub fn truncate(mut self, mode: Ellipsis) -> Self {
         self.truncate = Some(mode);
-        self.wrap = false;
         self.base.style.layout.flex_shrink = Some(1.0);
         self.base.style.layout.min_width = Some(Length::Px(0.0));
         self.remeasure();
@@ -149,14 +160,19 @@ impl Label {
     /// setters called wins.
     #[heca_grid_ui_macros::prop]
     pub fn wrap(mut self, wrap: bool) -> Self {
-        self.wrap = wrap;
-        if wrap {
-            self.truncate = None;
-            self.base.style.layout.flex_shrink = Some(1.0);
-            self.base.style.layout.min_width = Some(Length::Px(0.0));
-        }
+        self.wrap.set(wrap);
+        // Shrinkable either way: a label that cannot be handed less than its natural width neither
+        // wraps nor cuts, because there is never less width to work in.
+        self.base.style.layout.flex_shrink = Some(1.0);
+        self.base.style.layout.min_width = Some(Length::Px(0.0));
         self.remeasure();
         self
+    }
+
+    /// The wrap signal — reflow the label in place, without rebuilding it. Flipping it changes the
+    /// label's measure, so the next layout pass re-measures and everything below it moves.
+    pub fn wrap_signal(&self) -> Signal<bool> {
+        self.wrap
     }
 
     /// Draw these **source character indices** as marks — accented and bold — leaving the rest of
@@ -170,8 +186,25 @@ impl Label {
     ///
     /// Empty (the default) means the label paints exactly one text run, as it always has.
     #[heca_grid_ui_macros::host_only("a list of indices, not a scalar")]
-    pub fn marks(mut self, indices: impl IntoIterator<Item = usize>) -> Self {
-        self.marks = indices.into_iter().collect();
+    pub fn marks(self, indices: impl IntoIterator<Item = usize>) -> Self {
+        self.marks.set(indices.into_iter().collect());
+        self
+    }
+
+    /// The marks signal — re-mark the label in place, without rebuilding it. A search surface uses
+    /// this to move the highlights as the query changes.
+    pub fn marks_signal(&self) -> Signal<Vec<usize>> {
+        self.marks
+    }
+
+    /// Draw in the theme's **muted** colour — secondary text, like a description under a title.
+    ///
+    /// Separate from [`color`](Self::color) because the theme is only resolved at paint: a caller
+    /// building a tree cannot name the muted colour, and hardcoding one would not follow a theme
+    /// change. Ignored when an explicit colour is set.
+    #[heca_grid_ui_macros::prop]
+    pub fn muted(mut self, muted: bool) -> Self {
+        self.muted = muted;
         self
     }
 
@@ -184,8 +217,8 @@ impl Label {
 
     /// Is this drawn character marked? A character the label added itself (the ellipsis) carries no
     /// source index and is never marked.
-    fn is_marked(&self, source: Option<usize>) -> bool {
-        source.is_some_and(|i| self.marks.contains(&i))
+    fn is_marked(&self, marks: &[usize], source: Option<usize>) -> bool {
+        source.is_some_and(|i| marks.contains(&i))
     }
 
     /// The width of one monospace cell at the resolved font.
@@ -222,7 +255,7 @@ impl Label {
     fn drawn_indexed(&self) -> Vec<Vec<(char, Option<usize>)>> {
         let text = self.text.get_untracked();
         let cells = mono_cells(self.base.bounds.size.w, self.cell());
-        if self.wrap {
+        if self.wrap.get_untracked() {
             return wrap_indexed(&text, cells)
                 .into_iter()
                 .map(|line| line.into_iter().map(|(c, i)| (c, Some(i))).collect())
@@ -344,7 +377,7 @@ impl Label {
         let font = self.base.font as f64;
         // A wrapped label's box is N lines tall, so a run is one line; a plain label's run is its
         // whole box, which is what keeps a stretched single-line label centring as it always did.
-        let line_h = if self.wrap { self.line_h() } else { bounds.size.h };
+        let line_h = if self.wrap.get_untracked() { self.line_h() } else { bounds.size.h };
         self.drawn_lines()
             .iter()
             .enumerate()
@@ -408,7 +441,8 @@ impl Component for Label {
     fn remeasure(&mut self) {
         let text = self.text.get_untracked();
         self.seen_text = text.clone();
-        if self.wrap {
+        let fs = self.base.font;
+        if self.wrap.get_untracked() {
             // **Deliberately no size.** A wrapped label's height is a function of the width it is
             // resolved to, which this method runs too early to know — writing the one-line height
             // here would have taffy believe it, and the extra lines would paint outside the box.
@@ -417,8 +451,16 @@ impl Component for Label {
             self.base.style.layout.height = Length::Auto;
             return;
         }
+        if self.truncate.is_some() {
+            // **No definite width either.** A fixed natural width cannot be taken away on the cross
+            // axis of a column, so a cutting label put in one simply overflowed its container and
+            // never cut at all. `auto` + the measure path lets the box it is given decide, which is
+            // the whole contract of truncation; the height is still exactly one line.
+            self.base.style.layout.width = Length::Auto;
+            self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
+            return;
+        }
         let chars = text.chars().count() as f32;
-        let fs = self.base.font;
         self.base.style.layout.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
         self.base.style.layout.height = Length::Px(fs * MONO_LINE_RATIO);
     }
@@ -426,9 +468,11 @@ impl Component for Label {
     /// A wrapping label is the one widget measured from its resolved width (see
     /// [`wrap`](Label::wrap)); every other case is sized by `remeasure` above.
     fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
-        self.wrap.then(|| crate::layout::TextMeasure {
+        let wrap = self.wrap.get_untracked();
+        (wrap || self.truncate.is_some()).then(|| crate::layout::TextMeasure {
             text: self.text.get_untracked(),
             font: self.base.font,
+            wrap,
         })
     }
 
@@ -442,6 +486,7 @@ impl Component for Label {
         // hover sweep / disabled fade) with no wiring between the two widgets.
         let color = self
             .color
+            .or_else(|| self.muted.then(|| cx.theme().colors.muted))
             .or_else(|| cx.content_color())
             .unwrap_or_else(|| cx.theme().colors.foreground);
         let style = TextStyle::REGULAR
@@ -451,11 +496,13 @@ impl Component for Label {
         let bounds = self.base.bounds;
         let runs = self.run_rects();
         let mark_color = self.mark_color.unwrap_or_else(|| cx.theme().colors.accent);
+        let marks = self.marks.get_untracked();
+        let wrapping = self.wrap.get_untracked();
         // A plain label draws into its whole box, exactly as before — the alignment and vertical
         // centring the renderer applies are unchanged. A wrapped one draws each line into its own
         // one-line slice, stacked from the top of the box.
         for (i, line) in lines.iter().enumerate() {
-            let box_ = if self.wrap {
+            let box_ = if wrapping {
                 Rectangle::new(
                     Point::new(bounds.loc.x, bounds.loc.y + i as f64 * self.line_h()),
                     Size::new(bounds.size.w, self.line_h()),
@@ -463,7 +510,7 @@ impl Component for Label {
             } else {
                 bounds
             };
-            if self.marks.is_empty() {
+            if marks.is_empty() {
                 // **One run, as always.** An unmarked label must not be split into pieces: the
                 // renderer shapes a run at a time, and slicing every label into characters would
                 // cost the whole tree for a feature almost nothing uses.
@@ -478,9 +525,9 @@ impl Component for Label {
             let cell = self.cell();
             let mut col = 0usize;
             while col < line.len() {
-                let marked = self.is_marked(line[col].1);
+                let marked = self.is_marked(&marks, line[col].1);
                 let start = col;
-                while col < line.len() && self.is_marked(line[col].1) == marked {
+                while col < line.len() && self.is_marked(&marks, line[col].1) == marked {
                     col += 1;
                 }
                 let piece: String = line[start..col].iter().map(|(c, _)| *c).collect();
