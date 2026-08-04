@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-04T13:12:00.125Z
+**Last updated:** 2026-08-04T13:57:41.196Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -122,7 +122,7 @@ Status: 🚧 `in-progress`
 **Phases:**
 - 📋 **cb8f1203-9ae5-431d-8e7d-07dad2804396** P018 — gridui-05: Bloom and custom draw effects (0/2 tasks)
 - 🚧 **ef538743-f412-443d-811b-9e02b66106c1** P019 — gridui-01: Scroll/list primitive (1/8 tasks)
-- 📋 **35d74cc9-a3df-49c9-a5bb-59e12a88b49c** P028 — gridui-06: Additional widgets (0/7 tasks)
+- 📋 **35d74cc9-a3df-49c9-a5bb-59e12a88b49c** P028 — gridui-06: Additional widgets (0/8 tasks)
 - 📋 **36628b50-a0b5-4974-852e-96d68c09f11f** P029 — gridui-03: Nerd-Font icon widget (0/4 tasks)
 - 📋 **981bc6b0-9529-4a1c-96a3-7c8e34217bc4** P040 — gridui-02: Pane shell header and tabs (0/4 tasks)
 - 📋 **ce5d5ea4-0f84-4e5a-909a-77d8344a2a87** P046 — gridui-04: Showcase coverage and visual regression (0/2 tasks)
@@ -756,7 +756,7 @@ Widget aggiuntivi: DnD reorder, multi-select, HUD Frame, Metric Row, Search Inpu
 
 Status: 📋 `planned`
 
-**Tasks:** 0/7
+**Tasks:** 0/8
 
 ### 📋 36628b50-a0b5-4974-852e-96d68c09f11f — P029 — gridui-03: Nerd-Font icon widget
 
@@ -831,13 +831,13 @@ Status: ✅ `done`
 
 **Tasks:** 5/6
 
-### 🚧 9a4fa5f5-62a8-4243-85ab-de8edaed21e8 — P092 — gridui-12: Fuzzy search, frecency ranking and per-scope query history — one reusable seam
+### ✅ 9a4fa5f5-62a8-4243-85ab-de8edaed21e8 — P092 — gridui-12: Fuzzy search, frecency ranking and per-scope query history — one reusable seam
 
 Extract the palette's private matcher into a reusable search module, rank results by how the user has actually used them, and remember past queries per scope — with the scope key in place from day one for VS Code-style `>` / `@` / `:` modes.
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
-**Tasks:** 3/4
+**Tasks:** 4/4
 
 ### 📋 099e2eb5-30be-4f3c-ab57-a4f111cdc44c — P021 — plugin-06: Placeholder token system
 

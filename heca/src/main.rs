@@ -9,6 +9,7 @@ mod keymap;
 mod mouse;
 mod providers;
 mod rpc;
+mod search_state;
 mod shortcut;
 
 use app::events::AppEvent;
@@ -199,6 +200,7 @@ impl HecaApp {
             // opens at the new size.
             state.command_palette_size = self.app_config.config.settings.command_palette_size;
             state.search_case = self.app_config.config.settings.search_case;
+            state.search_history = self.app_config.config.settings.search_history;
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();

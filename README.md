@@ -507,6 +507,29 @@ configurable under `[appearance.terminal] show_scrollbar`):
 | Command palette | `p` | Open command palette |
 | Reload config | `Shift+R` | Reload config.toml at runtime |
 
+#### The command palette
+
+Every action heca knows about, searchable from one key — including those a mounted
+component contributes, which are listed under that component's name and focus it
+before running.
+
+- **Fuzzy, smart-case matching.** Type lowercase and case is ignored; type an
+  uppercase letter and it starts to matter. Set `search_case` to `"sensitive"` or
+  `"insensitive"` in `config.toml` if you'd rather it never guessed.
+- **It learns what you use.** Commands you pick often — and recently — rise to the
+  top, so an empty palette shows your habits rather than an alphabet. Running
+  something a second time counts for more than having run something else a moment
+  ago.
+- **Past searches come back.** `Ctrl+p` / `Shift+↑` walks back through what you
+  searched for, `Ctrl+n` / `Shift+↓` forward; step past the newest and whatever you
+  were part-way through typing is handed back to you.
+- **It remembers across restarts**, in a small file under your data directory. Delete
+  it whenever you like — you lose nothing but the convenience — or set
+  `search_history = false` to keep nothing at all. `search_history_size` and
+  `search_usage_size` decide how much is kept.
+- The selected row shows its full description, wrapped, and the rows below make room
+  for it as you move.
+
 ---
 
 ## Configuration

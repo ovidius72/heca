@@ -1197,6 +1197,7 @@ name = "heca"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "dirs",
  "git2",
  "heca-config",
  "heca-core",

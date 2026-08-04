@@ -25,6 +25,18 @@ pub enum ModifierKey {
 //  Default-value helpers (used by serde attributes on SettingsConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+fn default_search_history() -> bool {
+    true
+}
+
+fn default_search_history_size() -> usize {
+    50
+}
+
+fn default_search_usage_size() -> usize {
+    500
+}
+
 fn default_theme() -> String {
     "grid_tron".to_string()
 }
@@ -160,6 +172,15 @@ pub struct SettingsConfig {
     /// How a search query's case is treated (`smart` / `sensitive` / `insensitive`).
     #[serde(default, alias = "search-case")]
     pub search_case: SearchCase,
+    /// Remember what has been searched for and chosen, across restarts.
+    #[serde(default = "default_search_history", alias = "search-history")]
+    pub search_history: bool,
+    /// How many past queries each search surface keeps.
+    #[serde(default = "default_search_history_size", alias = "search-history-size")]
+    pub search_history_size: usize,
+    /// How many commands' usage counts each search surface keeps for ranking.
+    #[serde(default = "default_search_usage_size", alias = "search-usage-size")]
+    pub search_usage_size: usize,
     #[serde(default = "default_window_width")]
     pub window_width: u32,
     #[serde(default = "default_window_height")]
@@ -286,6 +307,9 @@ impl Default for SettingsConfig {
             mouse: default_mouse(),
             command_palette_size: PaletteSize::default(),
             search_case: SearchCase::default(),
+            search_history: default_search_history(),
+            search_history_size: default_search_history_size(),
+            search_usage_size: default_search_usage_size(),
             window_width: default_window_width(),
             window_height: default_window_height(),
             terminal_foreground: None,

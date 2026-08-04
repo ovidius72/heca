@@ -98,6 +98,25 @@ exists to stop.
   **NEVER** ad-hoc inline `Flex`/`Surface` with hardcoded sizes/colors in the app. Domain-neutral
   (never name a widget for workspace/column/pane). Full rule: **§ "Creating new widgets"** below.
 
+#### Searching, filtering or ranking a list → `heca_grid_ui::search`. Do NOT write a matcher.
+- **There is exactly one matcher in this workspace** (`heca-grid-ui/src/search.rs`) and there must
+  stay one. Fuzzy matching, smart-case, ranking by past use and query history all live there; a
+  widget **embeds a `SearchModel`** the way anything that needs to scroll nests a `ScrollRegion`.
+  Full reference: [`docs/widgets.md` → Search](docs/widgets.md#search--matching-ranking-by-use-and-query-history).
+- Four calls, and a consumer implements none of them: `rank` (filter + order), `handle` (the whole
+  of history navigation — a widget that walks a history itself has copied it), `query_changed`,
+  `record_run`.
+- **Never call save.** `SearchStore::revision()` moves on every `record_run` and the host writes
+  from `search_state::persist_if_changed`. A consumer that had to remember would eventually forget,
+  and nothing would report it.
+- **Pass your own scope name** (`"command"` is the palette's). Scopes keep separate histories and
+  rankings, and they are keyed in the persisted file — so a new surface is data, not a migration.
+- **Draw the highlight with [`Label::marks`](docs/widgets.md#label)**, fed from `Ranked::hits`.
+  Painting matched characters by hand is what the palette did for months; it drifts from the cut and
+  the reflow the moment either changes.
+- The history keys are shared vocabulary — `menu_history_up` / `menu_history_down` in
+  `[keys.widgets]`, not one widget's binding.
+
 #### FUNDAMENTAL — the styling/layout contract (violating any of these = redo)
 - **Don't invent widgets.** Use the library widgets. Never hand-roll UI in the app.
 - **Only library-provided values.** No hardcoded size/padding/alpha/color/spacing **anywhere** —
