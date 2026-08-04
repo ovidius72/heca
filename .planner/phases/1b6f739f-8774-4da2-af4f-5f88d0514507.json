@@ -101,10 +101,19 @@
       "priority": 2,
       "shortName": "item-gains-a-description-line",
       "title": "Item gains a description line — a second Label, not painted text",
-      "status": "in-progress",
+      "status": "canceled",
       "description": "The row's second line, composed the way the row already composes its first.\n\n## What exists\n\n`heca-grid-ui/src/widgets/item.rs` builds three children in `Item::new` (:117-122) and names their indices:\n\n```\nconst LEADING: usize = 0;   // Flex::empty() slot\n// 1 = the label — `Label::new(label).align(TextAlign::Start).grow(1.0)`\nconst TRAILING: usize = 2;  // Flex::empty() slot\n```\n\nwith the doc: *\"The label is a real `Label` child (not text drawn by `Item`), so the row is composed like every other widget: the engine lays the three out, each paints itself, and the label can be swapped or extended **without touching `Item::paint`**.\"* That is the seam this task uses — the description is another `Label`, and `Item::paint` is not touched.\n\nConstants that will need to follow the row's height: `ROW_H` (38.0), `FONT_SIZE` (15.0), the selection pill inset `SEL_INSET`, the active bar `ACTIVE_BAR_FRAC`.\n\n## What to build\n\n`Item::description(text)`: the label child becomes a `Flex::column` of the title `Label` and a muted description `Label` (theme `muted`, smaller `font_scale`), and the row grows to two lines **only when a description is set**. Slots stay vertically centred against the whole row; the active bar and the selection pill scale with the row rather than assuming `ROW_H`.\n\nPair it with `Label::truncate` (T379) so a long description cuts instead of overflowing — the palette rows are the first consumer, via F011.\n\n## Edge cases\n\n- **No description ⇒ nothing changes**: same height, same paint, same measure. Every existing `Item` in the sidebar, menus and `Select` options must be pixel-identical.\n- `label_signal()` keeps addressing the **title**; a description signal is separate if one is needed later (not now — no consumer).\n- The description must not steal the row's activation: it is a plain child, and `on_activate` stays the row's.\n\n## Test\n\nBuild an `Item` with and without a description, run `LayoutEngine`, and assert: the two-line row is taller than the one-line row by one line; both labels are children of the label column with the description **below** the title and left-aligned to it; the leading/trailing slots stay centred; a description-less `Item` measures exactly as it does today (guard against a silent global row-height change).",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3019641b-6df6-4f5f-b3fe-e1c54c490117-check-001-in-progress-canceled",
+          "date": "2026-08-04T07:40:10.372Z",
+          "fromStatus": "in-progress",
+          "toStatus": "canceled",
+          "title": "Dropped by the user 2026-08-04: not needed. `Item` gains no `description` property.",
+          "description": "Dropped by the user 2026-08-04: not needed. `Item` gains no `description` property.\n\nTwo reasons it was already dead. **The widget library says so itself**: `heca-grid-ui/src/widgets/item.rs:157,164,174,182` each carry `host_only(\"composed content — a description uses `children`\")` — a second line on a row comes from composed children, not from a property on `Item`. And **the shape was wrong for its only consumer**: the palette row is a `Grid` with named areas (`[\"title keys\", \"desc keys\"]`, where `Grid::areas` already computes `row_span`), two Labels coloured by the composer, and the keycap stack in the spanning cell — a composition, which by the settled widget-vs-component rule belongs in `heca/src/components/` (F011), not in the widget library.\n\nNothing was built; `Item` is untouched and every existing row keeps its current height and paint. The palette draws its own rows today (`heca-grid-ui/src/widgets/command_palette.rs`), which is what made this unnecessary. If a list row with a second line is ever wanted as a reusable piece, it is an F011 component built from children — not this task reopened."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -150,7 +159,7 @@
       "startedAt": "2026-07-30T13:54:39.563Z",
       "completedAt": "",
       "createdAt": "2026-07-30T13:43:45.665Z",
-      "updatedAt": "2026-07-30T13:54:39.563Z"
+      "updatedAt": "2026-08-04T07:40:10.372Z"
     },
     {
       "id": "5408f2d8-b2fa-47dd-867e-e4d5cbf1964d",
@@ -235,7 +244,7 @@
     }
   ],
   "createdAt": "2026-07-30T13:42:04.394Z",
-  "updatedAt": "2026-08-03T16:19:44.890Z",
+  "updatedAt": "2026-08-04T07:40:10.372Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
