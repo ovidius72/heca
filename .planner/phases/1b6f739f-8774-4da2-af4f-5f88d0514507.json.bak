@@ -25,7 +25,9 @@
     "4845ea12-be54-4cae-9e0c-059252d2b65f",
     "3019641b-6df6-4f5f-b3fe-e1c54c490117",
     "5408f2d8-b2fa-47dd-867e-e4d5cbf1964d",
-    "7dae47ea-461b-49be-b1ad-517005312d80"
+    "7dae47ea-461b-49be-b1ad-517005312d80",
+    "e29d2d8a-6616-4423-82a1-38a9dfb90446",
+    "7fbccecd-37e4-4023-999e-85cc1b42acc0"
   ],
   "tasks": [
     {
@@ -169,7 +171,7 @@
       "priority": 3,
       "shortName": "label-wraps-height-from-width",
       "title": "Label wraps — height from width, the other half of the gap",
-      "status": "planned",
+      "status": "in-progress",
       "description": "The second half of AGENTS.md's open gap (*\"truncation/ellipsis **+ wrapping**\"*). `Label::truncate` (T379) closed the first half; this is the harder one.\n\n## Why it is harder than truncation\n\nTruncation is a **paint-time** cut against the box the engine already gave the label — the measure never changes. Wrapping changes the measure itself: a wrapped label's **height depends on its resolved width**, which a fixed `Length::Px` measure cannot express.\n\n`heca-grid-ui/src/widgets/label.rs::remeasure` today sets:\n\n```\nwidth  = chars × font × MONO_ADVANCE_RATIO      // one line, natural width\nheight = font × MONO_LINE_RATIO                 // exactly one line\n```\n\nTaffy (0.7, `heca-grid-ui/src/layout.rs`) supports content-driven sizing through a **measure function** on leaf nodes — that path is what this task has to reach; the engine does not use it for labels today. Check whether `LayoutEngine` already wires one for any widget before adding a second mechanism.\n\n## What to build\n\n`Label::wrap(bool)` (or `Wrap::{None, Word}`) — mutually exclusive with `truncate`, since a label either cuts or reflows:\n- break on **word** boundaries, falling back to a hard break for a word longer than the line;\n- height = `lines × font × MONO_LINE_RATIO`, computed from the width the engine offers;\n- the run rect / decorations follow the **last** line, or span each line, whichever the existing `run_rect` contract can honour — decide and document it.\n\n## The consumer that asked for it (2026-07-30)\n\nThe command palette wraps **the selected row's description only**, and the list **reflows** — rows below shift down as the cursor moves, CSS-style, which the maintainer chose explicitly over a fixed two-line allowance. So the palette needs per-row heights that change with selection; row geometry there is already per-row (`row_rects`), so the reflow follows from the label's height being honest.\n\n## Behaviors to preserve\n\nA label that sets neither `wrap` nor `truncate` keeps today's single-line measure exactly — every existing layout in the app depends on it. Wrapping must not silently change the natural width either: a wrapped label still asks for its full width and only *accepts* less.\n\n## Test\n\nAssert the drawn lines, not a flag: the same text in a wide box paints one text run, in a narrow box paints N runs at increasing y, and the label's measured height is N line-heights. A long unbreakable word still fits (hard break) rather than overflowing.",
       "notes": "",
       "statusLog": [],
@@ -215,10 +217,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-08-04T07:47:29.624Z",
       "completedAt": "",
       "createdAt": "2026-08-03T14:50:00.466Z",
-      "updatedAt": "2026-08-03T14:50:00.466Z"
+      "updatedAt": "2026-08-04T07:47:29.624Z"
     },
     {
       "id": "7dae47ea-461b-49be-b1ad-517005312d80",
@@ -241,10 +243,54 @@
       "completedAt": "2026-08-03T16:19:44.890Z",
       "createdAt": "2026-08-03T15:48:30.498Z",
       "updatedAt": "2026-08-03T16:19:44.890Z"
+    },
+    {
+      "id": "e29d2d8a-6616-4423-82a1-38a9dfb90446",
+      "phaseId": "1b6f739f-8774-4da2-af4f-5f88d0514507",
+      "number": 387,
+      "shortId": "GM7M6",
+      "priority": 5,
+      "shortName": "label-marks-matched-characters",
+      "title": "Label marks matched characters — the last thing about text the palette hand-draws",
+      "status": "done",
+      "description": "The prerequisite for the palette's rows becoming composed widgets. Without it a composed `Label` cannot show a fuzzy match, and the palette has to keep painting its own text.\n\n## What the palette does today\n\n`heca-grid-ui/src/widgets/command_palette.rs:688-714` — it draws the row's label, then **over-draws each matched character in the accent colour**, positioning each by index against the monospace cell:\n\n```\n// Label, then over-draw matched chars in accent.\nfor &hi in &m.hits { … }\n```\n\n`Match.hits` (`:90`) is the list of matched char indices the fuzzy matcher returns. This is the third capability the palette hand-rolled because `Label` lacked it — truncation was the first (T379), wrapping the second (T382).\n\n## What to build\n\n`Label::marks(Vec<usize>)` + `Label::mark_color(Color)` (or one `marks(indices, color)` — pick one and say why): the listed **character indices** are drawn in the mark colour, the rest in the label's resolved colour.\n\nGeneric on purpose: any search surface highlights matches, and the indices come from `search::fuzzy` (P092/T384), which returns them for exactly this. Nothing here knows what a command is.\n\n## Where it interacts\n\n- **Truncation** (`drawn_text`, `:124`): the drawn string is a *cut* of the original, so an index into the original text is not an index into the drawn one. `Ellipsis::End` keeps a prefix (indices survive, past the cut are dropped); `Ellipsis::Start` drops `len - n + 1` from the head (every surviving index shifts). Get this wrong and the highlight lands on the wrong letters — visible, and exactly the kind of thing a test must assert on the drawn output.\n- **Wrapping** (T382, `drawn_lines`): an index must be mapped to (line, column). `wrap_lines` collapses runs of whitespace, so the mapping cannot be recovered by counting characters in the output — either return the source offsets from the wrap, or mark before wrapping. Decide and document.\n- **Decorations** (`run_rects`): unaffected — a mark is a colour, not a rect.\n\n## Edge cases\n\n- An index past the end of the text is ignored, not a panic — the caller's indices and the label's text can disagree by a frame when a signal updates.\n- Multi-byte text: indices are **chars**, never bytes, like every other measure in this widget.\n- No marks ⇒ one text run exactly as today. This must not split the draw into per-character runs for ordinary labels.\n\n## Test\n\nPaint and read the `DrawCommand::Text` runs: the marked characters come out in the mark colour and the rest in the label colour, with the concatenation still equal to the drawn text. With `truncate(Start)` the marks follow the characters they were attached to, not their original positions. Unmarked labels still paint exactly one run.\n\n---\n**Completion summary:**\nDone. `Label::marks(indices)` + `Label::mark_color(color)` in heca-grid-ui/src/widgets/label.rs; SDK setter for `mark_color` in heca-view/src/build.rs (the drift guard demanded it, as it did for `truncate` and `wrap`). `marks` is `host_only` — a list, not a scalar.\n\n**The mechanism that makes it correct: `drawn_indexed()`.** The cut and the reflow are applied in one place, and every drawn character carries its index in the **source** text (`None` for the ellipsis, which the label added itself). Marks are then a lookup on that index, so they survive both transformations by construction rather than by arithmetic: `Ellipsis::Start` shifts every surviving character, and wrapping collapses whitespace, so counting through the drawn output would drift. `drawn_lines()` is now derived from it, so there is one implementation of the cut.\n\n`font::wrap_indexed()` is the same generalisation one level down: it returns each character's source index, and `wrap_lines()` is derived from it. The joining space carries the index of the whitespace it stands for.\n\nPaint draws runs of same-markedness, each placed from the line's aligned origin (`run_rects`) at `TextAlign::Start`. **An unmarked label still paints exactly one run** — asserted, because splitting every label into pieces would cost the whole tree for a feature almost nothing uses. Marks are drawn bold + accent, matching what the palette hand-painted at command_palette.rs:714-723.\n\nTests assert the drawn runs and their colours: the pieces still spell the text; exactly the marked characters are accented; `Ellipsis::Start` carries the marks with the characters it kept; `Ellipsis::End` marks nothing once those characters are cut (and stamps nothing onto the ellipsis); a wrapped label marks the right word on the line it wrapped to. One test index was mine to fix — \"lazy\" starts at 35, not 34; the code had marked exactly what was asked for.\n\nNot visually verified: nothing consumes it yet. That arrives with T388.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T08:06:45.858Z",
+      "completedAt": "2026-08-04T08:12:48.920Z",
+      "createdAt": "2026-08-04T08:05:38.041Z",
+      "updatedAt": "2026-08-04T08:12:48.920Z"
+    },
+    {
+      "id": "7fbccecd-37e4-4023-999e-85cc1b42acc0",
+      "phaseId": "1b6f739f-8774-4da2-af4f-5f88d0514507",
+      "number": 388,
+      "shortId": "2JDWW",
+      "priority": 6,
+      "shortName": "the-palette-s-rows-become-comp",
+      "title": "The palette's rows become composed children — Select's pattern, so wrap/truncate/marks come from the widgets",
+      "status": "planned",
+      "description": "Stop the palette painting text. Its rows become real child components built from `Label`, the icon widgets and the keycap chips, so truncation (T379), wrapping (T382) and match marks (T387) arrive as **properties** instead of being re-implemented in `paint`.\n\nDepends on T387 (a composed label cannot show a match without it).\n\n## The precedent — this is a solved problem in this crate\n\n`Select` is an overlay panel whose rows are **real children** and it works today:\n- Options are pushed as children: `heca-grid-ui/src/widgets/select.rs:188` (`self.base.children.push(Box::new(choice))`).\n- The engine lays them out in the control's own flow and **measures** them there; `on_layout` (`:554`) captures each row's measured height.\n- `place_options` (`:365`) then moves each visible row into the overlay panel by baking an **absolute** target into its bounds and calling `shift_subtree` for descendants — idempotent, so re-running never compounds an offset. Rows outside the visible window collapse to zero size so no stale rect swallows a click.\n- Why it must be done that way is written at `select.rs:21-26`: \"the layout engine cannot place it there — a taffy node sits where its parent puts it\".\n\nThe palette needs exactly this, and currently does none of it: `routes_own_subtree()` returns true and its rows are \"drawn from data, not mounted as children\".\n\n## What the palette hand-draws today (`command_palette.rs`, ~957 lines)\n\n`paint` (`:557`) draws: the panel chrome, the selected-row fill and left accent bar, the icon, the label, the **match marks over-drawn per character** (`:688-714`), the description, and the keycap chips. Geometry is arithmetic: `row_h` (`:378`), `row_lines` (`:372`), `row_rects` (`:386`), `visible_rows` (`:325`), `layout` (`:445`).\n\n## What to build\n\n1. **A row child** composed of the existing widgets: the icon, a title `Label` (`marks` + `truncate(End)`), a description `Label` (`wrap(true)`), and the keycap stack. Built inside `heca-grid-ui` from generic widgets — a widget composing widgets, as `Select` composes `Choice`. It binds no app concept, so it is **not** an F011 component.\n2. **Measured heights replace the arithmetic.** `row_h`/`row_lines` go away; the height of a row is what the engine measured, captured in `on_layout` like `Select`'s. This is what makes the reflow work: a wrapping description reports its own height, so the rows below shift with no palette code for it.\n3. **`place_rows`** mirroring `place_options`: visible rows shifted to absolute targets inside the panel rect, off-window rows collapsed to zero.\n4. `visible_rows` and `layout` read the measured heights instead of computing them. **Keep the bottom margin** (`BOTTOM_FRAC`, T383) — it is a property of the panel, not of the rows.\n\n## Behaviours to preserve\n\n- The query line stays the hand-driven `Input` it is (`:181`) — that is a separate seam and not in scope.\n- The panel's own placement, size variants (`panel_metrics`, `:124`) and the bottom margin are unchanged.\n- Hit-testing: today paint, hover-select and the click hit-test all read one `row_rects`, which is what keeps a row from being drawn in one place and clicked in another. With real children the bounds **are** that single source — do not add a second geometry path beside them.\n- Rows outside the visible window must not be clickable (Select's zero-collapse).\n- The description-less list stays one line per row.\n\n## Edge cases\n\n- The palette is rebuilt on every open (`heca/src/chrome/palette.rs:185`), so children are built once per open — no incremental child management, but the row count changes as the **query filters**, which `Select` never has to handle. Decide whether rows are rebuilt per keystroke or built once for all commands and hidden — hiding is closer to Select and avoids rebuilding a hundred widgets per character.\n- A wrapping description makes rows different heights, so the running sum in `row_rects` must come from measured heights, not one height times an index.\n- First frame: `Select` notes its measured heights come from the previous layout pass (`:532`) and falls back to a font-derived height. The palette opens and paints immediately, so it needs the same fallback or the first frame is wrong.\n\n## Test\n\n- The drawn output is unchanged for a list without descriptions: same rows, same texts, same geometry as before the refactor.\n- Selecting a row whose description wraps makes the rows below it move down (assert their painted y), and the panel grows — the reflow, measured.\n- A click at a row's painted rect still runs that row's command; a click where a collapsed off-window row used to be runs nothing.\n- The match marks still land on the matched characters (now via `Label::marks`).\n\n**Visual verification is the user's** — this changes how every palette row is drawn.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-04T08:06:07.197Z",
+      "updatedAt": "2026-08-04T08:06:07.197Z"
     }
   ],
   "createdAt": "2026-07-30T13:42:04.394Z",
-  "updatedAt": "2026-08-04T07:40:10.372Z",
+  "updatedAt": "2026-08-04T08:12:48.920Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
