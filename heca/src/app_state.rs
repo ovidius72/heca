@@ -660,6 +660,13 @@ pub struct AppState {
     pub search_store: std::rc::Rc<std::cell::RefCell<heca_grid_ui::search::SearchStore>>,
     /// How a search query's case is treated (`[settings] search_case`). Re-read on reload.
     pub search_case: heca_config::settings::SearchCase,
+    /// Whether the search memory is written to disk at all (`[settings] search_history`). Turned
+    /// off, the store is neither read nor written — a shared or recorded machine is a real reason,
+    /// and a user who turns it off expects the existing file to stop being consulted too.
+    pub search_history: bool,
+    /// The store revision last written to disk, so a save happens exactly when something new was
+    /// recorded — see [`crate::search_state::persist_if_changed`].
+    pub search_saved_revision: u64,
     /// Structured font configuration (families + sizes), decoupled from the color
     /// theme. Read at the same choke points that previously read `theme.font_*`.
     /// Refreshed on `prefix+Shift+r` reload.

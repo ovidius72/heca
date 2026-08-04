@@ -367,10 +367,25 @@ pub(crate) async fn init_state(
         programs: std::rc::Rc::new(app_config.config.programs.clone()),
         appearance,
         command_palette_size: app_config.config.settings.command_palette_size,
-        // Empty: the palette ranks and recalls exactly as it would with no memory at all until
-        // something is run. F004/P092/T386 loads this from disk instead.
-        search_store: std::rc::Rc::new(std::cell::RefCell::new(Default::default())),
+        // Loaded from disk when `[settings] search_history` allows it; a missing, corrupt or
+        // unknown-version file is simply an empty store, so a first run and a broken file behave
+        // identically and neither can stop the launch.
+        search_store: std::rc::Rc::new(std::cell::RefCell::new({
+            let caps = heca_grid_ui::search::Caps {
+                history: app_config.config.settings.search_history_size,
+                usage: app_config.config.settings.search_usage_size,
+            };
+            match (
+                app_config.config.settings.search_history,
+                crate::search_state::default_path(),
+            ) {
+                (true, Some(path)) => crate::search_state::load(&path, caps),
+                _ => heca_grid_ui::search::SearchStore::with_caps(caps),
+            }
+        })),
         search_case: app_config.config.settings.search_case,
+        search_history: app_config.config.settings.search_history,
+        search_saved_revision: 0,
         font_config: app_config.config.font.clone(),
         terminal_cell_size,
         has_animated_images: false,

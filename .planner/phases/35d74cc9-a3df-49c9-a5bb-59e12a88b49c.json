@@ -28,7 +28,8 @@
     "8244bd6f-450d-4c5b-a280-cdc1ca7ba5e3",
     "9d05d3f7-4b99-4e1d-ad41-31e4298a0ce1",
     "fe759752-ee95-4feb-9340-5312a02ed9f9",
-    "e73685a2-4e0e-4287-965a-796c64ee8f2d"
+    "e73685a2-4e0e-4287-965a-796c64ee8f2d",
+    "d92a629d-5310-4beb-97db-c13a929e0cd9"
   ],
   "tasks": [
     {
@@ -184,12 +185,35 @@
       "completedAt": "",
       "createdAt": "2026-07-27T23:03:20.899Z",
       "updatedAt": "2026-07-27T23:23:19.243Z"
+    },
+    {
+      "id": "d92a629d-5310-4beb-97db-c13a929e0cd9",
+      "phaseId": "35d74cc9-a3df-49c9-a5bb-59e12a88b49c",
+      "number": 390,
+      "shortId": "S5YGC",
+      "priority": 8,
+      "shortName": "a-picker-widget-extracted-from",
+      "title": "A picker widget, extracted from CommandPalette — the second consumer that proves the search seam",
+      "status": "planned",
+      "description": "Proposed by the user 2026-08-04, after asking whether a `FilterableSelect` was needed to use the search API. **To think over before starting** — filed so the reasoning is not lost.\n\n## Why extraction, not a new widget\n\nThe command palette **already is a picker**: a query line, a filtered and ranked list, keyboard navigation, per-row marks, and now a query history. Building a `FilterableSelect` beside it would duplicate every one of those and the two would drift — which is the same defect this whole feature set has been correcting (the palette hand-rolled truncation, wrapping, match highlighting and a matcher, each because the shared piece did not exist).\n\nSo: pull the picker **out** of `heca-grid-ui/src/widgets/command_palette.rs` — the query `Input`, the filtered list, the selection, the row placement, the history keys — and leave `CommandPalette` as a thin specialization that supplies commands and runs the chosen one.\n\n## Why it is worth doing\n\n`heca-grid-ui/src/search.rs` (P092/T384) is written to be embedded by any widget: `rank` takes a closure yielding `(Option<id>, text)` and names no widget type, scopes are keyed so each surface has its own memory, and `WidgetIntent::MenuHistoryUp`/`Down` are shared vocabulary. **But the palette is its only consumer**, so that generality is designed rather than demonstrated. A second consumer is what finds the wrong assumptions. The two most likely to be wrong on first contact:\n- `rank` assumes the caller has a flat, indexable list;\n- `handle` assumes the widget owns a single query string.\n\nA picker also gives the app a reusable surface for \"switch workspace\", \"move pane to…\", \"open file\", and anything a plugin wants to offer — the fzf / telescope shape.\n\n## Where the pieces already are\n\n- `command_palette.rs`: `results()` (one `rank` call), `row_rects`/`place_rows` (measured heights + `Select`'s shift-into-panel pattern), `visible_rows`, `layout`, the hand-driven query `Input`, and the row children built in `command()`.\n- `heca-grid-ui/src/widgets/select.rs:188,365,554` — the precedent for real children placed into an overlay panel.\n- `search::SearchModel` — what the picker embeds; the palette would stop touching it directly.\n\n## Open questions to settle first\n\n- Does the picker own its query field, or take one? `handle` currently assumes the former.\n- Does it own the overlay panel and its placement, or is it a plain列 widget a caller mounts anywhere (a sidebar filter is not an overlay)? The palette's `TOP_FRAC`/`BOTTOM_FRAC`/`panel_metrics` are palette policy, not picker policy.\n- Preview pane and multi-select are the telescope-shaped extras this would eventually host — **not** in the first cut, but the shape should not preclude them.\n\nDo **not** start while P092's remaining work (the multi-process merge, the clear action) is open — both touch the same files.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-04T13:50:52.122Z",
+      "updatedAt": "2026-08-04T13:50:52.122Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T23:23:19.243Z",
+  "updatedAt": "2026-08-04T13:50:52.122Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

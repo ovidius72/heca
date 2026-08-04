@@ -43,10 +43,26 @@ const RECENCY_WEIGHT: i32 = 6;
 /// 8–20; this is the wall for the outliers.
 const BOOST_MAX: i32 = 28;
 
-/// How many past queries a scope remembers.
-const HISTORY_CAP: usize = 50;
-/// How many ids a scope's usage table keeps before pruning the least valuable.
-const FRECENCY_CAP: usize = 500;
+/// How many past queries a scope remembers, unless the host says otherwise.
+pub const DEFAULT_HISTORY_CAP: usize = 50;
+/// How many ids a scope's usage table keeps before pruning the least valuable, unless the host says
+/// otherwise.
+pub const DEFAULT_USAGE_CAP: usize = 500;
+
+/// How much a scope remembers. The host's, because it is the one with a config file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Caps {
+    /// Past queries kept per scope.
+    pub history: usize,
+    /// Usage entries kept per scope.
+    pub usage: usize,
+}
+
+impl Default for Caps {
+    fn default() -> Self {
+        Self { history: DEFAULT_HISTORY_CAP, usage: DEFAULT_USAGE_CAP }
+    }
+}
 
 /// A match: how well the query fits, and which characters it landed on.
 ///
@@ -172,10 +188,17 @@ struct Use {
 /// **Recency is distance in the use-sequence, never a timestamp.** No clock in a UI library means no
 /// clock skew, no timezone and no sleeping in a test — a test asserts an exact number. The sequence
 /// is part of what gets persisted, or every restart would reset "everything is equally old".
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Frecency {
     uses: HashMap<String, Use>,
     seq: u64,
+    cap: usize,
+}
+
+impl Default for Frecency {
+    fn default() -> Self {
+        Self { uses: HashMap::new(), seq: 0, cap: DEFAULT_USAGE_CAP }
+    }
 }
 
 impl Frecency {
@@ -183,6 +206,11 @@ impl Frecency {
     /// order is exactly what the matcher alone would give.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// An empty table keeping at most `cap` entries.
+    pub fn with_cap(cap: usize) -> Self {
+        Self { cap, ..Self::default() }
     }
 
     /// Record that `id` was chosen.
@@ -218,13 +246,18 @@ impl Frecency {
     }
 
     /// Rebuild from persisted state.
-    pub fn restore(seq: u64, entries: impl IntoIterator<Item = (String, u32, u64)>) -> Self {
+    pub fn restore(
+        seq: u64,
+        cap: usize,
+        entries: impl IntoIterator<Item = (String, u32, u64)>,
+    ) -> Self {
         let mut out = Self {
             uses: entries
                 .into_iter()
                 .map(|(id, count, last_seq)| (id, Use { count, last_seq }))
                 .collect(),
             seq,
+            cap,
         };
         out.prune();
         out
@@ -233,21 +266,22 @@ impl Frecency {
     /// Keep the table bounded: a long-lived install must not grow without limit. The least valuable
     /// entries go, which is the same judgement `boost` makes.
     fn prune(&mut self) {
-        if self.uses.len() <= FRECENCY_CAP {
+        if self.uses.len() <= self.cap {
             return;
         }
         let mut ranked: Vec<(String, i32)> =
             self.uses.keys().map(|id| (id.clone(), self.boost(id))).collect();
         ranked.sort_by_key(|(_, boost)| *boost);
-        for (id, _) in ranked.into_iter().take(self.uses.len() - FRECENCY_CAP) {
+        for (id, _) in ranked.into_iter().take(self.uses.len() - self.cap) {
             self.uses.remove(&id);
         }
     }
 }
 
 /// The queries a scope has been searched with, newest last, with a cursor for walking them.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct History {
+    cap: usize,
     entries: Vec<String>,
     /// Where the walk is. `None` means "not walking" — the field holds what the user typed.
     cursor: Option<usize>,
@@ -255,10 +289,21 @@ pub struct History {
     draft: Option<String>,
 }
 
+impl Default for History {
+    fn default() -> Self {
+        Self { cap: DEFAULT_HISTORY_CAP, entries: Vec::new(), cursor: None, draft: None }
+    }
+}
+
 impl History {
     /// An empty history.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// An empty history keeping at most `cap` queries.
+    pub fn with_cap(cap: usize) -> Self {
+        Self { cap, ..Self::default() }
     }
 
     /// Remember a query. Ignores an empty one and a repeat of the newest — retyping the same search
@@ -269,7 +314,7 @@ impl History {
             return;
         }
         self.entries.push(query.to_string());
-        if self.entries.len() > HISTORY_CAP {
+        if self.entries.len() > self.cap {
             self.entries.remove(0);
         }
     }
@@ -319,11 +364,11 @@ impl History {
     }
 
     /// Rebuild from persisted state, oldest first.
-    pub fn restore(entries: impl IntoIterator<Item = String>) -> Self {
+    pub fn restore(cap: usize, entries: impl IntoIterator<Item = String>) -> Self {
         let mut entries: Vec<String> = entries.into_iter().collect();
-        let overflow = entries.len().saturating_sub(HISTORY_CAP);
+        let overflow = entries.len().saturating_sub(cap);
         entries.drain(..overflow);
-        Self { entries, cursor: None, draft: None }
+        Self { cap, entries, cursor: None, draft: None }
     }
 }
 
@@ -344,6 +389,8 @@ pub struct Scope {
 #[derive(Debug, Clone, Default)]
 pub struct SearchStore {
     scopes: HashMap<String, Scope>,
+    caps: Caps,
+    revision: u64,
 }
 
 impl SearchStore {
@@ -352,9 +399,58 @@ impl SearchStore {
         Self::default()
     }
 
-    /// One scope's memory, created empty on first use.
+    /// An empty store remembering `caps` much per scope.
+    pub fn with_caps(caps: Caps) -> Self {
+        Self { caps, ..Self::default() }
+    }
+
+    /// How much this store remembers per scope.
+    pub fn caps(&self) -> Caps {
+        self.caps
+    }
+
+    /// One scope's memory, created empty on first use — with this store's caps.
     pub fn scope_mut(&mut self, scope: &str) -> &mut Scope {
-        self.scopes.entry(scope.to_string()).or_default()
+        let caps = self.caps;
+        self.scopes.entry(scope.to_string()).or_insert_with(|| Scope {
+            history: History::with_cap(caps.history),
+            frecency: Frecency::with_cap(caps.usage),
+        })
+    }
+
+    /// Bumped every time something is recorded.
+    ///
+    /// **This is what makes persistence impossible to forget.** A host saves when this changes,
+    /// rather than every consumer remembering to ask — a second search surface that forgot would
+    /// silently stop being remembered, and nothing would report it.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Note that something was recorded.
+    pub fn touch(&mut self) {
+        self.revision += 1;
+    }
+
+    /// Forget one scope's memory — both the past queries and the usage that ranks it.
+    ///
+    /// Returns whether anything was there to forget.
+    pub fn clear_scope(&mut self, scope: &str) -> bool {
+        let removed = self.scopes.remove(scope).is_some();
+        if removed {
+            self.touch();
+        }
+        removed
+    }
+
+    /// Forget every scope.
+    pub fn clear(&mut self) -> bool {
+        let had = !self.scopes.is_empty();
+        self.scopes.clear();
+        if had {
+            self.touch();
+        }
+        had
     }
 
     /// One scope's memory, if it has any yet.
@@ -495,6 +591,9 @@ impl SearchModel {
         if let Some(id) = id {
             scope.frecency.record(id);
         }
+        // The host watches this to decide when to persist, so a consumer never has to remember to
+        // ask for a save — recording *is* asking.
+        store.touch();
     }
 
     /// The shared store, for the host that persists it.

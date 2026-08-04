@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
+- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -656,6 +656,70 @@ A "needs attention" pulse: `Attention::new()`; `.trigger(pulses)` runs a fixed n
 sawtooth flashes (snap to `1.0`, fade to `0.0`, repeat) then stops; `.tick(dt)` (`true` while
 pulsing), `.amount()` (0–1), `.is_active()`. Used by [`Row.attention`](#row) — the widget
 flashes; the host plays any **sound** (the library is audio-free).
+
+### Search — matching, ranking by use, and query history
+
+`heca_grid_ui::search` — a capability a widget **embeds**, the way anything that needs to scroll
+nests a [`ScrollRegion`](#scrollregion). It owns the matcher, the ranking and the history so a
+searchable widget owns none of them.
+
+**No filesystem, no clock, and no widget type is named in the module.** That is what keeps it
+testable without a window and reusable by whatever searches next.
+
+```rust
+use heca_grid_ui::search::{SearchModel, SearchStore};
+
+// The store is the HOST'S: a palette is rebuilt every time it opens, and a memory
+// living in the widget would be empty every time.
+let store = Rc::new(RefCell::new(SearchStore::new()));
+let mut search = SearchModel::new("command", store);   // "command" is the scope
+```
+
+| Call | When | What it does |
+|------|------|--------------|
+| `.rank(&items, query, key)` | filtering | Returns `Vec<Ranked>` — index into `items`, score, and the matched character indices. `key` yields `(Option<&str> id, &str text)`. |
+| `.handle(intent, query)` | on `MenuHistoryUp`/`Down` | Walks the history. Returns `SearchAction::SetQuery(..)` to apply, or `Ignored`. **The whole of history navigation** — a widget that walks a history itself has copied this. |
+| `.query_changed()` | the user typed | Leaves the history walk; the field is theirs again. |
+| `.record_run(query, id)` | something ran | Remembers the query (for recall) and the id (for ranking). Only on a run — an abandoned search is not one anyone wants back. |
+
+**Identity is optional.** `key` returns `Option<&str>`; an item without an id matches and sorts
+normally and simply carries no ranking boost, so nothing has to grow an id field to become
+searchable.
+
+**Ranking** is the match score plus a frecency boost — use count (which wins from the *second* use)
+and recency, capped so a much-used entry never overtakes a clearly better textual match. Recency is
+**distance in a use-sequence, never a timestamp**: no clock in a UI library means no skew and tests
+that assert exact numbers.
+
+**Matching takes the best alignment, not the first.** A single greedy pass reads the query out of
+whatever comes earliest — `left` against `Toggle Left Sidebar` took the `l`/`e` from *Toggle* and
+then the `f`/`t` of *Left*, never matching the word, and scored the same as a clean match.
+
+**Scopes** keep separate memories: `"command"` today, and a second surface (or a `>` / `@` / `:`
+mode) passes a different name and gets its own history and ranking. Keyed from the first line ever
+written, so adding one is data rather than a file migration.
+
+**The two intents are shared vocabulary**, not one widget's feature:
+`WidgetIntent::MenuHistoryUp` / `MenuHistoryDown`, bound in `[keys.widgets]` as
+`menu_history_up` / `menu_history_down` (Shift+Arrows and Ctrl+p / Ctrl+n by default). Up is older;
+past the newest, the field gets back the draft the walk interrupted.
+
+**Marks:** feed `Ranked::hits` to [`Label::marks`](#label) and the widget draws the highlight — do
+not paint it yourself.
+
+#### Persistence is the host's
+
+The library holds the data; the app owns the path, the format and the failure behaviour. In heca
+that is `heca/src/search_state.rs` → `~/.local/share/heca/search-history.json`
+(`~/Library/Application Support/heca/` on macOS), loaded once at startup.
+
+**A consumer never calls save.** `SearchStore::revision()` bumps on every `record_run`, and the host
+calls `search_state::persist_if_changed(state)`, which writes only when it moved. Making every
+consumer remember to save would mean the second one silently stops being remembered, with nothing to
+report it.
+
+Settings: `search_history` (off ⇒ the file is neither written nor read), `search_history_size`
+(queries per scope, 50), `search_usage_size` (ranked entries per scope, 500).
 
 ---
 

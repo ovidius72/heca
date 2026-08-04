@@ -279,6 +279,10 @@ pub(crate) fn open_command_palette(state: &mut AppState) -> OverlayId {
             && let Some(entry) = rows.iter().find(|e| e.id == chosen)
         {
             dispatch_intent(state, registry, source, entry.intent.clone());
+            // Not the palette's business *what* was recorded or whether anything was: the shared
+            // helper saves when the store says it changed, so any future search surface is
+            // persisted by the same call without knowing this one exists.
+            crate::search_state::persist_if_changed(state);
         }
     });
     state.needs_redraw = true;

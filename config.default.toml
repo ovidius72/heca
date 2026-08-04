@@ -30,6 +30,14 @@ command_palette_size = "normal"
 #   "sensitive"   always case-sensitive.
 #   "insensitive" never case-sensitive, however you type.
 search_case = "smart"
+
+# Remember what you search for and which commands you pick, across restarts, so the
+# palette lists what you actually use first and Ctrl+p walks back through past
+# queries. Kept in a small file under your data directory
+# (~/.local/share/heca/search-history.json, or ~/Library/Application Support/heca
+# on macOS) — delete it any time and you lose nothing but the convenience. Set
+# false on a shared or recorded machine: the file is then neither written nor read.
+search_history = true
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Color theme by name. Built-ins: "grid_tron" (default), "grid_ares", "mocha",
