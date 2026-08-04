@@ -43,6 +43,7 @@ pub mod keymap;
 pub mod layout;
 pub mod reactive;
 pub mod scene;
+pub mod search;
 pub mod style;
 pub mod theme;
 pub mod widgets;
