@@ -198,6 +198,7 @@ impl HecaApp {
             // Re-read on reload like the rest: change the setting, press reload, the next palette
             // opens at the new size.
             state.command_palette_size = self.app_config.config.settings.command_palette_size;
+            state.search_case = self.app_config.config.settings.search_case;
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();

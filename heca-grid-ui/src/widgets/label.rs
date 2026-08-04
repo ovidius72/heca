@@ -510,38 +510,38 @@ impl Component for Label {
             } else {
                 bounds
             };
+            // **One run for the text, always.** The line is drawn whole, in the label's own
+            // colour, and marked characters are then over-drawn in the mark colour on top.
+            //
+            // Splitting the line into runs at the mark boundaries was tried and is wrong: the
+            // shaper drops a run's *leading* whitespace, so every run after the first landed a cell
+            // early and the spaces walked — `Toggle Left Sidebar` drew as `ToggleLe ftSidebar`.
+            // Scene-level tests could not see it, because the runs they assert were correct and the
+            // loss happened in shaping.
+            let text: String = line.iter().map(|(c, _)| *c).collect();
+            cx.text(box_, &text, color, self.base.font, self.align, style);
             if marks.is_empty() {
-                // **One run, as always.** An unmarked label must not be split into pieces: the
-                // renderer shapes a run at a time, and slicing every label into characters would
-                // cost the whole tree for a feature almost nothing uses.
-                let text: String = line.iter().map(|(c, _)| *c).collect();
-                cx.text(box_, &text, color, self.base.font, self.align, style);
                 continue;
             }
-            // Marked: draw runs of same-markedness, each placed by hand from the line's aligned
-            // origin. `run_rects` already resolved where the text sits inside the box for this
-            // `align`, so each piece is drawn at `Start` from there rather than re-deriving it.
+            // Per character, not per run: a marked run starting with a space would lose it the same
+            // way, and a single glyph cannot drift from its own position.
             let origin = runs.get(i).map_or(box_.loc.x, |r| r.loc.x);
             let cell = self.cell();
-            let mut col = 0usize;
-            while col < line.len() {
-                let marked = self.is_marked(&marks, line[col].1);
-                let start = col;
-                while col < line.len() && self.is_marked(&marks, line[col].1) == marked {
-                    col += 1;
+            for (col, (ch, source)) in line.iter().enumerate() {
+                if !self.is_marked(&marks, *source) || ch.is_whitespace() {
+                    continue;
                 }
-                let piece: String = line[start..col].iter().map(|(c, _)| *c).collect();
                 let rect = Rectangle::new(
-                    Point::new(origin + start as f64 * cell, box_.loc.y),
-                    Size::new((col - start) as f64 * cell, box_.size.h),
+                    Point::new(origin + col as f64 * cell, box_.loc.y),
+                    Size::new(cell, box_.size.h),
                 );
                 cx.text(
                     rect,
-                    &piece,
-                    if marked { mark_color } else { color },
+                    &ch.to_string(),
+                    mark_color,
                     self.base.font,
                     TextAlign::Start,
-                    if marked { style.bold(true) } else { style },
+                    style.bold(true),
                 );
             }
         }

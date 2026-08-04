@@ -21,6 +21,7 @@ use crate::style::WidgetSize;
 use crate::component::{Base, Component, Event, Handled, Modifiers, PaintCx, WidgetIntent};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::search::{Ranked, SearchAction, SearchModel};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::{Direction, Length};
 use crate::widgets::{paint_panel_chrome, Ellipsis, Flex, Glyph, Input, KeyCap, KeycapVariant, Label, PanelChrome, PanelElevation};
@@ -29,6 +30,14 @@ use std::cell::{Cell, RefCell};
 
 /// One command in a [`CommandPalette`].
 pub struct Command {
+    /// Stable identity, for ranking by past use. **Optional**: a command without one matches and
+    /// sorts normally and simply carries no frecency boost. The label cannot serve — a host prefixes
+    /// it with the owning component's title, so it changes with mounting.
+    id: Option<String>,
+    /// Which block this command belongs to while **nothing is typed** — lower sorts first. The
+    /// caller's policy, applied only in the browsing case; once there is a query the match decides
+    /// and the blocks dissolve.
+    group: u16,
     label: String,
     description: Option<String>,
     icon: Option<Glyph>,
@@ -44,6 +53,8 @@ impl Command {
     /// A command with `label` that runs `on_run` when selected.
     pub fn new(label: impl Into<String>, on_run: impl Fn() + 'static) -> Self {
         Self {
+            id: None,
+            group: 0,
             label: label.into(),
             description: None,
             icon: None,
@@ -59,6 +70,28 @@ impl Command {
     #[heca_grid_ui_macros::prop]
     pub fn description(mut self, text: impl Into<String>) -> Self {
         self.description = Some(text.into());
+        self
+    }
+
+    /// A stable identity, so past choices can rank this command. Usually the action's name.
+    ///
+    /// Optional by design: `rank` takes `Option<&str>`, so a command without an id still matches and
+    /// sorts — it just carries no boost. Nothing is forced to grow an identity to be searchable.
+    #[heca_grid_ui_macros::prop]
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Which block this command sorts into **while the query is empty** — lower first.
+    ///
+    /// The one thing a caller can say about ordering, and it is deliberately confined to the
+    /// browsing case: with nothing typed the only context available is whatever the caller knows
+    /// (the command palette leads with the focused component's actions), but the moment something is
+    /// typed the query is better context than that and the blocks are dropped.
+    #[heca_grid_ui_macros::prop]
+    pub fn group(mut self, group: u16) -> Self {
+        self.group = group;
         self
     }
 
@@ -82,13 +115,6 @@ impl Command {
         }
         self
     }
-}
-
-/// One filtered result: command index + match score + matched char indices.
-struct Match {
-    cmd: usize,
-    score: i32,
-    hits: Vec<usize>,
 }
 
 /// Narrowest the panel is allowed to be — and it yields to a window narrower than itself.
@@ -140,48 +166,6 @@ const fn panel_metrics(size: WidgetSize) -> (f64, usize) {
     }
 }
 
-/// Fuzzy subsequence match. Returns `(score, matched_indices)` if every query
-/// char appears in order in `text`. Higher score = better (consecutive,
-/// start-of-word, and earliness bonuses).
-fn fuzzy(query: &str, text: &str, case_sensitive: bool) -> Option<(i32, Vec<usize>)> {
-    let q: Vec<char> = query.chars().collect();
-    if q.is_empty() {
-        return Some((0, Vec::new()));
-    }
-    let t: Vec<char> = text.chars().collect();
-    let norm = |c: char| {
-        if case_sensitive {
-            c
-        } else {
-            c.to_ascii_lowercase()
-        }
-    };
-    let mut qi = 0;
-    let mut hits = Vec::with_capacity(q.len());
-    let mut score = 0i32;
-    let mut prev: Option<usize> = None;
-    for (ti, &tc) in t.iter().enumerate() {
-        if norm(tc) == norm(q[qi]) {
-            score += 1;
-            if prev == Some(ti.wrapping_sub(1)) {
-                score += 5; // consecutive run
-            }
-            if ti == 0 || !t[ti - 1].is_alphanumeric() {
-                score += 8; // start of a word
-            }
-            hits.push(ti);
-            prev = Some(ti);
-            qi += 1;
-            if qi == q.len() {
-                // Prefer shorter / tighter matches.
-                score -= (t.len() as i32 - q.len() as i32) / 4;
-                return Some((score, hits));
-            }
-        }
-    }
-    None
-}
-
 /// A fuzzy command launcher.
 pub struct CommandPalette {
     base: Base,
@@ -209,6 +193,9 @@ pub struct CommandPalette {
     /// row's height from a line count, it reads what the engine measured, so a description that
     /// wrapped onto three lines moves the rows below it without a line of arithmetic here.
     natural_h: Vec<f64>,
+    /// Matching, ranking by past use, and the query history — **embedded, not implemented**. Every
+    /// call below delegates; this widget owns no matcher and walks no history.
+    search: SearchModel,
     /// The marks signal of each row's title label, so the match highlights can be moved on every
     /// keystroke without rebuilding a hundred labels.
     title_marks: Vec<Signal<Vec<usize>>>,
@@ -234,6 +221,7 @@ impl CommandPalette {
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
+            search: SearchModel::detached("command"),
             natural_h: Vec::new(),
             title_marks: Vec::new(),
             desc_wrap: Vec::new(),
@@ -302,6 +290,16 @@ impl CommandPalette {
         self
     }
 
+    /// The search memory this palette ranks and recalls from — a host-owned store, so what the user
+    /// has searched and chosen survives the palette being rebuilt on every open.
+    ///
+    /// Unset, the palette gets a private store: it behaves identically, it simply forgets.
+    #[heca_grid_ui_macros::host_only("a shared model, not a scalar")]
+    pub fn search(mut self, model: SearchModel) -> Self {
+        self.search = model;
+        self
+    }
+
     /// The open-state signal — the host binds a trigger (e.g. Ctrl+K) to it.
     pub fn open_signal(&self) -> Signal<bool> {
         self.open
@@ -316,24 +314,22 @@ impl CommandPalette {
         self.query.borrow().value_str()
     }
 
-    /// The current filtered + ranked results.
-    fn results(&self) -> Vec<Match> {
+    /// The current filtered + ranked results — **entirely the model's answer**.
+    ///
+    /// Matching, smart-case and the ranking by past use all live in
+    /// [`search`](crate::search); this reads the order back. The one thing decided here is the
+    /// block ordering, and only while nothing is typed: with an empty query every match scores the
+    /// same and the caller's groups are the only context there is, but a typed query is better
+    /// context than a group and dissolves it.
+    fn results(&self) -> Vec<Ranked> {
         let query = self.query_text();
-        let case_sensitive = query.chars().any(|c| c.is_uppercase());
-        let mut out: Vec<Match> = self
-            .commands
-            .iter()
-            .enumerate()
-            .filter_map(|(i, c)| {
-                fuzzy(&query, &c.label, case_sensitive).map(|(score, hits)| Match {
-                    cmd: i,
-                    score,
-                    hits,
-                })
-            })
-            .collect();
-        // Stable sort by score desc (filter_map preserved original order for ties).
-        out.sort_by_key(|m| std::cmp::Reverse(m.score));
+        let mut out = self
+            .search
+            .rank(&self.commands, &query, |c| (c.id.as_deref(), c.label.as_str()));
+        if query.is_empty() {
+            // Stable, so the ranking inside each block survives.
+            out.sort_by_key(|r| self.commands[r.index].group);
+        }
         out
     }
 
@@ -359,7 +355,12 @@ impl CommandPalette {
     pub fn run_selected(&mut self) {
         let results = self.results();
         if let Some(m) = results.get(self.selected) {
-            (self.commands[m.cmd].on_run)();
+            let cmd = &self.commands[m.index];
+            // The query as typed and the command's identity — remembered only on a **run**. An
+            // abandoned search is not a search anyone wants back, so `close()` records nothing.
+            let (query, id) = (self.query_text(), cmd.id.clone());
+            (cmd.on_run)();
+            self.search.record_run(&query, id.as_deref());
         }
         self.close();
     }
@@ -381,7 +382,7 @@ impl CommandPalette {
     /// room by a nominal row height. A row is two lines when the list is described and taller again
     /// when an action carries several bindings, so a one-line estimate over-counted and the panel ran
     /// off the bottom of a short window — which is what this looked like in the app.
-    fn visible_rows(&self, results: &[Match]) -> usize {
+    fn visible_rows(&self, results: &[Ranked]) -> usize {
         let (_, max_rows) = panel_metrics(self.panel_size);
         let vp = self.viewport.get();
         if !vp.h.is_finite() {
@@ -395,7 +396,7 @@ impl CommandPalette {
         let mut room = (vp.h * (1.0 - TOP_FRAC - BOTTOM_FRAC) - chrome).max(0.0);
         let mut fits = 0usize;
         for m in results.iter().skip(self.scroll).take(max_rows) {
-            let h = self.row_h(m.cmd);
+            let h = self.row_h(m.index);
             if h > room && fits > 0 {
                 break;
             }
@@ -499,7 +500,7 @@ impl CommandPalette {
         let dx = panel.loc.x + PAD + ROW_PAD_X + self.icon_col();
         let mut targets: Vec<Option<Rectangle>> = vec![None; self.base.children.len()];
         for (ri, row) in self.row_rects(&results, panel, list_top) {
-            let cmd = results[ri].cmd;
+            let cmd = results[ri].index;
             let h = self.base.children[cmd].base().bounds.size.h;
             targets[cmd] = Some(Rectangle::new(
                 Point::new(dx, row.loc.y + ROW_PAD_Y),
@@ -528,7 +529,7 @@ impl CommandPalette {
     /// Reflow the selected row's description and cut every other. Called wherever the selection can
     /// move, because the reflow **is** the selection's visual: the row grows and the rest slide down.
     fn sync_wrap(&mut self) {
-        let selected = self.results().get(self.selected).map(|m| m.cmd);
+        let selected = self.results().get(self.selected).map(|m| m.index);
         for (i, wrap) in self.desc_wrap.iter().enumerate() {
             if let Some(wrap) = wrap {
                 wrap.set(Some(i) == selected);
@@ -541,7 +542,7 @@ impl CommandPalette {
             signal.set(Vec::new());
         }
         for m in self.results() {
-            self.title_marks[m.cmd].set(m.hits.clone());
+            self.title_marks[m.index].set(m.hits.clone());
         }
     }
 
@@ -549,7 +550,7 @@ impl CommandPalette {
     ///
     /// The one place row geometry is computed. Paint draws these, hover-select and the click
     /// hit-test read them — so a row can never be drawn in one place and clicked in another.
-    fn row_rects(&self, results: &[Match], panel: Rectangle, list_top: f64) -> Vec<(usize, Rectangle)> {
+    fn row_rects(&self, results: &[Ranked], panel: Rectangle, list_top: f64) -> Vec<(usize, Rectangle)> {
         let mut out = Vec::new();
         let mut y = list_top;
         let window = results
@@ -558,7 +559,7 @@ impl CommandPalette {
             .skip(self.scroll)
             .take(self.visible_rows(results));
         for (ri, m) in window {
-            let h = self.row_h(m.cmd);
+            let h = self.row_h(m.index);
             out.push((
                 ri,
                 Rectangle::new(
@@ -601,8 +602,18 @@ impl CommandPalette {
         self.scroll = 0;
     }
 
-    /// Reset the filter/selection whenever the query changes, and move the marks with it.
+    /// The user typed: reset the filter/selection, move the marks with it, and **leave the history
+    /// walk** — the field is theirs again.
     fn on_query_changed(&mut self) {
+        self.search.query_changed();
+        self.on_query_replaced();
+    }
+
+    /// The query changed without the user typing it — a history recall. Everything
+    /// [`on_query_changed`](Self::on_query_changed) does **except** ending the walk: resetting the
+    /// cursor here would make a second step back start again from the newest entry, so walking the
+    /// history would be impossible past its first step.
+    fn on_query_replaced(&mut self) {
         self.selected = 0;
         self.scroll = 0;
         self.sync_marks();
@@ -610,7 +621,7 @@ impl CommandPalette {
     }
 
     /// Panel + query + first-row geometry for the current viewport + result count.
-    fn layout(&self, results: &[Match]) -> (Rectangle, Rectangle, f64) {
+    fn layout(&self, results: &[Ranked]) -> (Rectangle, Rectangle, f64) {
         let vp = self.viewport.get();
         let line = self.line_h();
         let query_h = line + 2.0 * QUERY_PAD_Y;
@@ -625,7 +636,7 @@ impl CommandPalette {
                 .iter()
                 .skip(self.scroll)
                 .take(visible)
-                .map(|m| self.row_h(m.cmd))
+                .map(|m| self.row_h(m.index))
                 .sum(),
         };
 
@@ -761,7 +772,7 @@ impl Component for CommandPalette {
             // Result rows (the visible scroll window), from the one geometry helper.
             for (ri, row) in self.row_rects(&results, panel, list_top) {
                 let m = &results[ri];
-                let cmd = &self.commands[m.cmd];
+                let cmd = &self.commands[m.index];
                 let is_sel = ri == self.selected;
                 if is_sel {
                     let row_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
@@ -813,7 +824,7 @@ impl Component for CommandPalette {
                 } else {
                     muted.lerp(foreground, 0.7)
                 };
-                cx.with_content_color(content, |cx| self.row_child(m.cmd).paint(cx));
+                cx.with_content_color(content, |cx| self.row_child(m.index).paint(cx));
                 // Bindings: one row of keycap chips per binding, stacked down the row, each
                 // right-aligned to the same reserved column so every command's chips line up.
                 let cap_font = self.keycap_font();
@@ -924,6 +935,19 @@ impl Component for CommandPalette {
                 }
                 WidgetIntent::MenuUp => {
                     self.select_prev();
+                    Handled::Yes
+                }
+                // **Handled before the `_` arm below**, which forwards anything unlisted to the
+                // query field — an `Input` would ignore these and the key would fall through.
+                // The walk itself is the model's; this only applies the answer.
+                WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown => {
+                    let query = self.query_text();
+                    if let SearchAction::SetQuery(text) = self.search.handle(*intent, &query)
+                        && text != query
+                    {
+                        self.query.borrow_mut().set_value(&text);
+                        self.on_query_replaced();
+                    }
                     Handled::Yes
                 }
                 // **Everything else goes to the query field** — `Edit*` above all
@@ -1049,41 +1073,4 @@ impl LayoutExt for CommandPalette {}
 
 #[cfg(test)]
 mod tests {
-    use super::fuzzy;
-
-    #[test]
-    fn fuzzy_matches_subsequence_and_scores_consecutive_higher() {
-        assert!(
-            fuzzy("xyz", "abc", false).is_none(),
-            "non-subsequence misses"
-        );
-        assert!(
-            fuzzy("ace", "abcde", false).is_some(),
-            "scattered subsequence matches"
-        );
-        assert_eq!(
-            fuzzy("ce", "abcde", false).unwrap().1,
-            vec![2, 4],
-            "reports matched indices"
-        );
-
-        let consecutive = fuzzy("ab", "abxx", false).unwrap().0;
-        let scattered = fuzzy("ab", "axbx", false).unwrap().0;
-        assert!(
-            consecutive > scattered,
-            "a consecutive run outranks a scattered match"
-        );
-
-        // Empty query trivially matches (whole list shows).
-        assert!(fuzzy("", "anything", false).is_some());
-    }
-
-    #[test]
-    fn fuzzy_smart_case() {
-        // Case-insensitive when allowed.
-        assert!(fuzzy("git", "Git Push", false).is_some());
-        // Case-sensitive: an uppercase query char won't match a lowercase target.
-        assert!(fuzzy("G", "Git Push", true).is_some());
-        assert!(fuzzy("G", "git pull", true).is_none());
-    }
 }

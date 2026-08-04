@@ -20,6 +20,16 @@
 # "large" (1000px, 12 rows). Width and row count only — the text is the same size at
 # every setting. On a small screen the window wins: the panel never exceeds 92% of it.
 command_palette_size = "normal"
+
+# How a search query's case is treated — the command palette today, and any search
+# surface that follows it.
+#   "smart"       (default) case-insensitive until the query contains an uppercase
+#                 letter, then case-sensitive. What fzf and ripgrep do: typing
+#                 lowercase finds anything, and reaching for Shift is how you say
+#                 you meant it.
+#   "sensitive"   always case-sensitive.
+#   "insensitive" never case-sensitive, however you type.
+search_case = "smart"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Color theme by name. Built-ins: "grid_tron" (default), "grid_ares", "mocha",
