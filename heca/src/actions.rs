@@ -1302,7 +1302,21 @@ impl ActionRegistry {
             description: "Search every action — the app's and every mounted component's — and run one.",
             category: ActionCategory::System,
             icon: Some(Glyph::Search),
-            args: &[],
+            // Both OPTIONAL: bare is the actions list with an empty query, which is what a plain
+            // binding means. A *required* argument would take this action out of the palette's own
+            // listing, which offers only what it can run with nothing supplied.
+            args: &[
+                ArgDescriptor::optional(
+                    "mode",
+                    ArgKind::Text,
+                    "Which list to open in: pane or workspace; omit for actions.",
+                ),
+                ArgDescriptor::optional(
+                    "query",
+                    ArgKind::Text,
+                    "Text to start the search with; omit to open empty.",
+                ),
+            ],
         },
         ActionDescriptor {
             name: "reload_config",

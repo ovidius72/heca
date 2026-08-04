@@ -310,6 +310,17 @@ pub fn build_keymap(
     for (k, v) in &config.keys.bindings {
         merged_bindings.insert(k.clone(), v.clone());
     }
+    // `[[keys.bind]]` — the same normal-mode keymap, for the bindings that carry `args`. Merged by
+    // **combo** rather than replaced wholesale: a user adding one parameterized binding must not
+    // silently drop the defaults, which is the trap an array of tables otherwise sets.
+    let mut merged_bind = default_keys.bind.clone();
+    for binding in &config.keys.bind {
+        match merged_bind.iter_mut().find(|b| b.keys == binding.keys) {
+            Some(existing) => *existing = binding.clone(),
+            None => merged_bind.push(binding.clone()),
+        }
+    }
+
     let no_args = HashMap::new();
     for (action_name, value) in &merged_bindings {
         // An unknown name is NOT skipped any more: it becomes a Dynamic ref resolved at press
@@ -343,6 +354,33 @@ pub fn build_keymap(
                     index,
                 );
             }
+        }
+    }
+
+    // The arg-carrying bindings, into the same keymap and through the same seam as the flat ones —
+    // `action_ref_from_config` is what turns a name plus an `args` table into a built action, so a
+    // parameterized global binding is not a second resolution path.
+    for binding in &merged_bind {
+        let action = action_ref_from_config(&binding.action, &binding.args);
+        for key_str in binding.keys.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            let written = Written {
+                action: &binding.action,
+                layer: "[[keys.bind]]",
+                key: key_str,
+            };
+            let (mode, combo) = match key_str.strip_prefix("prefix+") {
+                Some(rest) => ("normal", KeyCombo::parse(rest.trim())),
+                None => ("global", KeyCombo::parse(key_str)),
+            };
+            bind_with_conflict_tracking(
+                &mut keymap,
+                mode,
+                combo,
+                action.clone(),
+                written,
+                conflicts,
+                index,
+            );
         }
     }
 
@@ -1006,7 +1044,10 @@ pub fn build_registry() -> ActionRegistry {
     );
 
     // ── System ──
-    registry.register(&WmAction::CommandPalette, handle_command_palette);
+    registry.register(
+        &WmAction::CommandPalette { mode: None, query: None },
+        handle_command_palette,
+    );
     registry.register(
         &WmAction::SpawnCommand {
             command: String::new(),
@@ -1761,7 +1802,7 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
-            Some(&WmAction::CommandPalette)
+            Some(&WmAction::CommandPalette { mode: None, query: None })
         );
     }
 
@@ -1786,7 +1827,7 @@ mod tests {
         // to avoid colliding with established keys; users bind it in config.
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
-            Some(&WmAction::CommandPalette)
+            Some(&WmAction::CommandPalette { mode: None, query: None })
         );
     }
 

@@ -24,7 +24,9 @@
 //!   collapse-current-workspace | expand-current-workspace | toggle-current-workspace-collapsed
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
-//!   command-palette
+//!   command-palette [mode] [query]
+//!     (both optional; `mode` is pane|workspace and composes with `query` into the prefilled
+//!      search — `command-palette pane nvim` opens the pane list narrowed to "nvim")
 //!   action <name> [--dock <container_id>] [key=value …]
 //!     (the generic verb: any action in the catalog by id, built-in or a component's own.
 //!      `--dock` names WHICH placement of a component the call is aimed at; without it the
@@ -622,7 +624,11 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "collapse-current-column" => Ok(WmAction::CollapseCurrentColumn),
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
-        "command-palette" => Ok(WmAction::CommandPalette),
+        // `command-palette [mode] [query]`, both optional — the same shape as `clear-search-*`.
+        "command-palette" => Ok(WmAction::CommandPalette {
+            mode: parts.next().map(|s| s.to_string()),
+            query: parts.next().map(|s| s.to_string()),
+        }),
         "spawn-command" => {
             let mut kind = SpawnKind::Terminal;
             let mut float = false;
@@ -1213,7 +1219,7 @@ mod tests {
     fn test_command_palette() {
         assert_eq!(
             parse_rpc_command("command-palette"),
-            Ok(WmAction::CommandPalette)
+            Ok(WmAction::CommandPalette { mode: None, query: None })
         );
     }
 

@@ -1995,8 +1995,12 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 /// The rows are read from the one [`ActionCatalog`](crate::actions::ActionCatalog) at open time, so
 /// this handler names nothing — a new plugin action, a rebind or a relabelled built-in is in the
 /// list without a change here. See [`crate::chrome::open_command_palette`].
-pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
-    crate::chrome::open_command_palette(state);
+pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
+    let (mode, query) = match action {
+        WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
+        _ => (None, None),
+    };
+    crate::chrome::open_command_palette(state, mode, query);
 }
 
 // ── External commands ──

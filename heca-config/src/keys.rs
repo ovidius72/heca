@@ -178,10 +178,26 @@ pub struct KeysConfig {
     /// Accepts both `prefix` and `prefix_key` for compatibility.
     #[serde(default = "default_prefix_key", alias = "prefix_key")]
     pub prefix: String,
-    /// Flat action bindings (any key not named "prefix", "command", "mode", "unbind", or
-    /// "widgets").
+    /// Flat action bindings (any key not named "prefix", "bind", "command", "mode", "unbind",
+    /// "widgets", or "component").
     #[serde(flatten)]
     pub bindings: KeybindingMap,
+    /// `[[keys.bind]]` — normal-mode bindings that carry `args`, for the actions a flat
+    /// `action = "keys"` line cannot express.
+    ///
+    /// The flat form is `action = keys`, so it has nowhere to put an argument; this is the same
+    /// entry `[[keys.component.bind]]` and `[[keys.mode]]` already use, at the top level where a
+    /// global binding lives. Both forms bind the same way and through the same seam — the array is
+    /// not a second keymap, it is the flat table with room for `args`.
+    ///
+    /// ```toml
+    /// [[keys.bind]]
+    /// keys = "prefix+o"
+    /// action = "command_palette"
+    /// args = { mode = "pane" }
+    /// ```
+    #[serde(default)]
+    pub bind: Vec<ModeBindingConfig>,
     /// Widget-internal keybindings (`[keys.widgets]`): the generic, cross-widget navigation +
     /// editing vocabulary (`item_next`/`item_previous`, `menu_up`/`menu_down`, `menu_history_up`/`menu_history_down`, `activate`,
     /// `dismiss`, `edit_*`) that the app resolves into a `heca_grid_ui::Keymap`. Applies only

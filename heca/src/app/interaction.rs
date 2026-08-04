@@ -405,7 +405,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
-        WmAction::CommandPalette
+        WmAction::CommandPalette { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. } => ActionPolicy::AlwaysAllowed,
 
@@ -1218,7 +1218,7 @@ mod tests {
             WmAction::ZoomColumn,
             WmAction::SidebarLeft,
             WmAction::WorkspaceNext,
-            WmAction::CommandPalette,
+            WmAction::CommandPalette { mode: None, query: None },
             WmAction::FocusToggleLocal,
             WmAction::PaneSelect,
             WmAction::FloatAt {
@@ -1496,7 +1496,7 @@ mod tests {
             WmAction::WorkspacePrev,
             WmAction::CreateWorkspace,
             WmAction::RenameWorkspace,
-            WmAction::CommandPalette,
+            WmAction::CommandPalette { mode: None, query: None },
             WmAction::ReloadConfig,
             // Scrollback
             WmAction::ScrollbackPageUp,
@@ -1680,7 +1680,7 @@ mod tests {
             ActionPolicy::FocusedPaneLocal
         );
         assert_eq!(
-            action_policy(&WmAction::CommandPalette),
+            action_policy(&WmAction::CommandPalette { mode: None, query: None }),
             ActionPolicy::AlwaysAllowed
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
@@ -2154,7 +2154,7 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
         let actions = [
-            WmAction::CommandPalette,
+            WmAction::CommandPalette { mode: None, query: None },
             WmAction::SpawnCommand {
                 command: String::new(),
                 kind: crate::input::SpawnKind::Terminal,

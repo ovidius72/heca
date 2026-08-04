@@ -358,7 +358,19 @@ pub enum WmAction {
     ToggleCurrentColumnCollapsed,
 
     // ── System ──
-    CommandPalette,
+    /// Open the command palette (F004/P092/T393).
+    ///
+    /// Both arguments are **optional**, and bare is exactly what it always was: the actions list,
+    /// empty query. A *required* argument would have taken the action out of the palette's own
+    /// listing, which offers only what it can run with no arguments.
+    ///
+    /// `mode` and `query` are not two mechanisms — they **compose into one prefilled query**.
+    /// `mode=pane query=nvim` opens the palette with `"@nvim"` typed, because the sigil is the mode
+    /// selector; the widget therefore needs no "open in a mode" API at all.
+    CommandPalette {
+        mode: Option<String>,
+        query: Option<String>,
+    },
 
     // ── External commands ──
     SpawnCommand {
@@ -700,7 +712,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_column" => Some(WmAction::RenameColumn),
         "reset_pane_name" => Some(WmAction::ResetPaneName),
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
-        "command_palette" => Some(WmAction::CommandPalette),
+        "command_palette" => Some(WmAction::CommandPalette { mode: None, query: None }),
         "reload_config" => Some(WmAction::ReloadConfig),
         "clear_search_history" => Some(WmAction::ClearSearchHistory { scope: None }),
         "clear_search_ranking" => Some(WmAction::ClearSearchRanking { scope: None }),
@@ -986,6 +998,12 @@ pub fn build_action(
             dock: get_string(args, "dock"),
         }),
 
+        // Both OPTIONAL, and they compose into one prefilled query — see the variant.
+        "command_palette" => Some(WmAction::CommandPalette {
+            mode: get_string(args, "mode"),
+            query: get_string(args, "query"),
+        }),
+
         "clear_search_history" => Some(WmAction::ClearSearchHistory {
             scope: get_string(args, "scope"),
         }),
@@ -1090,7 +1108,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         // Sidebars
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
-        WmAction::CommandPalette => 5,
+        WmAction::CommandPalette { .. } => 5,
         // Selection (host capability). Treated as pane-management-class
         // actions so they share priority with close/rename-style actions.
         WmAction::EnterSelectionMode
@@ -1245,7 +1263,7 @@ mod tests {
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
         assert_eq!(
             action_from_name("command_palette"),
-            Some(WmAction::CommandPalette)
+            Some(WmAction::CommandPalette { mode: None, query: None })
         );
         // Font zoom — six names map to two variants with the right step + None pane.
         assert_eq!(
@@ -1368,7 +1386,7 @@ mod tests {
         assert!(action_priority(&WmAction::ResizeIncrease) > action_priority(&WmAction::ClosePane));
         // CommandPalette should have lowest priority
         assert!(
-            action_priority(&WmAction::CommandPalette) > action_priority(&WmAction::SidebarLeft)
+            action_priority(&WmAction::CommandPalette { mode: None, query: None }) > action_priority(&WmAction::SidebarLeft)
         );
     }
 
@@ -1434,7 +1452,7 @@ mod tests {
             WmAction::SidebarLeft,
             WmAction::SidebarRight,
             // System
-            WmAction::CommandPalette,
+            WmAction::CommandPalette { mode: None, query: None },
             // Scrollback
             WmAction::ScrollbackPageUp,
             WmAction::ScrollbackPageDown,

@@ -138,8 +138,10 @@ swap_up    = "prefix+Ctrl+k"
 swap_down  = "prefix+Ctrl+j"
 
 # ── System ──
-command_palette = "prefix+p"        # Open command palette
+command_palette = "prefix+p"        # Open command palette (actions)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
+
+
 
 # ── Widget navigation & editing (widget-keys-config) ──
 # The generic, cross-widget vocabulary lives in the [keys.widgets] table near the end of this
@@ -176,6 +178,18 @@ scroll_to_top      = "Shift+Home"
 scroll_to_bottom   = "Shift+End"
 scroll_line_up     = "Shift+Up"
 scroll_line_down   = "Shift+Down"
+# The palette opened in a mode. One surface, three lists: the sigil is the mode selector, so these
+# are the same action with its query prefilled — typing `@` in the palette does exactly this.
+[[keys.bind]]
+keys   = "prefix+o"
+action = "command_palette"
+args   = { mode = "pane" }
+
+[[keys.bind]]
+keys   = "prefix+Ctrl+o"
+action = "command_palette"
+args   = { mode = "workspace" }
+
 # GUI/RPC-only by default (used by the terminal scrollbar): no flat keybinding
 # form supports args yet, but the action is still configurable in custom modes.
 # Example fixed jump in a user-defined mode:
