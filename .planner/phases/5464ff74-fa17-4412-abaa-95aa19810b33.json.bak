@@ -22,141 +22,197 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf",
-    "7ef645d5-dc18-4552-87ce-ba819452cb11",
-    "bfc43fce-a202-414c-a3f6-0d87a50547e8",
-    "fdbcabf3-eaa5-4983-9d36-75f393cb0b44"
+    "2afbc43e-4f96-42b0-8202-232f17318401",
+    "87f64d16-9cf8-48bf-bbe4-1542954e23b1",
+    "eaff801f-599f-4580-b20c-a2abfb842142",
+    "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e"
   ],
   "tasks": [
     {
-      "id": "6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 279,
-      "shortId": "GWVX6",
+      "id": "2afbc43e-4f96-42b0-8202-232f17318401",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 320,
+      "shortId": "KTPUY",
       "priority": 2,
-      "shortName": "choice-2-refactor-select-to-co",
-      "title": "choice-2: Refactor `Select` to compose `Choice` children (the hard one — overlay + scroll)",
+      "shortName": "confirm-dialog-as-layer",
+      "title": "Convert the confirm dialog to a layer with hintable buttons",
       "status": "done",
-      "description": "Make `Select` (`heca-grid-ui/src/widgets/select.rs`) **compose its options as `Choice` children** instead of hand-drawing them.\n\n## DONE 2026-07-14 — user tested and approved (\"works perfect\"). Branch `feat/viewnode-choice-select`.\n\n## How the hard part was solved\n**taffy measures, `Select` places.** The options are `Choice` children laid out in the trigger's flow — where the engine measures them (each hugs its content; `flex_shrink: 0` is already the library default, so they keep their natural heights). `Select` then *places* them, baking the offset from that flow into their bounds — the `ScrollRegion` trick, now shared: `shift_subtree` was promoted from `scroll_region.rs` to `component.rs` (`pub(crate)`).\n\nInvariant: **bounds === what is drawn === what is clickable.** Picks go through `choice_at()` (real bounds, never row arithmetic). Rows outside the visible window — and every row while closed except the chosen one — are **collapsed to zero size**, so no stale rect can swallow a click. Placement is re-derived in `on_layout`, idempotent (absolute targets; never compounds).\n\n- Row heights are **measured, not arithmetic** (`natural_h`, captured post-layout) → a two-line option stacks correctly. The flip/cap fit test reserves the *tallest* row (conservative → never clipped).\n- The control's horizontal insets ride on the rows as **margins** (not padding on the Select): that widens the control around them *and* keeps option content clear of the chevron + scrollbar lane. Padding could not do both.\n- Trigger **width hugs the widest option** (engine-measured, icons included — the char-count estimate is gone); **height** hugs the tallest option, so it can stand any of them in it.\n\n## The trigger shows the chosen option ITSELF (icon and all), open or closed\nClosed, the option *is* the trigger's content — `place_options` stands that child in the trigger slot. Open, it has moved into the list (a component is laid out in exactly one place), so the trigger draws a second **image** of its content via the new `PaintCx::with_translate`. Only content is echoed, never the row's chrome (the trigger's box is its chrome; a pill inside it would be a box in a box) — hence `sync_option_states` ties \"selected\" to `open`.\n\n## 3 generic library additions (all forced by the above, all documented in `docs/widgets.md` + rustdoc)\n- **`PaintCx::with_translate(dx, dy, |cx| …)`** — paint a subtree somewhere else. One choke point (`PaintCx::placed`) covers every draw helper + the cull test, so **no renderer change**. Rule written into the docs: what it draws is **NOT interactive** (no bounds ⇒ not hit-tested/focusable/hoverable); never use it to *move* a widget — that is `shift_subtree` + `on_layout`, which keeps bounds honest.\n- **`Component::text_summary()`** — accessible name of composed content (default: first child that has one; `Label` supplies it). Powers `selected_label()`: a control reading the *text* of content whose type it cannot see.\n- **`Style::align_self` + `LayoutExt::align_self`** (CSS `align-self`). Without it an `Auto`-width control silently goes full-width in a column parent (default `align: Stretch`) — the width hug would have been a regression.\n\n## User test round → 3 fixes (all in)\n1. **Hover bled through the open panel** (a Button underneath lit up): the panel now **consumes `PointerMoved`** over itself. Root cause: the host offers events to the overlay first and only falls through on `Handled::No`; `Select` never consumed moves. Pre-existing, exposed by the refactor.\n2. **Trigger lost the icon while open** → fixed with `with_translate` (above).\n3. Docs: added the **declarative `ViewNode` example** (both audiences, per AGENTS).\n\n## API\n`Select::new([..])` unchanged — sugar building `Choice::labeled(text, text)` children (every call site compiles). New: `Select::empty()` + `.option(Choice)` — typed to `Choice` on purpose (it keeps the row's `state()` signal to flip selection in place; `Box<dyn Component>` would erase it). **`Parent` is deliberately NOT implemented** — so choice-4's realize arm must build `Choice` typed (a `realize_choice`), not via generic `realize`. `selected_label()` now returns `String` (was `&str`). Preserved: `overlay_active()`, flip/cap, scroll + scrollbar + wheel, `MenuUp`/`MenuDown`/`Activate`/`Dismiss`, the `select-change` payload, `.selected(i)`, `.state()`, `.index()`. `focus_barrier` on. The cursor highlight stays the container's chrome (keeps the `hilite` token); selection is the `Choice`'s own state (accent pill + tinted content).\n\n## Tests (+3 → heca-grid-ui 137)\nsugar builds `Choice` children · composed icon+label option: trigger shows icon AND label **while open**, chosen row tints its content accent · click resolves from the child's **real bounds** (the two old tests that hardcoded `ROW_H = 30` arithmetic now read bounds) · off-window + closed rows collapsed/unclickable · flips above the trigger at the viewport edge.\n\n## Gates\nclippy `--workspace --all-targets --all-features` 0 warnings (only the pre-existing transitive `block v0.1.6` note) · heca-grid-ui **137** + 71 + 1 · heca 335 · showcase green (new composed LEVEL `Select` with icon+label options). No `cargo fmt`.\n\n## Files\n`heca-grid-ui/src/widgets/select.rs` (rewrite), `component.rs` (`with_translate`, `text_summary`, `shift_subtree`), `style.rs` + `builders.rs` (`align_self`), `label.rs` (`text_summary`), `choice.rs` (`BASE_PAD` → `pub(crate)`), `scroll_region.rs` (shared `shift_subtree`), `tests/phase_a.rs`, `heca-renderer/examples/showcase.rs`, `docs/widgets.md`.\n\n## NEXT\n**choice-3** (`7ef645d5`) — `Tabs` onto `Choice` children. Its sliding underline should now animate between the selected child's **real bounds** (a simplification), and `Tabs` gets the same treatment: sugar → `Choice::labeled` children, `focus_barrier`, no monospace-metric arithmetic.",
+      "description": "Migration step 2 from the design. A modal that draws its buttons manually has no child subtree, so `collect_hint_targets` finds nothing and it shows no keycaps — against the project rule that every action is KeyHint-reachable. Do it the conformant way: `OverlayHost::open_modal` with a ViewNode body and actions, NOT a bespoke modal.\n\n---\n**Completion summary:**\nClosed 2026-08-04 by a reconciliation pass — **the confirm prompt is already a layer, built the conformant way.**\n\n`heca/src/chrome/overlay.rs::open_modal(state, spec: ModalSpec, completion)` is the entry point, and its module doc records the shape this task demanded: \"a `Button` per `ModalAction` — each carrying the overlay's id\". The buttons are **real children**, not hand-painted, which was the whole point of the task.\n\nThe hint half is wired too: `heca/src/chrome/mod.rs:2185` runs `heca_grid_ui::collect_hint_targets(layer.root.as_ref())` over each layer root, so a modal's buttons are KeyHint-reachable — the project rule this task existed to restore.\n\n`heca/src/chrome/palette.rs`'s module note confirms the migration landed: \"the right-click context menu + the destructive-confirm prompt are now host-owned overlay layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.\"\n\n**Not re-verified visually.** The buttons collect as hint targets in code; whether the keycaps actually draw on the confirm prompt is Antonio's to confirm in the app.",
       "notes": "",
-      "statusLog": [
-        {
-          "id": "6ec99b20-bdf1-49d3-abc6-f5ba07ae39bf-check-001-in-progress-done",
-          "date": "2026-07-14T07:46:27.240Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        }
-      ],
+      "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-13T21:34:14.880Z",
-      "completedAt": "2026-07-14T07:46:27.240Z",
-      "createdAt": "2026-07-13T20:45:47.771Z",
-      "updatedAt": "2026-07-14T07:46:27.240Z"
-    },
-    {
-      "id": "7ef645d5-dc18-4552-87ce-ba819452cb11",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 280,
-      "shortId": "KSB6E",
-      "priority": 3,
-      "shortName": "choice-3-refactor-tabs-to-comp",
-      "title": "choice-3: Refactor `Tabs` to compose `Choice` children",
-      "status": "done",
-      "description": "Make `Tabs` (`heca-grid-ui/src/widgets/tabs.rs`) **compose its segments as `Choice` children** instead of laying them out from monospace metrics.\n\n## STATUS: code complete on `feat/viewnode-choice-select` (uncommitted). AWAITING USER TEST → then commit.\n\n## Done\n1. **Segments are `Choice` children.** `Tabs::new([\"A\",\"B\"])` stays as sugar building `Choice::labeled(text, text)` children (every call site compiles). New: `Tabs::empty()` + **`.tab(Choice)`** — typed to `Choice`, exactly as `Select::option` is, because the strip keeps each tab's `state()` **and** `hovered()` signals to drive them in place. (**Deviation from the task text, deliberate + same as choice-2:** `Parent` is NOT implemented — a `Box<dyn Component>` would erase those signals. choice-4's realize arm must build `Choice` typed.)\n2. **The underline tracks the selected child's REAL BOUNDS** (`underline_target()` reads `child.bounds`), animating between them in `tick`. All the segment arithmetic is gone — `segment()`, `total_width()`, `advance()`, `tab_at(rel_x)`, `MONO_ADVANCE_RATIO`, `TAB_PAD_H`, `V_PAD`. The underline is now correct for a tab holding an icon or a badge, which a char-count could never have measured. It **snaps** on the first layout (`on_layout`) instead of sliding in from the origin.\n3. **The strip hugs its tabs in both axes** (`width`/`height` = `Auto`; `align_self: Start` so it doesn't stretch in a column parent). The underline band is reserved as a **bottom margin on the tabs** — so the strip measures to \"the tallest tab + the band\" without computing a height. (A padding on the strip could not: it would inset the tabs, and the underline must sit *under* them.)\n4. **Hit-testing via `choice_at()`** — real bounds, no x-arithmetic.\n5. `focus_barrier` on. Preserved: `.selected(i)` (clamped), `.state()`, `.index()`, `on_change` → `Action::value(\"tab-change\", Usize)`, and `ItemPrevious`/`ItemNext` (still `Event::Widget`, no literal keys). Added `.selected_label()` (the tab's `text_summary()`).\n6. `tick` recurses into the tabs (a Spinner/Badge inside one animates).\n\n## VISUAL CHANGES — the user must review these\nThe tab now looks like an **option** (the `Choice` owns the look, `Tabs` adds the underline):\n- selected: accent **pill** + accent content (was: accent bold text, no pill);\n- unselected: **foreground** content (was: `muted` until hovered);\n- hover: the `Choice`'s hover tint (was: muted → foreground brightening);\n- horizontal padding is the option padding (`BASE_PAD` 8·scale, shared with `Select`'s rows) instead of `TAB_PAD_H` 14 → tabs are tighter, and the underline is correspondingly narrower (it spans the pill).\n\nThis is the consequence of \"an option looks the same everywhere\". If the user prefers the old muted/no-pill strip, the clean fix is a `Choice` builder that defers its chrome to the container (the container draws the indicator) — NOT a hand-drawn tab.\n\n## Tests (heca-grid-ui 138)\n`tabs_underline_slides_toward_the_selected_tabs_bounds` (rewritten — the old one picked the *first* Rect in the scene, which is now the selected tab's pill, so it would have passed while measuring the wrong thing; it now selects the underline by its 2px thickness, asserts it starts snapped to tab 0's bounds, does not jump on selection, and lands exactly on tab 1's bounds/width) · `tabs_sugar_builds_choice_children_and_composed_tabs_carry_their_content` (sugar → `Choice` children; a composed icon+label+`Badge` tab measures wider than a plain one; the selected tab's content is accent-tinted through the `Choice`, with no wiring from `Tabs`) · the existing nav/click test passes unchanged.\n\n## Docs\n`docs/widgets.md` `Tabs` entry rewritten — both audiences (native sugar + composed, and the declarative `ViewNode` form), the bounds-tracking underline, the margin-band measuring rule, `focus_barrier`. Rustdoc likewise.\n\n## Showcase\nA second, composed tab strip: `Icon + Label`, `Label + Badge::danger(\"3\")`, and a plain one.\n\n## Gates (2026-07-14)\nclippy `--workspace --all-targets --all-features` 0 warnings · heca-grid-ui **138** + 71 + 1 · heca 335 · showcase builds. No `cargo fmt`.\n\n## NEXT\nUser tests → commit → **choice-4** (realize arms for `Choice`/`Select`/`Tabs` + value→intent args).",
-      "notes": "",
-      "statusLog": [
+      "checklist": [
         {
-          "id": "7ef645d5-dc18-4552-87ce-ba819452cb11-check-001-in-progress-done",
-          "date": "2026-07-14T08:03:27.749Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
+          "id": "confirm-dialog-as-layer-c1",
+          "number": 1,
+          "title": "Confirm dialog goes through OverlayHost::open_modal",
+          "checked": false
+        },
+        {
+          "id": "confirm-dialog-as-layer-c2",
+          "number": 2,
+          "title": "Its buttons are real components with hint targets",
+          "checked": false
+        },
+        {
+          "id": "confirm-dialog-as-layer-c3",
+          "number": 3,
+          "title": "USER confirms the keycaps appear",
+          "checked": false
         }
       ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-14T07:47:13.915Z",
-      "completedAt": "2026-07-14T08:03:27.749Z",
-      "createdAt": "2026-07-13T20:46:02.413Z",
-      "updatedAt": "2026-07-14T08:03:27.749Z"
+      "startedAt": "2026-08-04T19:31:52.135Z",
+      "completedAt": "2026-08-04T19:31:52.135Z",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-08-04T19:31:52.135Z"
     },
     {
-      "id": "bfc43fce-a202-414c-a3f6-0d87a50547e8",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 281,
-      "shortId": "RXA77",
+      "id": "87f64d16-9cf8-48bf-bbe4-1542954e23b1",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 327,
+      "shortId": "J34RD",
       "priority": 4,
-      "shortName": "choice-4-realize-arms-choice-s",
-      "title": "choice-4: realize arms — `Choice`, `Select`, `Tabs` (+ value→intent args)",
-      "status": "done",
-      "description": "Add the `realize` arms so the option-shaped widgets are authorable declaratively, and make the **chosen value** flow back to the author.\n\n## STATUS: code complete on `feat/viewnode-choice-select` (uncommitted). No UI surface to test by hand — `realize` is the host bridge, covered by unit tests. Awaiting the user's go-ahead to commit.\n\n## Done (`heca/src/chrome/{view.rs, realize.rs}`)\n1. **`WidgetKind::Choice`** — new variant. Props: `value` (`Text`/`Int` — what the option *means*), `text` as the **childless sugar** (→ one `Label` child). Precedence: **children win** (identical rule to `Button`). With no `value`, the text stands in for it, so `Choice { text: \"HIGH\" }` matches the native `Choice::labeled`.\n2. **`realize` arms** — `Choice`, `Select`, `Tabs`:\n   - `realize_choice(node) -> Choice` — **typed**, not `Box<dyn Component>`, because `Select::option` / `Tabs::tab` are typed (they keep the option's state signals to drive selection in place; a boxed component would have erased them). This is why choice-2/3 deliberately did **not** implement `Parent` on those widgets.\n   - `realize_options()` — the `Choice` children in order; a child of any other kind is **ignored** with a debug log (realize stays total for untrusted input).\n   - `Select`/`Tabs` read `selected` (Int, via a new `usize_prop` that rejects negatives) and wire `change`.\n   - A **standalone** `Choice` gets its `press` intent wired (`on_activate` + hint target). Inside a `Select`/`Tabs` the container owns the click, so a `press` there is ignored rather than half-wired.\n3. **Value → intent args** (`option_change`) — the point of the whole model. The widgets emit an index (`SignalData::Usize`); `realize` captures the options' `value` props at realize time and maps the index back through them, dispatching the bound `Intent` with **`args[\"value\"]`** set → a plugin receives `{\"value\": \"high\"}`, never an opaque `1` that breaks the moment the options are reordered. No `value` on the option → falls back to `args[\"index\"]`.\n4. No closures cross the boundary; the `press`/`change` vocabulary is unchanged (AGENTS ⛔ SETTLED).\n\n## Tests (+5 → heca 340)\n`select_node_realizes_its_choice_children_as_options` (children become options; each composes its own icon+label; named by `text_summary`) · **`the_change_intent_carries_the_chosen_options_value_not_its_index`** (realize → layout → open the dropdown → click the second row *at its real bounds* → the emitted `InteractionIntent::View` carries `args[\"value\"] = \"high\"`) · `tabs_node_realizes_choice_children_and_reports_the_chosen_value` (same mapping via `ItemNext`) · `childless_choice_node_desugars_its_text_to_a_label_child` · `a_non_choice_child_of_a_select_is_ignored`. Also fixed `deferred_kind_is_empty_not_panic`, which used `Tabs` as its \"deferred kind\" — now realized, so it tests `Grid`.\n\n## Docs\n`view.rs` rustdoc: props/events table gains `Choice`/`Select`/`Tabs`, plus an \"Options are children\" section (the value→intent rule, the two totality rules). `docs/widgets.md`: the model table + a new **\"Options are children (`Select` / `Tabs` / `Choice`)\"** section; the `Choice` entry gains its declarative examples; the \"not realized yet\" list is down to `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` / `Toast`, with `ScrollBar` documented as **host-only** by design.\n**AGENTS.md ⭐ block updated**: the \"Genuinely OPEN\" list no longer claims `Select`/`Tabs`/`Button` realize coverage is open; a **SETTLED since** paragraph now records composition, options-as-children + value→intent, content-color inheritance, and host-only `ScrollBar`.\n\n## Gates (2026-07-14)\nclippy `--workspace --all-targets --all-features` 0 warnings · heca **340** · heca-grid-ui 138 + 71 + 1 · showcase builds. No `cargo fmt`.\n\n## NEXT\n**choice-5** (`fdbcabf3`) — realize arms for `ItemGroup` + `MarkerGroup` (no model change needed; `ItemGroup` introduces the `toggle` event name).",
+      "shortName": "show-layer-actions",
+      "title": "ShowLayer / HideLayer on-demand layers → a first native exposé",
+      "status": "planned",
+      "description": "Migration step 3. `ShowLayer(id)` makes an OnDemand layer visible and active, so the base context goes dormant when it is a context switch. A keybinding maps to it like any action, so it is rebindable and reachable from mouse and RPC.",
       "notes": "",
-      "statusLog": [
-        {
-          "id": "bfc43fce-a202-414c-a3f6-0d87a50547e8-check-001-in-progress-done",
-          "date": "2026-07-14T08:54:13.941Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        }
-      ],
+      "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "show-layer-actions-c1",
+          "number": 1,
+          "title": "ShowLayer/HideLayer drive OnDemand layers",
+          "checked": false
+        },
+        {
+          "id": "show-layer-actions-c2",
+          "number": 2,
+          "title": "Bindable + RPC-reachable like any action",
+          "checked": false
+        },
+        {
+          "id": "show-layer-actions-c3",
+          "number": 3,
+          "title": "A first native exposé proves it",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-14T08:03:28.470Z",
-      "completedAt": "2026-07-14T08:54:13.941Z",
-      "createdAt": "2026-07-13T20:46:14.315Z",
-      "updatedAt": "2026-07-14T08:54:13.941Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "fdbcabf3-eaa5-4983-9d36-75f393cb0b44",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 282,
-      "shortId": "YQE75",
-      "priority": 5,
-      "shortName": "choice-5-realize-arms-itemgrou",
-      "title": "choice-5: realize arms — `ItemGroup` + `MarkerGroup` (no model change needed)",
+      "id": "eaff801f-599f-4580-b20c-a2abfb842142",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 336,
+      "shortId": "9R927",
+      "priority": 3,
+      "shortName": "paint-input-through-stack",
+      "title": "Paint and route input through the layer stack",
       "status": "done",
-      "description": "The two easy kinds: both already expressible with the model as it stands (text + bools + children + one event). Pure `realize` work, no widget refactor, no new `PropValue`.\n\n## DONE 2026-07-14 — heca 343, clippy clean. Host-bridge work with no UI surface; verified by tests.\n\n## Shipped (`heca/src/chrome/{view.rs, realize.rs}`)\n- **`ItemGroup` arm** — props `text` (header) + `expanded` (Bool, default `true`); children = the rows, appended **after** the widget's own header (`children[0]`). The group applies its expanded state in `remeasure`, so builder order doesn't matter and a collapsed group folds its rows out of layout on the first pass.\n- **`MarkerGroup` arm** — props `active` / `nav_selected` (Bool); children = the rows. **No events**: it is an indicator, and the rows inside carry their own intents (asserted in a test — it registers zero hint targets).\n- **`toggle`** — the third canonical event name, alongside `press`/`change`. `toggle_change()` dispatches the bound intent with **`args[\"expanded\"]`** set to the state the group moved to, so an author binds one action and learns which way it went instead of tracking the state on their side. This mirrors the value→intent rule from choice-4: an event carries what the author needs to act on, never a bare ping.\n\n## Tests (+3 → heca 343)\n`item_group_node_realizes_its_header_and_rows` (header + 2 rows; `expanded: false` folds the rows via `display: none` after a layout pass) · `the_toggle_intent_carries_the_new_expanded_state` (realize → layout → click the header → the emitted `InteractionIntent::View` carries `args[\"expanded\"] = false`) · `marker_group_node_realizes_its_rows_and_flags`.\n\n## Note worth keeping\n`Component::text_summary()`'s default is **first descendant text wins** — on an `ItemGroup` that is the header's *chevron glyph*, not the label. Correct behaviour (the chevron is a real `Label`), but it means the default accessible name is only meaningful for content-only subtrees (a `Choice`, a `Button`). Do not lean on it for widgets whose chrome includes text.\n\n## Docs\n`view.rs`: the `Events` rustdoc now lists the whole vocabulary (`press` / `change` / `toggle`) with what each intent carries; props table gains `ItemGroup`/`MarkerGroup`. `docs/widgets.md`: model table + an event-vocabulary paragraph; both entries gain **Native + Declarative** examples; the \"not realized yet\" list is down to `Grid` / `DockFrame` / `Toast` (+ host-only `ScrollBar`).\n\n## Gates\nclippy `--workspace --all-targets --all-features` 0 warnings · heca **343** · heca-grid-ui 138 + 71 + 1 · showcase builds. No `cargo fmt`.\n\n## NEXT\n**choice-6** (`2178830d`) — `PropValue::List` + the `Grid` realize arm (tracks as CSS-like strings, areas, per-child placement). The only kind left that genuinely needs a new model primitive.",
+      "description": "Today only hint visibility reads the stack. Draw layers in stack order and route input to the active or modal layer. The invariants must survive: no hardcoded z (z is tree position), buttons never declare a layer (they inherit it from their surface), the active context moves only for context surfaces — never for zoom, scroll or provider selection.\n\n---\n**Completion summary:**\nClosed 2026-08-04 by a reconciliation pass — **the layer stack is laid out, painted and input-routed.**\n\n- **Layout, every frame:** `heca/src/chrome/mod.rs::layout_layers` runs `LayoutEngine::compute` on each visible layer root, so layer children get real measured bounds rather than hand-placed ones.\n- **Paint in stack order:** driven from the registry's ordering (`LayerBand` + `visible_roots_mut`), not from a hardcoded z — the invariant this task named.\n- **Input:** `dispatch_modal_pointer` (`chrome/mod.rs:1271`) delivers pointer events to the top modal layer and returns `true` so \"every caller stops there and nothing leaks to\" what is beneath. `top_modal` and `content_covered` answer which layer owns the context; keys reach an open overlay through the keymap and the widget's own `overlay_active` capture.\n- **Hints read the stack** through `collect_hint_targets(layer.root.as_ref())` (`:2185`).\n\nThe invariants held: z is tree position, buttons inherit their surface's layer rather than declaring one, and the active context moves only for context surfaces.\n\nLive proof beyond the tests: the command palette (P092/T393) mounts as an `Overlay`-band `OnDemand` layer, is laid out each frame, captures the keyboard while open, and occludes what is behind it.\n\n**Not re-verified visually as part of this pass** — it is exercised constantly by the palette, dropdowns and the confirm prompt, which Antonio drives regularly.",
       "notes": "",
-      "statusLog": [
-        {
-          "id": "fdbcabf3-eaa5-4983-9d36-75f393cb0b44-check-001-in-progress-done",
-          "date": "2026-07-14T08:57:36.478Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        }
-      ],
+      "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "paint-input-through-stack-c1",
+          "number": 1,
+          "title": "Layers painted in stack order",
+          "checked": false
+        },
+        {
+          "id": "paint-input-through-stack-c2",
+          "number": 2,
+          "title": "Input routed to the active/modal layer",
+          "checked": false
+        },
+        {
+          "id": "paint-input-through-stack-c3",
+          "number": 3,
+          "title": "No hardcoded z anywhere",
+          "checked": false
+        },
+        {
+          "id": "paint-input-through-stack-c4",
+          "number": 4,
+          "title": "USER confirms a layer opened from another sits above it",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-14T08:54:14.721Z",
-      "completedAt": "2026-07-14T08:57:36.478Z",
-      "createdAt": "2026-07-13T20:46:27.142Z",
-      "updatedAt": "2026-07-14T08:57:36.478Z"
+      "startedAt": "2026-08-04T19:32:03.187Z",
+      "completedAt": "2026-08-04T19:32:03.187Z",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-08-04T19:32:03.187Z"
+    },
+    {
+      "id": "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 339,
+      "shortId": "PQADT",
+      "priority": 1,
+      "shortName": "layer-content-viewnode",
+      "title": "Add LayerContent with the View(ViewNode) arm",
+      "status": "done",
+      "description": "`heca/src/chrome/layers.rs` has `LayerBand` and `LayerKind` but no `LayerContent` — a layer holds a native tree and nothing can hand it a description. Add `LayerContent::{Native(Box<dyn Component>), View(ViewNode)}` and realize the View arm through the ONE bridge (heca/src/chrome/realize.rs). Occluder comes from the realized tree's laid-out bounds — NEVER hardcoded.\n\n---\n**Completion summary:**\nDone 2026-08-04. `heca/src/chrome/layers.rs` + `heca/src/chrome/overlay.rs`.\n\n## What shipped\n\n- **`LayerContent`** with both arms: `Native(Box<dyn Component>)` and `View { node, realized }`. `DynamicLayer.root` became `content: LayerContent`, with `root()` / `root_mut()` accessors so every consumer is arm-agnostic.\n- **`LayerRegistry::add_view(band, kind, modal, covers_content, node, realized)`** — the View-arm constructor, mirroring `add`.\n- **`chrome::overlay::open_view_layer(state, band, kind, modal, covers_content, node)`** — the host entry point. Realizes through the **one** bridge (`super::realize` → `heca_view_realize::realize`) with the same boundary `build_modal_root` uses: a `ViewHintTargets` sink so the described tree's buttons are KeyHint-reachable, and an emitter that wraps the model's own `Intent` into `InteractionIntent::View` at the edge.\n\n## Design decision — the View arm keeps BOTH the node and the realized tree\n\nThe task's literal signature was `View(ViewNode)`. It is `View { node, realized }` instead, for two reasons:\n\n1. **A registry cannot realize.** `realize(node, theme, emit, hints, forms)` needs the theme, an intent emitter, the hint sink and the form bindings; `LayerRegistry` is plain data on `AppState` and holds none of them. So the caller realizes and hands both over — which is why `open_view_layer` exists at all.\n2. **Keeping only the tree would throw the description away.** The node is the source of truth a theme reload or a plugin update re-realizes from; the tree is what the host lays out, paints and hint-walks. `LayerContent::node()` exposes it, and the test asserts it survives realization.\n\n## The occluder invariant holds\n\nNothing is hardcoded and nothing was added: `active_hint_targets` (`heca/src/chrome/mod.rs:2182`) reads `layer.root().base().bounds`, so a View layer's occluder is its **realized tree's laid-out bounds** by construction — it goes through the same accessor as a native one.\n\n## Verification\n\n1151 tests, clippy 0 warnings. New test `a_view_layer_behaves_like_any_other_and_keeps_its_description`: a described layer sorts by band beside a native one, declares coverage the same way, keeps its `ViewNode`, and a native layer offers no description — the arms are not interchangeable.\n\n## Follow-on\n\n`open_view_layer` has **no caller yet** — it is a seam, which is why `layers.rs` still carries `#![allow(dead_code)]`. Its first consumer is **P082(F003)/T327** (`ShowLayer` / `HideLayer` actions → the native exposé): the registry's `show()`/`hide()` already exist and are documented as \"`ShowLayer` dispatches here\", but no `WmAction` reaches them.\n\nNot verified visually — nothing renders through this path until T327 gives it a caller.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "layer-content-viewnode-c1",
+          "number": 1,
+          "title": "Add LayerContent with both arms",
+          "checked": false
+        },
+        {
+          "id": "layer-content-viewnode-c2",
+          "number": 2,
+          "title": "Realize View through realize.rs, not a second path",
+          "checked": false
+        },
+        {
+          "id": "layer-content-viewnode-c3",
+          "number": 3,
+          "title": "Occluder read from real layout",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T19:36:13.155Z",
+      "completedAt": "2026-08-04T19:42:24.499Z",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-08-04T19:42:24.499Z"
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-07-27T11:40:15.519Z",
+  "updatedAt": "2026-08-04T19:42:24.499Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "f9bfa3aa-1cc1-4be0-a779-329234b9e6e6",
+      "date": "2026-08-04T19:31:52.137Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }

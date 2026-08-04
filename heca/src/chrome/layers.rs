@@ -7,8 +7,8 @@
 //! `chrome::active_hint_targets` composes both — built-ins + registered layers — into one
 //! band-ordered stack and applies the single visibility rule.
 //!
-//! Step 1 of the migration: the registry + its ordering. Native (`Box<dyn Component>`)
-//! content only; the `ViewNode` content path (plugins) and paint/input wiring land later.
+//! The registry + its ordering, and both content arms: a native `Box<dyn Component>` tree the
+//! host built, or a [`ViewNode`] description realized through the one bridge (F003/P082/T339).
 //!
 //! Seam API: the registration/show/hide surface below is consumed by the next migration
 //! steps (`ShowLayer`/`HideLayer` actions, the confirm dialog as a layer, plugins), so it
@@ -16,6 +16,7 @@
 #![allow(dead_code)]
 
 use heca_grid_ui::Component;
+use heca_view::ViewNode;
 
 /// Opaque, stable id for a registered layer. Returned by [`LayerRegistry::add`]; a plugin
 /// keeps its id to show/hide/update its layer.
@@ -65,8 +66,8 @@ pub(crate) enum LayerKind {
     OnDemand,
 }
 
-/// A dynamically registered layer. Its `root` is a native retained tree for now; the
-/// `ViewNode` content path (for plugins) is added in a later migration step.
+/// A dynamically registered layer. Its content is either a native retained tree or a
+/// [`ViewNode`] description — see [`LayerContent`].
 pub(crate) struct DynamicLayer {
     pub(crate) id: LayerId,
     pub(crate) band: LayerBand,
@@ -93,9 +94,66 @@ pub(crate) struct DynamicLayer {
     /// Whether it participates this frame. `Persistent` layers start visible; `OnDemand`
     /// layers start hidden and are shown via [`LayerRegistry::show`].
     pub(crate) visible: bool,
-    /// The layer's retained content tree (laid out + painted by the host; walked by
-    /// `collect_hint_targets` for its hint targets).
-    pub(crate) root: Box<dyn Component>,
+    /// What the layer holds — a tree the host built, or a **description** it was handed.
+    pub(crate) content: LayerContent,
+}
+
+/// What a layer's content **is** (F003/P082/T339).
+///
+/// Two arms because there are two authors. The host builds its own overlays as native trees; a
+/// plugin, a config file or an RPC line can only send a [`ViewNode`] — a description — and it is
+/// realized through the **one** bridge (`heca_view_realize::realize`, re-exported as
+/// [`chrome::realize`](super::realize)). There is deliberately no second mapper: a layer that drew
+/// a description its own way would be a parallel implementation of every widget.
+///
+/// The `View` arm keeps **both** the node and the tree realized from it. The node is the source of
+/// truth — it is what a theme change or a plugin update re-realizes from — and the realized tree is
+/// what the host lays out, paints and collects hint targets from. Keeping only the tree would throw
+/// away the description; keeping only the node would mean re-realizing every frame.
+pub(crate) enum LayerContent {
+    /// A retained tree the host built itself.
+    Native(Box<dyn Component>),
+    /// A description, plus the tree realized from it.
+    View {
+        node: ViewNode,
+        realized: Box<dyn Component>,
+    },
+}
+
+impl LayerContent {
+    /// The live tree, whichever arm this is — what the host lays out, paints and hint-walks.
+    pub(crate) fn root(&self) -> &dyn Component {
+        match self {
+            Self::Native(root) => root.as_ref(),
+            Self::View { realized, .. } => realized.as_ref(),
+        }
+    }
+
+    pub(crate) fn root_mut(&mut self) -> &mut Box<dyn Component> {
+        match self {
+            Self::Native(root) => root,
+            Self::View { realized, .. } => realized,
+        }
+    }
+
+    /// The description this was realized from, if it came from one.
+    pub(crate) fn node(&self) -> Option<&ViewNode> {
+        match self {
+            Self::Native(_) => None,
+            Self::View { node, .. } => Some(node),
+        }
+    }
+}
+
+impl DynamicLayer {
+    /// The layer's live tree — see [`LayerContent::root`].
+    pub(crate) fn root(&self) -> &dyn Component {
+        self.content.root()
+    }
+
+    pub(crate) fn root_mut(&mut self) -> &mut Box<dyn Component> {
+        self.content.root_mut()
+    }
 }
 
 /// The registry of dynamically added layers, held on `AppState`. The built-in surfaces are
@@ -127,7 +185,33 @@ impl LayerRegistry {
             modal,
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
-            root,
+            content: LayerContent::Native(root),
+        });
+        id
+    }
+
+    /// Register a layer whose content is a **description**. `realized` must be the tree produced
+    /// from `node` by the one bridge — the caller realizes, because realizing needs the theme, an
+    /// intent emitter, the hint sink and the form bindings, none of which a registry holds.
+    pub(crate) fn add_view(
+        &mut self,
+        band: LayerBand,
+        kind: LayerKind,
+        modal: bool,
+        covers_content: bool,
+        node: ViewNode,
+        realized: Box<dyn Component>,
+    ) -> LayerId {
+        let id = LayerId(self.next);
+        self.next += 1;
+        self.layers.push(DynamicLayer {
+            id,
+            band,
+            kind,
+            modal,
+            covers_content,
+            visible: matches!(kind, LayerKind::Persistent),
+            content: LayerContent::View { node, realized },
         });
         id
     }
@@ -160,7 +244,7 @@ impl LayerRegistry {
             modal,
             covers_content,
             visible: true,
-            root,
+            content: LayerContent::Native(root),
         });
     }
 
@@ -222,7 +306,7 @@ impl LayerRegistry {
         self.layers
             .iter_mut()
             .filter(|l| l.visible)
-            .map(|l| &mut l.root)
+            .map(|l| l.content.root_mut())
     }
 
     /// The id of the front-most visible **modal** layer (the one that captures input), if any.
@@ -242,7 +326,7 @@ impl LayerRegistry {
             .iter_mut()
             .rev()
             .find(|l| l.visible && l.modal)
-            .map(|l| l.root.as_mut())
+            .map(|l| l.content.root_mut().as_mut())
     }
 }
 
@@ -311,5 +395,49 @@ mod tests {
         let overlay = reg.add(LayerBand::Overlay, LayerKind::Persistent, false, false, empty_root());
         let order: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
         assert_eq!(order, vec![modal, overlay, content], "Modal > Overlay > Content");
+    }
+
+    /// **A described layer is a real layer.** It sorts, shows, hides and covers exactly like a
+    /// native one — the arm decides where the tree came from, never how the stack treats it.
+    #[test]
+    fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
+        use heca_view::{ViewNode, WidgetKind};
+        let mut reg = LayerRegistry::default();
+        let native = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
+        let node = ViewNode::new(WidgetKind::Label);
+        let described = reg.add_view(
+            LayerBand::Overlay,
+            LayerKind::Persistent,
+            false,
+            true,
+            node,
+            empty_root(),
+        );
+
+        let order: Vec<LayerId> =
+            reg.visible_front_to_back().iter().map(|l| l.id).collect();
+        assert_eq!(order, vec![described, native], "band decides order, not the content arm");
+        assert!(reg.content_covered(), "a described layer declares coverage like any other");
+
+        // The description is KEPT, not thrown away once realized: it is what a theme reload or a
+        // plugin update re-realizes from.
+        let layer = reg
+            .visible_front_to_back()
+            .into_iter()
+            .find(|l| l.id == described)
+            .expect("the described layer is in the stack");
+        assert!(layer.content.node().is_some(), "the ViewNode survives realization");
+        assert_eq!(
+            layer.content.node().map(|n| n.kind),
+            Some(WidgetKind::Label),
+        );
+
+        // And a native layer has no description to offer — the arms are not interchangeable.
+        let native_layer = reg
+            .visible_front_to_back()
+            .into_iter()
+            .find(|l| l.id == native)
+            .expect("the native layer is in the stack");
+        assert!(native_layer.content.node().is_none());
     }
 }

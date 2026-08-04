@@ -222,6 +222,52 @@ pub(crate) fn open_modal(
     id
 }
 
+/// Open a layer whose content is a **description** — the plugin / config / RPC path
+/// (F003/P082/T339).
+///
+/// The counterpart of [`open_modal`] for an author that cannot hand over a native tree. The
+/// `ViewNode` is realized through the **one** bridge, exactly as a modal's body is, and the layer
+/// keeps the node beside the realized tree so a theme reload or a plugin update can re-realize from
+/// the description rather than from whatever the tree has become.
+///
+/// `band`, `modal` and `covers_content` are the caller's: a plugin panel over the scrolling area is
+/// `Overlay` + `covers_content: true` + not modal, a rich dialog is `Modal` + both. **No occluder is
+/// passed** — `active_hint_targets` reads it from the realized tree's laid-out bounds, which is the
+/// invariant this path must not break.
+pub(crate) fn open_view_layer(
+    state: &mut AppState,
+    band: LayerBand,
+    kind: LayerKind,
+    modal: bool,
+    covers_content: bool,
+    node: ViewNode,
+) -> LayerId {
+    let event_proxy = state.event_proxy.clone();
+    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
+        let _ = event_proxy.send_event(AppEvent::ChromeIntent {
+            source: InteractionSource::MouseContent,
+            intent,
+        });
+    });
+    // Same boundary as `build_modal_root`: `realize` speaks the model's own `Intent` and knows
+    // nothing of `InteractionIntent`, so the carrier is put on here.
+    let view_emit: super::IntentEmitter = {
+        let emit = emit.clone();
+        Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+    };
+    let theme = super::chrome_gui_theme(state);
+    let mut forms = FormBindings::default();
+    let realized = {
+        let mut targets = super::ViewHintTargets(&mut state.hint_targets);
+        super::realize(&node, &theme, &view_emit, &mut targets, &mut forms)
+    };
+    let id = state
+        .layers
+        .add_view(band, kind, modal, covers_content, node, realized);
+    state.needs_redraw = true;
+    id
+}
+
 /// Read the current values of an overlay's named body fields into a [`PropMap`] — the `data`
 /// handed back in [`ModalResult::Action`]. Empty if the overlay has no form (e.g. a plain
 /// confirm) or is already gone.

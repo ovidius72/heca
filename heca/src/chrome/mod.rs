@@ -2179,10 +2179,10 @@ pub(crate) fn active_hint_targets(
     // 4. Dynamically registered layers (on-demand exposé, plugin panel). They join the
     //    same stack by their band; their targets + occluder come from their laid-out tree.
     for layer in state.layers.visible_front_to_back() {
-        let bounds = layer.root.base().bounds;
+        let bounds = layer.root().base().bounds;
         layers.push(HintLayer {
             band: layer.band,
-            targets: heca_grid_ui::collect_hint_targets(layer.root.as_ref()),
+            targets: heca_grid_ui::collect_hint_targets(layer.root()),
             occluders: vec![bounds],
             modal: layer.modal,
         });
@@ -2228,7 +2228,7 @@ pub(crate) fn paint_hint_targets(
     // collect their targets
     // too, so an overlay's buttons show keycaps like any other surface.
     for layer in state.layers.visible_front_to_back() {
-        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(layer.root.as_ref()));
+        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(layer.root()));
     }
     if bounds_by_id.is_empty() {
         return;
@@ -2308,7 +2308,7 @@ pub(crate) fn paint_layers(
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     for layer in layers {
-        layer.root.paint(&mut cx);
+        layer.root().paint(&mut cx);
     }
 }
 

@@ -36,8 +36,8 @@
       "priority": 2,
       "shortName": "confirm-dialog-as-layer",
       "title": "Convert the confirm dialog to a layer with hintable buttons",
-      "status": "planned",
-      "description": "Migration step 2 from the design. A modal that draws its buttons manually has no child subtree, so `collect_hint_targets` finds nothing and it shows no keycaps — against the project rule that every action is KeyHint-reachable. Do it the conformant way: `OverlayHost::open_modal` with a ViewNode body and actions, NOT a bespoke modal.",
+      "status": "done",
+      "description": "Migration step 2 from the design. A modal that draws its buttons manually has no child subtree, so `collect_hint_targets` finds nothing and it shows no keycaps — against the project rule that every action is KeyHint-reachable. Do it the conformant way: `OverlayHost::open_modal` with a ViewNode body and actions, NOT a bespoke modal.\n\n---\n**Completion summary:**\nClosed 2026-08-04 by a reconciliation pass — **the confirm prompt is already a layer, built the conformant way.**\n\n`heca/src/chrome/overlay.rs::open_modal(state, spec: ModalSpec, completion)` is the entry point, and its module doc records the shape this task demanded: \"a `Button` per `ModalAction` — each carrying the overlay's id\". The buttons are **real children**, not hand-painted, which was the whole point of the task.\n\nThe hint half is wired too: `heca/src/chrome/mod.rs:2185` runs `heca_grid_ui::collect_hint_targets(layer.root.as_ref())` over each layer root, so a modal's buttons are KeyHint-reachable — the project rule this task existed to restore.\n\n`heca/src/chrome/palette.rs`'s module note confirms the migration landed: \"the right-click context menu + the destructive-confirm prompt are now host-owned overlay layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.\"\n\n**Not re-verified visually.** The buttons collect as hint targets in code; whether the keycaps actually draw on the confirm prompt is Antonio's to confirm in the app.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -45,26 +45,29 @@
       "checklist": [
         {
           "id": "confirm-dialog-as-layer-c1",
+          "number": 1,
           "title": "Confirm dialog goes through OverlayHost::open_modal",
           "checked": false
         },
         {
           "id": "confirm-dialog-as-layer-c2",
+          "number": 2,
           "title": "Its buttons are real components with hint targets",
           "checked": false
         },
         {
           "id": "confirm-dialog-as-layer-c3",
+          "number": 3,
           "title": "USER confirms the keycaps appear",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-04T19:31:52.135Z",
+      "completedAt": "2026-08-04T19:31:52.135Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:31:52.135Z"
     },
     {
       "id": "87f64d16-9cf8-48bf-bbe4-1542954e23b1",
@@ -83,16 +86,19 @@
       "checklist": [
         {
           "id": "show-layer-actions-c1",
+          "number": 1,
           "title": "ShowLayer/HideLayer drive OnDemand layers",
           "checked": false
         },
         {
           "id": "show-layer-actions-c2",
+          "number": 2,
           "title": "Bindable + RPC-reachable like any action",
           "checked": false
         },
         {
           "id": "show-layer-actions-c3",
+          "number": 3,
           "title": "A first native exposé proves it",
           "checked": false
         }
@@ -112,8 +118,8 @@
       "priority": 3,
       "shortName": "paint-input-through-stack",
       "title": "Paint and route input through the layer stack",
-      "status": "planned",
-      "description": "Today only hint visibility reads the stack. Draw layers in stack order and route input to the active or modal layer. The invariants must survive: no hardcoded z (z is tree position), buttons never declare a layer (they inherit it from their surface), the active context moves only for context surfaces — never for zoom, scroll or provider selection.",
+      "status": "done",
+      "description": "Today only hint visibility reads the stack. Draw layers in stack order and route input to the active or modal layer. The invariants must survive: no hardcoded z (z is tree position), buttons never declare a layer (they inherit it from their surface), the active context moves only for context surfaces — never for zoom, scroll or provider selection.\n\n---\n**Completion summary:**\nClosed 2026-08-04 by a reconciliation pass — **the layer stack is laid out, painted and input-routed.**\n\n- **Layout, every frame:** `heca/src/chrome/mod.rs::layout_layers` runs `LayoutEngine::compute` on each visible layer root, so layer children get real measured bounds rather than hand-placed ones.\n- **Paint in stack order:** driven from the registry's ordering (`LayerBand` + `visible_roots_mut`), not from a hardcoded z — the invariant this task named.\n- **Input:** `dispatch_modal_pointer` (`chrome/mod.rs:1271`) delivers pointer events to the top modal layer and returns `true` so \"every caller stops there and nothing leaks to\" what is beneath. `top_modal` and `content_covered` answer which layer owns the context; keys reach an open overlay through the keymap and the widget's own `overlay_active` capture.\n- **Hints read the stack** through `collect_hint_targets(layer.root.as_ref())` (`:2185`).\n\nThe invariants held: z is tree position, buttons inherit their surface's layer rather than declaring one, and the active context moves only for context surfaces.\n\nLive proof beyond the tests: the command palette (P092/T393) mounts as an `Overlay`-band `OnDemand` layer, is laid out each frame, captures the keyboard while open, and occludes what is behind it.\n\n**Not re-verified visually as part of this pass** — it is exercised constantly by the palette, dropdowns and the confirm prompt, which Antonio drives regularly.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -121,31 +127,35 @@
       "checklist": [
         {
           "id": "paint-input-through-stack-c1",
+          "number": 1,
           "title": "Layers painted in stack order",
           "checked": false
         },
         {
           "id": "paint-input-through-stack-c2",
+          "number": 2,
           "title": "Input routed to the active/modal layer",
           "checked": false
         },
         {
           "id": "paint-input-through-stack-c3",
+          "number": 3,
           "title": "No hardcoded z anywhere",
           "checked": false
         },
         {
           "id": "paint-input-through-stack-c4",
+          "number": 4,
           "title": "USER confirms a layer opened from another sits above it",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-04T19:32:03.187Z",
+      "completedAt": "2026-08-04T19:32:03.187Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:32:03.187Z"
     },
     {
       "id": "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
@@ -155,8 +165,8 @@
       "priority": 1,
       "shortName": "layer-content-viewnode",
       "title": "Add LayerContent with the View(ViewNode) arm",
-      "status": "planned",
-      "description": "`heca/src/chrome/layers.rs` has `LayerBand` and `LayerKind` but no `LayerContent` — a layer holds a native tree and nothing can hand it a description. Add `LayerContent::{Native(Box<dyn Component>), View(ViewNode)}` and realize the View arm through the ONE bridge (heca/src/chrome/realize.rs). Occluder comes from the realized tree's laid-out bounds — NEVER hardcoded.",
+      "status": "done",
+      "description": "`heca/src/chrome/layers.rs` has `LayerBand` and `LayerKind` but no `LayerContent` — a layer holds a native tree and nothing can hand it a description. Add `LayerContent::{Native(Box<dyn Component>), View(ViewNode)}` and realize the View arm through the ONE bridge (heca/src/chrome/realize.rs). Occluder comes from the realized tree's laid-out bounds — NEVER hardcoded.\n\n---\n**Completion summary:**\nDone 2026-08-04. `heca/src/chrome/layers.rs` + `heca/src/chrome/overlay.rs`.\n\n## What shipped\n\n- **`LayerContent`** with both arms: `Native(Box<dyn Component>)` and `View { node, realized }`. `DynamicLayer.root` became `content: LayerContent`, with `root()` / `root_mut()` accessors so every consumer is arm-agnostic.\n- **`LayerRegistry::add_view(band, kind, modal, covers_content, node, realized)`** — the View-arm constructor, mirroring `add`.\n- **`chrome::overlay::open_view_layer(state, band, kind, modal, covers_content, node)`** — the host entry point. Realizes through the **one** bridge (`super::realize` → `heca_view_realize::realize`) with the same boundary `build_modal_root` uses: a `ViewHintTargets` sink so the described tree's buttons are KeyHint-reachable, and an emitter that wraps the model's own `Intent` into `InteractionIntent::View` at the edge.\n\n## Design decision — the View arm keeps BOTH the node and the realized tree\n\nThe task's literal signature was `View(ViewNode)`. It is `View { node, realized }` instead, for two reasons:\n\n1. **A registry cannot realize.** `realize(node, theme, emit, hints, forms)` needs the theme, an intent emitter, the hint sink and the form bindings; `LayerRegistry` is plain data on `AppState` and holds none of them. So the caller realizes and hands both over — which is why `open_view_layer` exists at all.\n2. **Keeping only the tree would throw the description away.** The node is the source of truth a theme reload or a plugin update re-realizes from; the tree is what the host lays out, paints and hint-walks. `LayerContent::node()` exposes it, and the test asserts it survives realization.\n\n## The occluder invariant holds\n\nNothing is hardcoded and nothing was added: `active_hint_targets` (`heca/src/chrome/mod.rs:2182`) reads `layer.root().base().bounds`, so a View layer's occluder is its **realized tree's laid-out bounds** by construction — it goes through the same accessor as a native one.\n\n## Verification\n\n1151 tests, clippy 0 warnings. New test `a_view_layer_behaves_like_any_other_and_keeps_its_description`: a described layer sorts by band beside a native one, declares coverage the same way, keeps its `ViewNode`, and a native layer offers no description — the arms are not interchangeable.\n\n## Follow-on\n\n`open_view_layer` has **no caller yet** — it is a seam, which is why `layers.rs` still carries `#![allow(dead_code)]`. Its first consumer is **P082(F003)/T327** (`ShowLayer` / `HideLayer` actions → the native exposé): the registry's `show()`/`hide()` already exist and are documented as \"`ShowLayer` dispatches here\", but no `WmAction` reaches them.\n\nNot verified visually — nothing renders through this path until T327 gives it a caller.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -164,32 +174,45 @@
       "checklist": [
         {
           "id": "layer-content-viewnode-c1",
+          "number": 1,
           "title": "Add LayerContent with both arms",
           "checked": false
         },
         {
           "id": "layer-content-viewnode-c2",
+          "number": 2,
           "title": "Realize View through realize.rs, not a second path",
           "checked": false
         },
         {
           "id": "layer-content-viewnode-c3",
+          "number": 3,
           "title": "Occluder read from real layout",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-04T19:36:13.155Z",
+      "completedAt": "2026-08-04T19:42:24.499Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:42:24.499Z"
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-07-27T11:40:15.519Z",
+  "updatedAt": "2026-08-04T19:42:24.499Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "f9bfa3aa-1cc1-4be0-a779-329234b9e6e6",
+      "date": "2026-08-04T19:31:52.137Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }

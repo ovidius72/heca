@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-08-04T15:25:35.681Z",
+  "updatedAt": "2026-08-04T19:36:13.188Z",
   "currentPhaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
   "inProgressTaskIds": [
-    "3f7db50c-c9a4-446b-8cf1-d3292a32200c"
+    "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e"
   ],
   "nextSteps": [
     "F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.",

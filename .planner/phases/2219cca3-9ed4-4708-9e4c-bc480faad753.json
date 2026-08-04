@@ -37,8 +37,8 @@
       "priority": 2,
       "shortName": "bind-any-action-by-name",
       "title": "Let config bind ANY action by name, contributed ones included",
-      "status": "planned",
-      "description": "keybindings.default.toml and the user's keybindings only speak to built-in `WmAction`s today. The registry is already keyed by name, so this is a lookup, not a new mechanism. Same syntax as a built-in — a user should not need to know whether an action is built in or contributed.",
+      "status": "done",
+      "description": "keybindings.default.toml and the user's keybindings only speak to built-in `WmAction`s today. The registry is already keyed by name, so this is a lookup, not a new mechanism. Same syntax as a built-in — a user should not need to know whether an action is built in or contributed.\n\n---\n**Completion summary:**\nClosed 2026-08-04 by a reconciliation pass, not by new work — **it was delivered by F003/P085 and the plugin-04 G3 change**, and the board was stale.\n\n`action_ref_from_config` (`heca/src/app/registry.rs:32`) resolves a config binding by name: built-in with args → `ActionRef::Builtin`, bare built-in → `ActionRef::Builtin`, and **anything else → `ActionRef::Dynamic(intent)`**, carrying the `args` table as `PropValue::Text`. The comment at `registry.rs:21` states the rule: \"Anything else ⇒ `ActionRef::Dynamic` — **not an error** (plugin-04 G3). Config is loaded before providers activate\", so a name that does not exist yet resolves at **press** time.\n\nThat is exactly what this task asked for: same syntax as a built-in, a lookup rather than a new mechanism, and a user who never has to know whether an action is built in or contributed.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -46,26 +46,29 @@
       "checklist": [
         {
           "id": "bind-any-action-by-name-c1",
+          "number": 1,
           "title": "Bind by name in config for contributed actions",
           "checked": false
         },
         {
           "id": "bind-any-action-by-name-c2",
+          "number": 2,
           "title": "Same syntax as built-ins",
           "checked": false
         },
         {
           "id": "bind-any-action-by-name-c3",
+          "number": 3,
           "title": "Unknown name is reported, not silently ignored",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-04T19:31:34.509Z",
+      "completedAt": "2026-08-04T19:31:34.509Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:31:34.509Z"
     },
     {
       "id": "58a4843a-f15c-4313-86a4-e694f82f8921",
@@ -75,8 +78,8 @@
       "priority": 3,
       "shortName": "palette-lists-contributed",
       "title": "Command palette lists contributed actions",
-      "status": "planned",
-      "description": "`ActionCatalog::describe_all()` already returns `ActionInfo` (serde) with label, icon and category — everything a palette needs. The palette does not read it. Feed it from there so contributed actions are listed, searchable and runnable.",
+      "status": "done",
+      "description": "`ActionCatalog::describe_all()` already returns `ActionInfo` (serde) with label, icon and category — everything a palette needs. The palette does not read it. Feed it from there so contributed actions are listed, searchable and runnable.\n\n---\n**Completion summary:**\nClosed 2026-08-04 by a reconciliation pass — **delivered by P085(F003)/T358**, which was written after this task was filed and went further than it asked.\n\n`heca/src/chrome/palette.rs::entries` builds every row from `catalog.all()`, so a contributed action is listed with its label, description, icon (via `catalog.icon`, which falls back to the category's glyph so no row is blank) and its bindings. It is searchable through the shared `SearchModel` like any other row.\n\nT358 also solved the part this task did not anticipate: a contributed action usually declares `ActionPolicy::ContainerFocused`, so merely *listing* it would produce an entry that is refused when chosen. `InteractionIntent::FocusContainerThenAction` focuses the owning placement first and then performs, which satisfies the policy instead of bypassing it. Rows are labelled with the owning component's title (`\"Containers › Restart Container\"`), and actions with a **required** argument are not offered at all — arity, read off the `args` every action declares.\n\nNote this task had earlier been raised as a possible cancellation; it is closed as **done**, not cancelled, because the capability exists and is shipped.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -84,26 +87,29 @@
       "checklist": [
         {
           "id": "palette-lists-contributed-c1",
+          "number": 1,
           "title": "Palette reads describe_all()",
           "checked": false
         },
         {
           "id": "palette-lists-contributed-c2",
+          "number": 2,
           "title": "Label, icon and category shown",
           "checked": false
         },
         {
           "id": "palette-lists-contributed-c3",
+          "number": 3,
           "title": "Running one dispatches it",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-04T19:31:43.304Z",
+      "completedAt": "2026-08-04T19:31:43.304Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:31:43.304Z"
     },
     {
       "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580",
@@ -113,25 +119,37 @@
       "priority": 1,
       "shortName": "read-default-binding",
       "title": "Offer ActionMeta.default_binding to the keymap on registration",
-      "status": "planned",
+      "status": "canceled",
       "description": "`ActionMeta` already carries `default_binding` (heca/src/actions.rs) and nothing reads it, so registering an action never makes a key work. Read it at `register_dynamic` time and offer it to the keymap. Never hardcode — it goes through `KeymapRegistry` like everything else.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580-check-001-planned-canceled",
+          "date": "2026-08-04T19:36:06.896Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "Cancelled by Antonio 2026-08-04, on the reconciliation pass. The task asks to read `ActionMeta.default_binding` at registration and offer it to the keymap — but **that field no longer exists**. It was deliberately deleted because it \"held a *second* copy of every key already in `keybindings.default.toml` — one nothing compared against, so the two could drift silently\" (`heca/src/keymap.rs:139`, `heca/src/providers/mod.rs:206`). Executing this task as written would resurrect exactly what was removed on purpose.",
+          "description": "Cancelled by Antonio 2026-08-04, on the reconciliation pass. The task asks to read `ActionMeta.default_binding` at registration and offer it to the keymap — but **that field no longer exists**. It was deliberately deleted because it \"held a *second* copy of every key already in `keybindings.default.toml` — one nothing compared against, so the two could drift silently\" (`heca/src/keymap.rs:139`, `heca/src/providers/mod.rs:206`). Executing this task as written would resurrect exactly what was removed on purpose.\n\nIts goal — \"registering an action makes a key work\" — is delivered instead by **F003/P086/T366**: `Provider::keybindings() -> Vec<(String, String)>` is the plugin path, consumed by `bind_provider_keybindings` (`heca/src/providers/actions.rs:86`) at mount **and after a reload** (a reload rebuilds the layers from a file that knows nothing about a plugin mounted afterwards, so without the second call every plugin key would silently unbind). Core components write their keys in `keybindings.default.toml` under `[[keys.component]]` instead, where `--keys-show` finds them and the user edits them in one place.\n\nReplaced, not dropped."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
           "id": "read-default-binding-c1",
+          "number": 1,
           "title": "Read default_binding at registration",
           "checked": false
         },
         {
           "id": "read-default-binding-c2",
+          "number": 2,
           "title": "Route through KeymapRegistry, never hardcoded",
           "checked": false
         },
         {
           "id": "read-default-binding-c3",
+          "number": 3,
           "title": "Test: a registered action's default key fires it",
           "checked": false
         }
@@ -141,7 +159,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:36:06.896Z"
     },
     {
       "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
@@ -151,30 +169,43 @@
       "priority": 4,
       "shortName": "collision-and-policy",
       "title": "Binding collisions + ActionPolicy at dispatch (NEEDS A DECISION)",
-      "status": "planned",
-      "description": "⛔ Ask the user first: does a contributed default binding LOSE to an existing one, or WIN? Either way the user must be TOLD when a binding is refused — never silently dropped. F010 (Improvements) already covers notifying about blocked keybindings; reuse it.\n\nAlso: a contributed action must honour `ActionPolicy` at dispatch exactly as a built-in does. It must not bypass the policy system.",
+      "status": "waiting",
+      "description": "⛔ Originally: \"does a contributed default binding LOSE to an existing one, or WIN? Ask the user first.\" **Reconciliation pass 2026-08-04 — two thirds of this is already settled and shipped.**\n\n## 1. The collision decision: MADE, and implemented. Config wins.\n\n`Provider::keybindings()` (`heca/src/providers/mod.rs:196`) states the rule: \"Whatever the user's file says still wins: a registration never overwrites a combo the config already bound, and never adds a second key to an action the user has rebound.\"\n\nEnforced in `register_component_keybinding` (`heca/src/app/registry.rs`): it returns early when the `BindingIndex` already knows the action, and skips any combo the layer already resolves. So a contributed binding **loses**. Do not re-open this.\n\n## 2. `ActionPolicy` at dispatch: HONOURED, no bypass.\n\n`dispatch_action_ref` (`heca/src/app/interaction.rs:918`) sends `ActionRef::Dynamic(intent)` through `dispatch_intent(… InteractionIntent::View(intent) …)` — the same policy-routed door as a built-in. A contributed action is judged exactly like one of heca's own. P085/T358 went further and added `FocusContainerThenAction` so a `ContainerFocused` action is *satisfied* rather than refused.\n\n## 3. What is actually left: the user is never TOLD a binding was refused.\n\nThis is the whole remaining scope. A registration that loses a collision is dropped **silently**, which is the defect the task named (\"never silently dropped\").\n\nIt is a notification producer, so it belongs to **F009 🔔 Notification System**, which is entirely unstarted (0/60). Ordering: P061 model → P056 store → P060 toast rendering → P059 dispatch → P062/P055 producers. Do not build an ad-hoc message for this — it is the same mistake T381 is filed to avoid, and F010 (Improvements) was already noted as covering \"notify about blocked keybindings\".\n\n**When resuming:** the only code to write is the producer call at the point of refusal in `register_component_keybinding`, plus whatever F009 settles as the draft/severity API. Everything else here is done.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337-check-001-planned-waiting",
+          "date": "2026-08-04T19:32:18.060Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Reconciled 2026-08-04. Two of its three parts are already answered in code; the only part left is \"tell the user\", which is a notification producer and therefore waits on F009 — the same call Antonio made for P055(F009)/T381.",
+          "description": "Reconciled 2026-08-04. Two of its three parts are already answered in code; the only part left is \"tell the user\", which is a notification producer and therefore waits on F009 — the same call Antonio made for P055(F009)/T381."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
           "id": "collision-and-policy-c1",
+          "number": 1,
           "title": "BLOCKING: settle collision behaviour with the user",
           "checked": false
         },
         {
           "id": "collision-and-policy-c2",
+          "number": 2,
           "title": "Refused bindings are reported to the user",
           "checked": false
         },
         {
           "id": "collision-and-policy-c3",
+          "number": 3,
           "title": "ActionPolicy honoured at dispatch",
           "checked": false
         },
         {
           "id": "collision-and-policy-c4",
+          "number": 4,
           "title": "Policy spot-check tests",
           "checked": false
         }
@@ -184,7 +215,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T19:32:18.060Z"
     },
     {
       "id": "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
@@ -203,11 +234,13 @@
       "checklist": [
         {
           "id": "unbind-on-unmount-c1",
+          "number": 1,
           "title": "Binding withdrawn on unmount via the existing handle",
           "checked": false
         },
         {
           "id": "unbind-on-unmount-c2",
+          "number": 2,
           "title": "Test: unmount frees the key",
           "checked": false
         }
@@ -221,9 +254,19 @@
     }
   ],
   "createdAt": "2026-07-26T08:38:21.132Z",
-  "updatedAt": "2026-07-27T11:40:15.518Z",
+  "updatedAt": "2026-08-04T19:36:06.896Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "94034979-7923-4849-aa4b-3610e1e0dfdc",
+      "date": "2026-08-04T19:31:34.511Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }

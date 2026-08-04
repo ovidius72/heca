@@ -311,51 +311,61 @@
       "checklist": [
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-001-add-scrollaxes-horizontal-both-builders-default-vertical-back-compat",
+          "number": 1,
           "title": "Add ScrollAxes + .horizontal()/.both() builders (default Vertical, back-compat)",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-002-add-horizontal-offset-signal-scroll-offset-x-bake-offset-on-both-axes-on-layout-resets-both",
+          "number": 2,
           "title": "Add horizontal offset signal + scroll_offset_x(); bake -offset on both axes; on_layout resets both",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-003-horizontal-scrollbar-bottom-edge-mirroring-the-vertical-thumb-auto-shown-on-overflow",
+          "number": 3,
           "title": "Horizontal scrollbar (bottom edge) mirroring the vertical thumb; auto-shown on overflow",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-004-wheel-plain-vertical-shift-wheel-horizontal-2-d-delta-both-clamp-each-axis",
+          "number": 4,
           "title": "Wheel: plain=vertical, Shift+wheel=horizontal, 2-D delta=both; clamp each axis",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-005-optional-styleext-background-border-radius-glow-so-it-can-be-a-scrollable-surface",
+          "number": 5,
           "title": "Optional StyleExt (background/border/radius/glow) so it can be a scrollable surface",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-006-showcase-whole-page-uses-scrollregion-new-both-drop-offset-tree-fixes-bug-c",
+          "number": 6,
           "title": "Showcase whole-page uses ScrollRegion::new().both() (drop offset_tree) — fixes BUG C",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-007-unit-tests-for-clamp-offset-math-both-axes",
+          "number": 7,
           "title": "Unit tests for clamp/offset math (both axes)",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-008-user-verifies-in-the-gpu-showcase-horizontal-vertical-scroll-scrollbar-shift-wheel-styled-surface",
+          "number": 8,
           "title": "USER verifies in the GPU showcase (horizontal+vertical scroll, scrollbar, Shift+wheel, styled surface)",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-009-docs-widgets-md-scrollregion-entry-rustdoc-native-declarative-examples-showcase-section",
+          "number": 9,
           "title": "docs/widgets.md ScrollRegion entry + rustdoc (native + declarative examples) + showcase section",
           "checked": false
         },
         {
           "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-010-cargo-clippy-workspace-all-targets-all-features-clean-rust-skill-review-before-commit",
+          "number": 10,
           "title": "cargo clippy --workspace --all-targets --all-features clean; rust-skill review before commit",
           "checked": false
         }
@@ -417,21 +427,25 @@
       "checklist": [
         {
           "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-001-reproduce-in-showcase-which-widgets-lost-rest-glow-user-input",
+          "number": 1,
           "title": "Reproduce in showcase: which widgets lost rest-glow (user input)",
           "checked": false
         },
         {
           "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-002-git-diff-the-refactored-widgets-paint-glow-usage-rest-vs-focused-vs-pre-refactor",
+          "number": 2,
           "title": "git-diff the refactored widgets' paint() glow usage (rest vs focused) vs pre-refactor",
           "checked": false
         },
         {
           "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-003-restore-theme-driven-rest-state-glow-read-from-theme-no-hardcode-so-glow-size-scales-it",
+          "number": 3,
           "title": "Restore theme-driven rest-state glow (read from theme, no hardcode) so glow_size scales it",
           "checked": false
         },
         {
           "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-004-verify-in-showcase-glow-select-scales-all-widgets-at-rest-not-only-focused",
+          "number": 4,
           "title": "Verify in showcase: glow Select scales all widgets at rest, not only focused",
           "checked": false
         }
@@ -501,31 +515,37 @@
       "checklist": [
         {
           "id": "126d0855-658d-471f-86a6-27eb144fc591-check-001-settle-routing-how-an-action-targets-a-scrollregion-focused-hovered-active-region",
+          "number": 1,
           "title": "Settle routing: how an action targets a ScrollRegion (focused/hovered/active region)",
           "checked": false
         },
         {
           "id": "126d0855-658d-471f-86a6-27eb144fc591-check-002-settle-horizontal-trigger-with-user-prefix-shift-arrow-is-taken-by-view-pan",
+          "number": 2,
           "title": "Settle horizontal trigger with user (prefix+Shift+Arrow is taken by view pan)",
           "checked": false
         },
         {
           "id": "126d0855-658d-471f-86a6-27eb144fc591-check-003-wmaction-variants-full-adding-new-actions-checklist-incl-action-policy",
+          "number": 3,
           "title": "WmAction variants + full Adding-New-Actions checklist incl. action_policy()",
           "checked": false
         },
         {
           "id": "126d0855-658d-471f-86a6-27eb144fc591-check-004-defaults-in-keybindings-default-toml-prefix-home-end-pageup-pagedown",
+          "number": 4,
           "title": "Defaults in keybindings.default.toml (prefix+Home/End/PageUp/PageDown)",
           "checked": false
         },
         {
           "id": "126d0855-658d-471f-86a6-27eb144fc591-check-005-rpc-reachability-tests-policy-spot-checks-routing",
+          "number": 5,
           "title": "RPC reachability + tests (policy spot-checks, routing)",
           "checked": false
         },
         {
           "id": "126d0855-658d-471f-86a6-27eb144fc591-check-006-user-verifies-in-gpu-showcase-once-t009-mounts-the-root-scrollregion",
+          "number": 6,
           "title": "USER verifies in GPU showcase once T009 mounts the root ScrollRegion",
           "checked": false
         }
@@ -571,26 +591,31 @@
       "checklist": [
         {
           "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-001-gate-every-widget-ring-on-focused-focus-visible-11-sites-listed-in-description",
+          "number": 1,
           "title": "Gate every widget ring on focused && focus_visible (11 sites listed in description)",
           "checked": false
         },
         {
           "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-002-checkbox-ring-box-rect-only-review-toggle",
+          "number": 2,
           "title": "Checkbox ring → box_rect() only; review Toggle",
           "checked": false
         },
         {
           "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-003-appearance-show-focus-border-override-config-default-toml-doc-chrome-gui-theme-application",
+          "number": 3,
           "title": "[appearance] show_focus_border override + config.default.toml doc + chrome_gui_theme application",
           "checked": false
         },
         {
           "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-004-docs-widgets-md-focus-section-checkbox-component-notes-rustdoc",
+          "number": 4,
           "title": "docs/widgets.md (focus section + Checkbox/Component notes) + rustdoc",
           "checked": false
         },
         {
           "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-005-user-verifies-in-gpu-showcase-click-vs-keyboard-toggle-off-reload",
+          "number": 5,
           "title": "USER verifies in GPU showcase (click vs keyboard, toggle off, reload)",
           "checked": false
         }
@@ -790,8 +815,15 @@
   ],
   "createdAt": "2026-07-08T11:47:16.270Z",
   "updatedAt": "2026-07-28T06:45:55.036Z",
-  "handoff": "# Session handoff — 2026-07-27 → 28\n\n**Reason:** context spent. Everything committed and pushed; tree clean; **985 tests, clippy 0\nwarnings**. Nothing half-built.\n\n## Read this first: how this user works\n\nTwo rounds of real frustration today, both earned. Read this before writing code.\n\n- **Nothing hardcoded that is data.** The day's recurring defect: solved for the one case in front of\n  the author, wrong the moment the model is used as designed. Three found in one session — the focus\n  key naming a *side*, a scroll offset keyed by container *kind*, a shell owning a scroll area that\n  belongs to whoever nests one.\n- **The model, in their words:** a **widget** is a component like React's, placeable anywhere, holding\n  its own logic — move it around the app and it behaves the same, no reinvention. A **container** holds\n  widgets and may nest a scroll area. A **sidebar** is a shell hosting containers, knowing almost\n  nothing about them. **Left/right is only position.** Placing a container twice is *placing it twice*.\n- **Reuse what exists; invent nothing.** `flex_grow` already was the fractional share; `Glyph::ALL`\n  already existed; the resize *mode* already existed; `ResizeAxis` already covers x/y. Every time I\n  proposed machinery they asked whether something already did it, and it usually did. **Search first.**\n- **They verify anything visual themselves.** Green tests never verify layout or interaction.\n- **Assert what was reported.** A test asserting a `grow` *flag* passed while the layout was visibly\n  broken; the measured-height test caught it. If a bug was visible, measure the visible thing.\n- **Never decide whether a task lives or dies**, and do not act on an instruction's letter when the next\n  step needs otherwise — ask. **\"We are discussing\" means stop writing.**\n- **Commit messages say what changed.** Prior-error archaeology belongs in the task.\n- **`git checkout <file>` destroyed uncommitted work twice.** Copy to the scratchpad first. A global\n  find-and-replace also broke code outside its intent — bound every edit.\n\n## Where the work is\n\nBranch `feat/action-arg-declaration`, pushed. **PR #250** —\nhttps://github.com/ovidius72/heca/pull/250 (PR #249 merged; #250 is everything after it).\n\n## Closed this session\n\nF003/P011 **T006** (typed builder SDK — the user confirmed the described and native panels are\nidentical), **T018** (`PropValue::Map`, so `border`/`glow` are authorable at last), **T019** (fixed\nvalue sets as types), plus all of T021's implementation.\n\nCommits: `f2deecd` `1653169` `7183250` `189a2cd` `096f06e` `1f4b92d` `7b3a624` `fd403dd` `1d75cb3`\n`3084714` `8c65a54` `c65ae90` `fcbba56` `95a894d`.\n\n**The technical lesson worth carrying:** `flex_grow` alone does **not** divide a region — it\ndistributes only *positive* free space, and container content is taller than a sidebar, so two\ncontainers measured **1214px each inside a 600px body**. A share needs a **zero base size + permission\nto shrink** (CSS `flex: 1 1 0`). Then **296px each**, measured. `Layout` has no `flex_basis`, so that\nzero is written as a height today — **do not copy it**; F004/P006/T010 replaces it with one `share(n)`.\n\n## ✅ The test bed is gone and STAYS gone\n\n`95a894d` removed the two extra placements from `heca/src/app/startup.rs`; the right sidebar is empty\nuntil it gets real features. I asked whether to restore it for verifying T012/T020 — **the user said no\n(2026-07-28). Do not re-add it.**\n\nConsequence to plan around: there is **one** container on screen, so focus and \"the focused area\nscrolls, the others decline\" cannot be demonstrated with two real docks. Verify what one container can\nshow, and say plainly what a single container cannot prove rather than quietly asserting it works. A\nsecond real dock is a future feature, not scaffolding to invent.\n\n## Open, in order\n\n1. **T021 — close it.** All implementation and docs are done (`fcbba56`: `docs/widgets.md` + README\n   carry container shares, nested scrolling and the model). The test-bed question is settled above.\n2. **T020 — `FocusDock`.** Chrome keyboard focus as a **container id**, via `ActionRegistry` +\n   `KeymapRegistry` + `KeyHint` (the user's design). One action, two doors: bare → pick a dock by\n   letter; `focus_dock(dock=\"…\")` → direct, for RPC. **Focus must be visible.** Fixes a live bug: the\n   focus key expands the *left* container even when the dock is seated right, which the dock allows.\n3. **T012 — keyboard scrolling (blocked on T020).** Widget half shipped (`096f06e`): eight semantic\n   `WidgetIntent::Scroll*`, `ScrollRegion` owning the paging and the clamp, declining any axis it cannot\n   scroll, `keyboard_target(Signal<bool>)` gating which instance responds. **Route settled 2026-07-28\n   after checking the code:** the bindings are prefix-gated (`prefix+[Shift+]PageUp/PageDown/Home/End`\n   — settled, do not reopen), so they arrive on the `WmAction` path by construction. The widget-keymap\n   idea is **ruled out**: `[keys.widgets]` is consulted at `heca/src/app/events.rs:156` only when a\n   modal is open and the mode is not Prefix. Four actions with an axis argument (reuse `ResizeAxis`),\n   full Adding-New-Actions checklist, handler dispatches `Event::Widget` into the chrome tree.\n4. **F004/P005/T007 — resize handle + resize mode.** Config keeps declaring **fixed** amounts (nothing\n   a user wrote breaks); the **proportion is computed internally per target**; one conversion shared by\n   drag and key; both axes; defaults shipped and customizable. The app hand-rolls divider resizing in\n   `heca/src/mouse/resize.rs` — absorb or delete it, never both.\n5. **F004/P006/T010 — `flex_basis` + one `share(n)` setter**, so no caller writes a fixed measure to\n   express a proportion.\n\n## Facts worth not rediscovering\n\n- `.planner/HANDOFF.md` is **deprecated**; handoffs live on `phase.handoff`.\n- `resume.json`'s `nextSteps`/`notes` are free text that task operations never refresh, and have\n  misdirected two sessions. **Read the task.**\n- `planner-task-show` / `planner-phase-update` can exceed the tool output limit; the response is saved\n  to a file, and `phase-update` **applies** even when it cannot be displayed.\n- Phase status is derived from tasks, so a phase JSON keeps `status: null` while the tool reports done.\n- **Check task statuses against the commits before trusting a recap** — two finished tasks sat\n  `in-progress` for a whole session here.",
+  "handoff": "",
   "handoffUpdatedAt": "2026-07-28T06:45:31.077Z",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/99d19246-1ba9-4720-9895-e70c66acf144-2026-08-04T19-19-36-348Z.md",
+      "clearedAt": "2026-08-04T19:19:36.348Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": []
 }

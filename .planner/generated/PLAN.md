@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-04T16:21:17.069Z
+**Last updated:** 2026-08-04T19:42:24.529Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -127,8 +127,8 @@ Status: 🚧 `in-progress`
 - ✅ **68a01ad8-1026-4c09-b516-2e2838723903** P075 — viewnode-all-widgets: ViewNode → all widgets (compositional refactor) (3/4 tasks)
 - ✅ **1df9c36c-5c29-4288-9fe1-7a6e9c72179b** P076 — viewnode-choice: Choice primitive + compose the remaining widgets (full ViewNode coverage) (9/9 tasks)
 - ✅ **4d4aa26b-6245-4c0f-8bdf-64573a7afbf5** P078 — plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (9/9 tasks)
-- 📋 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (0/5 tasks)
-- 📋 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/4 tasks)
+- 🚧 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (2/5 tasks)
+- 🚧 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (3/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
 
 ### 🚧 cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
@@ -140,7 +140,7 @@ Status: 🚧 `in-progress`
 **Phases:**
 - 📋 **cb8f1203-9ae5-431d-8e7d-07dad2804396** P018 — gridui-05: Bloom and custom draw effects (0/2 tasks)
 - 🚧 **ef538743-f412-443d-811b-9e02b66106c1** P019 — gridui-01: Scroll/list primitive (1/8 tasks)
-- 📋 **35d74cc9-a3df-49c9-a5bb-59e12a88b49c** P028 — gridui-06: Additional widgets (0/8 tasks)
+- ⏸️ **35d74cc9-a3df-49c9-a5bb-59e12a88b49c** P028 — gridui-06: Additional widgets (0/8 tasks)
 - 📋 **36628b50-a0b5-4974-852e-96d68c09f11f** P029 — gridui-03: Nerd-Font icon widget (0/4 tasks)
 - 📋 **981bc6b0-9529-4a1c-96a3-7c8e34217bc4** P040 — gridui-02: Pane shell header and tabs (0/4 tasks)
 - 📋 **ce5d5ea4-0f84-4e5a-909a-77d8344a2a87** P046 — gridui-04: Showcase coverage and visual regression (0/2 tasks)
@@ -208,14 +208,14 @@ Status: ⏸️ `deferred`
 
 **Work remaining:** Feature pianificata ma differita: l’implementazione dipende dal completamento delle fondamenta di Pluggable Chrome, in particolare plugin-01 → plugin-05.
 
-### 📋 fc19894f-c2aa-4ed1-81f3-24d82670dbae — F009 — 🔔 Notification System
+### ⏳ fc19894f-c2aa-4ed1-81f3-24d82670dbae — F009 — 🔔 Notification System
 
 Sistema notifiche configurabile per Heca. V1 implementa notifiche in-app tramite i widget esistenti `Toast`, `ToastStack`, `ToastSpec` e `ToastSeverity`; Heca possiede modello, store, queue, lifecycle, timer, dedup, routing e dispatch azioni. Backend OS/system notifications e integrazione global KeyHint per azioni toast restano differiti. Out of scope: confirmation modals e confirmation-before-action flow.
 
-Status: 📋 `planned`
+Status: ⏳ `waiting`
 
 **Phases:**
-- 📋 **03b297bb-a915-4712-a6b4-dc688dc7ddc5** P055 — notification-06: Routing + Additional Producers (0/8 tasks)
+- ⏳ **03b297bb-a915-4712-a6b4-dc688dc7ddc5** P055 — notification-06: Routing + Additional Producers (0/8 tasks)
 - 📋 **93379c9a-43b7-43eb-8988-be505251fe79** P056 — notification-02: Store + Lifecycle (0/9 tasks)
 - 📋 **461b88ca-5faa-4bea-8734-6c98587f115d** P057 — notification-09: Tests + Documentation (0/8 tasks)
 - 📋 **949d48a4-6001-42b2-a12c-25ba69a95c24** P058 — notification-08: Toast Keyboard Hint Integration (0/4 tasks)
@@ -768,11 +768,11 @@ Status: 🚧 `in-progress`
 
 **Tasks:** 1/8
 
-### 📋 35d74cc9-a3df-49c9-a5bb-59e12a88b49c — P028 — gridui-06: Additional widgets
+### ⏸️ 35d74cc9-a3df-49c9-a5bb-59e12a88b49c — P028 — gridui-06: Additional widgets
 
 Widget aggiuntivi: DnD reorder, multi-select, HUD Frame, Metric Row, Search Input, Accordion.
 
-Status: 📋 `planned`
+Status: ⏸️ `deferred`
 
 **Tasks:** 0/8
 
@@ -1025,21 +1025,21 @@ Status: ✅ `done`
 
 **Tasks:** 9/9
 
-### 📋 2219cca3-9ed4-4708-9e4c-bc480faad753 — P080 — plugin-10: Keybinding + command-palette integration for contributed actions
+### 🚧 2219cca3-9ed4-4708-9e4c-bc480faad753 — P080 — plugin-10: Keybinding + command-palette integration for contributed actions
 
 A provider or plugin can register an action, but nothing binds it to a key from config or shows it in the command palette. The plan's Phase 11 half that has no phase.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
-**Tasks:** 0/5
+**Tasks:** 2/5
 
-### 📋 5464ff74-fa17-4412-abaa-95aa19810b33 — P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack
+### 🚧 5464ff74-fa17-4412-abaa-95aa19810b33 — P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack
 
 The layer registry ships with native content only. Its own comments say the ViewNode path (plugins) and paint/input wiring land later — this is that work.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
-**Tasks:** 0/4
+**Tasks:** 3/4
 
 ### 📋 961a2d9f-8fc2-4af7-b302-4cbd1b2493d5 — P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract
 
@@ -1073,11 +1073,11 @@ Status: ⏸️ `deferred`
 
 **Tasks:** 0/4
 
-### 📋 03b297bb-a915-4712-a6b4-dc688dc7ddc5 — P055 — notification-06: Routing + Additional Producers
+### ⏳ 03b297bb-a915-4712-a6b4-dc688dc7ddc5 — P055 — notification-06: Routing + Additional Producers
 
 Choke point `notify`, routing per app/system/none e producer aggiuntivi.
 
-Status: 📋 `planned`
+Status: ⏳ `waiting`
 
 **Tasks:** 0/8
 
