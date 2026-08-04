@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-03T14:50:00.497Z
+**Last updated:** 2026-08-03T16:29:45.662Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -829,6 +829,14 @@ The library's missing text capability, recorded as an open gap in AGENTS for mon
 
 Status: 🚧 `in-progress`
 
+**Tasks:** 2/4
+
+### 📋 9a4fa5f5-62a8-4243-85ab-de8edaed21e8 — P092 — gridui-12: Fuzzy search, frecency ranking and per-scope query history — one reusable seam
+
+Extract the palette's private matcher into a reusable search module, rank results by how the user has actually used them, and remember past queries per scope — with the scope key in place from day one for VS Code-style `>` / `@` / `:` modes.
+
+Status: 📋 `planned`
+
 **Tasks:** 0/3
 
 ### 📋 099e2eb5-30be-4f3c-ab57-a4f111cdc44c — P021 — plugin-06: Placeholder token system
@@ -1029,7 +1037,7 @@ A focused container receives the keyboard directly and runs actions IT declared 
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 7/11
+**Tasks:** 8/11
 
 ### ✅ 2e5af5db-420b-45bb-8bde-7e763c69cbea — P086 — A component declares its keys, its mouse and its focus — generically, for any component
 
