@@ -96,6 +96,15 @@ pub(crate) struct DynamicLayer {
     pub(crate) visible: bool,
     /// What the layer holds — a tree the host built, or a **description** it was handed.
     pub(crate) content: LayerContent,
+    /// The tree realized from `content` when it is a [`LayerContent::View`]; `None` for a
+    /// `Native` layer, whose tree *is* its content.
+    ///
+    /// Host bookkeeping **about** the content, deliberately not inside it: `LayerContent` is the
+    /// vocabulary a plugin author reads, and a realization cache is not part of that vocabulary.
+    /// It lives here for the same reason `visible` does. Realizing needs the theme, an intent
+    /// emitter, the hint sink and the form bindings — none of which a registry holds — so the host
+    /// realizes first and registers both.
+    pub(crate) realized: Option<Box<dyn Component>>,
 }
 
 /// What a layer's content **is** (F003/P082/T339).
@@ -106,53 +115,52 @@ pub(crate) struct DynamicLayer {
 /// [`chrome::realize`](super::realize)). There is deliberately no second mapper: a layer that drew
 /// a description its own way would be a parallel implementation of every widget.
 ///
-/// The `View` arm keeps **both** the node and the tree realized from it. The node is the source of
-/// truth — it is what a theme change or a plugin update re-realizes from — and the realized tree is
-/// what the host lays out, paints and collects hint targets from. Keeping only the tree would throw
-/// away the description; keeping only the node would mean re-realizing every frame.
+/// The arm holds the **description only** — the shape ratified in the surface-compositor model
+/// (F003/P019 §9). The node is the source of truth a theme reload or a plugin update re-realizes
+/// from; the tree realized from it is host bookkeeping and lives on
+/// [`DynamicLayer::realized`](DynamicLayer#structfield.realized), outside the vocabulary a plugin
+/// author reads.
 pub(crate) enum LayerContent {
-    /// A retained tree the host built itself.
+    /// Built in Rust — chrome, a pane header, an overlay the host assembled.
     Native(Box<dyn Component>),
-    /// A description, plus the tree realized from it.
-    View {
-        node: ViewNode,
-        realized: Box<dyn Component>,
-    },
+    /// Data- or plugin-described; the host `realize()`s it.
+    View(ViewNode),
 }
 
 impl LayerContent {
-    /// The live tree, whichever arm this is — what the host lays out, paints and hint-walks.
-    pub(crate) fn root(&self) -> &dyn Component {
-        match self {
-            Self::Native(root) => root.as_ref(),
-            Self::View { realized, .. } => realized.as_ref(),
-        }
-    }
-
-    pub(crate) fn root_mut(&mut self) -> &mut Box<dyn Component> {
-        match self {
-            Self::Native(root) => root,
-            Self::View { realized, .. } => realized,
-        }
-    }
-
-    /// The description this was realized from, if it came from one.
+    /// The description this layer was described by, if it was.
     pub(crate) fn node(&self) -> Option<&ViewNode> {
         match self {
             Self::Native(_) => None,
-            Self::View { node, .. } => Some(node),
+            Self::View(node) => Some(node),
         }
     }
 }
 
 impl DynamicLayer {
-    /// The layer's live tree — see [`LayerContent::root`].
+    /// The live tree — what the host lays out, paints and hint-walks.
+    ///
+    /// For a `Native` layer that is the content itself; for a `View` layer it is
+    /// [`realized`](Self::realized), which the host produced from the description before
+    /// registering. The arm says where the tree came from, never how the stack treats it.
     pub(crate) fn root(&self) -> &dyn Component {
-        self.content.root()
+        match &self.content {
+            LayerContent::Native(root) => root.as_ref(),
+            LayerContent::View(_) => self
+                .realized
+                .as_deref()
+                .expect("a View layer is registered with its realized tree (add_view/insert_view)"),
+        }
     }
 
     pub(crate) fn root_mut(&mut self) -> &mut Box<dyn Component> {
-        self.content.root_mut()
+        match &mut self.content {
+            LayerContent::Native(root) => root,
+            LayerContent::View(_) => self
+                .realized
+                .as_mut()
+                .expect("a View layer is registered with its realized tree (add_view/insert_view)"),
+        }
     }
 }
 
@@ -186,6 +194,7 @@ impl LayerRegistry {
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
             content: LayerContent::Native(root),
+            realized: None,
         });
         id
     }
@@ -211,7 +220,8 @@ impl LayerRegistry {
             modal,
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
-            content: LayerContent::View { node, realized },
+            content: LayerContent::View(node),
+            realized: Some(realized),
         });
         id
     }
@@ -245,6 +255,7 @@ impl LayerRegistry {
             covers_content,
             visible: true,
             content: LayerContent::Native(root),
+            realized: None,
         });
     }
 
@@ -306,7 +317,7 @@ impl LayerRegistry {
         self.layers
             .iter_mut()
             .filter(|l| l.visible)
-            .map(|l| l.content.root_mut())
+            .map(|l| l.root_mut())
     }
 
     /// The id of the front-most visible **modal** layer (the one that captures input), if any.
@@ -326,7 +337,7 @@ impl LayerRegistry {
             .iter_mut()
             .rev()
             .find(|l| l.visible && l.modal)
-            .map(|l| l.content.root_mut().as_mut())
+            .map(|l| l.root_mut().as_mut())
     }
 }
 
@@ -427,6 +438,7 @@ mod tests {
             .find(|l| l.id == described)
             .expect("the described layer is in the stack");
         assert!(layer.content.node().is_some(), "the ViewNode survives realization");
+        assert!(layer.realized.is_some(), "and its realized tree is registered beside it");
         assert_eq!(
             layer.content.node().map(|n| n.kind),
             Some(WidgetKind::Label),

@@ -77,10 +77,19 @@
       "priority": 4,
       "shortName": "show-layer-actions",
       "title": "ShowLayer / HideLayer on-demand layers → a first native exposé",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Migration step 3. `ShowLayer(id)` makes an OnDemand layer visible and active, so the base context goes dormant when it is a context switch. A keybinding maps to it like any action, so it is rebindable and reachable from mouse and RPC.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "87f64d16-9cf8-48bf-bbe4-1542954e23b1-check-001-planned-in-progress",
+          "date": "2026-08-04T20:16:52.186Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "Reopening P082 work: T339 shipped `LayerContent` with the wrong arm shape (`View { node, realized }` instead of the ratified `View(ViewNode)`). Antonio chose option 1 on 2026-08-04 — match the spec and hold the realized tree beside the content on `DynamicLayer`. Doing that correction under this phase before T327's own work begins.",
+          "description": "Reopening P082 work: T339 shipped `LayerContent` with the wrong arm shape (`View { node, realized }` instead of the ratified `View(ViewNode)`). Antonio chose option 1 on 2026-08-04 — match the spec and hold the realized tree beside the content on `DynamicLayer`. Doing that correction under this phase before T327's own work begins."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -105,10 +114,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-08-04T20:16:52.186Z",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-04T20:16:52.186Z"
     },
     {
       "id": "eaff801f-599f-4580-b20c-a2abfb842142",
@@ -200,7 +209,7 @@
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-08-04T19:42:24.499Z",
+  "updatedAt": "2026-08-04T20:16:52.186Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
