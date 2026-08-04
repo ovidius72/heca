@@ -399,6 +399,16 @@ pub enum WidgetIntent {
     MenuUp,
     /// Vertical down — menus, `Select` lists, the command palette. `menu_down`.
     MenuDown,
+    /// An **older** past query — a search surface's history, walked backwards. `menu_history_up`.
+    ///
+    /// Vocabulary, not a palette feature: any surface that searches has a history worth recalling.
+    /// Up/down rather than previous/next because the table splits by axis (`item_*` is horizontal,
+    /// `menu_*` vertical) and because beside `item_previous`, a "history_prev" reads ambiguously —
+    /// an older entry, or one row up?
+    MenuHistoryUp,
+    /// A **newer** past query, and past the newest, the draft the walk interrupted.
+    /// `menu_history_down`.
+    MenuHistoryDown,
     /// Activate / commit / submit the current entry or primary action. `activate`.
     Activate,
     /// Dismiss / cancel / close the overlay. `dismiss`.

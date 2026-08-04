@@ -271,6 +271,8 @@ pub fn build_widget_keymap(config: &heca_config::theme::Config) -> heca_grid_ui:
         ("item_next", WidgetIntent::ItemNext),
         ("menu_up", WidgetIntent::MenuUp),
         ("menu_down", WidgetIntent::MenuDown),
+        ("menu_history_up", WidgetIntent::MenuHistoryUp),
+        ("menu_history_down", WidgetIntent::MenuHistoryDown),
         ("activate", WidgetIntent::Activate),
         ("dismiss", WidgetIntent::Dismiss),
     ];

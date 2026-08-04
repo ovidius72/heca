@@ -119,6 +119,20 @@ pub(crate) fn entries(
     rows.into_iter().map(|(_, entry)| entry).collect()
 }
 
+/// Which block an entry sorts into **while the palette's query is empty** — 0 for the focused
+/// component's actions, 1 for everything else.
+///
+/// The focused-first rule (P085) exists so that focusing a component puts *its* verbs at hand, and
+/// with nothing typed that focus is the only context there is. Once something is typed the query is
+/// better context and the widget drops the blocks entirely — an action whose name the user spelled
+/// correctly must not sit below one they did not, merely because its component holds focus.
+fn group_of(entry: &PaletteEntry, owners: &std::collections::HashMap<String, OwnerInfo>) -> u16 {
+    match owners.get(&entry.id) {
+        Some(o) if o.focused => 0,
+        _ => 1,
+    }
+}
+
 /// Can this action be **invoked with no arguments**? Only those belong in a palette.
 ///
 /// A palette offers a name and nothing else, so an action that requires arguments cannot be run
@@ -181,9 +195,27 @@ pub(crate) fn open_command_palette(state: &mut AppState) -> OverlayId {
         let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
     });
 
-    let rows = entries(&state.action_catalog, &owners(state), &state.action_shortcuts);
+    let owners = owners(state);
+    let rows = entries(&state.action_catalog, &owners, &state.action_shortcuts);
     let mut palette = CommandPalette::new()
         .placeholder("Type a command…")
+        // The app's search memory, so what was searched and chosen outlives this palette — it is
+        // built from scratch on every open.
+        .search(
+            heca_grid_ui::search::SearchModel::new("command", state.search_store.clone())
+                // The user's `[settings] search_case`, as the library's own vocabulary.
+                .case(match state.search_case {
+                    heca_config::settings::SearchCase::Smart => {
+                        heca_grid_ui::search::MatchCase::Smart
+                    }
+                    heca_config::settings::SearchCase::Sensitive => {
+                        heca_grid_ui::search::MatchCase::Sensitive
+                    }
+                    heca_config::settings::SearchCase::Insensitive => {
+                        heca_grid_ui::search::MatchCase::Insensitive
+                    }
+                }),
+        )
         // The user's `[settings] command_palette_size`, as a semantic variant — the widget owns what
         // each one means in pixels.
         .panel_size(match state.command_palette_size {
@@ -199,6 +231,11 @@ pub(crate) fn open_command_palette(state: &mut AppState) -> OverlayId {
         let emit_run = emit.clone();
         let mut command =
             Command::new(row.label.clone(), move || emit_run(carrier.clone()))
+                // The action's name: the stable identity past choices are counted against. The
+                // label cannot serve — it carries the owning component's title, so it changes with
+                // mounting.
+                .id(row.id.clone())
+                .group(group_of(row, &owners))
                 .description(row.description.clone());
         if let Some(glyph) = row.icon {
             command = command.icon(glyph);

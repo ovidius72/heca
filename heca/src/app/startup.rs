@@ -367,6 +367,10 @@ pub(crate) async fn init_state(
         programs: std::rc::Rc::new(app_config.config.programs.clone()),
         appearance,
         command_palette_size: app_config.config.settings.command_palette_size,
+        // Empty: the palette ranks and recalls exactly as it would with no memory at all until
+        // something is run. F004/P092/T386 loads this from disk instead.
+        search_store: std::rc::Rc::new(std::cell::RefCell::new(Default::default())),
+        search_case: app_config.config.settings.search_case,
         font_config: app_config.config.font.clone(),
         terminal_cell_size,
         has_animated_images: false,

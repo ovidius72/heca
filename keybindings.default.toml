@@ -329,6 +329,7 @@ scroll_line_down   = "Shift+Down"
 # widget/overlay is focused (never hijacks normal-mode input). Split by AXIS:
 #   • item_previous / item_next  — HORIZONTAL (left/right): Tabs, a dialog's button row.
 #   • menu_up / menu_down        — VERTICAL (up/down): menus, Select lists, the palette.
+#   • menu_history_up / _down    — a search surface's PAST QUERIES (up = older).
 #   • activate / dismiss         — shared (commit/submit, close/cancel).
 #   • edit_*                     — text-Input shortcuts (plain typing/caret keys are built in).
 # Tab / Shift+Tab are NOT here: they are the universal, always-on focus-traversal primitive
@@ -341,6 +342,12 @@ item_previous = ["ArrowLeft", "Ctrl+h"]   # Horizontal previous (left) — vim C
 item_next     = ["ArrowRight", "Ctrl+l"]   # Horizontal next (right) — vim Ctrl+l
 menu_up       = ["ArrowUp", "Ctrl+k"]      # Vertical up / previous — vim Ctrl+k
 menu_down     = ["ArrowDown", "Ctrl+j"]    # Vertical down / next — vim Ctrl+j
+# Past queries of a search surface (the command palette today). Ctrl+p/n and Shift+Arrows because
+# Ctrl+j/k and the plain arrows are already menu_down/menu_up above — every key the shell muscle
+# memory reaches for here was taken. Up is OLDER, down is NEWER, and past the newest the field gets
+# back the draft the walk interrupted.
+menu_history_up   = ["Shift+ArrowUp", "Ctrl+p"]     # Older query
+menu_history_down = ["Shift+ArrowDown", "Ctrl+n"]   # Newer query / back to the draft
 activate      = ["Enter", "Space"]          # Commit / submit the selected entry or primary action
 dismiss       = "Escape"                    # Close / cancel the overlay
 edit_delete_back          = "Ctrl+h"                 # Input: delete one char before the caret

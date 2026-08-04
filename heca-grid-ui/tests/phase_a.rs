@@ -357,11 +357,15 @@ fn a_label_marks_the_characters_it_was_given() {
     let plain = runs_of(Label::new("close pane"), 40.0);
     assert_eq!(plain.len(), 1, "an unmarked label is one run: {plain:?}");
 
-    // Marked ⇒ the runs alternate, the marked ones in the mark colour, and the pieces still spell
-    // the whole string in order.
+    // Marked ⇒ **the whole line is still one run**, with the marked characters over-drawn on top.
+    // Splitting the line at the mark boundaries loses a run's leading space in the shaper, which
+    // walks every space in the label — so the text must never be cut into pieces.
     let marked = runs_of(Label::new("close pane").marks([0, 1, 6]).mark_color(mark), 40.0);
-    let spelled: String = marked.iter().map(|(t, _)| t.as_str()).collect();
-    assert_eq!(spelled, "close pane", "the pieces must still spell the text");
+    assert_eq!(
+        marked.first().map(|(t, _)| t.as_str()),
+        Some("close pane"),
+        "the line is drawn whole, so its spacing is the font's own: {marked:?}",
+    );
     let in_mark: String = marked
         .iter()
         .filter(|(_, c)| *c == mark)
@@ -4030,6 +4034,170 @@ fn the_palette_never_runs_off_a_short_window() {
             );
         }
     }
+}
+
+/// **The palette recalls past queries — and implements none of it.** The walk, the draft and the
+/// stop at the oldest all live in `search::SearchModel`; this asserts the *drawn* query line, which
+/// is the only thing that proves the recall reached the field.
+#[test]
+fn command_palette_recalls_past_queries_from_its_history() {
+    use heca_grid_ui::search::{SearchModel, SearchStore};
+    use heca_grid_ui::{Command, CommandPalette, Component, GridKey, WidgetIntent};
+    let theme = Theme::default();
+    let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
+
+    // A palette is rebuilt every time it opens, which is exactly why the memory is the host's.
+    let open = || {
+        CommandPalette::new()
+            .search(SearchModel::new("command", store.clone()))
+            .command(Command::new("Close pane", || {}).id("close"))
+            .command(Command::new("Split pane", || {}).id("split"))
+            .open(true)
+    };
+    // The drawn query line: the first text run inside the panel is the field's.
+    let query_text = |p: &CommandPalette| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+            p.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .expect("the query line paints")
+    };
+
+    // Search and run twice, so there is a history to walk.
+    for query in ["close", "split"] {
+        let mut p = open();
+        LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
+        for c in query.chars() {
+            heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        }
+        heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    }
+
+    let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
+    // Type a draft, then walk back through the history.
+    for c in "dra".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    assert_eq!(query_text(&p), "dra");
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    assert_eq!(query_text(&p), "split", "one step back is the newest past query");
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    assert_eq!(query_text(&p), "close", "a second step keeps walking — the cursor is not reset");
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryDown));
+    assert_eq!(query_text(&p), "split");
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryDown));
+    assert_eq!(query_text(&p), "dra", "past the newest, the draft comes back");
+}
+
+/// **Past choices order the list, and typing overrules them.** With nothing typed the palette shows
+/// what the user actually uses; the moment a query spells another command better, that one leads.
+#[test]
+fn command_palette_ranks_by_past_use_until_something_is_typed() {
+    use heca_grid_ui::search::{SearchModel, SearchStore};
+    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
+    let ran = std::rc::Rc::new(std::cell::Cell::new(""));
+
+    let open = || {
+        let (a, b) = (ran.clone(), ran.clone());
+        CommandPalette::new()
+            .search(SearchModel::new("command", store.clone()))
+            .command(Command::new("Close pane", move || a.set("close")).id("close"))
+            .command(Command::new("Split pane", move || b.set("split")).id("split"))
+            .open(true)
+    };
+
+    // Use "Split pane" — it is second in the caller's order.
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "split");
+
+    // Nothing typed: the used one leads, so activating the top row runs it again.
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "split", "past use orders an untyped list");
+
+    // Typed: the query spells the other command, and it wins despite the other's history.
+    let mut p = open();
+    for c in "close".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "close", "typing overrules the boost");
+}
+
+/// A group orders the list **only while nothing is typed**. The command palette's host uses it for
+/// the focused component's actions: with an empty query that focus is the only context there is,
+/// and once a query exists it is better context than the block.
+#[test]
+fn a_group_leads_an_empty_query_and_dissolves_once_typing_starts() {
+    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(""));
+    let open = || {
+        let (a, b) = (ran.clone(), ran.clone());
+        CommandPalette::new()
+            // Declared second, but in the leading block.
+            .command(Command::new("Zoom out", move || a.set("zoom")).id("zoom").group(1))
+            .command(Command::new("Workspaces › Delete row", move || b.set("del")).id("del").group(0))
+            .open(true)
+    };
+
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "del", "the leading block comes first while nothing is typed");
+
+    let mut p = open();
+    for c in "zoom".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "zoom", "a typed query dissolves the block");
+}
+
+/// An **abandoned** search is not one anyone wants back: dismissing records nothing.
+#[test]
+fn command_palette_remembers_only_what_was_run() {
+    use heca_grid_ui::search::{SearchModel, SearchStore};
+    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    let theme = Theme::default();
+    let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
+    let open = || {
+        CommandPalette::new()
+            .search(SearchModel::new("command", store.clone()))
+            .command(Command::new("Close pane", || {}).id("close"))
+            .open(true)
+    };
+
+    let mut p = open();
+    for c in "abandoned".chars() {
+        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Dismiss));
+
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+        heca_grid_ui::Component::paint(&p, &mut cx);
+    }
+    let query = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .expect("the query line paints");
+    assert_ne!(query, "abandoned", "a dismissed search was not remembered");
 }
 
 /// Filtering matches the **label**. A description explains a command the user has already found;

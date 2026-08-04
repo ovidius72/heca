@@ -651,6 +651,15 @@ pub struct AppState {
     /// How roomy the command palette is (`[settings] command_palette_size`). Re-read on reload, so
     /// changing it and pressing reload resizes the next palette.
     pub command_palette_size: heca_config::settings::PaletteSize,
+    /// What the user has searched for and chosen — the command palette's memory, ranked into its
+    /// order and recalled by its history keys.
+    ///
+    /// **Host-owned**, because the palette is rebuilt from scratch every time it opens (see
+    /// `chrome::palette::open_command_palette`) and a memory that died with the widget would
+    /// remember nothing. In-memory for now; F004/P092/T386 gives it a file.
+    pub search_store: std::rc::Rc<std::cell::RefCell<heca_grid_ui::search::SearchStore>>,
+    /// How a search query's case is treated (`[settings] search_case`). Re-read on reload.
+    pub search_case: heca_config::settings::SearchCase,
     /// Structured font configuration (families + sizes), decoupled from the color
     /// theme. Read at the same choke points that previously read `theme.font_*`.
     /// Refreshed on `prefix+Shift+r` reload.
@@ -840,6 +849,7 @@ pub struct AppState {
     /// very often). See `mouse::update_cursor`.
     pub current_cursor: winit::window::CursorIcon,
 }
+
 
 impl AppState {
 

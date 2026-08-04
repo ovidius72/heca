@@ -125,6 +125,24 @@ pub enum PaletteSize {
     Large,
 }
 
+/// How a search query's case is treated — the command palette today, and any search surface that
+/// follows it.
+///
+/// Three, because the right answer is a habit rather than a fact: `smart` is what fzf and ripgrep
+/// do and suits most people, `sensitive` suits anyone whose command names differ only by case, and
+/// `insensitive` suits anyone who never wants Shift to change what they find.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchCase {
+    /// Insensitive until the query contains an uppercase character, then sensitive.
+    #[default]
+    Smart,
+    /// Always case-sensitive.
+    Sensitive,
+    /// Never case-sensitive.
+    Insensitive,
+}
+
 /// User-configurable settings that control behaviour and appearance.
 ///
 /// Font family/size configuration has moved out of `[settings]` into the
@@ -139,6 +157,9 @@ pub struct SettingsConfig {
     /// How roomy the command palette is (`small` / `normal` / `large`).
     #[serde(default, alias = "command-palette-size")]
     pub command_palette_size: PaletteSize,
+    /// How a search query's case is treated (`smart` / `sensitive` / `insensitive`).
+    #[serde(default, alias = "search-case")]
+    pub search_case: SearchCase,
     #[serde(default = "default_window_width")]
     pub window_width: u32,
     #[serde(default = "default_window_height")]
@@ -264,6 +285,7 @@ impl Default for SettingsConfig {
             theme: default_theme(),
             mouse: default_mouse(),
             command_palette_size: PaletteSize::default(),
+            search_case: SearchCase::default(),
             window_width: default_window_width(),
             window_height: default_window_height(),
             terminal_foreground: None,
