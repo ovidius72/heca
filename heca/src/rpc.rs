@@ -545,6 +545,14 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         }),
         // …and the way back: the keyboard returns to the focused pane.
         "unfocus-dock" => Ok(WmAction::UnfocusDock),
+        // Forget a search memory. The scope is optional in the same way: omitted, every search
+        // surface is forgotten.
+        "clear-search-history" => Ok(WmAction::ClearSearchHistory {
+            scope: parts.next().map(|s| s.to_string()),
+        }),
+        "clear-search-ranking" => Ok(WmAction::ClearSearchRanking {
+            scope: parts.next().map(|s| s.to_string()),
+        }),
         // Chrome container placement (plugin-02, §2.9) — RPC parity for the moves.
         "move-container-to-region" => {
             let container_id = expect_arg!("container_id").to_string();

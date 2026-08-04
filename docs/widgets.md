@@ -695,9 +695,127 @@ that assert exact numbers.
 whatever comes earliest — `left` against `Toggle Left Sidebar` took the `l`/`e` from *Toggle* and
 then the `f`/`t` of *Left*, never matching the word, and scored the same as a clean match.
 
-**Scopes** keep separate memories: `"command"` today, and a second surface (or a `>` / `@` / `:`
-mode) passes a different name and gets its own history and ranking. Keyed from the first line ever
-written, so adding one is data rather than a file migration.
+#### Scopes — a second search surface
+
+**A scope is not built, it is named.** It is a plain string you choose — a namespace label for
+"whose memory is this" — handed to `SearchModel::new`, created on first use and registered nowhere.
+Any string works; the convention is a lowercase singular noun for *what is being searched*:
+`"command"`, `"pane"`, `"workspace"`, `"file"`.
+
+It is **not** a sigil and not an icon. VS Code's `>` / `@` / `:` are *query prefixes* — a UI gesture
+for switching which list you are looking at — and a scope is the storage key behind one. A surface
+could read the prefix and repoint its model at a different scope, but the two are separate ideas and
+neither implies the other.
+
+```rust
+// Three surfaces that will not tread on each other. The strings are chosen here and
+// nowhere else — there is no enum to extend and nothing to register.
+let commands = SearchModel::new("command",   state.search_store.clone());
+let panes    = SearchModel::new("pane",      state.search_store.clone());
+let files    = SearchModel::new("file",      state.search_store.clone());
+```
+
+They become keys in the persisted file the first time each one records something:
+
+```json
+{
+  "version": 2,
+  "scopes": {
+    "command": {
+      "history": [{ "query": "clo",  "at": 1754300000 }],
+      "uses":    [{ "id": "close_pane", "count": 7, "last_used_at": 1754300000 }]
+    },
+    "pane": {
+      "history": [{ "query": "nvim", "at": 1754300100 }],
+      "uses":    [{ "id": "~/projects/heca:nvim", "count": 3, "last_used_at": 1754300100 }]
+    }
+  }
+}
+```
+
+Note the second scope's ids: **an id is whatever you rank by**, and it is persisted, so it has to
+mean the same thing tomorrow. An action name does. A pane's numeric id does not — it is unique
+within a session and meaningless after a restart, so a ranking keyed on it would accumulate dead
+keys and rank nothing. For rows that outlive nothing, rank on a natural key (a path plus a program,
+a workspace's name) or pass `None` and take pure text matching.
+
+Worked end to end — a widget that filters a list of its own and remembers what was picked:
+
+```rust
+struct PanePicker {
+    base: Base,
+    panes: Vec<PaneEntry>,      // { id: String, title: String }
+    query: Input,
+    selected: usize,
+    search: SearchModel,        // handed in by the host, over a scope of its own
+}
+
+impl PanePicker {
+    /// Filtered + ordered. The matcher, the smart-case rule and the ranking by past
+    /// picks all live in the model; this reads the answer back.
+    fn results(&self) -> Vec<Ranked> {
+        self.search.rank(&self.panes, &self.query.value_str(), |p| {
+            (Some(p.id.as_str()), p.title.as_str())
+        })
+    }
+
+    /// Painting a row: the marks come from the match, not from the widget.
+    fn row_label(&self, r: &Ranked) -> Label {
+        Label::new(self.panes[r.index].title.clone())
+            .truncate(Ellipsis::End)
+            .marks(r.hits.clone())
+    }
+
+    fn run_selected(&mut self) {
+        let results = self.results();
+        if let Some(r) = results.get(self.selected) {
+            let query = self.query.value_str();
+            let id = self.panes[r.index].id.clone();
+            (self.on_pick)(&id);
+            // The only persistence call a consumer makes — and it is not a save.
+            self.search.record_run(&query, Some(&id));
+        }
+    }
+}
+
+impl Component for PanePicker {
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
+        match ev {
+            // History: forwarded, never walked here.
+            Event::Widget(i @ (WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown)) => {
+                let q = self.query.value_str();
+                if let SearchAction::SetQuery(text) = self.search.handle(*i, &q) {
+                    self.query.set_value(&text);
+                    self.selected = 0;      // NOT `query_changed` — that ends the walk
+                }
+                Handled::Yes
+            }
+            // A real keystroke leaves the walk behind.
+            Event::Key { pressed: true, .. } => {
+                let handled = dispatch(&mut self.query, ev);
+                self.search.query_changed();
+                self.selected = 0;
+                handled
+            }
+            _ => Handled::No,
+        }
+    }
+}
+```
+
+Nothing here saves anything: the host writes when `SearchStore::revision()` moves.
+
+The two share the store and share nothing else: separate query histories, separate rankings. The
+scope name is what the persisted file is keyed by, so a new surface appears there on its first save
+and `clear_search_history scope=symbol` addresses exactly it.
+
+Keyed from the first line ever written, deliberately: retrofitting a key into a file that already
+exists means migrating it, so `"command"` was never allowed to be implicit even while it was the only
+one.
+
+**What does not exist yet:** nothing switches scope at runtime. VS Code-style `>` / `@` / `:` modes
+would be one surface changing which scope its model points at as the query prefix changes — the
+storage supports it, the UI does not do it.
 
 **The two intents are shared vocabulary**, not one widget's feature:
 `WidgetIntent::MenuHistoryUp` / `MenuHistoryDown`, bound in `[keys.widgets]` as

@@ -974,6 +974,14 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
     registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
+    registry.register(
+        &WmAction::ClearSearchHistory { scope: None },
+        crate::handlers::handle_clear_search_history,
+    );
+    registry.register(
+        &WmAction::ClearSearchRanking { scope: None },
+        crate::handlers::handle_clear_search_ranking,
+    );
     registry.register(&WmAction::UnfocusDock, handle_unfocus_dock);
     registry.register(
         &WmAction::CollapseCurrentWorkspace,

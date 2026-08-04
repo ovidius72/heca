@@ -1596,6 +1596,24 @@ pub(crate) fn focus_navigable_dock(state: &mut AppState) {
 /// The pick is uniform — it is offered even when there is only one dock — because "sometimes a letter
 /// appears and sometimes the key acts immediately" is a rule a user has to learn from surprise.
 /// Nothing mounted, or nothing on screen, means nothing to focus: a no-op.
+/// Forget the past queries every search surface remembers, or just one scope's.
+pub fn handle_clear_search_history(state: &mut AppState, action: &WmAction) {
+    let scope = match action {
+        WmAction::ClearSearchHistory { scope } => scope.clone(),
+        _ => None,
+    };
+    crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Queries);
+}
+
+/// Forget the usage counts that rank a search surface's list.
+pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) {
+    let scope = match action {
+        WmAction::ClearSearchRanking { scope } => scope.clone(),
+        _ => None,
+    };
+    crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Ranking);
+}
+
 pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
     let WmAction::FocusDock { dock } = action else {
         return;

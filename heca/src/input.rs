@@ -515,6 +515,24 @@ pub enum WmAction {
         dock: Option<crate::chrome::ContainerId>,
     },
 
+    /// Forget the past queries a search surface remembers (F004/P092/T392).
+    ///
+    /// `scope` is **optional**, and that is what makes one action serve both doors: bare it forgets
+    /// every search surface's queries, which is what someone binding a key or picking it from the
+    /// palette means; a caller that knows which surface it means says so. A *required* argument
+    /// could not be offered in the palette at all.
+    ClearSearchHistory {
+        scope: Option<String>,
+    },
+
+    /// Forget the usage counts that rank a search surface's list (F004/P092/T392).
+    ///
+    /// Separate from [`ClearSearchHistory`](Self::ClearSearchHistory) because they are different
+    /// intentions: forgetting what you typed is not forgetting what you use.
+    ClearSearchRanking {
+        scope: Option<String>,
+    },
+
     /// Give the keyboard back to the focused pane — chrome focus is released (F003/P085/T352).
     ///
     /// The counterpart of [`FocusDock`](Self::FocusDock), and the reason `Esc` is a *binding* in the
@@ -684,6 +702,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
         "command_palette" => Some(WmAction::CommandPalette),
         "reload_config" => Some(WmAction::ReloadConfig),
+        "clear_search_history" => Some(WmAction::ClearSearchHistory { scope: None }),
+        "clear_search_ranking" => Some(WmAction::ClearSearchRanking { scope: None }),
         // Scrollback
         "scrollback_page_up" => Some(WmAction::ScrollbackPageUp),
         "scrollback_page_down" => Some(WmAction::ScrollbackPageDown),
@@ -966,6 +986,13 @@ pub fn build_action(
             dock: get_string(args, "dock"),
         }),
 
+        "clear_search_history" => Some(WmAction::ClearSearchHistory {
+            scope: get_string(args, "scope"),
+        }),
+        "clear_search_ranking" => Some(WmAction::ClearSearchRanking {
+            scope: get_string(args, "scope"),
+        }),
+
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
             kind: get_enum(args, "kind").unwrap_or(SpawnKind::Terminal),
@@ -1126,6 +1153,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. }
         | WmAction::ReloadConfig
+        | WmAction::ClearSearchHistory { .. }
+        | WmAction::ClearSearchRanking { .. }
         | WmAction::AddPaneToColumn { .. }
         | WmAction::AddColumnToWorkspace { .. }
         | WmAction::DeleteColumn { .. }

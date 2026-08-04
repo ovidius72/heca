@@ -213,6 +213,11 @@ impl Frecency {
         Self { cap, ..Self::default() }
     }
 
+    /// How many entries this table keeps.
+    pub fn cap(&self) -> usize {
+        self.cap
+    }
+
     /// Record that `id` was chosen.
     pub fn record(&mut self, id: &str) {
         self.seq += 1;
@@ -304,6 +309,11 @@ impl History {
     /// An empty history keeping at most `cap` queries.
     pub fn with_cap(cap: usize) -> Self {
         Self { cap, ..Self::default() }
+    }
+
+    /// How many queries this history keeps.
+    pub fn cap(&self) -> usize {
+        self.cap
     }
 
     /// Remember a query. Ignores an empty one and a repeat of the newest — retyping the same search
@@ -432,25 +442,47 @@ impl SearchStore {
         self.revision += 1;
     }
 
-    /// Forget one scope's memory — both the past queries and the usage that ranks it.
+    /// Forget past queries — one scope, or every scope when `scope` is `None`.
+    ///
+    /// Separate from [`clear_ranking`](Self::clear_ranking) because they are different intentions:
+    /// forgetting what you typed is not forgetting what you use.
     ///
     /// Returns whether anything was there to forget.
-    pub fn clear_scope(&mut self, scope: &str) -> bool {
-        let removed = self.scopes.remove(scope).is_some();
-        if removed {
-            self.touch();
-        }
-        removed
+    pub fn clear_history(&mut self, scope: Option<&str>) -> bool {
+        self.clear_with(scope, |s| {
+            let had = !s.history.entries().is_empty();
+            s.history = History::with_cap(s.history.cap());
+            had
+        })
     }
 
-    /// Forget every scope.
-    pub fn clear(&mut self) -> bool {
-        let had = !self.scopes.is_empty();
-        self.scopes.clear();
-        if had {
+    /// Forget the usage that ranks a list — one scope, or every scope when `scope` is `None`.
+    pub fn clear_ranking(&mut self, scope: Option<&str>) -> bool {
+        self.clear_with(scope, |s| {
+            let had = s.frecency.entries().next().is_some();
+            s.frecency = Frecency::with_cap(s.frecency.cap());
+            had
+        })
+    }
+
+    fn clear_with(&mut self, scope: Option<&str>, mut f: impl FnMut(&mut Scope) -> bool) -> bool {
+        let mut changed = false;
+        match scope {
+            Some(name) => {
+                if let Some(s) = self.scopes.get_mut(name) {
+                    changed = f(s);
+                }
+            }
+            None => {
+                for s in self.scopes.values_mut() {
+                    changed |= f(s);
+                }
+            }
+        }
+        if changed {
             self.touch();
         }
-        had
+        changed
     }
 
     /// One scope's memory, if it has any yet.
@@ -800,6 +832,34 @@ mod tests {
             model.handle(WidgetIntent::MenuDown, ""),
             SearchAction::Ignored,
         );
+    }
+
+    /// **The two halves are forgotten separately.** Clearing what you typed is not clearing what
+    /// you use, and a user asking for one rarely means the other.
+    #[test]
+    fn queries_and_ranking_are_cleared_independently() {
+        let store = Rc::new(RefCell::new(SearchStore::new()));
+        let mut m = SearchModel::new("command", store.clone());
+        m.record_run("a query", Some("close"));
+        let items = [("close", "Close Pane")];
+
+        assert!(store.borrow_mut().clear_history(Some("command")));
+        assert_eq!(
+            m.handle(WidgetIntent::MenuHistoryUp, "typed"),
+            SearchAction::SetQuery("typed".to_string()),
+            "there is nothing left to recall",
+        );
+        assert!(
+            m.rank(&items, "", |i| (Some(i.0), i.1))[0].score > 0,
+            "…but what you use still ranks",
+        );
+
+        assert!(store.borrow_mut().clear_ranking(Some("command")));
+        assert_eq!(m.rank(&items, "", |i| (Some(i.0), i.1))[0].score, 0, "and now it does not");
+
+        // Nothing left to forget is not an error, and reports honestly.
+        assert!(!store.borrow_mut().clear_history(Some("command")));
+        assert!(!store.borrow_mut().clear_ranking(Some("nonexistent")));
     }
 
     /// A scope is a separate memory — that is what makes `>` / `@` / `:` data rather than a reshape.
