@@ -5540,9 +5540,9 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
 
     assert_eq!(grid.selected_key(), Some("a"));
 
-    // menu_down walks WITHIN the column — this is the case that was switching workspace before.
+    // A column with depth: menu_down walks WITHIN it — the case that used to switch workspace.
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
-    assert_eq!(grid.selected_key(), Some("b"), "j moves to the next pane in the column");
+    assert_eq!(grid.selected_key(), Some("b"), "j moves to the next pane in the split column");
     assert!(lit[1].get_untracked() && !lit[0].get_untracked(), "exactly one cell is lit");
 
     // item_next crosses to the next COLUMN, clamping the cell index into the shorter column.
@@ -5554,6 +5554,15 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
     assert_eq!(grid.selected_key(), Some("d"), "n moves to the next workspace");
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
     assert_eq!(grid.selected_key(), Some("d"), "and stops at the last one");
+
+    // …and a column with NO depth sends the same key to the next row instead, so vertical always
+    // does something useful rather than nothing.
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    assert_eq!(grid.selected_key(), Some("a"), "the column position survives the row change");
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemNext));
+    assert_eq!(grid.selected_key(), Some("c"), "the single-cell column of row 0");
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
+    assert_eq!(grid.selected_key(), Some("d"), "no depth here, so j moved to the next row");
 
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(chosen.borrow().as_str(), "d");

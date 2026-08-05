@@ -153,6 +153,20 @@ impl CardGrid {
     /// here stops at its ends for the same reason. Moving between rows or columns keeps the
     /// position on the other axes where the new place is long enough, which is what makes a grid
     /// feel like a grid rather than a reset.
+    /// Move down (`1`) or up (`-1`) on whichever vertical axis has depth here: the cells of the
+    /// current column when it holds more than one, the rows otherwise.
+    pub fn step_vertical(&mut self, d: isize) {
+        let deep = self
+            .rows
+            .get(self.cursor.0)
+            .and_then(|r| r.get(self.cursor.1))
+            .is_some_and(|col| col.len() > 1);
+        match deep {
+            true => self.step(0, d, 0),
+            false => self.step(0, 0, d),
+        }
+    }
+
     pub fn step(&mut self, dcol: isize, dcell: isize, drow: isize) {
         if self.rows.is_empty() {
             return;
@@ -213,8 +227,12 @@ impl Component for CardGrid {
             // that does not. Two widgets, one pair of keys, never both on screen.
             WidgetIntent::ItemPrevious => self.step(-1, 0, 0),
             WidgetIntent::ItemNext => self.step(1, 0, 0),
-            WidgetIntent::MenuUp => self.step(0, -1, 0),
-            WidgetIntent::MenuDown => self.step(0, 1, 0),
+            // **Vertical goes as deep as there is depth.** In a column holding more than one cell
+            // it walks the cells; in a column holding one it moves to the next row instead, so the
+            // key always does the useful thing rather than nothing. The outer axis stays reachable
+            // unconditionally on `menu_history_*`.
+            WidgetIntent::MenuUp => self.step_vertical(-1),
+            WidgetIntent::MenuDown => self.step_vertical(1),
             WidgetIntent::MenuHistoryUp => self.step(0, 0, -1),
             WidgetIntent::MenuHistoryDown => self.step(0, 0, 1),
             WidgetIntent::Activate => {

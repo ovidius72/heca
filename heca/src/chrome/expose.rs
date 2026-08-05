@@ -284,7 +284,11 @@ pub(crate) fn map(
                     .align(Align::Center)
                     .child(Label::new(ws.name.clone()).muted(true)),
             )
-            .child(strip);
+            // **A strip wider than the row scrolls; it does not overflow into the next workspace.**
+            // Columns are sized against the viewport, so a workspace scrolled beyond one screen is
+            // deliberately wider than its row — that is the fact worth seeing. niri does the same:
+            // its overview fixes a zoom and scrolls rather than shrinking everything to fit.
+            .child(ScrollRegion::new().horizontal().grow(1.0).child(strip));
         grid = grid.row(columns_of_cells, share(row, 1.0, true));
     }
     if let Some(id) = start {
