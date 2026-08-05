@@ -358,6 +358,31 @@ pub enum WmAction {
     ToggleCurrentColumnCollapsed,
 
     // ── System ──
+    /// Show / hide / toggle an **addressable layer** by name (F003/P082/T327).
+    ///
+    /// `name` is `<owner>.<short>` — `heca.expose`, `docker.expose` — the stable handle a layer is
+    /// registered under. A `LayerId` could not serve: it is a runtime counter, so no keybinding,
+    /// config line or RPC call could ever know it.
+    ///
+    /// `dock` names **which seating** when a component is placed twice, and is optional for the
+    /// same reason `focus_dock`'s is: a keybinding cannot name a placement, so bare resolves the
+    /// way `owning_mount` does — the focused seating, else the last focused of that kind. Both
+    /// arguments optional keeps the action offerable in the palette, which lists only what it can
+    /// run with nothing supplied.
+    ShowLayer {
+        name: Option<String>,
+        dock: Option<String>,
+    },
+    HideLayer {
+        name: Option<String>,
+        dock: Option<String>,
+    },
+    /// Show it if hidden, hide it if shown — one key for a surface you flick in and out of.
+    ToggleLayer {
+        name: Option<String>,
+        dock: Option<String>,
+    },
+
     /// Open the command palette (F004/P092/T393).
     ///
     /// Both arguments are **optional**, and bare is exactly what it always was: the actions list,
@@ -713,6 +738,9 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "reset_pane_name" => Some(WmAction::ResetPaneName),
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
         "command_palette" => Some(WmAction::CommandPalette { mode: None, query: None }),
+        "show_layer" => Some(WmAction::ShowLayer { name: None, dock: None }),
+        "hide_layer" => Some(WmAction::HideLayer { name: None, dock: None }),
+        "toggle_layer" => Some(WmAction::ToggleLayer { name: None, dock: None }),
         "reload_config" => Some(WmAction::ReloadConfig),
         "clear_search_history" => Some(WmAction::ClearSearchHistory { scope: None }),
         "clear_search_ranking" => Some(WmAction::ClearSearchRanking { scope: None }),
@@ -998,6 +1026,19 @@ pub fn build_action(
             dock: get_string(args, "dock"),
         }),
 
+        "show_layer" => Some(WmAction::ShowLayer {
+            name: get_string(args, "name"),
+            dock: get_string(args, "dock"),
+        }),
+        "hide_layer" => Some(WmAction::HideLayer {
+            name: get_string(args, "name"),
+            dock: get_string(args, "dock"),
+        }),
+        "toggle_layer" => Some(WmAction::ToggleLayer {
+            name: get_string(args, "name"),
+            dock: get_string(args, "dock"),
+        }),
+
         // Both OPTIONAL, and they compose into one prefilled query — see the variant.
         "command_palette" => Some(WmAction::CommandPalette {
             mode: get_string(args, "mode"),
@@ -1109,6 +1150,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
         WmAction::CommandPalette { .. } => 5,
+        WmAction::ShowLayer { .. } | WmAction::HideLayer { .. } | WmAction::ToggleLayer { .. } => 5,
         // Selection (host capability). Treated as pane-management-class
         // actions so they share priority with close/rename-style actions.
         WmAction::EnterSelectionMode

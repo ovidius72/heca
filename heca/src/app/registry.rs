@@ -1048,6 +1048,13 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::CommandPalette { mode: None, query: None },
         handle_command_palette,
     );
+    for act in [
+        WmAction::ShowLayer { name: None, dock: None },
+        WmAction::HideLayer { name: None, dock: None },
+        WmAction::ToggleLayer { name: None, dock: None },
+    ] {
+        registry.register(&act, crate::handlers::handle_layer_visibility);
+    }
     registry.register(
         &WmAction::SpawnCommand {
             command: String::new(),

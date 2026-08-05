@@ -1319,6 +1319,69 @@ impl ActionRegistry {
             ],
         },
         ActionDescriptor {
+            name: "show_layer",
+            label: "Show Layer",
+            description: "Bring an addressable layer into the stack — an expose, a plugin panel.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // Both OPTIONAL: a `LayerId` is a runtime counter nothing outside the process could
+            // name, and a *required* argument would keep this out of the palette entirely.
+            args: &[
+                ArgDescriptor::optional(
+                    "name",
+                    ArgKind::Text,
+                    "Layer to show, as owner.short (e.g. heca.expose).",
+                ),
+                ArgDescriptor::optional(
+                    "dock",
+                    ArgKind::Text,
+                    "Which placement, when a component is seated twice; omit to use the focused one.",
+                ),
+            ],
+        },
+        ActionDescriptor {
+            name: "hide_layer",
+            label: "Hide Layer",
+            description: "Take an addressable layer back out of the stack.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // Both OPTIONAL: a `LayerId` is a runtime counter nothing outside the process could
+            // name, and a *required* argument would keep this out of the palette entirely.
+            args: &[
+                ArgDescriptor::optional(
+                    "name",
+                    ArgKind::Text,
+                    "Layer to hide, as owner.short (e.g. heca.expose).",
+                ),
+                ArgDescriptor::optional(
+                    "dock",
+                    ArgKind::Text,
+                    "Which placement, when a component is seated twice; omit to use the focused one.",
+                ),
+            ],
+        },
+        ActionDescriptor {
+            name: "toggle_layer",
+            label: "Toggle Layer",
+            description: "Show an addressable layer if hidden, hide it if shown.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // Both OPTIONAL: a `LayerId` is a runtime counter nothing outside the process could
+            // name, and a *required* argument would keep this out of the palette entirely.
+            args: &[
+                ArgDescriptor::optional(
+                    "name",
+                    ArgKind::Text,
+                    "Layer to toggle, as owner.short (e.g. heca.expose).",
+                ),
+                ArgDescriptor::optional(
+                    "dock",
+                    ArgKind::Text,
+                    "Which placement, when a component is seated twice; omit to use the focused one.",
+                ),
+            ],
+        },
+        ActionDescriptor {
             name: "reload_config",
             label: "Reload Config",
             description: "Reload keymaps, theme, and settings from config.toml without restarting.",

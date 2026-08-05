@@ -18,6 +18,27 @@
 use heca_grid_ui::Component;
 use heca_view::ViewNode;
 
+/// Build a layer's addressable name: `<owner>.<short>` — `layer_name("docker", "expose")` is
+/// `"docker.expose"`.
+///
+/// **The owner half is the caller's `kind()`, never the author's string**, which is what makes the
+/// namespace unforgeable: a plugin has nowhere to write a prefix, so it cannot claim `heca.*` or
+/// another component's names. The same construction `action_id_for` uses for `<component>.<name>`.
+///
+/// A `short` that already contains a dot is **rejected** rather than joined, so a second segment
+/// cannot be smuggled in (`expose.thing` would otherwise become `docker.expose.thing` and read as
+/// if `docker.expose` owned it).
+pub(crate) fn layer_name(owner: &str, short: &str) -> Option<String> {
+    if short.is_empty() || short.contains('.') || owner.is_empty() {
+        return None;
+    }
+    Some(format!("{owner}.{short}"))
+}
+
+/// The namespace the host's own layers live under — the reserved counterpart of a provider's
+/// `kind()`. A plugin cannot register here, because it never supplies the owner half.
+pub(crate) const HOST_OWNER: &str = "heca";
+
 /// Opaque, stable id for a registered layer. Returned by [`LayerRegistry::add`]; a plugin
 /// keeps its id to show/hide/update its layer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -94,6 +115,20 @@ pub(crate) struct DynamicLayer {
     /// Whether it participates this frame. `Persistent` layers start visible; `OnDemand`
     /// layers start hidden and are shown via [`LayerRegistry::show`].
     pub(crate) visible: bool,
+    /// The stable name an action addresses this layer by — `"heca.expose"`,
+    /// `"docker.expose"` — or `None` for a layer nobody names (an overlay addressed only by the
+    /// `LayerId` its opener kept: a dropdown, a modal, the command palette).
+    ///
+    /// **A name is `<owner>.<short>`, and the owner half is never written by the author.** It is
+    /// stamped by [`layer_name`] from the registering provider's `kind()`, exactly as
+    /// `action_id_for` builds `<component>.<name>`, `ActionMeta.owner` is stamped in
+    /// `register_provider_actions`, and a context path is derived from `kind()`. A plugin therefore
+    /// cannot claim `heca.*` or another plugin's namespace: the API gives it nowhere to put a dot.
+    ///
+    /// **Type-level, not per placement.** A component seated twice declares one layer name; which
+    /// seating an action means is a separate optional argument, the way `[[keys.component]]` takes
+    /// an optional `id` and `focus_dock` an optional `dock`.
+    pub(crate) name: Option<String>,
     /// What the layer holds — a tree the host built, or a **description** it was handed.
     pub(crate) content: LayerContent,
     /// The tree realized from `content` when it is a [`LayerContent::View`]; `None` for a
@@ -193,6 +228,7 @@ impl LayerRegistry {
             modal,
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
+            name: None,
             content: LayerContent::Native(root),
             realized: None,
         });
@@ -220,10 +256,50 @@ impl LayerRegistry {
             modal,
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
+            name: None,
             content: LayerContent::View(node),
             realized: Some(realized),
         });
         id
+    }
+
+    /// Register a layer under an addressable [`name`](DynamicLayer#structfield.name), so
+    /// `show_layer` / `hide_layer` can reach it without knowing its `LayerId` — which is a runtime
+    /// counter no keybinding, config line or RPC call could ever know.
+    ///
+    /// Build `name` with [`layer_name`] so the owner half is stamped rather than typed. Re-registering
+    /// an existing name **replaces** that layer, which is what a remount should do; it returns the
+    /// new id either way.
+    pub(crate) fn add_named(
+        &mut self,
+        name: String,
+        band: LayerBand,
+        kind: LayerKind,
+        modal: bool,
+        covers_content: bool,
+        root: Box<dyn Component>,
+    ) -> LayerId {
+        self.layers.retain(|l| l.name.as_deref() != Some(name.as_str()));
+        let id = self.add(band, kind, modal, covers_content, root);
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.name = Some(name);
+        }
+        id
+    }
+
+    /// The layer registered under `name`, if any.
+    pub(crate) fn by_name(&self, name: &str) -> Option<LayerId> {
+        self.layers
+            .iter()
+            .find(|l| l.name.as_deref() == Some(name))
+            .map(|l| l.id)
+    }
+
+    /// Is the layer named `name` participating this frame?
+    pub(crate) fn is_visible_named(&self, name: &str) -> bool {
+        self.layers
+            .iter()
+            .any(|l| l.name.as_deref() == Some(name) && l.visible)
     }
 
     /// Reserve the next id **without** adding a layer, for the case where the layer's own
@@ -254,6 +330,7 @@ impl LayerRegistry {
             modal,
             covers_content,
             visible: true,
+            name: None,
             content: LayerContent::Native(root),
             realized: None,
         });
@@ -451,5 +528,51 @@ mod tests {
             .find(|l| l.id == native)
             .expect("the native layer is in the stack");
         assert!(native_layer.content.node().is_none());
+    }
+
+    /// **The owner half is unforgeable.** An author supplies only the short name, so a plugin has
+    /// nowhere to write a prefix — and a short name carrying its own dot is rejected rather than
+    /// joined, or `expose.thing` would read as if `docker.expose` owned it.
+    #[test]
+    fn a_layer_name_is_stamped_from_its_owner_and_cannot_be_forged() {
+        assert_eq!(layer_name("docker", "expose").as_deref(), Some("docker.expose"));
+        assert_eq!(layer_name(HOST_OWNER, "expose").as_deref(), Some("heca.expose"));
+        assert_eq!(layer_name("docker", "expose.thing"), None, "no smuggled second segment");
+        assert_eq!(layer_name("docker", "heca.expose"), None, "cannot claim another namespace");
+        assert_eq!(layer_name("docker", ""), None);
+    }
+
+    /// A named layer is addressable without knowing its `LayerId` — which is a runtime counter no
+    /// keybinding or RPC call could know. Re-registering the name replaces it, as a remount should.
+    #[test]
+    fn a_named_layer_is_addressable_and_re_registering_replaces_it() {
+        let mut reg = LayerRegistry::default();
+        let anonymous = reg.add(LayerBand::Overlay, LayerKind::OnDemand, false, false, empty_root());
+        let name = layer_name(HOST_OWNER, "expose").expect("valid");
+
+        let first = reg.add_named(
+            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
+        );
+        assert_eq!(reg.by_name(&name), Some(first));
+        assert!(!reg.is_visible_named(&name), "OnDemand starts hidden");
+
+        reg.show(first);
+        assert!(reg.is_visible_named(&name));
+
+        // A remount registers the same name again: one layer, the new one.
+        let second = reg.add_named(
+            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
+        );
+        assert_ne!(second, first);
+        assert_eq!(reg.by_name(&name), Some(second), "the name follows the new registration");
+        assert!(!reg.is_visible_named(&name), "and the replacement starts hidden again");
+
+        // An anonymous layer answers to no name, and is untouched by a named registration.
+        assert_eq!(reg.by_name("heca.nothing"), None);
+        reg.show(anonymous);
+        assert!(
+            reg.visible_front_to_back().iter().any(|l| l.id == anonymous),
+            "the unnamed layer is still in the stack after two named registrations",
+        );
     }
 }

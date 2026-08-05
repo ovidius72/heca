@@ -24,6 +24,8 @@
 //!   collapse-current-workspace | expand-current-workspace | toggle-current-workspace-collapsed
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
+//!   show-layer <name> [dock] | hide-layer <name> [dock] | toggle-layer <name> [dock]
+//!     (an addressable layer, named owner.short — e.g. heca.expose)
 //!   command-palette [mode] [query]
 //!     (both optional; `mode` is pane|workspace and composes with `query` into the prefilled
 //!      search — `command-palette pane nvim` opens the pane list narrowed to "nvim")
@@ -624,6 +626,20 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "collapse-current-column" => Ok(WmAction::CollapseCurrentColumn),
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
+        // `show-layer <name> [dock]` — the addressable-layer verbs (F003/P082/T327).
+        "show-layer" => Ok(WmAction::ShowLayer {
+            name: parts.next().map(|s| s.to_string()),
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+        "hide-layer" => Ok(WmAction::HideLayer {
+            name: parts.next().map(|s| s.to_string()),
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+        "toggle-layer" => Ok(WmAction::ToggleLayer {
+            name: parts.next().map(|s| s.to_string()),
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+
         // `command-palette [mode] [query]`, both optional — the same shape as `clear-search-*`.
         "command-palette" => Ok(WmAction::CommandPalette {
             mode: parts.next().map(|s| s.to_string()),
@@ -1213,6 +1229,28 @@ mod tests {
         // which this parser cannot express — it returns a `WmAction`, a closed enum.
         assert!(parse_rpc_command("sidebar-up").is_err());
         assert!(parse_rpc_command("sidebar-delete-selected").is_err());
+    }
+
+    /// The addressable-layer verbs parse with both arguments optional — a bare `show-layer` is
+    /// still a valid action, which is what keeps it offerable in the palette.
+    #[test]
+    fn test_layer_visibility_verbs() {
+        assert_eq!(
+            parse_rpc_command("show-layer heca.expose"),
+            Ok(WmAction::ShowLayer { name: Some("heca.expose".into()), dock: None }),
+        );
+        assert_eq!(
+            parse_rpc_command("hide-layer docker.expose docker.right"),
+            Ok(WmAction::HideLayer {
+                name: Some("docker.expose".into()),
+                dock: Some("docker.right".into()),
+            }),
+        );
+        assert_eq!(
+            parse_rpc_command("toggle-layer"),
+            Ok(WmAction::ToggleLayer { name: None, dock: None }),
+            "bare is valid: both arguments are optional",
+        );
     }
 
     #[test]

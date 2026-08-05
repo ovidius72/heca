@@ -406,6 +406,11 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
         WmAction::CommandPalette { .. }
+        // A layer is chrome, not the tiled content: showing one is allowed whatever the panes are
+        // doing, exactly as opening the palette is.
+        | WmAction::ShowLayer { .. }
+        | WmAction::HideLayer { .. }
+        | WmAction::ToggleLayer { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. } => ActionPolicy::AlwaysAllowed,
 

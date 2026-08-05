@@ -1995,6 +1995,32 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 /// The rows are read from the one [`ActionCatalog`](crate::actions::ActionCatalog) at open time, so
 /// this handler names nothing — a new plugin action, a rebind or a relabelled built-in is in the
 /// list without a change here. See [`crate::chrome::open_command_palette`].
+/// Show / hide / toggle a layer **by name** (F003/P082/T327).
+///
+/// `dock` is accepted and currently unused: a layer name is type-level, so it only starts to matter
+/// when one component is seated twice and each seating registers its own layer. Parsed now so the
+/// argument does not change shape later — the same reason `focus_dock` takes an optional `dock`.
+///
+/// An unknown name is a **no-op, not a panic**: names come from config and RPC, so a typo must not
+/// take the app down. It is silent for now; saying so is a notification producer and belongs to
+/// F009, alongside T335 and T381.
+pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
+    let (name, show) = match action {
+        WmAction::ShowLayer { name, .. } => (name, Some(true)),
+        WmAction::HideLayer { name, .. } => (name, Some(false)),
+        WmAction::ToggleLayer { name, .. } => (name, None),
+        _ => return,
+    };
+    let Some(name) = name.as_deref() else { return };
+    let Some(id) = state.layers.by_name(name) else { return };
+    let show = show.unwrap_or(!state.layers.is_visible_named(name));
+    match show {
+        true => state.layers.show(id),
+        false => state.layers.hide(id),
+    }
+    state.needs_redraw = true;
+}
+
 pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
     let (mode, query) = match action {
         WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
