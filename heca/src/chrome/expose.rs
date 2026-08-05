@@ -162,6 +162,9 @@ use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{Flex, Label, Row};
 use heca_grid_ui::Component;
 
+/// Per workspace row, the panes left to right with the signal that lights each box.
+pub(crate) type NavMap = Vec<Vec<(PaneId, heca_grid_ui::reactive::Signal<bool>)>>;
+
 /// The `nav_key` of a pane's box — the row's one identity, so the cursor, the right-click target
 /// and later a drag are three readers of a single declaration (the rule F003/P085/T354 set).
 pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
@@ -182,7 +185,16 @@ const LABEL_W: f64 = 130.0;
 /// independently would make every workspace look identical and destroy the whole point.
 ///
 /// `avail` is the room the layer has for the strips, excluding the name column.
-pub(crate) fn build(rows: &[ExposeWorkspace], theme: &GuiTheme, avail_w: f64) -> Box<dyn Component> {
+///
+/// Returns the tree **and** one nav signal per pane box, in visual order per workspace row — the
+/// same arrangement `CommandPalette` uses for its match marks: the selection moves by writing a
+/// signal, so nothing is rebuilt to light a different box.
+pub(crate) fn build(
+    rows: &[ExposeWorkspace],
+    theme: &GuiTheme,
+    avail_w: f64,
+) -> (Box<dyn Component>, NavMap) {
+    let mut nav: NavMap = Vec::new();
     let widest = rows
         .iter()
         .map(|r| r.strip_width)
@@ -194,6 +206,7 @@ pub(crate) fn build(rows: &[ExposeWorkspace], theme: &GuiTheme, avail_w: f64) ->
 
     let mut stack = Flex::column().gap(ROW_GAP).grow(1.0);
     for ws in rows {
+        let mut row_nav = Vec::new();
         let mut strip = Flex::row().gap(COL_GAP).grow(1.0);
         for col in &ws.columns {
             let mut column = Flex::column()
@@ -203,8 +216,10 @@ pub(crate) fn build(rows: &[ExposeWorkspace], theme: &GuiTheme, avail_w: f64) ->
                 // A `Row` is the app's card: background, radius, and `nav_key` — the same widget
                 // the sidebar uses for a pane, so selection and right-click come from the shared
                 // declaration rather than from anything invented here.
+                let card = Row::new();
+                row_nav.push((pane.pane_id, card.nav_state()));
                 column = column.child(
-                    Row::new()
+                    card
                         .background(theme.colors.foreground.with_alpha(
                             super::alpha_u8(theme.colors.card_background_alpha),
                         ))
@@ -219,6 +234,7 @@ pub(crate) fn build(rows: &[ExposeWorkspace], theme: &GuiTheme, avail_w: f64) ->
             }
             strip = strip.child(column);
         }
+        nav.push(row_nav);
         stack = stack.child(
             Flex::row()
                 .gap(ROW_GAP)
@@ -230,7 +246,7 @@ pub(crate) fn build(rows: &[ExposeWorkspace], theme: &GuiTheme, avail_w: f64) ->
                 .child(strip),
         );
     }
-    Box::new(stack)
+    (Box::new(stack), nav)
 }
 
 /// Register (or re-register) the exposé as the named layer `heca.expose`.
@@ -259,7 +275,21 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     });
     let theme = super::chrome_gui_theme(state);
     let width = state.session.viewport_size.w;
-    let root = build(&rows, &theme, width);
+    let (tree, nav) = build(&rows, &theme, width);
+    let event_proxy = state.event_proxy.clone();
+    let emit: super::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
+        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: crate::app::interaction::InteractionSource::Keyboard,
+            intent,
+        });
+    });
+    // Start on the pane you are in, so the map opens where you are standing.
+    let here = state
+        .session
+        .active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|p| p.id);
+    let root: Box<dyn Component> = Box::new(Expose::new(tree, nav, emit, here));
     // Modal + covering: the overview is a context switch — it replaces what you are looking at, so
     // nothing behind it should be acted on. `covers_content` is what `Domain::Overlay` reads.
     let was_visible = state.layers.is_visible_named(&name);
@@ -279,6 +309,135 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     Some(id)
 }
 
+
+// ── The component ──────────────────────────────────────────────────────────────
+
+use heca_grid_ui::component::{Base, Event, Handled, WidgetIntent};
+use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+
+/// The exposé's root: the rows, plus the cursor over them.
+///
+/// It answers the **generic** widget navigation vocabulary rather than inventing keys —
+/// `item_previous`/`item_next` are the horizontal axis and `menu_up`/`menu_down` the vertical one,
+/// which is exactly `[keys.widgets]`' existing split and already spelled `Ctrl+h`/`Ctrl+l` and
+/// `Ctrl+k`/`Ctrl+j`. So the keys the user asked for arrive with no new action and no new binding.
+pub(crate) struct Expose {
+    base: Base,
+    /// Per workspace row, the panes left to right with the signal that lights each box.
+    nav: NavMap,
+    /// (row, index within the row).
+    cursor: (usize, usize),
+    emit: super::ChromeIntentEmitter,
+}
+
+impl Expose {
+    pub(crate) fn new(
+        tree: Box<dyn Component>,
+        nav: NavMap,
+        emit: super::ChromeIntentEmitter,
+        start: Option<PaneId>,
+    ) -> Self {
+        let mut base = Base::new();
+        base.style.layout.width = Length::Pct(1.0);
+        base.style.layout.height = Length::Pct(1.0);
+        base.children.push(tree);
+        // Open on the pane you are in, so the view starts where you are rather than at the corner.
+        let cursor = start
+            .and_then(|id| {
+                nav.iter().enumerate().find_map(|(r, row)| {
+                    row.iter().position(|(p, _)| *p == id).map(|c| (r, c))
+                })
+            })
+            .unwrap_or((0, 0));
+        let mut me = Self { base, nav, cursor, emit };
+        me.sync();
+        me
+    }
+
+    /// Light the selected box and darken the rest. A write per box, never a rebuild.
+    fn sync(&mut self) {
+        for (r, row) in self.nav.iter().enumerate() {
+            for (c, (_, sig)) in row.iter().enumerate() {
+                let on = (r, c) == self.cursor;
+                if sig.get_untracked() != on {
+                    sig.set(on);
+                }
+            }
+        }
+    }
+
+    /// Move within the row (`dx`) or between workspaces (`dy`), clamped — the ends do not wrap,
+    /// because a map you can fall off the edge of is disorienting.
+    fn step(&mut self, dx: isize, dy: isize) {
+        if self.nav.is_empty() {
+            return;
+        }
+        let rows = self.nav.len() as isize;
+        let r = (self.cursor.0 as isize + dy).clamp(0, rows - 1) as usize;
+        let len = self.nav[r].len() as isize;
+        if len == 0 {
+            // An empty workspace has no pane to sit on; keep the row, park the index.
+            self.cursor = (r, 0);
+            self.sync();
+            return;
+        }
+        // Changing row keeps the column where possible, the way a grid should.
+        let base = if dy == 0 { self.cursor.1 as isize } else { self.cursor.1.min(len as usize - 1) as isize };
+        let c = (base + dx).clamp(0, len - 1) as usize;
+        self.cursor = (r, c);
+        self.sync();
+    }
+
+    fn selected(&self) -> Option<PaneId> {
+        self.nav.get(self.cursor.0).and_then(|r| r.get(self.cursor.1)).map(|(p, _)| *p)
+    }
+
+    fn close(&self) {
+        if let Some(name) = super::layers::layer_name(super::layers::HOST_OWNER, "expose") {
+            (self.emit)(crate::app::interaction::InteractionIntent::ActivateAction(
+                crate::input::WmAction::HideLayer { name: Some(name), dock: None },
+            ));
+        }
+    }
+}
+
+impl Component for Expose {
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
+    fn focusable(&self) -> bool {
+        true
+    }
+    fn overlay_active(&self) -> bool {
+        true
+    }
+
+    fn on_event_capture(&mut self, ev: &Event) -> Handled {
+        let Event::Widget(intent) = ev else {
+            // The overview is modal: it swallows the rest rather than letting it reach the panes
+            // behind, which are deliberately not actionable while it is up.
+            return Handled::No;
+        };
+        match intent {
+            WidgetIntent::ItemPrevious => self.step(-1, 0),
+            WidgetIntent::ItemNext => self.step(1, 0),
+            WidgetIntent::MenuUp => self.step(0, -1),
+            WidgetIntent::MenuDown => self.step(0, 1),
+            WidgetIntent::Activate => {
+                if let Some(pane_id) = self.selected() {
+                    (self.emit)(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
+                }
+                self.close();
+            }
+            WidgetIntent::Dismiss => self.close(),
+            _ => return Handled::No,
+        }
+        Handled::Yes
+    }}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,7 +448,7 @@ mod tests {
         let mut s = Session::new(SessionId(0), viewport, 1.0, LayoutOptions::default());
         s.workspaces[0].name = Some("Editing".to_string());
         s.add_pane(Pane::new(PaneId(1), "a"), None, false);
-        s.add_pane(Pane::new(PaneId(2), "b"), Some(1), false);
+        s.add_pane(Pane::new(PaneId(2), "b"), None, false);
         s.add_workspace(Rectangle::from_size(viewport));
         s
     }
@@ -366,5 +525,48 @@ mod tests {
         let room = 10_000.0_f64;
         let scale = ((room - 130.0) / widest.max(1.0)).min(1.0);
         assert_eq!(scale, 1.0, "a huge window does not magnify a small session");
+    }
+
+    /// The cursor moves on the **generic** nav vocabulary — no keys of its own — and clamps at the
+    /// edges rather than wrapping. Moving between workspaces keeps the column where it can.
+    #[test]
+    fn the_cursor_walks_the_grid_and_stops_at_the_edges() {
+        use heca_grid_ui::component::WidgetIntent as W;
+        let s = session();
+        let rows = model(&s, |p| p.title.clone());
+        let theme = heca_grid_ui::theme::Theme::default();
+        let (tree, nav) = build(&rows, &theme, 1200.0);
+        let lit = nav.clone();
+        let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let mut ex = Expose::new(tree, nav, emit, None);
+
+        let selected = |lit: &NavMap| {
+            let mut out = None;
+            for (r, row) in lit.iter().enumerate() {
+                for (c, (_, sig)) in row.iter().enumerate() {
+                    if sig.get_untracked() {
+                        assert!(out.is_none(), "exactly one box is lit");
+                        out = Some((r, c));
+                    }
+                }
+            }
+            out
+        };
+
+        assert_eq!(selected(&lit), Some((0, 0)), "opens on the first pane when nothing is focused");
+
+        // Left at the edge stays put — the map has no wrap-around to fall off.
+        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::ItemPrevious));
+        assert_eq!(selected(&lit), Some((0, 0)));
+
+        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::ItemNext));
+        assert_eq!(selected(&lit), Some((0, 1)), "right moves along the workspace row");
+
+        // Down onto the empty workspace: the row changes, and nothing is lit there.
+        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::MenuDown));
+        assert_eq!(selected(&lit), None, "an empty workspace has no pane to sit on");
+
+        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::MenuUp));
+        assert!(selected(&lit).is_some(), "coming back lands on a pane again");
     }
 }
