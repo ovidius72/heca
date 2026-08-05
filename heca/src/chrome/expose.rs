@@ -193,6 +193,7 @@ pub(crate) fn build(
     rows: &[ExposeWorkspace],
     theme: &GuiTheme,
     avail_w: f64,
+    avail_h: f64,
 ) -> (Box<dyn Component>, NavMap) {
     let mut nav: NavMap = Vec::new();
     let widest = rows
@@ -208,14 +209,26 @@ pub(crate) fn build(
     // its own the panes show straight through it and the map is unreadable — which is exactly what
     // it did on first sight. The theme's window background, not a scrim: this is a full-screen
     // context switch, not a dialog floating over content you are meant to keep seeing.
-    let mut stack = Flex::column().gap(ROW_GAP).grow(1.0);
+    // **A share is an explicit size, not `grow`.** `flex_grow` distributes only *positive* free
+    // space, so a column of `grow(1.0)` rows does not divide the height — every row collapses to
+    // its content and the map becomes one short box floating in the middle. Each workspace gets a
+    // real height instead.
+    let n = rows.len().max(1) as f64;
+    let row_h = ((avail_h - ROW_GAP as f64 * (n + 1.0)) / n).max(40.0);
+
+    let mut stack = Flex::column().gap(ROW_GAP);
     for ws in rows {
         let mut row_nav = Vec::new();
         let mut strip = Flex::row().gap(COL_GAP).grow(1.0);
         for col in &ws.columns {
+            // Panes share their column's height the same way — explicitly.
+            let pane_h = ((row_h - COL_GAP as f64 * (col.panes.len() as f64 - 1.0).max(0.0))
+                / col.panes.len().max(1) as f64)
+                .max(20.0);
             let mut column = Flex::column()
                 .gap(COL_GAP)
-                .width(Length::Px((col.width * scale) as f32));
+                .width(Length::Px((col.width * scale) as f32))
+                .height(Length::Px(row_h as f32));
             for pane in &col.panes {
                 // A `Row` is the app's card: background, radius, and `nav_key` — the same widget
                 // the sidebar uses for a pane, so selection and right-click come from the shared
@@ -232,7 +245,7 @@ pub(crate) fn build(
                         .padding(4.0)
                         .active(pane.active)
                         .nav_key(pane_nav_key(pane.pane_id))
-                        .grow(1.0)
+                        .height(Length::Px(pane_h as f32))
                         .child(Label::new(pane.name.clone())),
                 );
             }
@@ -243,7 +256,7 @@ pub(crate) fn build(
             Flex::row()
                 .gap(ROW_GAP)
                 .align(Align::Center)
-                .grow(1.0)
+                .height(Length::Px(row_h as f32))
                 .child(Flex::row().width(Length::Px(LABEL_W as f32)).child(
                     Label::new(ws.name.clone()).muted(!ws.active),
                 ))
@@ -255,10 +268,12 @@ pub(crate) fn build(
     // first sight. `Surface` is the library's decorated container; `Flex` is layout only and
     // deliberately carries no fill, so this is the widget for the job rather than a new property.
     //
-    // The window background, not a scrim: this is a full-screen context switch, not a dialog
-    // floating over content you are meant to keep seeing.
+    // The window background **forced opaque**. heca's own background is translucent by design
+    // (the frosted compositor), so painting with it as-is left the app showing through and the
+    // sidebars readable straight over the map. A layer that is a context switch has to hide what
+    // it replaces; `paint_layers` already draws after the chrome, so opacity is the whole fix.
     let root = Surface::column()
-        .background(theme.colors.background)
+        .background(theme.colors.background.with_alpha(255))
         .padding(ROW_GAP)
         .width(Length::Pct(1.0))
         .height(Length::Pct(1.0))
@@ -292,7 +307,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     });
     let theme = super::chrome_gui_theme(state);
     let width = state.session.viewport_size.w;
-    let (tree, nav) = build(&rows, &theme, width);
+    let (tree, nav) = build(&rows, &theme, width, state.session.viewport_size.h);
     let event_proxy = state.event_proxy.clone();
     let emit: super::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
         let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
@@ -552,7 +567,7 @@ mod tests {
         let s = session();
         let rows = model(&s, |p| p.title.clone());
         let theme = heca_grid_ui::theme::Theme::default();
-        let (tree, nav) = build(&rows, &theme, 1200.0);
+        let (tree, nav) = build(&rows, &theme, 1200.0, 800.0);
         let lit = nav.clone();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
         let mut ex = Expose::new(tree, nav, emit, None);
