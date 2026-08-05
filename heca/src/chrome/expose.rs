@@ -73,6 +73,9 @@ pub(crate) struct ExposeWorkspace {
     /// [`ExposeColumn::width`]. This is what lets the row show which part you are actually looking
     /// at, and it is why the rows in a bird's-eye are offset from one another.
     pub(crate) viewport: (f64, f64),
+    /// The workspace's viewport height — the other half of its shape, so a row can be drawn as the
+    /// screen scaled rather than as a bar of arbitrary height.
+    pub(crate) viewport_h: f64,
     /// The strip's total width — the sum of the columns, or the viewport when there are none. The
     /// scale factor for the row is this against the room the row is given.
     pub(crate) strip_width: f64,
@@ -144,6 +147,7 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
                     .collect(),
                 columns,
                 viewport: (view_x, view_w),
+                viewport_h: scrolling.working_area.size.h,
                 // A workspace with no columns is still a row, as wide as its viewport, so an empty
                 // workspace does not collapse to nothing and become unselectable.
                 strip_width: if strip > 0.0 { strip } else { view_w },
@@ -171,8 +175,14 @@ pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
 /// The gutter holding a workspace's name — a fixed label column, so the strips all start at the
 /// same x whatever a workspace is called.
 const GUTTER_W: f32 = 120.0;
-/// Smallest a workspace row may be drawn before the stack starts scrolling instead of squeezing.
-const ROW_MIN_H: f32 = 90.0;
+/// How large the map draws things, as a fraction of life size — niri's `overview { zoom }`, whose
+/// range is 0–0.75 and whose default is 0.5.
+///
+/// **Everything is drawn at real size times this**, which is what makes the map a map: a workspace
+/// row is the viewport's shape, a column keeps its real proportion of the screen, and a strip
+/// scrolled past one screen really is wider than its row — so it scrolls, instead of being squashed
+/// to fit and telling you nothing. Fitting-to-fit was tried twice and lost exactly that.
+const ZOOM: f64 = 0.5;
 
 /// A share expressed as `flex_grow`, plus the two things that make it a share.
 ///
@@ -269,15 +279,16 @@ pub(crate) fn map(
             //
             // A ratio, not a computed pixel: taffy resolves `Pct` against the row, so nothing here
             // knows how wide the row will be.
-            let frac = (col.width / ws.viewport.1.max(1.0)) as f32;
-            strip = strip.child(column.width(Length::Pct(frac)).shrink(0.0));
+            strip = strip.child(column.width(Length::Px((col.width * ZOOM) as f32)).shrink(0.0));
             columns_of_cells.push(cells);
         }
+        // The row is the **viewport's shape**, scaled: that is why a pane box looks like a pane and
+        // not a wide flat bar. Its height is the screen's height at the same zoom the widths use.
+        let row_h = (ws.viewport_h * ZOOM) as f32;
         let row = Flex::row()
             .gap_spacing(Spacing::Sm)
             .align(Align::Stretch)
-            // A minimum so a row stays legible once there are many; past that the stack scrolls.
-            .min_height(Length::Px(ROW_MIN_H))
+            .height(Length::Px(row_h))
             .child(
                 Flex::row()
                     .width(Length::Px(GUTTER_W))
@@ -289,7 +300,7 @@ pub(crate) fn map(
             // deliberately wider than its row — that is the fact worth seeing. niri does the same:
             // its overview fixes a zoom and scrolls rather than shrinking everything to fit.
             .child(ScrollRegion::new().horizontal().grow(1.0).child(strip));
-        grid = grid.row(columns_of_cells, share(row, 1.0, true));
+        grid = grid.row(columns_of_cells, row);
     }
     if let Some(id) = start {
         grid = grid.selected(id.0.to_string());
