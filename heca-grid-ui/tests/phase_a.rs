@@ -5507,3 +5507,54 @@ fn a_margin_can_be_set_per_axis() {
         "margin_top overrides margin_y",
     );
 }
+
+/// **`CardGrid` owns where the selection is, and nothing about what a card means.** It answers the
+/// shared nav vocabulary, clamps at the edges, and hands the caller back its own key.
+#[test]
+fn a_card_grid_walks_two_axes_and_returns_the_callers_key() {
+    use heca_grid_ui::reactive::{signal, SignalGet};
+    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label};
+    use heca_grid_ui::WidgetIntent;
+
+    let lit: Vec<Signal<bool>> = (0..3).map(|_| signal(false)).collect();
+    let chosen = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+    let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
+
+    let (c, d) = (chosen.clone(), dismissed.clone());
+    let mut grid = CardGrid::new()
+        .row(
+            vec![
+                GridCell::new("a", lit[0]),
+                GridCell::new("b", lit[1]),
+            ],
+            Flex::row().child(Label::new("a")).child(Label::new("b")),
+        )
+        // A row with no cards is still reachable — the cursor parks on it.
+        .row(vec![], Flex::row())
+        .row(vec![GridCell::new("c", lit[2])], Flex::row().child(Label::new("c")))
+        .on_activate(move |key| *c.borrow_mut() = key.to_string())
+        .on_dismiss(move || d.set(true))
+        .selected("b");
+
+    assert_eq!(grid.selected_key(), Some("b"), "opens on the requested card");
+    assert!(lit[1].get_untracked(), "and that card is the lit one");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemNext));
+    assert_eq!(grid.selected_key(), Some("b"), "right at the end stays put — no wrap");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemPrevious));
+    assert_eq!(grid.selected_key(), Some("a"));
+    assert!(lit[0].get_untracked() && !lit[1].get_untracked(), "exactly one card is lit");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
+    assert_eq!(grid.selected_key(), None, "an empty row is a row you can stand on");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
+    assert_eq!(grid.selected_key(), Some("c"), "and you can move past it");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(chosen.borrow().as_str(), "c", "the caller gets its own key back");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Dismiss));
+    assert!(dismissed.get());
+}
