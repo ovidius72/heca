@@ -213,7 +213,8 @@ pub(crate) fn map(
     emit: super::ChromeIntentEmitter,
     start: Option<PaneId>,
 ) -> Box<dyn Component> {
-    let mut grid = CardGrid::new();
+    // Workspaces need air between them or two rows of panes read as one grid.
+    let mut grid = CardGrid::new().gap_spacing(Spacing::Md);
     for ws in rows {
         let mut columns_of_cells: Vec<Vec<GridCell>> = Vec::new();
         let mut strip = Flex::row().gap_spacing(Spacing::Xs).grow(1.0);

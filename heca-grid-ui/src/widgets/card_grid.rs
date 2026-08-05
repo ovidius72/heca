@@ -179,6 +179,10 @@ impl CardGrid {
     }
 }
 
+// A grid is a container: the caller sets its gap, padding and sizing like any other, rather than
+// the widget baking in spacing it cannot know the right value for.
+impl crate::builders::LayoutExt for CardGrid {}
+
 impl Default for CardGrid {
     fn default() -> Self {
         Self::new()
