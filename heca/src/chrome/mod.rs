@@ -6,6 +6,7 @@
 mod contribution;
 pub(crate) mod context_menu;
 mod events;
+mod expose;
 mod focus;
 mod host;
 mod layers;
