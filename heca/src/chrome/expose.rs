@@ -159,7 +159,7 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
 use heca_grid_ui::builders::{LayoutExt, NavExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Flex, Label, Row};
+use heca_grid_ui::widgets::{Flex, Label, Row, Surface};
 use heca_grid_ui::Component;
 
 /// Per workspace row, the panes left to right with the signal that lights each box.
@@ -204,6 +204,10 @@ pub(crate) fn build(
     // Never magnify: a session narrower than the window is drawn at 1:1 rather than blown up.
     let scale = (room / widest).min(1.0);
 
+    // **An overlay is opaque.** The layer sits over the running app, so without a background of
+    // its own the panes show straight through it and the map is unreadable — which is exactly what
+    // it did on first sight. The theme's window background, not a scrim: this is a full-screen
+    // context switch, not a dialog floating over content you are meant to keep seeing.
     let mut stack = Flex::column().gap(ROW_GAP).grow(1.0);
     for ws in rows {
         let mut row_nav = Vec::new();
@@ -246,7 +250,20 @@ pub(crate) fn build(
                 .child(strip),
         );
     }
-    (Box::new(stack), nav)
+    // **An overlay is opaque.** The layer sits over the running app, so without a surface of its
+    // own the panes show straight through it and the map is unreadable — which is what it did on
+    // first sight. `Surface` is the library's decorated container; `Flex` is layout only and
+    // deliberately carries no fill, so this is the widget for the job rather than a new property.
+    //
+    // The window background, not a scrim: this is a full-screen context switch, not a dialog
+    // floating over content you are meant to keep seeing.
+    let root = Surface::column()
+        .background(theme.colors.background)
+        .padding(ROW_GAP)
+        .width(Length::Pct(1.0))
+        .height(Length::Pct(1.0))
+        .child(stack);
+    (Box::new(root), nav)
 }
 
 /// Register (or re-register) the exposé as the named layer `heca.expose`.
