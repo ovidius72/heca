@@ -259,10 +259,18 @@ pub(crate) fn map(
                 // Panes divide their column's height evenly — each an equal share.
                 column = column.child(share(card, 1.0, true));
             }
-            // **The column's share is its real width**, so the row is filled edge to edge and the
-            // proportions still hold: a wide column stays wide relative to its neighbours, but a
-            // workspace with one column no longer leaves the rest of the row empty.
-            strip = strip.child(share(column, col.width, false));
+            // **A column's width is its fraction of the VIEWPORT, not a share of the row.**
+            //
+            // A share always fills, so one column became the whole row and a workspace holding a
+            // single half-screen pane looked exactly like one holding four. The map has to keep the
+            // relationship to the screen, not just the ratio between columns: half the viewport is
+            // half the row, and a strip wider than the viewport runs past the row's edge — which is
+            // the truth about that workspace and the reason the view exists.
+            //
+            // A ratio, not a computed pixel: taffy resolves `Pct` against the row, so nothing here
+            // knows how wide the row will be.
+            let frac = (col.width / ws.viewport.1.max(1.0)) as f32;
+            strip = strip.child(column.width(Length::Pct(frac)).shrink(0.0));
             columns_of_cells.push(cells);
         }
         let row = Flex::row()

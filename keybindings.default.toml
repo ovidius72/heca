@@ -144,7 +144,7 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 # here, listed in the palette and reachable over RPC. It takes no target: an overlay id is a runtime
 # counter nothing outside the process could name, so it closes whatever is in front, and does
 # nothing when there is none.
-close_overlay   = ["Escape", "Ctrl+q"]
+close_overlay   = ["Escape", "q", "Ctrl+q"]
 
 
 
