@@ -5558,3 +5558,32 @@ fn a_card_grid_walks_two_axes_and_returns_the_callers_key() {
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Dismiss));
     assert!(dismissed.get());
 }
+
+/// **An overlay must not eat a key its panel did not want.** `Keymap::dispatch` offers the raw key
+/// first and the semantic intent second, so claiming the key stops the walk before the intent
+/// arrives — which is how Esc stopped closing an overlay and `Ctrl+h` never reached `item_previous`.
+#[test]
+fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
+    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay};
+    use heca_grid_ui::reactive::signal;
+    use heca_grid_ui::{GridKey, WidgetIntent};
+
+    let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let d = dismissed.clone();
+    let lit = signal(false);
+    let grid = CardGrid::new()
+        .row(vec![GridCell::new("a", lit)], Flex::row().child(Label::new("a")))
+        .on_dismiss(move || d.set(true));
+    let mut overlay = Overlay::new().blocking(true).panel(grid).open(true);
+
+    // A raw key the panel has no use for: the overlay must NOT claim it, or the keymap stops here.
+    let handled = heca_grid_ui::dispatch(
+        &mut overlay,
+        &Event::Key { key: GridKey::Escape, pressed: true },
+    );
+    assert_eq!(handled, Handled::No, "an unwanted key is not swallowed");
+
+    // …so the intent the same chord resolves to still arrives, and closes the layer.
+    heca_grid_ui::dispatch(&mut overlay, &Event::Widget(WidgetIntent::Dismiss));
+    assert!(dismissed.get(), "Dismiss reached the panel");
+}

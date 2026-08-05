@@ -880,14 +880,15 @@ impl Component for Overlay {
             // driven from the keyboard: a `CardGrid`'s cursor never moved and `Dismiss` never
             // arrived, which is exactly how an overlay became impossible to close with Esc.
             //
-            // Swallowed afterwards when blocking, for the same reason a modal swallows the pointer:
-            // a key the panel did not want must not reach the app behind it.
+            // **The panel's answer is returned as-is — a blocking layer does NOT swallow these.**
+            // `Keymap::dispatch` offers the raw key first and only then the semantic intents it
+            // resolves to, so claiming an unwanted key as handled stops the walk before the intent
+            // arrives: Esc never became `Dismiss`, and `Ctrl+h` never got past `edit_delete_back`
+            // to `item_previous`. Keys reaching the app behind is not a risk here anyway — this
+            // path runs only while a modal layer is up.
             _ => {
                 let panel_root = self.base.children[0].as_mut();
-                if crate::component::dispatch(panel_root, ev) == Handled::Yes {
-                    return Handled::Yes;
-                }
-                if self.blocking { Handled::Yes } else { Handled::No }
+                crate::component::dispatch(panel_root, ev)
             }
         }
     }
