@@ -157,9 +157,9 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
 // ── The composition ───────────────────────────────────────────────────────────
 
 use heca_grid_ui::builders::{LayoutExt, NavExt, Parent, StyleExt};
-use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::style::{Align, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay, Row, Surface};
+use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay, Row, ScrollRegion, Surface};
 use heca_grid_ui::Component;
 
 /// The `nav_key` of a pane's box — the row's one identity, so the cursor, the right-click target
@@ -168,107 +168,93 @@ pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
     format!("expose.pane.{}", pane_id.0)
 }
 
-/// Gap between workspace rows, and between the columns inside one.
-const ROW_GAP: f32 = 10.0;
-const COL_GAP: f32 = 4.0;
-/// The gutter holding a workspace's name.
-const GUTTER_W: f64 = 120.0;
-/// The most the map is ever drawn at, as a fraction of life size.
+/// The gutter holding a workspace's name — a fixed label column, so the strips all start at the
+/// same x whatever a workspace is called.
+const GUTTER_W: f32 = 120.0;
+/// Smallest a workspace row may be drawn before the stack starts scrolling instead of squeezing.
+const ROW_MIN_H: f32 = 90.0;
+
+/// A share expressed as `flex_grow`, plus the two things that make it a share.
 ///
-/// Without it a session with one workspace is drawn 1:1 and the overview says nothing you could not
-/// already see. niri's overview caps itself the same way (`zoom`, default 0.5).
-const MAX_ZOOM: f64 = 0.5;
+/// `flex_grow` alone does **not** divide a region — it distributes only *positive* free space, so a
+/// row of `grow(1.0)` children collapses to its content. A share needs a **zero base size and
+/// permission to shrink** as well (CSS `flex: 1 1 0`). Written once here so no caller re-derives it.
+fn share<T: LayoutExt + Component>(node: T, weight: f64, vertical: bool) -> T {
+    let node = node.grow(weight.max(0.001) as f32);
+    let node = match vertical {
+        true => node.height(Length::Px(0.0)),
+        false => node.width(Length::Px(0.0)),
+    };
+    node.shrink(1.0)
+}
 
 /// Build the overview — **a composition, not a widget**: it binds `PaneId` to a `FocusPane` intent
-/// and the `hide_layer` action, which is the only reason it is not in `heca-grid-ui`.
+/// and the `close_overlay` action, which is the only reason it is not in `heca-grid-ui`.
 ///
 /// Plain data in, a `Component` out, and **never `&AppState`** (§ 0b): the session is already
 /// reduced to [`ExposeWorkspace`]s by [`model`], so this is testable without a window.
 ///
+/// **Nothing here computes pixels.** Sizes are declared as relationships and taffy resolves them —
+/// a column's width is its share of the row, weighted by the column's real width, so the row is
+/// always filled and the proportions are still true. Gaps and padding are `Spacing` tokens, which
+/// scale with the font, rather than literals. The earlier version hand-computed a scale, a row
+/// height and a pane height, which is the layout engine's job and is why the map wasted its width.
+///
 /// What is drawn, and what is not:
-/// - **A workspace is a row.** No box, no border, no fill — it exists as vertical position and a
-///   muted name in the gutter. Drawing a workspace-shaped rectangle is what made the first attempt
-///   read as "a rectangle with nothing inside".
-/// - **A column is invisible grouping**: it sets the horizontal slot's width, proportional to the
-///   real column, and stacks its panes.
+/// - **A workspace is a row.** No box, no border, no fill — vertical position and a muted name.
+/// - **A column is invisible grouping** that takes its share of the row's width.
 /// - **A pane is the only thing with a surface.**
 ///
-/// The overlay behaviour — filling the viewport, the scrim, swallowing outside input — is
-/// [`Overlay`]'s, and the cursor is [`CardGrid`]'s. Neither is re-implemented here.
+/// The overlay behaviour is [`Overlay`]'s, the cursor is [`CardGrid`]'s, and the overflow is
+/// [`ScrollRegion`]'s. None of the three is re-implemented here.
 pub(crate) fn map(
     rows: &[ExposeWorkspace],
     theme: &GuiTheme,
     emit: super::ChromeIntentEmitter,
-    avail_w: f64,
-    avail_h: f64,
     start: Option<PaneId>,
 ) -> Box<dyn Component> {
-    // **One scale, both axes** — that is what makes this a bird's-eye rather than a diagram. A
-    // workspace is viewport-sized, so its row is the viewport scaled: same aspect, same relative
-    // width, and a wide column still looks wide.
-    //
-    // The scale is the smallest of three: what the width allows, what stacking every workspace
-    // vertically allows, and `MAX_ZOOM`. The cap is the answer to "should it be full height" — no.
-    // With a single workspace the first two allow 1:1, which would draw the map at life size and
-    // tell the user nothing. niri caps its overview the same way (`zoom 0.5`).
-    let widest = rows.iter().map(|r| r.strip_width).fold(0.0_f64, f64::max).max(1.0);
-    let n = rows.len().max(1) as f64;
-    let room_h = (avail_h - ROW_GAP as f64 * (n + 1.0)).max(1.0);
-    let scale = (((avail_w - GUTTER_W).max(1.0)) / widest)
-        .min(room_h / (n * avail_h.max(1.0)))
-        .min(MAX_ZOOM);
-    // A share is an explicit size: `flex_grow` distributes only positive free space, so it cannot
-    // divide a region — rows built with it collapse to their content.
-    let row_h = (avail_h * scale).max(40.0);
-
     let mut grid = CardGrid::new();
     for ws in rows {
         let mut columns_of_cells: Vec<Vec<GridCell>> = Vec::new();
-        let mut strip = Flex::row().gap(COL_GAP).height(Length::Px(row_h as f32));
+        let mut strip = Flex::row().gap_spacing(Spacing::Xs).grow(1.0);
         for col in &ws.columns {
             let mut cells = Vec::new();
-            let pane_h = ((row_h - COL_GAP as f64 * (col.panes.len() as f64 - 1.0).max(0.0))
-                / col.panes.len().max(1) as f64)
-                .max(20.0);
-            let mut column = Flex::column()
-                .gap(COL_GAP)
-                .width(Length::Px((col.width * scale) as f32))
-                .height(Length::Px(row_h as f32));
+            let mut column = Flex::column().gap_spacing(Spacing::Xs);
             for pane in &col.panes {
-                // The card lights from its OWN nav signal — `CardGrid` writes it, `Row` reads it.
-                // No new widget API: `nav_state()` is the seam that already exists for this.
                 let card = Row::new();
                 cells.push(GridCell::new(pane.pane_id.0.to_string(), card.nav_state()));
-                column = column.child(
-                    card
-                        .background(theme.colors.foreground.with_alpha(
-                            super::alpha_u8(theme.colors.card_background_alpha),
-                        ))
-                        .highlight(theme.colors.accent)
-                        .radius(theme.colors.control_radius())
-                        .padding(4.0)
-                        .active(pane.active)
-                        .nav_key(pane_nav_key(pane.pane_id))
-                        .height(Length::Px(pane_h as f32))
-                        .child(Label::new(pane.name.clone())),
-                );
+                let card = card
+                    .background(theme.colors.foreground.with_alpha(
+                        super::alpha_u8(theme.colors.card_background_alpha),
+                    ))
+                    .highlight(theme.colors.accent)
+                    .radius(theme.colors.control_radius())
+                    .pad_all(Spacing::Xs)
+                    .active(pane.active)
+                    .nav_key(pane_nav_key(pane.pane_id))
+                    .child(Label::new(pane.name.clone()));
+                // Panes divide their column's height evenly — each an equal share.
+                column = column.child(share(card, 1.0, true));
             }
-            strip = strip.child(column);
+            // **The column's share is its real width**, so the row is filled edge to edge and the
+            // proportions still hold: a wide column stays wide relative to its neighbours, but a
+            // workspace with one column no longer leaves the rest of the row empty.
+            strip = strip.child(share(column, col.width, false));
             columns_of_cells.push(cells);
         }
-        grid = grid.row(
-            columns_of_cells,
-            Flex::row()
-                .gap(ROW_GAP)
-                .align(Align::Center)
-                .height(Length::Px(row_h as f32))
-                .child(
-                    Flex::row()
-                        .width(Length::Px(GUTTER_W as f32))
-                        .child(Label::new(ws.name.clone()).muted(true)),
-                )
-                .child(strip),
-        );
+        let row = Flex::row()
+            .gap_spacing(Spacing::Sm)
+            .align(Align::Stretch)
+            // A minimum so a row stays legible once there are many; past that the stack scrolls.
+            .min_height(Length::Px(ROW_MIN_H))
+            .child(
+                Flex::row()
+                    .width(Length::Px(GUTTER_W))
+                    .align(Align::Center)
+                    .child(Label::new(ws.name.clone()).muted(true)),
+            )
+            .child(strip);
+        grid = grid.row(columns_of_cells, share(row, 1.0, true));
     }
     if let Some(id) = start {
         grid = grid.selected(id.0.to_string());
@@ -288,9 +274,8 @@ pub(crate) fn map(
     let grid = grid
         .on_activate(move |key| {
             // **Close first, then focus.** `FocusPane` acts on the tiled content, which is refused
-            // while an overlay covers it — the map blocking the very move it exists to make. Both
-            // are queued and applied in order, so closing first puts the domain back before the
-            // focus is judged. Choosing a pane here means "leave the map and go there" anyway.
+            // while an overlay covers it. Both are queued and applied in order, so the domain is
+            // back before the focus is judged. Choosing a pane here means "leave the map and go".
             close();
             if let Ok(id) = key.parse::<u64>() {
                 emit(crate::app::interaction::InteractionIntent::FocusPane {
@@ -309,8 +294,10 @@ pub(crate) fn map(
             .panel(
                 Surface::column()
                     .background(theme.colors.background.with_alpha(255))
-                    .padding(ROW_GAP)
-                    .child(grid),
+                    .pad_all(Spacing::Md)
+                    // **The overflow is the scroll region's.** Enough workspaces and the rows run
+                    // past the window; nothing here needs to know how many fit.
+                    .child(ScrollRegion::new().grow(1.0).child(grid)),
             )
             .open(true),
     )
@@ -353,14 +340,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
-    let root = map(
-        &rows,
-        &theme,
-        emit,
-        state.session.viewport_size.w,
-        state.session.viewport_size.h,
-        here,
-    );
+    let root = map(&rows, &theme, emit, here);
     let was_visible = state.layers.is_visible_named(&name);
     let id = state.layers.add_named(
         name.clone(),
@@ -446,25 +426,6 @@ mod tests {
         assert_eq!((f.w, f.h), (200.0, 150.0), "a float carries its own size");
     }
 
-    /// **One scale for every row**, decided by the widest strip — that is what makes the view a map
-    /// rather than a diagram: a wide column looks wide, and a busy workspace looks busy. Scaling
-    /// each row to its own width would draw every workspace identically.
-    #[test]
-    fn every_row_is_drawn_at_the_same_scale_and_nothing_is_magnified() {
-        let s = session();
-        let rows = model(&s, |p| p.title.clone());
-        let widest = rows.iter().map(|r| r.strip_width).fold(0.0_f64, f64::max);
-
-        // Two workspaces of very different width still share one scale, so their strips keep their
-        // real proportion to one another.
-        let narrow = rows.iter().find(|r| r.columns.is_empty()).expect("an empty workspace");
-        assert!(narrow.strip_width <= widest);
-
-        // A huge window does not magnify the map: the zoom cap wins over the fit.
-        let room = 10_000.0_f64;
-        let scale = ((room - GUTTER_W) / widest.max(1.0)).min(MAX_ZOOM);
-        assert_eq!(scale, MAX_ZOOM, "the cap answers 'should one workspace fill the screen': no");
-    }
 
 
     /// **Dismiss must reach the grid through the overlay.** The layer root is an `Overlay`, whose
@@ -481,7 +442,7 @@ mod tests {
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
             sink.borrow_mut().push(format!("{intent:?}"));
         });
-        let mut root = map(&rows, &theme, emit, 1200.0, 800.0, None);
+        let mut root = map(&rows, &theme, emit, None);
 
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
         let got = seen.borrow().join(" ");

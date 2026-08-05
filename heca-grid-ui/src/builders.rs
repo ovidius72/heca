@@ -193,6 +193,28 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Flex grow factor (share of remaining space).
+    /// Permission to **shrink** below the natural size, the other half of a share.
+    ///
+    /// `flex_grow` distributes only *positive* free space, so growing alone never divides a region:
+    /// a child keeps its content size and the row overflows. A true share is grow + a zero base
+    /// size + this (CSS `flex: 1 1 0`).
+    fn shrink(mut self, s: f32) -> Self {
+        self.base_mut().style.layout.flex_shrink = Some(s);
+        self
+    }
+
+    /// Floor for the height — a row that must stay legible however many share the space.
+    fn min_height(mut self, h: Length) -> Self {
+        self.base_mut().style.layout.min_height = Some(h);
+        self
+    }
+
+    /// Floor for the width.
+    fn min_width(mut self, w: Length) -> Self {
+        self.base_mut().style.layout.min_width = Some(w);
+        self
+    }
+
     fn grow(mut self, g: f32) -> Self {
         self.base_mut().style.layout.flex_grow = g;
         self
