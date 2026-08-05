@@ -2004,6 +2004,21 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 /// An unknown name is a **no-op, not a panic**: names come from config and RPC, so a typo must not
 /// take the app down. It is silent for now; saying so is a notification producer and belongs to
 /// F009, alongside T335 and T381.
+/// Close the front-most overlay from a **bound key** (F003/P082/T327).
+///
+/// The id-carrying form (`CloseOverlay { overlay: Some(..) }`) is intercepted in `dispatch_intent`
+/// instead, because resolving an overlay runs its completion and that needs the registry, which a
+/// handler is not given. A widget's own `Dismiss` emits that form, so a dialog still resolves
+/// properly; this is the path for a **host layer** with no completion to run — the exposé — and for
+/// a key pressed with nothing else claiming it.
+///
+/// No overlay up is a no-op, which is what makes binding Escape to it harmless.
+pub fn handle_close_overlay(state: &mut AppState, _action: &WmAction) {
+    let Some(id) = state.layers.top_modal_id() else { return };
+    state.layers.hide(id);
+    state.needs_redraw = true;
+}
+
 pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
     let (name, show) = match action {
         WmAction::ShowLayer { name, .. } => (name, Some(true)),

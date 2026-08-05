@@ -1319,6 +1319,16 @@ impl ActionRegistry {
             ],
         },
         ActionDescriptor {
+            name: "close_overlay",
+            label: "Close Overlay",
+            description: "Dismiss the front-most overlay — the exposé, a dialog, a menu.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // No arguments at all: the overlay it closes is the one in front, because an OverlayId
+            // is a runtime counter nothing outside the process could name.
+            args: &[],
+        },
+        ActionDescriptor {
             name: "show_layer",
             label: "Show Layer",
             description: "Bring an addressable layer into the stack — an expose, a plugin panel.",

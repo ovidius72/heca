@@ -1048,6 +1048,10 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::CommandPalette { mode: None, query: None },
         handle_command_palette,
     );
+    registry.register(
+        &WmAction::CloseOverlay { overlay: None },
+        crate::handlers::handle_close_overlay,
+    );
     for act in [
         WmAction::ShowLayer { name: None, dock: None },
         WmAction::HideLayer { name: None, dock: None },

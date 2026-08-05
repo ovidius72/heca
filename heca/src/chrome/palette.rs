@@ -468,7 +468,7 @@ pub(crate) fn open_command_palette(
     // the close that follows a chosen command is a no-op after the `SubmitOverlay` already popped it.
     let open = palette.open_signal();
     let emit_close = emit.clone();
-    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     create_effect(move |_| {
         if !open.get() {
             emit_close(close.clone());

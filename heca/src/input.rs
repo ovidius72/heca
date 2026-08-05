@@ -589,9 +589,14 @@ pub enum WmAction {
         overlay: crate::chrome::OverlayId,
         action: String,
     },
-    /// Dismiss overlay `overlay`, resolving its result to `ModalResult::Dismissed` and popping it.
+    /// Dismiss an overlay, resolving its result to `ModalResult::Dismissed` and popping it.
+    ///
+    /// `overlay` is **optional so the action can be bound to a key**: an `OverlayId` is a runtime
+    /// counter no config line could name. Bare, it closes the front-most visible modal layer —
+    /// which is what "close the overlay" means to someone pressing Escape — and does nothing when
+    /// none is up, so the key is harmless in normal use.
     CloseOverlay {
-        overlay: crate::chrome::OverlayId,
+        overlay: Option<crate::chrome::OverlayId>,
     },
 
     // ── Chrome region show/hide (sidebar-fu-6) ──
@@ -738,6 +743,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "reset_pane_name" => Some(WmAction::ResetPaneName),
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
         "command_palette" => Some(WmAction::CommandPalette { mode: None, query: None }),
+        "close_overlay" => Some(WmAction::CloseOverlay { overlay: None }),
         "show_layer" => Some(WmAction::ShowLayer { name: None, dock: None }),
         "hide_layer" => Some(WmAction::HideLayer { name: None, dock: None }),
         "toggle_layer" => Some(WmAction::ToggleLayer { name: None, dock: None }),

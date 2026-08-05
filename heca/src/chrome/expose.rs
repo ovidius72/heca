@@ -272,25 +272,29 @@ pub(crate) fn map(
         grid = grid.selected(id.0.to_string());
     }
 
+    // Dismissal goes through the **action**, not a bespoke hide: `close_overlay` is in the registry,
+    // so it is bindable, rebindable in config, listed in the palette and reachable over RPC.
     let close = {
         let emit = emit.clone();
         move || {
-            if let Some(name) = super::layers::layer_name(super::layers::HOST_OWNER, "expose") {
-                emit(crate::app::interaction::InteractionIntent::ActivateAction(
-                    crate::input::WmAction::HideLayer { name: Some(name), dock: None },
-                ));
-            }
+            emit(crate::app::interaction::InteractionIntent::ActivateAction(
+                crate::input::WmAction::CloseOverlay { overlay: None },
+            ));
         }
     };
     let on_close = close.clone();
     let grid = grid
         .on_activate(move |key| {
+            // **Close first, then focus.** `FocusPane` acts on the tiled content, which is refused
+            // while an overlay covers it — the map blocking the very move it exists to make. Both
+            // are queued and applied in order, so closing first puts the domain back before the
+            // focus is judged. Choosing a pane here means "leave the map and go there" anyway.
+            close();
             if let Ok(id) = key.parse::<u64>() {
                 emit(crate::app::interaction::InteractionIntent::FocusPane {
                     pane_id: PaneId(id),
                 });
             }
-            close();
         })
         .on_dismiss(on_close);
 
@@ -480,8 +484,8 @@ mod tests {
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
         let got = seen.borrow().join(" ");
         assert!(
-            got.contains("HideLayer"),
-            "Esc must hide the layer; the emitter saw: {got:?}",
+            got.contains("CloseOverlay"),
+            "Esc must run the close_overlay ACTION, not a bespoke hide; the emitter saw: {got:?}",
         );
     }
 

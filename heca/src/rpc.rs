@@ -24,6 +24,7 @@
 //!   collapse-current-workspace | expand-current-workspace | toggle-current-workspace-collapsed
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
+//!   close-overlay
 //!   show-layer <name> [dock] | hide-layer <name> [dock] | toggle-layer <name> [dock]
 //!     (an addressable layer, named owner.short — e.g. heca.expose)
 //!   command-palette [mode] [query]
@@ -626,6 +627,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "collapse-current-column" => Ok(WmAction::CollapseCurrentColumn),
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
+        "close-overlay" => Ok(WmAction::CloseOverlay { overlay: None }),
         // `show-layer <name> [dock]` — the addressable-layer verbs (F003/P082/T327).
         "show-layer" => Ok(WmAction::ShowLayer {
             name: parts.next().map(|s| s.to_string()),

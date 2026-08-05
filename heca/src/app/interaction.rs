@@ -406,11 +406,6 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
         WmAction::CommandPalette { .. }
-        // A layer is chrome, not the tiled content: showing one is allowed whatever the panes are
-        // doing, exactly as opening the palette is.
-        | WmAction::ShowLayer { .. }
-        | WmAction::HideLayer { .. }
-        | WmAction::ToggleLayer { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. } => ActionPolicy::AlwaysAllowed,
 
@@ -455,7 +450,16 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // Overlay control (§2.7.2): classified Global for match completeness, but never
         // actually consulted — `dispatch_intent` intercepts these before routing (they carry
         // an overlay id and resolve the `OverlayHost`, not a focus-domain-sensitive action).
-        WmAction::SubmitOverlay { .. } | WmAction::CloseOverlay { .. } => ActionPolicy::Global,
+        // **Overlay and layer control is `Global`, not `AlwaysAllowed`.** `AlwaysAllowed` is
+        // refused while something covers the content — so an `AlwaysAllowed` close would be blocked
+        // by the very overlay it exists to close, which is exactly what happened to the exposé
+        // ("blocked intent from Keyboard" on Esc). Showing/hiding a layer is app-level control, not
+        // an act on the panes, so it is allowed in every domain.
+        WmAction::SubmitOverlay { .. }
+        | WmAction::CloseOverlay { .. }
+        | WmAction::ShowLayer { .. }
+        | WmAction::HideLayer { .. }
+        | WmAction::ToggleLayer { .. } => ActionPolicy::Global,
         // Chrome shell region show/hide (sidebar-fu-6): acts on chrome geometry,
         // independent of the pane tiled/floating domain — reachable from any focus.
         WmAction::ShowLeftSidebar
@@ -791,6 +795,16 @@ pub(crate) fn dispatch_intent(
     }
     if let InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay }) = &intent {
         let overlay = *overlay;
+        // Bare — a bound key — means the front-most visible modal layer. A named host layer (the
+        // exposé) has no completion to resolve, so it is simply hidden; an overlay with one is
+        // resolved as a dismissal, which is what pops it and runs its completion.
+        let overlay = match overlay {
+            Some(id) => id,
+            None => match state.layers.top_modal_id() {
+                Some(id) => crate::chrome::OverlayId(id),
+                None => return,
+            },
+        };
         crate::chrome::resolve_overlay(state, registry, overlay, crate::chrome::ModalResult::Dismissed);
         return;
     }

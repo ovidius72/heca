@@ -394,7 +394,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         menu = menu.entry(entry);
     }
     let emit_dismiss = emit.clone();
-    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
@@ -494,7 +494,7 @@ fn build_modal_root(
     // Esc / scrim dismissal flows through the same emitter as the buttons: a `CloseOverlay`
     // for this overlay, resolved to `ModalResult::Dismissed` in `dispatch_intent`.
     let emit_dismiss = emit.clone();
-    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     Box::new(
         dialog
             .dismissible(spec.dismissible)

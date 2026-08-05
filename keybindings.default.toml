@@ -140,6 +140,11 @@ swap_down  = "prefix+Ctrl+j"
 # ── System ──
 command_palette = "prefix+p"        # Open command palette (actions)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
+# Close the front-most overlay — the exposé, a dialog, a menu. A real action, so it is rebindable
+# here, listed in the palette and reachable over RPC. It takes no target: an overlay id is a runtime
+# counter nothing outside the process could name, so it closes whatever is in front, and does
+# nothing when there is none.
+close_overlay   = ["Escape", "Ctrl+q"]
 
 
 
