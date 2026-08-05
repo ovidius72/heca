@@ -2012,6 +2012,13 @@ pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
         _ => return,
     };
     let Some(name) = name.as_deref() else { return };
+    // **Rebuild before showing.** A layer's content is structural — panes open, workspaces come and
+    // go — and a signal replaces a prop, never a child. So shape follows a re-registration, and the
+    // moment a layer is asked for is the moment its shape must be current. Without this the exposé
+    // showed the session as it was at startup, whatever had happened since.
+    if show != Some(false) {
+        crate::chrome::rebuild_named_layer(state, name);
+    }
     let Some(id) = state.layers.by_name(name) else { return };
     let show = show.unwrap_or(!state.layers.is_visible_named(name));
     match show {

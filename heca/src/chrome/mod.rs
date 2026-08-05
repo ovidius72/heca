@@ -8,6 +8,19 @@ pub(crate) mod context_menu;
 mod events;
 mod expose;
 pub(crate) use expose::register as register_expose;
+
+/// Re-register a **host-owned** named layer, so what it shows is current.
+///
+/// The one place a layer name maps to the code that rebuilds it. A layer whose content is derived
+/// from app state cannot be kept fresh by signals alone — those replace a prop, never a child — so
+/// it is rebuilt, and `add_named` replacing under the same name is what makes that safe.
+///
+/// An unknown name is a no-op: a plugin's layer is rebuilt by the plugin, not from here.
+pub(crate) fn rebuild_named_layer(state: &mut crate::app_state::AppState, name: &str) {
+    if Some(name) == layers::layer_name(layers::HOST_OWNER, "expose").as_deref() {
+        expose::register(state);
+    }
+}
 mod focus;
 mod host;
 mod layers;

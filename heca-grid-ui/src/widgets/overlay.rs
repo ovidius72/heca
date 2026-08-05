@@ -875,7 +875,20 @@ impl Component for Overlay {
                 }
                 if self.blocking { Handled::Yes } else { Handled::No }
             }
-            _ => Handled::No,
+            // **Everything else — keys and semantic `WidgetIntent`s — goes to the panel.**
+            // The overlay owns its walk, so without this arm nothing inside a panel could ever be
+            // driven from the keyboard: a `CardGrid`'s cursor never moved and `Dismiss` never
+            // arrived, which is exactly how an overlay became impossible to close with Esc.
+            //
+            // Swallowed afterwards when blocking, for the same reason a modal swallows the pointer:
+            // a key the panel did not want must not reach the app behind it.
+            _ => {
+                let panel_root = self.base.children[0].as_mut();
+                if crate::component::dispatch(panel_root, ev) == Handled::Yes {
+                    return Handled::Yes;
+                }
+                if self.blocking { Handled::Yes } else { Handled::No }
+            }
         }
     }
 }

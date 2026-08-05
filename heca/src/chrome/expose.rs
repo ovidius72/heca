@@ -173,6 +173,11 @@ const ROW_GAP: f32 = 10.0;
 const COL_GAP: f32 = 4.0;
 /// The gutter holding a workspace's name.
 const GUTTER_W: f64 = 120.0;
+/// The most the map is ever drawn at, as a fraction of life size.
+///
+/// Without it a session with one workspace is drawn 1:1 and the overview says nothing you could not
+/// already see. niri's overview caps itself the same way (`zoom`, default 0.5).
+const MAX_ZOOM: f64 = 0.5;
 
 /// Build the overview — **a composition, not a widget**: it binds `PaneId` to a `FocusPane` intent
 /// and the `hide_layer` action, which is the only reason it is not in `heca-grid-ui`.
@@ -198,15 +203,23 @@ pub(crate) fn map(
     avail_h: f64,
     start: Option<PaneId>,
 ) -> Box<dyn Component> {
-    // One scale for every row, set by the widest strip: a wide column looks wide and a busy
-    // workspace looks busy. Scaling each row to its own width would draw them all alike. Never
-    // magnified — a session narrower than the window stays 1:1.
+    // **One scale, both axes** — that is what makes this a bird's-eye rather than a diagram. A
+    // workspace is viewport-sized, so its row is the viewport scaled: same aspect, same relative
+    // width, and a wide column still looks wide.
+    //
+    // The scale is the smallest of three: what the width allows, what stacking every workspace
+    // vertically allows, and `MAX_ZOOM`. The cap is the answer to "should it be full height" — no.
+    // With a single workspace the first two allow 1:1, which would draw the map at life size and
+    // tell the user nothing. niri caps its overview the same way (`zoom 0.5`).
     let widest = rows.iter().map(|r| r.strip_width).fold(0.0_f64, f64::max).max(1.0);
-    let scale = (((avail_w - GUTTER_W).max(1.0)) / widest).min(1.0);
+    let n = rows.len().max(1) as f64;
+    let room_h = (avail_h - ROW_GAP as f64 * (n + 1.0)).max(1.0);
+    let scale = (((avail_w - GUTTER_W).max(1.0)) / widest)
+        .min(room_h / (n * avail_h.max(1.0)))
+        .min(MAX_ZOOM);
     // A share is an explicit size: `flex_grow` distributes only positive free space, so it cannot
     // divide a region — rows built with it collapse to their content.
-    let n = rows.len().max(1) as f64;
-    let row_h = ((avail_h - ROW_GAP as f64 * (n + 1.0)) / n).max(40.0);
+    let row_h = (avail_h * scale).max(40.0);
 
     let mut grid = CardGrid::new();
     for ws in rows {
@@ -441,10 +454,35 @@ mod tests {
         let narrow = rows.iter().find(|r| r.columns.is_empty()).expect("an empty workspace");
         assert!(narrow.strip_width <= widest);
 
-        // A session narrower than the window is drawn 1:1, never blown up to fill it.
+        // A huge window does not magnify the map: the zoom cap wins over the fit.
         let room = 10_000.0_f64;
-        let scale = ((room - 130.0) / widest.max(1.0)).min(1.0);
-        assert_eq!(scale, 1.0, "a huge window does not magnify a small session");
+        let scale = ((room - GUTTER_W) / widest.max(1.0)).min(MAX_ZOOM);
+        assert_eq!(scale, MAX_ZOOM, "the cap answers 'should one workspace fill the screen': no");
+    }
+
+
+    /// **Dismiss must reach the grid through the overlay.** The layer root is an `Overlay`, whose
+    /// panel is a `Surface`, whose child is the `CardGrid` that answers the intent — so this pins
+    /// the whole routing chain the widget keymap relies on when the layer is the top modal.
+    #[test]
+    fn a_dismiss_reaches_the_grid_through_the_overlay() {
+        use heca_grid_ui::component::{Event, WidgetIntent as W};
+        let s = session();
+        let rows = model(&s, |p| p.title.clone());
+        let theme = heca_grid_ui::theme::Theme::default();
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let sink = seen.clone();
+        let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
+            sink.borrow_mut().push(format!("{intent:?}"));
+        });
+        let mut root = map(&rows, &theme, emit, 1200.0, 800.0, None);
+
+        heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
+        let got = seen.borrow().join(" ");
+        assert!(
+            got.contains("HideLayer"),
+            "Esc must hide the layer; the emitter saw: {got:?}",
+        );
     }
 
 }
