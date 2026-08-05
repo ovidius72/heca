@@ -190,6 +190,13 @@ keys   = "prefix+Ctrl+o"
 action = "command_palette"
 args   = { mode = "workspace" }
 
+# The exposé — a bird's-eye view of every workspace, its columns and its panes
+# (F003/P082/T327). niri binds its equivalent to `toggle-overview`; this is the same idea.
+[[keys.bind]]
+keys   = "prefix+Tab"
+action = "toggle_layer"
+args   = { name = "heca.expose" }
+
 # GUI/RPC-only by default (used by the terminal scrollbar): no flat keybinding
 # form supports args yet, but the action is still configurable in custom modes.
 # Example fixed jump in a user-defined mode:
