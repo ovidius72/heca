@@ -161,7 +161,7 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
 // ── The composition ───────────────────────────────────────────────────────────
 
 use heca_grid_ui::builders::{LayoutExt, NavExt, Parent, StyleExt};
-use heca_grid_ui::style::{Align, Length, Spacing};
+use heca_grid_ui::style::{Align, Justify, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay, Row, ScrollRegion, Surface};
 use heca_grid_ui::Component;
@@ -239,7 +239,16 @@ pub(crate) fn map(
     };
 
     // Workspaces need air between them or two rows of panes read as one grid.
-    let mut grid = CardGrid::new().gap_spacing(Spacing::Md);
+    // **The map opens centred.** One workspace with one pane sits in the middle of the window
+    // rather than pinned to the corner, and a few rows sit centred as a block — the map is a
+    // picture of the session, and a picture is centred. It only stops being centred when there is
+    // more than fits, at which point the scroll takes over.
+    let mut grid = CardGrid::new()
+        .gap_spacing(Spacing::Md)
+        .justify(Justify::Center)
+        .align(Align::Center)
+        .min_height(Length::Pct(1.0))
+        .min_width(Length::Pct(1.0));
     for ws in rows {
         let mut columns_of_cells: Vec<Vec<GridCell>> = Vec::new();
         let mut strip = Flex::row().gap_spacing(Spacing::Xs).grow(1.0);
