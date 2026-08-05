@@ -213,6 +213,21 @@ pub(crate) fn map(
     emit: super::ChromeIntentEmitter,
     start: Option<PaneId>,
 ) -> Box<dyn Component> {
+    // **One behaviour, two ways in.** Choosing a pane closes the map and focuses it, whether the
+    // choice came from the cursor (`CardGrid::on_activate`) or a click on the card itself. Defined
+    // once here so the mouse and the keyboard can never drift apart.
+    let choose = {
+        let emit = emit.clone();
+        std::rc::Rc::new(move |pane_id: PaneId| {
+            // Close FIRST: `FocusPane` acts on the tiled content and is refused while the map
+            // covers it. Both are queued and applied in order.
+            emit(crate::app::interaction::InteractionIntent::ActivateAction(
+                crate::input::WmAction::CloseOverlay { overlay: None },
+            ));
+            emit(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
+        })
+    };
+
     // Workspaces need air between them or two rows of panes read as one grid.
     let mut grid = CardGrid::new().gap_spacing(Spacing::Md);
     for ws in rows {
@@ -233,6 +248,13 @@ pub(crate) fn map(
                     .pad_all(Spacing::Xs)
                     .active(pane.active)
                     .nav_key(pane_nav_key(pane.pane_id))
+                    // Click to go there. `Row` already provides the hover tint and the press
+                    // handling, so the mouse costs one line rather than a second input path.
+                    .on_activate({
+                        let choose = choose.clone();
+                        let id = pane.pane_id;
+                        move || choose(id)
+                    })
                     .child(Label::new(pane.name.clone()));
                 // Panes divide their column's height evenly — each an equal share.
                 column = column.child(share(card, 1.0, true));
@@ -271,20 +293,16 @@ pub(crate) fn map(
             ));
         }
     };
-    let on_close = close.clone();
     let grid = grid
-        .on_activate(move |key| {
-            // **Close first, then focus.** `FocusPane` acts on the tiled content, which is refused
-            // while an overlay covers it. Both are queued and applied in order, so the domain is
-            // back before the focus is judged. Choosing a pane here means "leave the map and go".
-            close();
-            if let Ok(id) = key.parse::<u64>() {
-                emit(crate::app::interaction::InteractionIntent::FocusPane {
-                    pane_id: PaneId(id),
-                });
+        .on_activate({
+            let choose = choose.clone();
+            move |key| {
+                if let Ok(id) = key.parse::<u64>() {
+                    choose(PaneId(id));
+                }
             }
         })
-        .on_dismiss(on_close);
+        .on_dismiss(close);
 
     Box::new(
         Overlay::new()
