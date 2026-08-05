@@ -7,6 +7,7 @@ mod contribution;
 pub(crate) mod context_menu;
 mod events;
 mod expose;
+pub(crate) use expose::register as register_expose;
 mod focus;
 mod host;
 mod layers;

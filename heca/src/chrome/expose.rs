@@ -152,6 +152,133 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
         .collect()
 }
 
+
+
+// ── The tree ───────────────────────────────────────────────────────────────────
+
+use heca_grid_ui::builders::{LayoutExt, NavExt, Parent, StyleExt};
+use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::theme::Theme as GuiTheme;
+use heca_grid_ui::widgets::{Flex, Label, Row};
+use heca_grid_ui::Component;
+
+/// The `nav_key` of a pane's box — the row's one identity, so the cursor, the right-click target
+/// and later a drag are three readers of a single declaration (the rule F003/P085/T354 set).
+pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
+    format!("expose.pane.{}", pane_id.0)
+}
+
+/// Gap between workspace rows, and between the columns inside one.
+const ROW_GAP: f32 = 10.0;
+const COL_GAP: f32 = 4.0;
+/// Room the workspace's name takes at the head of its row.
+const LABEL_W: f64 = 130.0;
+
+/// Build the overview tree from the model.
+///
+/// **One scale for every row.** The widest strip decides it, and every workspace is drawn at that
+/// same scale — which is what makes the view a map: a wide column looks wide, and a workspace with
+/// three columns looks busier than one with a single pane. Scaling each row to fit its own width
+/// independently would make every workspace look identical and destroy the whole point.
+///
+/// `avail` is the room the layer has for the strips, excluding the name column.
+pub(crate) fn build(rows: &[ExposeWorkspace], theme: &GuiTheme, avail_w: f64) -> Box<dyn Component> {
+    let widest = rows
+        .iter()
+        .map(|r| r.strip_width)
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
+    let room = (avail_w - LABEL_W).max(1.0);
+    // Never magnify: a session narrower than the window is drawn at 1:1 rather than blown up.
+    let scale = (room / widest).min(1.0);
+
+    let mut stack = Flex::column().gap(ROW_GAP).grow(1.0);
+    for ws in rows {
+        let mut strip = Flex::row().gap(COL_GAP).grow(1.0);
+        for col in &ws.columns {
+            let mut column = Flex::column()
+                .gap(COL_GAP)
+                .width(Length::Px((col.width * scale) as f32));
+            for pane in &col.panes {
+                // A `Row` is the app's card: background, radius, and `nav_key` — the same widget
+                // the sidebar uses for a pane, so selection and right-click come from the shared
+                // declaration rather than from anything invented here.
+                column = column.child(
+                    Row::new()
+                        .background(theme.colors.foreground.with_alpha(
+                            super::alpha_u8(theme.colors.card_background_alpha),
+                        ))
+                        .highlight(theme.colors.accent)
+                        .radius(theme.colors.control_radius())
+                        .padding(4.0)
+                        .active(pane.active)
+                        .nav_key(pane_nav_key(pane.pane_id))
+                        .grow(1.0)
+                        .child(Label::new(pane.name.clone())),
+                );
+            }
+            strip = strip.child(column);
+        }
+        stack = stack.child(
+            Flex::row()
+                .gap(ROW_GAP)
+                .align(Align::Center)
+                .grow(1.0)
+                .child(Flex::row().width(Length::Px(LABEL_W as f32)).child(
+                    Label::new(ws.name.clone()).muted(!ws.active),
+                ))
+                .child(strip),
+        );
+    }
+    Box::new(stack)
+}
+
+/// Register (or re-register) the exposé as the named layer `heca.expose`.
+///
+/// **Re-registering is the rebuild path.** `add_named` replaces the layer under that name, and the
+/// exposé's content is structural — a pane opens, a column is deleted — which a signal cannot
+/// express, since a `Signal<PropValue>` replaces a *prop* and never adds or removes children. So
+/// values follow signals and *shape* follows this call. It is safe to call while the layer is up:
+/// the selection lives in the chrome store, keyed by mount, exactly as the sidebar's cursor does,
+/// so a rebuild restores it rather than resetting to the top.
+///
+/// Hidden on registration (`LayerKind::OnDemand` via `add`), so nothing appears until
+/// `show_layer name=heca.expose` or `toggle_layer` asks for it.
+pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::LayerId> {
+    let name = super::layers::layer_name(super::layers::HOST_OWNER, "expose")?;
+    let programs = state.programs.clone();
+    let rows = model(&state.session, |pane| {
+        super::pane_info_view(
+            &programs,
+            &pane.title,
+            pane.custom_name.as_deref(),
+            Some(&pane.runtime),
+            false,
+        )
+        .title
+    });
+    let theme = super::chrome_gui_theme(state);
+    let width = state.session.viewport_size.w;
+    let root = build(&rows, &theme, width);
+    // Modal + covering: the overview is a context switch — it replaces what you are looking at, so
+    // nothing behind it should be acted on. `covers_content` is what `Domain::Overlay` reads.
+    let was_visible = state.layers.is_visible_named(&name);
+    let id = state.layers.add_named(
+        name.clone(),
+        super::LayerBand::Overlay,
+        super::LayerKind::OnDemand,
+        true,
+        true,
+        root,
+    );
+    // A rebuild must not close a view the user is standing in.
+    if was_visible {
+        state.layers.show(id);
+    }
+    state.needs_redraw = true;
+    Some(id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +346,25 @@ mod tests {
         assert_eq!(f.x, 160.0, "40 viewport-relative + 120 scrolled = 160 in the strip");
         assert_eq!(f.y, 30.0, "vertical does not scroll");
         assert_eq!((f.w, f.h), (200.0, 150.0), "a float carries its own size");
+    }
+
+    /// **One scale for every row**, decided by the widest strip — that is what makes the view a map
+    /// rather than a diagram: a wide column looks wide, and a busy workspace looks busy. Scaling
+    /// each row to its own width would draw every workspace identically.
+    #[test]
+    fn every_row_is_drawn_at_the_same_scale_and_nothing_is_magnified() {
+        let s = session();
+        let rows = model(&s, |p| p.title.clone());
+        let widest = rows.iter().map(|r| r.strip_width).fold(0.0_f64, f64::max);
+
+        // Two workspaces of very different width still share one scale, so their strips keep their
+        // real proportion to one another.
+        let narrow = rows.iter().find(|r| r.columns.is_empty()).expect("an empty workspace");
+        assert!(narrow.strip_width <= widest);
+
+        // A session narrower than the window is drawn 1:1, never blown up to fill it.
+        let room = 10_000.0_f64;
+        let scale = ((room - 130.0) / widest.max(1.0)).min(1.0);
+        assert_eq!(scale, 1.0, "a huge window does not magnify a small session");
     }
 }

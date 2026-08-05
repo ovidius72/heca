@@ -361,7 +361,7 @@ pub(crate) async fn init_state(
         }
     };
 
-    Box::new(AppState {
+    let mut state = Box::new(AppState {
         window,
         event_proxy,
         surface,
@@ -448,7 +448,12 @@ pub(crate) async fn init_state(
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
-    })
+    });
+    // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach
+    // from the very first frame. Re-registering is the rebuild path when the session's shape
+    // changes; see `chrome::expose::register`.
+    crate::chrome::register_expose(&mut state);
+    state
 }
 
 #[cfg(test)]
