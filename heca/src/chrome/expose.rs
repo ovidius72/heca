@@ -154,19 +154,16 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
 
 
 
-// ── The tree ───────────────────────────────────────────────────────────────────
+// ── The composition ───────────────────────────────────────────────────────────
 
 use heca_grid_ui::builders::{LayoutExt, NavExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Flex, Label, Row, Surface};
+use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay, Row, Surface};
 use heca_grid_ui::Component;
 
-/// Per workspace row, the panes left to right with the signal that lights each box.
-pub(crate) type NavMap = Vec<Vec<(PaneId, heca_grid_ui::reactive::Signal<bool>)>>;
-
 /// The `nav_key` of a pane's box — the row's one identity, so the cursor, the right-click target
-/// and later a drag are three readers of a single declaration (the rule F003/P085/T354 set).
+/// and later a drag are three readers of a single declaration (F003/P085/T354).
 pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
     format!("expose.pane.{}", pane_id.0)
 }
@@ -174,54 +171,48 @@ pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
 /// Gap between workspace rows, and between the columns inside one.
 const ROW_GAP: f32 = 10.0;
 const COL_GAP: f32 = 4.0;
-/// Room the workspace's name takes at the head of its row.
-const LABEL_W: f64 = 130.0;
+/// The gutter holding a workspace's name.
+const GUTTER_W: f64 = 120.0;
 
-/// Build the overview tree from the model.
+/// Build the overview — **a composition, not a widget**: it binds `PaneId` to a `FocusPane` intent
+/// and the `hide_layer` action, which is the only reason it is not in `heca-grid-ui`.
 ///
-/// **One scale for every row.** The widest strip decides it, and every workspace is drawn at that
-/// same scale — which is what makes the view a map: a wide column looks wide, and a workspace with
-/// three columns looks busier than one with a single pane. Scaling each row to fit its own width
-/// independently would make every workspace look identical and destroy the whole point.
+/// Plain data in, a `Component` out, and **never `&AppState`** (§ 0b): the session is already
+/// reduced to [`ExposeWorkspace`]s by [`model`], so this is testable without a window.
 ///
-/// `avail` is the room the layer has for the strips, excluding the name column.
+/// What is drawn, and what is not:
+/// - **A workspace is a row.** No box, no border, no fill — it exists as vertical position and a
+///   muted name in the gutter. Drawing a workspace-shaped rectangle is what made the first attempt
+///   read as "a rectangle with nothing inside".
+/// - **A column is invisible grouping**: it sets the horizontal slot's width, proportional to the
+///   real column, and stacks its panes.
+/// - **A pane is the only thing with a surface.**
 ///
-/// Returns the tree **and** one nav signal per pane box, in visual order per workspace row — the
-/// same arrangement `CommandPalette` uses for its match marks: the selection moves by writing a
-/// signal, so nothing is rebuilt to light a different box.
-pub(crate) fn build(
+/// The overlay behaviour — filling the viewport, the scrim, swallowing outside input — is
+/// [`Overlay`]'s, and the cursor is [`CardGrid`]'s. Neither is re-implemented here.
+pub(crate) fn map(
     rows: &[ExposeWorkspace],
     theme: &GuiTheme,
+    emit: super::ChromeIntentEmitter,
     avail_w: f64,
     avail_h: f64,
-) -> (Box<dyn Component>, NavMap) {
-    let mut nav: NavMap = Vec::new();
-    let widest = rows
-        .iter()
-        .map(|r| r.strip_width)
-        .fold(0.0_f64, f64::max)
-        .max(1.0);
-    let room = (avail_w - LABEL_W).max(1.0);
-    // Never magnify: a session narrower than the window is drawn at 1:1 rather than blown up.
-    let scale = (room / widest).min(1.0);
-
-    // **An overlay is opaque.** The layer sits over the running app, so without a background of
-    // its own the panes show straight through it and the map is unreadable — which is exactly what
-    // it did on first sight. The theme's window background, not a scrim: this is a full-screen
-    // context switch, not a dialog floating over content you are meant to keep seeing.
-    // **A share is an explicit size, not `grow`.** `flex_grow` distributes only *positive* free
-    // space, so a column of `grow(1.0)` rows does not divide the height — every row collapses to
-    // its content and the map becomes one short box floating in the middle. Each workspace gets a
-    // real height instead.
+    start: Option<PaneId>,
+) -> Box<dyn Component> {
+    // One scale for every row, set by the widest strip: a wide column looks wide and a busy
+    // workspace looks busy. Scaling each row to its own width would draw them all alike. Never
+    // magnified — a session narrower than the window stays 1:1.
+    let widest = rows.iter().map(|r| r.strip_width).fold(0.0_f64, f64::max).max(1.0);
+    let scale = (((avail_w - GUTTER_W).max(1.0)) / widest).min(1.0);
+    // A share is an explicit size: `flex_grow` distributes only positive free space, so it cannot
+    // divide a region — rows built with it collapse to their content.
     let n = rows.len().max(1) as f64;
     let row_h = ((avail_h - ROW_GAP as f64 * (n + 1.0)) / n).max(40.0);
 
-    let mut stack = Flex::column().gap(ROW_GAP);
+    let mut grid = CardGrid::new();
     for ws in rows {
-        let mut row_nav = Vec::new();
-        let mut strip = Flex::row().gap(COL_GAP).grow(1.0);
+        let mut cells = Vec::new();
+        let mut strip = Flex::row().gap(COL_GAP).height(Length::Px(row_h as f32));
         for col in &ws.columns {
-            // Panes share their column's height the same way — explicitly.
             let pane_h = ((row_h - COL_GAP as f64 * (col.panes.len() as f64 - 1.0).max(0.0))
                 / col.panes.len().max(1) as f64)
                 .max(20.0);
@@ -230,11 +221,10 @@ pub(crate) fn build(
                 .width(Length::Px((col.width * scale) as f32))
                 .height(Length::Px(row_h as f32));
             for pane in &col.panes {
-                // A `Row` is the app's card: background, radius, and `nav_key` — the same widget
-                // the sidebar uses for a pane, so selection and right-click come from the shared
-                // declaration rather than from anything invented here.
+                // The card lights from its OWN nav signal — `CardGrid` writes it, `Row` reads it.
+                // No new widget API: `nav_state()` is the seam that already exists for this.
                 let card = Row::new();
-                row_nav.push((pane.pane_id, card.nav_state()));
+                cells.push(GridCell::new(pane.pane_id.0.to_string(), card.nav_state()));
                 column = column.child(
                     card
                         .background(theme.colors.foreground.with_alpha(
@@ -251,47 +241,72 @@ pub(crate) fn build(
             }
             strip = strip.child(column);
         }
-        nav.push(row_nav);
-        stack = stack.child(
+        grid = grid.row(
+            cells,
             Flex::row()
                 .gap(ROW_GAP)
                 .align(Align::Center)
                 .height(Length::Px(row_h as f32))
-                .child(Flex::row().width(Length::Px(LABEL_W as f32)).child(
-                    Label::new(ws.name.clone()).muted(!ws.active),
-                ))
+                .child(
+                    Flex::row()
+                        .width(Length::Px(GUTTER_W as f32))
+                        .child(Label::new(ws.name.clone()).muted(true)),
+                )
                 .child(strip),
         );
     }
-    // **An overlay is opaque.** The layer sits over the running app, so without a surface of its
-    // own the panes show straight through it and the map is unreadable — which is what it did on
-    // first sight. `Surface` is the library's decorated container; `Flex` is layout only and
-    // deliberately carries no fill, so this is the widget for the job rather than a new property.
-    //
-    // The window background **forced opaque**. heca's own background is translucent by design
-    // (the frosted compositor), so painting with it as-is left the app showing through and the
-    // sidebars readable straight over the map. A layer that is a context switch has to hide what
-    // it replaces; `paint_layers` already draws after the chrome, so opacity is the whole fix.
-    let root = Surface::column()
-        .background(theme.colors.background.with_alpha(255))
-        .padding(ROW_GAP)
-        .width(Length::Pct(1.0))
-        .height(Length::Pct(1.0))
-        .child(stack);
-    (Box::new(root), nav)
+    if let Some(id) = start {
+        grid = grid.selected(id.0.to_string());
+    }
+
+    let close = {
+        let emit = emit.clone();
+        move || {
+            if let Some(name) = super::layers::layer_name(super::layers::HOST_OWNER, "expose") {
+                emit(crate::app::interaction::InteractionIntent::ActivateAction(
+                    crate::input::WmAction::HideLayer { name: Some(name), dock: None },
+                ));
+            }
+        }
+    };
+    let on_close = close.clone();
+    let grid = grid
+        .on_activate(move |key| {
+            if let Ok(id) = key.parse::<u64>() {
+                emit(crate::app::interaction::InteractionIntent::FocusPane {
+                    pane_id: PaneId(id),
+                });
+            }
+            close();
+        })
+        .on_dismiss(on_close);
+
+    Box::new(
+        Overlay::new()
+            .blocking(true)
+            .panel_size(Length::Pct(1.0), Length::Pct(1.0))
+            // The panel carries the opaque surface: heca's window colour is translucent by design
+            // (the frosted compositor), so a map painted with it lets the app read straight through.
+            .panel(
+                Surface::column()
+                    .background(theme.colors.background.with_alpha(255))
+                    .padding(ROW_GAP)
+                    .child(grid),
+            )
+            .open(true),
+    )
 }
 
-/// Register (or re-register) the exposé as the named layer `heca.expose`.
+
+/// Register (or re-register) the exposé as the named layer `heca.expose` — **host wiring only**.
+///
+/// The composition itself is [`map`], which takes plain data; this is the part that needs
+/// `AppState`, and it does nothing but gather it.
 ///
 /// **Re-registering is the rebuild path.** `add_named` replaces the layer under that name, and the
-/// exposé's content is structural — a pane opens, a column is deleted — which a signal cannot
-/// express, since a `Signal<PropValue>` replaces a *prop* and never adds or removes children. So
-/// values follow signals and *shape* follows this call. It is safe to call while the layer is up:
-/// the selection lives in the chrome store, keyed by mount, exactly as the sidebar's cursor does,
-/// so a rebuild restores it rather than resetting to the top.
-///
-/// Hidden on registration (`LayerKind::OnDemand` via `add`), so nothing appears until
-/// `show_layer name=heca.expose` or `toggle_layer` asks for it.
+/// content is structural — a pane opens, a column is deleted — which a signal cannot express. So
+/// values follow signals and shape follows this call. It is safe while the view is up: the layer is
+/// re-shown if it was showing.
 pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::LayerId> {
     let name = super::layers::layer_name(super::layers::HOST_OWNER, "expose")?;
     let programs = state.programs.clone();
@@ -306,8 +321,6 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .title
     });
     let theme = super::chrome_gui_theme(state);
-    let width = state.session.viewport_size.w;
-    let (tree, nav) = build(&rows, &theme, width, state.session.viewport_size.h);
     let event_proxy = state.event_proxy.clone();
     let emit: super::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
         let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
@@ -315,15 +328,20 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
             intent,
         });
     });
-    // Start on the pane you are in, so the map opens where you are standing.
+    // Open on the pane you are in, so the map starts where you are standing.
     let here = state
         .session
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
-    let root: Box<dyn Component> = Box::new(Expose::new(tree, nav, emit, here));
-    // Modal + covering: the overview is a context switch — it replaces what you are looking at, so
-    // nothing behind it should be acted on. `covers_content` is what `Domain::Overlay` reads.
+    let root = map(
+        &rows,
+        &theme,
+        emit,
+        state.session.viewport_size.w,
+        state.session.viewport_size.h,
+        here,
+    );
     let was_visible = state.layers.is_visible_named(&name);
     let id = state.layers.add_named(
         name.clone(),
@@ -333,142 +351,12 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         true,
         root,
     );
-    // A rebuild must not close a view the user is standing in.
     if was_visible {
         state.layers.show(id);
     }
     state.needs_redraw = true;
     Some(id)
 }
-
-
-// ── The component ──────────────────────────────────────────────────────────────
-
-use heca_grid_ui::component::{Base, Event, Handled, WidgetIntent};
-use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
-
-/// The exposé's root: the rows, plus the cursor over them.
-///
-/// It answers the **generic** widget navigation vocabulary rather than inventing keys —
-/// `item_previous`/`item_next` are the horizontal axis and `menu_up`/`menu_down` the vertical one,
-/// which is exactly `[keys.widgets]`' existing split and already spelled `Ctrl+h`/`Ctrl+l` and
-/// `Ctrl+k`/`Ctrl+j`. So the keys the user asked for arrive with no new action and no new binding.
-pub(crate) struct Expose {
-    base: Base,
-    /// Per workspace row, the panes left to right with the signal that lights each box.
-    nav: NavMap,
-    /// (row, index within the row).
-    cursor: (usize, usize),
-    emit: super::ChromeIntentEmitter,
-}
-
-impl Expose {
-    pub(crate) fn new(
-        tree: Box<dyn Component>,
-        nav: NavMap,
-        emit: super::ChromeIntentEmitter,
-        start: Option<PaneId>,
-    ) -> Self {
-        let mut base = Base::new();
-        base.style.layout.width = Length::Pct(1.0);
-        base.style.layout.height = Length::Pct(1.0);
-        base.children.push(tree);
-        // Open on the pane you are in, so the view starts where you are rather than at the corner.
-        let cursor = start
-            .and_then(|id| {
-                nav.iter().enumerate().find_map(|(r, row)| {
-                    row.iter().position(|(p, _)| *p == id).map(|c| (r, c))
-                })
-            })
-            .unwrap_or((0, 0));
-        let mut me = Self { base, nav, cursor, emit };
-        me.sync();
-        me
-    }
-
-    /// Light the selected box and darken the rest. A write per box, never a rebuild.
-    fn sync(&mut self) {
-        for (r, row) in self.nav.iter().enumerate() {
-            for (c, (_, sig)) in row.iter().enumerate() {
-                let on = (r, c) == self.cursor;
-                if sig.get_untracked() != on {
-                    sig.set(on);
-                }
-            }
-        }
-    }
-
-    /// Move within the row (`dx`) or between workspaces (`dy`), clamped — the ends do not wrap,
-    /// because a map you can fall off the edge of is disorienting.
-    fn step(&mut self, dx: isize, dy: isize) {
-        if self.nav.is_empty() {
-            return;
-        }
-        let rows = self.nav.len() as isize;
-        let r = (self.cursor.0 as isize + dy).clamp(0, rows - 1) as usize;
-        let len = self.nav[r].len() as isize;
-        if len == 0 {
-            // An empty workspace has no pane to sit on; keep the row, park the index.
-            self.cursor = (r, 0);
-            self.sync();
-            return;
-        }
-        // Changing row keeps the column where possible, the way a grid should.
-        let base = if dy == 0 { self.cursor.1 as isize } else { self.cursor.1.min(len as usize - 1) as isize };
-        let c = (base + dx).clamp(0, len - 1) as usize;
-        self.cursor = (r, c);
-        self.sync();
-    }
-
-    fn selected(&self) -> Option<PaneId> {
-        self.nav.get(self.cursor.0).and_then(|r| r.get(self.cursor.1)).map(|(p, _)| *p)
-    }
-
-    fn close(&self) {
-        if let Some(name) = super::layers::layer_name(super::layers::HOST_OWNER, "expose") {
-            (self.emit)(crate::app::interaction::InteractionIntent::ActivateAction(
-                crate::input::WmAction::HideLayer { name: Some(name), dock: None },
-            ));
-        }
-    }
-}
-
-impl Component for Expose {
-    fn base(&self) -> &Base {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut Base {
-        &mut self.base
-    }
-    fn focusable(&self) -> bool {
-        true
-    }
-    fn overlay_active(&self) -> bool {
-        true
-    }
-
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        let Event::Widget(intent) = ev else {
-            // The overview is modal: it swallows the rest rather than letting it reach the panes
-            // behind, which are deliberately not actionable while it is up.
-            return Handled::No;
-        };
-        match intent {
-            WidgetIntent::ItemPrevious => self.step(-1, 0),
-            WidgetIntent::ItemNext => self.step(1, 0),
-            WidgetIntent::MenuUp => self.step(0, -1),
-            WidgetIntent::MenuDown => self.step(0, 1),
-            WidgetIntent::Activate => {
-                if let Some(pane_id) = self.selected() {
-                    (self.emit)(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
-                }
-                self.close();
-            }
-            WidgetIntent::Dismiss => self.close(),
-            _ => return Handled::No,
-        }
-        Handled::Yes
-    }}
 
 #[cfg(test)]
 mod tests {
@@ -559,46 +447,4 @@ mod tests {
         assert_eq!(scale, 1.0, "a huge window does not magnify a small session");
     }
 
-    /// The cursor moves on the **generic** nav vocabulary — no keys of its own — and clamps at the
-    /// edges rather than wrapping. Moving between workspaces keeps the column where it can.
-    #[test]
-    fn the_cursor_walks_the_grid_and_stops_at_the_edges() {
-        use heca_grid_ui::component::WidgetIntent as W;
-        let s = session();
-        let rows = model(&s, |p| p.title.clone());
-        let theme = heca_grid_ui::theme::Theme::default();
-        let (tree, nav) = build(&rows, &theme, 1200.0, 800.0);
-        let lit = nav.clone();
-        let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut ex = Expose::new(tree, nav, emit, None);
-
-        let selected = |lit: &NavMap| {
-            let mut out = None;
-            for (r, row) in lit.iter().enumerate() {
-                for (c, (_, sig)) in row.iter().enumerate() {
-                    if sig.get_untracked() {
-                        assert!(out.is_none(), "exactly one box is lit");
-                        out = Some((r, c));
-                    }
-                }
-            }
-            out
-        };
-
-        assert_eq!(selected(&lit), Some((0, 0)), "opens on the first pane when nothing is focused");
-
-        // Left at the edge stays put — the map has no wrap-around to fall off.
-        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::ItemPrevious));
-        assert_eq!(selected(&lit), Some((0, 0)));
-
-        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::ItemNext));
-        assert_eq!(selected(&lit), Some((0, 1)), "right moves along the workspace row");
-
-        // Down onto the empty workspace: the row changes, and nothing is lit there.
-        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::MenuDown));
-        assert_eq!(selected(&lit), None, "an empty workspace has no pane to sit on");
-
-        heca_grid_ui::dispatch(&mut ex, &Event::Widget(W::MenuUp));
-        assert!(selected(&lit).is_some(), "coming back lands on a pane again");
-    }
 }
