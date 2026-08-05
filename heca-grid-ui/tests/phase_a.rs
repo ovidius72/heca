@@ -5508,53 +5508,55 @@ fn a_margin_can_be_set_per_axis() {
     );
 }
 
-/// **`CardGrid` owns where the selection is, and nothing about what a card means.** It answers the
-/// shared nav vocabulary, clamps at the edges, and hands the caller back its own key.
+/// **`CardGrid` walks three axes.** Columns on `item_*`, the cell within a column on `menu_*`, and
+/// the outer row on `menu_history_*` — all on the shared vocabulary, so the widget owns no keys.
 #[test]
-fn a_card_grid_walks_two_axes_and_returns_the_callers_key() {
+fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
     use heca_grid_ui::reactive::{signal, SignalGet};
     use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label};
     use heca_grid_ui::WidgetIntent;
 
-    let lit: Vec<Signal<bool>> = (0..3).map(|_| signal(false)).collect();
+    let lit: Vec<Signal<bool>> = (0..5).map(|_| signal(false)).collect();
     let chosen = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
     let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
-
     let (c, d) = (chosen.clone(), dismissed.clone());
+
+    // Row 0: two columns, the first holding two stacked cells. Row 1: one column, one cell.
     let mut grid = CardGrid::new()
         .row(
             vec![
-                GridCell::new("a", lit[0]),
-                GridCell::new("b", lit[1]),
+                vec![GridCell::new("a", lit[0]), GridCell::new("b", lit[1])],
+                vec![GridCell::new("c", lit[2])],
             ],
-            Flex::row().child(Label::new("a")).child(Label::new("b")),
+            Flex::row().child(Label::new("row0")),
         )
-        // A row with no cards is still reachable — the cursor parks on it.
-        .row(vec![], Flex::row())
-        .row(vec![GridCell::new("c", lit[2])], Flex::row().child(Label::new("c")))
+        .row(
+            vec![vec![GridCell::new("d", lit[3])]],
+            Flex::row().child(Label::new("row1")),
+        )
         .on_activate(move |key| *c.borrow_mut() = key.to_string())
         .on_dismiss(move || d.set(true))
-        .selected("b");
+        .selected("a");
 
-    assert_eq!(grid.selected_key(), Some("b"), "opens on the requested card");
-    assert!(lit[1].get_untracked(), "and that card is the lit one");
-
-    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemNext));
-    assert_eq!(grid.selected_key(), Some("b"), "right at the end stays put — no wrap");
-
-    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemPrevious));
     assert_eq!(grid.selected_key(), Some("a"));
-    assert!(lit[0].get_untracked() && !lit[1].get_untracked(), "exactly one card is lit");
 
+    // menu_down walks WITHIN the column — this is the case that was switching workspace before.
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
-    assert_eq!(grid.selected_key(), None, "an empty row is a row you can stand on");
+    assert_eq!(grid.selected_key(), Some("b"), "j moves to the next pane in the column");
+    assert!(lit[1].get_untracked() && !lit[0].get_untracked(), "exactly one cell is lit");
 
-    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
-    assert_eq!(grid.selected_key(), Some("c"), "and you can move past it");
+    // item_next crosses to the next COLUMN, clamping the cell index into the shorter column.
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemNext));
+    assert_eq!(grid.selected_key(), Some("c"), "l moves a column right");
+
+    // menu_history_* is the OUTER axis here — the workspace.
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
+    assert_eq!(grid.selected_key(), Some("d"), "n moves to the next workspace");
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
+    assert_eq!(grid.selected_key(), Some("d"), "and stops at the last one");
 
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Activate));
-    assert_eq!(chosen.borrow().as_str(), "c", "the caller gets its own key back");
-
+    assert_eq!(chosen.borrow().as_str(), "d");
     heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Dismiss));
     assert!(dismissed.get());
 }
@@ -5572,7 +5574,7 @@ fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
     let d = dismissed.clone();
     let lit = signal(false);
     let grid = CardGrid::new()
-        .row(vec![GridCell::new("a", lit)], Flex::row().child(Label::new("a")))
+        .row(vec![vec![GridCell::new("a", lit)]], Flex::row().child(Label::new("a")))
         .on_dismiss(move || d.set(true));
     let mut overlay = Overlay::new().blocking(true).panel(grid).open(true);
 

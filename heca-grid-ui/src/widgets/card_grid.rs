@@ -37,8 +37,10 @@ impl GridCell {
     }
 }
 
-/// One row's cells: their keys and the signals that light them.
+/// One column's cells, top to bottom: their keys and the signals that light them.
 type Cells = Vec<(String, Signal<bool>)>;
+/// One row's columns, left to right.
+type Columns = Vec<Cells>;
 
 /// What a caller runs when a cell is chosen — it is handed the caller's own key.
 type OnActivate = Box<dyn Fn(&str)>;
@@ -47,9 +49,9 @@ type OnActivate = Box<dyn Fn(&str)>;
 pub struct CardGrid {
     base: Base,
     /// Per row, the cards left to right: their keys and their light signals.
-    rows: Vec<Cells>,
-    /// (row, index within the row).
-    cursor: (usize, usize),
+    rows: Vec<Columns>,
+    /// (row, column, index within the column) — three axes, because a map has three.
+    cursor: (usize, usize, usize),
     on_activate: Option<OnActivate>,
     on_dismiss: Option<Box<dyn Fn()>>,
 }
@@ -65,7 +67,7 @@ impl CardGrid {
         Self {
             base,
             rows: Vec::new(),
-            cursor: (0, 0),
+            cursor: (0, 0, 0),
             on_activate: None,
             on_dismiss: None,
         }
@@ -77,10 +79,14 @@ impl CardGrid {
     /// surface needs — because how a row *looks* is the caller's, while where the cursor *is* is
     /// this widget's. `cards` must be in the same left-to-right order the layout draws them, or the
     /// cursor and the picture disagree.
-    #[heca_grid_ui_macros::host_only("a row of composed cards, not a scalar")]
-    pub fn row(mut self, cards: Vec<GridCell>, layout: impl Component + 'static) -> Self {
-        self.rows
-            .push(cards.iter().map(|c| (c.key.clone(), c.selected)).collect());
+    #[heca_grid_ui_macros::host_only("a row of composed columns, not a scalar")]
+    pub fn row(mut self, columns: Vec<Vec<GridCell>>, layout: impl Component + 'static) -> Self {
+        self.rows.push(
+            columns
+                .iter()
+                .map(|col| col.iter().map(|c| (c.key.clone(), c.selected)).collect())
+                .collect(),
+        );
         self.base.children.push(Box::new(layout));
         self
     }
@@ -107,7 +113,9 @@ impl CardGrid {
     pub fn selected(mut self, key: impl Into<String>) -> Self {
         let key = key.into();
         if let Some(at) = self.rows.iter().enumerate().find_map(|(r, row)| {
-            row.iter().position(|(k, _)| *k == key).map(|c| (r, c))
+            row.iter().enumerate().find_map(|(c, col)| {
+                col.iter().position(|(k, _)| *k == key).map(|i| (r, c, i))
+            })
         }) {
             self.cursor = at;
         }
@@ -120,6 +128,7 @@ impl CardGrid {
         self.rows
             .get(self.cursor.0)
             .and_then(|r| r.get(self.cursor.1))
+            .and_then(|c| c.get(self.cursor.2))
             .map(|(k, _)| k.as_str())
     }
 
@@ -127,39 +136,45 @@ impl CardGrid {
     /// rebuild.
     fn sync(&self) {
         for (r, row) in self.rows.iter().enumerate() {
-            for (c, (_, sig)) in row.iter().enumerate() {
-                let on = (r, c) == self.cursor;
-                if sig.get_untracked() != on {
-                    sig.set(on);
+            for (c, col) in row.iter().enumerate() {
+                for (i, (_, sig)) in col.iter().enumerate() {
+                    let on = (r, c, i) == self.cursor;
+                    if sig.get_untracked() != on {
+                        sig.set(on);
+                    }
                 }
             }
         }
     }
 
-    /// Move by `dx` within the row and `dy` between rows, **clamped at the edges**.
+    /// Move the cursor on one of the **three axes**, each clamped at its ends.
     ///
     /// No wrap-around: a map you can fall off the end of is disorienting, and every list widget
-    /// here stops at its ends for the same reason. Changing row keeps the column where the new row
-    /// is long enough, which is what makes a grid feel like a grid.
-    pub fn step(&mut self, dx: isize, dy: isize) {
+    /// here stops at its ends for the same reason. Moving between rows or columns keeps the
+    /// position on the other axes where the new place is long enough, which is what makes a grid
+    /// feel like a grid rather than a reset.
+    pub fn step(&mut self, dcol: isize, dcell: isize, drow: isize) {
         if self.rows.is_empty() {
             return;
         }
-        let last_row = self.rows.len() as isize - 1;
-        let r = (self.cursor.0 as isize + dy).clamp(0, last_row) as usize;
-        let len = self.rows[r].len() as isize;
-        if len == 0 {
-            // A row with no cards is still a row you can move onto; the cursor parks there rather
-            // than skipping it, so an empty row is reachable instead of invisible.
-            self.cursor = (r, 0);
+        let (mut r, mut c, mut i) = self.cursor;
+        r = ((r as isize + drow).clamp(0, self.rows.len() as isize - 1)) as usize;
+        let cols = self.rows[r].len();
+        if cols == 0 {
+            // A row with no columns is still a row you can stand on — reachable, not skipped.
+            self.cursor = (r, 0, 0);
             self.sync();
             return;
         }
-        let from = match dy {
-            0 => self.cursor.1 as isize,
-            _ => (self.cursor.1 as isize).min(len - 1),
-        };
-        self.cursor = (r, (from + dx).clamp(0, len - 1) as usize);
+        c = ((c.min(cols - 1) as isize + dcol).clamp(0, cols as isize - 1)) as usize;
+        let cells = self.rows[r][c].len();
+        if cells == 0 {
+            self.cursor = (r, c, 0);
+            self.sync();
+            return;
+        }
+        i = ((i.min(cells - 1) as isize + dcell).clamp(0, cells as isize - 1)) as usize;
+        self.cursor = (r, c, i);
         self.sync();
     }
 }
@@ -184,10 +199,20 @@ impl Component for CardGrid {
             return Handled::No;
         };
         match intent {
-            WidgetIntent::ItemPrevious => self.step(-1, 0),
-            WidgetIntent::ItemNext => self.step(1, 0),
-            WidgetIntent::MenuUp => self.step(0, -1),
-            WidgetIntent::MenuDown => self.step(0, 1),
+            // Three axes on the shared vocabulary, no keys of this widget's own:
+            //   item_previous/next  → COLUMN (Ctrl+h / Ctrl+l)
+            //   menu_up/down        → the cell within that column (Ctrl+k / Ctrl+j)
+            //   menu_history_up/down → ROW (Ctrl+p / Ctrl+n)
+            //
+            // The history pair is deliberately reused rather than given new keys: it means "the
+            // outer axis" on a surface that has one, and a search surface's past queries on one
+            // that does not. Two widgets, one pair of keys, never both on screen.
+            WidgetIntent::ItemPrevious => self.step(-1, 0, 0),
+            WidgetIntent::ItemNext => self.step(1, 0, 0),
+            WidgetIntent::MenuUp => self.step(0, -1, 0),
+            WidgetIntent::MenuDown => self.step(0, 1, 0),
+            WidgetIntent::MenuHistoryUp => self.step(0, 0, -1),
+            WidgetIntent::MenuHistoryDown => self.step(0, 0, 1),
             WidgetIntent::Activate => {
                 // Read the key first: the callback may tear the surface down.
                 let key = self.selected_key().map(str::to_string);

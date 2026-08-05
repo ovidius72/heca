@@ -223,9 +223,10 @@ pub(crate) fn map(
 
     let mut grid = CardGrid::new();
     for ws in rows {
-        let mut cells = Vec::new();
+        let mut columns_of_cells: Vec<Vec<GridCell>> = Vec::new();
         let mut strip = Flex::row().gap(COL_GAP).height(Length::Px(row_h as f32));
         for col in &ws.columns {
+            let mut cells = Vec::new();
             let pane_h = ((row_h - COL_GAP as f64 * (col.panes.len() as f64 - 1.0).max(0.0))
                 / col.panes.len().max(1) as f64)
                 .max(20.0);
@@ -253,9 +254,10 @@ pub(crate) fn map(
                 );
             }
             strip = strip.child(column);
+            columns_of_cells.push(cells);
         }
         grid = grid.row(
-            cells,
+            columns_of_cells,
             Flex::row()
                 .gap(ROW_GAP)
                 .align(Align::Center)
