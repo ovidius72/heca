@@ -697,6 +697,27 @@ pub trait Component {
     fn as_hint_target(&self) -> Option<crate::hint::HintTargetId> {
         self.base().hint_target
     }
+
+    /// Visit this subtree's laid-out hint targets in document order. The default
+    /// walks [`Base::children`]; retained managers whose dynamic children live in
+    /// an internal cache may override this without fabricating proxy geometry.
+    fn visit_hint_targets(
+        &self,
+        visitor: &mut dyn FnMut(crate::hint::HintTargetId, Rectangle),
+    ) {
+        if !self.base().visible.get_untracked()
+            || self.base().disabled.get_untracked()
+            || self.base().style.layout.hidden
+        {
+            return;
+        }
+        if let Some(id) = self.as_hint_target() {
+            visitor(id, self.base().bounds);
+        }
+        for child in self.base().children.iter() {
+            child.visit_hint_targets(visitor);
+        }
+    }
 }
 
 /// Combine two "seconds until next redraw" requests, keeping the sooner one

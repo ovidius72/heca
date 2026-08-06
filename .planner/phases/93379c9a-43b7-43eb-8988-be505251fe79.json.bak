@@ -3,476 +3,598 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 56,
   "shortId": "FVRFU",
-  "priority": 1,
-  "slug": "notification-02-store-lifecycle",
-  "title": "notification-02: Store + Lifecycle",
+  "priority": 2,
+  "slug": "notification-02-store-queue-visibility-history",
+  "title": "notification-02: Store, Queue, Visibility + History",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "Store app-owned, queue, dedup, expiry e scheduling timer.",
-  "description": "Implementare `NotificationStore` con push, dismiss, lookup action, expiry, dedup e policy di visibilità. Integrare expiry e next wake-up nel lifecycle loop senza busy-loop.",
+  "summary": "Implementare coda d'attesa, quattro slot visibili stabili, dedup, expiry e cronologia limitata.",
+  "description": "Implementare `NotificationStore` come unica autorità per ID, dedup, lifecycle e proiezione. Gli stati operativi sono espliciti: in attesa, visibile e archiviata. Massimo quattro notifiche sono visibili contemporaneamente; quelle in attesa non iniziano il timer e non scadono. Una notifica promossa a visibile riceve l'istante di inizio/scadenza. Gli elementi già visibili non cambiano posto: un duplicato visibile aggiorna i dati nello stesso slot e riavvia il timer, un duplicato in attesa passa in testa alla coda, un duplicato presente solo nella cronologia viene riattivato. Dismiss e scadenza spostano una voce nella cronologia limitata. `next_expiry()` considera soltanto visibili non sticky e `heca/src/app/lifecycle.rs:168-172` usa il minimo tra prossimo frame animato e prossima scadenza, senza busy-loop. Tutte le API temporali ricevono `Instant now` per test deterministici.",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "goals": [
+    "Nessuna notifica persa quando i quattro slot sono occupati.",
+    "Nessuna scadenza mentre una notifica è ancora in attesa.",
+    "Nessun salto o riordinamento delle card già visibili.",
+    "Dedup e cronologia con comportamento deterministico.",
+    "Wake-up esatto per la prossima scadenza."
+  ],
+  "nonGoals": [
+    "Pannello grafico della cronologia.",
+    "Persistenza della cronologia tra riavvii.",
+    "Routing app/system/none."
+  ],
+  "dependencies": [
+    "P061(F009) fornisce i tipi canonici."
+  ],
   "dependsOn": [],
-  "risks": [],
+  "risks": [
+    "HashMap da sola non conserva ordine e slot; usare strutture esplicite e un indice dedup coerente.",
+    "Le notifiche sticky possono occupare slot indefinitamente: è comportamento intenzionale, ma la coda deve restare osservabile/testabile."
+  ],
   "openQuestions": [],
-  "decisions": [],
+  "decisions": [
+    "Quattro slot visibili.",
+    "Timer avviato alla promozione, non al push.",
+    "Duplicato visibile aggiornato in loco; duplicato in attesa prioritario senza espellere una card visibile.",
+    "Cronologia limitata inclusa, nessuna UI di cronologia in questa fase."
+  ],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Transizioni in attesa→visibile→archiviata coperte da test.",
+    "Dedup non produce duplicati né spostamenti visivi.",
+    "next_expiry ignora coda e sticky.",
+    "Lifecycle dorme fino al prossimo evento necessario."
+  ],
   "taskIds": [
-    "56193253-82c2-4a4e-9f0c-91c902660e9b",
-    "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a",
-    "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567",
-    "d82433c4-2603-4a71-9b18-a2cc0b33b970",
-    "4ef355c8-5b85-4be7-a94f-6d02286ed3ae",
-    "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
-    "586953dc-a2af-45cc-8eff-f6d5441f6ece",
-    "126d0855-658d-471f-86a6-27eb144fc591",
-    "d5962a9a-2776-4bd9-a629-5d44f1e33a81"
+    "951e11b5-372b-46b7-a516-840784a11251",
+    "a395e3d6-2d24-495d-a496-22f9c60c5599",
+    "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
+    "cb773621-1f27-4e0d-ae2a-e012cea246e3",
+    "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
+    "113d5dd1-0639-4492-912c-aaf088e1587a",
+    "671754ad-5b4d-4472-997c-d379b4986ad5",
+    "d976a997-ed47-4b76-819d-2028cefa9eed",
+    "e2f02933-4071-40d3-a069-60da05391c32",
+    "a2ca34b3-b1c5-475e-8572-48295fe43878"
   ],
   "tasks": [
     {
-      "id": "56193253-82c2-4a4e-9f0c-91c902660e9b",
-      "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
-      "number": 292,
-      "shortId": "GSNBN",
-      "priority": 6,
-      "shortName": "sidebar-peek-action",
-      "title": "Sidebar peek action",
-      "status": "done",
-      "description": "RICHIESTA UTENTE 2026-07-14: in sidebar mode serve un modo per FOCALIZZARE la riga selezionata SENZA USCIRE dalla sidebar mode — così si può camminare l'albero con j/k e \"sbirciare\" pane/workspace nella vista principale restando in navigazione.\n\nOggi: `l` / `Right` / `ArrowRight` (sidebar_right_nav) e Enter focalizzano la pane e ESCONO da SidebarNav (input_mode = Normal). Non esiste un focus che resta in modalità.\n\nDECISIONI PRESE CON L'UTENTE:\n- Nome azione: `sidebar_peek` → `WmAction::SidebarPeek` (nome di config bindabile in keybindings.toml).\n- Default: `Space` in mode \"sidebar\". ATTENZIONE: `Space` è oggi legato a `sidebar_right_nav` (keybindings.default.toml, sezione mode \"sidebar\") — quella riga va SOSTITUITA. `l`/`Right`/`ArrowRight` restano per il right-nav, quindi non si perde nulla.\n- Comportamento su riga WORKSPACE (il cursore si ferma su pane + workspace, mai su colonne): passa a quel workspace (riusa `WmAction::FocusWorkspace`) e RESTA in sidebar mode. Così il tasto è \"attiva ciò che sto puntando, senza uscire\" su TUTTE le righe raggiungibili dal cursore.\n- Su riga PANE / FLOATING PANE: focalizza quella pane, resta in sidebar mode.\n\nLAVORO (checklist \"Adding New Actions\" di AGENTS.md — nessuna scorciatoia: la capability deve essere raggiungibile da tastiera, mouse/UI e RPC):\n1. `WmAction::SidebarPeek` in heca/src/input.rs.\n2. `action_from_name()`: \"sidebar_peek\" → SidebarPeek.\n3. `action_priority()`: match ESPLICITO (niente catch-all).\n4. Handler `handle_sidebar_peek` in heca/src/handlers.rs: solo in `InputMode::SidebarNav`; legge `sidebar_tree.current_item()`; Pane/FloatingPane → focus della pane; Workspace → switch workspace; NON tocca `input_mode` (è questo il punto); `needs_redraw = true`. La selezione nav non si muove (il cursore resta dov'è) ma il rebuild post-focus la ri-proietta (vedi F003/P004/T003).\n5. Registrazione in `build_registry()` (heca/src/app/registry.rs).\n6. Default binding in keybindings.default.toml, mode \"sidebar\": `Space` → sidebar_peek (rimuovendo Space → sidebar_right_nav).\n7. Descriptor in `ActionRegistry::ALL` (heca/src/actions.rs) — è user-facing.\n8. Parser RPC (heca/src/rpc.rs).\n9. `action_policy()` in heca/src/app/interaction.rs — il match è esaustivo (aggiungere una variante senza classificarla è un errore di compilazione). Classificare come `TiledOnly` come le altre `Sidebar*`, + spot-check assertion nei test.\n10. README (tabella keybinding sidebar) + doc.\n11. Test: peek su pane → pane focalizzata E `input_mode` resta `SidebarNav`; peek su workspace → workspace attivo cambiato E mode invariata; peek fuori da SidebarNav → no-op.\n\nCONTESTO CODICE:\n- heca/src/handlers.rs — `handle_sidebar_right_nav` (il focus-ed-esci da cui differenziarsi), `focus_pane_by_id`, `publish_sidebar_selection`\n- heca/src/input.rs — WmAction, action_from_name, action_priority\n- heca/src/app/registry.rs — build_registry\n- heca/src/app/interaction.rs — action_policy (match esaustivo)\n- heca/src/actions.rs — ActionRegistry::ALL\n- keybindings.default.toml — mode \"sidebar\" (Space oggi = sidebar_right_nav)\n\nNB (pulizia inclusa qui): alcuni commenti nel codice non ancora committato di plugin-03 citano id di task INVENTATI (\"t005/t006/t007\") che non esistono nel planner; e il commento in app/startup.rs è STALE (dice che il render path non consuma ancora il provider, cosa non più vera dopo il cutover). Da correggere: riferirsi alla fase (plugin-03), non a id di task nei commenti.\n\n---\n**Completion summary:**\nCOMPLETATO 2026-07-14 — merged in PR #240 (commit 5d4181f, merge 470b192).\n\nFATTO (checklist \"Adding New Actions\" completa):\n1. `WmAction::SidebarPeek` (input.rs) + doc: focalizza la riga sotto il cursore sidebar SENZA cambiare input mode.\n2. `action_from_name(\"sidebar_peek\")`.\n3. `action_priority()` — arm esplicito.\n4. `handle_sidebar_peek` (handlers.rs): NON gated su InputMode (vedi decisione sotto); Pane/FloatingPane → dispatch `handle_focus_pane(FocusPane)`; Workspace → dispatch `handle_focus_workspace(FocusWorkspace)`; Column irraggiungibile dal cursore; albero vuoto → no-op. Non tocca MAI `input_mode`. Ripubblica la selezione nello store.\n5. `build_registry()` — registrato.\n6. keybindings.default.toml mode \"sidebar\": `Space` → sidebar_peek (SOSTITUISCE Space → sidebar_right_nav; l/Right/ArrowRight restano).\n7. Descriptor in `ActionRegistry::ALL`.\n8. RPC: `sidebar-peek` + test.\n9. `action_policy()` → TiledOnly + spot-check assertion.\n10. README: riga Space + spiegazione \"focus-and-stay\" vs \"focus-and-leave\".\n\nDECISIONE (correzione richiesta dall'utente, importante): l'azione NON è gated su `InputMode::SidebarNav`. Un mode-guard renderebbe ogni chiamante non-tastiera (RPC, UI futura) un no-op silenzioso. **Un'azione è una CAPABILITY, non un key handler.**\n\nREFACTOR COLLEGATO (l'utente: \"always trying to hardcode\"): i sidebar handler che RI-DERIVAVANO a mano il focus ora dispatchano l'azione esistente —\n- `handle_sidebar_right_nav`: `focus_pane_by_id` (in due arm duplicati) → `handle_focus_pane(FocusPane)`;\n- `handle_sidebar_create_column` e `handle_sidebar_zoom_selected_column`: `switch_workspace_tracked` → `handle_focus_workspace(FocusWorkspace)`.\nRegola applicata: un handler può implementare la PROPRIA azione, ma non deve MAI re-implementarne un'altra — la dispatcha. (Restano legittime le chiamate dirette che SONO l'implementazione della propria azione, es. `activate_column` nello zoom: nessuna azione possiede \"rendi attiva questa colonna\".)\nDELTA DI COMPORTAMENTO da tenere d'occhio: `handle_focus_workspace` fa anche bounds-check + `after_focus_change`, che il nudo `switch_workspace_tracked` non faceva — quindi `c`/`z` da sidebar su un ALTRO workspace ora eseguono anche il follow-up di focus prima di split/zoom.\n\nRPC PARITY (stessa logica): tutta la famiglia sidebar ora è raggiungibile via RPC, non solo i toggle di regione — `sidebar-focus`, `sidebar-up`, `sidebar-down`, `sidebar-left-nav`, `sidebar-right-nav`, `sidebar-peek`, `sidebar-expand-toggle`, `sidebar-create-workspace`, `sidebar-create-column`, `sidebar-split-in-column`, `sidebar-zoom-selected-column`, `sidebar-delete-selected`. Ognuno con test del parser. Uno script guida la sidebar come l'utente: `sidebar-focus` per entrare in nav mode, poi muoversi/agire.\n\nPULIZIA inclusa: rimossi dai commenti gli id di task INVENTATI (t004/t005/t006/t007 non esistono nel planner) e corretto il commento stantio in app/startup.rs (diceva che il render path non consumava ancora il provider — falso dopo il cutover).\n\nGATE: clippy --workspace --all-targets --all-features 0 warning; heca 361 + grid-ui 142 verdi; showcase builda.\n\nFILE: heca/src/input.rs, handlers.rs, app/registry.rs, app/interaction.rs, actions.rs, rpc.rs, keybindings.default.toml, README.md.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-14T15:45:01.578Z",
-      "completedAt": "2026-07-14T16:08:55.877Z",
-      "createdAt": "2026-07-14T15:44:56.662Z",
-      "updatedAt": "2026-07-14T16:08:55.877Z"
-    },
-    {
-      "id": "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a",
-      "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
-      "number": 293,
-      "shortId": "GZMCN",
-      "priority": 1,
-      "shortName": "swap-param-delegation",
-      "title": "Swap param delegation",
+      "id": "951e11b5-372b-46b7-a516-840784a11251",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 194,
+      "shortId": "83CXV",
+      "priority": 3,
+      "shortName": "store-expire",
+      "title": "Implement visibility-based expiry",
       "status": "planned",
-      "description": "APERTO — punto 3 della lista finale di `redo-mouse.md` (file cancellato 2026-07-14; contenuto verificato e migrato qui).\nTesto originale: \"Fix `handle_swap_param` for true cross-workspace swap or keep one-way move\".\n\n## STATO (verificato 2026-07-14)\n- `heca/src/handlers.rs:385` — `handle_swap_param(state, action)` destruttura `WmAction::Swap { a_id, b_id }`.\n- `AGENTS.md`, § \"Remaining in original refactoring plan\", lo elenca ANCORA come aperto: \"**Phase 3.2: `handle_swap_param()` still needs delegation to shared helpers (partial progress)**\".\n- Gli helper condivisi vivono in `heca/src/app/pane_ops.rs` (`find_pane_indices_in_workspace`, `insert_pane_at_position`, …) e in `heca/src/app/mutations.rs` (`after_layout_change`).\n\n## DECISIONE DA PRENDERE (è il cuore del task)\nDelle due, una — e va DECISA, non lasciata ambigua:\n(a) **swap cross-workspace VERO**: due pane in workspace diversi si scambiano di posto (ognuna finisce nello slot dell'altra);\n(b) **one-way move**: si ammette solo lo spostamento in una direzione, e lo swap cross-workspace viene esplicitamente NON supportato (e documentato come tale).\nOggi il comportamento è ambiguo/parziale: è questa ambiguità il bug.\n\n## LAVORO\n1. Decidere (a) o (b) con l'utente.\n2. Delegare `handle_swap_param` agli helper condivisi invece di ri-derivare indici/inserimenti a mano (è il debito che AGENTS segnala).\n3. ⚠️ ATTENZIONE, invariante: NON perdere pane. Vale la stessa lezione del task `sidebar-drop-loses-panes` (app-10): rimuovere una pane PRIMA di sapere dove reinserirla, ignorando il `Result` dell'insert, la fa sparire. Risolvere/validare la destinazione PRIMA di rimuovere, oppure take-or-restore.\n4. Test: swap same-workspace (regressione), swap cross-workspace (o rifiuto esplicito se (b)), conteggio pane SEMPRE conservato, indici stale dopo rimozione.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`; l'azione resta raggiungibile da tastiera + mouse/UI + RPC (P2).",
+      "description": "Implementare expiry soltanto per notifiche visibili auto-dismiss. Calcolare `visible_since`/`expires_at` alla promozione; le pending non hanno scadenza attiva. `expire_due(now)` archivia tutte le visibili dovute, preserva l'ordine degli slot rimasti, promuove pending negli spazi liberati e assegna loro un nuovo timer completo. Sticky non entra mai nell'insieme delle scadenze. Un update deduplicato visibile riavvia la durata.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-001-pending-non-scade-anche-dopo-tempo-lungo",
+          "number": 1,
+          "title": "Pending non scade anche dopo tempo lungo.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-002-timer-parte-alla-promozione",
+          "number": 2,
+          "title": "Timer parte alla promozione.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-003-sticky-ignorata",
+          "number": 3,
+          "title": "Sticky ignorata.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-004-pi-expiry-simultanee-gestite",
+          "number": 4,
+          "title": "Più expiry simultanee gestite.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-005-dedup-visibile-resetta-timer",
+          "number": 5,
+          "title": "Dedup visibile resetta timer.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-14T18:13:22.014Z",
-      "updatedAt": "2026-07-14T18:13:22.014Z"
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:21:02.600Z"
     },
     {
-      "id": "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567",
-      "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
-      "number": 294,
-      "shortId": "VJ7H6",
-      "priority": 2,
-      "shortName": "focus-follows-mouse-delay",
-      "title": "Focus follows mouse delay",
-      "status": "planned",
-      "description": "APERTO — punto 4 della lista finale di `redo-mouse.md` (file cancellato 2026-07-14; contenuto verificato e migrato qui).\nTesto originale: \"Add `focus_follows_mouse_delay_ms` config\".\n\n## PERCHÉ\nCon `focus_follows_mouse = true`, il focus segue il cursore ISTANTANEAMENTE: attraversare una pane per raggiungerne un'altra ruba il focus alle pane intermedie (il classico \"focus flicker\" mentre si muove il mouse in diagonale). Un ritardo (hover dwell) prima di cambiare focus lo elimina: il focus cambia solo se il cursore RESTA sulla pane per N ms.\n\n## STATO (verificato 2026-07-14)\n- `focus_follows_mouse` ESISTE: setting in `heca-config` `[settings]`, letto sul `CursorMoved` in `heca/src/mouse.rs` (gate: `mouse_enabled` + `focus_follows_mouse` + `InputMode::Normal|Prefix` + cursore nell'area contenuto, poi `hit_test_pane`).\n- **`focus_follows_mouse_delay_ms` NON esiste**: zero occorrenze in tutto il repo (`--include=*.rs --include=*.toml`). Mai implementato.\n\n## LAVORO\n1. `heca-config/src/settings.rs`: nuovo campo `focus_follows_mouse_delay_ms: u64` (0 = comportamento odierno, istantaneo → back-compat totale).\n2. **`config.default.toml`**: aggiungere il setting con commento sotto `[settings]` (regola cardinale AGENTS.md: un campo di `SettingsConfig` che non sta nel file di default è un BUG — il default vivrebbe solo nel codice, invisibile all'utente).\n3. `heca/src/mouse.rs` (`CursorMoved`): non cambiare focus subito. Registrare pane candidata + istante; il focus scatta quando il cursore è rimasto sulla STESSA pane per `delay_ms`. Se il cursore passa su un'altra pane prima della scadenza, il timer riparte. NB: serve un tick (l'`about_to_wait`/loop di redraw già esiste — lì gira anche `dnd_edge_scroll`), altrimenti senza ulteriori eventi mouse il focus non scatterebbe mai.\n4. Il cambio di focus DEVE passare dall'azione (`WmAction::FocusPane` via il dispatch centrale), non da una mutazione diretta.\n5. Reload a runtime (`prefix+Shift+r`) deve raccogliere il nuovo valore.\n6. `README.md`: documentare il setting.\n\n## TEST\n- delay = 0 → comportamento identico a oggi (test di non-regressione);\n- delay > 0 → attraversare una pane senza fermarsi NON le dà il focus;\n- restare fermi oltre la soglia → il focus cambia una volta sola;\n- il timer si resetta cambiando pane.\n\n## GATE\nclippy 0 warning; `cargo test -p heca`; niente `cargo fmt`.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-14T18:13:43.153Z",
-      "updatedAt": "2026-07-14T18:13:43.153Z"
-    },
-    {
-      "id": "d82433c4-2603-4a71-9b18-a2cc0b33b970",
-      "phaseId": "3e04a8f5-3c51-4f2d-8fab-d51b392e80bc",
-      "number": 295,
-      "shortId": "QZBDM",
+      "id": "a395e3d6-2d24-495d-a496-22f9c60c5599",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 195,
+      "shortId": "BBSS4",
       "priority": 4,
-      "shortName": "action-docs-authoring-custom-a",
-      "title": "action-docs — Authoring custom actions (README + widgets.md)",
-      "status": "done",
-      "description": "Richiesta dell'utente (2026-07-14, dopo la verifica manuale della showcase): documentare COME SI CREA UN'AZIONE, con esempi di codice, in `docs/widgets.md` e `README.md`. Scorporato da `action-task-C` (che resta owner di `register(ActionSpec)` + introspezione RPC + doc del Callback): qui si documenta SOLO ciò che ESISTE già dopo plugin-04.\n\n## STATO ATTUALE (verificato 2026-07-14)\n- `README.md` §\"Creating Custom Actions\" (~riga 937) è **STALE e sbagliata**: 6 step che (a) mandano il default binding in `heca-config/src/theme.rs` — FALSO, i default stanno in `keybindings.default.toml` (regola cardinale AGENTS.md); (b) NON menzionano la classificazione OBBLIGATORIA in `action_policy()` (dimenticarla = errore di compilazione); (c) non menzionano l'`ActionDescriptor` nel catalogo (label/icon/category), la parità RPC (regola P2), né il `[confirm]`; (d) precedono plugin-04, quindi ignorano completamente le azioni name-keyed.\n- `docs/widgets.md` §\"Declarative UI model (ViewNode)\" (riga 2337) e §\"Declaring a tree\" (2478) mostrano `.on_press(Intent::new(\"rename\"))` ma **non spiegano MAI da dove venga quell'id**: manca del tutto l'altra metà del contratto (quale azione risolve, e come crearne una propria).\n- Ciò che ESISTE dopo plugin-04 (commit b61b485 / 484a22e / f44981a): `ActionMeta` owned con `policy` obbligatoria; `ActionCatalog` runtime (una sola casa dei metadata, su `AppState`); `ActionRegistry` (handler: `handlers` per discriminante + `dyn_handlers` per nome); `Dispatch { Native | NativeDyn | Declarative }`; `register_dynamic(registry, catalog, meta, handler) -> ActionHandle` / `unregister_dynamic`; una sola porta `dispatch_view_intent` con gli args cablati via `build_action`; `ActionRef { Builtin | Dynamic }` nel keymap (binding di config verso id dinamici, risolti al PRESS); i 5 id dotted `chrome.container.*`.\n- `Intent` (heca/src/chrome/view.rs:241) ha `new(action)` + `.arg(key, PropValue)`.\n\n## LAVORO\n1. **`docs/widgets.md`** — nuova sezione dopo \"Declaring a tree\": *l'altra metà di un Intent, l'azione che nomina*. Tabella id built-in (snake_case) vs name-keyed (dotted); gli args viaggiano su ENTRAMBI i path (stesso `build_action`) ⇒ mostrare lo STESSO risultato da widget / config / RPC; un id sconosciuto non è un crash. Poi **come registrare un'azione propria**: esempio completo `register_dynamic` con `ActionMeta` (policy!), handler `Rc<dyn Fn(&mut AppState, &Intent)>` che legge gli args, `unregister_dynamic` all'unmount; il Button `ViewNode` che la spara. Tabella delle 6 `ActionPolicy` con la TRAPPOLA `AlwaysAllowed` (bloccata quando floating; `Global` è l'unica davvero sempre permessa). `handler: None` ⇒ `Declarative` (dichiarata, la esegue il proprietario oltre il confine WASM). Link al README per la checklist in-tree.\n2. **`README.md`** — riscrivere §\"Creating Custom Actions\" in DUE percorsi: (A) azione BUILT-IN in-tree (variante `WmAction` → `action_from_name`/`build_action` → **`action_policy()` obbligatorio** → handler → `build_registry` → `ActionDescriptor` in `ALL` → default in `keybindings.default.toml` → comando RPC per la parità P2 → `[confirm]` opzionale); (B) azione NAME-KEYED a runtime (`register_dynamic`, policy dichiarata, bindabile da config per nome, dispatch da menu/ViewNode/RPC, `Declarative` per WASM). Correggere il riferimento a `heca-config/src/theme.rs`.\n3. Coerenza fra i due file (cross-link), nessuna API inventata: `ProviderHandles` (heca/src/providers/mod.rs:79) tiene per ora SOLO le `subscriptions` — l'`ActionHandle` NON è ancora agganciato lì (G5 resta da fare, plugin-05): documentare `unregister_dynamic` esplicito, non un `handles.keep(handle)` che non esiste.\n\n## GATE\nSolo documentazione: nessun codice, nessun gate di build. Verificare che ogni snippet corrisponda alle firme reali (`ActionMeta`, `register_dynamic`, `Intent::arg`, `ActionCategory`, `Glyph`).\n\n---\n**Completion summary:**\nDONE 2026-07-14 — commit `506e5f5` (branch `test/context-menu-keyboard-nav`).\n\n## README.md — §\"Actions System\"\n- **§\"Creating Custom Actions\" RISCRITTA** in DUE percorsi espliciti:\n  - **A. Azione built-in (in-tree)**, 9 step: variante `WmAction` → nome (`action_from_name` per le unit, **`build_action` per le parametrizzate** — è lo stesso costruttore usato da binding/Intent/RPC) → **`action_policy()` OBBLIGATORIO** (match esaustivo: saltarlo NON COMPILA, ed è voluto) con l'avvertenza sulla trappola `AlwaysAllowed` → handler → `build_registry` → **`ActionDescriptor` in `ALL`** (label/icon/category: è ciò che dà all'azione la sua identità visiva ovunque) → **default binding in `keybindings.default.toml`, NON in Rust** → **parità RPC** (regola P2) → `ConfirmSpec` opzionale.\n  - **B. Azione name-keyed (provider/plugin)**: `register_dynamic` con `ActionMeta` owned (`policy` OBBLIGATORIA, spiegato il perché: un built-in è costretto dal match esaustivo, un'azione name-keyed non ha variante ⇒ è il campo a costringere), handler che riceve l'`Intent` (args come DATI, nessuna closure attraverso il confine), `unregister_dynamic` all'unmount; come bindarla da config (flat e con args); **`None` come handler ⇒ azione `Declarative`** (dichiarata, la esegue il proprietario oltre il confine WASM).\n- **CORRETTE 3 falsità della vecchia sezione**: (1) il default binding NON va in `heca-config/src/theme.rs` (i default stanno nei file `.default.toml`: un default che vive solo nel codice è invisibile all'utente); (2) mancava del tutto `action_policy()`; (3) mancavano `ActionDescriptor`, parità RPC e `[confirm]`.\n- **§\"Registry Dispatch\" aggiornata**: il diagramma diceva ancora `KeymapRegistry → WmAction`. Ora mostra le 3 superfici (tastiera→`ActionRef`, mouse/UI→`Intent`, RPC→comando) che convergono su UNA porta + interaction policy, e le due back end (built-in→`WmAction`→handler nativo; name-keyed→handler registrato). Aggiunto il tipo \"Name-keyed actions\" fra gli Action Types.\n- **Documentato ciò che l'utente NON poteva indovinare**: un binding verso un'azione che ancora non esiste NON è un errore (la config è letta PRIMA che i provider registrino) ⇒ e quindi **nemmeno un TYPO è un errore**: semplicemente non spara mai. \"If a binding seems dead, check the name.\"\n\n## docs/widgets.md — §\"Declarative UI model (ViewNode)\"\n- Nuova §**\"The other half of an `Intent` — the action it names\"**: il doc mostrava `.on_press(Intent::new(\"rename\"))` in più punti senza MAI dire da dove venisse quell'id (mezzo contratto). Ora: tabella id built-in (snake_case) vs name-keyed (dotted); **gli args viaggiano su entrambi i path attraverso lo stesso `build_action`** ⇒ mostrato lo STESSO risultato da widget / config / RPC; un id sconosciuto non è mai un crash.\n- Nuova §**\"Registering a custom (name-keyed) action\"**: esempio completo `register_dynamic`/`unregister_dynamic`; spiegato PERCHÉ metadata e handler stanno in due posti (motivo di BORROW, non di design: un handler è `fn(&mut AppState, …)` e non riceve il registry); tabella delle **6 `ActionPolicy`** con la trappola `AlwaysAllowed` in evidenza; nota che `ActionPolicy` è `pub(crate)` ⇒ un provider in-tree nomina l'enum, un plugin WASM dichiarerà la stessa scelta come dati (G2: il plugin dichiara, l'host onora).\n- TOC aggiornata (la sezione \"Declarative UI model\" non era nemmeno indicizzata).\n\n## VERIFICHE FATTE (nessuna API inventata)\nOgni firma negli esempi controllata contro il sorgente: campi di `ActionMeta` (7, esatti), `register_dynamic`/`unregister_dynamic`, `Intent::new`/`.arg`, `ActionCategory`, le 6 varianti di `ActionPolicy`, i nomi dei `Glyph` (scartato `Glyph::Sparkle` che NON esiste → `Glyph::Play`/`Glyph::Gear`). Gli import negli esempi usano `crate::` (heca è un binario, non una lib). **`ProviderHandles` (providers/mod.rs:79) tiene ancora SOLO le `subscriptions`** ⇒ documentato `unregister_dynamic` esplicito e NON un `handles.keep(handle)` inesistente (l'aggancio RAII è G5, resta a plugin-05). Tutti e 6 gli anchor cross-doc verificati come risolvibili.\n\n## GATE\nSolo documentazione. Per sicurezza: `cargo clippy --workspace --all-targets --all-features` 0 warning; `cargo test -p heca` 383 passed / 0 failed (invariati).",
+      "shortName": "store-dedup",
+      "title": "Implement dedup without visual jumps",
+      "status": "planned",
+      "description": "Implementare dedup per chiave esplicita. Duplicato visibile: mantenere ID e slot, sostituire dati canonici, aggiornare target/action e riavviare il timer. Duplicato pending: mantenere ID, aggiornare dati e spostare la voce in testa alla coda d'attesa senza espellere una card visibile. Duplicato presente soltanto in cronologia: rimuoverlo dalla cronologia, aggiornare i dati e riattivarlo come voce più recente secondo disponibilità slot, mantenendo l'ID per continuità dedup. Una chiave assente crea un nuovo ID. Mantenere coerente l'indice in dismiss/expiry/history trimming.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-001-caso-visible-in-place",
+          "number": 1,
+          "title": "Caso visible in-place.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-002-caso-pending-prioritario",
+          "number": 2,
+          "title": "Caso pending prioritario.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-003-caso-archived-riattivato",
+          "number": 3,
+          "title": "Caso archived riattivato.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-004-caso-nuova-chiave",
+          "number": 4,
+          "title": "Caso nuova chiave.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-005-indice-coerente-dopo-trim",
+          "number": 5,
+          "title": "Indice coerente dopo trim.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-14T21:41:38.427Z",
-      "completedAt": "2026-07-14T21:45:21.214Z",
-      "createdAt": "2026-07-14T21:41:16.001Z",
-      "updatedAt": "2026-07-14T21:45:21.214Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:21:14.216Z"
     },
     {
-      "id": "4ef355c8-5b85-4be7-a94f-6d02286ed3ae",
-      "phaseId": "3e04a8f5-3c51-4f2d-8fab-d51b392e80bc",
-      "number": 296,
-      "shortId": "8S9M6",
+      "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 196,
+      "shortId": "MPHXW",
+      "priority": 1,
+      "shortName": "store-push",
+      "title": "Implement push, monotonic IDs and slot promotion",
+      "status": "planned",
+      "description": "Implementare `push(draft, now)` attraverso le invarianti dello store. Assegnare un nuovo `NotificationId` monotono soltanto quando la dedup non trova una voce esistente. Se esiste uno slot libero, promuovere immediatamente la voce e iniziare il timer; altrimenti inserirla nella coda senza expiry. Quando una visibile esce, promuovere la prima in attesa nello slot libero senza spostare le altre card. Gestire overflow ID in modo esplicito e testabile.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-001-id-non-riutilizzati",
+          "number": 1,
+          "title": "ID non riutilizzati.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-002-push-con-slot-libero",
+          "number": 2,
+          "title": "Push con slot libero.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-003-push-con-quattro-slot-pieni",
+          "number": 3,
+          "title": "Push con quattro slot pieni.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-004-promozione-nello-slot-liberato",
+          "number": 4,
+          "title": "Promozione nello slot liberato.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-005-nessun-riordinamento-degli-slot-occupati",
+          "number": 5,
+          "title": "Nessun riordinamento degli slot occupati.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:20:46.285Z"
+    },
+    {
+      "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 197,
+      "shortId": "SDKQ7",
       "priority": 5,
-      "shortName": "action-task-d-migrate-built-in",
-      "title": "action-task-D — Migrate built-ins onto register(ActionSpec)",
-      "status": "canceled",
-      "description": "Follow-up MECCANICO di action-task-C (2026-07-15). Puramente opzionale: nessun cambiamento funzionale, nessun bug — è cleanup/unificazione.\n\n# ⚠️ MEASURED 2026-07-27 — THE PREMISE DOES NOT HOLD, AND THE SAFETY GOAL IS ALREADY MET\n\n## The two lists do not pair 1:1\n\n**148 descriptors in `ActionRegistry::ALL`, but only 132 distinct `WmAction` variants with a registered handler.** A handler is keyed by the enum **variant**, not by the name, and several names share one variant. Verified example (actions.rs:820/829/838 vs registry.rs:725):\n\n| Name — 3 palette entries, 3 keybindings | Variant — 1 handler |\n|---|---|\n| `app_font_increase` | `WmAction::AppFontZoom { step: In }` |\n| `app_font_decrease` | `WmAction::AppFontZoom { step: Out }` |\n| `app_font_reset` | `WmAction::AppFontZoom { step: Reset }` |\n\nOne `ActionSpec` per NAME therefore means writing the same handler 16 times over, registering it repeatedly onto the same discriminant key (later calls overwriting earlier ones — harmless, but pointless). **\"One place per action, so they cannot drift\" is true for the 132 that are 1:1 and quietly false for the other 16.**\n\n## What it would cost\n\n- **More code, not less.** A 148-entry const array + a 132-line `build_registry()` becomes 148 larger literals.\n- **A hand-pairing job.** Each literal needs the right `handle_*` function beside it. One wrong pair silently binds a key to the wrong action — the exact class of silent failure that F003/P010/T006, F003/P017/T005 and F003/P017/T006 were all spent removing.\n\n## THE SAFETY GOAL IS DONE (commits a413730 + d95cde20)\n\nThe task's stated purpose — \"togliere la possibilità di drift ALL↔handler\" — is enforced by two tests closing both directions:\n\n- **`every_catalogued_action_has_a_handler`** (heca/src/app/registry.rs) — walks all 148 descriptors, resolves each to its `WmAction` (by name, or built from its **declared `args`**), asserts a handler is registered. Verified by deleting one `register()` line: it fails and names `zoom_column`.\n- **`every_wm_action_variant_is_reachable_by_name`** (heca/src/input.rs, from F003/P010/T006) — the other direction: walks every variant, asserts a descriptor names it. This is the direction that had actually rotted — 23 argument-taking actions had handlers and no descriptor at all.\n\nDrift is now *caught in the same commit that causes it* rather than *impossible*. That is a smaller difference than it sounds.\n\n## WHAT IS ACTUALLY LEFT HERE\n\nUniformity of shape only: one way to register an action instead of two, so a reader learns one pattern. Genuine but small — and **not** a capability question, see below.\n\n## ⚠️ IT IS NOT ABOUT PLUGINS. THE DYNAMIC PATH ALREADY EXISTS\n\nThe user asked (2026-07-27) whether a plugin must edit `build_registry` to add an action. **No.** `register_dynamic(registry, catalog, meta, handler)` registers a name-keyed action at runtime — no enum variant, no `build_registry` edit, no rebuild. It joins the same one catalog, so it gets a label, an icon, `list-actions`, `describe-action` (including its declared `args`), menu dispatch, RPC, and config binding by name — the last even *before* it exists, since config is read before providers mount and an unresolved name resolves at press time. `handler: None` registers a `Dispatch::Declarative` action, forwarded to its owner across the WASM boundary.\n\n`build_registry()` is the **built-in** path only. Built-ins keep the enum deliberately: discriminant dispatch is zero-cost, and `action_policy()`'s exhaustive match makes forgetting to classify a new one a compile error.\n\n**Still missing, and it is not this task:** nothing in production calls `register_dynamic` yet — it carries `expect(dead_code, reason = \"plugin-04 seam: the first registrant is T1 (chrome placement actions) / a provider; exercised by tests today\")`. Architecturally a plugin can add an action; demonstrably nobody has. That belongs to F003/P001 (WASM runtime) and F003/P008.\n\n## WHEN THIS WOULD BECOME WORTH DOING\n\nIf built-ins ever need registering at **runtime** — conditional on platform, unloadable, or if the `WmAction` enum is retired. None is on the table; if one arrives, the merge comes with it for free.\n\n═══════════════════════════════════════════════════════════════════\nORIGINAL DESCRIPTION (2026-07-15) — the plan as first written\n═══════════════════════════════════════════════════════════════════\n\n## STATO ATTUALE\nI ~115 built-in prendono i metadata da `ActionRegistry::ALL` (const array in `heca/src/actions.rs`), seedati nel catalogo da `ActionCatalog::with_builtins()`, e gli handler da `build_registry()` (`heca/src/app/registry.rs`). Sono DUE punti separati che possono divergere (un descriptor in ALL senza handler, o viceversa).\n\naction-task-C ha aggiunto l'API nativa a una chiamata: `register(registry, catalog, ActionSpec { action, handler, meta })` (`heca/src/actions.rs`) che cabla handler (per discriminante) + meta insieme. Ma i built-in NON sono stati migrati — l'API esiste e i built-in usano ancora il vecchio doppio path.\n\n## LAVORO (se/quando si vuole fare)\n1. Sostituire il seeding `const ALL` + `build_registry()` con una serie di `register(ActionSpec { ... })`, una per azione, così handler e metadata stanno in UN posto per azione e non possono divergere.\n2. `ActionRegistry::ALL` può poi essere ritirato (o ridotto), come previsto da action-interaction-plan §5.1.\n3. Attaccare i 3 confirm spec (close/delete_column/delete_workspace) direttamente nel loro `ActionSpec.meta.confirm`, eliminando il fixup post-seed in `with_builtins`.\n4. Gate invariato: clippy 0 warning; `cargo test -p heca`; niente `cargo fmt`.\n\n## PERCHÉ È A BASSA PRIORITÀ\nZero guadagno funzionale: il catalogo prodotto è identico. Il solo vantaggio è togliere la possibilità di drift ALL↔handler e avere un solo modo di registrare un'azione. Farlo quando conviene toccare comunque quella zona.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "4ef355c8-5b85-4be7-a94f-6d02286ed3ae-check-001-in-progress-planned",
-          "date": "2026-07-27T07:08:36.716Z",
-          "fromStatus": "in-progress",
-          "toStatus": "planned",
-          "title": "Started 2026-07-27 and stopped before the rewrite: measuring the two lists showed the task's premise does not hold (148 names vs 132 handler-bearing variants, so they do not pair 1:1). The safety property the task exists for was delivered instead, by two guard tests. The structural merge is left planned because it is still a legitimate choice for uniformity — but it now buys shape, not safety, and the user has been given the numbers. Not started as specified; pending their call.</motivation>",
-          "description": "Started 2026-07-27 and stopped before the rewrite: measuring the two lists showed the task's premise does not hold (148 names vs 132 handler-bearing variants, so they do not pair 1:1). The safety property the task exists for was delivered instead, by two guard tests. The structural merge is left planned because it is still a legitimate choice for uniformity — but it now buys shape, not safety, and the user has been given the numbers. Not started as specified; pending their call.</motivation>\n<parameter name=\"description\">Follow-up MECCANICO di action-task-C (2026-07-15). Puramente opzionale: nessun cambiamento funzionale, nessun bug — è cleanup/unificazione. NON è debito \"for now\" (il path esistente funziona); registrare qui perché la nota non resti sepolta in un task chiuso.\n\n# ⚠️ MEASURED 2026-07-27 — THE PREMISE DOES NOT HOLD, AND THE SAFETY GOAL IS ALREADY MET\n\n## The two lists do not pair 1:1\n\n**148 descriptors in `ActionRegistry::ALL`, but only 132 distinct `WmAction` variants with a registered handler.** A handler is keyed by the enum **variant**, not by the name, and several names share one variant. Verified example (actions.rs:820/829/838 vs registry.rs:725):\n\n| Name — 3 palette entries, 3 keybindings | Variant — 1 handler |\n|---|---|\n| `app_font_increase` | `WmAction::AppFontZoom { step: In }` |\n| `app_font_decrease` | `WmAction::AppFontZoom { step: Out }` |\n| `app_font_reset` | `WmAction::AppFontZoom { step: Reset }` |\n\nSo one `ActionSpec` per NAME means writing the same handler 16 times over, registering it repeatedly onto the same discriminant key (later calls overwriting earlier ones — harmless, but pointless). **\"One place per action, so they cannot drift\" is true for the 132 that are 1:1 and quietly false for the other 16.**\n\n## What it would cost\n\n- **More code, not less.** A 148-entry const array + a 132-line `build_registry()` becomes 148 larger literals.\n- **A hand-pairing job.** Each of the 148 literals needs the right `handle_*` function beside it. One wrong pair silently binds a key to the wrong action — the exact class of silent failure F003/P010/T006, F003/P017/T005 and F003/P017/T006 were all spent removing.\n\n## THE SAFETY GOAL IS DONE (commit d95cde20 + a413730)\n\nThe task's stated purpose — \"togliere la possibilità di drift ALL↔handler\" — is now enforced by two tests that close both directions:\n\n- **`every_catalogued_action_has_a_handler`** (heca/src/app/registry.rs) — walks all 148 descriptors, resolves each to its `WmAction` (by name, or built from its **declared `args`**), asserts a handler is registered. Verified by deleting one `register()` line: it fails and names `zoom_column`.\n- **`every_wm_action_variant_is_reachable_by_name`** (heca/src/input.rs, added by F003/P010/T006) — the other direction: walks every variant and asserts a descriptor names it. This is the direction that had actually rotted — 23 argument-taking actions had handlers and no descriptor at all.\n\nDrift is now *caught in the same commit that causes it*, rather than *impossible*. That is a smaller difference than it sounds.\n\n## WHAT IS ACTUALLY LEFT IN THIS TASK\n\nUniformity of shape only: one way to register an action instead of two, so a reader learns one pattern. Genuine but small, and it is **not** a capability question — see below.\n\n## ⚠️ IT IS NOT ABOUT PLUGINS. THE DYNAMIC PATH ALREADY EXISTS\n\nThe user asked (2026-07-27) whether a plugin has to edit `build_registry` to add an action. **No.** `register_dynamic(registry, catalog, meta, handler)` registers a name-keyed action at runtime — no enum variant, no `build_registry` edit, no rebuild. It joins the same one catalog, so it gets a label, an icon, `list-actions`, `describe-action` (including its declared `args`), menu dispatch, RPC, and config binding by name — the last even *before* it exists, since config is read before providers mount and an unresolved name resolves at press time. `handler: None` registers a `Dispatch::Declarative` action, forwarded to its owner across the WASM boundary.\n\n`build_registry()` is the **built-in** path only. Built-ins keep the enum deliberately: discriminant dispatch is zero-cost, and `action_policy()`'s exhaustive match makes forgetting to classify a new one a compile error.\n\n**Still missing, and it is not this task:** nothing in production calls `register_dynamic` yet — it carries `expect(dead_code, reason = \"plugin-04 seam: the first registrant is T1 (chrome placement actions) / a provider; exercised by tests today\")`. Architecturally a plugin can add an action; demonstrably nobody has. That belongs to F003/P001 (WASM runtime) and F003/P008.\n\n## WHEN THIS WOULD BECOME WORTH DOING\n\nIf built-ins ever need registering at **runtime** — conditional on platform, unloadable, or if the `WmAction` enum is retired. None of those is on the table; if one arrives, the merge comes with it for free.\n\n═══════════════════════════════════════════════════════════════════\nORIGINAL DESCRIPTION (2026-07-15) BELOW — the plan as first written\n═══════════════════════════════════════════════════════════════════\n\n## STATO ATTUALE\nI ~115 built-in prendono i metadata da `ActionRegistry::ALL` (const array in `heca/src/actions.rs`), seedati nel catalogo da `ActionCatalog::with_builtins()`, e gli handler da `build_registry()` (`heca/src/app/registry.rs`). Sono DUE punti separati che possono divergere (un descriptor in ALL senza handler, o viceversa).\n\naction-task-C ha aggiunto l'API nativa a una chiamata: `register(registry, catalog, ActionSpec { action, handler, meta })` (`heca/src/actions.rs`) che cabla handler (per discriminante) + meta insieme. Ma i built-in NON sono stati migrati — l'API esiste e i built-in usano ancora il vecchio doppio path.\n\n## LAVORO (se/quando si vuole fare)\n1. Sostituire il seeding `const ALL` + `build_registry()` con una serie di `register(ActionSpec { ... })`, una per azione, così handler e metadata stanno in UN posto per azione e non possono divergere.\n2. `ActionRegistry::ALL` può poi essere ritirato (o ridotto), come previsto da action-interaction-plan §5.1 (\"i dati escono da const ALL e finiscono in register_builtins()\").\n3. Attaccare i 3 confirm spec (close/delete_column/delete_workspace) direttamente nel loro `ActionSpec.meta.confirm`, eliminando il fixup post-seed in `with_builtins`.\n4. Gate invariato: `cargo clippy --workspace --all-targets --all-features` 0 warning; `cargo test -p heca` (parità del catalogo: il test `builtin_metadata_survives_the_owned_ripple_unchanged` deve restare verde); niente `cargo fmt`.\n\n## PERCHÉ È A BASSA PRIORITÀ\nZero guadagno funzionale: il catalogo prodotto è identico. Il solo vantaggio è togliere la possibilità di drift ALL↔handler e avere un solo modo di registrare un'azione (nativo = dinamico). Farlo quando conviene toccare comunque quella zona."
-        },
-        {
-          "id": "4ef355c8-5b85-4be7-a94f-6d02286ed3ae-check-002-planned-canceled",
-          "date": "2026-07-27T07:10:53.066Z",
-          "fromStatus": "planned",
-          "toStatus": "canceled",
-          "title": "Closed 2026-07-27 by the user's decision: \"if this task doesn't produce anything I want to close and not plan again. we need to close tasks and not keeping delaying.\"",
-          "description": "Closed 2026-07-27 by the user's decision: \"if this task doesn't produce anything I want to close and not plan again. we need to close tasks and not keeping delaying.\"\n\nCanceled rather than done, because the specified work — 148 `register(ActionSpec)` literals replacing `const ALL` + `build_registry()` — was deliberately NOT carried out. Marking it done would be false.\n\nWHAT IT DID PRODUCE, and why the rest is not coming back:\n- The task's stated purpose was \"togliere la possibilità di drift ALL↔handler\". That is DONE, by test rather than by structure: `every_catalogued_action_has_a_handler` (heca/src/app/registry.rs, commit d95cde20) and `every_wm_action_variant_is_reachable_by_name` (heca/src/input.rs, commit a413730) close both directions. Deleting one `register()` line fails the first and names the action.\n- What remained after that was uniformity of shape only, and measuring killed it: 148 names vs 132 handler-bearing variants, so they do not pair 1:1 (`app_font_increase`/`_decrease`/`_reset` all share `WmAction::AppFontZoom`). The rewrite would have produced more code than it removed, repeated the same handler 16 times, and required hand-pairing 148 literals where one wrong pair silently binds a key to the wrong action.\n- It is NOT a plugin capability question. `register_dynamic` already lets a provider or plugin add an action at runtime with no enum variant and no `build_registry` edit. `build_registry()` is the built-in path only.\n\nDO NOT RE-PLAN THIS. If built-ins ever need registering at runtime — conditional on platform, unloadable, or the `WmAction` enum retired — the merge comes with that work for free and does not need a task of its own. The full measurements and reasoning stay in the description above."
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-27T06:48:41.113Z",
-      "completedAt": "",
-      "createdAt": "2026-07-15T16:54:35.432Z",
-      "updatedAt": "2026-07-27T07:10:53.066Z"
-    },
-    {
-      "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2",
-      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 297,
-      "shortId": "YRTYE",
-      "priority": 10,
-      "shortName": "scrollregion-two-axis-scrollab",
-      "title": "ScrollRegion two-axis + scrollable surface (overlay/scroll rework Part 1)",
-      "status": "done",
-      "description": "Part 1 of the overlay/scroll rework (design: docs/overlay-design.md §\"T009 rework\"; sibling: plugin-task-ui-7/T009 owns Part 2 = overlays above the scroll + base Overlay widget). Fixes BUG C (showcase content wider than the viewport runs off-screen with no scrollbar).\n\nCURRENT STATE:\n- `ScrollRegion` (heca-grid-ui/src/widgets/scroll_region.rs) is an embeddable VERTICAL-ONLY scroll viewport. It bakes `-scroll_offset` into child bounds (bounds === drawn === clickable), clips via renderer PushClip/PopClip, resets `applied_offset` in `Component::on_layout` (post-order, so the shift never compounds). Public API: `new()`, `scroll_offset() -> Signal<f32>`, `scroll_to(f32)`, `ensure_visible(Rectangle)`, `scroll_to_child(usize)`. Wheel via `Event::Scroll`; auto vertical scrollbar (theme-accent thumb, wide grab lane, control_radius). Module doc explicitly says \"v1 is vertical-only; horizontal scrolling is future work.\"\n- The SHOWCASE scrolls its whole page with a MANUAL `offset_tree(dy)` (heca-renderer/examples/showcase.rs ~L1740) — vertical only — NOT a ScrollRegion. That is why wide content has no horizontal scrollbar.\n- `Surface`/`StyleExt` (background/border/radius/glow) exist as theme-driven builders on surfaces.\n\nDESIRED STATE (extend ScrollRegion; DO NOT add a parallel widget):\n1. Two-axis scrolling. Add `ScrollAxes { Vertical (default), Horizontal, Both }` via builders `.horizontal()`/`.both()` (default Vertical = back-compat; existing callers unchanged). Per-axis offset — decision Q2 lean: keep the existing `scroll_offset()` Signal<f32> as the vertical accessor and ADD a horizontal `scroll_offset_x()` Signal<f32> (two signals, smaller diff) rather than switching to a Point. Lay children at natural size on BOTH axes (no shrink) so content overflows horizontally; bake `-offset` on both axes in the same place the vertical shift is applied; clip to the region rect (already done).\n2. Horizontal scrollbar on the bottom edge mirroring the vertical thumb (theme-accent grip, wide invisible grab lane, control_radius); auto-shown only when the horizontal axis overflows. Q1 lean: overlay/auto-hide over content (match the vertical thumb), no reserved gutter.\n3. Wheel/trackpad: plain `Event::Scroll` delta → vertical; Shift+wheel → horizontal; a 2-D delta drives both. Clamp each axis to [0, max_offset]. Confirm what `Event::Scroll` carries (dx/dy? modifiers?) in component.rs before wiring.\n4. Optional \"scrollable surface\" styling: give ScrollRegion optional `StyleExt` (background/border/radius/glow), theme-driven — a plain `ScrollRegion::new()` stays frameless, `.background(..).border(..)` makes it a scrollable panel. No hardcoded styling.\n5. Showcase adopts it: replace the manual `offset_tree` page-scroll with a root `ScrollRegion::new().both()` wrapping the content (dogfood; fixes BUG C). NB: overlays (Dialog/Select) must be hosted ABOVE this scroll — that is Part 2 (T009); until then the in-flow Dialog stays off-screen when scrolled (BUG B) — do not attempt to fix BUG B here.\n\nEDGE CASES: content smaller than viewport on an axis → no scrollbar, offset pinned 0; on_layout must reset BOTH axes' applied offsets; `ensure_visible`/`scroll_to_child` stay vertical for now (or extend if cheap); back-compat — `scroll_offset()` semantics unchanged for vertical-only callers.\n\nVERIFY INTERACTIVELY (mandatory — see the no-unverified-rendering lesson): unit-test the pure clamp/offset math; then the USER runs `cargo run -p heca-renderer --example showcase` to confirm horizontal + vertical scroll, the bottom scrollbar, Shift+wheel, and that a styled scrollable surface renders. Do NOT mark done on green unit tests alone.\n\nDOCS (both audiences, per the rule): docs/widgets.md ScrollRegion entry (new builders + horizontal scrollbar + StyleExt, native + declarative examples) + rustdoc; showcase demo section.\n\n---\n**Completion summary:**\nWIDGET DONE + user-verified interactively. Commit c84528a (feat) + 6162a51 (planner) on branch feat/action-task-c. ScrollRegion extended to two-axis + scrollable surface (heca-grid-ui/src/widgets/scroll_region.rs): ScrollAxes/.horizontal()/.both(); scroll_offset_x/scroll_to_x; two-axis sync_shift/on_layout; horizontal scrollbar; gutter + clean corner (v_overflow/h_overflow); max_offset reserves the perpendicular gutter; click-in-track paging (both axes); StyleExt scrollable-surface; Event::Scroll two-axis (delta_x/delta_y) with host modifier→axis mapping (component.rs + select.rs + showcase). REMOVED hardcoded keys + tab-stop focusability (tmux model → keyboard scroll host-driven, T011). docs/widgets.md rewritten + rustdoc + showcase demo. Full workspace green, clippy clean, rust-skill clean. User verified two-axis pointer scroll, click-track, Shift+wheel, gutter/corner clean, plain keys don't scroll.\n\nCHECKLIST NOTE: items 1-5,7,9,10 DONE. Item 8 (user verify) DONE. Item 6 \"showcase whole-page uses ScrollRegion.both() (drop offset_tree)\" DEFERRED to Part 2 / T009 — it fully fixes BUG C but is COUPLED with overlays-above-scroll (else re-triggers BUG B: in-flow Dialog off-screen when scrolled). Forced-complete because the widget deliverable is done; the whole-page adoption belongs with the overlay rework.",
+      "shortName": "store-dismiss",
+      "title": "Implement dismiss and archive transition",
+      "status": "planned",
+      "description": "Implementare la mutazione store invocata esclusivamente dall'handler registrato `DismissNotification`. Dismiss di una visibile/pending rimuove la voce dal relativo stato, la archivia con causa e timestamp, aggiorna gli indici e promuove pending se necessario. ID sconosciuto è un no-op deterministico riportabile all'handler, non un panic. Rispettare `dismissible`: il percorso utente non chiude una voce non dismissible; i producer/runtime possono avere un'API interna distinta per rimuovere errori risolti, come `config.reload.failed`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-001-add-scrollaxes-horizontal-both-builders-default-vertical-back-compat",
-          "title": "Add ScrollAxes + .horizontal()/.both() builders (default Vertical, back-compat)",
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-001-dismiss-visible-e-pending",
+          "number": 1,
+          "title": "Dismiss visible e pending.",
           "checked": false
         },
         {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-002-add-horizontal-offset-signal-scroll-offset-x-bake-offset-on-both-axes-on-layout-resets-both",
-          "title": "Add horizontal offset signal + scroll_offset_x(); bake -offset on both axes; on_layout resets both",
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-002-unknown-id-no-panic",
+          "number": 2,
+          "title": "Unknown ID no panic.",
           "checked": false
         },
         {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-003-horizontal-scrollbar-bottom-edge-mirroring-the-vertical-thumb-auto-shown-on-overflow",
-          "title": "Horizontal scrollbar (bottom edge) mirroring the vertical thumb; auto-shown on overflow",
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-003-non-dismissible-bloccata-dal-percorso-utente",
+          "number": 3,
+          "title": "Non-dismissible bloccata dal percorso utente.",
           "checked": false
         },
         {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-004-wheel-plain-vertical-shift-wheel-horizontal-2-d-delta-both-clamp-each-axis",
-          "title": "Wheel: plain=vertical, Shift+wheel=horizontal, 2-D delta=both; clamp each axis",
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-004-rimozione-interna-per-risoluzione-producer",
+          "number": 4,
+          "title": "Rimozione interna per risoluzione producer.",
           "checked": false
         },
         {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-005-optional-styleext-background-border-radius-glow-so-it-can-be-a-scrollable-surface",
-          "title": "Optional StyleExt (background/border/radius/glow) so it can be a scrollable surface",
-          "checked": false
-        },
-        {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-006-showcase-whole-page-uses-scrollregion-new-both-drop-offset-tree-fixes-bug-c",
-          "title": "Showcase whole-page uses ScrollRegion::new().both() (drop offset_tree) — fixes BUG C",
-          "checked": false
-        },
-        {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-007-unit-tests-for-clamp-offset-math-both-axes",
-          "title": "Unit tests for clamp/offset math (both axes)",
-          "checked": false
-        },
-        {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-008-user-verifies-in-the-gpu-showcase-horizontal-vertical-scroll-scrollbar-shift-wheel-styled-surface",
-          "title": "USER verifies in the GPU showcase (horizontal+vertical scroll, scrollbar, Shift+wheel, styled surface)",
-          "checked": false
-        },
-        {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-009-docs-widgets-md-scrollregion-entry-rustdoc-native-declarative-examples-showcase-section",
-          "title": "docs/widgets.md ScrollRegion entry + rustdoc (native + declarative examples) + showcase section",
-          "checked": false
-        },
-        {
-          "id": "c0e2d0de-3e8c-49da-bdd8-529d530a1cf2-check-010-cargo-clippy-workspace-all-targets-all-features-clean-rust-skill-review-before-commit",
-          "title": "cargo clippy --workspace --all-targets --all-features clean; rust-skill review before commit",
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-005-promozione-e-indici-coerenti",
+          "number": 5,
+          "title": "Promozione e indici coerenti.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-16T06:32:40.603Z",
-      "completedAt": "2026-07-16T08:47:46.232Z",
-      "createdAt": "2026-07-16T06:32:29.772Z",
-      "updatedAt": "2026-07-16T08:47:46.232Z"
-    },
-    {
-      "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece",
-      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 298,
-      "shortId": "Q5DW4",
-      "priority": 11,
-      "shortName": "regression-widget-glow-only-on",
-      "title": "REGRESSION: widget glow only on focused elements (lost rest-state glow)",
-      "status": "done",
-      "description": "Reported by user 2026-07-16. SYMPTOM: changing the glow-size Select no longer visibly affects widgets at rest; glow appears only on focused/hovered elements.\n\n## DIAGNOSIS (code archaeology — original hypothesis FALSIFIED)\nNo regression event exists: widget glow conditions AND values byte-identical since pre-refactor baseline 833c214; scaled_glow chokepoint, showcase wiring, renderer path all correct. TRUTH: most control surfaces never passed a REST glow — glow was a hover/on/checked affordance — so glow_size had almost nothing to scale at rest.\n\n## FIX (user direction: theme owns the glow COLOR, the config glow_size setting owns the amount, honored by ALL widgets at widget-base level)\n- Theme token `interaction.control_rest_glow: u8` (default 30 ≈ 0.12; 0 = flat; serde-default) + BASE-LEVEL `PaintCx::rest_glow(radius)` (component.rs, beside scaled_glow): color from theme.colors.glow, intensity from the token; runs through scaled_glow so glow_size (none/thin/medium/large) scales presence+radius+strength uniformly.\n- Wired at rest: Button Primary/Destructive/Outline, Input, Toggle track, Checkbox BOX, Select trigger, Pane (all variants), DockFrame fill, Tag (toned), Alert (toned).\n\n## ROUND 3 (2026-07-17, from user's first GPU pass) — uncommitted, awaiting final verification\nUser findings + fixes:\n1. \"Button glow too much vs other widgets\" → new REST_GLOW_RADIUS = 12 for the resting base rect (the hover halo keeps GLOW_RADIUS 30); Outline lerps radius rest→hover with p.\n2. \"Toasts have no glow\" → Toast card surface now carries the rest glow, toned to its severity.\n3. \"Icons no glow\" → NOT POSSIBLE at the widget level: an Icon is a glyph text run (TextCmd) and glow is an SDF RECT renderer feature — a glyph halo needs a renderer capability (SDF text/glyph glow). RECORDED as a follow-up (renderer feature), documented in widgets.md; not faked with rects. RailCell's bare-icon rest state is flat for the same reason (by design).\n4. \"ScrollRegion no glow (probably correct?)\" → frameless region: CORRECT (no surface). A STYLED region (.background/.border scrollable panel) now falls back to the rest glow when no explicit .glow set.\n5. \"Not all chrome elements have glow\" → FILLED Row (the list/pane cards, e.g. showcase PANES) now falls back to the rest glow; unfilled Row/Item rows, ChromeRegion (layout shell) and RailCell rest stay deliberately flat (no surface). DockFrame fill was already wired in round 2.\nFocus batch (T014) verified \"Perfect\" by user; regression glance \"looks good\".\n- Docs: widgets.md consolidated \"The glow model — who owns what\" + \"The focus model — ring visibility\" sections (TOC updated) on top of the per-widget notes; config.default.toml glow_size/show_focus_border comments.\n- Workspace green, clippy clean. Single commit with the focus work per user request.\n\nVERIFY (user, GPU showcase): button rest halo now matches other controls; toasts (t) halo in their severity tone; pane cards in the chrome demo halo; the styled two-axis ScrollRegion demo halos; GLOW select none→large scales all of it; icons still flat (renderer follow-up).\n\n## FOLLOW-UP (recorded, out of scope here): SDF glyph/text glow renderer capability so Icon (and RailCell's bare-icon rest) can halo.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-001-planned-in-progress",
-          "date": "2026-07-16T18:03:56.794Z",
-          "fromStatus": "planned",
-          "toStatus": "in-progress",
-          "title": "planned → in-progress",
-          "description": ""
-        },
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-002-in-progress-done",
-          "date": "2026-07-16T22:32:10.849Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "DONE — commit 7ff3b59 (single commit with T014 focus work, branch feat/action-task-c, PR #244). Diagnosis: no regression existed — most control surfaces never passed a rest glow, so glow_size had nothing to scale at rest. Fix (user-directed model): theme owns the glow COLOR (theme.glow + per-widget tones), the config glow_size setting owns the AMOUNT (none/thin/medium/large via the scaled_glow chokepoint), and the new interaction.control_rest_glow token + base-level PaintCx::rest_glow(radius) give every surface a faint rest halo: Button P/D/Outline (tight REST_GLOW_RADIUS=12 at rest; hover halo unchanged), Input, Toggle track, Checkbox box, Select trigger, Pane, DockFrame fill, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (severity-toned). User verified across two GPU rounds; round-3 findings (button halo too wide, toasts/cards/styled-region flat) fixed in the same commit. Deliberately flat: Secondary/Ghost/Link buttons, unfilled rows, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled controls. FOLLOW-UP recorded: SDF glyph/text glow renderer capability so Icons can halo (glyphs are text runs; glow is a rect-renderer feature). Docs: widgets.md \"The glow model — who owns what\" + per-widget notes.",
-          "description": "DONE — commit 7ff3b59 (single commit with T014 focus work, branch feat/action-task-c, PR #244). Diagnosis: no regression existed — most control surfaces never passed a rest glow, so glow_size had nothing to scale at rest. Fix (user-directed model): theme owns the glow COLOR (theme.glow + per-widget tones), the config glow_size setting owns the AMOUNT (none/thin/medium/large via the scaled_glow chokepoint), and the new interaction.control_rest_glow token + base-level PaintCx::rest_glow(radius) give every surface a faint rest halo: Button P/D/Outline (tight REST_GLOW_RADIUS=12 at rest; hover halo unchanged), Input, Toggle track, Checkbox box, Select trigger, Pane, DockFrame fill, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (severity-toned). User verified across two GPU rounds; round-3 findings (button halo too wide, toasts/cards/styled-region flat) fixed in the same commit. Deliberately flat: Secondary/Ghost/Link buttons, unfilled rows, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled controls. FOLLOW-UP recorded: SDF glyph/text glow renderer capability so Icons can halo (glyphs are text runs; glow is a rect-renderer feature). Docs: widgets.md \"The glow model — who owns what\" + per-widget notes."
-        },
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-003-done-in-progress",
-          "date": "2026-07-16T22:33:06.712Z",
-          "fromStatus": "done",
-          "toStatus": "in-progress",
-          "title": "Reopened: round 3 (REST_GLOW_RADIUS on buttons, severity-toned Toast glow, filled-Row cards, styled ScrollRegion fallback) is committed in 7ff3b59 but NOT yet user-verified in the GPU showcase — per the user's process rule, a task awaiting testing stays in-progress. NOTE (process, recorded): the commit should have waited for this verification; committed early by mistake. Remaining to close: user confirms in the showcase — button rest halo matches other controls, toasts (t) halo in severity tone, pane cards halo, styled two-axis region halos, GLOW select none→large scales all of it, icons deliberately flat (renderer follow-up in T014-followups task).",
-          "description": "Reopened: round 3 (REST_GLOW_RADIUS on buttons, severity-toned Toast glow, filled-Row cards, styled ScrollRegion fallback) is committed in 7ff3b59 but NOT yet user-verified in the GPU showcase — per the user's process rule, a task awaiting testing stays in-progress. NOTE (process, recorded): the commit should have waited for this verification; committed early by mistake. Remaining to close: user confirms in the showcase — button rest halo matches other controls, toasts (t) halo in severity tone, pane cards halo, styled two-axis region halos, GLOW select none→large scales all of it, icons deliberately flat (renderer follow-up in T014-followups task)."
-        },
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-004-in-progress-done",
-          "date": "2026-07-16T22:55:06.215Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "DONE — user-verified in the GPU showcase across rounds 4-6 (\"perfect. all is ok\"), commits 7ff3b59 (rest-glow model + focus batch) and 319a349 (tuning). Final model: theme owns the glow COLOR (theme.glow; toasts deliberately use it, not their severity tone — severity under the accent bracket frame blended purple); the glow_size setting owns the AMOUNT via the scaled_glow chokepoint (Thin strength raised 0.5→0.75 so it is distinct from None on faint rest glows); interaction.control_rest_glow + PaintCx::rest_glow(radius) give every surface the rest halo. Coverage: Button all bordered variants incl. Secondary (REST_GLOW_RADIUS 12; hover 30→16; Ghost glows with its hover fade), Input, Toggle, Checkbox box, Select trigger, Pane, DockFrame, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (radius 14). Deliberately flat: Ghost/Link at rest, unfilled rows, Choice option rows, Tabs strip, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled. FOLLOW-UP in T014: SDF glyph glow so Icons can halo. Docs: widgets.md \"The glow model — who owns what\" + per-widget notes.",
-          "description": "DONE — user-verified in the GPU showcase across rounds 4-6 (\"perfect. all is ok\"), commits 7ff3b59 (rest-glow model + focus batch) and 319a349 (tuning). Final model: theme owns the glow COLOR (theme.glow; toasts deliberately use it, not their severity tone — severity under the accent bracket frame blended purple); the glow_size setting owns the AMOUNT via the scaled_glow chokepoint (Thin strength raised 0.5→0.75 so it is distinct from None on faint rest glows); interaction.control_rest_glow + PaintCx::rest_glow(radius) give every surface the rest halo. Coverage: Button all bordered variants incl. Secondary (REST_GLOW_RADIUS 12; hover 30→16; Ghost glows with its hover fade), Input, Toggle, Checkbox box, Select trigger, Pane, DockFrame, filled Row cards, styled ScrollRegion, Tag, Alert, Toast (radius 14). Deliberately flat: Ghost/Link at rest, unfilled rows, Choice option rows, Tabs strip, RailCell bare-icon rest, frameless ScrollRegion, layout shells, disabled. FOLLOW-UP in T014: SDF glyph glow so Icons can halo. Docs: widgets.md \"The glow model — who owns what\" + per-widget notes."
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-001-reproduce-in-showcase-which-widgets-lost-rest-glow-user-input",
-          "title": "Reproduce in showcase: which widgets lost rest-glow (user input)",
-          "checked": false
-        },
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-002-git-diff-the-refactored-widgets-paint-glow-usage-rest-vs-focused-vs-pre-refactor",
-          "title": "git-diff the refactored widgets' paint() glow usage (rest vs focused) vs pre-refactor",
-          "checked": false
-        },
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-003-restore-theme-driven-rest-state-glow-read-from-theme-no-hardcode-so-glow-size-scales-it",
-          "title": "Restore theme-driven rest-state glow (read from theme, no hardcode) so glow_size scales it",
-          "checked": false
-        },
-        {
-          "id": "586953dc-a2af-45cc-8eff-f6d5441f6ece-check-004-verify-in-showcase-glow-select-scales-all-widgets-at-rest-not-only-focused",
-          "title": "Verify in showcase: glow Select scales all widgets at rest, not only focused",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-16T18:03:56.794Z",
-      "completedAt": "2026-07-16T22:55:06.215Z",
-      "createdAt": "2026-07-16T08:40:57.189Z",
-      "updatedAt": "2026-07-16T22:55:06.215Z"
-    },
-    {
-      "id": "126d0855-658d-471f-86a6-27eb144fc591",
-      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 299,
-      "shortId": "CY8C2",
-      "priority": 12,
-      "shortName": "scrollregion-keyboard-scroll-a",
-      "title": "Keyboard scrolling acts on whatever has focus — one branch, plus the four horizontal actions",
-      "status": "canceled",
-      "description": "# Keyboard scrolling for any scroll area\n\n# ✅ SHIPPED — the widget half (`096f06e`), unchanged by anything below\n\nEight `WidgetIntent` variants: `ScrollPageUp` / `ScrollPageDown` / `ScrollToTop` / `ScrollToBottom`\nand the four horizontal ones. `ScrollRegion` acts on them:\n\n- it owns the arithmetic — a page is 0.9 of its viewport, the edges clamp — because it is the only\n  thing that knows its viewport and its content;\n- it **declines** an axis it cannot scroll (axis off, or content fits), so a nested region or the host\n  gets a turn; consuming would make the key silently do nothing;\n- handled after the children, so the innermost scrollable region wins, as with the wheel;\n- `keyboard_target(Signal<bool>)` gates which instance responds — per instance, position-agnostic,\n  unset means yes. Bound to the mount's chrome focus by F003/P011/T020\n  (`StateView::container_keyboard_target`).\n\n**The logic lives in the widget, once.** Every `ScrollRegion` anywhere behaves identically with no\nper-usage code. The host only ever says \"one page down, this axis\".\n\n# ⚠️ THE ROUTE CHANGED — 2026-07-29, by the user. This supersedes the 2026-07-16/27 keys.\n\n**Superseded:** vertical `prefix+Home/End/PageUp/PageDown`, horizontal `prefix+Shift+` the same four.\nThat shape existed because there was no other way to stop the keys reaching the terminal.\n\n**Now:** *focus is the mode* (P085(F007) — \"Components declare their actions; chrome focus is the\nmode\"). While a component holds chrome focus nothing is forwarded to a backend, so **plain\n`PageUp` / `PageDown` / `Home` / `End` are free** and are the container's scroll keys; the existing\n`Shift+` variants stay exactly as they are for the focused *pane*'s scrollback.\n\n**And it is not a new action family.** The bindings already exist and are already global/direct:\n`scroll_page_up = \"Shift+PageUp\"`, `scroll_page_down`, `scroll_to_top = \"Shift+Home\"`,\n`scroll_to_bottom = \"Shift+End\"`, `scroll_line_up/down` (`keybindings.default.toml`), handled today\nagainst the focused terminal viewport. So the app half is:\n\n1. **One branch at the top of those existing handlers**: chrome focus set ⇒ dispatch the matching\n   `Event::Widget(WidgetIntent::Scroll*)` into the chrome tree — the FocusScope (P085/T351) delivers it\n   to the focused container and every other container is inert — else the terminal viewport path,\n   unchanged. One binding, one meaning: *scroll whatever has focus*.\n2. **The four horizontal actions** still need adding (`ScrollPageLeft/Right`, `ScrollToLeftEdge/RightEdge`\n   — the widget intents exist, no `WmAction` does), through the full Adding-New-Actions checklist\n   (AGENTS.md): variant → `action_from_name` → `action_priority` → `action_policy()` → handler →\n   `build_registry` → `keybindings.default.toml` → `ActionRegistry::ALL` descriptor **with its `args`\n   declaration** → `rpc.rs` → README. Reuse `ResizeAxis` (`heca/src/input.rs:40`) if an axis argument is\n   preferred over four names — optional, defaulting to vertical, so a plain binding stays legal\n   (a *required* argument would forbid a bare key, F003/P010/T006).\n3. A **declined** intent stops at the chrome; it does **not** fall through to the pane. The\n   innermost-wins rule is about nested *scroll areas*, and the pane is not an outer scroll area of the\n   sidebar.\n\n**This half is specified in P085(F007)/T352 step 5** (the routing task) — whichever is picked up first,\ndo not implement it twice. What remains uniquely here is the horizontal action family.\n\n# Still ruled out (2026-07-28, checked in code — do not re-open)\n\nFeeding these through the **widget keymap** (`build_widget_keymap`, `heca/src/app/registry.rs:202`,\nthe `[keys.widgets]` table). It is consulted at `heca/src/app/events.rs:156` inside a branch that\nrequires **a modal to be open**, so `[keys.widgets]` reaches focused widgets inside modals only.\n\n# The 2026-07-17 blocker is discharged\n\n\"No chrome surface mounts a `ScrollRegion`\" is false since 2026-07-26: containers nest their own\n(`heca/src/providers/workspaces.rs`). `GridKey` still has no `PageUp`/`PageDown` — and does not need\nit, because the intent is semantic. That is the point of not delivering a key.\n\n# Acceptance\n\n- With a container focused, plain `PageUp/PageDown/Home/End` scroll **it**; with a pane focused, the\n  `Shift+` variants scroll the pane's scrollback, as today.\n- Every other scroll area declines; nothing reaches the terminal while a container is focused.\n- Horizontal scrolling reachable from RPC through the same actions, one code path.\n- No second mechanism for the same job.\n- Whole workspace green, clippy 0 warnings.\n- **USER verifies in the app**, with more than one scroll area on screen (P085(F007)/T359 seats the\n  second one).",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-001-planned-blocked",
-          "date": "2026-07-16T23:14:27.765Z",
-          "fromStatus": "planned",
-          "toStatus": "blocked",
-          "title": "Investigated the integration surface this session; recording the routing decision and a hard blocker (no chrome ScrollRegion target) so the next session does not land dead keybindings.",
-          "description": "Investigated the integration surface this session; recording the routing decision and a hard blocker (no chrome ScrollRegion target) so the next session does not land dead keybindings."
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-002-blocked-planned",
-          "date": "2026-07-27T20:53:27.489Z",
-          "fromStatus": "blocked",
-          "toStatus": "planned",
-          "title": "Re-checked in code 2026-07-27: the hard blocker is DISCHARGED. The 2026-07-17 claim \"NO chrome surface mounts a grid-ui ScrollRegion — it appears in heca/src ONLY in chrome/realize.rs\" is now false. `build_sidebar_shell` (heca/src/chrome/mod.rs:1541) mounts a real `ScrollRegion`, restores its offset from `SharedChromeState.workspaces.scroll` through `scroll_to`, and re-stores it from an `on_scroll` listener that ignores host-driven restores (`event: None`). It is called TWICE from `build_chrome_root` (:3129 left, :3150 right), so there are two live app-side targets, not none. F004/P001/T006's first half landed under the 2026-07-26 sidebar work, and its second half (\"SidebarNav cursor calls ensure_visible\") is satisfied by a better mechanism: `Component::wants_visible` (heca-grid-ui/src/component.rs:516), which every scroll area honours, so the keyboard cursor is followed by the library rather than by per-list host wiring. Two of the other 2026-07-17 findings still hold and are now T012's own work, not blockers: there is still no keyboard→chrome-widget-tree routing (nothing in heca/src dispatches `Event::Widget` into the chrome tree), and `GridKey` still has no `PageUp`/`PageDown` — which only matters if the scroll intent reaches the widget as a key, and the task prefers a semantic intent or an imperative call. What is left before building is the routing DECISION (focused-surface, this task's own answer, versus F004/P001/T007's explicit pick-mode); that is the user's call, not mine.",
-          "description": "Re-checked in code 2026-07-27: the hard blocker is DISCHARGED. The 2026-07-17 claim \"NO chrome surface mounts a grid-ui ScrollRegion — it appears in heca/src ONLY in chrome/realize.rs\" is now false. `build_sidebar_shell` (heca/src/chrome/mod.rs:1541) mounts a real `ScrollRegion`, restores its offset from `SharedChromeState.workspaces.scroll` through `scroll_to`, and re-stores it from an `on_scroll` listener that ignores host-driven restores (`event: None`). It is called TWICE from `build_chrome_root` (:3129 left, :3150 right), so there are two live app-side targets, not none. F004/P001/T006's first half landed under the 2026-07-26 sidebar work, and its second half (\"SidebarNav cursor calls ensure_visible\") is satisfied by a better mechanism: `Component::wants_visible` (heca-grid-ui/src/component.rs:516), which every scroll area honours, so the keyboard cursor is followed by the library rather than by per-list host wiring. Two of the other 2026-07-17 findings still hold and are now T012's own work, not blockers: there is still no keyboard→chrome-widget-tree routing (nothing in heca/src dispatches `Event::Widget` into the chrome tree), and `GridKey` still has no `PageUp`/`PageDown` — which only matters if the scroll intent reaches the widget as a key, and the task prefers a semantic intent or an imperative call. What is left before building is the routing DECISION (focused-surface, this task's own answer, versus F004/P001/T007's explicit pick-mode); that is the user's call, not mine."
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-003-in-progress-blocked",
-          "date": "2026-07-27T23:42:19.401Z",
-          "fromStatus": "in-progress",
-          "toStatus": "blocked",
-          "title": "Half shipped, half blocked (2026-07-28). The WIDGET half is done and committed in `096f06e`: eight `WidgetIntent::Scroll*` variants (page and edge, both axes), `ScrollRegion` acting on them — it owns the paging arithmetic and the clamp because it is the only thing that knows its viewport and content — declining any axis it cannot scroll so a nested region or the host gets a turn, handled after the children so the innermost wins like the wheel, plus `ScrollRegion::keyboard_target(Signal<bool>)` which gates which instance responds and is per-instance and position-agnostic. Tests included, and the gating was verified by flipping the signal. The APP half cannot be built honestly yet: it must target the container that holds keyboard focus, and there is no such thing until F003/P011/T020 (`FocusDock`) lands. Everything else about it is settled and written in the description — the four actions through the full Adding-New-Actions checklist, the bindings (`prefix+Home/End/PageUp/PageDown`, Shift for horizontal), the dispatch into the chrome tree where every non-focused container declines. No keybindings exist yet, so there are no dead keys in the meantime.",
-          "description": "Half shipped, half blocked (2026-07-28). The WIDGET half is done and committed in `096f06e`: eight `WidgetIntent::Scroll*` variants (page and edge, both axes), `ScrollRegion` acting on them — it owns the paging arithmetic and the clamp because it is the only thing that knows its viewport and content — declining any axis it cannot scroll so a nested region or the host gets a turn, handled after the children so the innermost wins like the wheel, plus `ScrollRegion::keyboard_target(Signal<bool>)` which gates which instance responds and is per-instance and position-agnostic. Tests included, and the gating was verified by flipping the signal. The APP half cannot be built honestly yet: it must target the container that holds keyboard focus, and there is no such thing until F003/P011/T020 (`FocusDock`) lands. Everything else about it is settled and written in the description — the four actions through the full Adding-New-Actions checklist, the bindings (`prefix+Home/End/PageUp/PageDown`, Shift for horizontal), the dispatch into the chrome tree where every non-focused container declines. No keybindings exist yet, so there are no dead keys in the meantime."
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-004-blocked-planned",
-          "date": "2026-07-28T12:27:03.803Z",
-          "fromStatus": "blocked",
-          "toStatus": "planned",
-          "title": "Its one blocker is discharged: F003/P011/T020 landed chrome focus (a container id + per-mount keyboard_target signals), so \"which area obeys\" now has an answer. The route it had settled is superseded by the user's 2026-07-29 decision (focus is the mode), which shrinks this task to one branch in the existing scroll handlers plus the four horizontal actions — recorded in the description.",
-          "description": "Its one blocker is discharged: F003/P011/T020 landed chrome focus (a container id + per-mount keyboard_target signals), so \"which area obeys\" now has an answer. The route it had settled is superseded by the user's 2026-07-29 decision (focus is the mode), which shrinks this task to one branch in the existing scroll handlers plus the four horizontal actions — recorded in the description."
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-005-planned-canceled",
-          "date": "2026-07-28T12:32:57.291Z",
-          "fromStatus": "planned",
-          "toStatus": "canceled",
-          "title": "Unified into P085(F007)/T352 (VKF85, \"Focus is the mode\") at the user's request 2026-07-30 — the two said the same thing once the route changed to focus-is-the-mode. Every section this task still carried was transferred into T352 verbatim first: the shipped widget half (096f06e), the superseded prefix-gated keys, the four horizontal actions still to add, the widget-keymap route ruled out (events.rs:156 is modal-only), and the discharged 2026-07-17 blocker. Canceled rather than done — the work is not done, it has one home now.",
-          "description": "Unified into P085(F007)/T352 (VKF85, \"Focus is the mode\") at the user's request 2026-07-30 — the two said the same thing once the route changed to focus-is-the-mode. Every section this task still carried was transferred into T352 verbatim first: the shipped widget half (096f06e), the superseded prefix-gated keys, the four horizontal actions still to add, the widget-keymap route ruled out (events.rs:156 is modal-only), and the discharged 2026-07-17 blocker. Canceled rather than done — the work is not done, it has one home now."
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-001-settle-routing-how-an-action-targets-a-scrollregion-focused-hovered-active-region",
-          "title": "Settle routing: how an action targets a ScrollRegion (focused/hovered/active region)",
-          "checked": false
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-002-settle-horizontal-trigger-with-user-prefix-shift-arrow-is-taken-by-view-pan",
-          "title": "Settle horizontal trigger with user (prefix+Shift+Arrow is taken by view pan)",
-          "checked": false
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-003-wmaction-variants-full-adding-new-actions-checklist-incl-action-policy",
-          "title": "WmAction variants + full Adding-New-Actions checklist incl. action_policy()",
-          "checked": false
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-004-defaults-in-keybindings-default-toml-prefix-home-end-pageup-pagedown",
-          "title": "Defaults in keybindings.default.toml (prefix+Home/End/PageUp/PageDown)",
-          "checked": false
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-005-rpc-reachability-tests-policy-spot-checks-routing",
-          "title": "RPC reachability + tests (policy spot-checks, routing)",
-          "checked": false
-        },
-        {
-          "id": "126d0855-658d-471f-86a6-27eb144fc591-check-006-user-verifies-in-gpu-showcase-once-t009-mounts-the-root-scrollregion",
-          "title": "USER verifies in GPU showcase once T009 mounts the root ScrollRegion",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-27T21:02:01.727Z",
+      "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-16T09:37:52.181Z",
-      "updatedAt": "2026-07-28T12:32:57.291Z"
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:21:23.399Z"
     },
     {
-      "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81",
-      "phaseId": "99d19246-1ba9-4720-9895-e70c66acf144",
-      "number": 300,
-      "shortId": "EM6A4",
-      "priority": 13,
-      "shortName": "focus-ring-polish-honor-focus",
-      "title": "Focus-ring polish: honor focus-visible (keyboard-only ring), [appearance] toggle, control-only ring for labeled controls",
-      "status": "done",
-      "description": "USER REQUESTS (2026-07-16; all four proposals APPROVED by user): (1) focus ring only on keyboard navigation, not mouse click; (2) a setting to enable/disable the focus outline; (3) less intrusive focus overall; (4) Checkbox ring should wrap only the box, not the label.\n\n## BUILT 2026-07-16 (uncommitted, AWAITING USER GPU VERIFICATION)\n1. FOCUS-VISIBLE HONORED: new `Base::shows_focus_ring()` (component.rs, = focused && focus_visible — CSS :focus-visible semantics, single definition). ALL 13 ring sites now gate on it (button, badge_button, checkbox, icon_button, input, select, toast, tabs, toggle single-line; choice, item, rail_cell, row multiline). Mouse click still focuses (Enter/Space work, caret shows) but draws NO ring; Tab/arrow navigation (FocusManager::advance → focus_visible=true) rings. Regression test: focus_ring_shows_on_keyboard_focus_not_on_mouse_click (phase_a.rs).\n2. [appearance] show_focus_border SETTING: new Option<bool> field in AppearanceConfig (appearance.rs) + effective_show_focus_border(theme) resolver (config override → theme.show_focus_border), applied at the chrome_gui_theme() choke point (heca/src/chrome/mod.rs) so prefix+Shift+r live-reloads it; documented in config.default.toml [appearance] effect-token block (glow_size/intensity/show_focus_border).\n3. LESS INTRUSIVE = (1)+(2) combined; focus_border_width was already configurable for thinning.\n4. CHECKBOX ring now wraps box_rect() only (checkbox.rs) — the standard control ring; label stays clickable but un-ringed. Toggle reviewed: it rings its own track (no label) — already correct.\nDocs: widgets.md Base table focus_visible row rewritten, Theme table show_focus_border row added, Checkbox entry note. Workspace green, clippy clean.\n\nVERIFY (user, GPU showcase + app): click any widget → NO ring (but it activates/types); Tab / arrows → ring appears on the focused widget; checkbox ring hugs the box only; in the APP: set [appearance] show_focus_border = false + prefix+Shift+r → all rings gone (the showcase has no config file — the setting is app-side).",
+      "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 198,
+      "shortId": "56N9J",
+      "priority": 0,
+      "shortName": "store-struct",
+      "title": "Define NotificationStore invariants and structures",
+      "status": "planned",
+      "description": "Definire `NotificationStore` con: contatore ID monotono; storage canonico; coda d'attesa ordinata; quattro slot visibili stabili; cronologia ordinata e limitata; indice `dedup_key → NotificationId`. Esplicitare invarianti e centralizzare tutte le transizioni per impedire ID presenti in più stati o indici dangling. Preferire API che accettano `Instant now` e restituiscono se la proiezione visibile è cambiata, così l'host aggiorna il signal soltanto quando necessario.",
       "notes": "",
-      "statusLog": [
-        {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-001-planned-in-progress",
-          "date": "2026-07-16T18:33:50.514Z",
-          "fromStatus": "planned",
-          "toStatus": "in-progress",
-          "title": "planned → in-progress",
-          "description": ""
-        },
-        {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-002-in-progress-done",
-          "date": "2026-07-16T22:30:21.690Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "User verified in the GPU showcase 2026-07-17 (\"Perfect\"): click focuses without a ring, keyboard navigation rings, Checkbox rings the box only. Implementation: Base::shows_focus_ring() gating all 13 ring sites (focus-visible semantics), [appearance] show_focus_border override wired through chrome_gui_theme with config.default.toml docs, Checkbox ring → box_rect(), regression test focus_ring_shows_on_keyboard_focus_not_on_mouse_click, docs/widgets.md \"The focus model\" section. Committed together with the T011 glow work (single commit per user request).",
-          "description": "User verified in the GPU showcase 2026-07-17 (\"Perfect\"): click focuses without a ring, keyboard navigation rings, Checkbox rings the box only. Implementation: Base::shows_focus_ring() gating all 13 ring sites (focus-visible semantics), [appearance] show_focus_border override wired through chrome_gui_theme with config.default.toml docs, Checkbox ring → box_rect(), regression test focus_ring_shows_on_keyboard_focus_not_on_mouse_click, docs/widgets.md \"The focus model\" section. Committed together with the T011 glow work (single commit per user request)."
-        }
-      ],
+      "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-001-gate-every-widget-ring-on-focused-focus-visible-11-sites-listed-in-description",
-          "title": "Gate every widget ring on focused && focus_visible (11 sites listed in description)",
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-001-strutture-pending-visible-history-index",
+          "number": 1,
+          "title": "Strutture pending/visible/history/index.",
           "checked": false
         },
         {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-002-checkbox-ring-box-rect-only-review-toggle",
-          "title": "Checkbox ring → box_rect() only; review Toggle",
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-002-invarianti-documentate",
+          "number": 2,
+          "title": "Invarianti documentate.",
           "checked": false
         },
         {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-003-appearance-show-focus-border-override-config-default-toml-doc-chrome-gui-theme-application",
-          "title": "[appearance] show_focus_border override + config.default.toml doc + chrome_gui_theme application",
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-003-api-now-injected",
+          "number": 3,
+          "title": "API now-injected.",
           "checked": false
         },
         {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-004-docs-widgets-md-focus-section-checkbox-component-notes-rustdoc",
-          "title": "docs/widgets.md (focus section + Checkbox/Component notes) + rustdoc",
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-004-segnalazione-visible-projection-changed",
+          "number": 4,
+          "title": "Segnalazione visible projection changed.",
           "checked": false
         },
         {
-          "id": "d5962a9a-2776-4bd9-a629-5d44f1e33a81-check-005-user-verifies-in-gpu-showcase-click-vs-keyboard-toggle-off-reload",
-          "title": "USER verifies in GPU showcase (click vs keyboard, toggle off, reload)",
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-005-test-store-vuoto-e-limiti",
+          "number": 5,
+          "title": "Test store vuoto e limiti.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-16T18:33:50.514Z",
-      "completedAt": "2026-07-16T22:30:21.690Z",
-      "createdAt": "2026-07-16T17:23:03.026Z",
-      "updatedAt": "2026-07-16T22:30:21.690Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:20:28.742Z"
+    },
+    {
+      "id": "113d5dd1-0639-4492-912c-aaf088e1587a",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 199,
+      "shortId": "MXHQK",
+      "priority": 2,
+      "shortName": "visible-toasts",
+      "title": "Implement stable four-slot visible projection",
+      "status": "planned",
+      "description": "Esporre la proiezione ordinata delle notifiche visibili verso `Vec<ToastSpec>` mantenendo la posizione relativa degli elementi già visibili. Il limite è quattro. La rimozione lascia uno slot che viene riempito dalla prima pending; non risortare tutte le card per severity o timestamp a ogni aggiornamento. Fornire un modo economico per rilevare cambiamenti della proiezione e registrare target Hint per le sole affordance visibili.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-001-massimo-quattro-spec",
+          "number": 1,
+          "title": "Massimo quattro spec.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-002-ordine-stabile-dopo-dismiss-expiry-update",
+          "number": 2,
+          "title": "Ordine stabile dopo dismiss/expiry/update.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-003-promozione-pending-deterministica",
+          "number": 3,
+          "title": "Promozione pending deterministica.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-004-nessuna-severity-sort-continua",
+          "number": 4,
+          "title": "Nessuna severity sort continua.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-005-test-sequenza-con-pi-di-quattro-notifiche",
+          "number": 5,
+          "title": "Test sequenza con più di quattro notifiche.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.843Z",
+      "updatedAt": "2026-08-06T14:20:54.383Z"
+    },
+    {
+      "id": "671754ad-5b4d-4472-997c-d379b4986ad5",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 200,
+      "shortId": "VPAR5",
+      "priority": 7,
+      "shortName": "store-action-for",
+      "title": "Implement notification action and target lookup",
+      "status": "planned",
+      "description": "Esporre lookup read-only per ID visibile che restituisce/clona la `NotificationAction` e i target runtime necessari all'host. Non eseguire l'Intent nello store. Rifiutare azioni per ID archiviati, rimossi o senza action; evitare borrow dello store attraverso il dispatch, perché l'handler dell'Intent può mutare AppState. Fornire lookup per dedup key usato dal producer reload per risolvere/rimuovere l'errore sticky.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-001-lookup-action-visibile",
+          "number": 1,
+          "title": "Lookup action visibile.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-002-no-action-per-archived-missing",
+          "number": 2,
+          "title": "No action per archived/missing.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-003-clone-prima-del-dispatch",
+          "number": 3,
+          "title": "Clone prima del dispatch.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-004-lookup-dedup-key",
+          "number": 4,
+          "title": "Lookup dedup key.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-005-test-action-aggiornata-same-id",
+          "number": 5,
+          "title": "Test action aggiornata same-ID.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.843Z",
+      "updatedAt": "2026-08-06T14:21:40.150Z"
+    },
+    {
+      "id": "d976a997-ed47-4b76-819d-2028cefa9eed",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 201,
+      "shortId": "L3GQ7",
+      "priority": 8,
+      "shortName": "next-expiry",
+      "title": "Compute next visible notification expiry",
+      "status": "planned",
+      "description": "Implementare `next_expiry()` come minimo degli `expires_at` delle sole notifiche visibili auto-dismiss. Restituire `None` con sole pending/sticky o store vuoto. Dopo push, dedup, dismiss, expiry e promozione il risultato deve riflettere immediatamente il nuovo stato. Non chiamare `Instant::now` internamente.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-001-minimo-tra-visibili",
+          "number": 1,
+          "title": "Minimo tra visibili.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-002-pending-sticky-ignorate",
+          "number": 2,
+          "title": "Pending/sticky ignorate.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-003-aggiornamento-dopo-reset-timer",
+          "number": 3,
+          "title": "Aggiornamento dopo reset timer.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-004-none-corretto",
+          "number": 4,
+          "title": "None corretto.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-005-test-con-scadenze-uguali",
+          "number": 5,
+          "title": "Test con scadenze uguali.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.844Z",
+      "updatedAt": "2026-08-06T14:21:45.770Z"
+    },
+    {
+      "id": "e2f02933-4071-40d3-a069-60da05391c32",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 202,
+      "shortId": "MZ5EZ",
+      "priority": 8,
+      "shortName": "lifecycle-expiry",
+      "title": "Integrate notification expiry into lifecycle scheduling",
+      "status": "planned",
+      "description": "Integrare store e `next_expiry()` in `heca/src/app/lifecycle.rs:87-172`. A ogni tick pertinente chiamare `expire_due(now)`, sincronizzare signal/hint soltanto se cambia la proiezione e richiedere redraw. Nel calcolo `ControlFlow`, scegliere il minimo tra prossimo frame necessario alle animazioni e prossima scadenza; se nessuno esiste usare Wait. Evitare wake-up per pending/sticky e busy-loop quando una deadline è già trascorsa: processarla prima di impostare il prossimo wait.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-001-expire-prima-del-nuovo-wait",
+          "number": 1,
+          "title": "Expire prima del nuovo wait.",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-002-min-frame-deadline-notification-deadline",
+          "number": 2,
+          "title": "Min(frame_deadline, notification_deadline).",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-003-wait-con-sole-pending-sticky",
+          "number": 3,
+          "title": "Wait con sole pending/sticky.",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-004-redraw-sync-su-transizione",
+          "number": 4,
+          "title": "Redraw/sync su transizione.",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-005-test-o-helper-puro-per-scelta-deadline",
+          "number": 5,
+          "title": "Test o helper puro per scelta deadline.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.844Z",
+      "updatedAt": "2026-08-06T14:13:41.155Z"
+    },
+    {
+      "id": "a2ca34b3-b1c5-475e-8572-48295fe43878",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 395,
+      "shortId": "252SA",
+      "priority": 6,
+      "shortName": "notification-history",
+      "title": "Implement bounded runtime notification history",
+      "status": "planned",
+      "description": "Implementare la cronologia runtime limitata secondo `notification_history_limit` definito in `heca-config/src/settings.rs`. Archiviare almeno causa (`Dismissed`, `Expired`, `Resolved`), timestamp e snapshot della notifica; applicare trimming deterministico degli elementi più vecchi e mantenere coerente l'indice dedup. Esporre API read-only per futuri consumer e test, senza costruire una schermata UI e senza persistenza su disco. Una notifica deduplicata presente soltanto nella cronologia viene rimossa dalla cronologia e riattivata secondo la policy dello store.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-001-record-con-causa-e-timestamp",
+          "number": 1,
+          "title": "Record con causa e timestamp.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-002-limite-configurabile-applicato",
+          "number": 2,
+          "title": "Limite configurabile applicato.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-003-trim-pi-vecchi-e-indice-coerente",
+          "number": 3,
+          "title": "Trim più vecchi e indice coerente.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-004-api-read-only",
+          "number": 4,
+          "title": "API read-only.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-005-test-riattivazione-da-history-e-limit-1-100",
+          "number": 5,
+          "title": "Test riattivazione da history e limit=1/100.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-06T14:13:50.024Z",
+      "updatedAt": "2026-08-06T14:21:28.931Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-07-28T12:32:57.291Z",
+  "updatedAt": "2026-08-06T14:21:45.770Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

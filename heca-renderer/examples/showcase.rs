@@ -306,6 +306,43 @@ fn described_vs_native(theme: &Theme) -> Flex {
     row
 }
 
+/// Stable identity used to demonstrate in-place notification updates.
+const SHOWCASE_CONNECTION_TOAST_ID: u64 = 2;
+/// Demo-host capacity: lifecycle policy stays outside the presentation widget.
+const SHOWCASE_MAX_VISIBLE_TOASTS: usize = 5;
+
+fn connection_pending_toast() -> ToastSpec {
+    ToastSpec::new(SHOWCASE_CONNECTION_TOAST_ID, "Connection unstable")
+        .severity(ToastSeverity::Warning)
+        .body("Retry the same notification in place")
+        .action("Retry")
+        .action_target(HintTargetId::new(702))
+        .dismiss_target(HintTargetId::new(703))
+}
+
+fn connection_restored_toast() -> ToastSpec {
+    ToastSpec::new(SHOWCASE_CONNECTION_TOAST_ID, "Connection restored")
+        .severity(ToastSeverity::Success)
+        .body("Same ID, updated payload and controls")
+        .action("Details")
+        .action_target(HintTargetId::new(704))
+        .dismiss_target(HintTargetId::new(705))
+}
+
+fn notification_batch() -> Vec<ToastSpec> {
+    vec![
+        ToastSpec::new(1, "Build succeeded")
+            .severity(ToastSeverity::Success)
+            .body("12 targets completed")
+            .dismiss_target(HintTargetId::new(701)),
+        connection_pending_toast(),
+        ToastSpec::new(3, "Background sync active")
+            .severity(ToastSeverity::Info)
+            .body("Non-dismissible host-owned status")
+            .dismissible(false),
+    ]
+}
+
 /// Handles the host keeps after building the UI, to drive chrome interactions
 /// from the keymap (the same signals an RPC layer would write).
 struct BuiltUi {
@@ -333,7 +370,7 @@ struct BuiltUi {
     /// Context-menu open state + anchor; right-click opens it at the cursor.
     menu_open: Signal<bool>,
     menu_anchor: Signal<Point>,
-    /// Host-owned toast render list; `t` pushes one, the stack reports dismiss.
+    /// Host-owned toast render list; `t` inserts and `u` updates one keyed entry.
     toasts: Signal<Vec<ToastSpec>>,
 }
 
@@ -506,17 +543,27 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // 20-entry list so the dropdown caps its height and shows a scrollbar.
     let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
 
-    // ToastStack (G-overlay): the app owns the render list (`toasts`) and the
-    // lifecycle; the stack just corner-anchors + animates them and reports
-    // intents. `t` pushes one (see the keymap); clicking × removes it here.
-    // Start empty — press `t` to push toasts (keeps them out of the dropdown's
-    // corner by default; the overlapping-overlays text-bleed is a separate
-    // renderer limitation to fix later).
+    // ToastStack stays in the viewport overlay layer; the host owns only this
+    // plain render list and maps each opaque HintTargetId to its own command.
+    // The Toast's real Button/IconButton children carry those ids — the card
+    // never paints shortcut keycaps itself. `t` inserts a batch; `u` and Retry
+    // replace the connection payload under the SAME id; × removes one with exit.
     let toasts = signal(Vec::<ToastSpec>::new());
+    let dismiss_toasts = toasts;
+    let action_toasts = toasts;
     let toast_stack = ToastStack::new(toasts)
         .corner(ToastCorner::TopRight)
-        .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
-        .on_action(|id| println!("[showcase] toast {id} action"));
+        .on_dismiss(move |id| dismiss_toasts.update(|v| v.retain(|s| s.id != id)))
+        .on_action(move |id| {
+            println!("[showcase] toast {id} action");
+            if id == SHOWCASE_CONNECTION_TOAST_ID {
+                action_toasts.update(|items| {
+                    if let Some(spec) = items.iter_mut().find(|spec| spec.id == id) {
+                        *spec = connection_restored_toast();
+                    }
+                });
+            }
+        });
 
     // Dialog (T009 / BUG B): the widget is hosted in the OVERLAY layer above the
     // page scroll — never in-flow inside scrolled content, where taffy would center
@@ -583,6 +630,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
+        // ToastStack is a separate overlay: while cards are visible, a miss
+        // still reaches this ordinary page-layer control underneath that layer.
+        .child(caption("ToastStack overlay — t: insert (max 5) · u: same-ID update · ×: exit"))
+        .child(
+            Button::secondary("PAGE PASS-THROUGH PROBE")
+                .on_click(click("toast-pass-through-probe")),
+        )
         .child(caption("Card"))
         .child(
             Flex::row()
@@ -971,11 +1025,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Spinner::new())
                 .child(Alert::warning("LINK UNSTABLE").body("retrying handshake...")),
         )
-        // Toasts: bracket-framed notification cards. Severity-toned, with a body
-        // line, an optional inline action, and a × dismiss. Presentation only —
-        // here the example plays the "host" (its callbacks just print); a real app
-        // owns the queue + lifecycle. Stacked like a notification list (also the
-        // shape they take inline in a sidebar).
+        // Toasts: bracket-framed notification cards composed from real Icon,
+        // Label, Button and IconButton children. Focus/input/target geometry comes
+        // from those children — no manually-painted action, dismiss, or keycap.
+        // Presentation only: the example host owns queue/lifecycle and callbacks.
         .child(caption("Toast"))
         .child(
             Flex::column()
@@ -2255,7 +2308,7 @@ struct GpuState {
     /// Context-menu open state + anchor; right-click opens it at the cursor.
     menu_open: Signal<bool>,
     menu_anchor: Signal<Point>,
-    /// Host-owned toast render list; `t` pushes one.
+    /// Host-owned toast render list; `t` inserts and `u` updates the stable connection id.
     toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
     ctrl: bool,
@@ -3047,17 +3100,45 @@ impl ApplicationHandler for App {
                             use std::io::Write;
                             let _ = std::io::stdout().flush();
                         }
-                        // `t` pushes a new toast onto the host-owned list; the
-                        // ToastStack slides it in, and × dismisses (removes the id).
+                        // `t` demonstrates insertion + stacking in one shot. Later
+                        // presses append another independently-keyed notification.
                         GridKey::Char('t') if state.focus.focused().is_none() => {
-                            state.toasts.update(|v| {
-                                let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
-                                v.push(
-                                    ToastSpec::new(id, format!("Event #{id}"))
-                                        .severity(ToastSeverity::Info)
-                                        .body("Pushed with the `t` key")
-                                        .action("View"),
-                                );
+                            state.toasts.update(|items| {
+                                if items.is_empty() {
+                                    items.extend(notification_batch());
+                                } else if items.len() < SHOWCASE_MAX_VISIBLE_TOASTS {
+                                    let id = items.iter().map(|spec| spec.id).max().unwrap_or(0) + 1;
+                                    items.push(
+                                        ToastSpec::new(id, format!("Event #{id}"))
+                                            .severity(ToastSeverity::Info)
+                                            .body("Appended with the `t` key")
+                                            .action("View"),
+                                    );
+                                } else {
+                                    println!(
+                                        "[showcase] toast demo capacity is {SHOWCASE_MAX_VISIBLE_TOASTS}",
+                                    );
+                                }
+                            });
+                            state.window.request_redraw();
+                        }
+                        // `u` replaces every field of the connection notification
+                        // without changing its key. Repeat to toggle pending/restored;
+                        // if it was dismissed, the same command inserts it again.
+                        GridKey::Char('u') if state.focus.focused().is_none() => {
+                            state.toasts.update(|items| {
+                                if let Some(spec) = items
+                                    .iter_mut()
+                                    .find(|spec| spec.id == SHOWCASE_CONNECTION_TOAST_ID)
+                                {
+                                    *spec = if spec.severity == ToastSeverity::Success {
+                                        connection_pending_toast()
+                                    } else {
+                                        connection_restored_toast()
+                                    };
+                                } else {
+                                    items.push(connection_pending_toast());
+                                }
                             });
                             state.window.request_redraw();
                         }

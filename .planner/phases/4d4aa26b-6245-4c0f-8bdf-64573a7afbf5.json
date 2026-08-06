@@ -50,31 +50,37 @@
       "checklist": [
         {
           "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-001-inventory-every-style-field-into-layout-visual-semantic-allowed-with-the-reasoning-written-down",
+          "number": 1,
           "title": "Inventory every Style field into layout / visual / semantic-allowed, with the reasoning written down",
           "checked": false
         },
         {
           "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-002-decide-the-shape-nested-structs-vs-per-field-markers-after-measuring-the-call-site-blast-radius",
+          "number": 2,
           "title": "Decide the shape (nested structs vs per-field markers) after measuring the call-site blast radius",
           "checked": false
         },
         {
           "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-003-apply-the-split-keep-layoutext-styleext-call-sites-unchanged",
+          "number": 3,
           "title": "Apply the split; keep LayoutExt/StyleExt call sites unchanged",
           "checked": false
         },
         {
           "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-004-preserve-styleext-not-being-implemented-for-flex",
+          "number": 4,
           "title": "Preserve StyleExt NOT being implemented for Flex",
           "checked": false
         },
         {
           "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-005-workspace-green-clippy-clean",
+          "number": 5,
           "title": "Workspace green + clippy clean",
           "checked": false
         },
         {
           "id": "7d82f8e0-a7cc-4922-b96b-667207c2be4e-check-006-user-verifies-zero-visual-change-in-the-showcase",
+          "number": 6,
           "title": "USER verifies zero visual change in the showcase",
           "checked": false
         }
@@ -103,36 +109,43 @@
       "checklist": [
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-001-add-serialization-to-the-layout-group-from-t1-the-types-it-holds",
+          "number": 1,
           "title": "Add serialization to the layout group from T1 + the types it holds",
           "checked": false
         },
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-002-replace-the-align-self-justify-self-blocks-and-realize-flex-s-gap-align-reads-with-one-generic-merge",
+          "number": 2,
           "title": "Replace the align_self/justify_self blocks and realize_flex's gap/align reads with one generic merge",
           "checked": false
         },
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-003-align-property-names-to-field-names-rename-fields-rather-than-adding-a-lookup-table",
+          "number": 3,
           "title": "Align property names to field names; rename fields rather than adding a lookup table",
           "checked": false
         },
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-004-merge-on-top-of-the-constructed-widget-verify-scrollregion-s-constructor-defaults-survive",
+          "number": 4,
           "title": "Merge ON TOP of the constructed widget — verify ScrollRegion's constructor defaults survive",
           "checked": false
         },
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-005-totality-test-mistyped-unknown-values-ignored-no-panic",
+          "number": 5,
           "title": "Totality test: mistyped/unknown values ignored, no panic",
           "checked": false
         },
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-006-test-that-a-newly-added-style-field-works-with-no-realize-rs-change",
+          "number": 6,
           "title": "Test that a newly added Style field works with no realize.rs change",
           "checked": false
         },
         {
           "id": "c386da25-df9c-4f9d-ace5-7103a6c389fd-check-007-update-view-rs-props-table-docs-widgets-md",
+          "number": 7,
           "title": "Update view.rs props table + docs/widgets.md",
           "checked": false
         }
@@ -161,36 +174,43 @@
       "checklist": [
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-001-design-the-neutral-scalar-type-setter-trait-confirm-heca-grid-ui-gains-no-app-types",
+          "number": 1,
           "title": "Design the neutral scalar type + setter trait; confirm heca-grid-ui gains no app types",
           "checked": false
         },
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-002-build-the-generator-over-annotated-builder-methods",
+          "number": 2,
           "title": "Build the generator over annotated builder methods",
           "checked": false
         },
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-003-add-explicit-host-only-opt-out-markers-closures-signal-bound-builders-scrollbar",
+          "number": 3,
           "title": "Add explicit host-only opt-out markers (closures, signal-bound builders, ScrollBar)",
           "checked": false
         },
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-004-generate-enum-name-value-conversion-so-the-enum-list-is-not-new-drift",
+          "number": 4,
           "title": "Generate enum name→value conversion so the enum list is not new drift",
           "checked": false
         },
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-005-shrink-realize-kind-to-construct-then-feed-remove-the-per-property-string-literals",
+          "number": 5,
           "title": "Shrink realize_kind to construct-then-feed; remove the per-property string literals",
           "checked": false
         },
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-006-add-the-drift-test-modelled-on-the-existing-widgetkind-coverage-guard",
+          "number": 6,
           "title": "Add the drift test modelled on the existing WidgetKind coverage guard",
           "checked": false
         },
         {
           "id": "1ea732ca-3582-44f4-be02-245375910948-check-007-update-view-rs-props-table-docs-widgets-md",
+          "number": 7,
           "title": "Update view.rs props table + docs/widgets.md",
           "checked": false
         }
@@ -219,36 +239,43 @@
       "checklist": [
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-001-expose-input-placeholder-under-its-own-key-do-not-overload-text-which-is-the-value",
+          "number": 1,
           "title": "Expose Input placeholder under its own key — do NOT overload `text` (which is the value)",
           "checked": false
         },
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-002-expose-scroll-axes-as-an-enum-name-vertical-horizontal-both-unknown-name-default",
+          "number": 2,
           "title": "Expose Scroll axes as an enum name (vertical/horizontal/both), unknown name → default",
           "checked": false
         },
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-003-confirm-t3-s-generator-made-both-nearly-free-if-not-report-that-as-a-t3-gap",
+          "number": 3,
           "title": "Confirm T3's generator made both nearly free; if not, report that as a T3 gap",
           "checked": false
         },
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-004-tests-unknown-enum-name-wrong-value-type-missing-property-all-keep-the-default",
+          "number": 4,
           "title": "Tests: unknown enum name, wrong value type, missing property — all keep the default",
           "checked": false
         },
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-005-verify-scrollregion-s-constructor-settings-survive",
+          "number": 5,
           "title": "Verify ScrollRegion's constructor settings survive",
           "checked": false
         },
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-006-update-view-rs-props-table-docs-widgets-md-input-and-scrollregion",
+          "number": 6,
           "title": "Update view.rs props table + docs/widgets.md §Input and §ScrollRegion",
           "checked": false
         },
         {
           "id": "0223c291-8cba-4ca0-8712-6ade0e8d0aed-check-007-user-confirms-a-declarative-two-axis-region-scrolls-both-ways-in-the-showcase",
+          "number": 7,
           "title": "USER confirms a declarative two-axis region scrolls both ways in the showcase",
           "checked": false
         }
@@ -277,36 +304,43 @@
       "checklist": [
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-001-add-the-widgetkind-variant-the-all-entry-ordinal-s-exhaustive-match-will-force-the-second",
+          "number": 1,
           "title": "Add the WidgetKind variant + the ALL entry (ordinal's exhaustive match will force the second)",
           "checked": false
         },
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-002-add-the-realize-arm-mapping-to-the-separator-widget",
+          "number": 2,
           "title": "Add the realize arm mapping to the separator widget",
           "checked": false
         },
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-003-expose-orientation-enum-by-name-default-horizontal-length",
+          "number": 3,
           "title": "Expose orientation (enum by name, default horizontal) + length",
           "checked": false
         },
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-004-coverage-all-lists-every-widget-kind-tests-pass",
+          "number": 4,
           "title": "Coverage + all_lists_every_widget_kind tests pass",
           "checked": false
         },
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-005-give-the-per-kind-test-fixture-whatever-a-separator-needs",
+          "number": 5,
           "title": "Give the per-kind test fixture whatever a Separator needs",
           "checked": false
         },
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-006-update-view-rs-props-table-docs-widgets-md-the-showcase",
+          "number": 6,
           "title": "Update view.rs props table + docs/widgets.md + the showcase",
           "checked": false
         },
         {
           "id": "eea3a791-01d6-4ce1-a335-17e3622fae7f-check-007-user-looks-at-it-before-closing",
+          "number": 7,
           "title": "USER looks at it before closing",
           "checked": false
         }
@@ -335,36 +369,43 @@
       "checklist": [
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-001-blocking-put-options-a-b-c-to-the-user-with-the-trade-offs-do-not-pick-silently",
+          "number": 1,
           "title": "BLOCKING: put options A / B / C to the user with the trade-offs; do not pick silently",
           "checked": false
         },
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-002-add-the-kind-realize-arm-mapping-to-the-row-widget",
+          "number": 2,
           "title": "Add the kind + realize arm mapping to the Row widget",
           "checked": false
         },
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-003-wire-press-intent-and-a-keyhint-target-follow-the-button-arm-else-prefix-cannot-reach-it",
+          "number": 3,
           "title": "Wire press → intent AND a KeyHint target (follow the Button arm), else prefix+/ cannot reach it",
           "checked": false
         },
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-004-handle-selected-active-state-the-way-item-s-arm-already-does",
+          "number": 4,
           "title": "Handle selected/active state the way Item's arm already does",
           "checked": false
         },
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-005-apply-the-naming-decision-across-view-rs-realize-rs-widgets-md-plugin-authoring-md-readme-the-plan",
+          "number": 5,
           "title": "Apply the naming decision across view.rs, realize.rs, widgets.md, plugin-authoring.md, README, the plan",
           "checked": false
         },
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-006-coverage-guards-pass",
+          "number": 6,
           "title": "Coverage guards pass",
           "checked": false
         },
         {
           "id": "6e2a7db7-0092-471a-9db3-ff1fbb685152-check-007-user-verifies-click-enter-space-hover-and-selected-state-in-the-showcase",
+          "number": 7,
           "title": "USER verifies click, Enter/Space, hover and selected state in the showcase",
           "checked": false
         }
@@ -393,41 +434,49 @@
       "checklist": [
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-001-blocking-put-option-a-token-names-only-vs-b-remove-to-the-user-recommend-a",
+          "number": 1,
           "title": "BLOCKING: put option A (token names only) vs B (remove) to the user; recommend A",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-002-if-a-resolve-token-names-against-the-theme-unknown-name-keeps-the-default-hex-refused",
+          "number": 2,
           "title": "If A: resolve token names against the Theme; unknown name keeps the default; hex refused",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-003-if-a-correct-the-rustdoc-that-currently-promises-rrggbb",
+          "number": 3,
           "title": "If A: correct the rustdoc that currently promises #rrggbb",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-004-if-a-decide-which-kinds-accept-a-colour-be-conservative-label-at-minimum",
+          "number": 4,
           "title": "If A: decide which kinds accept a colour — be conservative, Label at minimum",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-005-if-a-verify-a-runtime-theme-reload-restyles-it",
+          "number": 5,
           "title": "If A: verify a runtime theme reload restyles it",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-006-if-b-remove-the-variant-and-coordinate-the-doc-rewrite-with-t8",
+          "number": 6,
           "title": "If B: remove the variant and coordinate the doc rewrite with T8",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-007-update-view-rs-rustdoc-docs-widgets-md",
+          "number": 7,
           "title": "Update view.rs rustdoc + docs/widgets.md",
           "checked": false
         },
         {
           "id": "59f5c555-2a36-4247-9216-5002ae4ce55a-check-008-user-looks-at-the-result",
+          "number": 8,
           "title": "USER looks at the result",
           "checked": false
         }
@@ -465,46 +514,55 @@
       "checklist": [
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-001-fix-the-panel-title-error-rewrite-onto-card-or-add-a-real-title-to-panel",
+          "number": 1,
           "title": "Fix the Panel title error — rewrite onto Card, or add a real title to Panel",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-002-fix-the-label-muted-error-according-to-t7-s-decision",
+          "number": 2,
           "title": "Fix the Label Muted error according to T7's decision",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-003-reconcile-padding-placeholder-scroll-axes-separator-clickable-row-with-what-now-exists",
+          "number": 3,
           "title": "Reconcile padding / placeholder / scroll axes / separator / clickable row with what now exists",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-004-make-the-input-example-unambiguous-about-value-vs-name",
+          "number": 4,
           "title": "Make the Input example unambiguous about value vs name",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-005-update-docs-plugin-authoring-md-examples-1-3-shipped-vs-planned",
+          "number": 5,
           "title": "Update docs/plugin-authoring.md (examples 1-3 + shipped-vs-planned)",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-006-update-readme-md-s-plugins-section",
+          "number": 6,
           "title": "Update README.md's Plugins section",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-007-update-pluggable-chrome-plugin-plan-md-2-6-1-and-2-6-2",
+          "number": 7,
           "title": "Update pluggable-chrome-plugin-plan.md §2.6.1 and §2.6.2",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-008-replace-the-stale-backlog-md-progress-pointer-with-the-planner",
+          "number": 8,
           "title": "Replace the stale BACKLOG.md progress pointer with the planner",
           "checked": false
         },
         {
           "id": "5cf37c3b-b128-4abd-9f49-1018e2deb4d2-check-009-re-read-every-example-as-a-newcomer-nothing-aspirational-left-unmarked",
+          "number": 9,
           "title": "Re-read every example as a newcomer; nothing aspirational left unmarked",
           "checked": false
         }
@@ -550,16 +608,19 @@
       "checklist": [
         {
           "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-001-defer-to-plugin-08-unless-the-user-wants-it-decided-sooner",
+          "number": 1,
           "title": "Defer to plugin-08 unless the user wants it decided sooner",
           "checked": false
         },
         {
           "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-002-if-taken-up-put-the-separate-crate-question-to-the-user-with-the-settled-rule-s-actual-scope-made-clear",
+          "number": 2,
           "title": "If taken up: put the separate-crate question to the user with the settled rule's actual scope made clear",
           "checked": false
         },
         {
           "id": "eedbd3a5-22c8-4a8a-8e7a-3f9a1c470822-check-003-check-that-t3-s-generated-property-tables-are-reusable-for-generating-other-language-definitions",
+          "number": 3,
           "title": "Check that T3's generated property tables are reusable for generating other-language definitions",
           "checked": false
         }
@@ -577,5 +638,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

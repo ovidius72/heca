@@ -375,6 +375,14 @@
       "toStatus": "in-progress",
       "title": "draft → in-progress",
       "description": ""
+    },
+    {
+      "id": "6ee13b38-f701-4078-b937-5dd637a2e582",
+      "date": "2026-07-30T09:17:43.796Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ]
 }

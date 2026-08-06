@@ -22,157 +22,222 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "2178830d-f5d6-46a1-9cba-6352afba8187",
-    "b4ef758e-bf59-46ba-a77e-ebd9b20d6638",
-    "af69ae20-58d6-4014-a4b7-9294e0c7ebe1",
-    "bd6b5935-a55b-4ad0-b26d-fcfd3985c611",
-    "bc9ca992-57d9-4c4b-bc19-b92fa948d1f9"
+    "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+    "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+    "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+    "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+    "9417690f-e416-42e4-b4a2-8dce72068de3"
   ],
   "tasks": [
     {
-      "id": "2178830d-f5d6-46a1-9cba-6352afba8187",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 283,
-      "shortId": "PNC8T",
-      "priority": 6,
-      "shortName": "choice-6-propvalue-list-grid-r",
-      "title": "choice-6: `PropValue::List` + `Grid` realize (tracks, areas, placement)",
-      "status": "done",
-      "description": "`Grid` is the **only** kind left that genuinely needs a structured prop. Add the one model primitive it needs and realize it.\n\n## DONE 2026-07-14 — heca 348, heca-grid-ui 140, clippy clean, user tested the showcase.\n\n## Shipped\n- **`PropValue::List(Vec<PropValue>)`** (`view.rs`) — one new variant, the **last** the phase needs. Its rustdoc says why it is rare: the option-shaped widgets do NOT use it (their options are **children** — an option is a node with a value and content, not a string). Covered by a JSON round-trip test over the whole `PropValue` vocabulary, nested list included (the WASM boundary).\n- **`Grid` realize arm** — `columns` / `rows` / `areas` as lists; **placement is a prop on the CHILD** (`area` by name, or `col`/`row` + optional spans, defaulting to 1). Neither → taffy auto-placement; an unknown area name → auto-placement too. Keeps `ViewNode`'s shape flat.\n- **`parse_track()`** — CSS-like strings (`\"22px\"` / bare number / `\"1fr\"` / `\"auto\"` / `\"min\"`(`-content`) / `\"max\"`(`-content`)), case-insensitive + trimmed. **Anything unrecognised degrades to `Auto`** — never a panic (untrusted input).\n- **`Grid::area_boxed` / `cell_boxed`** — the boxed-setter seam (`Dialog::body_boxed` precedent).\n\n## Follow-up from the user's test (same task)\nThe showcase Grid demo exposed **two real gaps**, both now closed:\n\n1. **A grid item is pinned to the TOP-LEFT of its cell by default.** `Stretch` on both axes + an explicitly-sized item (every leaf has one — a `Label` measures to `font × 1.4`, an `Icon` to `font`) = nothing to stretch, so it lands at the cell start. An `Icon` and a `Label` in one row do NOT share a centre line. The vertical knob (`align`) existed; the **horizontal one did not** — and `justify` is a trap: on a grid it is `justify-content`, which distributes the whole *track set* and never moves an item in its cell. **Added `Style::justify_items` / `Style::justify_self` + the `LayoutExt` builders**, wired into `to_taffy`. `realize` now reads `align` + `justify_items` on a `Grid`, and **`align_self` / `justify_self` on EVERY kind** (they describe a node inside its parent, so they are read centrally in `realize`, not per arm).\n2. **The `areas` template defines the structure; `rows`/`columns` only *size* the tracks it implies.** A template with more lines than row tracks silently creates **implicit** rows — and an item spanning them is centred over a taller area than its neighbours, which reads as \"the text is off-centre\". This bit the user immediately when they wrote a 1-row grid but left a 2-line template. Documented with a WRONG/RIGHT pair; rule of thumb: **count the lines in `areas` — that is how many rows you have.**\n\n## Tests (heca 348 · heca-grid-ui 140)\nGrid: `grid_tracks_parse_and_garbage_degrades_to_auto` · `grid_node_realizes_tracks_areas_and_per_child_placement` · `grid_child_in_an_unknown_area_auto_places` · `grid_alignment_is_authorable_on_both_axes` · `every_prop_value_round_trips_including_lists` · **`grid_items_align_in_their_cell_on_both_axes`** (the top-left default; `align` centres vertically; `justify_items` horizontally; the per-item overrides win; and `justify` deliberately does **not** move an item — the trap, pinned) · **`grid_areas_template_defines_the_rows_not_the_row_tracks`** (a one-line template shares a centre line; a two-line template with the same single row track does not).\n\n## Showcase\n`Grid` had **no** demo at all (an AGENTS requirement). Added two: the two-row rich row (icon spanning both lines, `align: Center`, dot pinned right with `justify_self`), and the single-line variant that shows the one-line-template rule. The *declarative* path cannot be shown there — `realize` is app-side (`heca`), and `heca-renderer` does not depend on `heca`.\n\n## Docs\n`docs/widgets.md` `Grid` entry: Native + Declarative examples; the full track vocabulary + degrade rule; **\"The `areas` template defines the structure\"** (WRONG/RIGHT pair); **\"Aligning items inside their cells (read this — the default surprises people)\"** — the four-knob table (align / justify_items / align_self / justify_self), the `justify` trap, and examples per axis. `LayoutExt` table + the model table updated. `view.rs` rustdoc in sync.\n\n## Gates\nclippy 0 warnings · heca **348** · heca-grid-ui **140** + 71 + 1 · showcase builds. No `cargo fmt`.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "2178830d-f5d6-46a1-9cba-6352afba8187-check-001-in-progress-done",
-          "date": "2026-07-14T10:04:57.232Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        },
-        {
-          "id": "2178830d-f5d6-46a1-9cba-6352afba8187-check-002-in-progress-done",
-          "date": "2026-07-14T10:47:47.129Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-14T10:00:38.314Z",
-      "completedAt": "2026-07-14T10:47:47.129Z",
-      "createdAt": "2026-07-13T20:46:38.525Z",
-      "updatedAt": "2026-07-14T10:47:47.129Z"
-    },
-    {
-      "id": "b4ef758e-bf59-46ba-a77e-ebd9b20d6638",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 284,
-      "shortId": "CHF9L",
-      "priority": 7,
-      "shortName": "choice-7-named-child-slots-slo",
-      "title": "choice-7: Named child slots (`slot` prop) → `DockFrame` + `Item` leading/trailing + `Toast`",
-      "status": "done",
-      "description": "Close the last structural gap: a node whose children belong to **different places** in the widget (a header vs a body, a leading vs a trailing slot).\n\n## DONE 2026-07-14 — heca 352, heca-grid-ui 142, clippy clean. Host-bridge work with no UI surface; verified by tests.\n\n## The mechanism (as LOCKED — zero model surgery)\nA child carries a **`slot` prop** (`.prop(\"slot\", PropValue::Text(\"header\".into()))`) and the parent's arm routes on it. `ViewNode.children` stays **one flat `Vec`** — no `slots: Map<..>`, no second child vector, JSON stays flat — and it generalizes to every future slotted widget for free.\n\n**Two rules, both keeping `realize` total for untrusted input:**\n1. **A widget may declare a DEFAULT slot.** `DockFrame`'s is the body ⇒ an unslotted child lands there. **`Item` has none** — its middle *is* the label (from `text`) — so an unslotted child is **ignored** rather than dropped somewhere it doesn't belong.\n2. **An unknown slot name is never an error**: debug-logged (`warn_unknown_slot`), then falls back to the default slot (or ignored where there is none). A plugin's typo costs it a misplaced child, not a panic.\n\n## Shipped\n- `realize.rs`: `slot_of()` + `warn_unknown_slot()` (the one helper pair, reused by both slotted arms), `intent_carrier()` (an event → carrier for the non-pick events: `dismiss`, a toast's `action`), `severity_prop()` (unknown name → `Info`).\n- **`DockFrame` arm** — props `text` / `expanded` / `frameless` / `active` / `nav_selected`; slot `header` (the controls slot), body = default; event `toggle` (from choice-5, carries `args[\"expanded\"]`). **`.rail(..)` is host-only** and documented as such — it binds a host-owned `Signal<RegionMode>`, which static data cannot drive (the `ScrollBar` rule, now generalized to *individual builders* that bind a host signal).\n- **`Item` arm** — slots `leading` / `trailing`, no default.\n- **`Toast` arm** — props `text` / `severity` / `icon` / `body` / `action_text` / `dismissible`; events `press` / `dismiss` / `action`. **No slots, deliberately**: its inline action is a *labelled button*, not arbitrary content, so it is a prop + an intent. A slot would have promised a composition the widget doesn't offer.\n- **Boxed setters** (`realize` holds `Box<dyn Component>`, which is not itself `Component`): `DockFrame::header_boxed` / `child_boxed`, `Item::leading_boxed` / `trailing_boxed` — the `Dialog::body_boxed` seam.\n- **`Component::text_summary` on `Badge` / `Tag` / `BadgeButton`** — a real gap the tests exposed: these render their **own** text (they compose no `Label`), so the trait's default (first child that has one) reported `None`. The trait doc already said such widgets must override it; they now do.\n\n## Tests (+3 → heca 352)\n`dock_frame_routes_its_header_slot_and_defaults_the_rest_to_the_body` · `item_routes_leading_and_trailing_slots_and_ignores_the_rest` (an unslotted **and** an unknown-slot child are both ignored; the row keeps its 3 slots and the label is not overwritten) · `toast_node_realizes_its_props_and_three_intents` (+ unknown severity → `Info`).\n\n## Docs\n`docs/widgets.md`: a new **\"Named child slots (the `slot` prop)\"** section in the model (the mechanism, the two rules, why it needs no model surgery); `Item`, `DockFrame` and `Toast` entries each gain their **Declarative** form with **their slot names listed** — slot names are part of a widget's declarative contract, like its props; the Toast entry states plainly that a declarative toast is for **inline** use, not for firing app notifications (the host owns the queue via `ToastStack` + `ToastSpec`). The model table gains all three, and the **\"not realized yet\" list is GONE**, replaced by a coverage statement. `view.rs` rustdoc in sync.\n\n## Coverage after this task\n**Every `WidgetKind` realizes to its widget**, except `ScrollBar` — host-only by design (live host signals cannot come from static data). choice-8 turns that statement into a *test* so it cannot rot.\n\n## Gates\nclippy 0 warnings · heca **352** · heca-grid-ui 142 + 71 + 1 · showcase builds. No `cargo fmt`.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "b4ef758e-bf59-46ba-a77e-ebd9b20d6638-check-001-in-progress-done",
-          "date": "2026-07-14T13:36:55.851Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-14T13:31:37.029Z",
-      "completedAt": "2026-07-14T13:36:55.851Z",
-      "createdAt": "2026-07-13T20:46:58.481Z",
-      "updatedAt": "2026-07-14T13:36:55.851Z"
-    },
-    {
-      "id": "af69ae20-58d6-4014-a4b7-9294e0c7ebe1",
-      "phaseId": "1df9c36c-5c29-4288-9fe1-7a6e9c72179b",
-      "number": 285,
-      "shortId": "S4SSC",
-      "priority": 8,
-      "shortName": "choice-8-vocabulary-coverage-p",
-      "title": "choice-8 vocabulary coverage plus Choice vs Item guidance",
-      "status": "done",
-      "description": "The closing task: make the \"not realized yet\" list **empty by construction**, and write the `Choice` vs `Item` guidance.\n\n## DONE 2026-07-14 — workspace green (heca 354 · heca-grid-ui 142 · heca-core 89 · …), clippy 0. Docs-and-guard work; **no UI surface to test**.\n\n## 1. The coverage guard (the point of the task)\n`every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones` walks **`WidgetKind::ALL`**, realizes a representative node per kind, lays it out and paints it, and asserts the result is **alive** — it either holds the children it was given or paints something. The empty-`Flex` fallback does *neither*, so **a kind with no `realize` arm fails loudly** instead of rendering nothing and being discovered months later by a plugin author. That failure mode is invisible in review and invisible at runtime; this is the only thing that catches it.\n\n**Two layers stop the guard itself from rotting** (a guard is only as good as the list it walks):\n- `sample_node(kind)`'s match is **exhaustive** → a new `WidgetKind` **fails to compile** until it has a sample.\n- `WidgetKind::ordinal()` is exhaustive too, and `all_lists_every_widget_kind` ties it to `ALL` → a variant that reaches `ordinal` but not `ALL` **fails the test**.\n\n`ScrollBar` is asserted to realize to **nothing** — so the host-only decision is *pinned by a test*, not merely documented.\n\n## 2. `ScrollBar` — host-only, and the rule generalized\n`realize` keeps it out of the realized set and its debug log now says why (\"its state is a live host signal, which static data cannot drive — use Scroll\"). Documented as a **general principle**, not a one-off:\n\n> **A widget whose state is a live host signal is HOST-ONLY.**\n\nA `ViewNode` is static, serializable data: it cannot carry a signal, let alone update one, so a declarative `ScrollBar` would render a **dead control** (a thumb that never moves). Plugins use **`Scroll`** (a `ScrollRegion`), which owns its own offset. The rule also covers individual **builders** — `DockFrame::rail(..)` binds a host-owned `RegionMode` signal, so a declarative dock is never rail-aware.\n\n## 3. `Choice` vs `Item` guidance\nThe comparison table + rule of thumb (from choice-1) is now **cross-referenced from both entries** — the `Item` entry gained a callout (\"Both are selectable, both compose their content, both are one Tab stop — but they answer different questions\"), pointing at the full table. `Item` = a **row** (leading · label · trailing, fixed height, `ActiveMarker`) — a list that looks like rows. `Choice` = **any content + a value** — the user is picking one of several.\n\n## 4. Docs sweep — every stale claim gone\n- `realize.rs` module rustdoc: \"arms are filled in incrementally … unhandled kinds fall back to an empty container\" → a **Coverage** section (complete; the host-only exception; and *the test that enforces it*).\n- `view.rs`: `WidgetKind::ALL` + `ordinal` with the guard explained; the props/events table carries every kind.\n- `docs/widgets.md`: the \"not realized yet\" list is **gone**, replaced by a coverage statement; `ScrollBar` gained a **host-only** callout (why a declarative one would be a dead control, use `Scroll` instead, and the general rule); the last `viewnode-task-1` reference (Item's slots) now points at Named child slots.\n- `docs/chrome-and-ui.md`: closed-vocabulary section states **every `WidgetKind` is authorable**, with the host-only exception and *why* it generalizes.\n- **AGENTS.md ⭐ block**: \"Genuinely OPEN\" no longer lists realize coverage (it is complete) — the remaining open items are a typed builder SDK over `ViewNode` and `Label` truncation/wrapping. The **SETTLED** list now records: coverage is complete *and test-enforced*; composition; options-as-children + value→intent; the `slot` prop; content-color inheritance; and the host-only rule.\n\n## Gates\nclippy `--workspace --all-targets --all-features` 0 warnings · `cargo test --workspace` green (heca **354**, heca-grid-ui 142 + 71 + 1, heca-core 89, …) · showcase builds. No `cargo fmt`.\n\n## PHASE COMPLETE\nchoice-1..8 all done. `ViewNode` coverage is closed: every `WidgetKind` realizes, enforced by a test.",
-      "notes": "",
-      "statusLog": [
-        {
-          "id": "af69ae20-58d6-4014-a4b7-9294e0c7ebe1-check-001-in-progress-done",
-          "date": "2026-07-14T13:46:43.910Z",
-          "fromStatus": "in-progress",
-          "toStatus": "done",
-          "title": "in-progress → done",
-          "description": ""
-        }
-      ],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-14T13:41:44.299Z",
-      "completedAt": "2026-07-14T13:46:43.910Z",
-      "createdAt": "2026-07-13T20:48:08.360Z",
-      "updatedAt": "2026-07-14T13:46:43.910Z"
-    },
-    {
-      "id": "bd6b5935-a55b-4ad0-b26d-fcfd3985c611",
-      "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
-      "number": 286,
-      "shortId": "QPPAW",
-      "priority": 9,
-      "shortName": "gridui-debt-dialog-font-derive",
-      "title": "gridui-debt Dialog font-derived min-width needs Style min_width",
+      "id": "0e58fe01-a456-4800-9ad5-92a65e26b0a0",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 317,
+      "shortId": "JC8WV",
+      "priority": 3,
+      "shortName": "collapse-flavours",
+      "title": "Two collapse flavours, declared per Provider",
       "status": "planned",
-      "description": "**Rescued from the old root `HANDOFF.md` §3c (deleted 2026-07-13); do not lose this.**\n\nA short confirm dialog (\"Delete Pane?\") renders **cramped** — the panel hugs its content, so a two-word title + two buttons produces a tiny box, and dialogs of different content have visibly different widths with no shared baseline.\n\n## The gap\n`Style` (`heca-grid-ui/src/style.rs`) has **no `min_width`** — only `width`/`height` (`Length::{Auto, Px}`). So `Dialog` cannot express \"hug the content, but never below a sensible floor\".\n\n## Work\n1. Add `min_width: Length` (and probably `min_height` for symmetry — decide) to `Style`, defaulting to `Length::Auto`, and wire it into `Style::to_taffy()` (taffy has `min_size`). Add the builder to `LayoutExt`.\n2. Give `Dialog`'s panel a **font-derived** minimum — the note said **~22em** (i.e. `22 × base font`), so it scales with the theme font instead of being a magic pixel count. Verify against the real dialogs (delete-pane confirm, the rename form).\n3. Tests: a `min_width` smaller than the content is a no-op; larger than the content floors the box; it scales with the base font.\n4. `docs/widgets.md`: the `Style`/`LayoutExt` tables + the `Dialog` entry.\n\n## Why it's here\n`gridui-07` (crate-review debt) is the right home: it is a missing primitive in the layout style, not a feature.\n\n## Gates\nclippy 0; `cargo test -p heca-grid-ui -p heca`; showcase green; no `cargo fmt`.",
+      "description": "A LIST provider (workspaces and similar) ENUMERATES — one cell per item when collapsed. A TOOL provider (a Docker panel) FOLDS — the whole provider becomes a single icon. The Provider declares which it is; the host applies it. Still one description, still write once.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "collapse-flavours-c1",
+          "title": "Provider declares its flavour",
+          "checked": false
+        },
+        {
+          "id": "collapse-flavours-c2",
+          "title": "Host applies it",
+          "checked": false
+        },
+        {
+          "id": "collapse-flavours-c3",
+          "title": "Both flavours demonstrated",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-13T21:19:50.592Z",
-      "updatedAt": "2026-07-13T21:19:50.592Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "bc9ca992-57d9-4c4b-bc19-b92fa948d1f9",
-      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
-      "number": 287,
-      "shortId": "BL773",
-      "priority": 8,
-      "shortName": "context-menu-bug-keyboard-navi",
-      "title": "context-menu-bug keyboard navigation of an open menu does nothing",
-      "status": "done",
-      "description": "**BUG, rescued from the old root `HANDOFF.md` §3c (deleted 2026-07-13); do not lose this.**\n\nThe user reported that **`Ctrl+j`/`Ctrl+k` and the arrow keys do not navigate an open context menu** — the highlight does not move.\n\n## What was already checked (the code path *traces* correct)\n1. `top_modal(state)` matches while the menu is open, so the overlay-capture gate in `route_interaction` blocks WM actions — that part works.\n2. The **widget keymap** path delivers the key (`heca/src/app/events.rs`, overlay key branch → `Keymap::dispatch`).\n3. `ContextMenu::event` returns `Handled::No` on a **raw** arrow, which is what lets the host resolve it into the semantic `WidgetIntent::{MenuUp, MenuDown}` and re-deliver it.\n4. `input_mode` is reset to `Normal` at `heca/src/input.rs:229`.\n\nSo the trace looks right and the bug is **not** where it was expected. **It needs a runtime repro.**\n\n## Prime suspects (from the note)\n- The **`[keys.widgets]` defaults** — are `menu_up`/`menu_down` actually bound to `↑`/`Ctrl+k` and `↓`/`Ctrl+j` in `keybindings.default.toml`, and does `build_widget_keymap` pick them up?\n- The **`>` shifted-binding match** — a shifted-symbol binding may be swallowing or mis-resolving the combo before the menu ever sees it.\n\n## How to work it\nReproduce in the running app: open a context menu, press the keys, and instrument the four trace points above to see which one does not fire. Do **NOT** attempt a fix from the code trace alone — that is exactly what already failed once.\n\n## Gates\nclippy 0; `cargo test -p heca`; the user confirms the menu navigates in the real app; no `cargo fmt`.\n\n---\n**Completion summary:**\nCHIUSO 2026-07-14 — il bug NON esiste più. L'utente ha confermato a runtime: \"ctrl+j/k for me is fixed\".\n\nVERIFICA DEL CODICE (i due \"prime suspects\" della nota sono entrambi PULITI):\n1. `[keys.widgets]` (keybindings.default.toml:221-226): `menu_up = [\"ArrowUp\",\"Ctrl+k\"]`, `menu_down = [\"ArrowDown\",\"Ctrl+j\"]` — presenti e corretti.\n2. `build_widget_keymap` (heca/src/app/registry.rs:135) mappa `menu_up`/`menu_down` → `WidgetIntent::MenuUp`/`MenuDown` leggendo la config.\n3. `ContextMenu::event` (heca-grid-ui/src/widgets/context_menu.rs:463): su `Event::Widget(MenuDown/MenuUp)` chiama `select_next`/`select_prev` → l'highlight si muove. I tasti RAW non vengono ingoiati (`Handled::No`), così l'host può risolverli in `WidgetIntent` e ri-consegnarli.\nNessun binding shiftato (`>`) intercetta la combo.\n\nCAUSA PROBABILE DELLA GUARIGIONE: commit 8f55108 \"feat(app): overlay-capture interaction policy…\", che ha toccato il ramo overlay dei tasti in `app/events.rs` (il punto di consegna). Il bug era stato aperto PRIMA di quel commit.\n\nPERCHÉ ERA POSSIBILE ROMPERLO IN SILENZIO (e perché nessuno sapeva dire quando fosse tornato a funzionare): la metà WIDGET della catena non era coperta da NESSUN test. La metà host sì (`widget_keymap_maps_default_bindings_by_axis` in app/registry.rs già asseriva Ctrl+j→MenuDown, Ctrl+k→MenuUp).\n\nREGRESSION TEST AGGIUNTI (è questo il vero deliverable del task):\n- `heca-grid-ui/src/widgets/context_menu.rs::menu_intents_move_the_highlight_and_skip_disabled_entries` — dato l'intent semantico, la selezione SI MUOVE, salta le voci disabilitate, non wrappa agli estremi, e un tasto RAW resta `Handled::No` (se lo ingoiasse, la navigazione si romperebbe di nuovo: è esattamente il modo in cui questo bug può tornare).\n- `heca/src/app/registry.rs::widget_keymap_maps_default_bindings_by_axis` — aggiunta l'asserzione mancante `ArrowUp → MenuUp` (c'erano già ArrowDown/Ctrl+j/Ctrl+k).\n\nNON TESTABILE IN UNIT TEST: il ramo di consegna in `app/events.rs` (richiede AppState + finestra reale). Resta coperto solo dalla verifica manuale dell'utente.\n\nGATE: clippy --workspace --all-targets --all-features 0 warning; heca 361 + heca-grid-ui 72 (era 71) verdi.",
+      "id": "16871aea-041e-45f4-9dd7-ecce60ffa38d",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 319,
+      "shortId": "YQLV7",
+      "priority": 1,
+      "shortName": "provider-content-model",
+      "title": "The write-once Group/Item content model",
+      "status": "planned",
+      "description": "A Provider describes its content ONCE as a semantic tree of Groups and Items. Each node carries its meaning a single time: an Item has icon, label, status, intent and expanded-only actions; a Group has identity, collapsed, and children nested to any depth. The author NEVER writes an expanded tree and a collapsed tree — that double authoring is what this rejects, and it would fall on every plugin too.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "provider-content-model-c1",
+          "title": "Group/Item model defined",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c2",
+          "title": "Nesting to any depth",
+          "checked": false
+        },
+        {
+          "id": "provider-content-model-c3",
+          "title": "No second tree anywhere in the author's code",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-14T16:11:53.331Z",
-      "completedAt": "2026-07-14T16:14:44.814Z",
-      "createdAt": "2026-07-13T21:20:20.133Z",
-      "updatedAt": "2026-07-14T16:14:44.814Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "373ef265-b0e5-4199-8bcc-5cf32fd786f8",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 322,
+      "shortId": "FYRQE",
+      "priority": 4,
+      "shortName": "railcell-widget-work",
+      "title": "RailCell text label + nav_selected, and Glyph::Stack",
+      "status": "planned",
+      "description": "Verified NOT built 2026-07-26: `RailCell` has no `nav_selected` (0 hits in rail_cell.rs) and `Glyph::Stack` does not exist — `Glyph::FolderSimple` already does. Extend RailCell to show a short text label for the name/number styles, add `nav_selected` mirroring Row / MarkerGroup / DockFrame, and add the Stack glyph. All styling from Theme — no literals.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "railcell-widget-work-c1",
+          "title": "RailCell shows a short text label",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c2",
+          "title": "nav_selected added, mirroring the other widgets",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c3",
+          "title": "Glyph::Stack added",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c4",
+          "title": "All colours from theme tokens",
+          "checked": false
+        },
+        {
+          "id": "railcell-widget-work-c5",
+          "title": "docs/widgets.md + showcase updated",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "89ba55be-c2d1-4406-a4fb-0888b58d98b7",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 329,
+      "shortId": "C4X6X",
+      "priority": 5,
+      "shortName": "rail-config-and-behaviour",
+      "title": "The two config settings + click, right-click and KeyHint behaviour",
+      "status": "planned",
+      "description": "`workspace_collapsed_style` and `pane_collapsed_style`, both `[appearance]`, typed snake_case enums defaulting to \"icon\", both added to config.default.toml and the README.\n\nBehaviour: a workspace cell click TOGGLES its pane list and does NOT switch workspace; a pane cell click focuses that pane. Right-click shows the SAME context menu as the expanded form — reuse the existing builders. The universal picker stamps letters over the cells. Column-target picks are unavailable while collapsed — an accepted limitation.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "rail-config-and-behaviour-c1",
+          "title": "Both config settings, documented in config.default.toml + README",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c2",
+          "title": "Workspace click toggles, pane click focuses",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c3",
+          "title": "Right-click reuses the expanded menu builders",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c4",
+          "title": "KeyHint over cells",
+          "checked": false
+        },
+        {
+          "id": "rail-config-and-behaviour-c5",
+          "title": "USER drives a region through its modes",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "9417690f-e416-42e4-b4a2-8dce72068de3",
+      "phaseId": "961a2d9f-8fc2-4af7-b302-4cbd1b2493d5",
+      "number": 331,
+      "shortId": "X86TA",
+      "priority": 2,
+      "shortName": "realize-per-mode",
+      "title": "Mode-awareness lives in exactly one place: realize()",
+      "status": "planned",
+      "description": "The host renders the one tree for the region's current mode. Expanded → Group becomes a `DockFrame`, Item becomes a `Row` with all extras. Collapsed → a `RailCell` per node, recursively, with expanded-only extras omitted. This must NOT be duplicated across widgets or in the author's code.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "realize-per-mode-c1",
+          "title": "Both renderings come from one tree",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c2",
+          "title": "Mode branch exists only in realize()",
+          "checked": false
+        },
+        {
+          "id": "realize-per-mode-c3",
+          "title": "Group collapse is a generic host behaviour, not workspace-specific",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-26T11:29:06.784Z",

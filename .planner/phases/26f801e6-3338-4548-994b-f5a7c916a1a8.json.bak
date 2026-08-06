@@ -22,7 +22,8 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "1b6874c9-8276-45e7-b4ee-d70762bf188d"
+    "1b6874c9-8276-45e7-b4ee-d70762bf188d",
+    "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95"
   ],
   "tasks": [
     {
@@ -77,10 +78,63 @@
       "completedAt": "",
       "createdAt": "2026-07-30T13:38:32.360Z",
       "updatedAt": "2026-07-30T13:38:32.360Z"
+    },
+    {
+      "id": "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95",
+      "phaseId": "26f801e6-3338-4548-994b-f5a7c916a1a8",
+      "number": 377,
+      "shortId": "HWHYE",
+      "priority": 2,
+      "shortName": "the-pane-header-composes-the-b",
+      "title": "The pane header composes the button component and the segment bar",
+      "status": "planned",
+      "description": "The header itself, once its two halves exist as components.\n\n## What exists\n\n`heca/src/chrome/mod.rs:782` — `build_pane_header()`: the title, the info bar, and the configured `PaneAction` buttons, all assembled inline. `pane_action_spec()` :549 maps each `PaneAction` to `(glyph, WmAction, label, needs_focus)` and stays the single source of what a header button is. `build_pane_viewport_widgets()` :906 (scrollbar + badge) sits beside it.\n\nThe button set is already a **dynamic vector** (`pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>`, fed by config's `[pane] title_actions`, with the documented plugin seam appending later) — the build loop only reads descriptor fields. That property must survive: **no per-action `match` may return in the render loop.**\n\n## What to build\n\nA pane-header component composing the action-button component (P087/T374) and the segment bar (P089/T376), consumed by `chrome/mod.rs` in this same task, with `build_pane_header` deleted.\n\n## Test\n\nHeadless: the configured action list produces exactly that many buttons in order; a config-hidden action produces none; each button carries its tooltip + hint (delegated to the button component's own test, not re-asserted here); the title truncates through the segment bar rather than any local arithmetic.\n\n## Behaviors to preserve\n\nPixel-identical headers; the per-pane header trees keep their own hint-id ranges and `remove_range` on rebuild (`sync_pane_headers`); the rebuild signature (`chrome_signature` + the width bucket at :748) unchanged; a floating pane still hides the buttons that do not apply — that visibility follows `action_allowed_when_floating` (policy), never a hardcoded list.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95-check-001-header-component-composes-the-action-button-component-the-segment-bar",
+          "number": 1,
+          "title": "header component composes the action-button component + the segment bar",
+          "checked": false
+        },
+        {
+          "id": "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95-check-002-build-pane-header-deleted-chrome-mod-rs-consumes-the-component",
+          "number": 2,
+          "title": "build_pane_header deleted; chrome/mod.rs consumes the component",
+          "checked": false
+        },
+        {
+          "id": "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95-check-003-button-set-stays-a-dynamic-vector-no-per-action-match-reintroduced",
+          "number": 3,
+          "title": "button set stays a dynamic vector — no per-action match reintroduced",
+          "checked": false
+        },
+        {
+          "id": "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95-check-004-headless-test-configured-list-buttons-in-order-hidden-action-none-title-fits-via-the-bar",
+          "number": 4,
+          "title": "headless test: configured list → buttons in order; hidden action → none; title fits via the bar",
+          "checked": false
+        },
+        {
+          "id": "9a5572dc-3bc3-45a0-afa2-77c9d3bc3c95-check-005-floating-pane-button-visibility-still-derived-from-policy-action-allowed-when-floating",
+          "number": 5,
+          "title": "floating-pane button visibility still derived from policy (action_allowed_when_floating)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-30T13:38:46.383Z",
+      "updatedAt": "2026-07-30T13:38:46.383Z"
     }
   ],
   "createdAt": "2026-07-30T13:27:59.996Z",
-  "updatedAt": "2026-07-30T13:38:32.360Z",
+  "updatedAt": "2026-07-30T13:38:46.383Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

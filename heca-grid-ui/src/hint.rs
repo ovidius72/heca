@@ -13,7 +13,6 @@
 //! [`DragItemId`](crate::drag::DragItemId)).
 
 use crate::component::Component;
-use crate::reactive::SignalGet;
 use heca_core::layout::Rectangle;
 
 /// Opaque hint-target identifier. The host maps it back to an intent to dispatch
@@ -33,31 +32,14 @@ impl HintTargetId {
     }
 }
 
-/// Should this subtree be enumerated? Hidden widgets have stale bounds and never
-/// receive input, so they're skipped (matching paint / event / drag resolution).
-fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.layout.hidden
-}
-
 /// Enumerate **every** hint target in the tree with its laid-out bounds, in
 /// document order (parents before children). The host assigns letters to the
-/// result and stamps a keycap over each `bounds`. Hidden subtrees are skipped.
+/// result and stamps a keycap over each `bounds`. Hidden and disabled subtrees
+/// are skipped because they cannot receive activation.
 pub fn collect_hint_targets(root: &dyn Component) -> Vec<(HintTargetId, Rectangle)> {
     let mut out = Vec::new();
-    collect_into(root, &mut out);
+    root.visit_hint_targets(&mut |id, bounds| out.push((id, bounds)));
     out
-}
-
-fn collect_into(node: &dyn Component, out: &mut Vec<(HintTargetId, Rectangle)>) {
-    if skip(node) {
-        return;
-    }
-    if let Some(id) = node.as_hint_target() {
-        out.push((id, node.base().bounds));
-    }
-    for child in node.base().children.iter() {
-        collect_into(child.as_ref(), out);
-    }
 }
 
 #[cfg(test)]
@@ -101,10 +83,10 @@ mod tests {
     }
 
     #[test]
-    fn skips_hidden_subtrees_and_untagged_nodes() {
+    fn skips_hidden_disabled_and_untagged_nodes() {
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        // An untagged node with a tagged child, then a hidden tagged node.
+        // An untagged node with a tagged child, then hidden/disabled targets.
         let mut visible_parent = Flex::column();
         visible_parent
             .base_mut()
@@ -116,11 +98,15 @@ mod tests {
         hidden.base_mut().visible.set(false);
         root.base_mut().children.push(Box::new(hidden));
 
+        let mut disabled = Surface::new().hint_target(HintTargetId::new(10));
+        disabled.base_mut().disabled.set(true);
+        root.base_mut().children.push(Box::new(disabled));
+
         let targets = collect_hint_targets(&root);
         assert_eq!(
             targets.iter().map(|(id, _)| id.raw()).collect::<Vec<_>>(),
             vec![7],
-            "untagged parent is transparent; hidden tagged node is skipped"
+            "untagged parent is transparent; hidden and disabled targets are skipped"
         );
     }
 }

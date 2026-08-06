@@ -21,10 +21,60 @@
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [],
-  "taskIds": [],
-  "tasks": [],
+  "taskIds": [
+    "cae20e83-bcb3-4faa-88fa-6935614db0a1"
+  ],
+  "tasks": [
+    {
+      "id": "cae20e83-bcb3-4faa-88fa-6935614db0a1",
+      "phaseId": "839f99ba-5604-47a5-bb43-1968ee9cf697",
+      "number": 378,
+      "shortId": "V5TL4",
+      "priority": 1,
+      "shortName": "a-test-sees-inline-composition",
+      "title": "A test sees inline composition — the allowlist, in the style of prop_drift",
+      "status": "planned",
+      "description": "An extraction nobody defends is undone by the next feature written in a hurry. This makes \"an app file composing widgets inline\" something a check reports rather than something a reviewer must notice.\n\n## The precedent to copy\n\n`heca-grid-ui/tests/prop_drift.rs` — `every_builder_bearing_widget_has_a_generated_property_surface` plus `every_exception_still_names_a_real_type`: a scan with an **explicit exception list**, each entry carrying a reason, and a second test proving the exceptions still refer to something real (so the list cannot rot into lies).\n\n## What to build\n\nThe same shape for app-level composition: scan `heca/src/**` for widget-construction sites (`Flex::`, `Item::new`, `Row::new`, `Label::new`, `Icon::new` …) and fail on any file outside the allowlist. The allowlist starts as `heca/src/components/**` plus every file that genuinely cannot move yet — each with a written reason and, where it applies, the planner id of the task that will move it.\n\nKeep the check blunt and honest rather than clever: a per-file count of construction sites is something a reviewer can verify by eye. A precise AST-level rule that nobody trusts is worse than a crude one that fails loudly.\n\n## Edge cases — do not let the guard fight the architecture\n\n- `realize()` (heca-view-realize) builds widget trees from `ViewNode` for anyone: a provider **describing** its own body is not inline composition and must not be flagged.\n- Test modules construct widgets constantly — scan non-test code, or exclude `#[cfg(test)]` blocks.\n- `heca-grid-ui` itself is out of scope: composing widgets is what the library is for.\n\n## Also in this task\n\n- The boundary + how-to already live in the project `globalRules` and AGENTS § 0/0b — **link** them from `docs/chrome-and-ui.md`; do not paste a third copy.\n- Add the component catalog to `docs/chrome-and-ui.md`: what exists, what each takes, and what none of them may take (`&AppState`).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cae20e83-bcb3-4faa-88fa-6935614db0a1-check-001-scan-test-with-an-explicit-allowlist-each-entry-carrying-a-reason-planner-id-where-one-exists",
+          "number": 1,
+          "title": "scan test with an explicit allowlist, each entry carrying a reason (+ planner id where one exists)",
+          "checked": false
+        },
+        {
+          "id": "cae20e83-bcb3-4faa-88fa-6935614db0a1-check-002-second-test-proves-every-allowlisted-path-still-exists-the-list-cannot-rot",
+          "number": 2,
+          "title": "second test proves every allowlisted path still exists — the list cannot rot",
+          "checked": false
+        },
+        {
+          "id": "cae20e83-bcb3-4faa-88fa-6935614db0a1-check-003-excludes-components-test-code-provider-bodies-described-via-viewnode-heca-grid-ui-itself",
+          "number": 3,
+          "title": "excludes: components/, test code, provider bodies described via ViewNode, heca-grid-ui itself",
+          "checked": false
+        },
+        {
+          "id": "cae20e83-bcb3-4faa-88fa-6935614db0a1-check-004-docs-chrome-and-ui-md-gains-the-component-catalog-and-links-the-rule-no-third-copy",
+          "number": 4,
+          "title": "docs/chrome-and-ui.md gains the component catalog and LINKS the rule (no third copy)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-30T13:39:06.078Z",
+      "updatedAt": "2026-07-30T13:39:06.078Z"
+    }
+  ],
   "createdAt": "2026-07-30T13:28:16.724Z",
-  "updatedAt": "2026-07-30T13:28:16.724Z",
+  "updatedAt": "2026-07-30T13:39:06.078Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

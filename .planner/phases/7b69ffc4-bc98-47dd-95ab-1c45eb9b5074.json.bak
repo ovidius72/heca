@@ -22,19 +22,19 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "d7b4523a-c813-4cfd-bee5-e9726906e036"
+    "3d20f9cc-da40-4585-b9cd-c731934fef29"
   ],
   "tasks": [
     {
-      "id": "d7b4523a-c813-4cfd-bee5-e9726906e036",
-      "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
-      "number": 101,
-      "shortId": "ZSDTP",
+      "id": "3d20f9cc-da40-4585-b9cd-c731934fef29",
+      "phaseId": "7b69ffc4-bc98-47dd-95ab-1c45eb9b5074",
+      "number": 20,
+      "shortId": "CJLHT",
       "priority": 1,
-      "shortName": "visual-regression-snapshots",
-      "title": "Visual regression snapshots for widget states",
-      "status": "planned",
-      "description": "Snapshot/render tests per stati normali, hover, active, disabled, focused.",
+      "shortName": "mount-terminal-pane-shell",
+      "title": "Mount terminal inside grid-ui Pane shell",
+      "status": "done",
+      "description": "Montare terminale come content dentro la shell pane di grid-ui.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,10 +42,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "startedAt": "2026-07-01T18:11:32.026Z",
+      "completedAt": "2026-07-01T18:11:32.026Z",
+      "createdAt": "2026-07-01T18:11:32.026Z",
+      "updatedAt": "2026-07-01T18:11:32.026Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",

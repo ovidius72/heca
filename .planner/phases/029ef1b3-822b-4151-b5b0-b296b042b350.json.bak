@@ -22,117 +22,153 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "80d65d00-ea07-4725-9891-69499125f645",
-    "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6",
-    "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13",
-    "a52865e6-5a18-4c67-8634-2e3127307000"
+    "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+    "88963acd-0cce-4897-837c-6fd617d604b8",
+    "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+    "f226ca8f-7f28-4f4e-97f6-83a89b03f12c"
   ],
   "tasks": [
     {
-      "id": "80d65d00-ea07-4725-9891-69499125f645",
-      "phaseId": "87939acb-c177-4c6b-b4d7-2df14c25390d",
-      "number": 172,
-      "shortId": "3N8M2",
-      "priority": 2,
-      "shortName": "markdown-preview",
-      "title": "Render native rich markdown preview",
+      "id": "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 323,
+      "shortId": "2T7E5",
+      "priority": 4,
+      "shortName": "verify-visually",
+      "title": "USER verifies every container agrees at 0 and at a large width",
       "status": "planned",
-      "description": "Preview markdown ricca nativa/overlay.",
+      "description": "Borders are visible. Green tests are not verification. Build the showcase, set the global width to 0 and then to something large, and confirm Toast, Modal, Bracketed panes, plain Panes and the control widgets all agree.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "verify-visually-c1",
+          "title": "USER confirms at width 0",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c2",
+          "title": "USER confirms at a large width",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c3",
+          "title": "Separate from fix/bracket-frame-render — do not conflate",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.608Z",
-      "updatedAt": "2026-07-01T18:15:25.608Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6",
-      "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
-      "number": 173,
-      "shortId": "MRPRS",
-      "priority": 2,
-      "shortName": "agent-status-display",
-      "title": "Agent status display in pane chrome",
-      "status": "deferred",
-      "description": "Mostrare lo stato agent nel chrome del pane.",
+      "id": "88963acd-0cce-4897-837c-6fd617d604b8",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 328,
+      "shortId": "WAZD5",
+      "priority": 1,
+      "shortName": "decide-override-rule",
+      "title": "DECIDE FIRST: does an explicit .border(color, width) override the global?",
+      "status": "planned",
+      "description": "⛔ Blocking, and it is the user's call. Either an explicit `.border(color, width)` still overrides the global width, or width is ALWAYS theme-driven and a widget picks only the colour. Both are defensible and the answer changes the widget API. Ties into the planned config (memory `border-style-config-options`: sidebar_border_style / pane_border_style).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [
-        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
-        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
-        "88b87a32-ff00-4044-9a32-c575e3ed5401",
-        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      "checklist": [
+        {
+          "id": "decide-override-rule-c1",
+          "title": "BLOCKING: put both options to the user with the trade-off",
+          "checked": false
+        }
       ],
+      "subtasks": [],
+      "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.608Z",
-      "updatedAt": "2026-07-01T19:58:10.784796Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13",
-      "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
-      "number": 174,
-      "shortId": "QD7QU",
+      "id": "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 332,
+      "shortId": "VGTZY",
       "priority": 3,
-      "shortName": "builtin-agent-drivers",
-      "title": "Built-in agent drivers",
-      "status": "deferred",
-      "description": "Driver built-in per Claude/Codex/pi.",
+      "shortName": "showcase-reads-theme",
+      "title": "The showcase stops hardcoding 2.0",
+      "status": "planned",
+      "description": "heca-renderer/examples/showcase.rs has literal `.border(theme.accent, 2.0)` calls (~762, 771, 793, 819 as of 2026-06-23) that ignore the global control entirely. Read `theme.border_width` instead. This is also why the demo panes kept a border at 0.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [
-        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
-        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
-        "88b87a32-ff00-4044-9a32-c575e3ed5401",
-        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      "checklist": [
+        {
+          "id": "showcase-reads-theme-c1",
+          "title": "Showcase reads theme.border_width",
+          "checked": false
+        },
+        {
+          "id": "showcase-reads-theme-c2",
+          "title": "No literal border widths left",
+          "checked": false
+        }
       ],
+      "subtasks": [],
+      "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.609Z",
-      "updatedAt": "2026-07-01T19:58:10.784796Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     },
     {
-      "id": "a52865e6-5a18-4c67-8634-2e3127307000",
-      "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
-      "number": 175,
-      "shortId": "9XLLS",
-      "priority": 4,
-      "shortName": "agent-transition-sounds",
-      "title": "Transition sounds via rodio",
-      "status": "deferred",
-      "description": "Suoni di transizione stato agent via `rodio`.",
+      "id": "f226ca8f-7f28-4f4e-97f6-83a89b03f12c",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 337,
+      "shortId": "T8G9T",
+      "priority": 2,
+      "shortName": "one-global-control",
+      "title": "theme.border_width becomes the one control; 0 means none everywhere",
+      "status": "planned",
+      "description": "Path 1 (Button, Input, Select, Checkbox, Tag, Card via `PaintCx::border()`) is already correct. Path 2 is the problem: `PaintCx::bracket_frame` falls back to a solid hairline at width 0 so the container 'stays framed' — which is why Toast, Modal and Bracketed panes keep a border when you set 0. Drop that fallback AND update the test that asserts it: `bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners` in heca-grid-ui/tests/phase_a.rs.\n\nNOTE: border now lives at `style.visual.border` after the Layout/Visual split (F003/P017/T1, commit 8718718) — re-verify the line references first.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [
-        "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
-        "7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c",
-        "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
-        "88b87a32-ff00-4044-9a32-c575e3ed5401",
-        "74abdac5-8a35-4e5f-a82f-3abb9bb0b738"
+      "checklist": [
+        {
+          "id": "one-global-control-c1",
+          "title": "Drop the bracket_frame hairline fallback",
+          "checked": false
+        },
+        {
+          "id": "one-global-control-c2",
+          "title": "Update the test that asserts the hairline",
+          "checked": false
+        },
+        {
+          "id": "one-global-control-c3",
+          "title": "Container width always comes from theme.border_width",
+          "checked": false
+        },
+        {
+          "id": "one-global-control-c4",
+          "title": "A Bordered pane with no explicit colour uses the theme colour",
+          "checked": false
+        }
       ],
+      "subtasks": [],
+      "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-01T18:15:25.609Z",
-      "updatedAt": "2026-07-01T19:58:10.784796Z"
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
     }
   ],
   "createdAt": "2026-07-26T11:20:26.506Z",

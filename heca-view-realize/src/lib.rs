@@ -585,16 +585,29 @@ fn realize_kind(
             if let Some(label) = node.props.get("action_text").and_then(PropValue::as_text)
                 && let Some(carrier) = intent_carrier(node, "action")
             {
+                let target = hints.register(carrier.clone());
                 let emit = emit.clone();
-                toast = toast.action(label, move || emit(carrier.clone()));
+                toast = toast
+                    .action(label, move || emit(carrier.clone()))
+                    .action_target(target);
             }
             if let Some(carrier) = intent_carrier(node, "press") {
                 let emit = emit.clone();
                 toast = toast.on_click(move || emit(carrier.clone()));
             }
-            if let Some(carrier) = intent_carrier(node, "dismiss") {
+            let dismissible = node
+                .props
+                .get("dismissible")
+                .and_then(PropValue::as_bool)
+                .unwrap_or(true);
+            if dismissible
+                && let Some(carrier) = intent_carrier(node, "dismiss")
+            {
+                let target = hints.register(carrier.clone());
                 let emit = emit.clone();
-                toast = toast.on_dismiss(move || emit(carrier.clone()));
+                toast = toast
+                    .on_dismiss(move || emit(carrier.clone()))
+                    .dismiss_target(target);
             }
             Box::new(toast)
         }
@@ -2546,11 +2559,62 @@ mod tests {
             .on("action", Intent::new("rebuild"))
             .on("dismiss", Intent::new("close_toast"));
 
-        let toast = realize(&node, &Theme::default(), &emit, &mut TestHints::default(), &mut FormBindings::default());
-        assert!(
-            toast.base().children.is_empty(),
-            "the Toast draws its own card — it takes no children",
+        let mut hints = TestHints::default();
+        let toast = realize(
+            &node,
+            &Theme::default(),
+            &emit,
+            &mut hints,
+            &mut FormBindings::default(),
         );
+        assert_eq!(
+            toast.base().children.len(),
+            3,
+            "Toast realizes leading, content, and dismiss as retained child slots",
+        );
+        assert_eq!(
+            toast.base().children[1].base().children.len(),
+            3,
+            "title, body, and action are real content children",
+        );
+        assert_eq!(hints.checkpoint(), 2, "action and dismiss each register one target");
+        assert_eq!(
+            hints.get(HintTargetId::new(0)).map(|intent| intent.action.as_str()),
+            Some("rebuild"),
+        );
+        assert_eq!(
+            hints.get(HintTargetId::new(1)).map(|intent| intent.action.as_str()),
+            Some("close_toast"),
+        );
+        assert_eq!(
+            toast.base().children[1]
+                .base()
+                .children
+                .last()
+                .and_then(|child| child.as_hint_target()),
+            Some(HintTargetId::new(0)),
+        );
+        assert_eq!(toast.base().children[2].as_hint_target(), Some(HintTargetId::new(1)));
+
+        let unavailable = ViewNode::new(WidgetKind::Toast)
+            .text("Background task")
+            .prop("dismissible", PropValue::Bool(false))
+            .on("action", Intent::new("ghost_action"))
+            .on("dismiss", Intent::new("ghost_dismiss"));
+        let before = hints.checkpoint();
+        let unavailable = realize(
+            &unavailable,
+            &Theme::default(),
+            &emit,
+            &mut hints,
+            &mut FormBindings::default(),
+        );
+        assert_eq!(
+            hints.checkpoint(),
+            before,
+            "missing action text and hidden dismiss do not register ghost targets",
+        );
+        assert!(heca_grid_ui::collect_hint_targets(unavailable.as_ref()).is_empty());
 
         // An unknown severity degrades to the widget's default rather than erroring.
         let bogus = ViewNode::new(WidgetKind::Toast)

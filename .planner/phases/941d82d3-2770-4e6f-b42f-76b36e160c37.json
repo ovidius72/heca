@@ -3,24 +3,48 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 63,
   "shortId": "K928J",
-  "priority": 8,
-  "slug": "notification-07-os-backend",
-  "title": "notification-07: OS/System Notification Backend",
+  "priority": 9,
+  "slug": "notification-09-native-os-notification-backend-post-v1",
+  "title": "notification-09: Native OS Notification Backend (post-v1)",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "Backend OS notifications differito.",
-  "description": "Fase differita per backend desktop notification via trait dedicato e spike `notify-rust` su Linux/macOS/Windows. Non implementare prima che il backend in-app sia stabile.",
+  "summary": "Backend desktop nativo successivo alla stabilizzazione del percorso in-app.",
+  "description": "Fase post-v1 esplicitamente differita. Dopo che overlay, router e producer reload sono stabili, definire un `SystemNotificationBackend` isolato dal modello UI e valutare `notify-rust` o API equivalenti su Linux, macOS e Windows. Il router `System` passa dal fallback in-app al backend nativo; se l'invio fallisce a runtime, logga l'errore e ricade in-app in modo deterministico senza perdere la notifica. Definire capability e limiti per azioni native: non promettere azioni se la piattaforma/libreria non può restituirle in modo portabile. Nessun codice OS entra in heca-grid-ui.",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "goals": [
+    "Contratto backend testabile tramite fake.",
+    "Spikes piattaforma documentati prima di scegliere la dipendenza.",
+    "Fallback runtime affidabile.",
+    "Nessuna regressione del canale app."
+  ],
+  "nonGoals": [
+    "Bloccare la prima versione in-app.",
+    "Notifiche agent.",
+    "Sincronizzazione cronologia con Notification Center OS."
+  ],
+  "dependencies": [
+    "P057(F009) prima versione verificata e stabile.",
+    "P093(F009) è indipendente: i produttori aggiuntivi possono precedere o seguire il backend OS."
+  ],
   "dependsOn": [],
-  "risks": [],
+  "risks": [
+    "Supporto azioni/callback differente tra piattaforme.",
+    "Permessi e sandboxing macOS/Windows.",
+    "Dipendenza multipiattaforma non uniforme: mantenere trait e fallback."
+  ],
   "openQuestions": [],
-  "decisions": [],
+  "decisions": [
+    "Non implementare prima della stabilizzazione in-app.",
+    "Errore backend OS ricade in-app e resta nei log."
+  ],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Trait e fake testati.",
+    "Scelta libreria/API motivata per ogni piattaforma.",
+    "System consegna nativamente quando disponibile e ricade in-app su errore.",
+    "Documentazione aggiornata senza promesse non supportate."
+  ],
   "taskIds": [
     "3a993014-82fb-4551-b976-dc0d4662e145",
     "3dad3770-2179-42ee-928d-3efb03db615f",
@@ -34,116 +58,357 @@
       "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
       "number": 226,
       "shortId": "UL7LR",
-      "priority": 3,
+      "priority": 1,
       "shortName": "spike-linux",
-      "title": "Spike notify-rust on Linux",
+      "title": "Post-v1: evaluate native notifications on Linux",
       "status": "planned",
-      "description": "Validare freedesktop/D-Bus notifications, app name/icon e supporto actions; deferred.",
+      "description": "Valutare `notify-rust`/D-Bus su Linux per invio, replacement ID, icone, urgenza, azioni callback, disponibilità daemon e comportamento headless. Produrre una decisione documentata e un piccolo spike isolato, senza integrare prima il trait/fake. Verificare failure e fallback in-app, non soltanto il caso ideale.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-001-planned-deferred",
+          "date": "2026-08-06T14:18:35.853Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Spike piattaforma rinviato fino al completamento e verifica del backend in-app.",
+          "description": "Spike piattaforma rinviato fino al completamento e verifica del backend in-app."
+        },
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-002-deferred-planned",
+          "date": "2026-08-06T14:19:57.276Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Spike post-v1 ordinato dopo il trait/fake; non parte del primo rilascio.",
+          "description": "Spike post-v1 ordinato dopo il trait/fake; non parte del primo rilascio."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-001-api-e-daemon-supportati",
+          "number": 1,
+          "title": "API e daemon supportati.",
+          "checked": false
+        },
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-002-replacement-dedup",
+          "number": 2,
+          "title": "Replacement/dedup.",
+          "checked": false
+        },
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-003-actions-callback",
+          "number": 3,
+          "title": "Actions callback.",
+          "checked": false
+        },
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-004-failure-headless",
+          "number": 4,
+          "title": "Failure/headless.",
+          "checked": false
+        },
+        {
+          "id": "3a993014-82fb-4551-b976-dc0d4662e145-check-005-decisione-dipendenza",
+          "number": 5,
+          "title": "Decisione dipendenza.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-08-06T14:19:57.276Z"
     },
     {
       "id": "3dad3770-2179-42ee-928d-3efb03db615f",
       "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
       "number": 227,
       "shortId": "QTDMM",
-      "priority": 4,
+      "priority": 2,
       "shortName": "spike-macos",
-      "title": "Spike notify-rust on macOS",
+      "title": "Post-v1: evaluate native notifications on macOS",
       "status": "planned",
-      "description": "Validare Notification Center permissions/app identity e failure behavior; deferred.",
+      "description": "Valutare il supporto reale di `notify-rust` o API macOS per applicazione non bundle/bundle, permessi, Notification Center, replacement, icone e action callbacks. Documentare requisiti packaging/signing e fallback. Non promettere azioni native se la libreria non può restituirle stabilmente a Heca.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-001-planned-deferred",
+          "date": "2026-08-06T14:18:42.074Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Spike piattaforma rinviato fino al completamento e verifica del backend in-app.",
+          "description": "Spike piattaforma rinviato fino al completamento e verifica del backend in-app."
+        },
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-002-deferred-planned",
+          "date": "2026-08-06T14:20:01.140Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Spike post-v1 ordinato dopo il trait/fake; non parte del primo rilascio.",
+          "description": "Spike post-v1 ordinato dopo il trait/fake; non parte del primo rilascio."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-001-bundle-permission-requirements",
+          "number": 1,
+          "title": "Bundle/permission requirements.",
+          "checked": false
+        },
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-002-replacement",
+          "number": 2,
+          "title": "Replacement.",
+          "checked": false
+        },
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-003-action-callbacks",
+          "number": 3,
+          "title": "Action callbacks.",
+          "checked": false
+        },
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-004-packaging-signing",
+          "number": 4,
+          "title": "Packaging/signing.",
+          "checked": false
+        },
+        {
+          "id": "3dad3770-2179-42ee-928d-3efb03db615f-check-005-decisione-e-fallback",
+          "number": 5,
+          "title": "Decisione e fallback.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-08-06T14:20:01.140Z"
     },
     {
       "id": "6c14b330-693e-49c7-9616-5b4be2699d06",
       "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
       "number": 229,
       "shortId": "49KGM",
-      "priority": 1,
+      "priority": 4,
       "shortName": "system-fallback",
-      "title": "Decide fallback behavior for system backend failures",
+      "title": "Post-v1: implement deterministic OS-backend failure fallback",
       "status": "planned",
-      "description": "Definire fallback sicuro verso in-app senza loop ricorsivi quando il backend system fallisce; deferred.",
+      "description": "Quando il backend OS esiste ma ritorna errore/unavailable, loggare il dettaglio una volta secondo policy anti-spam e consegnare la notifica originale al canale in-app senza generare una seconda notifica ricorsiva. Preservare dedup e action semantics compatibili; se azioni native non sono supportate, scegliere esplicitamente se mantenere la notifica in-app. Testare con fake backend success/failure intermittente.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-001-planned-deferred",
+          "date": "2026-08-06T14:18:55.780Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Dipende dal trait e dagli spike OS post-v1; la prima versione usa sempre il fallback in-app per System.",
+          "description": "Dipende dal trait e dagli spike OS post-v1; la prima versione usa sempre il fallback in-app per System."
+        },
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-002-deferred-planned",
+          "date": "2026-08-06T14:20:10.163Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Integrazione fallback post-v1 da eseguire solo dopo trait e spike piattaforma.",
+          "description": "Integrazione fallback post-v1 da eseguire solo dopo trait e spike piattaforma."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-001-fallback-original-draft",
+          "number": 1,
+          "title": "Fallback original draft.",
+          "checked": false
+        },
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-002-no-recursive-warning",
+          "number": 2,
+          "title": "No recursive warning.",
+          "checked": false
+        },
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-003-anti-spam-log",
+          "number": 3,
+          "title": "Anti-spam log.",
+          "checked": false
+        },
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-004-actions-capability",
+          "number": 4,
+          "title": "Actions capability.",
+          "checked": false
+        },
+        {
+          "id": "6c14b330-693e-49c7-9616-5b4be2699d06-check-005-fake-intermittent-failure",
+          "number": 5,
+          "title": "Fake intermittent failure.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-08-06T14:20:10.163Z"
     },
     {
       "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe",
       "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
       "number": 230,
       "shortId": "3KQN8",
-      "priority": 2,
+      "priority": 0,
       "shortName": "system-backend-trait",
-      "title": "Define SystemNotificationBackend trait",
+      "title": "Post-v1: define SystemNotificationBackend trait and fake",
       "status": "planned",
-      "description": "Definire trait backend OS notifications separato dallo store e dai producer; deferred.",
+      "description": "Definire nell'app un trait backend OS che riceve un payload domain-owned, non ToastSpec, e restituisce un esito/errore strutturato. Includere capability query per action callback, replacement/dedup e severity invece di presumere supporto uniforme. Implementare un fake per test del router e fallback. Nessuna dipendenza OS o heca-grid-ui nel trait.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-001-planned-deferred",
+          "date": "2026-08-06T14:18:28.457Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Backend OS esplicitamente successivo alla stabilizzazione della prima versione in-app.",
+          "description": "Backend OS esplicitamente successivo alla stabilizzazione della prima versione in-app."
+        },
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-002-deferred-planned",
+          "date": "2026-08-06T14:19:53.416Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Fase esplicitamente post-v1 ma appartenente a F009; mantenerla planned impedisce che lo stato derivato nasconda il nucleo v1 pianificato.",
+          "description": "Fase esplicitamente post-v1 ma appartenente a F009; mantenerla planned impedisce che lo stato derivato nasconda il nucleo v1 pianificato."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-001-payload-app-owned",
+          "number": 1,
+          "title": "Payload app-owned.",
+          "checked": false
+        },
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-002-result-strutturato",
+          "number": 2,
+          "title": "Result strutturato.",
+          "checked": false
+        },
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-003-capability-query",
+          "number": 3,
+          "title": "Capability query.",
+          "checked": false
+        },
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-004-fake-backend",
+          "number": 4,
+          "title": "Fake backend.",
+          "checked": false
+        },
+        {
+          "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe-check-005-test-router-success-failure",
+          "number": 5,
+          "title": "Test router success/failure.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-08-06T14:19:53.416Z"
     },
     {
       "id": "fbfdf381-38e2-4391-8501-0e22ba975548",
       "phaseId": "941d82d3-2770-4e6f-b42f-76b36e160c37",
       "number": 232,
       "shortId": "BFMBD",
-      "priority": 5,
+      "priority": 3,
       "shortName": "spike-windows",
-      "title": "Spike notify-rust on Windows",
+      "title": "Post-v1: evaluate native notifications on Windows",
       "status": "planned",
-      "description": "Validare Windows toast app identity requirements e fallback behavior; deferred.",
+      "description": "Valutare toast notification Windows tramite `notify-rust` o API dedicate: AppUserModelID, installazione/shortcut, icone, replacement, action activation e limiti per applicazione desktop. Documentare requisiti di packaging e comportamento quando l'integrazione non è disponibile. Validare fallback in-app.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-001-planned-deferred",
+          "date": "2026-08-06T14:18:48.704Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Spike piattaforma rinviato fino al completamento e verifica del backend in-app.",
+          "description": "Spike piattaforma rinviato fino al completamento e verifica del backend in-app."
+        },
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-002-deferred-planned",
+          "date": "2026-08-06T14:20:04.998Z",
+          "fromStatus": "deferred",
+          "toStatus": "planned",
+          "title": "Spike post-v1 ordinato dopo il trait/fake; non parte del primo rilascio.",
+          "description": "Spike post-v1 ordinato dopo il trait/fake; non parte del primo rilascio."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
-      "checklist": [],
+      "checklist": [
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-001-appusermodelid-requirements",
+          "number": 1,
+          "title": "AppUserModelID requirements.",
+          "checked": false
+        },
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-002-packaging",
+          "number": 2,
+          "title": "Packaging.",
+          "checked": false
+        },
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-003-replacement-actions",
+          "number": 3,
+          "title": "Replacement/actions.",
+          "checked": false
+        },
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-004-unavailable-path",
+          "number": 4,
+          "title": "Unavailable path.",
+          "checked": false
+        },
+        {
+          "id": "fbfdf381-38e2-4391-8501-0e22ba975548-check-005-decisione-e-fallback",
+          "number": 5,
+          "title": "Decisione e fallback.",
+          "checked": false
+        }
+      ],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-08-06T14:20:04.998Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.127Z",
-  "updatedAt": "2026-07-27T11:40:15.533Z",
+  "updatedAt": "2026-08-06T14:23:27.634Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

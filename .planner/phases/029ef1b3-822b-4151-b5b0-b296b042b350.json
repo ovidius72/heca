@@ -45,16 +45,19 @@
       "checklist": [
         {
           "id": "verify-visually-c1",
+          "number": 1,
           "title": "USER confirms at width 0",
           "checked": false
         },
         {
           "id": "verify-visually-c2",
+          "number": 2,
           "title": "USER confirms at a large width",
           "checked": false
         },
         {
           "id": "verify-visually-c3",
+          "number": 3,
           "title": "Separate from fix/bracket-frame-render — do not conflate",
           "checked": false
         }
@@ -83,6 +86,7 @@
       "checklist": [
         {
           "id": "decide-override-rule-c1",
+          "number": 1,
           "title": "BLOCKING: put both options to the user with the trade-off",
           "checked": false
         }
@@ -111,11 +115,13 @@
       "checklist": [
         {
           "id": "showcase-reads-theme-c1",
+          "number": 1,
           "title": "Showcase reads theme.border_width",
           "checked": false
         },
         {
           "id": "showcase-reads-theme-c2",
+          "number": 2,
           "title": "No literal border widths left",
           "checked": false
         }
@@ -144,21 +150,25 @@
       "checklist": [
         {
           "id": "one-global-control-c1",
+          "number": 1,
           "title": "Drop the bracket_frame hairline fallback",
           "checked": false
         },
         {
           "id": "one-global-control-c2",
+          "number": 2,
           "title": "Update the test that asserts the hairline",
           "checked": false
         },
         {
           "id": "one-global-control-c3",
+          "number": 3,
           "title": "Container width always comes from theme.border_width",
           "checked": false
         },
         {
           "id": "one-global-control-c4",
+          "number": 4,
           "title": "A Bordered pane with no explicit colour uses the theme colour",
           "checked": false
         }
@@ -176,5 +186,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

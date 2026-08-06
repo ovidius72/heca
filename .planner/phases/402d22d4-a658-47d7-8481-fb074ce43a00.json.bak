@@ -80,5 +80,14 @@
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "d003f2fb-72a8-45c1-869b-faf6316514d5",
+      "date": "2026-07-30T12:01:56.377Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ]
 }

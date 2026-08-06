@@ -46,36 +46,43 @@
       "checklist": [
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-001-dispatch-is-the-only-child-walk-in-the-crate",
+          "number": 1,
           "title": "dispatch() is the only child walk in the crate",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-002-routes-own-subtree-declared-on-select-and-dialog-with-a-stated-reason-code-otherwise-untouched",
+          "number": 2,
           "title": "routes_own_subtree() declared on Select and Dialog with a stated reason, code otherwise untouched",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-003-all-24-widgets-migrated-no-route-event-call-left-in-a-widget",
+          "number": 3,
           "title": "all 24 widgets migrated; no route_event call left in a widget",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-004-every-event-call-site-across-the-workspace-moved-to-dispatch",
+          "number": 4,
           "title": "every .event() call site across the workspace moved to dispatch()",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-005-capture-vs-bubble-decided-per-widget-gestures-swallows-capture-leftovers-bubble",
+          "number": 5,
           "title": "capture vs bubble decided per widget: gestures/swallows capture, leftovers bubble",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-006-pointer-delivery-rs-still-fails-when-a-container-drops-a-kind",
+          "number": 6,
           "title": "pointer_delivery.rs still fails when a container drops a kind",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-007-user-drives-focus-dropdowns-menus-palette-drag-sidebar-pane-headers-in-the-app",
+          "number": 7,
           "title": "USER drives focus, dropdowns, menus, palette, drag, sidebar, pane headers in the app",
           "checked": false
         }
@@ -104,36 +111,43 @@
       "checklist": [
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-001-modal-layer-move-press-release-wheel-through-dispatch-modal-pointer-done",
+          "number": 1,
           "title": "modal layer: move + press + release + wheel through dispatch_modal_pointer (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-002-wheel-event-matches-the-showcase-s-delta-and-shift-to-x-convention-done",
+          "number": 2,
           "title": "wheel_event() matches the showcase's delta and Shift-to-X convention (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-003-pointer-funnel-rs-guard-verified-to-fail-against-the-pre-fix-file-done",
+          "number": 3,
           "title": "pointer_funnel.rs guard, verified to fail against the pre-fix file (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-004-chrome-tree-pane-header-pane-viewport-seams-folded-into-the-same-funnel",
+          "number": 4,
           "title": "chrome tree / pane header / pane viewport seams folded into the same funnel",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-005-decide-whether-chrome-dispatch-press-may-keep-discarding-the-tree",
+          "number": 5,
           "title": "decide whether chrome_dispatch_press may keep discarding the tree",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-006-guard-extended-to-cover-every-seam",
+          "number": 6,
           "title": "guard extended to cover every seam",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-007-user-confirms-wheel-over-a-modal-does-not-reach-the-terminal-behind-it",
+          "number": 7,
           "title": "USER confirms wheel over a modal does not reach the terminal behind it",
           "checked": false
         }
@@ -162,41 +176,49 @@
       "checklist": [
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-001-scrollinfo-carries-offsets-maxima-content-viewport-and-option-event",
+          "number": 1,
           "title": "ScrollInfo carries offsets, maxima, content, viewport and Option<&Event>",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-002-scrollsource-enum-removed-in-favour-of-the-real-event",
+          "number": 2,
           "title": "ScrollSource enum removed in favour of the real event",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-003-every-offset-path-funnels-through-the-one-chokepoint",
+          "number": 3,
           "title": "every offset path funnels through the one chokepoint",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-004-fires-only-on-an-actual-change",
+          "number": 4,
           "title": "fires only on an actual change",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-005-scroll-start-scroll-end-for-thumb-and-track-from-existing-gesture-state",
+          "number": 5,
           "title": "scroll_start/scroll_end for thumb and track from existing gesture state",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-006-wheel-scroll-end-via-an-idle-timer-in-tick-keeping-frames-requested",
+          "number": 6,
           "title": "wheel scroll_end via an idle timer in tick, keeping frames requested",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-007-re-entrancy-rule-documented-or-the-fire-deferred",
+          "number": 7,
           "title": "re-entrancy rule documented or the fire deferred",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-008-user-confirms-one-scroll-end-per-wheel-gesture-not-per-notch",
+          "number": 8,
           "title": "USER confirms one scroll_end per wheel gesture, not per notch",
           "checked": false
         }
@@ -234,31 +256,37 @@
       "checklist": [
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-001-settle-node-level-intent-vs-app-on-bus-with-the-identity-problem-answered",
+          "number": 1,
           "title": "settle node-level intent vs app.on bus, with the identity problem answered",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-002-scroll-start-scroll-scroll-end-reachable-from-a-description",
+          "number": 2,
           "title": "scroll_start / scroll / scroll_end reachable from a description",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-003-a-written-decision-on-the-rate-at-which-scroll-crosses-a-plugin-boundary",
+          "number": 3,
           "title": "a written decision on the rate at which scroll crosses a plugin boundary",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-004-event-vocabulary-docs-updated-in-both-docs-widgets-md-and-view-rs",
+          "number": 4,
           "title": "event-vocabulary docs updated in BOTH docs/widgets.md and view.rs",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-005-worked-example-in-docs-widgets-md-native-declarative-the-host-s-one-line",
+          "number": 5,
           "title": "worked example in docs/widgets.md: native + declarative + the host's one line",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-006-user-confirms-the-example-shows-what-they-asked-for",
+          "number": 6,
           "title": "USER confirms the example shows what they asked for",
           "checked": false
         }
@@ -298,5 +326,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

@@ -56,6 +56,19 @@
       "linkedPhaseIds": [],
       "createdAt": "2026-07-13T15:33:58.204Z",
       "updatedAt": "2026-07-13T15:33:58.204Z"
+    },
+    {
+      "id": "de43129f-eb37-4e1a-bd7f-2ba52c5a9c99",
+      "title": "chrome-bugs: Chrome interaction bugs",
+      "description": "UI/interaction bugs found during the pane-naming session (2026-07-10). Not diagnosed yet — capture + repro first.\n\nSub-tasks:\n- [~] chrome-bug-collapsed-sidebar-picks — BUG: with the sidebar **collapsed** (rail mode), clicking a rail cell focuses the **wrong pane** / opens the **delete dialog** / shows the wrong highlight. Root cause found (grill-me, 2026-07-11): the collapsed rail is hand-drawn (`render_sidebar_collapsed`) and `sidebar_hit_test` re-derives the rail geometry with its own magic numbers (`ITEM_HEIGHT`, a phantom `BTN_ROW_HEIGHT` top offset the rail never draws) — the two copies drifted, so clicks map one row off. Resolution (decided with the user): DROP the collapsed rail entirely rather than rebuild it — a region is now **Expanded ⇄ Hidden** (no rail). Deleting `render_sidebar_collapsed` + the collapsed branch of `sidebar_hit_test` removes the broken code and closes this bug by construction. Tracked as the \"drop the collapsed rail\" work under `app-task-21`. Full design + rationale: `docs/sidebar-provider-modes.md`.\n- [ ] chrome-bug-titlebar-doubleclick-fullscreen — BUG (macOS): double-clicking the top-bar sidebar-toggle button enters OS full screen. No app fullscreen/titlebar code exists — the window uses `Window::default_attributes()` (native macOS titlebar) and the vibrancy path doesn't touch the style mask, so this is macOS's native \"double-click title bar to zoom/fill/full screen\" firing because the top-bar interactive regions sit in the OS titlebar's draggable band (button eats the first click, the OS titlebar gets the second). Fix is macOS-specific: exclude the top-bar buttons from the drag/titlebar region (`mouseDownCanMoveWindow = NO` on those NSViews) or disable titlebar double-click zoom for the window. Files: `heca/src/app/startup.rs` (window/NSWindow setup). Needs on-machine repro.\n\nSource: BACKLOG.md (Requirement, found 2026-07-10).",
+      "status": "in-progress",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+        "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09"
+      ],
+      "createdAt": "2026-07-13T15:34:04.707Z",
+      "updatedAt": "2026-07-13T15:34:04.707Z"
     }
   ]
 }

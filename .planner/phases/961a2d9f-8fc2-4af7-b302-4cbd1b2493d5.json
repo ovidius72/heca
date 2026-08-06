@@ -46,16 +46,19 @@
       "checklist": [
         {
           "id": "collapse-flavours-c1",
+          "number": 1,
           "title": "Provider declares its flavour",
           "checked": false
         },
         {
           "id": "collapse-flavours-c2",
+          "number": 2,
           "title": "Host applies it",
           "checked": false
         },
         {
           "id": "collapse-flavours-c3",
+          "number": 3,
           "title": "Both flavours demonstrated",
           "checked": false
         }
@@ -84,16 +87,19 @@
       "checklist": [
         {
           "id": "provider-content-model-c1",
+          "number": 1,
           "title": "Group/Item model defined",
           "checked": false
         },
         {
           "id": "provider-content-model-c2",
+          "number": 2,
           "title": "Nesting to any depth",
           "checked": false
         },
         {
           "id": "provider-content-model-c3",
+          "number": 3,
           "title": "No second tree anywhere in the author's code",
           "checked": false
         }
@@ -122,26 +128,31 @@
       "checklist": [
         {
           "id": "railcell-widget-work-c1",
+          "number": 1,
           "title": "RailCell shows a short text label",
           "checked": false
         },
         {
           "id": "railcell-widget-work-c2",
+          "number": 2,
           "title": "nav_selected added, mirroring the other widgets",
           "checked": false
         },
         {
           "id": "railcell-widget-work-c3",
+          "number": 3,
           "title": "Glyph::Stack added",
           "checked": false
         },
         {
           "id": "railcell-widget-work-c4",
+          "number": 4,
           "title": "All colours from theme tokens",
           "checked": false
         },
         {
           "id": "railcell-widget-work-c5",
+          "number": 5,
           "title": "docs/widgets.md + showcase updated",
           "checked": false
         }
@@ -170,26 +181,31 @@
       "checklist": [
         {
           "id": "rail-config-and-behaviour-c1",
+          "number": 1,
           "title": "Both config settings, documented in config.default.toml + README",
           "checked": false
         },
         {
           "id": "rail-config-and-behaviour-c2",
+          "number": 2,
           "title": "Workspace click toggles, pane click focuses",
           "checked": false
         },
         {
           "id": "rail-config-and-behaviour-c3",
+          "number": 3,
           "title": "Right-click reuses the expanded menu builders",
           "checked": false
         },
         {
           "id": "rail-config-and-behaviour-c4",
+          "number": 4,
           "title": "KeyHint over cells",
           "checked": false
         },
         {
           "id": "rail-config-and-behaviour-c5",
+          "number": 5,
           "title": "USER drives a region through its modes",
           "checked": false
         }
@@ -218,16 +234,19 @@
       "checklist": [
         {
           "id": "realize-per-mode-c1",
+          "number": 1,
           "title": "Both renderings come from one tree",
           "checked": false
         },
         {
           "id": "realize-per-mode-c2",
+          "number": 2,
           "title": "Mode branch exists only in realize()",
           "checked": false
         },
         {
           "id": "realize-per-mode-c3",
+          "number": 3,
           "title": "Group collapse is a generic host behaviour, not workspace-specific",
           "checked": false
         }
@@ -245,5 +264,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

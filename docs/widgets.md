@@ -2436,9 +2436,15 @@ sidebar. Severity maps to theme tokens, never literals.
 - **Construct**: `Toast::new(title)` (= info) or `Toast::{info,success,warning,danger}(title)`.
 - **Builders**: `.severity(ToastSeverity)`, `.icon(Glyph)` / `.no_icon()`, `.body(text)`,
   `.action(label, on_click)`, `.dismissible(bool)` (default `true`).
+- **Runtime targets**: `.action_target(HintTargetId)` and `.dismiss_target(HintTargetId)` attach
+  opaque host-owned ids to the real `Button` / `IconButton` children. The host keeps the id→intent
+  map; grid-ui exposes only identity plus the child's laid-out bounds to `collect_hint_targets`.
+  Builder order is irrelevant. A target without its affordance is ignored: no action means no action
+  target, and `dismissible(false)` removes both the close control and its target. Keycaps remain the
+  global hint painter's responsibility — `Toast` never paints one.
 - **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` (×),
   `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
-  Enter/Space activates).
+  Enter/Space activates). Action and dismiss remain separate focusable keyboard targets.
 
 **Native:**
 
@@ -2467,7 +2473,9 @@ ViewNode::new(WidgetKind::Toast)
 - **Props**: `text` (title), `severity` (`Text` — an unknown name degrades to `info`), `icon`
   (Glyph name), `body`, `action_text`, `dismissible` (Bool).
 - **Events**: `press` (the whole card), `dismiss` (the ×), `action` (the inline button — only wired
-  when `action_text` is set).
+  when `action_text` is set). The realizer registers `action` and visible `dismiss` with its supplied
+  `HintTargets` sink and attaches the resulting ids to the same controls that emit those intents;
+  absent affordances allocate no target.
 - **No slots.** The inline action is a *labelled button*, not arbitrary content, so it is a prop plus
   an intent. A slot would have promised a composition the widget does not offer.
 
@@ -3659,12 +3667,18 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 ### ToastStack
 
 An overlay that arranges a **host-supplied** set of notifications into a corner stack. **Presentation
-only** — it owns no queue, lifetimes, auto-dismiss timers, or dedup; that's the app's job. The host
-owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached [`Toast`](#toast)
-widgets by **id** (each keeps its hover/flash state), corner-anchors them on the overlay layer,
-slides new ones in, routes events to the toast under the cursor, and reports
-`on_dismiss(id)`/`on_action(id)` back — the host then removes the id (which reflows the rest). It is
-overlay-active only while it has toasts, and **passes through** clicks that miss every toast.
+only** — it owns no queue, lifetimes, auto-dismiss timers, or semantic dedup policy; that's the app's
+job. The host owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached
+[`Toast`](#toast) widgets by **id**. An unchanged ID is an update, not an immutable payload: changed
+title/body/severity/icon/action/dismissibility/targets rebuild only that card while its transition and
+surviving control state stay retained. Duplicate keys collapse deterministically (first key position,
+last payload), so a malformed snapshot never paints two cards with one identity.
+
+The stack corner-anchors cards on the overlay layer, slides additions in and removals out, routes
+events to the toast under the cursor, and reports `on_dismiss(id)`/`on_action(id)` back. A removed
+card becomes inert immediately, then its old slot reflows only after exit completes; re-adding the
+same ID mid-exit revives that entry and reverses its transition. The stack is overlay-active while a
+card is visible and **passes through** clicks that miss every toast.
 Its `overlay_occludes(pos)` reports the **cards'** rects (not the whole corner), so a host gate
 like "right-click opens the page menu" skips points a toast covers while staying live elsewhere
 (see [`Component` trait](#component-trait)).
@@ -3672,7 +3686,7 @@ like "right-click opens the page menu" skips points a toast covers while staying
 - **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
   `.gap(px)`, `.margin(px)`.
 - **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id| …)` (inline action clicked).
-- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(label)?.dismissible(bool)` — plain data the host owns.
+- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(label)?.action_target(id)?.dismissible(bool).dismiss_target(id)?` — plain data the host owns. Replacing any field while retaining `id` updates the existing card. Target ids are optional, opaque, and become metadata on the real action/dismiss controls only when those controls exist; the stack exposes their live bounds through the normal global `collect_hint_targets` seam.
 
 ```rust
 let toasts = signal(Vec::<ToastSpec>::new());            // the app's render list

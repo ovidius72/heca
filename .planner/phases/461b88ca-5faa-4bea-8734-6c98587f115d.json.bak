@@ -4,62 +4,100 @@
   "number": 57,
   "shortId": "SGTXU",
   "priority": 7,
-  "slug": "notification-09-tests-docs",
-  "title": "notification-09: Tests + Documentation",
+  "slug": "notification-07-verification-documentation",
+  "title": "notification-07: Verification + Documentation",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "Copertura test e documentazione utente/planner.",
-  "description": "Aggiungere test per adapter, store lifecycle, dedup, config parsing, reload producer e dispatch azioni; documentare il sistema notifiche in README e aggiornare docs/widgets solo se cambiano widget grid-ui.",
+  "summary": "Verificare widget, modello, store, overlay, routing, reload e documentare il contratto completo.",
+  "description": "Eseguire la verifica multilivello della prima versione. In `heca-grid-ui` coprire composizione reale, aggiornamento same-ID, eventi delle affordance e pass-through. Nell'app coprire modello/adapter Intent, queue con quattro slot, expiry avviata alla visibilità, sticky, dedup senza spostamenti, cronologia limitata, next wake-up, LayerRegistry non modale, occlusione modale, target KeyHint, dismiss via ActionRegistry/RPC, `InteractionSource::ChromeOverlay`, router app/system/none e reload success/failure/retry. Aggiornare `docs/widgets.md`, commenti showcase, README e default config verificandoli contro il codice. Non copiare il piano in backlog paralleli: il planner è l'unica fonte di avanzamento.",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "goals": [
+    "Test regressione per ogni decisione accettata.",
+    "Documentazione coerente tra widget generico e dominio app.",
+    "Nessun percorso mouse-only o registry bypass.",
+    "Validazione clippy completa prima della chiusura."
+  ],
+  "nonGoals": [
+    "Test di backend OS non ancora implementato.",
+    "UI della cronologia.",
+    "Aggiornare piani Markdown paralleli al planner."
+  ],
+  "dependencies": [
+    "P058-P062 core v1 completate."
+  ],
   "dependsOn": [],
-  "risks": [],
+  "risks": [
+    "Test soltanto del modello senza attraversare il layer/event path possono mancare regressioni di routing.",
+    "Lo showcase deve esercitare aggiornamento same-ID, non soltanto append e retain."
+  ],
   "openQuestions": [],
-  "decisions": [],
+  "decisions": [
+    "Planner come sola fonte di pianificazione/avanzamento.",
+    "Showcase è riferimento vivo e criterio di accettazione.",
+    "Documentare chiaramente che system usa fallback app finché P063 non è completata."
+  ],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Tutti i test mirati e `cargo clippy --workspace --all-targets --all-features` verdi.",
+    "Showcase dimostra add/update/action/dismiss/pass-through.",
+    "README/config/docs/widgets sincronizzati.",
+    "Nessuna attività v1 non verificata."
+  ],
   "taskIds": [
-    "dcda3d13-0225-42e5-b5bf-d39d4896d580",
-    "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
-    "eaff801f-599f-4580-b20c-a2abfb842142",
-    "f226ca8f-7f28-4f4e-97f6-83a89b03f12c",
-    "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
-    "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
-    "a838cc76-edf3-4cb6-8126-d2e5ce52217c",
-    "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d"
+    "0b00bffd-412b-4557-8f78-efa680f56a3c",
+    "107ae543-0959-4d93-a867-fcfa7293be3b",
+    "963b15c4-eb41-4f99-b1f2-0f9ee61665fb",
+    "9ce48992-789d-4ec2-ab17-29ff4c09fe65",
+    "a18c6869-fa10-4528-a93e-143cf816b94b",
+    "b4d18180-bcb3-487d-8de8-324425c64408",
+    "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef",
+    "d6be5a7c-a8e4-47cf-961b-bea43e90e686"
   ],
   "tasks": [
     {
-      "id": "dcda3d13-0225-42e5-b5bf-d39d4896d580",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 334,
-      "shortId": "4LDUG",
+      "id": "0b00bffd-412b-4557-8f78-efa680f56a3c",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 235,
+      "shortId": "R5SGY",
       "priority": 1,
-      "shortName": "read-default-binding",
-      "title": "Offer ActionMeta.default_binding to the keymap on registration",
+      "shortName": "test-store-lifecycle",
+      "title": "Test queue, visibility, expiry and history lifecycle",
       "status": "planned",
-      "description": "`ActionMeta` already carries `default_binding` (heca/src/actions.rs) and nothing reads it, so registering an action never makes a key work. Read it at `register_dynamic` time and offer it to the keymap. Never hardcode — it goes through `KeymapRegistry` like everything else.",
+      "description": "Aggiungere unit test deterministici con clock iniettato per: push 1..N; quattro slot; pending senza expiry; promozione e timer completo; sticky; expiry simultanee; dismiss visible/pending; non-dismissible; archiviazione cause; history limit/trimming; next_expiry. Verificare invarianti dopo ogni transizione e nessun ID presente in più stati.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "read-default-binding-c1",
-          "title": "Read default_binding at registration",
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-001-queue-oltre-quattro",
+          "number": 1,
+          "title": "Queue oltre quattro.",
           "checked": false
         },
         {
-          "id": "read-default-binding-c2",
-          "title": "Route through KeymapRegistry, never hardcoded",
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-002-pending-non-scade",
+          "number": 2,
+          "title": "Pending non scade.",
           "checked": false
         },
         {
-          "id": "read-default-binding-c3",
-          "title": "Test: a registered action's default key fires it",
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-003-promotion-timer",
+          "number": 3,
+          "title": "Promotion timer.",
+          "checked": false
+        },
+        {
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-004-sticky-dismiss",
+          "number": 4,
+          "title": "Sticky/dismiss.",
+          "checked": false
+        },
+        {
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-005-history-trim-invarianti",
+          "number": 5,
+          "title": "History trim/invarianti.",
           "checked": false
         }
       ],
@@ -67,161 +105,52 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:20:46.286Z"
     },
     {
-      "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 335,
-      "shortId": "TS69U",
-      "priority": 4,
-      "shortName": "collision-and-policy",
-      "title": "Binding collisions + ActionPolicy at dispatch (NEEDS A DECISION)",
-      "status": "planned",
-      "description": "⛔ Ask the user first: does a contributed default binding LOSE to an existing one, or WIN? Either way the user must be TOLD when a binding is refused — never silently dropped. F010 (Improvements) already covers notifying about blocked keybindings; reuse it.\n\nAlso: a contributed action must honour `ActionPolicy` at dispatch exactly as a built-in does. It must not bypass the policy system.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "collision-and-policy-c1",
-          "title": "BLOCKING: settle collision behaviour with the user",
-          "checked": false
-        },
-        {
-          "id": "collision-and-policy-c2",
-          "title": "Refused bindings are reported to the user",
-          "checked": false
-        },
-        {
-          "id": "collision-and-policy-c3",
-          "title": "ActionPolicy honoured at dispatch",
-          "checked": false
-        },
-        {
-          "id": "collision-and-policy-c4",
-          "title": "Policy spot-check tests",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "eaff801f-599f-4580-b20c-a2abfb842142",
-      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
-      "number": 336,
-      "shortId": "9R927",
-      "priority": 3,
-      "shortName": "paint-input-through-stack",
-      "title": "Paint and route input through the layer stack",
-      "status": "planned",
-      "description": "Today only hint visibility reads the stack. Draw layers in stack order and route input to the active or modal layer. The invariants must survive: no hardcoded z (z is tree position), buttons never declare a layer (they inherit it from their surface), the active context moves only for context surfaces — never for zoom, scroll or provider selection.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "paint-input-through-stack-c1",
-          "title": "Layers painted in stack order",
-          "checked": false
-        },
-        {
-          "id": "paint-input-through-stack-c2",
-          "title": "Input routed to the active/modal layer",
-          "checked": false
-        },
-        {
-          "id": "paint-input-through-stack-c3",
-          "title": "No hardcoded z anywhere",
-          "checked": false
-        },
-        {
-          "id": "paint-input-through-stack-c4",
-          "title": "USER confirms a layer opened from another sits above it",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "f226ca8f-7f28-4f4e-97f6-83a89b03f12c",
-      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
-      "number": 337,
-      "shortId": "T8G9T",
-      "priority": 2,
-      "shortName": "one-global-control",
-      "title": "theme.border_width becomes the one control; 0 means none everywhere",
-      "status": "planned",
-      "description": "Path 1 (Button, Input, Select, Checkbox, Tag, Card via `PaintCx::border()`) is already correct. Path 2 is the problem: `PaintCx::bracket_frame` falls back to a solid hairline at width 0 so the container 'stays framed' — which is why Toast, Modal and Bracketed panes keep a border when you set 0. Drop that fallback AND update the test that asserts it: `bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners` in heca-grid-ui/tests/phase_a.rs.\n\nNOTE: border now lives at `style.visual.border` after the Layout/Visual split (F003/P017/T1, commit 8718718) — re-verify the line references first.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [
-        {
-          "id": "one-global-control-c1",
-          "title": "Drop the bracket_frame hairline fallback",
-          "checked": false
-        },
-        {
-          "id": "one-global-control-c2",
-          "title": "Update the test that asserts the hairline",
-          "checked": false
-        },
-        {
-          "id": "one-global-control-c3",
-          "title": "Container width always comes from theme.border_width",
-          "checked": false
-        },
-        {
-          "id": "one-global-control-c4",
-          "title": "A Bordered pane with no explicit colour uses the theme colour",
-          "checked": false
-        }
-      ],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
-    },
-    {
-      "id": "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
-      "phaseId": "2219cca3-9ed4-4708-9e4c-bc480faad753",
-      "number": 338,
-      "shortId": "KXD2Z",
+      "id": "107ae543-0959-4d93-a867-fcfa7293be3b",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 236,
+      "shortId": "VQURT",
       "priority": 5,
-      "shortName": "unbind-on-unmount",
-      "title": "Bindings disappear when their provider does",
+      "shortName": "planner-docs",
+      "title": "Add end-to-end in-app notification acceptance tests",
       "status": "planned",
-      "description": "`register_dynamic` returns an RAII `ActionHandle` and `unregister_dynamic` withdraws handler + meta. The binding must go the same way, or a dead action keeps a key hostage.",
+      "description": "Aggiungere test host-level o harness appropriato che attraversi producer/router→store→visible projection→ToastStack layer→AppEvent/Intent. Coprire overlay non modale pass-through, click action, click dismiss, KeyHint equivalence, modal occlusion, sync target cleanup e redraw dopo expiry. Non creare file backlog o piani Markdown duplicati: il planner è la sola fonte di avanzamento.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "unbind-on-unmount-c1",
-          "title": "Binding withdrawn on unmount via the existing handle",
+          "id": "107ae543-0959-4d93-a867-fcfa7293be3b-check-001-producer-to-visible-scene",
+          "number": 1,
+          "title": "Producer to visible scene.",
           "checked": false
         },
         {
-          "id": "unbind-on-unmount-c2",
-          "title": "Test: unmount frees the key",
+          "id": "107ae543-0959-4d93-a867-fcfa7293be3b-check-002-pointer-pass-through",
+          "number": 2,
+          "title": "Pointer pass-through.",
+          "checked": false
+        },
+        {
+          "id": "107ae543-0959-4d93-a867-fcfa7293be3b-check-003-action-dismiss-click",
+          "number": 3,
+          "title": "Action/dismiss click.",
+          "checked": false
+        },
+        {
+          "id": "107ae543-0959-4d93-a867-fcfa7293be3b-check-004-keyhint-modal-occlusion",
+          "number": 4,
+          "title": "KeyHint/modal occlusion.",
+          "checked": false
+        },
+        {
+          "id": "107ae543-0959-4d93-a867-fcfa7293be3b-check-005-expiry-redraw-target-cleanup",
+          "number": 5,
+          "title": "Expiry redraw/target cleanup.",
           "checked": false
         }
       ],
@@ -229,37 +158,52 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:21:23.399Z"
     },
     {
-      "id": "fe6f4b88-4cd7-4c0b-8f04-53c1bc03937e",
-      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
-      "number": 339,
-      "shortId": "PQADT",
-      "priority": 1,
-      "shortName": "layer-content-viewnode",
-      "title": "Add LayerContent with the View(ViewNode) arm",
+      "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 237,
+      "shortId": "LA5BP",
+      "priority": 3,
+      "shortName": "test-config-parsing",
+      "title": "Test notification configuration and runtime reload",
       "status": "planned",
-      "description": "`heca/src/chrome/layers.rs` has `LayerBand` and `LayerKind` but no `LayerContent` — a layer holds a native tree and nothing can hand it a description. Add `LayerContent::{Native(Box<dyn Component>), View(ViewNode)}` and realize the View arm through the ONE bridge (heca/src/chrome/realize.rs). Occluder comes from the realized tree's laid-out bounds — NEVER hardcoded.",
+      "description": "Testare parsing/default/deep merge di `notification_system` e `notification_history_limit` in heca-config, inclusi valori invalidi. Nell'app verificare reload app↔system↔none senza restart, failure che conserva setting correnti e riduzione history limit che trimma deterministicamente. System fallback deve warning una volta per sessione.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "layer-content-viewnode-c1",
-          "title": "Add LayerContent with both arms",
+          "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb-check-001-default-e-override",
+          "number": 1,
+          "title": "Default e override.",
           "checked": false
         },
         {
-          "id": "layer-content-viewnode-c2",
-          "title": "Realize View through realize.rs, not a second path",
+          "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb-check-002-invalid-config",
+          "number": 2,
+          "title": "Invalid config.",
           "checked": false
         },
         {
-          "id": "layer-content-viewnode-c3",
-          "title": "Occluder read from real layout",
+          "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb-check-003-deep-merge",
+          "number": 3,
+          "title": "Deep merge.",
+          "checked": false
+        },
+        {
+          "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb-check-004-runtime-channel-switch",
+          "number": 4,
+          "title": "Runtime channel switch.",
+          "checked": false
+        },
+        {
+          "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb-check-005-history-limit-system-warning",
+          "number": 5,
+          "title": "History limit + system warning.",
           "checked": false
         }
       ],
@@ -267,130 +211,280 @@
       "dependsOn": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:21:02.602Z"
     },
     {
-      "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c",
-      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
-      "number": 340,
-      "shortId": "W2W9H",
-      "priority": 1,
-      "shortName": "the-framework-walks-the-childr",
-      "title": "The framework walks the children — Component loses `event`, gains capture/bubble",
-      "status": "done",
-      "description": "The core change. After it, \"forward the event to my children\" is not a line any widget contains, so\nit is not a line any widget can omit.\n\n## Current state\n\n`heca-grid-ui/src/component.rs:442` used to read:\n\n```rust\nfn event(&mut self, ev: &Event) -> Handled { route_event(&mut self.base_mut().children, ev) }\n```\n\nIt has ALREADY been replaced (2026-07-26) by `on_event_capture` + `on_event`. Nothing else has\nmoved, so the workspace does not compile: 24 widgets still define `fn event`, and `route_event`\n(component.rs:582) still calls `child.event(ev)`.\n\n## Build\n\n1. `pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled` in component.rs — the only\n   child walk in the library:\n   - `on_event_capture(ev)`; `Yes` => stop, nobody below sees it.\n   - unless `routes_own_subtree()`, walk `base_mut().children` **in reverse** (top z-order first,\n     matching today's `route_event`), recursing through `dispatch`.\n   - `on_event(ev)`.\n2. `fn routes_own_subtree(&self) -> bool { false }` on the trait — the declared exception.\n3. Delete `route_event`, or keep it `pub(crate)` solely for the opt-out widgets to call inside their\n   own capture. Prefer deleting it: leaving it reachable is how the old habit comes back.\n4. Migrate all 24 widgets (`grep -l \"fn event(&mut self\" heca-grid-ui/src/widgets/*.rs`). The\n   compiler names every one (E0407: not a member of trait). The rule for each:\n   - state that must be current before anything below is hit-tested, a gesture that must beat any\n     child under the cursor, or a swallow => **`on_event_capture`**;\n   - anything done with an event the children declined => **`on_event`**;\n   - the `route_event(children, ev)` call itself => **delete**, the framework does it.\n5. `Select` and `Dialog` declare `routes_own_subtree() -> true` with the reason on the method, and\n   keep their existing routing verbatim inside `on_event_capture`. Do NOT rewrite them: `Select`'s\n   rows are placed children (zero-sized while closed, hit-tested from baked bounds) and `Dialog`\n   routes through `FocusManager::dispatch_trapped` / `offer_to_overlay`, which are overlay-aware\n   scans, not child walks.\n6. Every caller of `.event(&Event…)` becomes `dispatch(…)`. The compiler finds them: heca/src\n   (chrome/mod.rs:1206+, app/events.rs, realize.rs tests), heca-renderer/examples/showcase.rs,\n   heca-grid-ui tests.\n\n## Edge cases that will bite\n\n- **Order flips.** Today most overriding widgets handle first and never route; `Component::event`'s\n  default routed to children and did nothing else. Under `dispatch`, own-handling runs AFTER\n  children unless it is in capture. A widget that consumed a press before its children now needs\n  capture, or its children start stealing clicks.\n- **Gates become consumes.** `ScrollRegion` only forwards a press to children *when hovered*. With\n  automatic routing that gate must be expressed as capture consuming the press, and the new failure\n  mode is over-consuming — equally silent. Test both directions.\n- `Tooltip` is transparent to events and must stay so (it only adds paint).\n- Focus-barrier widgets (`Button`, `Item`, `Choice`) are one click target and one Tab stop; children\n  must not become independently clickable.\n- `Handled::No` from `on_event_capture` must not be confused with \"not interested\" — the walk\n  continues either way.\n\n## Done when\n\n- `cargo test --workspace` green, clippy 0.\n- `heca-grid-ui/tests/pointer_delivery.rs` passes unchanged, and still FAILS when an arm is removed\n  (re-verify by deleting Dialog's release handling).\n- The USER drives the app: focus traversal, a dropdown inside a modal, the context menu, the command\n  palette, sidebar row clicks and drag, terminal viewport badge/scrollbar, pane header buttons.\n  Green tests are not verification here.\n\n---\n**Completion summary:**\nDONE 2026-07-26. User drove the app and confirmed: the scroll box (wheel, Shift+wheel, both thumbs, release outside the window, click-and-hold in the track), the dialog itself (Tab, typing, Enter, Esc, scrim), and the interactions the refactor could have broken (Select dropdown, right-click context menu, command palette, sidebar rows + pane drag, pane-header buttons). 927 tests, clippy 0.\n\n## What shipped\n\n`heca-grid-ui/src/component.rs`\n- `Component::event` is GONE. Two hooks replace it: `on_event_capture` (before children, `Yes`\n  stops the walk) and `on_event` (after the children declined). Neither mentions children.\n- `pub fn dispatch(node, ev)` — the only child walk in the crate; re-exported as\n  `heca_grid_ui::dispatch`. `route_event` survives only for the widgets that own their walk.\n- `fn clips_children() -> bool` + `clipped_out()` — a NEW universal rule that came out of this:\n  a widget that clips its children does not let a press or a move outside its bounds reach them.\n  Release and wheel are deliberately NOT gated (a drag must end wherever the cursor went; the wheel\n  carries no position). This replaces `ScrollRegion`'s hand-written `if self.hovered { route }` gate\n  and is what stops scrolled-out content staying clickable where it would have been.\n\n18 of 24 widgets now declare only what they do. Six own their walk, each with the reason on the\nmethod, and `tests/pointer_delivery.rs` holds every one of them to delivering all four pointer kinds:\n- `Select` — option rows are placed children, zero-sized while closed, hit-tested from baked bounds.\n- `Dialog` — routes through the overlay-aware focus scan (`dispatch_trapped`/`offer_to_overlay`).\n- `Overlay` — a closed layer's panel must be completely inert.\n- `CommandPalette`, `ContextMenu` — rows are drawn from data, not mounted as children.\n- `ItemGroup`, `DockFrame` — they report what their own subtree did, which must happen even when the\n  header consumed the click. This was found the hard way: the first attempt put the comparison in\n  `on_event` and would have silently stopped firing the toggle.\n\n`ScrollRegion` is NOT an exception — capture takes the thumb grab and hover gate, bubble takes the\nwheel and release, so the nested-region rule (innermost hovered region wins) is now simply which hook\nthe code sits in. Its `press_capture`/`move_capture` helpers live in an inherent impl at the end of\nscroll_region.rs.\n\nCall sites: ~165 `.event(..)` converted to `dispatch(..)` across heca-grid-ui, heca and the showcase.\n\n## Re-verified\n\nDeleting `Dialog`'s `PointerReleased` arm still fails `pointer_delivery.rs` with the container and\nthe kind named — the guard did not become decorative under the new model.",
+      "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 238,
+      "shortId": "E5F8E",
+      "priority": 4,
+      "shortName": "test-action-dispatch",
+      "title": "Test Intent dispatch, dismiss action and policies",
+      "status": "planned",
+      "description": "Verificare che notification action conservi action+args e risolva built-in/dynamic tramite `dispatch_view_intent`; `notification.dismiss` attraversi build_action/ActionRegistry/RPC e sia Global; ChromeOverlay non aggiri policy TiledOnly/SourceDependent; outcome non riusciti non applichino dismiss_after; click e Hint producano lo stesso Intent. Includere ID missing/non-dismissible e target obsoleti.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-001-dispatch-is-the-only-child-walk-in-the-crate",
-          "title": "dispatch() is the only child walk in the crate",
+          "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65-check-001-built-in-args",
+          "number": 1,
+          "title": "Built-in args.",
           "checked": false
         },
         {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-002-routes-own-subtree-declared-on-select-and-dialog-with-a-stated-reason-code-otherwise-untouched",
-          "title": "routes_own_subtree() declared on Select and Dialog with a stated reason, code otherwise untouched",
+          "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65-check-002-dynamic-action",
+          "number": 2,
+          "title": "Dynamic action.",
           "checked": false
         },
         {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-003-all-24-widgets-migrated-no-route-event-call-left-in-a-widget",
-          "title": "all 24 widgets migrated; no route_event call left in a widget",
+          "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65-check-003-dismiss-registry-rpc",
+          "number": 3,
+          "title": "Dismiss registry/RPC.",
           "checked": false
         },
         {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-004-every-event-call-site-across-the-workspace-moved-to-dispatch",
-          "title": "every .event() call site across the workspace moved to dispatch()",
+          "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65-check-004-policy-floating",
+          "number": 4,
+          "title": "Policy floating.",
           "checked": false
         },
         {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-005-capture-vs-bubble-decided-per-widget-gestures-swallows-capture-leftovers-bubble",
-          "title": "capture vs bubble decided per widget: gestures/swallows capture, leftovers bubble",
-          "checked": false
-        },
-        {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-006-pointer-delivery-rs-still-fails-when-a-container-drops-a-kind",
-          "title": "pointer_delivery.rs still fails when a container drops a kind",
-          "checked": false
-        },
-        {
-          "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-007-user-drives-focus-dropdowns-menus-palette-drag-sidebar-pane-headers-in-the-app",
-          "title": "USER drives focus, dropdowns, menus, palette, drag, sidebar, pane headers in the app",
+          "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65-check-005-outcome-e-click-hint",
+          "number": 5,
+          "title": "Outcome e click=Hint.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-26T16:51:07.084Z",
-      "completedAt": "2026-07-26T17:54:49.160Z",
-      "createdAt": "2026-07-26T16:49:41.433Z",
-      "updatedAt": "2026-07-26T17:54:49.160Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:21:14.217Z"
     },
     {
-      "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d",
-      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
-      "number": 341,
-      "shortId": "XUV82",
+      "id": "a18c6869-fa10-4528-a93e-143cf816b94b",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 239,
+      "shortId": "ZEP42",
+      "priority": 5,
+      "shortName": "readme-docs",
+      "title": "Document the notification system in README and defaults",
+      "status": "planned",
+      "description": "Aggiungere sezione utente con configurazione app/system/none, fallback system temporaneo, comportamento none/log, massimo quattro visibili, coda senza scadenza, sticky, dedup, cronologia runtime limitata, Retry reload e accesso KeyHint/RPC. Aggiornare config.default.toml e indicare esplicitamente che il backend OS appartiene a P063 post-v1. Non documentare agent/declined-action/pane/provider/spawn come capacità v1.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a18c6869-fa10-4528-a93e-143cf816b94b-check-001-config-examples",
+          "number": 1,
+          "title": "Config examples.",
+          "checked": false
+        },
+        {
+          "id": "a18c6869-fa10-4528-a93e-143cf816b94b-check-002-queue-history-semantics",
+          "number": 2,
+          "title": "Queue/history semantics.",
+          "checked": false
+        },
+        {
+          "id": "a18c6869-fa10-4528-a93e-143cf816b94b-check-003-actions-keyhint-rpc",
+          "number": 3,
+          "title": "Actions KeyHint/RPC.",
+          "checked": false
+        },
+        {
+          "id": "a18c6869-fa10-4528-a93e-143cf816b94b-check-004-fallback-os",
+          "number": 4,
+          "title": "Fallback OS.",
+          "checked": false
+        },
+        {
+          "id": "a18c6869-fa10-4528-a93e-143cf816b94b-check-005-scope-v1-accurato",
+          "number": 5,
+          "title": "Scope v1 accurato.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:17:58.981Z"
+    },
+    {
+      "id": "b4d18180-bcb3-487d-8de8-324425c64408",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 240,
+      "shortId": "6SMJU",
+      "priority": 0,
+      "shortName": "test-model-conversion",
+      "title": "Test model, builder and ToastSpec projection",
+      "status": "planned",
+      "description": "Coprire NotificationId, source, severity mapping totale, lifecycle defaults, NotificationDraft builder, NotificationAction Intent+args, target ID stabili e conversione da visibile a ToastSpec. Verificare assenza di action/dismiss target quando non applicabili e differenza spec su update same-ID. Nessun test deve richiedere GPU o Window.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b4d18180-bcb3-487d-8de8-324425c64408-check-001-id-source",
+          "number": 1,
+          "title": "ID/source.",
+          "checked": false
+        },
+        {
+          "id": "b4d18180-bcb3-487d-8de8-324425c64408-check-002-severity-lifecycle",
+          "number": 2,
+          "title": "Severity/lifecycle.",
+          "checked": false
+        },
+        {
+          "id": "b4d18180-bcb3-487d-8de8-324425c64408-check-003-draft-action-intent",
+          "number": 3,
+          "title": "Draft/action Intent.",
+          "checked": false
+        },
+        {
+          "id": "b4d18180-bcb3-487d-8de8-324425c64408-check-004-target-conditions",
+          "number": 4,
+          "title": "Target conditions.",
+          "checked": false
+        },
+        {
+          "id": "b4d18180-bcb3-487d-8de8-324425c64408-check-005-same-id-projection-changed",
+          "number": 5,
+          "title": "Same-ID projection changed.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:20:28.743Z"
+    },
+    {
+      "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 241,
+      "shortId": "9LBWM",
+      "priority": 6,
+      "shortName": "test-reload-producer",
+      "title": "Test reload success, failure and Retry recovery",
+      "status": "planned",
+      "description": "Testare: failure conserva config e produce sticky dedup; failure ripetuto aggiorna stesso ID/testo; Retry usa Intent e non dismiss_after; successo applica nuova config, archivia failure come Resolved e poi emette success attraverso il nuovo canale; none risolve senza mostrare; stderr path resta invocato. Usare file config temporanei, mai la configurazione reale dell'utente.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef-check-001-failure-atomic",
+          "number": 1,
+          "title": "Failure atomic.",
+          "checked": false
+        },
+        {
+          "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef-check-002-repeated-same-id",
+          "number": 2,
+          "title": "Repeated same-ID.",
+          "checked": false
+        },
+        {
+          "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef-check-003-retry-non-chiude",
+          "number": 3,
+          "title": "Retry non chiude.",
+          "checked": false
+        },
+        {
+          "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef-check-004-success-resolves-failure",
+          "number": 4,
+          "title": "Success resolves failure.",
+          "checked": false
+        },
+        {
+          "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef-check-005-app-system-none",
+          "number": 5,
+          "title": "App/system/none.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:21:28.932Z"
+    },
+    {
+      "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686",
+      "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
+      "number": 242,
+      "shortId": "9C6PR",
       "priority": 2,
-      "shortName": "one-door-for-pointer-input-int",
-      "title": "One door for pointer input into the app's widget trees, with a guard that reads the event loop",
-      "status": "done",
-      "description": "The host half of the same defect. T1 stops a CONTAINER dropping a kind; this stops the HOST never\nsending it. Both are needed: framework routing cannot deliver an event winit handed to nobody.\n\n## What was wrong (heca/src/app/events.rs, as of 2026-07-26)\n\nEach seam picked a different subset, and each looked reasonable in isolation:\n\n| seam | move | press | release | wheel |\n|---|---|---|---|---|\n| modal layer (app/events.rs:209, :251) | yes | yes | **no** | **no branch at all** |\n| chrome tree (chrome/mod.rs:3108, :3123) | yes | yes | yes | **no** |\n| pane header (chrome/mod.rs:1193, :1214) | yes | yes | **no** | **no** |\n| pane viewport (chrome/mod.rs:1231-1289) | yes | yes | yes | **no** |\n\nA modal is \"a panel of buttons\", so a wheel looked irrelevant and a release looked redundant. Then a\nmodal body held a scroll region.\n\n## Built (2026-07-26, uncommitted)\n\n- `chrome::dispatch_modal_pointer(state, &Event) -> bool` (heca/src/chrome/mod.rs) — one function,\n  `true` when a modal owns the pointer so the caller stops. A `debug_assert!` pins it to the pointer\n  kinds; keys go through the keymap.\n- `heca/src/app/events.rs`: `CursorMoved`, `MouseInput` (Pressed AND Released) and `MouseWheel` all\n  route through it. `wheel_event()` converts winit deltas to `Event::Scroll` using the showcase's\n  convention (LineDelta negated; PixelDelta / 20.0; Shift + a wheel with no native X remapped to X)\n  so a region scrolls identically in the app and the showcase.\n- `heca/tests/pointer_funnel.rs` — reads `app/events.rs` and fails when a pointer branch is handled\n  without the funnel, or when the button branch reaches it without deciding both Pressed and\n  Released. Verified against the pre-fix file: all three branches would have failed.\n\n## Remaining\n\n- The chrome tree, pane headers and pane viewport seams still hand-pick kinds. Fold them into the\n  same funnel shape (a `dispatch_chrome_pointer` / one router that resolves which retained tree owns\n  the pointer) and extend `pointer_funnel.rs` to cover them. Note `chrome_dispatch_press` DISCARDS\n  the tree afterwards (`state.chrome_tree = None`, chrome/mod.rs:3114) — a scroll region in the\n  sidebar cannot hold a grab across events at all while that stands. Decide it here.\n- `heca/src/chrome/mod.rs:1274` `dispatch_pane_viewport_release` exists solely because this bug was\n  hit there earlier and patched locally; it should fall out of the shared path.\n\n## Done when\n\n- Every retained tree in the app receives move, press, release and wheel through one funnel.\n- `pointer_funnel.rs` covers every seam, and fails when one bypasses it.\n- The USER confirms in the app: wheel over a modal body scrolls it and does NOT scroll the terminal\n  behind; a thumb drag released anywhere stops; the sidebar and pane-header widgets still behave.\n\n---\n**Completion summary:**\nDONE 2026-07-26, driven by the user in the app.\n\n## Host delivery\n- `chrome::dispatch_modal_pointer` — one door to the modal layer; `CursorMoved`, `MouseInput`\n  (Pressed AND Released) and `MouseWheel` all go through it. `wheel_event()` matches the showcase's\n  delta + Shift-to-X convention.\n- `chrome_dispatch_release` / `chrome_dispatch_wheel` — the retained chrome tree gets the two kinds\n  it never had. The wheel is offered to the sidebar before the terminal.\n- `chrome_dispatch_press` now RETURNS whether a widget consumed it, and the left-sidebar path takes\n  that as final. That was the actual cause of \"dragging the thumb activates the pane\": a press was\n  resolved by geometry (`sidebar_drag_source`) before the widget tree ever saw it, and the thumb sits\n  inside the pane card's bounds.\n- **The tree is no longer discarded on press** (`chrome_tree = None` is gone). That line was a\n  rebuild used as a reset; nothing spanning two events could survive it. The drift it guarded is\n  handled by the signature rebuild + `sync_chrome_signals`.\n- Guards: `heca/tests/pointer_funnel.rs` now also requires the chrome tree's release and wheel.\n\n## The sidebar has a real ScrollRegion\nOffset lives in `SharedChromeState.workspaces.scroll` (the signal already reserved for it), restored\nvia `scroll_to` (reports `event: None`) and written back only when `event.is_some()` — so a rebuild\ncannot be mistaken for the user scrolling. The right sidebar gets the region without persistence; no\ncontainer state owns an offset for it yet.\n\n## Widget-level fixes that came out of the user's testing (all in heca-grid-ui, so every future\n## region gets them)\n- `Component::wants_visible` — default keyboard focus; `Row`/`MarkerGroup`/`DockFrame` add their nav\n  cursor. Any enclosing region scrolls to it, so `prefix+e` + j/k follows without a host call. It\n  tracks the target's NATURAL position, so it follows the selection and does not fight the wheel.\n- The scrollbar owns its whole lane for hover (`in_scrollbar_lane`, shared with the paging press), so\n  the row behind it no longer highlights.\n- `SCROLLBAR_EDGE_INSET` — the bar sits flush at the edge; the pad is clearance from content only.\n- **Per-side padding on `Layout`** (`padding_left/right/top/bottom`, cascade side → axis → uniform,\n  mirroring margins) + `LayoutExt` builders. Free in the declarative model, since the property\n  surface is `Layout`'s own fields.\n- `reserve_scrollbar_gutters` — the region reserves the lane in LAYOUT, so a card is laid out beside\n  the bar and keeps its rounded corner instead of being clipped flat. It takes `max(existing padding,\n  gutter)` rather than the sum, so where the padding is already roomy the bar sits in it and both\n  sides stay equal. Cannot oscillate: narrowing content only makes it taller.\n- `SCROLLBAR_W` 8 → 5 (visible thickness only; the 16px grab lane is unchanged).\n\n## Not done\nThe pane-header seam still hand-picks kinds (`dispatch_pane_header_press`/`_move`, no release). The\nuser's direction for it is \"fix it using the right widgets\" rather than patching another seam.",
+      "shortName": "test-dedup",
+      "title": "Test dedup priority without visual reordering",
+      "status": "planned",
+      "description": "Aggiungere sequenze esplicite: duplicato visible mantiene ID/slot e resetta timer; duplicato pending mantiene ID e passa in testa alla coda; duplicato archived viene riattivato; una nuova key crea nuovo ID; quattro visible non vengono espulse da update pending; ToastStack riceve same-ID changed spec e aggiorna la scena. Verificare indice dedup dopo dismiss, expiry e history trimming.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-001-modal-layer-move-press-release-wheel-through-dispatch-modal-pointer-done",
-          "title": "modal layer: move + press + release + wheel through dispatch_modal_pointer (done)",
+          "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686-check-001-visible-in-place",
+          "number": 1,
+          "title": "Visible in-place.",
           "checked": false
         },
         {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-002-wheel-event-matches-the-showcase-s-delta-and-shift-to-x-convention-done",
-          "title": "wheel_event() matches the showcase's delta and Shift-to-X convention (done)",
+          "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686-check-002-pending-to-front",
+          "number": 2,
+          "title": "Pending to front.",
           "checked": false
         },
         {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-003-pointer-funnel-rs-guard-verified-to-fail-against-the-pre-fix-file-done",
-          "title": "pointer_funnel.rs guard, verified to fail against the pre-fix file (done)",
+          "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686-check-003-archived-reactivation",
+          "number": 3,
+          "title": "Archived reactivation.",
           "checked": false
         },
         {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-004-chrome-tree-pane-header-pane-viewport-seams-folded-into-the-same-funnel",
-          "title": "chrome tree / pane header / pane viewport seams folded into the same funnel",
+          "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686-check-004-no-visible-eviction-jump",
+          "number": 4,
+          "title": "No visible eviction/jump.",
           "checked": false
         },
         {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-005-decide-whether-chrome-dispatch-press-may-keep-discarding-the-tree",
-          "title": "decide whether chrome_dispatch_press may keep discarding the tree",
-          "checked": false
-        },
-        {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-006-guard-extended-to-cover-every-seam",
-          "title": "guard extended to cover every seam",
-          "checked": false
-        },
-        {
-          "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-007-user-confirms-wheel-over-a-modal-does-not-reach-the-terminal-behind-it",
-          "title": "USER confirms wheel over a modal does not reach the terminal behind it",
+          "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686-check-005-index-toaststack-update",
+          "number": 5,
+          "title": "Index + ToastStack update.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-26T18:33:22.281Z",
-      "completedAt": "2026-07-26T20:41:31.740Z",
-      "createdAt": "2026-07-26T16:50:05.476Z",
-      "updatedAt": "2026-07-26T20:41:31.740Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-04T07:02:06.289Z",
+      "updatedAt": "2026-08-06T14:20:54.384Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.533Z",
+  "updatedAt": "2026-08-06T14:21:28.932Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

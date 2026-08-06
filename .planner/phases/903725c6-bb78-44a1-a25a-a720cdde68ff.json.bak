@@ -22,19 +22,19 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "8244bd6f-450d-4c5b-a280-cdc1ca7ba5e3"
+    "fe981bc6-d6bf-4fec-b6d9-13ab2d3722d9"
   ],
   "tasks": [
     {
-      "id": "8244bd6f-450d-4c5b-a280-cdc1ca7ba5e3",
-      "phaseId": "35d74cc9-a3df-49c9-a5bb-59e12a88b49c",
-      "number": 96,
-      "shortId": "JYYB2",
-      "priority": 4,
-      "shortName": "multiselect-widget",
-      "title": "Multi-select Select widget",
-      "status": "planned",
-      "description": "Supporto multi-select per il widget Select.",
+      "id": "fe981bc6-d6bf-4fec-b6d9-13ab2d3722d9",
+      "phaseId": "903725c6-bb78-44a1-a25a-a720cdde68ff",
+      "number": 34,
+      "shortId": "MPJTJ",
+      "priority": 1,
+      "shortName": "render-dirty-rows",
+      "title": "Render only dirty rows instead of full pane",
+      "status": "done",
+      "description": "Consumare `TerminalDamage` e ridisegnare solo le righe sporche.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,10 +42,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-07-01T18:13:27.647Z",
-      "updatedAt": "2026-07-01T18:13:27.647Z"
+      "startedAt": "2026-07-01T18:11:32.026Z",
+      "completedAt": "2026-07-01T18:11:32.026Z",
+      "createdAt": "2026-07-01T18:11:32.026Z",
+      "updatedAt": "2026-07-01T18:11:32.026Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",

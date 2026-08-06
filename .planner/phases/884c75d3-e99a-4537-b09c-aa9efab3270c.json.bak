@@ -22,19 +22,19 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "c992d27c-dfe3-4fef-a7af-58cc4f026db0"
+    "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc"
   ],
   "tasks": [
     {
-      "id": "c992d27c-dfe3-4fef-a7af-58cc4f026db0",
-      "phaseId": "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
-      "number": 61,
-      "shortId": "3KYQ7",
+      "id": "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc",
+      "phaseId": "884c75d3-e99a-4537-b09c-aa9efab3270c",
+      "number": 143,
+      "shortId": "6XW2M",
       "priority": 1,
-      "shortName": "workspaces-provider",
-      "title": "Study sidebar render model + design render seam (T1)",
-      "status": "done",
-      "description": "design-only — task di studio/design pre-implementazione. COMPLETATO.\n\nT1 FINDINGS (verificato nel codice):\n\n1. Sidebar OGGI = grid-ui Component (expanded) + hand-painted rail (collapsed):\n   - EXPANDED: build_chrome_root (chrome/mod.rs:3208) → build_sidebar_shell (:1761) → build_workspaces_container (:1626) produce un Flex (Component grid-ui) con DockFrame/Badge/KeyHint. Painted via paint_chrome_root (:1984) → Scene → renderer.\n   - COLLAPSED rail: render_sidebar_collapsed (sidebar/render.rs) hand-drawn con PrimitiveRenderer/TextRenderer, chiamato da app/render.rs:988. È SHELL (activity strip), NON container content.\n\n2. Il WorkspacesContainer content È GIÀ un grid-ui Component (Flex). → Il render seam WidgetModel = Box<dyn Component> è fattibile: NESSUNA rewrite, la migration è WIRING EXTRACTION.\n\n3. build_workspaces_container (:1626) consuma: tree=&SidebarTree, programs=&ProgramsConfig, theme=&GuiTheme, emit_intent=&ChromeIntentEmitter, ws_state=&WorkspacesContainerState, signals=&mut ChromeSignals, drag=&mut DragItemRegistry, hints=&mut HintTargetRegistry.\n\n4. ChromeCtx OGGI (host.rs + providers/mod.rs) espone SOLO: app.state() (read-only selectors: active_pane, pane_runtime, is_workspace_collapsed, left/right_visible) + app.on(event). NON espone: SidebarTree, ProgramsConfig, GuiTheme, emit_intent, signals/drag/hints.\n\n5. Build model = RETAINED (F4.1, app/render.rs:1170): build_chrome_root è chiamato SOLO quando chrome_signature cambia (cambio strutturale), NON per-frame. signals/drag/hints creati al build e mantenuti in state.chrome_tree: RetainedChrome. sync_chrome_signals pusha value-state per-frame senza rebuild.\n\nDESIGN DECISION (Option C — hybrid, raccomandata):\n- WorkspacesContainerProvider.build_contribution restituisce ContainerContribution il cui build(&ChromeCtx) produce il Flex del WorkspacesContainer content (logica spostata da build_workspaces_container).\n- build_sidebar_shell (framing/header/collapse toggle) RESTA host-side (è shell, non container).\n- L'host build_chrome_root invece di chiamare build_sidebar_shell direttamente, legge ChromeHost::contributions(LeftSidebar), chiama provider.build_contribution(ctx) → container.build(ctx) → body Flex, e lo monta nello shell.\n- ESPANDERE ChromeCtx con selector per: tree() (SidebarTree projection), programs() (ProgramsConfig), theme() (GuiTheme), emit_intent() (ChromeIntentEmitter). I registri per-frame signals/drag/hints vanno passati al build closure — opzione: interior mutability (RefCell) in ChromeCtx oppure signature build estesa. Dettaglio da risolvere in T2/T3.\n\nIMPATTO SU STIMA: T3 (t005) scende da 3–5h a ~2–3h (wiring, non rewrite). T2/T4 invariati. Totale plugin-03 rimanente ~7–12h (era 9–15h).\n\nRIFERIMENTI CODICE:\n- heca/src/chrome/mod.rs:1626 build_workspaces_container (da spostare nel provider)\n- heca/src/chrome/mod.rs:1761 build_sidebar_shell (resta host-side)\n- heca/src/chrome/mod.rs:3208 build_chrome_root (punto di mount, da modificare per leggere ChromeHost)\n- heca/src/chrome/mod.rs:1984 paint_chrome_root\n- heca/src/app/render.rs:1170 retained build (F4.1, chrome_signature-gated)\n- heca/src/host.rs App/StateView (facade da espandere)\n- heca/src/providers/mod.rs ChromeCtx (da espandere con tree/programs/theme/emit_intent)\n- heca/src/sidebar/render.rs render_sidebar_collapsed (collapsed rail, resta shell-side hand-drawn per ora)",
+      "shortName": "fix-vibrancy-warning",
+      "title": "Fix NSWindow vibrancy console warning",
+      "status": "planned",
+      "description": "Silenziare il warning macOS sulla vibrancy.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -42,10 +42,10 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-03T11:12:24.356Z",
-      "completedAt": "2026-07-09T11:30:21.409Z",
-      "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-09T11:30:21.409Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-01T18:14:56.477Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",

@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-04T14:18:17.724Z
+**Last updated:** 2026-08-06T23:00:15.806Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -102,7 +102,7 @@ Status: 🚧 `in-progress`
 - 📋 **f94d6da1-43b0-4b6a-a954-b404164126bd** P051 — plugin-09: Multi-region proof + config integration (0/3 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P053 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - ✅ **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P066 — action-interaction: Declarative action interaction (confirm + response buttons) (5/6 tasks)
-- 🚧 **99d19246-1ba9-4720-9895-e70c66acf144** P067 — plugin-ui: Declarative widget-tree UI model (ViewNode) (18/21 tasks)
+- ⏸️ **99d19246-1ba9-4720-9895-e70c66acf144** P067 — plugin-ui: Declarative widget-tree UI model (ViewNode) (18/21 tasks)
 - ✅ **8f760a9b-3ce8-4932-8286-67d742397f2e** P068 — context-menu: Contextual menu → OverlayHost + plugin-declarable (8/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P069 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P070 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
@@ -112,6 +112,8 @@ Status: 🚧 `in-progress`
 - 📋 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (0/5 tasks)
 - 📋 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (0/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
+- 🚧 **5de43f15-8304-4f64-870f-8514d534d5a5** P085 — Components declare their actions; chrome focus is the mode (8/11 tasks)
+- ✅ **2e5af5db-420b-45bb-8bde-7e763c69cbea** P086 — A component declares its keys, its mouse and its focus — generically, for any component (10/10 tasks)
 
 ### 🚧 cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -131,6 +133,8 @@ Status: 🚧 `in-progress`
 - 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P079 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/5 tasks)
 - 📋 **029ef1b3-822b-4151-b5b0-b296b042b350** P081 — gridui-09: One border-width control — three paths currently disagree (0/4 tasks)
 - 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (3/5 tasks)
+- ✅ **1b6f739f-8774-4da2-af4f-5f88d0514507** P091 — gridui-11: Text fits its box — Label truncation and Item's second line (5/6 tasks)
+- 🚧 **9a4fa5f5-62a8-4243-85ab-de8edaed21e8** P092 — gridui-12: Fuzzy search, frecency ranking and per-scope query history — one reusable seam (6/7 tasks)
 
 ### ✅ b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -190,22 +194,23 @@ Status: ⏸️ `deferred`
 
 **Work remaining:** Feature pianificata ma differita: l’implementazione dipende dal completamento delle fondamenta di Pluggable Chrome, in particolare plugin-01 → plugin-05.
 
-### 📋 fc19894f-c2aa-4ed1-81f3-24d82670dbae — F009 — 🔔 Notification System
+### 🚧 fc19894f-c2aa-4ed1-81f3-24d82670dbae — F009 — 🔔 Notification System
 
 Sistema notifiche configurabile per Heca. V1 implementa notifiche in-app tramite i widget esistenti `Toast`, `ToastStack`, `ToastSpec` e `ToastSeverity`; Heca possiede modello, store, queue, lifecycle, timer, dedup, routing e dispatch azioni. Backend OS/system notifications e integrazione global KeyHint per azioni toast restano differiti. Out of scope: confirmation modals e confirmation-before-action flow.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Phases:**
-- 📋 **03b297bb-a915-4712-a6b4-dc688dc7ddc5** P055 — notification-06: Routing + Additional Producers (0/8 tasks)
-- 📋 **93379c9a-43b7-43eb-8988-be505251fe79** P056 — notification-02: Store + Lifecycle (0/9 tasks)
-- 📋 **461b88ca-5faa-4bea-8734-6c98587f115d** P057 — notification-09: Tests + Documentation (0/8 tasks)
-- 📋 **949d48a4-6001-42b2-a12c-25ba69a95c24** P058 — notification-08: Toast Keyboard Hint Integration (0/4 tasks)
-- 📋 **ccefbac4-b29e-45d8-bd1d-e7199afa4907** P059 — notification-04: Toast Action Dispatch (0/5 tasks)
-- 📋 **e298f926-f6b3-4147-abcc-eea87171cd81** P060 — notification-03: In-App Toast Rendering (0/6 tasks)
-- 📋 **e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2** P061 — notification-01: Model + Config (0/10 tasks)
-- 📋 **e8d54d82-7357-4436-9b81-22cf2eaef545** P062 — notification-05: Reload Config Producer (0/5 tasks)
-- 📋 **941d82d3-2770-4e6f-b42f-76b36e160c37** P063 — notification-07: OS/System Notification Backend (0/5 tasks)
+- 📋 **03b297bb-a915-4712-a6b4-dc688dc7ddc5** P055 — notification-05: Delivery Router + Mode Semantics (0/3 tasks)
+- 📋 **93379c9a-43b7-43eb-8988-be505251fe79** P056 — notification-02: Store, Queue, Visibility + History (0/10 tasks)
+- 📋 **461b88ca-5faa-4bea-8734-6c98587f115d** P057 — notification-07: Verification + Documentation (0/8 tasks)
+- ✅ **949d48a4-6001-42b2-a12c-25ba69a95c24** P058 — notification-00: Toast / ToastStack Widget Foundation (5/5 tasks)
+- 📋 **ccefbac4-b29e-45d8-bd1d-e7199afa4907** P059 — notification-04: Intent Dispatch, Dismiss Action + KeyHint (0/6 tasks)
+- 📋 **e298f926-f6b3-4147-abcc-eea87171cd81** P060 — notification-03: Persistent Overlay Integration (0/6 tasks)
+- 📋 **e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2** P061 — notification-01: Domain Model + Config (0/10 tasks)
+- 📋 **e8d54d82-7357-4436-9b81-22cf2eaef545** P062 — notification-06: Reload Config Producer (0/5 tasks)
+- 📋 **941d82d3-2770-4e6f-b42f-76b36e160c37** P063 — notification-09: Native OS Notification Backend (post-v1) (0/5 tasks)
+- 📋 **0d8440cd-f306-4e2d-9f78-432a2720ccae** P093 — notification-08: Additional Producers (post-v1) (0/3 tasks)
 
 ### 📋 2272d270-40ae-47fe-bc64-a173b51a097c — F010 — Improvements
 
@@ -219,6 +224,7 @@ Status: 📋 `planned`
 - 📋 **dcf9ff70-cf6e-416e-8e46-8cc36b4ec233** P071 — Notification (0/2 tasks)
 - 📋 **6d582a8a-3b10-4157-8009-2b2db2825e29** P072 — Actions/Keybindings (0/4 tasks)
 - 📄 **13be12b1-e912-4117-88bb-6ac85e230bcf** P073 — WhichKey Like Modal (0/0 tasks)
+- 📋 **cd9bbc0d-5e78-4656-8f5f-c7c6ee089220** P094 — Theme/effect token consistency audit and normalization (0/1 tasks)
 
 ### 📋 873f81ba-ce7c-4bcc-90ed-27a25a742285 — F011 — 🧱 Component Breakout
 
@@ -372,14 +378,6 @@ Phases: `c192c5ca-f6ac-493a-bd8d-d95117c430aa`, `5cab2dbb-ce1b-4a33-b6bc-ede8437
 ---
 ## Phases
 
-### 📄 227d7422-e493-41ff-b786-8e659bf2f88c — P064 — notification-03
-
-Status: 📄 `draft`
-
-### 📄 e544983e-887a-4978-985d-4f9a279496ff — P065 — notification-06
-
-Status: 📄 `draft`
-
 ### 📋 0d4b8645-a638-4774-a9e1-ed8edb37e53f — P023 — nvim-01: Embed nvim + RPC + render single grid
 
 Spawn `nvim --embed`, msgpack-RPC, `nvim_ui_attach` e render singola grid.
@@ -445,6 +443,14 @@ Status: 📋 `planned`
 Implement a neovim emacs wich-key feature like.
 
 Status: 📄 `draft`
+
+### 📋 cd9bbc0d-5e78-4656-8f5f-c7c6ee089220 — P094 — Theme/effect token consistency audit and normalization
+
+Eliminare metriche visuali locali non governate da Theme/config e correggere lo scaling incoerente dei glow.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/1
 
 ### 📋 00afc6e8-101c-47e3-8739-5a8b216c81c4 — P020 — app-04: Pane numbering
 
@@ -919,11 +925,11 @@ Status: ✅ `done`
 
 **Tasks:** 5/6
 
-### 🚧 99d19246-1ba9-4720-9895-e70c66acf144 — P067 — plugin-ui: Declarative widget-tree UI model (ViewNode)
+### ⏸️ 99d19246-1ba9-4720-9895-e70c66acf144 — P067 — plugin-ui: Declarative widget-tree UI model (ViewNode)
 
 The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node holds a vector of child widgets — plus the host mapper that realizes it into the retained heca-grid-ui tree. Gate/consumers: the rich overlay body (plugin-task-15), config-plugin render (plugin-task-21), and the WASM contribution description (plugin-task-26) all build on this. Source: docs/chrome-and-ui.md §2.6.1–2.6.2.
 
-Status: 🚧 `in-progress`
+Status: ⏸️ `deferred`
 
 **Tasks:** 18/21
 
@@ -1055,74 +1061,146 @@ Status: ⏸️ `deferred`
 
 **Tasks:** 0/4
 
-### 📋 03b297bb-a915-4712-a6b4-dc688dc7ddc5 — P055 — notification-06: Routing + Additional Producers
+### 📋 03b297bb-a915-4712-a6b4-dc688dc7ddc5 — P055 — notification-05: Delivery Router + Mode Semantics
 
-Choke point `notify`, routing per app/system/none e producer aggiuntivi.
-
-Status: 📋 `planned`
-
-**Tasks:** 0/8
-
-### 📋 93379c9a-43b7-43eb-8988-be505251fe79 — P056 — notification-02: Store + Lifecycle
-
-Store app-owned, queue, dedup, expiry e scheduling timer.
+Centralizzare app/system/none e definire fallback OS; mantenere i produttori aggiuntivi fuori dalla prima versione.
 
 Status: 📋 `planned`
+Dependencies: P056(F009) store disponibile., P060(F009) canale app disponibile per la presentazione.
 
-**Tasks:** 0/9
+**Completion criteria:**
+- Test router per tutti e tre i modi.
+- System fallback consegna ogni notifica ma avvisa una sola volta.
+- None lascia verificabili i log/risultati producer senza elementi nello store.
+- Nessuna dipendenza da widget nel router.
+- La fase può essere chiusa prima dei produttori post-v1 di P093.
 
-### 📋 461b88ca-5faa-4bea-8734-6c98587f115d — P057 — notification-09: Tests + Documentation
+**Tasks:** 0/3
 
-Copertura test e documentazione utente/planner.
+### 📋 93379c9a-43b7-43eb-8988-be505251fe79 — P056 — notification-02: Store, Queue, Visibility + History
 
-Status: 📋 `planned`
-
-**Tasks:** 0/8
-
-### 📋 949d48a4-6001-42b2-a12c-25ba69a95c24 — P058 — notification-08: Toast Keyboard Hint Integration
-
-Integrazione differita con global prefix+/ hint system.
-
-Status: 📋 `planned`
-
-**Tasks:** 0/4
-
-### 📋 ccefbac4-b29e-45d8-bd1d-e7199afa4907 — P059 — notification-04: Toast Action Dispatch
-
-Azioni toast dispatchate tramite ActionRegistry/policy path.
+Implementare coda d'attesa, quattro slot visibili stabili, dedup, expiry e cronologia limitata.
 
 Status: 📋 `planned`
+Dependencies: P061(F009) fornisce i tipi canonici.
 
-**Tasks:** 0/5
-
-### 📋 e298f926-f6b3-4147-abcc-eea87171cd81 — P060 — notification-03: In-App Toast Rendering
-
-Montare ToastStack nel chrome retained tree usando segnali app-owned.
-
-Status: 📋 `planned`
-
-**Tasks:** 0/6
-
-### 📋 e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2 — P061 — notification-01: Model + Config
-
-Tipi core delle notifiche, mapping ToastSpec e schema config `notification_system`.
-
-Status: 📋 `planned`
+**Completion criteria:**
+- Transizioni in attesa→visibile→archiviata coperte da test.
+- Dedup non produce duplicati né spostamenti visivi.
+- next_expiry ignora coda e sticky.
+- Lifecycle dorme fino al prossimo evento necessario.
 
 **Tasks:** 0/10
 
-### 📋 e8d54d82-7357-4436-9b81-22cf2eaef545 — P062 — notification-05: Reload Config Producer
+### 📋 461b88ca-5faa-4bea-8734-6c98587f115d — P057 — notification-07: Verification + Documentation
 
-Primo producer reale: reload config success/failure con Retry.
+Verificare widget, modello, store, overlay, routing, reload e documentare il contratto completo.
 
 Status: 📋 `planned`
+Dependencies: P058-P062 core v1 completate.
+
+**Completion criteria:**
+- Tutti i test mirati e `cargo clippy --workspace --all-targets --all-features` verdi.
+- Showcase dimostra add/update/action/dismiss/pass-through.
+- README/config/docs/widgets sincronizzati.
+- Nessuna attività v1 non verificata.
+
+**Tasks:** 0/8
+
+### ✅ 949d48a4-6001-42b2-a12c-25ba69a95c24 — P058 — notification-00: Toast / ToastStack Widget Foundation
+
+Correggere Toast e ToastStack secondo la widget architecture e aggiornare lo showcase prima dell'integrazione Heca.
+
+Status: ✅ `done`
+Dependencies: Widget framework routing di P084(F004) quando necessario; non aggiungere un nuovo router locale alternativo.
+
+**Completion criteria:**
+- Nessuna affordance Toast composta tramite pittura manuale.
+- Aggiornamento dello stesso ID visibile nello showcase e coperto da test.
+- Click fuori dalle card restituisce Handled::No; azione/chiusura consumano soltanto i propri eventi.
+- docs/widgets.md e showcase descrivono l'API effettiva.
+
+**Tasks:** 5/5
+
+### 📋 ccefbac4-b29e-45d8-bd1d-e7199afa4907 — P059 — notification-04: Intent Dispatch, Dismiss Action + KeyHint
+
+Instradare azioni e chiusura tramite Intent/ActionRegistry con sorgente ChromeOverlay e parità KeyHint/RPC.
+
+Status: 📋 `planned`
+Dependencies: P060(F009) espone callback/target dal livello persistente., HintTargetRegistry globale già atterrato in F003.
+
+**Completion criteria:**
+- Click e Hint producono lo stesso Intent osservabile.
+- RPC `action notification.dismiss id=…` usa lo stesso handler.
+- Unknown dynamic action non causa crash e segue il normale esito Intent.
+- Test di policy tiled/floating/modal superati.
+
+**Tasks:** 0/6
+
+### 📋 e298f926-f6b3-4147-abcc-eea87171cd81 — P060 — notification-03: Persistent Overlay Integration
+
+Integrare NotificationRuntime e ToastStack come overlay persistente, non modale e pass-through.
+
+Status: 📋 `planned`
+Dependencies: P058(F009) ToastStack corretto., P056(F009) proiezione visibile stabile.
+
+**Completion criteria:**
+- ToastStack segue viewport e band ordering.
+- Click fuori dai toast raggiunge il contenuto sottostante.
+- Modale aperto impedisce azioni sui toast dietro.
+- Signal e retained tree non vengono ricreati inutilmente.
+
+**Tasks:** 0/6
+
+### 📋 e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2 — P061 — notification-01: Domain Model + Config
+
+Definire modello app-owned, azioni Intent e configurazione app/system/none.
+
+Status: 📋 `planned`
+Dependencies: P058(F009) definisce il contratto ToastSpec/target effettivo da consumare.
+
+**Completion criteria:**
+- Tipi e builder documentati e coperti da test.
+- Config default e parsing per app/system/none.
+- Nessuna closure o WmAction-only nel modello azione.
+- Conversione verso ToastSpec completa e domain-neutral.
+
+**Tasks:** 0/10
+
+### 📋 e8d54d82-7357-4436-9b81-22cf2eaef545 — P062 — notification-06: Reload Config Producer
+
+Produrre feedback deduplicato sul reload preservando la configurazione valida e rimuovendo errori risolti.
+
+Status: 📋 `planned`
+Dependencies: P055(F009) fornisce il router app/system/none., P059(F009) fornisce dispatch Intent e dismiss registrato.
+
+**Completion criteria:**
+- Test success/failure/retry con config precedente preservata.
+- Cambio runtime app/system/none effettivo senza restart.
+- Nessuna card di errore residua dopo Retry riuscito.
+- Dedup stesso ID aggiorna testo/timer correttamente.
 
 **Tasks:** 0/5
 
-### 📋 941d82d3-2770-4e6f-b42f-76b36e160c37 — P063 — notification-07: OS/System Notification Backend
+### 📋 941d82d3-2770-4e6f-b42f-76b36e160c37 — P063 — notification-09: Native OS Notification Backend (post-v1)
 
-Backend OS notifications differito.
+Backend desktop nativo successivo alla stabilizzazione del percorso in-app.
+
+Status: 📋 `planned`
+Dependencies: P057(F009) prima versione verificata e stabile., P093(F009) è indipendente: i produttori aggiuntivi possono precedere o seguire il backend OS.
+
+**Completion criteria:**
+- Trait e fake testati.
+- Scelta libreria/API motivata per ogni piattaforma.
+- System consegna nativamente quando disponibile e ricade in-app su errore.
+- Documentazione aggiornata senza promesse non supportate.
+
+**Tasks:** 0/5
+
+### 📋 0d8440cd-f306-4e2d-9f78-432a2720ccae — P093 — notification-08: Additional Producers (post-v1)
+
+Aggiungere produttori pane/provider/plugin/spawn soltanto dopo la verifica del nucleo notifiche.
 
 Status: 📋 `planned`
 
-**Tasks:** 0/5
+**Tasks:** 0/3

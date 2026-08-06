@@ -4273,11 +4273,157 @@ fn input_raw_ctrl_char_is_ignored_not_typed() {
 
 // --- Toast ------------------------------------------------------------------
 
-/// Lay a toast out as the root at its fixed width so `bounds` are set for
-/// hit-testing, returning its resolved height.
+/// Lay a toast out at the stack's card width so every composed child has
+/// honest bounds for hit-testing, returning the resolved height.
 fn layout_toast(t: &mut heca_grid_ui::Toast) -> f64 {
+    t.base_mut().style.layout.width = Length::Px(320.0);
     LayoutEngine::new().compute(t, Size::new(400.0, 300.0));
     t.base().bounds.size.h
+}
+
+fn rect_center(rect: Rectangle) -> Point {
+    Point::new(
+        rect.loc.x + rect.size.w / 2.0,
+        rect.loc.y + rect.size.h / 2.0,
+    )
+}
+
+#[test]
+fn toast_content_is_a_real_retained_subtree() {
+    let mut toast = Toast::warning("Disk almost full")
+        .body("Remove unused files")
+        .action("Review", || {});
+    layout_toast(&mut toast);
+
+    assert_eq!(
+        toast.base().children.len(),
+        3,
+        "leading, content, dismiss slots",
+    );
+    let content = &toast.base().children[1];
+    assert_eq!(
+        content.base().children.len(),
+        3,
+        "title, body, and action are real children",
+    );
+    assert!(
+        toast.base().children[0].base().bounds.size.w > 0.0,
+        "icon is laid out",
+    );
+    assert!(
+        content.base().children[2].focusable(),
+        "action is a real focusable control",
+    );
+    assert!(
+        toast.base().children[2].focusable(),
+        "dismiss is a real focusable control",
+    );
+}
+
+#[test]
+fn toast_action_and_dismiss_targets_use_their_real_child_bounds() {
+    let action_id = HintTargetId::new(41);
+    let dismiss_id = HintTargetId::new(42);
+    // Target-first order is intentional: rebuilding after `.action` and
+    // `.dismissible` must preserve the opaque ids.
+    let mut toast = Toast::info("Connection lost")
+        .action_target(action_id)
+        .dismiss_target(dismiss_id)
+        .action("Retry", || {});
+    layout_toast(&mut toast);
+
+    let action_bounds = toast.base().children[1]
+        .base()
+        .children
+        .last()
+        .expect("action child")
+        .base()
+        .bounds;
+    let dismiss_bounds = toast.base().children[2].base().bounds;
+    assert_eq!(
+        collect_hint_targets(&toast),
+        vec![(action_id, action_bounds), (dismiss_id, dismiss_bounds)],
+    );
+    assert!(action_bounds.size.w > 0.0 && action_bounds.size.h > 0.0);
+    assert!(dismiss_bounds.size.w > 0.0 && dismiss_bounds.size.h > 0.0);
+}
+
+#[test]
+fn toast_missing_affordances_never_leave_ghost_targets() {
+    let action_id = HintTargetId::new(51);
+    let dismiss_id = HintTargetId::new(52);
+    let mut neither = Toast::info("Background task")
+        .action_target(action_id)
+        .dismiss_target(dismiss_id)
+        .dismissible(false);
+    layout_toast(&mut neither);
+    assert!(
+        collect_hint_targets(&neither).is_empty(),
+        "a target id cannot manufacture an absent control",
+    );
+
+    let mut action_only = Toast::info("Background task")
+        .action("Open", || {})
+        .action_target(action_id)
+        .dismiss_target(dismiss_id)
+        .dismissible(false);
+    layout_toast(&mut action_only);
+    assert_eq!(
+        collect_hint_targets(&action_only)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+        vec![action_id],
+        "dismissible=false removes the dismiss control and its target",
+    );
+}
+
+#[test]
+fn toast_action_and_dismiss_are_separate_keyboard_targets() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let acted = Rc::new(Cell::new(0u32));
+    let dismissed = Rc::new(Cell::new(0u32));
+    let a = acted.clone();
+    let d = dismissed.clone();
+    let mut toast = Toast::info("Connection lost")
+        .action("Retry", move || a.set(a.get() + 1))
+        .on_dismiss(move || d.set(d.get() + 1));
+    layout_toast(&mut toast);
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut toast, true);
+    focus.deliver_key(&mut toast, GridKey::Enter);
+    assert_eq!(acted.get(), 1, "the first tab stop is the action");
+    assert_eq!(dismissed.get(), 0);
+
+    focus.advance(&mut toast, true);
+    focus.deliver_key(&mut toast, GridKey::Space);
+    assert_eq!(acted.get(), 1);
+    assert_eq!(dismissed.get(), 1, "the second tab stop is dismiss");
+}
+
+#[test]
+fn toast_disabled_state_is_shared_with_composed_controls() {
+    let mut toast = Toast::info("Build finished")
+        .action("Open", || {})
+        .action_target(HintTargetId::new(71))
+        .on_dismiss(|| {})
+        .dismiss_target(HintTargetId::new(72))
+        .disabled(true);
+    layout_toast(&mut toast);
+
+    let action = &toast.base().children[1].base().children[1];
+    assert!(!action.focusable(), "disabled action leaves the focus order");
+    assert!(
+        !toast.base().children[2].focusable(),
+        "disabled dismiss leaves the focus order",
+    );
+    assert!(
+        collect_hint_targets(&toast).is_empty(),
+        "disabled controls also leave the global hint picker",
+    );
 }
 
 #[test]
@@ -4285,8 +4431,11 @@ fn toast_height_grows_with_body_then_action() {
     use heca_grid_ui::Toast;
     let bare = layout_toast(&mut Toast::info("Saved"));
     let with_body = layout_toast(&mut Toast::info("Saved").body("All files written"));
-    let with_action =
-        layout_toast(&mut Toast::info("Saved").body("All files written").action("Undo", || {}));
+    let with_action = layout_toast(
+        &mut Toast::info("Saved")
+            .body("All files written")
+            .action("Undo", || {}),
+    );
     assert!(with_body > bare, "a body line adds height");
     assert!(with_action > with_body, "an action row adds further height");
 }
@@ -4302,10 +4451,15 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
     let mut t = Toast::warning("Disk almost full").on_dismiss(move || d.set(d.get() + 1));
     layout_toast(&mut t);
 
-    // The × lives in the top-right gutter (width 320, ~21px square inset by 13).
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(296.0, 23.0) });
+    let dismiss = t.base().children[2].base().bounds;
+    let pos = rect_center(dismiss);
+    let hit = heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos });
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
     assert!(matches!(hit, Handled::Yes), "the × consumes the click");
+
+    let release = heca_grid_ui::dispatch(&mut t, &Event::PointerReleased { pos });
+    assert_eq!(release, Handled::No, "release is not a second activation");
+    assert_eq!(dismissed.get(), 1, "dismiss fires exactly once");
 }
 
 #[test]
@@ -4316,12 +4470,31 @@ fn toast_action_button_fires_on_action() {
 
     let acted = Rc::new(Cell::new(0u32));
     let a = acted.clone();
-    let mut t = Toast::info("File deleted").action("Undo", move || a.set(a.get() + 1));
+    let card_clicked = Rc::new(Cell::new(0u32));
+    let c = card_clicked.clone();
+    let mut t = Toast::info("File deleted")
+        .action("Undo", move || a.set(a.get() + 1))
+        .on_click(move || c.set(c.get() + 1));
     layout_toast(&mut t);
 
-    // Action row sits below the title, left-aligned in the text column.
-    heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+    let content = &t.base().children[1];
+    let action = content
+        .base()
+        .children
+        .last()
+        .expect("action child")
+        .base()
+        .bounds;
+    let pos = rect_center(action);
+    let hit = heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos });
+    assert_eq!(hit, Handled::Yes, "the action consumes its press");
     assert_eq!(acted.get(), 1, "clicking the action button fires on_action");
+    assert_eq!(card_clicked.get(), 0, "the child consumes before the card");
+
+    let release = heca_grid_ui::dispatch(&mut t, &Event::PointerReleased { pos });
+    assert_eq!(release, Handled::No, "release is not a second activation");
+    assert_eq!(acted.get(), 1, "the action fires exactly once");
+    assert_eq!(card_clicked.get(), 0, "release does not bubble into the card");
 }
 
 #[test]
@@ -4333,8 +4506,14 @@ fn toast_body_click_fires_on_click_only_when_set() {
     // Without on_click, a body click is not consumed (it can fall through).
     let mut inert = Toast::info("Build finished").dismissible(false);
     layout_toast(&mut inert);
-    let hit = heca_grid_ui::dispatch(&mut inert, &Event::PointerPressed { pos: Point::new(160.0, 20.0) });
-    assert!(matches!(hit, Handled::No), "a non-clickable toast doesn't eat body clicks");
+    let hit = heca_grid_ui::dispatch(
+        &mut inert,
+        &Event::PointerPressed { pos: Point::new(160.0, 20.0) },
+    );
+    assert!(
+        matches!(hit, Handled::No),
+        "a non-clickable toast doesn't eat body clicks",
+    );
 
     // With on_click, the same click activates + consumes.
     let clicked = Rc::new(Cell::new(0u32));
@@ -4343,7 +4522,10 @@ fn toast_body_click_fires_on_click_only_when_set() {
         .dismissible(false)
         .on_click(move || c.set(c.get() + 1));
     layout_toast(&mut t);
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    let hit = heca_grid_ui::dispatch(
+        &mut t,
+        &Event::PointerPressed { pos: Point::new(160.0, 20.0) },
+    );
     assert_eq!(clicked.get(), 1, "body click fires on_click");
     assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
 }
@@ -4664,7 +4846,17 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
     let mut t = Toast::info("File deleted").action("Retry", || {});
     layout_toast(&mut t);
     let card_w = t.base().bounds.size.w;
-    heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+    let action = t.base().children[1]
+        .base()
+        .children
+        .last()
+        .expect("action child")
+        .base()
+        .bounds;
+    heca_grid_ui::dispatch(
+        &mut t,
+        &Event::PointerPressed { pos: rect_center(action) },
+    );
 
     let mut scene = Scene::new();
     {
@@ -4701,6 +4893,48 @@ fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
 }
 
 #[test]
+fn toast_stack_exposes_spec_targets_to_the_global_collector() {
+    let action_id = HintTargetId::new(61);
+    let dismiss_id = HintTargetId::new(62);
+    let items = signal(vec![
+        ToastSpec::new(7, "Connection lost")
+            .action("Retry")
+            .action_target(action_id)
+            .dismiss_target(dismiss_id),
+    ]);
+    let mut stack = ToastStack::new(items).corner(ToastCorner::TopLeft);
+    stack.tick(1.0);
+    assert!(
+        collect_hint_targets(&stack)
+            .iter()
+            .all(|(_, bounds)| bounds.loc.x.is_finite() && bounds.loc.y.is_finite()),
+        "headless collection uses deterministic finite fallback geometry",
+    );
+
+    let theme = Theme::default();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
+        stack.paint(&mut cx);
+    }
+
+    let targets = collect_hint_targets(&stack);
+    assert_eq!(
+        targets.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        vec![action_id, dismiss_id],
+    );
+    assert!(
+        targets.iter().all(|(_, bounds)| {
+            bounds.loc.x.is_finite()
+                && bounds.loc.y.is_finite()
+                && bounds.size.w > 0.0
+                && bounds.size.h > 0.0
+        }),
+        "the stack reports the real laid-out control bounds",
+    );
+}
+
+#[test]
 fn toast_stack_dismiss_reports_the_clicked_id() {
     use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
     use std::cell::Cell;
@@ -4730,7 +4964,7 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
 }
 
 #[test]
-fn toast_stack_passes_through_clicks_that_miss_every_toast() {
+fn toast_stack_passes_through_pointer_events_that_miss_every_toast() {
     use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
 
     let items = signal(vec![ToastSpec::new(1, "Hi")]);
@@ -4742,9 +4976,37 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
         stack.paint(&mut cx);
     }
-    // Far from the top-left toast → not consumed, so the UI behind still gets it.
-    let hit = heca_grid_ui::dispatch(&mut stack, &Event::PointerPressed { pos: Point::new(700.0, 500.0) });
-    assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
+
+    // Far from the top-left toast: the overlay must not trap any phase of the
+    // pointer interaction, so the ordinary page layer can own the whole gesture.
+    let pos = Point::new(700.0, 500.0);
+    for event in [
+        Event::PointerMoved { pos },
+        Event::PointerPressed { pos },
+        Event::PointerReleased { pos },
+    ] {
+        assert_eq!(
+            heca_grid_ui::dispatch(&mut stack, &event),
+            Handled::No,
+            "a pointer event that misses every toast passes through: {event:?}",
+        );
+    }
+}
+
+#[test]
+fn toast_stack_tick_keeps_motion_alive_and_marks_its_damage() {
+    use heca_grid_ui::{Component, ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Arriving")]);
+    let mut stack = ToastStack::new(items);
+    stack.tick(0.0); // reconcile and establish the first off-screen frame
+    stack.base().clear_needs_paint();
+
+    assert!(stack.tick(0.05), "an incomplete enter keeps requesting animation frames");
+    assert!(stack.base().needs_paint(), "motion marks the stack for repaint");
+    let damage = stack.damage_bounds();
+    assert!(damage.loc.x.is_finite() && damage.loc.y.is_finite());
+    assert!(damage.size.w > 0.0 && damage.size.h > 0.0, "damage covers the moving card");
 }
 
 // --- viewport culling -------------------------------------------------------

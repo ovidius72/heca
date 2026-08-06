@@ -27,7 +27,8 @@
     "a1906a6c-7eb4-434f-b603-61aed6117696",
     "1e38ca25-04f1-4466-8efc-23bd8d948c18",
     "63b4db04-4db5-4ffc-8a75-b8e8d24398bc",
-    "15f91cc6-9dd1-4c04-b533-c51f9eace1d3"
+    "15f91cc6-9dd1-4c04-b533-c51f9eace1d3",
+    "3f7db50c-c9a4-446b-8cf1-d3292a32200c"
   ],
   "tasks": [
     {
@@ -161,10 +162,32 @@
       "completedAt": "2026-08-04T14:17:54.398Z",
       "createdAt": "2026-08-04T14:17:47.572Z",
       "updatedAt": "2026-08-04T14:17:54.398Z"
+    },
+    {
+      "id": "3f7db50c-c9a4-446b-8cf1-d3292a32200c",
+      "phaseId": "9a4fa5f5-62a8-4243-85ab-de8edaed21e8",
+      "number": 393,
+      "shortId": "5ZUQ2",
+      "priority": 7,
+      "shortName": "the-palette-opens-in-a-scope-p",
+      "title": "The palette opens in a scope — pane and workspace pickers on their own keys",
+      "status": "planned",
+      "description": "Asked for by the user 2026-08-04: `prefix+p` actions, `prefix+o` pane search, `prefix+O` workspaces — one surface, opened against a chosen scope, each remembering separately.\n\nEverything underneath already supports it; nothing switches scope at runtime yet.\n\n## What exists\n\n- `SearchModel::new(scope, store)` — the scope is a name the caller picks, created on first use and registered nowhere. Separate history and separate ranking per scope, and it is the key the persisted file uses (`heca/src/search_state.rs`), so a new scope needs no schema change and no migration.\n- `CommandPalette::search(model)` already takes the model, so the palette is scope-agnostic today by accident of design rather than by intent.\n- The clear actions already address a scope by name (`clear_search_history scope=pane`).\n\n## What to build\n\n1. **A scope + a source of rows.** `open_command_palette` builds rows from the `ActionCatalog`; a pane picker builds them from open panes, a workspace picker from workspaces. That is a *different list*, not a different widget — so the shape is one open function taking \"which list, which scope, what running a row does\".\n2. **The `WmAction`** — one action with a required-ish target (`command_palette scope=pane`), or three (`command_palette`, `pane_picker`, `workspace_picker`). Prefer **one action with an optional scope**: it keeps the palette's own entry offerable and lets a binding say `prefix+o → command_palette scope=pane`. Note `command_palette` is deliberately not offered inside the palette (`palette.rs::offerable`), which needs revisiting if it grows arguments.\n3. **Bindings** in `keybindings.default.toml`.\n\n## The design problem worth deciding first: what is a stable id?\n\nFrecency is keyed on an id, and that id is **persisted**. For actions the id is the action name — stable forever. For panes it is not:\n\n- a pane id is unique within a session and meaningless after a restart, so a persisted ranking would accumulate garbage keys and never rank anything;\n- a workspace index is worse: it is reused, so a persisted count would attach to whatever workspace later takes that index — actively wrong, not merely useless.\n\nThree ways out, and this task should not start until one is chosen:\n- **A natural key.** Rank on something stable and meaningful — a pane's cwd + program, a workspace's name. Then \"the editor I always jump to\" ranks correctly across restarts, which is the actual value.\n- **An ephemeral scope.** Mark the scope as not-persisted: history still recalls within the session, ranking resets on launch. Simple and honest; loses most of the benefit.\n- **No id.** `rank` takes `Option<&str>`, so passing `None` gives pure text matching with no ranking at all. Fine for workspaces, weak for panes.\n\nThe natural key is the right answer for panes and probably for workspaces (their names), but it needs the picker's rows to carry it, which is a decision about what a row *is*.\n\n## Relationship to T390\n\n`P028(F004)/T390` proposes extracting the picker out of `CommandPalette` so it can be mounted anywhere. If that lands first this is nearly free — the picker takes a scope and a list. If this lands first, `open_command_palette` grows a second and third caller and the extraction gets easier to justify. Either order works; do not do both at once.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-04T14:18:17.696Z",
+      "updatedAt": "2026-08-04T14:18:17.696Z"
     }
   ],
   "createdAt": "2026-08-03T16:17:19.213Z",
-  "updatedAt": "2026-08-04T14:17:54.398Z",
+  "updatedAt": "2026-08-04T14:18:17.696Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
