@@ -26,7 +26,8 @@
     "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
     "87175753-f899-4090-9acb-28a48d93457a",
     "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300",
-    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8"
+    "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
+    "98c0e646-a0d7-4087-b72d-af9a3a8db523"
   ],
   "tasks": [
     {
@@ -36,9 +37,9 @@
       "shortId": "CYVSC",
       "priority": 1,
       "shortName": "region-drag-surfaces",
-      "title": "Add region drag surfaces — additively",
+      "title": "Drag is a widget capability, not a region: delete DragSurfaceId and the per-surface machinery",
       "status": "planned",
-      "description": "`DragSurfaceId` has exactly one variant, `LeftSidebar`. Add right sidebar, top bar and bottom bar. ADDITIVE ONLY: never modify or re-type an existing drag type, never remove or rename a variant. The app constructs these and matches exhaustively, so adding is free and the compiler simply asks for new arms.",
+      "description": "**⚠️ This REVERSES the phase's \"ADDITIVE ONLY — add variants, never remove one\" rule, and the\noriginal plan of this task (\"add right sidebar, top bar and bottom bar variants\"). Decided by\nAntonio 2026-08-06, after F004/P084/T394 gave the framework a real drag vocabulary.**\n\nHis words: *\"DND it's not only a thing of left/right/top/bottom bars? it should be available as\nother widgets for plugin developers to be used in pane, overlay, sidebar, etc.. WHY WE ARE ALWAYS\nHARDCODING?\"* — and, about `heca/src/mouse/drag.rs`: *\"this should be up to the DockView that\nmanages the workspaces, not the sidebar or the mouse.\"*\n\n# Why the old plan is dead\n\nAdding variants makes the enum longer, not open. A closed enum of **regions** cannot describe a\ndrag inside a pane, inside an overlay, or inside a plugin's own subtree — and a plugin cannot add a\nvariant at runtime, which is what T330 was invented to paper over.\n\nThe reason it looked like a region problem is historical: the app's drag predates the framework\nhaving any, so it was built where the mouse events were, one handler per surface.\n\n# What exists now (F004/P084/T394, 2026-08-06)\n\n- `Base::drag_source` / `Base::drop_target` — universal, on **every** widget, declared with\n  `DragExt::draggable(id)` / `.drop_target(id)`.\n- The router emits `DragStart` / `Drag` / `DragEnd` / `DragEnter` / `DragOver` / `DragLeave` /\n  `Drop` to whichever widget is under the pointer, with `DragEvent::side` (Before/Onto/After)\n  already computed. It hit-tests **every mounted tree**, so this works in a pane, an overlay,\n  either sidebar or a plugin subtree today — nothing in it names a region.\n- 8 px threshold, capture, and the end-of-gesture guarantee (`DragEnd` always fires) are the\n  framework's.\n\n# The work\n\n1. **Delete the region layer**: `DragSurfaceId`, `DragContext`, `SurfaceDragState`,\n   `heca/src/mouse/drag.rs`, `heca/src/mouse/surface_left.rs`, `heca/src/mouse/target.rs`, the drag\n   half of `heca/src/mouse/release.rs`, and `sidebar_bounds`. Also the early return at\n   `heca/src/mouse.rs` (`if point_in_right_sidebar(...) { ...; return None; }`) — the reason the\n   right sidebar could not drag at all while the left one could, with identical widgets.\n2. **The ghost and the insertion line move INTO `heca-grid-ui`.** The app paints both per surface\n   today; they are one drag visual for every drag, and a plugin cannot draw them. This is the only\n   part that moves rather than being deleted.\n3. **The workspace drop logic moves to `heca/src/providers/workspaces/`** — beside the rows it is\n   about. The container declares its rows draggable, answers `Drop` with an action through the\n   registry, and nothing named `surface_left.rs` exists.\n4. `DragItemKind` — decide whether it survives at all; the payload is the host's, keyed by the\n   opaque `DragItemId` the container itself registered.\n5. T330 (plugin open variants) **dissolves** if this lands: there is no enum left to open.\n\n# Done when\n\n- A widget is draggable by declaring one id, wherever it is mounted.\n- The right sidebar drags because nothing distinguishes it from the left.\n- The move is still reachable from keyboard and RPC (the phase's action-first rule stands).\n- Antonio drags in the app: left sidebar, right sidebar, and between them.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -46,16 +47,19 @@
       "checklist": [
         {
           "id": "region-drag-surfaces-c1",
+          "number": 1,
           "title": "New surface variants added additively",
           "checked": false
         },
         {
           "id": "region-drag-surfaces-c2",
+          "number": 2,
           "title": "No existing type or variant changed",
           "checked": false
         },
         {
           "id": "region-drag-surfaces-c3",
+          "number": 3,
           "title": "Compiler-required match arms filled in",
           "checked": false
         }
@@ -65,7 +69,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-06T15:34:17.483Z"
     },
     {
       "id": "69a41dcc-1648-41a7-b317-7f9b141b8dcf",
@@ -84,16 +88,19 @@
       "checklist": [
         {
           "id": "dockframe-drag-handle-c1",
+          "number": 1,
           "title": "Drag handle drives SurfaceDragState",
           "checked": false
         },
         {
           "id": "dockframe-drag-handle-c2",
+          "number": 2,
           "title": "Ghost renders in the overlay layer",
           "checked": false
         },
         {
           "id": "dockframe-drag-handle-c3",
+          "number": 3,
           "title": "USER drags a container",
           "checked": false
         }
@@ -122,16 +129,19 @@
       "checklist": [
         {
           "id": "region-drop-targets-c1",
+          "number": 1,
           "title": "Region and gaps set hover_item",
           "checked": false
         },
         {
           "id": "region-drop-targets-c2",
+          "number": 2,
           "title": "Multiple targets highlight at once",
           "checked": false
         },
         {
           "id": "region-drop-targets-c3",
+          "number": 3,
           "title": "Insertion line renders in the overlay layer",
           "checked": false
         }
@@ -151,20 +161,31 @@
       "priority": 5,
       "shortName": "plugin-escape-hatch",
       "title": "The open variants for plugins (defer until plugins exist)",
-      "status": "planned",
+      "status": "rejected",
       "description": "`DragItemKind::Custom(u32)` so non-workspace containers do not inherit window-manager nouns, and `DragSurfaceId::Plugin(PluginSurfaceId)` funnelling dynamic surfaces through runtime dispatch while built-ins keep the fast path. Not needed until F003/P001 — but it is the same code and the same decision, so it lives here.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "89ec296b-2d8e-4fd2-a1ab-85d71a3c3300-check-001-planned-rejected",
+          "date": "2026-08-06T15:34:50.806Z",
+          "fromStatus": "planned",
+          "toStatus": "rejected",
+          "title": "Superseded by P079(F004)/T318 (Antonio, 2026-08-06): the closed enums it was opening are being deleted, not extended. `DragSurfaceId::Plugin(..)` and `DragItemKind::Custom(u32)` existed to let a plugin add a *region* variant at runtime; with drag declared per widget (`Base::drag_source` / `drop_target`, any widget in any mounted tree) there is no enum left to open — a plugin's widget is draggable by declaring one opaque id, the same as a built-in one. Kept as a record rather than deleted, because the escape hatch was a designed decision and this says why it stopped being needed.",
+          "description": "Superseded by P079(F004)/T318 (Antonio, 2026-08-06): the closed enums it was opening are being deleted, not extended. `DragSurfaceId::Plugin(..)` and `DragItemKind::Custom(u32)` existed to let a plugin add a *region* variant at runtime; with drag declared per widget (`Base::drag_source` / `drop_target`, any widget in any mounted tree) there is no enum left to open — a plugin's widget is draggable by declaring one opaque id, the same as a built-in one. Kept as a record rather than deleted, because the escape hatch was a designed decision and this says why it stopped being needed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
           "id": "plugin-escape-hatch-c1",
+          "number": 1,
           "title": "Defer until plugins exist",
           "checked": false
         },
         {
           "id": "plugin-escape-hatch-c2",
+          "number": 2,
           "title": "One open variant each, additive",
           "checked": false
         }
@@ -174,7 +195,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-07-26T11:44:50.918444Z"
+      "updatedAt": "2026-08-06T15:34:50.806Z"
     },
     {
       "id": "bc9325d9-ad3a-4fdd-a684-fb3a768ccdc8",
@@ -193,21 +214,25 @@
       "checklist": [
         {
           "id": "action-first-then-drag-c1",
+          "number": 1,
           "title": "Actions exist and work from keyboard + RPC first",
           "checked": false
         },
         {
           "id": "action-first-then-drag-c2",
+          "number": 2,
           "title": "Drop dispatches the action, never mutates",
           "checked": false
         },
         {
           "id": "action-first-then-drag-c3",
+          "number": 3,
           "title": "Follow the full Adding-New-Actions checklist",
           "checked": false
         },
         {
           "id": "action-first-then-drag-c4",
+          "number": 4,
           "title": "USER confirms keyboard and mouse agree",
           "checked": false
         }
@@ -218,12 +243,44 @@
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
       "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "98c0e646-a0d7-4087-b72d-af9a3a8db523",
+      "phaseId": "3ef2f8e6-c79f-47d5-876c-c91ac6f36462",
+      "number": 396,
+      "shortId": "F3BDG",
+      "priority": 6,
+      "shortName": "the-drag-ghost-and-the-inserti",
+      "title": "The drag ghost and the insertion line belong to the framework, not to each surface",
+      "status": "planned",
+      "description": "Split out of `P079(F004)/T318` (which deletes the region layer) because this is the one part that\n**moves into `heca-grid-ui`** rather than being deleted. Decided with T318, 2026-08-06.\n\n# What exists\n\n- **App-side, per surface.** `SurfaceDragState.ghost_label: Option<DragLabel>` carries the chip's\n  text and a hand-maintained `x`/`y` (`heca/src/mouse/drag.rs` sets it on threshold and moves it on\n  every cursor step); `heca/src/app/render.rs` paints it. The insertion indicator is drawn from\n  `DropHit { bounds, side }` at the app's own call sites.\n- `DragLabel` and `DropSide`/`DropHit` already live in `heca-grid-ui/src/drag/`, so the *types* are\n  in the right crate; only the drawing and the position bookkeeping are not.\n- Since F004/P084/T394 the framework owns the gesture: `DragStart`/`Drag`/`DragEnd` on the source,\n  `DragEnter`/`DragOver`/`DragLeave`/`Drop` on the target, with `DragEvent::side` computed for it.\n\n# Why it moves\n\nA plugin's widget can be draggable (it declares one id) but **cannot draw the drag**: the ghost and\nthe insertion line are painted by app code that knows which sidebar it is in. One drag should look\nlike one drag wherever it happens, and the widget author should write none of it — the same bargain\nas `Base::hovered` and the focus ring.\n\n# The work\n\n1. A framework-owned overlay for the in-flight drag: the ghost follows the pointer (the router\n   already has every move), and the insertion line draws against the current drop target's bounds\n   and `side`. Both painted through `PaintCx::with_overlay`, so they composite above everything, and\n   both read every colour/radius/width from the `Theme` — no magic numbers, per the widget rules.\n2. What the ghost *shows* is the widget's to say, not the framework's: reuse\n   `Component::text_summary()` (the accessible-name path) for the default, with an explicit\n   override for a source that wants something else. **Do not** re-introduce a host-supplied string\n   that the app has to keep in step with the row it came from\n   (`heca/src/mouse/drag.rs::drag_ghost_label` re-derives it from the session on every drag start).\n3. Delete `SurfaceDragState.ghost_label` and its two writers, and the ghost paint in\n   `heca/src/app/render.rs`.\n4. Showcase: a drag demo that is not a sidebar — two lists in a panel — so the \"works anywhere\"\n   claim is visible and not just asserted.\n5. Docs: `docs/widgets.md` drag section + rustdoc, per the mandatory both-audiences rule.\n\n# Edge cases\n\n- A drag that ends over nothing still clears the ghost (`DragEnd` always fires — the framework\n  guarantees it).\n- The pointer leaving the window mid-drag (`Event::pointer_cancelled()`) clears both visuals.\n- A source removed mid-drag (a rebuild during the gesture) must not leave a ghost painted.\n\n# Done when\n\nAntonio drags a row in the app and sees the same ghost and the same insertion line in the left\nsidebar, the right sidebar, and a non-sidebar surface — with no app code drawing any of it.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-06T15:34:42.957Z",
+      "updatedAt": "2026-08-06T15:34:42.957Z"
     }
   ],
   "createdAt": "2026-07-26T08:37:59.875Z",
-  "updatedAt": "2026-07-27T11:40:15.495Z",
+  "updatedAt": "2026-08-06T15:34:50.806Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "c61c3ef6-7a99-4404-82f9-af3e181fb483",
+      "date": "2026-08-06T15:34:17.485Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ]
 }

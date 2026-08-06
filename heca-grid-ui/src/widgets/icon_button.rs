@@ -13,7 +13,7 @@ use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Icon;
@@ -40,7 +40,6 @@ pub struct IconButton {
     /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
     progress: f32,
     flash: Flash,
-    hovered: Signal<bool>,
     on_click: Option<Box<dyn Fn()>>,
 }
 
@@ -63,7 +62,6 @@ impl IconButton {
             show_glow: true,
             progress: 0.0,
             flash: Flash::new(),
-            hovered: signal(false),
             on_click: None,
         }
     }
@@ -107,12 +105,13 @@ impl IconButton {
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
         self.base.focusable = true; // clickable icon buttons are focusable (Component::focusable)
+        self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
     }
 
     /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
-        self.hovered
+        self.base.pointer.hovered
     }
 
     fn activate(&mut self) {
@@ -210,18 +209,28 @@ impl Component for IconButton {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.base.bounds.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if self.on_click.is_none() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.activate();
                 Handled::Yes
             }
@@ -231,7 +240,7 @@ impl Component for IconButton {
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;
-        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        let target = if self.base.hovered() { 1.0 } else { 0.0 };
         if (self.progress - target).abs() >= 1e-3 {
             let step = dt / HOVER_DURATION;
             self.progress = if self.progress < target {

@@ -508,6 +508,10 @@ pub fn place_beside(
     Rectangle::new(Point::new(x, y), panel)
 }
 
+/// How far a blocking scrim reaches when no viewport has been cached yet (logical px). Large
+/// enough to be "everywhere" for any real window, finite enough to do arithmetic with.
+const SCRIM_REACH: f64 = 1.0e9;
+
 /// The base overlay surface: a viewport-filling, centering layer that paints a
 /// panel (its single child) with the shared overlay chrome — optional scrim,
 /// drop shadow, theme surface fill, and the bracket reticle.
@@ -821,14 +825,43 @@ impl Component for Overlay {
         true
     }
 
+    /// The overlay's **input** surface: nothing at all while closed (the panel is still in the
+    /// tree and still laid out, and must be completely inert), the whole viewport while
+    /// **blocking** (the scrim owns every point — that is what blocking means), and just the panel
+    /// otherwise, so a press beside a non-blocking layer reaches the page behind it.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if !self.is_open() {
+            return None;
+        }
+        if self.blocking {
+            // Before the first paint there is no viewport to read, and "the scrim owns every
+            // point" is true either way — so say that, rather than quietly shrinking to the panel
+            // and letting a press through a modal.
+            let vp = self.viewport.get();
+            return Some(if vp.w.is_finite() {
+                Rectangle::new(Point::new(0.0, 0.0), vp)
+            } else {
+                Rectangle::new(Point::new(-SCRIM_REACH, -SCRIM_REACH), Size::new(2.0 * SCRIM_REACH, 2.0 * SCRIM_REACH))
+            });
+        }
+        Some(self.panel_bounds())
+    }
+
+    /// Keys and intents only. **Pointer events are not forwarded here any more**: the router
+    /// carries them to the widget under the cursor and then back up through this layer, so a press
+    /// inside the panel reaches the panel without this method knowing the panel exists, and a
+    /// press that gets *here* is one nothing in the panel wanted — which is the definition of a
+    /// press on the scrim.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
-        // Nested overlay first: an open overlay INSIDE the panel (a Select
-        // dropdown) captures input over the whole layer before the panel's
-        // ordinary children see it — mirroring the host's focus.rs overlay
-        // scan. `offer_to_overlay` carries no manager state, so a fresh
+        if ev.pointer().is_some() {
+            return Handled::No;
+        }
+        // Nested overlay first: an open overlay INSIDE the panel (a Select dropdown) captures keys
+        // over the whole layer before the panel's ordinary children see them — mirroring the
+        // host's focus.rs overlay scan. `offer_to_overlay` carries no manager state, so a fresh
         // FocusManager is just the scan.
         let panel_root = match self.base.children.first_mut() {
             Some(p) => p.as_mut(),
@@ -837,59 +870,57 @@ impl Component for Overlay {
         if FocusManager::new().offer_to_overlay(panel_root, ev) == Handled::Yes {
             return Handled::Yes;
         }
-        let panel = self.panel_bounds();
+        // **Everything else — keys and semantic `WidgetIntent`s — goes to the panel.**
+        // The overlay owns its walk, so without this nothing inside a panel could ever be
+        // driven from the keyboard: a `CardGrid`'s cursor never moved and `Dismiss` never
+        // arrived, which is exactly how an overlay became impossible to close with Esc.
+        //
+        // **The panel's answer is returned as-is — a blocking layer does NOT swallow these.**
+        // `Keymap::dispatch` offers the raw key first and only then the semantic intents it
+        // resolves to, so claiming an unwanted key as handled stops the walk before the intent
+        // arrives: Esc never became `Dismiss`, and `Ctrl+h` never got past `edit_delete_back`
+        // to `item_previous`. Keys reaching the app behind is not a risk here anyway — this
+        // path runs only while a modal layer is up.
+        crate::component::deliver(panel_root, ev)
+    }
+
+    /// What the panel did not take. A press here landed on the scrim: it fires
+    /// `on_outside_click`, and a **blocking** layer swallows it (and every other pointer event)
+    /// so nothing behind the modal is driven through it.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.is_open() {
+            return Handled::No;
+        }
         match ev {
-            Event::PointerPressed { pos } => {
-                if panel.contains(*pos) {
-                    let panel_root = self.base.children[0].as_mut();
-                    let _ = crate::component::dispatch(panel_root, ev);
-                } else if let Some(f) = &self.on_outside_click {
+            Event::PointerDown(p) => {
+                if !self.panel_bounds().contains(p.pos)
+                    && let Some(f) = &self.on_outside_click
+                {
                     f();
                 }
-                if self.blocking { Handled::Yes } else { Handled::No }
+                self.swallow()
             }
-            Event::PointerMoved { .. } => {
-                let panel_root = self.base.children[0].as_mut();
-                let _ = crate::component::dispatch(panel_root, ev);
-                if self.blocking { Handled::Yes } else { Handled::No }
-            }
-            // A press has to be matched by its RELEASE inside the panel, or a
-            // widget that grabbed the pointer never lets go — a `ScrollRegion`
-            // thumb drag stayed stuck to the cursor because the release never
-            // reached it (the overlay swallowed it as an unhandled event).
-            Event::PointerReleased { .. } => {
-                let panel_root = self.base.children[0].as_mut();
-                let _ = crate::component::dispatch(panel_root, ev);
-                if self.blocking { Handled::Yes } else { Handled::No }
-            }
-            // The panel gets the wheel FIRST — a scrollable inside a modal (a long
-            // dialog body) must scroll. The overlay scan above only offers to an
-            // `overlay_active` descendant (a nested dropdown), and a `ScrollRegion`
-            // is not one, so without this it never saw the wheel at all. Only if
-            // the panel doesn't take it does the blocking layer swallow it, which
-            // is what keeps the page behind a modal from scrolling.
-            Event::Scroll { .. } => {
-                let panel_root = self.base.children[0].as_mut();
-                if crate::component::dispatch(panel_root, ev) == Handled::Yes {
-                    return Handled::Yes;
+            Event::PointerUp(_) | Event::PointerMove(_) | Event::Scroll(_) => self.swallow(),
+            // A **non-blocking** layer is not on the path of a press beside it, so the press
+            // reaches it as the outside event instead. Same hook, both shapes.
+            Event::PointerDownOutside(_) => {
+                if let Some(f) = &self.on_outside_click {
+                    f();
                 }
-                if self.blocking { Handled::Yes } else { Handled::No }
+                Handled::No
             }
-            // **Everything else — keys and semantic `WidgetIntent`s — goes to the panel.**
-            // The overlay owns its walk, so without this arm nothing inside a panel could ever be
-            // driven from the keyboard: a `CardGrid`'s cursor never moved and `Dismiss` never
-            // arrived, which is exactly how an overlay became impossible to close with Esc.
-            //
-            // **The panel's answer is returned as-is — a blocking layer does NOT swallow these.**
-            // `Keymap::dispatch` offers the raw key first and only then the semantic intents it
-            // resolves to, so claiming an unwanted key as handled stops the walk before the intent
-            // arrives: Esc never became `Dismiss`, and `Ctrl+h` never got past `edit_delete_back`
-            // to `item_previous`. Keys reaching the app behind is not a risk here anyway — this
-            // path runs only while a modal layer is up.
-            _ => {
-                let panel_root = self.base.children[0].as_mut();
-                crate::component::dispatch(panel_root, ev)
-            }
+            _ => Handled::No,
+        }
+    }
+}
+
+impl Overlay {
+    /// A blocking layer consumes what nothing in it wanted; a non-blocking one lets it through.
+    fn swallow(&self) -> Handled {
+        if self.blocking {
+            Handled::Yes
+        } else {
+            Handled::No
         }
     }
 }
@@ -898,6 +929,7 @@ impl LayoutExt for Overlay {}
 
 #[cfg(test)]
 mod tests {
+    use crate::event::PointerButton;
     use super::*;
     use crate::builders::Parent;
     use crate::widgets::{Flex, Label};
@@ -915,7 +947,7 @@ mod tests {
         assert!(!o.focusable());
         assert!(!o.overlay_occludes(Point::new(1.0, 1.0)));
         assert_eq!(
-            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(1.0, 1.0) }),
+            crate::component::dispatch(&mut o, &Event::pointer_pressed(Point::new(1.0, 1.0), PointerButton::Left)),
             Handled::No
         );
     }
@@ -925,11 +957,11 @@ mod tests {
         let mut o = open_overlay();
         assert!(o.overlay_occludes(Point::new(-500.0, -500.0)), "scrim owns every point");
         assert_eq!(
-            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(-500.0, -500.0) }),
+            crate::component::dispatch(&mut o, &Event::pointer_pressed(Point::new(-500.0, -500.0), PointerButton::Left)),
             Handled::Yes,
             "modal swallows the outside press"
         );
-        assert_eq!(crate::component::dispatch(&mut o, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut o, &Event::wheel(Point::new(-500.0, -500.0), 0.0, 1.0)), Handled::Yes);
     }
 
     #[test]
@@ -949,7 +981,7 @@ mod tests {
         assert!(o.overlay_occludes(Point::new(110.0, 110.0)), "panel point occludes");
         assert!(!o.overlay_occludes(Point::new(0.0, 0.0)), "outside point does not");
         assert_eq!(
-            crate::component::dispatch(&mut o, &Event::PointerPressed { pos: Point::new(0.0, 0.0) }),
+            crate::component::dispatch(&mut o, &Event::pointer_pressed(Point::new(0.0, 0.0), PointerButton::Left)),
             Handled::No,
             "light layer lets the outside press fall through"
         );

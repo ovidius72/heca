@@ -42,6 +42,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
     paint_child, shift_subtree, Base, Component, Event, Handled, PaintCx, WidgetIntent,
 };
+use crate::effects::Eased;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::{Direction, Length, Spacing};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -150,6 +151,26 @@ impl ScrollAxes {
     }
 }
 
+/// Where a [`ScrollRegion`] puts the descendant it is following.
+///
+/// The default [`Minimal`](RevealAlign::Minimal) is scroll-into-view: move as little as possible,
+/// and not at all when the target is already on screen. [`Center`](RevealAlign::Center) is the
+/// typewriter behaviour — the thing you are on stays at the middle of the viewport and the
+/// neighbours move past it — which is what a map or an overview wants, where the point is to see
+/// what is *around* the current item rather than merely to keep it visible.
+///
+/// It applies to the automatic follow only. [`ensure_visible`](ScrollRegion::ensure_visible) is
+/// minimal by definition and [`center_on`](ScrollRegion::center_on) is centring by definition; a
+/// caller asking for one of those by name gets it whatever this says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, heca_grid_ui_macros::PropName)]
+pub enum RevealAlign {
+    /// Scroll the least that makes the target fully visible (the historical behaviour).
+    #[default]
+    Minimal,
+    /// Keep the target at the centre of the viewport.
+    Center,
+}
+
 /// Where a [`ScrollRegion`] is, and what put it there — the payload of
 /// [`on_scroll_start`](ScrollRegion::on_scroll_start), [`on_scroll`](ScrollRegion::on_scroll) and
 /// [`on_scroll_end`](ScrollRegion::on_scroll_end).
@@ -219,6 +240,21 @@ pub struct ScrollRegion {
     base: Base,
     /// Which axes scroll (default [`ScrollAxes::Vertical`]).
     axes: ScrollAxes,
+    /// Where the followed descendant is put (default [`RevealAlign::Minimal`]).
+    reveal_align: RevealAlign,
+    /// May the view move **past the ends of its content**? See [`overscroll`](Self::overscroll).
+    overscroll: bool,
+    /// Whether a scrollbar may appear at all. See [`scrollbars`](Self::scrollbars).
+    scrollbars: bool,
+    /// The gliding shift, one [`Eased`] per axis, or `None` for an instant jump (the default, and
+    /// every caller's behaviour before this existed). See [`smooth_scroll`](Self::smooth_scroll).
+    ///
+    /// Two independent values rather than one 2-D one: they share a time constant but not a
+    /// distance, so a long horizontal move must not drag the short vertical one out with it.
+    eased: Option<(Eased, Eased)>,
+    /// Whether the pair above has been seeded from the first real layout yet. The first sync
+    /// **snaps** — a surface opens where it belongs rather than gliding in from the corner.
+    eased_seeded: bool,
     /// Vertical scroll offset (content px shifted up). 0 = top.
     scroll_offset: Signal<f32>,
     /// Horizontal scroll offset (content px shifted left). 0 = left. Inert unless
@@ -238,10 +274,6 @@ pub struct ScrollRegion {
     thumb_grab: Option<f64>,
     /// While dragging the horizontal thumb: the x-offset from the thumb's left.
     h_thumb_grab: Option<f64>,
-    /// Whether the cursor is currently over this region. Updated from
-    /// `PointerMoved`/`PointerPressed`; gates `Event::Scroll` so an inline
-    /// region only swallows the wheel when actually hovered.
-    hovered: bool,
     /// Host-owned: whether this region takes keyboard scroll intents. See
     /// [`keyboard_target`](ScrollRegion::keyboard_target). `None` ⇒ it does.
     keyboard_target: Option<Signal<bool>>,
@@ -260,12 +292,15 @@ pub struct ScrollRegion {
     on_scroll_end: Option<ScrollListener>,
     /// Whether a scroll gesture is currently in flight (between start and end).
     scrolling: bool,
-    /// The **natural** (unscrolled) top of the descendant last brought into view.
+    /// The **natural** (unscrolled) top-left of the descendant last brought into view.
     ///
     /// Natural rather than on-screen on purpose: it changes when the *selection moves* and stays
     /// put when the *user scrolls*, which is exactly the difference between "follow the cursor" and
     /// "fight the wheel".
-    last_revealed: Option<f64>,
+    ///
+    /// Both coordinates, because a horizontal region's cursor moves **sideways**: remembering only
+    /// the top, a strip of cards would decide nothing had changed and never follow at all.
+    last_revealed: Option<(f64, f64)>,
     /// Seconds left before an idle wheel gesture is declared over, or `None` when nothing is
     /// waiting. A wheel has no release, so its end is a **silence**, not an event — see
     /// [`WHEEL_IDLE_END`].
@@ -308,13 +343,17 @@ impl ScrollRegion {
         Self {
             base,
             axes: ScrollAxes::default(),
+            reveal_align: RevealAlign::default(),
+            overscroll: false,
+            scrollbars: true,
+            eased: None,
+            eased_seeded: false,
             scroll_offset: signal(0.0),
             scroll_offset_x: signal(0.0),
             applied_offset: 0.0,
             applied_offset_x: 0.0,
             thumb_grab: None,
             h_thumb_grab: None,
-            hovered: false,
             keyboard_target: None,
             thumb_hovered: false,
             h_thumb_hovered: false,
@@ -397,6 +436,85 @@ impl ScrollRegion {
         self
     }
 
+    /// Where the followed descendant is put (default [`RevealAlign::Minimal`]).
+    #[heca_grid_ui_macros::prop]
+    pub fn reveal_align(mut self, align: RevealAlign) -> Self {
+        self.reveal_align = align;
+        self
+    }
+
+    /// How this region places the descendant it follows.
+    pub fn clone_reveal_align(&self) -> RevealAlign {
+        self.reveal_align
+    }
+
+    /// Let the view move **past the ends of its content**, so a centred target reaches the middle
+    /// even when there is nothing on one side of it to fill the space.
+    ///
+    /// This is the difference between an axis that has ends and one that does not. A stack of
+    /// workspaces has a top and a bottom: the first one rests against the top edge, because half a
+    /// screen of nothing above it is not information. A strip of columns is a ribbon that runs off
+    /// both sides: the leftmost column still comes to the centre when you focus it, with empty
+    /// space to its left, because "the focused one is in the middle" is the whole grammar of the
+    /// surface and an exception at the ends breaks it.
+    ///
+    /// Off by default — every list keeps stopping at its content, which is what a list should do.
+    /// Only meaningful together with [`RevealAlign::Center`].
+    #[heca_grid_ui_macros::prop]
+    pub fn overscroll(mut self, on: bool) -> Self {
+        self.overscroll = on;
+        self
+    }
+
+    /// Whether the view may move past the ends of its content.
+    pub fn clone_overscroll(&self) -> bool {
+        self.overscroll
+    }
+
+    /// Whether a scrollbar may appear (default `true`).
+    ///
+    /// Turning it off removes the thumb **and the gutter it reserves**, so the content gets the
+    /// full width back rather than a bar-shaped strip of nothing. Both, because reserving room for
+    /// a bar that never draws is the same bug as drawing one nobody wants.
+    ///
+    /// For a surface where the bar carries no information: a map positioned by where the cursor is
+    /// has no "how far down am I" to report — the picture already says it — and a bar across it
+    /// reads as a divider between things that are not divided.
+    #[heca_grid_ui_macros::prop]
+    pub fn scrollbars(mut self, on: bool) -> Self {
+        self.scrollbars = on;
+        self
+    }
+
+    /// Whether a scrollbar may appear.
+    pub fn clone_scrollbars(&self) -> bool {
+        self.scrollbars
+    }
+
+    /// Ease the view to where it is going over `seconds`, instead of jumping there.
+    ///
+    /// It smooths **where the content sits**, which is the scroll offset *and* the centring pad
+    /// together — animating only the offset would leave the pad snapping underneath it, and the
+    /// two would visibly disagree on a surface using both.
+    ///
+    /// A wheel notch and a thumb drag are **never** eased: they have to track the input one to one
+    /// or the region feels like it is lagging behind the finger. What eases is the view moving on
+    /// its own — following a cursor, a programmatic `scroll_to`.
+    ///
+    /// `0.0` or less turns it off, so a config value of zero means "instant" rather than "divide
+    /// by zero". Off by default: every existing list keeps jumping exactly as it did.
+    #[heca_grid_ui_macros::prop]
+    pub fn smooth_scroll(mut self, seconds: f32) -> Self {
+        self.eased = (seconds > 0.0).then(|| (Eased::new(seconds), Eased::new(seconds)));
+        self.eased_seeded = false;
+        self
+    }
+
+    /// Whether the view glides to where it is going rather than jumping.
+    pub fn clone_smooth_scroll(&self) -> bool {
+        self.eased.is_some()
+    }
+
     /// The reactive vertical scroll offset (content px). Read or drive it from the
     /// host: `region.scroll_offset().get_untracked()` / `.set(v)`. Use
     /// [`scroll_to`](Self::scroll_to) to set with clamping.
@@ -432,10 +550,11 @@ impl ScrollRegion {
     /// the public API — so a listener cannot miss a movement, and a new way to scroll cannot forget
     /// to announce itself. `cause` is the input that did it, or `None` when the host did.
     fn set_offset_y(&mut self, offset: f32, cause: Option<&Event>) -> f32 {
-        let max = self.max_offset() as f32;
-        let v = offset.clamp(0.0, max);
+        let (min, max) = self.offset_bounds_y();
+        let v = offset.clamp(min as f32, max as f32);
         let changed = v != self.scroll_offset.get_untracked();
         self.scroll_offset.set(v);
+        self.snap_if_driven(cause);
         self.sync_shift();
         if changed {
             self.report_scroll(cause);
@@ -445,15 +564,38 @@ impl ScrollRegion {
 
     /// The horizontal counterpart of [`set_offset_y`](Self::set_offset_y).
     fn set_offset_x(&mut self, offset: f32, cause: Option<&Event>) -> f32 {
-        let max = self.max_offset_x() as f32;
-        let v = offset.clamp(0.0, max);
+        let (min, max) = self.offset_bounds_x();
+        let v = offset.clamp(min as f32, max as f32);
         let changed = v != self.scroll_offset_x.get_untracked();
         self.scroll_offset_x.set(v);
+        self.snap_if_driven(cause);
         self.sync_shift();
         if changed {
             self.report_scroll(cause);
         }
         v
+    }
+
+    /// A movement the user is driving **with the pointer** lands immediately: a thumb drag has to
+    /// track the finger one to one, and a bar that lags it by even a few frames feels broken.
+    ///
+    /// A **wheel notch is not that**. It is a discrete step — a tenth of a viewport at a time — so
+    /// applying it instantly is a jump, and a run of them is a run of jumps. Eased, the same notches
+    /// read as one continuous movement. So the wheel is deliberately *not* snapped here even though
+    /// it is user input: what has to track the input is the thing under the finger, and a wheel has
+    /// nothing under it.
+    fn snap_if_driven(&mut self, cause: Option<&Event>) {
+        if !matches!(
+            cause,
+            Some(Event::PointerMove(_) | Event::PointerDown(_))
+        ) {
+            return;
+        }
+        let (x, y) = self.desired_shift();
+        if let Some((ex, ey)) = self.eased.as_mut() {
+            ex.snap(x);
+            ey.snap(y);
+        }
     }
 
     /// Report a movement: `scroll_start` if this began one, then `scroll` — and arm the idle timer
@@ -464,7 +606,7 @@ impl ScrollRegion {
             self.fire(self.on_scroll_start.as_deref(), cause);
         }
         // A gesture with a release ends on that release; a wheel ends on silence.
-        self.wheel_idle = matches!(cause, Some(Event::Scroll { .. }) | None)
+        self.wheel_idle = matches!(cause, Some(Event::Scroll(_)) | None)
             .then_some(WHEEL_IDLE_END);
         self.fire(self.on_scroll.as_deref(), cause);
     }
@@ -651,6 +793,35 @@ impl ScrollRegion {
         // else already fully visible — no scroll.
     }
 
+    /// Scroll so the given rect — read from a descendant's current `bounds`, exactly as
+    /// [`ensure_visible`](Self::ensure_visible) takes it — sits at the **centre** of the viewport.
+    ///
+    /// Unconditional, unlike `ensure_visible`: a target already on screen but off-centre is brought
+    /// back to the middle, because "keep it centred" is the whole behaviour. The clamp inside
+    /// [`scroll_to`](Self::scroll_to) does the rest, so at the ends of the content the target simply
+    /// stops short of the centre rather than the view scrolling into empty space. A caller that
+    /// wants it centred at the ends too gives the content slack of its own — half a viewport of
+    /// padding at each end is the usual way, and it is the caller's because only the caller knows
+    /// whether that empty space belongs in its surface.
+    /// **Both axes**, unlike [`ensure_visible`](Self::ensure_visible), which is vertical only: a
+    /// horizontal region centres horizontally, and a two-axis one does both. A strip of cards is
+    /// the case that needs it — "the one you are on sits in the middle" is the same sentence
+    /// whichever way the cards are laid out.
+    pub fn center_on(&mut self, visual_rect: Rectangle) {
+        self.sync_shift();
+        let vp = self.base.bounds;
+        if self.axes.is_vertical() {
+            let natural_top = visual_rect.loc.y + self.applied_offset;
+            let mid = natural_top + visual_rect.size.h / 2.0;
+            self.scroll_to((mid - vp.loc.y - vp.size.h / 2.0) as f32);
+        }
+        if self.axes.is_horizontal() {
+            let natural_left = visual_rect.loc.x + self.applied_offset_x;
+            let mid = natural_left + visual_rect.size.w / 2.0;
+            self.scroll_to_x((mid - vp.loc.x - vp.size.w / 2.0) as f32);
+        }
+    }
+
     /// Convenience: scroll so the direct child at `index` is fully visible. Use
     /// this for a list whose selectable units are direct children (e.g. a flat
     /// list of `Item`s). For a nested selectable unit (a sidebar row inside a
@@ -682,6 +853,111 @@ impl ScrollRegion {
         (max_bottom - vp.loc.y).max(vp.size.h)
     }
 
+    /// The **raw** content extent along each axis — what the children actually occupy, with no
+    /// floor at the viewport. [`content_extent`](Self::content_extent) clamps to the viewport
+    /// because that is what the scroll maths wants; centring needs the unclamped truth, since the
+    /// whole question is *how much smaller than the viewport the content is*.
+    fn raw_extent(&self) -> (f64, f64) {
+        let vp = self.base.bounds;
+        let (mut right, mut bottom) = (vp.loc.x, vp.loc.y);
+        for c in &self.base.children {
+            let b = c.base().bounds;
+            right = right.max(b.loc.x + b.size.w + self.applied_offset_x);
+            bottom = bottom.max(b.loc.y + b.size.h + self.applied_offset);
+        }
+        (right - vp.loc.x, bottom - vp.loc.y)
+    }
+
+    /// How far to push the content down and right so it sits in the **middle of a region it does
+    /// not fill** — `(0, 0)` unless [`reveal_align`](Self::reveal_align) is
+    /// [`Center`](RevealAlign::Center) and there is leftover room on that axis.
+    ///
+    /// This is the other half of what "centred" means, and the half that has nothing to do with
+    /// scrolling. `center_on` can only ever put the target in the middle by *moving the content
+    /// past it*; when the content is smaller than the viewport there is nothing to move — the
+    /// offset clamps to `0` and everything lands hard against the top-left corner. A map of one
+    /// workspace, or a strip of three columns on a wide screen, is exactly that case, and pinning
+    /// it to the corner is what an overview must never look like.
+    ///
+    /// **It centres the cursor, not the box.** When something in the subtree asks to be revealed,
+    /// the pad puts *that* in the middle, so focusing the leftmost of three columns brings it to
+    /// the centre and pushes its neighbours off the right edge — the same picture scrolling gives
+    /// when the content is larger. Only with nothing to follow does it centre the content as a
+    /// whole, which is the honest answer for a surface with no cursor in it.
+    ///
+    /// Deliberately **not** `justify_content: center` on the region: flexbox centring overflows
+    /// equally in both directions once the content is larger, which puts the first row above the
+    /// scrollable area and makes it permanently unreachable. This applies only while there is
+    /// slack, so it can never do that — CSS's `safe center`, which taffy has no spelling for.
+    fn center_pad(&self) -> (f64, f64) {
+        if self.reveal_align != RevealAlign::Center {
+            return (0.0, 0.0);
+        }
+        let vp = self.base.bounds;
+        let (content_w, content_h) = self.raw_extent();
+        // Natural (pre-shift) rect of whatever asked to be seen, if anything did.
+        let target = crate::component::reveal_target_in(&self.base.children).map(|r| {
+            Rectangle::new(
+                Point::new(r.loc.x + self.applied_offset_x, r.loc.y + self.applied_offset),
+                r.size,
+            )
+        });
+        let over = self.overscroll;
+        let pad = |on: bool, vp_start: f64, vp_len: f64, content: f64, tgt: Option<(f64, f64)>| {
+            if !on || (content > vp_len && !over) {
+                // Overflowing an axis with ends: the scroll offset does the centring, and it
+                // clamps — so the first and last of anything rest against the edge instead of
+                // floating in half a screen of nothing. With `overscroll` there are no ends to
+                // clamp to, and the pad centres whatever the cursor is on, always.
+                return 0.0;
+            }
+            match tgt {
+                Some((start, len)) => vp_len / 2.0 - (start - vp_start) - len / 2.0,
+                None => (vp_len - content) / 2.0,
+            }
+        };
+        (
+            pad(
+                self.axes.is_horizontal(),
+                vp.loc.x,
+                vp.size.w,
+                content_w,
+                target.map(|r| (r.loc.x, r.size.w)),
+            ),
+            pad(
+                self.axes.is_vertical(),
+                vp.loc.y,
+                vp.size.h,
+                content_h,
+                target.map(|r| (r.loc.y, r.size.h)),
+            ),
+        )
+    }
+
+    /// The range the vertical offset may take: `[0, max]` normally.
+    ///
+    /// **With [`overscroll`](Self::overscroll) it gains a viewport of room at each end.** Without
+    /// that the wheel is dead on an overscrolling surface: the position is carried by the centring
+    /// pad, the content usually fits, so `max_offset` is `0`, the range is a single point and every
+    /// notch is a no-op. A viewport either side is enough to look past anything and bounded enough
+    /// that the view cannot be flicked off into empty space.
+    fn offset_bounds_y(&self) -> (f64, f64) {
+        let max = self.max_offset();
+        match self.overscroll && self.axes.is_vertical() {
+            true => (-self.base.bounds.size.h, max + self.base.bounds.size.h),
+            false => (0.0, max),
+        }
+    }
+
+    /// The horizontal counterpart of [`offset_bounds_y`](Self::offset_bounds_y).
+    fn offset_bounds_x(&self) -> (f64, f64) {
+        let max = self.max_offset_x();
+        match self.overscroll && self.axes.is_horizontal() {
+            true => (-self.base.bounds.size.w, max + self.base.bounds.size.w),
+            false => (0.0, max),
+        }
+    }
+
     /// Largest valid vertical offset (≥ 0). Always 0 when the vertical axis is
     /// disabled. When a horizontal bar shows it reserves that bar's gutter, so the
     /// user can scroll the last row fully **above** the bar instead of leaving it
@@ -690,7 +966,7 @@ impl ScrollRegion {
         if !self.axes.is_vertical() {
             return 0.0;
         }
-        let reserve = if self.h_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
+        let reserve = if self.scrollbars && self.h_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
         (self.content_extent() + reserve - self.base.bounds.size.h).max(0.0)
     }
 
@@ -718,7 +994,7 @@ impl ScrollRegion {
         if !self.axes.is_horizontal() {
             return 0.0;
         }
-        let reserve = if self.v_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
+        let reserve = if self.scrollbars && self.v_overflow() { SCROLLBAR_GUTTER } else { 0.0 };
         (self.content_extent_x() + reserve - self.base.bounds.size.w).max(0.0)
     }
 
@@ -738,7 +1014,9 @@ impl ScrollRegion {
     /// content fits. The track stops short of the horizontal bar's gutter when both
     /// show, so the two never overlap in the bottom-right corner.
     fn thumb_rect(&self) -> Option<Rectangle> {
-        if !self.v_overflow() {
+        // `scrollbars(false)` means no bar: no thumb drawn, none to grab, and no gutter reserved.
+        // Gating only the gutter left the bar painted — visible, draggable, and taking no space.
+        if !self.scrollbars || !self.v_overflow() {
             return None;
         }
         let vp = self.base.bounds;
@@ -778,7 +1056,7 @@ impl ScrollRegion {
     /// The **horizontal** scrollbar thumb rect (bottom edge, viewport space), or
     /// `None` when the content fits horizontally. Mirrors [`thumb_rect`](Self::thumb_rect).
     fn h_thumb_rect(&self) -> Option<Rectangle> {
-        if !self.h_overflow() {
+        if !self.scrollbars || !self.h_overflow() {
             return None;
         }
         let vp = self.base.bounds;
@@ -817,9 +1095,59 @@ impl ScrollRegion {
     /// end at `natural − scroll_offset` (the visual position). Idempotent when
     /// already in sync. Called from `paint` and `event` so bounds are always
     /// current for drawing, hit-testing, and DnD.
+    /// Where the content **wants** to sit: the scroll offset, less the centring pad.
+    ///
+    /// The pad rides the same shift as the offset, and subtracts: a positive pad moves the content
+    /// **down and right**, into the middle of the room it does not fill. The two never fight —
+    /// where there is slack the offset is pinned at 0, and where there is none the pad is.
+    fn desired_shift(&self) -> (f64, f64) {
+        let (pad_x, pad_y) = self.center_pad();
+        (
+            self.scroll_offset_x.get_untracked() as f64 - pad_x,
+            self.scroll_offset.get_untracked() as f64 - pad_y,
+        )
+    }
+
+    /// Clamp a shift so the content can **never leave the viewport**.
+    ///
+    /// The position of an overscrolling surface is two numbers added together — the centring pad
+    /// and the scroll offset — and bounding each of them separately does not bound their sum. Twice
+    /// now that sum has carried the whole map off screen, leaving an empty window and no way back
+    /// but the keyboard. This is the invariant that cannot be violated by any combination of them:
+    /// a quarter of the viewport's worth of content stays on screen, whatever the two parts say.
+    fn clamp_visible(&self, shift: (f64, f64)) -> (f64, f64) {
+        let vp = self.base.bounds.size;
+        let (content_w, content_h) = self.raw_extent();
+        let clamp = |s: f64, viewport: f64, content: f64| {
+            if viewport <= 0.0 || content <= 0.0 {
+                return s;
+            }
+            let keep = (viewport * 0.25).min(content);
+            s.clamp(keep - viewport, content - keep)
+        };
+        (
+            clamp(shift.0, vp.w, content_w),
+            clamp(shift.1, vp.h, content_h),
+        )
+    }
+
     fn sync_shift(&mut self) {
-        let target_y = self.scroll_offset.get_untracked() as f64;
-        let target_x = self.scroll_offset_x.get_untracked() as f64;
+        let desired = self.clamp_visible(self.desired_shift());
+        // Smoothing puts the *eased* value on screen and lets `tick` walk it to `desired`; without
+        // it the desired value goes straight on. The first sync snaps either way.
+        let (target_x, target_y) = match self.eased.as_mut() {
+            None => desired,
+            Some((ex, ey)) => {
+                if !self.eased_seeded {
+                    self.eased_seeded = true;
+                    ex.snap(desired.0);
+                    ey.snap(desired.1);
+                }
+                ex.set(desired.0);
+                ey.set(desired.1);
+                (ex.value(), ey.value())
+            }
+        };
         let dy = self.applied_offset - target_y;
         let dx = self.applied_offset_x - target_x;
         if dx != 0.0 || dy != 0.0 {
@@ -830,6 +1158,23 @@ impl ScrollRegion {
             self.applied_offset_x = target_x;
             self.base.mark_needs_paint();
         }
+    }
+}
+
+impl ScrollRegion {
+    /// Walk the on-screen shift toward [`desired_shift`](Self::desired_shift), returning `true`
+    /// while it still has ground to cover (which is what keeps frames coming).
+    ///
+    /// The motion itself is [`Eased`]'s, in `effects.rs` beside `Flash` and `Attention` — the same
+    /// value-plus-`tick` shape every animated widget here embeds.
+    fn advance_eased(&mut self, dt: f32) -> bool {
+        let (dx, dy) = self.clamp_visible(self.desired_shift());
+        let Some((ex, ey)) = self.eased.as_mut() else { return false };
+        ex.set(dx);
+        ey.set(dy);
+        let moving = ex.tick(dt) | ey.tick(dt);
+        self.sync_shift();
+        moving
     }
 }
 
@@ -973,9 +1318,9 @@ impl Component for ScrollRegion {
         let vp = self.base.bounds;
 
         match ev {
-            Event::PointerPressed { pos } => self.press_capture(*pos, vp, ev),
-            Event::PointerMoved { pos } => self.move_capture(*pos, vp, ev),
-            // Scroll and Released deliberately fall through to the children first — see `on_event`.
+            Event::PointerDown(p) => self.press_capture(p.pos, vp, ev),
+            Event::PointerMove(p) => self.move_capture(p.pos, vp, ev),
+            // Scroll and the release deliberately fall through to the children first — see `on_event`.
             _ => Handled::No,
         }
     }
@@ -985,23 +1330,27 @@ impl Component for ScrollRegion {
     fn on_event(&mut self, ev: &Event) -> Handled {
         let vp = self.base.bounds;
         match ev {
-            Event::Scroll { delta_x, delta_y } => {
-                // Only swallow the wheel when the cursor is over this region AND the
-                // delta's axis is scrollable. `Event::Scroll` has no position, so the
-                // router can't hit-test it; `hovered` (from `PointerMoved`) is our gate.
+            Event::Scroll(p) => {
+                // **The wheel carries a position now**, and the router only delivers it to what is
+                // under the cursor — so being here *is* the hover test this arm used to do by
+                // hand against a flag it maintained from moves. What is left is the honest
+                // question: can this region scroll the axis it was asked for? If not it declines,
+                // and the event carries on to the region outside it.
+                //
                 // The host already mapped modifiers to axes (plain wheel → `delta_y`,
-                // `Shift`+wheel → `delta_x`), so we just consume each axis we can scroll.
-                // Anything we don't consume propagates to the host.
+                // `Shift`+wheel → `delta_x`), so each axis is simply consumed if it can move.
                 let mut handled = false;
-                if self.hovered && *delta_y != 0.0 && self.max_offset() > 0.0 {
+                let (min_y, max_y) = self.offset_bounds_y();
+                let (min_x, max_x) = self.offset_bounds_x();
+                if p.delta_y != 0.0 && max_y > min_y {
                     let next = self.scroll_offset.get_untracked() as f64
-                        + (*delta_y as f64) * WHEEL_STEP_FRAC * vp.size.h;
+                        + (p.delta_y as f64) * WHEEL_STEP_FRAC * vp.size.h;
                     self.set_offset_y(next as f32, Some(ev));
                     handled = true;
                 }
-                if self.hovered && *delta_x != 0.0 && self.max_offset_x() > 0.0 {
+                if p.delta_x != 0.0 && max_x > min_x {
                     let next = self.scroll_offset_x.get_untracked() as f64
-                        + (*delta_x as f64) * WHEEL_STEP_FRAC * vp.size.w;
+                        + (p.delta_x as f64) * WHEEL_STEP_FRAC * vp.size.w;
                     self.set_offset_x(next as f32, Some(ev));
                     handled = true;
                 }
@@ -1014,9 +1363,10 @@ impl Component for ScrollRegion {
             // regions nest. A region that cannot scroll the axis asked for returns `No` and the
             // event carries on — a vertical-only region must not swallow a horizontal page.
             Event::Widget(intent) => self.scroll_intent(*intent, ev),
-            Event::PointerReleased { .. } => {
+            Event::PointerUp(_) => {
                 // No bounds check: a drag that started here ends here, wherever the cursor drifted
-                // to. Gating a release on position is exactly how a thumb gets stuck.
+                // to — the press captured the pointer, so the release is delivered here whatever
+                // it is over. Gating a release on position is exactly how a thumb gets stuck.
                 let was_dragging = self.release_grabs();
                 if was_dragging {
                     self.end_scroll(Some(ev));
@@ -1037,6 +1387,7 @@ impl Component for ScrollRegion {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
+        animating |= self.advance_eased(dt);
         let mut fire: Option<(bool, Point)> = None;
         if let Some(tr) = &mut self.track_repeat {
             tr.next_in -= dt;
@@ -1123,6 +1474,8 @@ impl ScrollRegion {
     /// It moves only when the *target* moves. The remembered position is the target's natural one,
     /// so scrolling the region by hand does not change it and the view does not snap back — the
     /// user can always look somewhere else.
+    ///
+    /// [`reveal_align`](Self::reveal_align) decides *where* it lands: minimally in view, or centred.
     fn follow_revealed(&mut self) {
         let target = crate::component::reveal_target_in(&self.base.children);
         let Some(rect) = target else {
@@ -1130,19 +1483,33 @@ impl ScrollRegion {
             return;
         };
         // Natural = what layout produced, before this region's shift was baked in.
-        let natural_top = rect.loc.y + self.applied_offset;
-        if self.last_revealed == Some(natural_top) {
+        let natural = (
+            rect.loc.x + self.applied_offset_x,
+            rect.loc.y + self.applied_offset,
+        );
+        if self.last_revealed == Some(natural) {
             return;
         }
-        self.last_revealed = Some(natural_top);
-        self.ensure_visible(rect);
+        self.last_revealed = Some(natural);
+        match self.reveal_align {
+            RevealAlign::Minimal => self.ensure_visible(rect),
+            // With `overscroll` the centring pad already tracks the target on every sync, and a
+            // scroll on top of it would centre the same thing twice and overshoot by that much.
+            // What the offset carries there is **where the user has wheeled to**, and moving the
+            // cursor is a new instruction that supersedes it — so it goes back to zero and the pad
+            // puts the target dead centre, instead of centring it half a screen off for good.
+            RevealAlign::Center if self.overscroll => {
+                self.scroll_to(0.0);
+                self.scroll_to_x(0.0);
+            }
+            RevealAlign::Center => self.center_on(rect),
+        }
     }
 
     /// A press, before the children: end any stale gesture, then try the scrollbar lanes.
     fn press_capture(&mut self, pos: Point, vp: Rectangle, cause: &Event) -> Handled {
         {
             let pos = &pos;
-                self.hovered = vp.contains(*pos);
                 // A fresh press means any previous gesture is over — so a grab can never survive
                 // one, even if this region never saw the release that should have ended it.
                 //
@@ -1215,7 +1582,6 @@ impl ScrollRegion {
     fn move_capture(&mut self, pos: Point, vp: Rectangle, cause: &Event) -> Handled {
         {
             let pos = &pos;
-                self.hovered = vp.contains(*pos);
                 // Track thumb-lane hover for the highlight affordance. A drag in
                 // progress keeps handling moves even after the cursor leaves.
                 let lane_hit = self.thumb_hit_rect().is_some_and(|h| h.contains(*pos));
@@ -1282,9 +1648,26 @@ impl Parent for ScrollRegion {}
 
 #[cfg(test)]
 mod tests {
+    use crate::event::PointerButton;
     use super::*;
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    /// A resolved wheel event over the region under test. The router puts a real one here only
+    /// when the pointer is over the region; these tests call the widget directly, so they say so.
+    fn wheel(delta_x: f32, delta_y: f32) -> Event {
+        Event::Scroll(crate::event::PointerEvent {
+            delta_x,
+            delta_y,
+            ..crate::event::PointerEvent::at(Point::new(10.0, 10.0))
+        })
+    }
+
+    /// A **raw** wheel at a point — for the tests that go through the router, which is what
+    /// decides whose wheel it is.
+    fn wheel_at(pos: Point, delta_x: f32, delta_y: f32) -> Event {
+        Event::wheel(pos, delta_x, delta_y)
+    }
 
     fn region_with_children(child_heights: &[f64]) -> ScrollRegion {
         // Children are real components only for layout; here we just need bounds
@@ -1480,7 +1863,7 @@ mod tests {
         let pos = Point::new(t.loc.x - 4.0, t.loc.y + 4.0);
         assert!(r.thumb_hit_rect().unwrap().contains(pos), "pos is in the hit lane");
         assert!(!t.contains(pos), "pos is NOT on the thin visible thumb");
-        let handled = crate::component::dispatch(&mut r, &Event::PointerPressed { pos });
+        let handled = crate::component::dispatch(&mut r, &Event::pointer_pressed(pos, PointerButton::Left));
         assert_eq!(handled, Handled::Yes, "press in the lane grabs the thumb");
         assert!(r.thumb_grab.is_some(), "a drag started");
     }
@@ -1567,6 +1950,251 @@ mod tests {
         assert!(r.scroll_offset.get_untracked().abs() < 1e-6);
     }
 
+    /// **Centring is unconditional**, which is the difference from `ensure_visible`: a target
+    /// already fully on screen but sitting off to one side is still brought back to the middle.
+    /// That is what makes an overview read as a map — the current thing stays put and the
+    /// neighbours move past it.
+    #[test]
+    fn center_on_puts_the_target_in_the_middle_even_when_it_is_already_visible() {
+        let mut r = region_with_children(&[60.0, 60.0, 60.0, 60.0]); // vp 100, content 240
+        // child[1] natural 60..120: its middle is 90, the viewport's is 50.
+        r.center_on(Rectangle::new(Point::new(0.0, 60.0), Size::new(200.0, 60.0)));
+        assert!(
+            (r.scroll_offset.get_untracked() - 40.0_f32).abs() < 1e-6,
+            "90 (target middle) - 50 (viewport middle) = 40, not the 0 a minimal reveal would leave",
+        );
+    }
+
+    /// The clamp is the whole end-of-content story: near the top the target stops short of the
+    /// centre rather than the view scrolling into empty space. A surface that wants it centred
+    /// there too pads its own content — the widget does not invent space its caller did not ask for.
+    #[test]
+    fn center_on_clamps_at_the_ends_instead_of_scrolling_into_nothing() {
+        let mut r = region_with_children(&[60.0, 60.0, 60.0, 60.0]);
+        r.center_on(Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 60.0)));
+        assert!(r.scroll_offset.get_untracked().abs() < 1e-6, "the first child cannot go lower");
+        r.center_on(Rectangle::new(Point::new(0.0, 180.0), Size::new(200.0, 60.0)));
+        assert!(
+            (r.scroll_offset.get_untracked() - 140.0_f32).abs() < 1e-6,
+            "the last child stops at max_offset (240 content - 100 viewport)",
+        );
+    }
+
+    /// **Content that fits is centred in place.** This is the half of "centred" that has nothing to
+    /// do with scrolling, and the half that was missing: with three columns on a wide screen there
+    /// is no offset that moves them anywhere, so the map opened hard against the top-left corner —
+    /// which is the one thing an overview must never look like.
+    #[test]
+    fn content_smaller_than_the_region_is_centred_in_place() {
+        let mut r = region_with_children(&[40.0]); // viewport 200 × 100, content 200 × 40
+        r.axes = ScrollAxes::Both;
+        r.reveal_align = RevealAlign::Center;
+        r.base.children[0].base_mut().bounds =
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(80.0, 40.0));
+        r.sync_shift();
+
+        let b = r.base.children[0].base().bounds;
+        assert!((b.loc.x - 60.0).abs() < 1e-9, "(200 - 80) / 2 = 60 from the left, got {b:?}");
+        assert!((b.loc.y - 30.0).abs() < 1e-9, "(100 - 40) / 2 = 30 from the top, got {b:?}");
+        assert!(
+            r.scroll_offset.get_untracked().abs() < 1e-6
+                && r.scroll_offset_x.get_untracked().abs() < 1e-6,
+            "and it is not a scroll — there is nothing to scroll",
+        );
+    }
+
+    /// The pad is **only** the slack, so it can never make the start of the content unreachable —
+    /// the failure mode of a plain `justify_content: center`, which overflows both ways.
+    #[test]
+    fn overflowing_content_gets_no_centring_pad() {
+        let mut r = region_with_children(&[60.0, 60.0, 60.0]); // content 180, viewport 100
+        r.reveal_align = RevealAlign::Center;
+        r.sync_shift();
+        assert!(
+            r.base.children[0].base().bounds.loc.y.abs() < 1e-9,
+            "the first child stays at the top; centring here is the scroll's job",
+        );
+    }
+
+    /// **A horizontal region centres horizontally.** A strip of cards is the case that needs it,
+    /// and `ensure_visible` — vertical by construction — could never serve one.
+    #[test]
+    fn center_on_works_on_whichever_axis_the_region_scrolls() {
+        let mut r = region_with_children(&[60.0]);
+        r.axes = ScrollAxes::Horizontal;
+        // One wide child: viewport 200 wide, content 600.
+        r.base.children[0].base_mut().bounds =
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(600.0, 60.0));
+        // A card at x 300..400 — its middle is 350, the viewport's is 100.
+        r.center_on(Rectangle::new(Point::new(300.0, 0.0), Size::new(100.0, 60.0)));
+        assert!(
+            (r.scroll_offset_x.get_untracked() - 250.0_f32).abs() < 1e-6,
+            "350 - 100 = 250 horizontally",
+        );
+        assert!(
+            r.scroll_offset.get_untracked().abs() < 1e-6,
+            "and nothing vertically — that axis does not scroll here",
+        );
+    }
+
+    /// **An eased region walks to its target over several frames**, and keeps asking for them
+    /// until it arrives — a view that cut between two positions of the same picture would read as
+    /// a different picture.
+    #[test]
+    fn a_smooth_region_glides_to_its_target_instead_of_jumping() {
+        let mut r = region_with_children(&[60.0, 60.0, 60.0]).smooth_scroll(0.09); // content 180, vp 100
+        r.sync_shift(); // the first sync snaps: a surface opens where it belongs
+        assert!(r.applied_offset.abs() < 1e-9, "starts settled at the top");
+
+        r.scroll_to(80.0); // programmatic — the eased path
+        assert!(
+            r.applied_offset < 80.0,
+            "not there yet on the frame the move was asked for: {}",
+            r.applied_offset,
+        );
+        let mut frames = 0;
+        while r.tick(1.0 / 60.0) && frames < 120 {
+            frames += 1;
+        }
+        assert!(frames > 1, "it took more than one frame — that is the animation");
+        assert!(frames < 120, "and it finished rather than easing forever");
+        assert!(
+            (r.applied_offset - 80.0).abs() < 0.5,
+            "and it arrived exactly: {}",
+            r.applied_offset,
+        );
+    }
+
+    /// **A drag lands at once; a wheel glides.**
+    ///
+    /// The thing under the finger has to track it one to one — a thumb that lags reads as broken.
+    /// A wheel notch has nothing under it: it is a discrete tenth-of-a-viewport step, so applying
+    /// it instantly is a jump and a run of them is a run of jumps. Eased, the same notches read as
+    /// one movement. Snapping the wheel was what made the map jerky under the mouse.
+    #[test]
+    fn a_drag_lands_at_once_while_a_wheel_glides() {
+        let mut r = region_with_children(&[60.0, 60.0, 60.0]).smooth_scroll(0.09);
+        r.sync_shift();
+
+        let wheel = wheel(0.0, 3.0);
+        r.set_offset_y(50.0, Some(&wheel));
+        assert!(
+            r.applied_offset < 50.0,
+            "the wheel has somewhere to travel: {}",
+            r.applied_offset,
+        );
+        let mut frames = 0;
+        while r.tick(1.0 / 60.0) && frames < 240 {
+            frames += 1;
+        }
+        assert!(frames > 1, "over several frames — that is the glide");
+
+        let drag = Event::PointerMove(crate::event::PointerEvent::at(Point::new(0.0, 0.0)));
+        r.set_offset_y(10.0, Some(&drag));
+        assert!(
+            (r.applied_offset - 10.0).abs() < 1e-9,
+            "a pointer drag is there on the same frame: {}",
+            r.applied_offset,
+        );
+    }
+
+    /// **An overscrolling surface can still be wheeled.** Its position is carried by the centring
+    /// pad, so `max_offset` is `0` whenever the content fits — and with the range clamped to
+    /// `[0, 0]` every wheel notch was a no-op and the surface felt frozen under the mouse.
+    #[test]
+    fn a_wheel_moves_an_overscrolling_region_even_when_its_content_fits() {
+        let mut r = region_with_children(&[40.0]).overscroll(true);
+        r.reveal_align = RevealAlign::Center;
+        assert_eq!(r.max_offset(), 0.0, "the content fits — there is nothing to scroll *into*");
+        let wheel = wheel(0.0, 3.0);
+        r.on_event(&wheel);
+        assert!(
+            r.scroll_offset.get_untracked() > 0.0,
+            "and yet the wheel moved it: {}",
+            r.scroll_offset.get_untracked(),
+        );
+        // Bounded, so it cannot be flicked away into nothing.
+        r.set_offset_y(100_000.0, None);
+        assert!(r.scroll_offset.get_untracked() <= r.base.bounds.size.h as f32);
+    }
+
+    /// **Shift+wheel reaches the horizontal axis** — the host maps the modifier to `delta_x`, and a
+    /// horizontal region consumes it on the same terms.
+    #[test]
+    fn a_horizontal_delta_scrolls_a_horizontal_overscrolling_region() {
+        let mut r = region_with_children(&[40.0]);
+        r.axes = ScrollAxes::Horizontal;
+        r = r.overscroll(true);
+        r.on_event(&wheel(3.0, 0.0));
+        assert!(
+            r.scroll_offset_x.get_untracked() > 0.0,
+            "shift+wheel moves it sideways: {}",
+            r.scroll_offset_x.get_untracked(),
+        );
+    }
+
+    /// Moving the cursor supersedes wherever the user had wheeled to — otherwise the map would
+    /// centre every later selection at the same offset from the middle, for good.
+    #[test]
+    fn moving_the_cursor_cancels_a_wheel_on_an_overscrolling_region() {
+        let mut r = region_with_children(&[40.0]).overscroll(true);
+        r.reveal_align = RevealAlign::Center;
+        r.on_event(&wheel(0.0, 3.0));
+        assert!(r.scroll_offset.get_untracked() > 0.0);
+
+        let mut row = crate::widgets::Row::new();
+        row.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(40.0, 40.0));
+        row.nav_state().set(true);
+        r.base.children.push(Box::new(row));
+        r.follow_revealed();
+        assert!(
+            r.scroll_offset.get_untracked().abs() < 1e-6,
+            "back to zero, so the pad centres the new target exactly",
+        );
+    }
+
+    /// **No combination of pad and wheel can empty the view.** The position of an overscrolling
+    /// surface is two numbers added together, and bounding each separately does not bound the sum —
+    /// which is how the map twice ended up as an empty window with everything scrolled out of it.
+    #[test]
+    fn the_content_can_never_be_pushed_off_screen() {
+        let mut r = region_with_children(&[40.0]).overscroll(true);
+        r.reveal_align = RevealAlign::Center;
+        // Wheel as hard as the range allows, repeatedly.
+        for _ in 0..50 {
+            r.on_event(&wheel(0.0, 20.0));
+        }
+        for _ in 0..200 {
+            r.tick(1.0 / 60.0);
+        }
+        let child = r.base.children[0].base().bounds;
+        let vp = r.base.bounds;
+        assert!(
+            child.loc.y < vp.loc.y + vp.size.h && child.loc.y + child.size.h > vp.loc.y,
+            "the content still overlaps the viewport: {child:?} in {vp:?}",
+        );
+    }
+
+    /// **`scrollbars(false)` draws no bar at all.** Gating only the reserved gutter left the thumb
+    /// painted — visible on screen, grabbable, and taking up no space.
+    #[test]
+    fn a_region_with_scrollbars_off_paints_no_thumb() {
+        let with = region_with_children(&[60.0, 60.0, 60.0]);
+        assert!(with.thumb_rect().is_some(), "overflowing, so it would normally show one");
+        let without = region_with_children(&[60.0, 60.0, 60.0]).scrollbars(false);
+        assert!(without.thumb_rect().is_none(), "and none at all when they are off");
+    }
+
+    /// The alignment travels as a property, so a described surface reaches it — the capability
+    /// `axes` and `placeholder` both lacked for months.
+    #[test]
+    fn the_reveal_alignment_is_a_property_and_defaults_to_minimal() {
+        use crate::prop::{PropInput, SetProp};
+        assert_eq!(ScrollRegion::new().clone_reveal_align(), RevealAlign::Minimal);
+        let centred = ScrollRegion::new().set_prop("reveal_align", &PropInput::Text("center".into()));
+        assert_eq!(centred.clone_reveal_align(), RevealAlign::Center);
+    }
+
     #[test]
     fn ensure_visible_is_noop_when_item_already_visible() {
         let mut r = region_with_children(&[60.0, 60.0]);
@@ -1620,7 +2248,7 @@ mod tests {
         let mut r = region_with_children(&[300.0, 300.0]);
         // Press in the vertical track lane, below the thumb.
         let pos = Point::new(195.0, 90.0);
-        assert_eq!(crate::component::dispatch(&mut r, &Event::PointerPressed { pos }), Handled::Yes);
+        assert_eq!(crate::component::dispatch(&mut r, &Event::pointer_pressed(pos, PointerButton::Left)), Handled::Yes);
         assert!((r.scroll_offset.get_untracked() - 100.0).abs() < 1e-3, "first page fires on press");
         // Held but before the initial delay: animating, no extra page.
         assert!(r.tick(0.2), "held press keeps the host ticking");
@@ -1632,7 +2260,7 @@ mod tests {
         r.tick(0.1);
         assert!((r.scroll_offset.get_untracked() - 300.0).abs() < 1e-3, "repeat at the interval");
         // Release disarms it: no further paging however long we tick.
-        crate::component::dispatch(&mut r, &Event::PointerReleased { pos });
+        crate::component::dispatch(&mut r, &Event::pointer_released(pos, PointerButton::Left));
         assert!(!r.tick(1.0));
         assert!((r.scroll_offset.get_untracked() - 300.0).abs() < 1e-3, "stopped on release");
     }
@@ -1706,11 +2334,9 @@ mod tests {
             Rectangle::new(Point::new(0.0, 50.0), Size::new(200.0, 250.0));
         outer.base.children.push(Box::new(filler));
 
-        // Cursor over the inner region (both regions see the move → both hovered).
+        // The wheel is routed by position now: over the inner region, it is the inner region's.
         let pos = Point::new(10.0, 10.0);
-        crate::component::dispatch(&mut outer, &Event::PointerMoved { pos });
-        // Wheel: the inner region must consume it; the outer must not move.
-        let handled = crate::component::dispatch(&mut outer, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 });
+        let handled = crate::component::dispatch(&mut outer, &wheel_at(pos, 0.0, 1.0));
         assert_eq!(handled, Handled::Yes);
         assert!(
             inner_offset.get_untracked() > 0.0,
@@ -1721,10 +2347,9 @@ mod tests {
             "outer region did not scroll while the inner one consumed the wheel"
         );
 
-        // Cursor over the outer region but OFF the inner one: now the outer scrolls.
+        // Over the outer region but OFF the inner one: now the outer scrolls.
         let pos = Point::new(150.0, 80.0);
-        crate::component::dispatch(&mut outer, &Event::PointerMoved { pos });
-        let handled = crate::component::dispatch(&mut outer, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 });
+        let handled = crate::component::dispatch(&mut outer, &wheel_at(pos, 0.0, 1.0));
         assert_eq!(handled, Handled::Yes);
         assert!(
             outer.scroll_offset.get_untracked() > 0.0,
@@ -1794,8 +2419,8 @@ mod tests {
     #[test]
     fn the_wheel_reports_with_the_event_that_caused_it() {
         let (log, mut r) = recorder();
-        crate::component::dispatch(&mut r, &Event::PointerMoved { pos: Point::new(50.0, 50.0) });
-        crate::component::dispatch(&mut r, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 });
+        crate::component::dispatch(&mut r, &Event::pointer_moved(Point::new(50.0, 50.0)));
+        crate::component::dispatch(&mut r, &wheel(0.0, 1.0));
         assert_eq!(log.borrow().as_slice(), &[("start", true), ("scroll", true)]);
     }
 
@@ -1804,8 +2429,8 @@ mod tests {
     #[test]
     fn a_wheel_gesture_ends_after_the_idle_timeout_and_not_before() {
         let (log, mut r) = recorder();
-        crate::component::dispatch(&mut r, &Event::PointerMoved { pos: Point::new(50.0, 50.0) });
-        crate::component::dispatch(&mut r, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 });
+        crate::component::dispatch(&mut r, &Event::pointer_moved(Point::new(50.0, 50.0)));
+        crate::component::dispatch(&mut r, &wheel(0.0, 1.0));
 
         assert!(r.tick(WHEEL_IDLE_END / 2.0), "still pending: keep the frames coming");
         assert!(
@@ -1822,12 +2447,12 @@ mod tests {
     fn a_thumb_drag_ends_on_the_release() {
         let (log, mut r) = recorder();
         let lane_x = r.base.bounds.loc.x + r.base.bounds.size.w - 2.0;
-        crate::component::dispatch(&mut r, &Event::PointerPressed { pos: Point::new(lane_x, 5.0) });
-        crate::component::dispatch(&mut r, &Event::PointerMoved { pos: Point::new(lane_x, 40.0) });
+        crate::component::dispatch(&mut r, &Event::pointer_pressed(Point::new(lane_x, 5.0), PointerButton::Left));
+        crate::component::dispatch(&mut r, &Event::pointer_moved(Point::new(lane_x, 40.0)));
         assert!(log.borrow().iter().any(|(k, _)| *k == "scroll"), "the drag scrolled it");
         assert!(!log.borrow().iter().any(|(k, _)| *k == "end"), "not while the button is down");
 
-        crate::component::dispatch(&mut r, &Event::PointerReleased { pos: Point::new(900.0, 900.0) });
+        crate::component::dispatch(&mut r, &Event::pointer_released(Point::new(900.0, 900.0), PointerButton::Left));
         assert_eq!(log.borrow().last(), Some(&("end", true)), "the release ended it");
     }
 

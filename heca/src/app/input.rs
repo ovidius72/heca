@@ -219,19 +219,23 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(ctx.event_combo) else {
         return;
     };
-    // Deliver the real character for plain typing so case and shifted symbols survive;
-    // the combo key stays lowercased for chord matching only. Mirrors the overlay path.
-    let key = {
-        let mut cs = ctx.key_text.chars();
-        match (cs.next(), cs.next()) {
-            (Some(c), None) if !mods.ctrl && !mods.meta && !c.is_control() && c != ' ' => {
-                heca_grid_ui::GridKey::Char(c)
-            }
-            _ => combo_key,
-        }
-    };
-    let keymap = state.widget_keymap.clone();
+    // Typed text goes in as text, before the chord is resolved: `Event::TextInput` carries what
+    // the platform says the key produced, so case and shifted symbols survive without the host
+    // patching the key it sends. Mirrors the overlay path.
     let mut edited = false;
+    if let Some(text) = crate::app::events::typed_text(ctx.key_text, mods)
+        && let Some(search) = state.active_search_mut()
+    {
+        let ev = heca_grid_ui::Event::TextInput(text);
+        let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), &ev);
+        if handled == heca_grid_ui::Handled::Yes {
+            crate::app::terminal_host::run_scrollback_search(state);
+            state.needs_redraw = true;
+            return;
+        }
+    }
+    let key = combo_key;
+    let keymap = state.widget_keymap.clone();
     keymap.dispatch(key, mods, |ev| {
         match state.active_search_mut() {
             Some(search) => {

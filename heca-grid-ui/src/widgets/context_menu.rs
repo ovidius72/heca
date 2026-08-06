@@ -1,4 +1,17 @@
-//! [`ContextMenu`] — a cursor-anchored action menu (overlay).
+//! **Menus, split by what each part actually knows.**
+//!
+//! | | |
+//! |---|---|
+//! | [`MenuItem`] | one row: label, icon, enabled, danger, `on_click` |
+//! | [`Menu`] | a titled list of items. **Content only** — it knows nothing about triggers, anchors or keys |
+//! | [`ContextMenu`] | contains a `Menu` and shows it on right-click or the host's `open_context_menu`, anchored at the cursor or under the widget |
+//! | `MenuBar` | *not built yet*: contains `Menu`s and shows them as a strip, on a click of a title or its own keybinding |
+//!
+//! The split is at the joint a menu bar proves is real: a `MenuBar` shows the **same `Menu` value**
+//! as a strip, opening on a click of its title with its own keyboard convention. The trigger, the
+//! anchor and the shortcut belong to whatever contains the menu; the menu is content, and stays
+//! reusable across every surface that shows one. A submenu is the same shape again — a `MenuItem`
+//! holding a `Menu`.
 //!
 //! The pointer counterpart to the keyboard pick flows: a floating list of
 //! [`MenuEntry`]s opened at a point (typically the right-click cursor). It uses the
@@ -28,21 +41,38 @@ use crate::widgets::{paint_panel_chrome, place_at_point, Glyph, PanelChrome, Pan
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
 
-/// One entry in a [`ContextMenu`].
-pub struct MenuEntry {
+/// One row in a [`ContextMenu`]: what it says, and what it does.
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+/// use heca_grid_ui::widgets::{ContextMenu, Glyph, MenuItem};
+///
+/// let menu = ContextMenu::new()
+///     .child(MenuItem::new("Save as…").icon(Glyph::File).on_click(|| {}))
+///     .child(MenuItem::new("Revert").enabled(false).on_click(|| {}));
+/// ```
+///
+/// Read top to bottom: the label first, the behaviour after — which is the order a menu is written
+/// in and the order it is read on screen.
+#[derive(Clone)]
+pub struct MenuItem {
     label: String,
     icon: Option<Glyph>,
     key: Option<char>,
     shortcut: Option<String>,
     danger: bool,
     enabled: bool,
-    on_select: Box<dyn Fn()>,
+    on_select: std::rc::Rc<dyn Fn()>,
 }
 
+/// The name this row had when only a host built menus, kept so existing callers still compile.
+pub type MenuEntry = MenuItem;
+
 #[heca_grid_ui_macros::props]
-impl MenuEntry {
-    /// An entry with `label` that runs `on_select` when chosen.
-    pub fn new(label: impl Into<String>, on_select: impl Fn() + 'static) -> Self {
+impl MenuItem {
+    /// A row labelled `label` that does nothing yet — give it behaviour with
+    /// [`on_click`](MenuItem::on_click).
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
             label: label.into(),
             icon: None,
@@ -50,8 +80,20 @@ impl MenuEntry {
             shortcut: None,
             danger: false,
             enabled: true,
-            on_select: Box::new(on_select),
+            on_select: std::rc::Rc::new(|| {}),
         }
+    }
+
+    /// What this row does when chosen. Replaces whatever was there.
+    ///
+    /// A **plain closure**: this library knows nothing about actions, and an item that took an
+    /// action id would tie every menu in it to one host's dispatch. Firing a catalogued action
+    /// inside the closure is the author's choice — and the way to stay reachable from the command
+    /// palette and RPC, which a closure alone is not.
+    #[heca_grid_ui_macros::host_only("a closure — behaviour crosses a description as an Intent")]
+    pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_select = std::rc::Rc::new(f);
+        self
     }
 
     /// An optional leading icon.
@@ -117,7 +159,7 @@ const KEYCAP_FONT_SCALE: f32 = 0.72;
 /// A cursor-anchored action menu.
 pub struct ContextMenu {
     base: Base,
-    entries: Vec<MenuEntry>,
+    entries: Vec<MenuItem>,
     selected: usize,
     open: Signal<bool>,
     /// Host-owned anchor (top-left preferred position; clamped to the viewport).
@@ -133,6 +175,8 @@ pub struct ContextMenu {
     /// selected. The host points this at its overlay-close path (e.g. emit `CloseOverlay`),
     /// mirroring [`Dialog::on_dismiss`](super::Dialog).
     on_dismiss: Option<Box<dyn Fn()>>,
+    /// Fired after an entry ran, whatever it was — the host's hook for taking the layer down.
+    after_select: Option<Box<dyn Fn()>>,
 }
 
 impl ContextMenu {
@@ -148,37 +192,55 @@ impl ContextMenu {
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             on_dismiss: None,
+            after_select: None,
         }
     }
 
     /// Add an entry.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar — built from `children`")]
-    pub fn entry(mut self, e: MenuEntry) -> Self {
+    pub fn entry(mut self, e: MenuItem) -> Self {
         self.entries.push(e);
         self
     }
 
-    /// Set the initial open state.
+    /// Add an entry — the name that reads right when the items are written as content.
+    ///
+    /// The same call as [`entry`](ContextMenu::entry). An inherent method, so it wins over
+    /// [`Parent::child`](crate::builders::Parent::child) for a menu: a menu's rows are drawn from
+    /// data rather than laid out as child widgets, which is why this widget is one of the few that
+    /// does not take `impl Component` here.
+    pub fn child(self, item: MenuItem) -> Self {
+        self.entry(item)
+    }
+
+    /// Open or close the panel.
     #[heca_grid_ui_macros::prop]
     pub fn open(self, open: bool) -> Self {
         self.open.set(open);
         self
     }
 
-    /// Set the initial anchor (top-left preferred position).
+    /// The preferred top-left position, clamped into the viewport at paint.
     #[heca_grid_ui_macros::prop]
     pub fn anchor(self, at: Point) -> Self {
         self.anchor.set(at);
         self
     }
 
-    /// Center the panel on the anchor (anchor = desired center) instead of placing the
-    /// top-left at the anchor. For keyboard/RPC-opened menus with no pointer target.
+    /// Centre the panel on the anchor (anchor = desired centre) instead of placing its top-left
+    /// there — for a trigger with no pointer position.
     #[heca_grid_ui_macros::prop]
     pub fn centered(mut self, on: bool) -> Self {
         self.centered = on;
         self
     }
+
+    /// The rows' labels, in order — what a caller (or a test) can read back off a built panel
+    /// without reaching into its entries.
+    pub fn entry_labels(&self) -> Vec<String> {
+        self.entries.iter().map(|e| e.label.clone()).collect()
+    }
+
 
     /// The open-state signal — the host flips it on right-click / dismiss.
     pub fn open_signal(&self) -> Signal<bool> {
@@ -262,8 +324,22 @@ impl ContextMenu {
             && e.enabled
         {
             (e.on_select)();
+            if let Some(f) = &self.after_select {
+                f();
+            }
         }
         self.close();
+    }
+
+    /// Called **after an entry ran**, whatever the entry was.
+    ///
+    /// The host's seam for taking the panel's layer down. It is here rather than in each item
+    /// because an item is a plain closure that knows nothing about layers — and requiring every
+    /// author to close the menu they opened is a rule that gets forgotten exactly once per menu.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
+    pub fn after_select(mut self, f: impl Fn() + 'static) -> Self {
+        self.after_select = Some(Box::new(f));
+        self
     }
 
     /// Set the callback fired when the menu is **dismissed** (Esc / outside-click). The host
@@ -518,35 +594,54 @@ impl Component for ContextMenu {
             // Other raw keys (arrows, Enter, Tab) are NOT swallowed: report unhandled so the host
             // offers the resolved `WidgetIntent`. The host owns modal capture.
             Event::Key { pressed: true, .. } => Handled::No,
-            Event::PointerMoved { pos } => {
+            // The menu's rows are drawn from data, not from child widgets, so it hit-tests its
+            // own row rects — but only inside a panel the router already decided the pointer is
+            // over (`hit_bounds`). A move that is not over this menu never gets here.
+            Event::PointerMove(p) => {
                 let panel = self.layout();
                 for i in 0..self.entries.len() {
-                    if self.entries[i].enabled && self.row_rect(panel, i).contains(*pos) {
+                    if self.entries[i].enabled && self.row_rect(panel, i).contains(p.pos) {
                         self.selected = i;
                         break;
                     }
                 }
                 Handled::Yes
             }
-            Event::PointerPressed { pos } => {
+            Event::PointerDown(p) => {
                 let panel = self.layout();
                 let mut ran = false;
                 for i in 0..self.entries.len() {
-                    if self.entries[i].enabled && self.row_rect(panel, i).contains(*pos) {
+                    if self.entries[i].enabled && self.row_rect(panel, i).contains(p.pos) {
                         self.selected = i;
                         self.run_selected();
                         ran = true;
                         break;
                     }
                 }
-                // A click outside the panel (or on a disabled row) dismisses.
-                if !ran && !panel.contains(*pos) {
-                    self.fire_dismiss();
-                }
+                // A press inside the panel that matched no entry — a disabled row, the padding
+                // between rows — does nothing at all. Dismissal is what a press *outside* means,
+                // and that arrives as `PointerDownOutside`.
+                let _ = ran;
                 Handled::Yes
+            }
+            // The press that landed somewhere else — the whole of "click away to close", with no
+            // geometry of this menu's own and nothing to keep in step with the panel placement.
+            Event::PointerDownOutside(_) => {
+                self.fire_dismiss();
+                Handled::No
             }
             // Swallow all other input while open.
             _ => Handled::Yes,
+        }
+    }
+
+    /// The menu's **input** surface is the panel it draws, not the layout box it was placed in —
+    /// the rows live there. Closed, it takes nothing.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if self.is_open() {
+            Some(self.panel.get())
+        } else {
+            None
         }
     }
 
@@ -578,7 +673,7 @@ mod tests {
         let ran = Rc::new(Cell::new(0u32));
         let (d, r) = (dismissed.clone(), ran.clone());
         let mut m = ContextMenu::new()
-            .entry(MenuEntry::new("Rename", move || r.set(r.get() + 1)).key('r'))
+            .entry(MenuItem::new("Rename").on_click(move || r.set(r.get() + 1)).key('r'))
             .open(true)
             .on_dismiss(move || d.set(d.get() + 1));
 
@@ -609,9 +704,9 @@ mod tests {
     fn menu_intents_move_the_highlight_and_skip_disabled_entries() {
         let noop = || {};
         let mut m = ContextMenu::new()
-            .entry(MenuEntry::new("First", noop))
-            .entry(MenuEntry::new("Disabled", noop).enabled(false))
-            .entry(MenuEntry::new("Last", noop))
+            .entry(MenuItem::new("First").on_click(noop))
+            .entry(MenuItem::new("Disabled").on_click(noop).enabled(false))
+            .entry(MenuItem::new("Last").on_click(noop))
             .open(true);
 
         assert_eq!(m.selected, 0, "starts on the first entry");
@@ -656,8 +751,8 @@ mod tests {
         let m = ContextMenu::new()
             .anchor(anchor)
             .centered(true)
-            .entry(MenuEntry::new("Split", || {}).key('s'))
-            .entry(MenuEntry::new("Close", || {}).key('c'))
+            .entry(MenuItem::new("Split").on_click(|| {}).key('s'))
+            .entry(MenuItem::new("Close").on_click(|| {}).key('c'))
             .open(true);
         m.viewport.set(vp);
         let p = m.layout();
@@ -668,12 +763,143 @@ mod tests {
         let m2 = ContextMenu::new()
             .anchor(anchor)
             .centered(false)
-            .entry(MenuEntry::new("Split", || {}).key('s'))
-            .entry(MenuEntry::new("Close", || {}).key('c'))
+            .entry(MenuItem::new("Split").on_click(|| {}).key('s'))
+            .entry(MenuItem::new("Close").on_click(|| {}).key('c'))
             .open(true);
         m2.viewport.set(vp);
         let p2 = m2.layout();
         assert!((p2.loc.x - (anchor.x + ANCHOR_INSET)).abs() < 1e-9, "cursor x != anchor+inset");
         assert!((p2.loc.y - (anchor.y + ANCHOR_INSET)).abs() < 1e-9, "cursor y != anchor+inset");
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Menu — the content
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// **A titled list of [`MenuItem`]s.** Content, and nothing else: it does not know what opens it,
+/// where it appears, or which key summons it — those belong to whatever *presents* it.
+///
+/// Build it where the data is, so its items simply capture what they act on:
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+/// use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
+///
+/// let id = 7u64;
+/// let menu = Menu::new("Pane", "What you can do with this pane")
+///     .child(MenuItem::new("Rename").on_click(move || { let _ = id; }))
+///     .child(MenuItem::new("Close").danger(true).on_click(move || { let _ = id; }));
+///
+/// // Presented as a context menu on a row — right-click, or the keyboard action:
+/// let row = Row::new().child(Label::new("nvim")).context_menu(menu);
+/// ```
+///
+/// There is no row identity to declare, no path string, no menu id and no registry: the closure
+/// captured `id` in the loop that was already drawing that row.
+#[derive(Clone)]
+pub struct Menu {
+    title: String,
+    description: String,
+    name: Option<String>,
+    items: Vec<MenuItem>,
+}
+
+impl Menu {
+    /// A menu titled `title`, described by `description`.
+    ///
+    /// The title heads the panel a [`ContextMenu`] shows — and would be the strip label in a menu
+    /// bar, which is why it lives on the content rather than on a presenter. The description is
+    /// what makes a menu self-documenting instead of needing a declaration somewhere else.
+    pub fn new(title: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            description: description.into(),
+            name: None,
+            items: Vec::new(),
+        }
+    }
+
+    /// Add a row.
+    pub fn child(mut self, item: MenuItem) -> Self {
+        self.items.push(item);
+        self
+    }
+
+    /// **Optional. Give this menu a name so other components can add rows to it.**
+    ///
+    /// The single thing left of the contribution design: a named menu is one a host can offer to
+    /// everything mounted before it is shown, so a plugin's "Open in container" can appear on a row
+    /// it does not own. A menu without a name is closed, and needs nothing.
+    ///
+    /// Opaque here — this library neither parses it nor knows who answers it.
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// The menu's title.
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// What this menu is for, in a sentence.
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// The name other components may add rows to, if this menu has one.
+    pub fn declared_name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    /// The rows' labels, in order — what a caller (or a test) reads back without reaching into the
+    /// items.
+    pub fn item_labels(&self) -> Vec<String> {
+        self.items.iter().map(|i| i.label.clone()).collect()
+    }
+
+    /// Append rows a host collected from elsewhere (contributions to a [named](Menu::name) menu).
+    pub fn extend(mut self, items: impl IntoIterator<Item = MenuItem>) -> Self {
+        self.items.extend(items);
+        self
+    }
+
+    /// Turn this content into the panel that shows it — what a **host** does when it presents a
+    /// menu into a layer. A caller building a menu never needs it.
+    pub fn into_panel(self) -> ContextMenu {
+        let mut panel = ContextMenu::new();
+        for item in self.items {
+            panel = panel.entry(item);
+        }
+        panel
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ContextMenu — the presenter
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Where a menu appears — chosen by **what triggered it**, never by an author.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MenuAnchor {
+    /// At a point: the panel's top-left goes there, clamped into the viewport. The pointer trigger.
+    At(Point),
+    /// Under a widget: the panel hangs off its bottom edge, flipping above and clamping like every
+    /// other anchored panel — so the row the menu is *about* stays visible while you read it. The
+    /// keyboard trigger.
+    Under(Rectangle),
+}
+
+impl MenuAnchor {
+    /// Apply this anchor to a panel and open it.
+    pub fn open(self, panel: ContextMenu) -> ContextMenu {
+        match self {
+            Self::At(p) => panel.anchor(p).centered(false).open(true),
+            Self::Under(b) => panel
+                .anchor(Point::new(b.loc.x, b.loc.y + b.size.h))
+                .centered(false)
+                .open(true),
+        }
     }
 }

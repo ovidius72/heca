@@ -18,7 +18,7 @@ use crate::input::{FontZoomStep, WmAction};
 use crate::keymap::Keymaps;
 use crate::mouse;
 use heca_core::layout::Point;
-use heca_grid_ui::{Event, Handled};
+use heca_grid_ui::{Event, Handled, PointerButton, RawPointer, RawPointerKind};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 #[derive(Clone, Debug)]
@@ -130,37 +130,47 @@ pub(crate) fn handle_window_event(
                 // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
                 // `Ctrl+h/j/k/l` resolve to the right chord.
                 if let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(&event_combo) {
-                    // For plain printable typing, deliver the ACTUAL character (case-preserved,
-                    // shifted symbols intact) from `key_text` rather than the lowercased combo key
-                    // — otherwise an overlay `Input` can't type uppercase (Shift) or `!@#`. The
-                    // combo key stays lowercased only for chord *matching*, which `Keymap::resolve`
-                    // does internally anyway. Space stays `GridKey::Space` (so it still activates a
-                    // focused button); Ctrl/Meta combos and named keys keep the combo key.
-                    let key = {
-                        let mut cs = key_text.chars();
-                        match (cs.next(), cs.next()) {
-                            (Some(c), None)
-                                if !mods.ctrl
-                                    && !mods.meta
-                                    && !c.is_control()
-                                    && c != ' ' =>
-                            {
-                                heca_grid_ui::GridKey::Char(c)
-                            }
-                            _ => combo_key,
+                    // **Typed text first, as text.** The character the user committed goes in as
+                    // `Event::TextInput` — case and shifted symbols intact, because it is what the
+                    // platform said, not something reconstructed from a chord. The host used to
+                    // patch the *key* instead (swap the lowercased combo key for the real
+                    // character before sending it) so that a field could rebuild the text from it;
+                    // a field no longer rebuilds anything, so the patch is gone.
+                    if let Some(text) = typed_text(&key_text, mods) {
+                        let typed = state
+                            .layers
+                            .top_modal_root_mut()
+                            .map(|root| {
+                                heca_grid_ui::dispatch(root, &Event::TextInput(text))
+                            })
+                            .unwrap_or(Handled::No);
+                        if matches!(typed, Handled::Yes) {
+                            state.mark_full_redraw();
+                            return;
                         }
-                    };
+                    }
+                    let key = combo_key;
                     let keymap = state.widget_keymap.clone();
-                    keymap.dispatch(key, mods, |ev| {
+                    let handled = keymap.dispatch(key, mods, |ev| {
                         state
                             .layers
                             .top_modal_root_mut()
                             .map(|root| heca_grid_ui::dispatch(root, ev))
                             .unwrap_or(Handled::No)
                     });
+                    // **A key the overlay ignored is not consumed by the overlay.** Returning
+                    // regardless swallowed every binding an open surface had no use for — which is
+                    // why `q`, catalogued and bound to `close_overlay` alongside `Escape`, did
+                    // nothing while the map was up: `Escape` resolves to the `dismiss` widget
+                    // intent and was handled here, `q` resolves to nothing and died here.
+                    if matches!(handled, Handled::Yes) {
+                        state.mark_full_redraw();
+                        return;
+                    }
+                } else {
+                    state.mark_full_redraw();
+                    return;
                 }
-                state.mark_full_redraw();
-                return;
             }
 
             handle_keyboard_input(
@@ -204,9 +214,7 @@ pub(crate) fn handle_window_event(
             // and a thumb drag inside its body).
             if crate::chrome::dispatch_modal_pointer(
                 state,
-                &Event::PointerMoved {
-                    pos: Point::new(pos.0 as f64, pos.1 as f64),
-                },
+                &raw_pointer(state, RawPointerKind::Moved, PointerButton::Left),
             ) {
                 return;
             }
@@ -235,6 +243,15 @@ pub(crate) fn handle_window_event(
             mouse::update_cursor(state, pos);
             state.mark_full_redraw();
         }
+        // The pointer left the window: nothing may stay lit behind it. Without this a hover — or
+        // a gesture the release never came back for — survives the cursor going somewhere else
+        // entirely, which reads as a UI frozen mid-interaction.
+        WindowEvent::CursorLeft { .. } => {
+            let ev = raw_pointer(state, RawPointerKind::Cancelled, PointerButton::Left);
+            crate::chrome::dispatch_modal_pointer(state, &ev);
+            crate::chrome::chrome_dispatch_cancelled(state, &ev);
+            state.mark_full_redraw();
+        }
         WindowEvent::MouseInput {
             state: button_state,
             button,
@@ -247,11 +264,11 @@ pub(crate) fn handle_window_event(
             // what left a body's scrollbar thumb stuck to the cursor: the widget was still waiting
             // for the end of a gesture the host had decided not to deliver.
             if crate::chrome::top_modal(state).is_some() {
-                let pos = Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64);
-                let ev = match button_state {
-                    ElementState::Pressed => Event::PointerPressed { pos },
-                    ElementState::Released => Event::PointerReleased { pos },
+                let kind = match button_state {
+                    ElementState::Pressed => RawPointerKind::Pressed,
+                    ElementState::Released => RawPointerKind::Released,
                 };
+                let ev = raw_pointer(state, kind, grid_button(button));
                 crate::chrome::dispatch_modal_pointer(state, &ev);
                 return;
             }
@@ -380,7 +397,46 @@ fn wheel_event(state: &AppState, delta: MouseScrollDelta) -> Event {
     } else {
         (dx_raw, dy_raw)
     };
-    Event::Scroll { delta_x, delta_y }
+    let mut raw = RawPointer::new(
+        RawPointerKind::Wheel,
+        Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64),
+    )
+    .with_modifiers(grid_modifiers(state.modifiers));
+    raw.delta_x = delta_x;
+    raw.delta_y = delta_y;
+    Event::Raw(raw)
+}
+
+/// A raw pointer event at the current cursor, carrying the button and the live modifiers.
+///
+/// **One kind of pointer event leaves the host.** What it means — which widget it is for, whether
+/// a press and a release were a click, whether the pointer just left something, whether a drag
+/// began — is the framework's to work out, once, for every tree heca mounts. The host used to
+/// answer some of those itself, per surface, and the answers drifted.
+fn raw_pointer(state: &AppState, kind: RawPointerKind, button: PointerButton) -> Event {
+    Event::Raw(
+        RawPointer::new(
+            kind,
+            Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64),
+        )
+        .with_button(button)
+        .with_modifiers(grid_modifiers(state.modifiers)),
+    )
+}
+
+/// winit's mouse button as the library's.
+///
+/// The press that reaches a widget now says **which** button it was, so a widget can own its own
+/// right-click instead of the app rebuilding "what did you click" from a position.
+fn grid_button(button: winit::event::MouseButton) -> PointerButton {
+    match button {
+        winit::event::MouseButton::Left => PointerButton::Left,
+        winit::event::MouseButton::Right => PointerButton::Right,
+        winit::event::MouseButton::Middle => PointerButton::Middle,
+        winit::event::MouseButton::Back => PointerButton::Other(3),
+        winit::event::MouseButton::Forward => PointerButton::Other(4),
+        winit::event::MouseButton::Other(n) => PointerButton::Other(n),
+    }
 }
 
 /// Handle a `Ctrl`/`Meta`+wheel font-zoom gesture. Returns `true` when the wheel
@@ -425,6 +481,20 @@ fn handle_wheel_font_zoom(
     };
     dispatch_action(state, registry, InteractionSource::MouseContent, &action);
     true
+}
+
+/// The text a keystroke **committed**, if it committed any: what the platform reports the key
+/// produced, with the modifier chords that are shortcuts rather than typing filtered out.
+///
+/// Space is included — a space is a character a field must be able to type. A focused button still
+/// activates on it, because a button does not consume [`Event::TextInput`] and the key follows
+/// right behind it.
+pub(crate) fn typed_text(key_text: &str, mods: heca_grid_ui::Modifiers) -> Option<String> {
+    if mods.ctrl || mods.meta || key_text.is_empty() {
+        return None;
+    }
+    let printable = key_text.chars().all(|c| !c.is_control());
+    printable.then(|| key_text.to_string())
 }
 
 /// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state

@@ -18,11 +18,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
-use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
+use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
 use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerBand, LayerId, LayerKind};
+use crate::host::App;
+use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
 use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
@@ -357,6 +359,107 @@ impl DropdownSpec {
     }
 }
 
+/// Put a built menu on screen as an Overlay-band **modal** layer.
+///
+/// The one place a menu becomes a layer, shared by both ways one is opened: the host building it
+/// from a registry ([`open_dropdown`]) and a **widget declaring its own** ([`present_menu`]). A
+/// second insert site is how two menus end up covering differently.
+///
+/// A menu **captures input and demands a choice**, so it covers for policy purposes even though its
+/// panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Without that, the prefix
+/// sequence that deliberately falls through the overlay key path (so `prefix+/` can still pick an
+/// entry) reaches the router and runs — `prefix+x` with a menu open raised the close-pane confirm
+/// (found by the user, 2026-07-30).
+fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
+    state.layers.insert(
+        id.0,
+        LayerBand::Overlay,
+        LayerKind::OnDemand,
+        true,
+        true,
+        Box::new(panel),
+    );
+}
+
+/// **Present a menu a widget declared** (F004/P084/T395).
+///
+/// The whole of the host's job in the declared path: the widget built the menu and the framework
+/// chose the anchor, so this only mounts it and wires the two things a widget cannot reach — the
+/// layer it lives in, and the close that follows a choice.
+///
+/// Plugin entries still merge: a menu that named a [`path`](ContextMenu::path) is offered to the
+/// mounted providers for that path, so "Open in Docker" can still appear on a row a different
+/// component declared. A menu that named no path is simply itself.
+pub(crate) fn present_menu(state: &mut AppState, menu: Menu, anchor: MenuAnchor) -> OverlayId {
+    let id = OverlayId(state.layers.reserve_id());
+    let event_proxy = state.event_proxy.clone();
+    let source = InteractionSource::MouseContent;
+    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
+        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
+    });
+
+    // Rows other components added to this menu — only if it named itself.
+    let menu = merge_contributions(state, menu, id, &emit);
+
+    // Choosing an entry runs its own closure; taking the layer down afterwards is the host's, so an
+    // item stays a plain closure that knows nothing about overlays. The anchor was chosen by
+    // whatever triggered the menu — the cursor for a right-click, the widget for the keyboard.
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
+    let after = emit.clone();
+    let closing = close.clone();
+    let dismiss = emit.clone();
+    let panel = anchor
+        .open(menu.into_panel())
+        .after_select(move || after(closing.clone()))
+        .on_dismiss(move || dismiss(close.clone()));
+
+    insert_menu_layer(state, id, panel);
+    state.needs_redraw = true;
+    id
+}
+
+/// Append every mounted provider's rows for the menu's [`name`](Menu::name).
+///
+/// A menu without a name is closed: it built its own rows and nothing else may add to it.
+fn merge_contributions(
+    state: &mut AppState,
+    menu: Menu,
+    id: OverlayId,
+    emit: &ChromeIntentEmitter,
+) -> Menu {
+    let Some(path) = menu.declared_name().map(str::to_string) else {
+        return menu;
+    };
+    // A contributed row has no per-row payload (that was `about`, dropped 2026-08-07): it acts on
+    // app state, not on the row this menu was opened for.
+    let target = ContextTarget::Row {
+        container: path.clone(),
+        key: String::new(),
+    };
+    let ctx = ChromeCtx::new(App::new(&state.chrome_state));
+    let plugin = super::context_menu::plugin_providers_for(&state.chrome_host, &ctx, &path);
+    let items = state
+        .context_menu_registry
+        .items_for(&ctx, &path, &target, plugin);
+    let mut menu = menu;
+    for item in items {
+        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
+            overlay: id,
+            action: item.id.clone(),
+        });
+        let emit_e = emit.clone();
+        let mut entry = MenuItem::new(item.label.clone())
+            .on_click(move || emit_e(carrier.clone()))
+            .danger(item.danger)
+            .enabled(item.enabled);
+        if let Some(glyph) = state.action_catalog.icon(&item.id) {
+            entry = entry.icon(glyph);
+        }
+        menu = menu.child(entry);
+    }
+    menu
+}
+
 /// Open a context menu: build a [`ContextMenu`] from the spec (entries emit `SubmitOverlay`, dismiss
 /// emits `CloseOverlay`, icons from the action registry, host-assigned quick-pick letters), push it
 /// as an Overlay-band **modal** layer (so `top_modal` routes input + `paint_layers` paints it), and
@@ -378,7 +481,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
             action: item.id.clone(),
         });
         let emit_e = emit.clone();
-        let mut entry = MenuEntry::new(item.label.clone(), move || emit_e(carrier.clone()))
+        let mut entry = MenuItem::new(item.label.clone()).on_click(move || emit_e(carrier.clone()))
             .danger(item.danger)
             .enabled(item.enabled);
         if let Some(glyph) = state.action_catalog.icon(&item.id) {
@@ -405,14 +508,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // (`app/events.rs`, so `prefix+/` can still pick an entry) reaches the router and runs:
     // `prefix+x` with a menu open raised the close-pane confirm, which the blanket `top_modal` rule
     // this replaced had prevented (found by the user, 2026-07-30).
-    state.layers.insert(
-        id.0,
-        LayerBand::Overlay,
-        LayerKind::OnDemand,
-        true,
-        true,
-        Box::new(menu),
-    );
+    insert_menu_layer(state, id, menu);
 
     let items = spec.items;
     state.overlays.completions.insert(

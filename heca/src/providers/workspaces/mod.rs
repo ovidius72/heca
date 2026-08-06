@@ -1145,6 +1145,12 @@ fn build_workspaces_container(
         // theme's `active_wash_alpha` token, not a baked-in literal.
         dock = dock.active(active_ws);
         dock = dock.nav_selected(false);
+        // **The row's one identity, declared like every other row's.** A pane card and a column
+        // both call `nav_key`, and `nav_key_at` — which is how a right-click finds out what it
+        // landed on — reads exactly that. The workspace header pushed its key into the signal list
+        // and never told the widget, so the hit-test found nothing there: right-clicking a pane or
+        // a column opened its menu, a workspace opened none (Antonio, 2026-08-05).
+        dock = dock.nav_key(workspace_nav_key(ws_idx));
         let ws_pane_ids = ws
             .columns
             .iter()
@@ -1439,6 +1445,60 @@ mod tests {
     use heca_core::layout::PaneId;
     use heca_grid_ui::theme::Theme as GuiTheme;
     use std::rc::Rc;
+
+    /// **Every row kind declares its own `nav_key` on the widget.**
+    ///
+    /// `nav_key_at` — how a right-click finds out what it landed on — reads `Base::nav_key` and
+    /// nothing else. The workspace header pushed its key into the cursor-signal list and never told
+    /// the widget, so the hit-test found nothing at that row: right-clicking a pane or a column
+    /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
+    /// signals and declaring it on the widget are two different acts, and the projection tests
+    /// only ever checked the first.
+    #[test]
+    fn every_row_kind_carries_a_nav_key_the_hit_test_can_find() {
+        let tree = tree();
+        let state = store();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut hints = HintTargetRegistry::default();
+        let root = build_workspaces_container(
+            &tree,
+            &ProgramsConfig::default(),
+            &theme,
+            &emit,
+            &state.workspaces,
+            "left".to_string(),
+            heca_grid_ui::reactive::signal(0.0),
+            heca_grid_ui::reactive::signal(false),
+            &mut signals,
+            &mut drag,
+            &mut hints,
+        );
+
+        fn keys(n: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
+            if let Some(k) = n.base().nav_key.clone() {
+                out.push(k);
+            }
+            for c in &n.base().children {
+                keys(c.as_ref(), out);
+            }
+        }
+        let mut declared = Vec::new();
+        keys(&root, &mut declared);
+
+        for expected in [
+            workspace_nav_key(0),
+            column_nav_key(0, 0),
+            pane_nav_key(PaneId(1)),
+        ] {
+            assert!(
+                declared.contains(&expected),
+                "no widget declares {expected:?}, so a right-click there finds nothing: {declared:?}",
+            );
+        }
+    }
 
     /// One workspace, one column, one (active) pane — the smallest tree that still
     /// exercises every level of the projection.

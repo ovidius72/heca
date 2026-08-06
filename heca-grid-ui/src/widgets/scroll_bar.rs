@@ -32,7 +32,6 @@ pub struct ScrollBar {
     viewport_extent: Signal<f32>,
     offset: Signal<f32>,
     drag_grab: Option<f64>,
-    hovered: bool,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -54,7 +53,6 @@ impl ScrollBar {
             viewport_extent: signal(0.0),
             offset: signal(0.0),
             drag_grab: None,
-            hovered: false,
             on_change: None,
         }
     }
@@ -153,9 +151,6 @@ impl ScrollBar {
         self.set_offset(frac * self.max_offset());
     }
 
-    fn contains(&self, p: Point) -> bool {
-        self.base.bounds.contains(p)
-    }
 }
 
 impl Component for ScrollBar {
@@ -173,7 +168,7 @@ impl Component for ScrollBar {
         let Some(thumb) = self.thumb_rect() else {
             return;
         };
-        let active = self.hovered || self.drag_grab.is_some();
+        let active = self.base.hovered() || self.drag_grab.is_some();
         let accent = cx.theme().colors.accent;
         let glow = Some(Glow {
             color: accent,
@@ -198,32 +193,35 @@ impl Component for ScrollBar {
     }
 
     /// Capture, not bubble: a thumb grab is a gesture, and a gesture beats whatever happens to sit
-    /// under the cursor. It also must end on a release the widget receives wherever it lands.
+    /// under the cursor.
+    ///
+    /// **The grab does not have to arrange to hear the rest of itself.** Consuming the press
+    /// captures the pointer, so every move and the release come here wherever the cursor goes —
+    /// which is the whole of what this widget used to hand-roll by ignoring positions while
+    /// `drag_grab` was set, and the exact rule a host got wrong by gating a release on position.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.base.visible.get_untracked() {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.contains(*pos);
-                self.hovered = inside;
+            Event::PointerMove(p) => {
                 if let Some(grab) = self.drag_grab {
-                    self.set_from_thumb_top(pos.y - grab);
+                    self.set_from_thumb_top(p.pos.y - grab);
                     return Handled::Yes;
                 }
                 Handled::No
             }
-            Event::PointerPressed { pos } if self.contains(*pos) && self.scrollable() => {
+            Event::PointerDown(p) if self.scrollable() => {
                 let thumb = self.thumb_rect().expect("scrollable -> thumb");
-                if thumb.contains(*pos) {
-                    self.drag_grab = Some(pos.y - thumb.loc.y);
+                if thumb.contains(p.pos) {
+                    self.drag_grab = Some(p.pos.y - thumb.loc.y);
                 } else {
                     self.drag_grab = Some(thumb.size.h / 2.0);
-                    self.set_from_thumb_top(pos.y - thumb.size.h / 2.0);
+                    self.set_from_thumb_top(p.pos.y - thumb.size.h / 2.0);
                 }
                 Handled::Yes
             }
-            Event::PointerReleased { .. } if self.drag_grab.is_some() => {
+            Event::PointerUp(_) if self.drag_grab.is_some() => {
                 self.drag_grab = None;
                 Handled::Yes
             }
@@ -236,6 +234,7 @@ impl LayoutExt for ScrollBar {}
 
 #[cfg(test)]
 mod tests {
+    use crate::event::PointerButton;
     use super::*;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -278,15 +277,11 @@ mod tests {
         s.viewport_extent_signal().set(50.0);
         s.base.bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(16.0, 100.0));
         assert_eq!(
-            crate::component::dispatch(&mut s, &Event::PointerPressed {
-                pos: Point::new(8.0, 60.0),
-            }),
+            crate::component::dispatch(&mut s, &Event::pointer_pressed(Point::new(8.0, 60.0), PointerButton::Left)),
             Handled::Yes
         );
         assert!(!seen.borrow().is_empty(), "track click emits a new offset");
-        let _ = crate::component::dispatch(&mut s, &Event::PointerMoved {
-            pos: Point::new(8.0, 90.0),
-        });
+        let _ = crate::component::dispatch(&mut s, &Event::pointer_moved(Point::new(8.0, 90.0)));
         assert!(seen.borrow().last().copied().unwrap_or_default() > 0.0);
     }
 }

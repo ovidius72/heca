@@ -238,13 +238,16 @@ impl Component for Tooltip {
     /// everything through, so the wrapped widget stays fully interactive. Capture rather than
     /// bubble because the clock must start even when the child consumes the move.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if let Event::PointerMoved { pos } = ev {
-            let inside = self.base.bounds.contains(*pos);
-            if inside != self.hover_since.is_some() {
-                // Enter starts the reveal clock; leave clears it (the next `tick`
-                // detects the show/hide transition and damages the bubble).
-                self.hover_since = inside.then(Instant::now);
+        // Enter starts the reveal clock; leave clears it (the next `tick` detects the show/hide
+        // transition and damages the bubble). Two events instead of a position and a test — and
+        // the tooltip now hides when something is drawn over the widget it belongs to, which a
+        // `contains` could never notice.
+        match ev {
+            Event::PointerEnter(_) if self.hover_since.is_none() => {
+                self.hover_since = Some(Instant::now());
             }
+            Event::PointerLeave(_) => self.hover_since = None,
+            _ => {}
         }
         Handled::No
     }

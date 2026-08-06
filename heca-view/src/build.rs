@@ -44,7 +44,8 @@
 
 use crate::{
     Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
-    ViewNode, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewSize, ViewTextAlign, ViewVariant,
+    ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity, ViewSize,
+    ViewTextAlign, ViewVariant,
     WidgetKind,
 };
 
@@ -896,6 +897,23 @@ impl Scroll {
     /// Which way it scrolls.
     pub fn axes(self, axes: ViewScrollAxes) -> Self {
         self.prop("axes", axes)
+    }
+    /// Where it puts the descendant it follows — minimally in view, or centred.
+    pub fn reveal_align(self, align: ViewRevealAlign) -> Self {
+        self.prop("reveal_align", align)
+    }
+    /// Whether a scrollbar may appear (default `true`); off also gives back its gutter.
+    pub fn scrollbars(self, on: bool) -> Self {
+        self.prop("scrollbars", PropValue::Bool(on))
+    }
+    /// Let the view move past the ends of its content, so a centred target still reaches the
+    /// middle when there is nothing on one side of it.
+    pub fn overscroll(self, on: bool) -> Self {
+        self.prop("overscroll", PropValue::Bool(on))
+    }
+    /// Ease the view to where it is going over this many seconds; `0` jumps.
+    pub fn smooth_scroll(self, seconds: f32) -> Self {
+        self.prop("smooth_scroll", PropValue::Float(seconds as f64))
     }
 }
 

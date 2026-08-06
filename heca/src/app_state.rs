@@ -783,6 +783,20 @@ pub struct AppState {
     pub last_visited_ws_idx: Option<usize>,
     /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
     pub last_visited_pane_per_ws: Vec<Option<PaneId>>,
+    /// **Where the exposé's highlight is, per workspace** — the map's own cursor, kept here rather
+    /// than inside the widget because the map is rebuilt from scratch every time it opens.
+    ///
+    /// Two things depend on it, and both are things a freshly built tree cannot know:
+    /// - the map opens on the pane you came from, not the first card in the session;
+    /// - moving to another workspace and back returns the highlight to where you left it, instead
+    ///   of restarting at that row's first pane.
+    ///
+    /// Deliberately **not** [`last_visited_pane_per_ws`](Self::last_visited_pane_per_ws), which is
+    /// where the *app's* focus has been. Moving a highlight around a map is looking, not going: it
+    /// must not rewrite the history that `prefix+i` and the sidebar's dim highlight read.
+    ///
+    /// Indexed by workspace, grown with the session like its neighbour above.
+    pub expose_cursor_per_ws: Vec<Option<PaneId>>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.
@@ -850,6 +864,16 @@ pub struct AppState {
     /// only while such a widget/overlay is focused (never hijacks normal input). Rebuilt on config
     /// reload alongside the keymap.
     pub widget_keymap: heca_grid_ui::Keymap,
+    /// **Menus a widget declared and asked for**, waiting to become layers (F004/P084/T395).
+    ///
+    /// A widget builds its own menu and the framework picks the anchor, but only the host can put
+    /// one *above everything* — so `install_menu_sink` drops it here and the event loop drains it.
+    /// A queue rather than a direct call because the sink is a plain `Fn` installed once at
+    /// startup, and inserting a layer needs `&mut AppState`; and rather than an `AppEvent` because
+    /// a menu carries closures and a winit user event must be `Send`.
+    pub pending_menus: std::rc::Rc<
+        std::cell::RefCell<Vec<(heca_grid_ui::widgets::Menu, heca_grid_ui::widgets::MenuAnchor)>>,
+    >,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,

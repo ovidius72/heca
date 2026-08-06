@@ -376,3 +376,264 @@ pub trait Parent: Component + Sized {
         self
     }
 }
+
+/// **Event handlers, on any widget.** The one-line opt-in every widget already has for layout
+/// ([`LayoutExt`]), style ([`StyleExt`]), drag ([`DragExt`]) and navigation ([`NavExt`]) —
+/// the same shape, for what happens to it.
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+///
+/// let row = Row::new()
+///     .child(Label::new("pane-1"))
+///     .on_click(|_| println!("selected"))
+///     .on_right_click(|e| println!("menu at {:?}", e.pos))
+///     .on_pointer_enter(|_| println!("hovered"));
+/// ```
+///
+/// **Handlers run in the bubble phase**, after the widget's descendants have had the event and
+/// before the widget's own [`on_event`](Component::on_event) — so a handler sees what its children
+/// declined, and can stop the widget's built-in behaviour by taking the event itself:
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+/// use heca_grid_ui::EventKind;
+///
+/// // The general form: full control over the walk.
+/// let button = Button::primary("Delete").on(EventKind::Click, |cx| {
+///     cx.stop_propagation();   // the button will not fire
+/// });
+/// ```
+///
+/// The named builders below consume the event (an `on_click` that let the click carry on to the
+/// row behind it would be a surprise). Use [`on`](EventExt::on) with
+/// [`EventCx`](crate::event::EventCx) when you want to observe without consuming.
+pub trait EventExt: Component + Sized {
+    /// Register `f` for `kind`, with full control: `f` receives an
+    /// [`EventCx`](crate::event::EventCx) and consumes the event only if it calls
+    /// [`stop_propagation`](crate::event::EventCx::stop_propagation).
+    fn on(mut self, kind: crate::event::EventKind, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.base_mut()
+            .handlers
+            .get_or_insert_with(Default::default)
+            .add(kind, f);
+        self
+    }
+
+    /// A left click landed on this widget (or a descendant that did not take it). Consumes it.
+    fn on_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::Click, f)
+    }
+
+    /// A second click in the same run. The first still arrived as a
+    /// [`click`](EventExt::on_click). Consumes it.
+    fn on_double_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::DoubleClick, f)
+    }
+
+    /// A third click, and any beyond it (`click_count` says which). Consumes it.
+    fn on_triple_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::TripleClick, f)
+    }
+
+    /// A right click landed on this widget. Consumes it.
+    ///
+    /// This is the whole of "a widget can have its own menu": the widget hears the click, on
+    /// itself, with the position — no registry of row identities, no hit-test at the host, and
+    /// nothing to forget to declare.
+    fn on_right_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::RightClick, f)
+    }
+
+    /// A middle click landed on this widget. Consumes it.
+    fn on_middle_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::MiddleClick, f)
+    }
+
+    /// A button went down on this widget. Consuming it **captures the pointer**: the moves and the
+    /// release that end the gesture come here wherever the cursor goes.
+    fn on_pointer_down(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::PointerDown, f)
+    }
+
+    /// The button came up. Consumes it.
+    fn on_pointer_up(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::PointerUp, f)
+    }
+
+    /// The pointer moved over this widget, or anywhere while this widget holds capture.
+    /// Consumes it.
+    fn on_pointer_move(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::PointerMove, f)
+    }
+
+    /// The pointer came over this widget. **Does not consume** — entering is an announcement, and
+    /// several widgets on one path enter together.
+    fn on_pointer_enter(self, mut f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerEnter, move |cx| {
+            if let Some(p) = cx.pointer() {
+                f(p);
+            }
+        })
+    }
+
+    /// The pointer left this widget. **Does not consume**, for the same reason.
+    fn on_pointer_leave(self, mut f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerLeave, move |cx| {
+            if let Some(p) = cx.pointer() {
+                f(p);
+            }
+        })
+    }
+
+    /// The wheel turned over this widget. Consumes it — so it does **not** also scroll whatever
+    /// contains this widget. Use [`on`](EventExt::on) to watch one without claiming it.
+    fn on_scroll(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
+        self.on_pointer(crate::event::EventKind::Scroll, f)
+    }
+
+    /// A press landed somewhere that is **not** this widget or a descendant — how a popup closes
+    /// itself. Does not consume: the press belongs to whatever it landed on.
+    fn on_pointer_down_outside(
+        self,
+        mut f: impl FnMut(&crate::event::PointerEvent) + 'static,
+    ) -> Self {
+        self.on(crate::event::EventKind::PointerDownOutside, move |cx| {
+            if let Some(p) = cx.pointer() {
+                f(p);
+            }
+        })
+    }
+
+    /// This widget gained keyboard focus. Does not consume.
+    ///
+    /// Named `on_focus_gained`, not `on_focus`, because [`Component::on_focus`] is the widget's
+    /// own hook for the same moment and two same-named methods on one type is a puzzle nobody
+    /// should have to solve at a call site.
+    fn on_focus_gained(self, mut f: impl FnMut() + 'static) -> Self {
+        self.on(crate::event::EventKind::Focus, move |_| f())
+    }
+
+    /// This widget lost keyboard focus — the moment to commit an edit or close a popup. Does not
+    /// consume. Named `on_focus_lost` for the same reason as
+    /// [`on_focus_gained`](EventExt::on_focus_gained).
+    fn on_focus_lost(self, mut f: impl FnMut() + 'static) -> Self {
+        self.on(crate::event::EventKind::Blur, move |_| f())
+    }
+
+    /// This widget entered a live tree (fired on its first layout pass). Does not consume.
+    fn on_mount(self, mut f: impl FnMut() + 'static) -> Self {
+        self.on(crate::event::EventKind::Mount, move |_| f())
+    }
+
+    /// This widget is being dropped — the tree that held it was rebuilt or thrown away. Does not
+    /// consume. Use it to release what the widget registered with the host.
+    fn on_unmount(self, mut f: impl FnMut() + 'static) -> Self {
+        self.on(crate::event::EventKind::Unmount, move |_| f())
+    }
+
+    /// A drag began on this widget (it declared a
+    /// [`draggable`](DragExt::draggable) id and the pointer travelled past the threshold).
+    fn on_drag_start(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::DragStart, f)
+    }
+
+    /// The drag this widget started moved.
+    fn on_drag(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::Drag, f)
+    }
+
+    /// The drag this widget started ended, dropped or not.
+    fn on_drag_end(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::DragEnd, f)
+    }
+
+    /// A drag came over this drop target.
+    fn on_drag_enter(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::DragEnter, f)
+    }
+
+    /// A drag moved within this drop target — `side` follows the pointer.
+    fn on_drag_over(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::DragOver, f)
+    }
+
+    /// A drag left this drop target.
+    fn on_drag_leave(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::DragLeave, f)
+    }
+
+    /// A drag was released over this drop target.
+    fn on_drop(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
+        self.on_drag_kind(crate::event::EventKind::Drop, f)
+    }
+
+    /// **Give this widget a context menu.** Right-click it — or anything inside it — and the menu
+    /// opens at the cursor; trigger the host's `open_context_menu` while focus is here and it
+    /// opens under the widget.
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::{Menu, MenuItem};
+    ///
+    /// let id = 7u64;
+    /// let row = Row::new().child(Label::new("nvim")).context_menu(
+    ///     Menu::new("Pane", "What you can do with this pane")
+    ///         .child(MenuItem::new("Rename").on_click(move || { let _ = id; }))
+    ///         .child(MenuItem::new("Close").danger(true).on_click(move || { let _ = id; })),
+    /// );
+    /// ```
+    ///
+    /// Nothing else is needed: no row identity, no path string, no registered builder, no
+    /// host-side hit test, no `Shift+F10` handling, and no anchor — the framework picks that from
+    /// what triggered the menu. Universal, like `nav_key`, so an `Icon` and a plugin's own widget
+    /// carry one on the same terms as a `Row`. See [`crate::menu`] for bubbling and the host sink.
+    ///
+    /// Items whose labels or `enabled` depend on state the tree is **not** rebuilt on want
+    /// [`context_menu_built`](EventExt::context_menu_built) instead.
+    fn context_menu(mut self, menu: crate::widgets::Menu) -> Self {
+        self.base_mut().context_menu = Some(Box::new(move || menu.clone()));
+        self
+    }
+
+    /// The same, with the menu **built when it is triggered** — for items that must read state
+    /// this widget's tree is not rebuilt on.
+    fn context_menu_built(mut self, f: impl Fn() -> crate::widgets::Menu + 'static) -> Self {
+        self.base_mut().context_menu = Some(Box::new(f));
+        self
+    }
+
+    /// Shared body of the consuming pointer builders.
+    #[doc(hidden)]
+    fn on_pointer(
+        self,
+        kind: crate::event::EventKind,
+        mut f: impl FnMut(&crate::event::PointerEvent) + 'static,
+    ) -> Self {
+        self.on(kind, move |cx| {
+            if let Some(p) = cx.pointer() {
+                f(p);
+                cx.stop_propagation();
+            }
+        })
+    }
+
+    /// Shared body of the drag builders.
+    #[doc(hidden)]
+    fn on_drag_kind(
+        self,
+        kind: crate::event::EventKind,
+        mut f: impl FnMut(&crate::event::DragEvent) + 'static,
+    ) -> Self {
+        self.on(kind, move |cx| {
+            if let Some(d) = cx.event().drag() {
+                f(d);
+                cx.stop_propagation();
+            }
+        })
+    }
+}
+
+/// Every component gets the event builders for free — the point of the whole design: a widget
+/// author positions a widget and the events work, with nothing to opt into and nothing to forward.
+impl<T: Component + Sized> EventExt for T {}

@@ -193,7 +193,7 @@ mod tests {
         // (ignored) then the nav intent (consumed); the raw key is never reached.
         let seen = RefCell::new(Vec::new());
         let handled = km.dispatch(GridKey::Char('h'), ctrl, |ev| {
-            seen.borrow_mut().push(*ev);
+            seen.borrow_mut().push(ev.clone());
             if *ev == Event::Widget(WidgetIntent::ItemPrevious) {
                 Handled::Yes
             } else {
@@ -220,7 +220,7 @@ mod tests {
         // the raw key — this is how an Input keeps Ctrl+Arrow word/line caret motion.
         let seen = RefCell::new(Vec::new());
         km.dispatch(GridKey::ArrowLeft, ctrl, |ev| {
-            seen.borrow_mut().push(*ev);
+            seen.borrow_mut().push(ev.clone());
             Handled::No
         });
         assert_eq!(

@@ -2020,9 +2020,15 @@ mod tests {
         assert_eq!(hints.checkpoint(), 1, "one hint target: the row itself");
 
         let b = row.base().bounds;
-        heca_grid_ui::dispatch(row.as_mut(), &Event::PointerPressed {
-            pos: Point::new(b.loc.x + 5.0, b.loc.y + b.size.h / 2.0),
-        });
+        // A click is a press and the release that completes it — pressing and dragging off the row
+        // cancels, the way every other control behaves.
+        let at = Point::new(b.loc.x + 5.0, b.loc.y + b.size.h / 2.0);
+        heca_grid_ui::dispatch(row.as_mut(), &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left));
+        heca_grid_ui::dispatch(row.as_mut(), &Event::pointer_released(at, heca_grid_ui::PointerButton::Left));
+        // A raw key reaches only the widget that owns the keyboard — a real surface focuses the row
+        // before sending one, and an unfocused row taking Enter is what let a card eat the key
+        // meant for the list around it.
+        heca_grid_ui::reactive::SignalUpdate::set(&row.base_mut().focused, true);
         heca_grid_ui::dispatch(row.as_mut(), &Event::Key { key: GridKey::Enter, pressed: true });
 
         let fired = fired.borrow();
@@ -2116,13 +2122,9 @@ mod tests {
 
         // Open the dropdown, then click the second option where it actually is (its real bounds).
         let trigger = select.base().bounds;
-        heca_grid_ui::dispatch(select.as_mut(), &Event::PointerPressed {
-            pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
-        });
+        heca_grid_ui::dispatch(select.as_mut(), &Event::pointer_pressed(Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0), heca_grid_ui::PointerButton::Left));
         let high = select.base().children[1].base().bounds;
-        heca_grid_ui::dispatch(select.as_mut(), &Event::PointerPressed {
-            pos: Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0),
-        });
+        heca_grid_ui::dispatch(select.as_mut(), &Event::pointer_pressed(Point::new(high.loc.x + 5.0, high.loc.y + high.size.h / 2.0), heca_grid_ui::PointerButton::Left));
 
         let fired = fired.borrow();
         let [intent] = fired.as_slice() else {
@@ -2251,9 +2253,9 @@ mod tests {
 
         // Click the header (it starts expanded) → it collapses.
         let header = group.base().children[0].base().bounds;
-        heca_grid_ui::dispatch(group.as_mut(), &Event::PointerPressed {
-            pos: Point::new(header.loc.x + 5.0, header.loc.y + header.size.h / 2.0),
-        });
+        let at = Point::new(header.loc.x + 5.0, header.loc.y + header.size.h / 2.0);
+        heca_grid_ui::dispatch(group.as_mut(), &Event::pointer_pressed(at, heca_grid_ui::PointerButton::Left));
+        heca_grid_ui::dispatch(group.as_mut(), &Event::pointer_released(at, heca_grid_ui::PointerButton::Left));
 
         let fired = fired.borrow();
         let [intent] = fired.as_slice() else {
@@ -3177,8 +3179,8 @@ mod tests {
             );
             LayoutEngine::new().compute(region.as_mut(), Size::new(120.0, 80.0));
             // The wheel is hover-gated (`Event::Scroll` carries no position), so hover it first.
-            heca_grid_ui::dispatch(region.as_mut(), &Event::PointerMoved { pos: Point::new(60.0, 40.0) });
-            heca_grid_ui::dispatch(region.as_mut(), &Event::Scroll { delta_x: -1.0, delta_y: 0.0 })
+            heca_grid_ui::dispatch(region.as_mut(), &Event::pointer_moved(Point::new(60.0, 40.0)));
+            heca_grid_ui::dispatch(region.as_mut(), &Event::wheel(Point::new(60.0, 40.0), -1.0, 0.0))
         };
 
         assert_eq!(

@@ -132,6 +132,13 @@ pub(crate) enum InteractionIntent {
     FocusPane { pane_id: PaneId },
     /// Toggle a specific workspace header's collapsed state from the sidebar.
     ToggleWorkspaceCollapsed { ws_idx: usize },
+    /// Record where the **exposé's highlight** now is, so the map can reopen there and can return
+    /// to it after a trip through another workspace.
+    ///
+    /// Not an action and not a focus change — moving a highlight around a map is *looking*. It
+    /// touches no session state, so it is permitted in every domain including `Overlay`; refusing
+    /// it there would make it useless, since the only time it fires is while the map is up.
+    ExposeCursor { pane_id: PaneId },
     /// Start dragging a sidebar item (no WmAction equivalent).
     ///
     /// Policy-routed only — the drag itself is initiated in the mouse layer.
@@ -566,6 +573,10 @@ pub(crate) fn route_in_domain(
         // Likewise expanded before routing. Defensively it is a `View` intent: the name resolves to
         // its real policy when `dispatch_view_intent` looks it up.
         InteractionIntent::FocusContainerThenAction { .. } => RouteDecision::Allow(intent),
+        // Pure UI bookkeeping: it changes nothing anyone could be protected from, and the only
+        // time it fires is while a map covers the panes — so refusing it in `Overlay` would refuse
+        // it always.
+        InteractionIntent::ExposeCursor { .. } => RouteDecision::Allow(intent),
         // FocusPane from mouse content/sidebar: only the active floating pane can receive focus in
         // the floating domain, and nothing behind an overlay can.
         InteractionIntent::FocusPane { .. }
@@ -854,6 +865,9 @@ pub(crate) fn dispatch_intent(
         }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
             registry.execute(&WmAction::FocusPane { pane_id }, state);
+        }
+        RouteDecision::Allow(InteractionIntent::ExposeCursor { pane_id }) => {
+            crate::chrome::record_expose_cursor(state, pane_id);
         }
         RouteDecision::Allow(InteractionIntent::ToggleWorkspaceCollapsed { ws_idx }) => {
             crate::handlers::apply_ws_collapse(state, ws_idx, None);

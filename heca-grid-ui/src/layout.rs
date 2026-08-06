@@ -87,6 +87,10 @@ impl LayoutEngine {
             style.margin_top.unwrap_or(style.margin) as f64,
         );
         self.assign(root, origin);
+        // The first layout pass that sees a widget is the first moment it is both in a live tree
+        // and has a place in it — which is what `mount` means. Anything earlier would fire from a
+        // constructor, before the widget is anywhere.
+        crate::pointer::fire_mounts(root);
     }
 
     /// Recursively create taffy nodes for `c` and its children.

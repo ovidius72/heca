@@ -26,7 +26,9 @@
     "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d",
     "d3be3b18-5bb2-4670-8468-adbb118988a9",
     "57de8925-6015-4d79-8545-b32bb967f3cd",
-    "6dfe4acd-c706-485c-91b1-8b13aa163652"
+    "6dfe4acd-c706-485c-91b1-8b13aa163652",
+    "62b176af-bd2a-4a62-abeb-44e0e7059596",
+    "5ef43ba4-d6c8-482f-a908-40b1426a19e3"
   ],
   "tasks": [
     {
@@ -46,36 +48,43 @@
       "checklist": [
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-001-dispatch-is-the-only-child-walk-in-the-crate",
+          "number": 1,
           "title": "dispatch() is the only child walk in the crate",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-002-routes-own-subtree-declared-on-select-and-dialog-with-a-stated-reason-code-otherwise-untouched",
+          "number": 2,
           "title": "routes_own_subtree() declared on Select and Dialog with a stated reason, code otherwise untouched",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-003-all-24-widgets-migrated-no-route-event-call-left-in-a-widget",
+          "number": 3,
           "title": "all 24 widgets migrated; no route_event call left in a widget",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-004-every-event-call-site-across-the-workspace-moved-to-dispatch",
+          "number": 4,
           "title": "every .event() call site across the workspace moved to dispatch()",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-005-capture-vs-bubble-decided-per-widget-gestures-swallows-capture-leftovers-bubble",
+          "number": 5,
           "title": "capture vs bubble decided per widget: gestures/swallows capture, leftovers bubble",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-006-pointer-delivery-rs-still-fails-when-a-container-drops-a-kind",
+          "number": 6,
           "title": "pointer_delivery.rs still fails when a container drops a kind",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-007-user-drives-focus-dropdowns-menus-palette-drag-sidebar-pane-headers-in-the-app",
+          "number": 7,
           "title": "USER drives focus, dropdowns, menus, palette, drag, sidebar, pane headers in the app",
           "checked": false
         }
@@ -104,36 +113,43 @@
       "checklist": [
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-001-modal-layer-move-press-release-wheel-through-dispatch-modal-pointer-done",
+          "number": 1,
           "title": "modal layer: move + press + release + wheel through dispatch_modal_pointer (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-002-wheel-event-matches-the-showcase-s-delta-and-shift-to-x-convention-done",
+          "number": 2,
           "title": "wheel_event() matches the showcase's delta and Shift-to-X convention (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-003-pointer-funnel-rs-guard-verified-to-fail-against-the-pre-fix-file-done",
+          "number": 3,
           "title": "pointer_funnel.rs guard, verified to fail against the pre-fix file (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-004-chrome-tree-pane-header-pane-viewport-seams-folded-into-the-same-funnel",
+          "number": 4,
           "title": "chrome tree / pane header / pane viewport seams folded into the same funnel",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-005-decide-whether-chrome-dispatch-press-may-keep-discarding-the-tree",
+          "number": 5,
           "title": "decide whether chrome_dispatch_press may keep discarding the tree",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-006-guard-extended-to-cover-every-seam",
+          "number": 6,
           "title": "guard extended to cover every seam",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-007-user-confirms-wheel-over-a-modal-does-not-reach-the-terminal-behind-it",
+          "number": 7,
           "title": "USER confirms wheel over a modal does not reach the terminal behind it",
           "checked": false
         }
@@ -162,41 +178,49 @@
       "checklist": [
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-001-scrollinfo-carries-offsets-maxima-content-viewport-and-option-event",
+          "number": 1,
           "title": "ScrollInfo carries offsets, maxima, content, viewport and Option<&Event>",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-002-scrollsource-enum-removed-in-favour-of-the-real-event",
+          "number": 2,
           "title": "ScrollSource enum removed in favour of the real event",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-003-every-offset-path-funnels-through-the-one-chokepoint",
+          "number": 3,
           "title": "every offset path funnels through the one chokepoint",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-004-fires-only-on-an-actual-change",
+          "number": 4,
           "title": "fires only on an actual change",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-005-scroll-start-scroll-end-for-thumb-and-track-from-existing-gesture-state",
+          "number": 5,
           "title": "scroll_start/scroll_end for thumb and track from existing gesture state",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-006-wheel-scroll-end-via-an-idle-timer-in-tick-keeping-frames-requested",
+          "number": 6,
           "title": "wheel scroll_end via an idle timer in tick, keeping frames requested",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-007-re-entrancy-rule-documented-or-the-fire-deferred",
+          "number": 7,
           "title": "re-entrancy rule documented or the fire deferred",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-008-user-confirms-one-scroll-end-per-wheel-gesture-not-per-notch",
+          "number": 8,
           "title": "USER confirms one scroll_end per wheel gesture, not per notch",
           "checked": false
         }
@@ -234,31 +258,37 @@
       "checklist": [
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-001-settle-node-level-intent-vs-app-on-bus-with-the-identity-problem-answered",
+          "number": 1,
           "title": "settle node-level intent vs app.on bus, with the identity problem answered",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-002-scroll-start-scroll-scroll-end-reachable-from-a-description",
+          "number": 2,
           "title": "scroll_start / scroll / scroll_end reachable from a description",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-003-a-written-decision-on-the-rate-at-which-scroll-crosses-a-plugin-boundary",
+          "number": 3,
           "title": "a written decision on the rate at which scroll crosses a plugin boundary",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-004-event-vocabulary-docs-updated-in-both-docs-widgets-md-and-view-rs",
+          "number": 4,
           "title": "event-vocabulary docs updated in BOTH docs/widgets.md and view.rs",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-005-worked-example-in-docs-widgets-md-native-declarative-the-host-s-one-line",
+          "number": 5,
           "title": "worked example in docs/widgets.md: native + declarative + the host's one line",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-006-user-confirms-the-example-shows-what-they-asked-for",
+          "number": 6,
           "title": "USER confirms the example shows what they asked for",
           "checked": false
         }
@@ -291,12 +321,218 @@
       "completedAt": "",
       "createdAt": "2026-07-29T06:14:44.166Z",
       "updatedAt": "2026-07-29T06:14:44.166Z"
+    },
+    {
+      "id": "62b176af-bd2a-4a62-abeb-44e0e7059596",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 394,
+      "shortId": "X7SSB",
+      "priority": 6,
+      "shortName": "a-real-pointer-event-vocabular",
+      "title": "A real pointer/event vocabulary, and framework-owned routing on Base",
+      "status": "done",
+      "description": "**Part 1 of 2. Part 2 is `P084(F004)/T395` (context menus declared on the widget), which builds on\nthis and must not start until Antonio has driven a build of this one.** Split decided 2026-08-06:\nthis change rewires how *all* input reaches *every* widget, in both hosts; green tests said nothing\nabout six input/layout regressions this session, and only Antonio driving the GPU app found them.\nStacking a new API on unverified routing makes the bisect surface \"the whole event system plus a new\nAPI\".\n\nAgreed with Antonio 2026-08-05/06, after a session in which every bug traced back to one root: the\nwidget event vocabulary is missing pieces, so hosts and widgets reconstruct what the event should\nhave carried — each in their own way, each silently.\n\n# Why (evidence, not theory)\n\n- `Event::PointerPressed { pos }` (heca-grid-ui/src/component.rs) **carries no button and no\n  modifiers**, so a right-click can never reach a widget. `mouse.rs:428` catches it and rebuilds\n  \"what did you click\" from a position: `container_at(pos)` → `nav_key_at(pos)` →\n  `provider.context_path(&key)` → a menu-id string → the `menu(id, builder)` registry\n  (`providers/workspaces/mod.rs:300,311`).\n- That chain broke on a missing declaration: the workspace `DockFrame` pushed its key into\n  `signals.row_nav` but never called `.nav_key(...)` (`providers/workspaces/mod.rs:~1147`).\n  `nav_key_at` (heca-grid-ui/src/nav.rs:70) reads `Base::nav_key` and nothing else, so right-click on\n  a workspace opened **no menu at all** while panes and columns worked. No error, no failing test.\n  Fixed 2026-08-06 by adding the `nav_key`; the trap is the design.\n- `Event::Scroll { delta_x, delta_y }` has **no position** — `ScrollRegion`'s own module doc admits\n  *\"`Event::Scroll` carries no position, so the router can't hit-test it\"*, so it tracks hover\n  manually to know whether a wheel is for it.\n- **Six** widgets privately re-derive hover from `bounds.contains(pos)`: `Row`, `Item`, `RailCell`,\n  `Toast`, `Button`, `ScrollRegion`. `Input` keeps its own click counter for double/triple click.\n- **Seven** widgets hand-rolled raw `Enter`/`Space` activation with no focus check — fixed 2026-08-06\n  by moving the rule into `dispatch` (`deaf_to_raw_key` + `Component::takes_raw_keys`, defaulting to\n  `routes_own_subtree`). That fix is the precedent for this task: same class, same cure.\n- `Dialog::submit` synthesised `Event::Key { Enter }` at its primary button because nothing could say\n  \"activate this child\" through `dyn Component` — fixed 2026-08-06 with `Component::activate`.\n\nAntonio: *\"I want a user that wants to build a widget to just position it and it works out of the\nbox. They should NEVER be worried of blocking things you invented.\"* / *\"we cannot ship hardcoded\nAPIs or missing ones.\"*\n\n# Decisions (settled — do not re-open)\n\n1. **Events say what happened, never what you should do about it.** `right_click`, not\n   `context_menu`. Naming an event after the intended response is the same coupling as `.action()`.\n   Shift+F10 / the Menu key can *emit* `right_click`; that needs no new event type.\n2. **Handlers live on `Base`**, like `bounds`, `children`, `focused`, `nav_key`, `style`. Every widget\n   embedding `Base` gets them with no code.\n3. **The builder side is an `EventExt` trait** — the established one-line opt-in pattern of\n   `LayoutExt` / `StyleExt` / `NavExt`.\n4. **The framework resolves the raw pointer stream once**: hit-test → target → bubble; press+release\n   on the same widget ⇒ `click`; click count ⇒ `double_click`; `contains(pos)` transitions ⇒\n   `enter`/`leave`; the button on the press ⇒ `right_click`/`middle_click`.\n5. **Target + bubbling**, with `stop_propagation()` as the opt-out and capture as a rare opt-in.\n   Today it is capture-first-wins with no way to stop or continue deliberately — exactly how a `Row`\n   swallowed an `Enter` meant for its list.\n6. **`heca-grid-ui` must not learn about the app.** Not `ViewNode`, not `AppState`, not `WmAction`.\n\n# The vocabulary\n\nPointer/buttons: `pointer_down`/`pointer_up` gain **button + modifiers**; `click`, `double_click`,\n`triple_click`, `right_click`, `middle_click`.\nPointer/movement: `pointer_enter` / `pointer_leave`.\nWheel: **position** on `Scroll`.\nKeyboard: `text_input` for typed text/IME, distinct from `Key` — `Input` reconstructs it from\n`GridKey::Char` today, which forces the host's \"deliver the actual character, not the lowercased\ncombo key\" fixup in `app/events.rs`.\nFocus: `focus` / `blur` **events** — there is a `focused` signal but no event, so nothing can act on\ngaining/losing focus (select-all on focus, commit on blur, close a dropdown when focus leaves).\nLifecycle: `mount` / `unmount`.\nDrag: `drag_start`/`drag`/`drag_end`, `drag_enter`/`drag_over`/`drag_leave`/`drop` — today drag is\nentirely app-side (`DragItemRegistry`, `mouse/drag.rs`), so a plugin widget cannot participate.\n\n**Order, by how much each removes:** button + modifiers → `right_click` → `enter`/`leave` → position\non `Scroll`. Those four delete four existing hacks; the rest completes the vocabulary.\n\n# What this deletes here\n\nSix private hover copies, `Input`'s private click counter, and the widget-side half of the\nright-click archaeology. The menu-side deletions (`context_path`, the `menu(id, builder)` registry,\nthe `MENU_*` constants, `open_row_context_menu`) belong to T395.\n\n# Edge cases\n\n- `stop_propagation()` on a click must not suppress `leave` on the widget being left.\n- Double-click must still deliver the first `click` — do not swallow it waiting for a second.\n- `right_click` must not also fire `click`.\n- A widget removed from the tree between press and release must not strand a `click`.\n- Bubbling must survive `routes_own_subtree` containers (`Overlay`, `Dialog`, `ContextMenu`,\n  `CommandPalette`, `Select`, `FocusScope`, `DockFrame`, `ItemGroup`) — they route their own\n  children and must pass a bubbling event up, not eat it.\n- The pointer is **never** focus-gated (unlike raw keys): a click on an unfocused dock is how you\n  focus it.\n\n# Verification\n\nWidget-level tests are cheap and were what actually found this session's bugs — a headless dispatch\ntest proved the exposé tree was fine and moved the hunt to the app. But input behaviour needs Antonio\ndriving the GPU app: green tests said nothing about any of the six regressions. **Do not claim it\nworks.** Hand him a build and wait before starting T395.\n\nDocumentation is part of this task: the full event vocabulary, the target/bubble model, `EventExt`,\nand what a widget author has to know (which should be: nothing).\n\n---\n**Completion summary:**\n**DONE 2026-08-06 — built, and driven by Antonio in the GPU app (\"its good\"). Uncommitted.**\n\n⚠️ **C7–C11 and C14 are `P084(F004)/T395`'s**, not this task's — the checklist was written before the\n2026-08-06 split and never re-cut. C1–C6, C12, C13, C15 are this one, and are done.\n\n# What shipped\n\n**One pointer event leaves a host** — `Event::Raw(RawPointer)` with the **button** and the\n**modifiers** on it. `heca-grid-ui/src/pointer.rs` (new) resolves it once: hit-test → hover diff →\npress/release pairing → click runs → drag threshold → delivery (capture down the path, bubble back\nup). No widget hit-tests a pointer event; no widget forwards one.\n\n- `heca-grid-ui/src/event.rs` (new): the vocabulary. `PointerDown/Up/Move`, `PointerEnter/Leave`,\n  `Click/DoubleClick/TripleClick`, `RightClick/MiddleClick`, `PointerDownOutside`, `Scroll` (with a\n  position), the seven drag events, `Focus`/`Blur`, `Mount`/`Unmount`, `TextInput` separate from\n  `Key`. `PointerButton`, `PointerEvent`, `DragEvent`, `EventKind`, `EventCx`, `Handlers`.\n  Re-exported from `component.rs`, so no import moved.\n- `builders.rs`: **`EventExt`** — `.on_click`, `.on_right_click`, `.on_pointer_enter`, `.on_drop`,\n  `.on(kind, |cx| cx.stop_propagation())`. Every widget, no opt-in.\n- **State lives on the widgets** (`Base::pointer: PointerState`), not in a router the host owns: the\n  ~8 trees heca mounts never share a hover or a capture, and a widget dropped mid-gesture takes its\n  own state with it.\n\n# Three `Component` hooks, each replacing a workaround\n\n- **`hit_bounds() -> Option<Rectangle>`** — input surface ≠ layout box (a menu/palette panel);\n  `None` = takes no input at all (a closed `Overlay`, still laid out). The input twin of\n  `damage_bounds`.\n- **`after_subtree(ev, handled)`** — a container observing what its own rows did, consumed or not.\n  `ItemGroup`/`DockFrame` gave back the whole child walk they had taken over to get it.\n- **Capture on press** — consuming a `PointerDown` captures the pointer. `ScrollBar`/`ScrollRegion`\n  no longer arrange to hear the rest of their own gesture.\n\n# Deleted\n\nSeven private `contains()` helpers and every private hover copy; `Input`'s click counter + clock and\n`MULTI_CLICK`; `ScrollRegion`'s manual wheel hover-gate; **both** host \"deliver the real character,\nnot the lowercased combo key\" fixups (`app/events.rs`, `app/input.rs`); pointer forwarding in\n`Overlay`/`Dialog`/`FocusScope`/`ItemGroup`/`DockFrame`; `clipped_out` in `component.rs`.\n\n# Found in his testing (2026-08-06) — both fixed and pinned\n\n1. **A right-click on a sidebar row opened no menu.** Nine widgets carried\n   `Event::PointerDown(_) => Handled::Yes` — an arm with no body that claimed **every** button, so a\n   `Row` spent the right press and `mouse.rs`'s `open_row_context_menu` was never reached (the pane\n   worked because no widget sits there). Fixed as a declaration, not nine copies:\n   **`Base::one_click_target`**, the pointer twin of `focus_barrier`, applied by the router in\n   capture, **left button only**. The nine arms are gone.\n2. **Clicking away from an open menu did not close it.** `broadcast_outside` called `on_event`\n   directly and `ContextMenu` answers in `on_event_capture`; it now goes through `deliver_self`\n   (capture → handlers → `on_event`), the same single-node delivery as enter/leave. Also: a press\n   *inside* the panel matching no row does nothing again (only an outside press dismisses).\n\n# Behaviour change he will feel\n\nControls **fire on the click, not the press** — press, drag off, release, and nothing fires. The\npress is still consumed (host \"did a widget take it\" answers unchanged) and the click goes to\nwhoever took the press, so composed content cannot steal it.\n\n# Verification\n\n1216 tests, clippy 0 warnings. `heca-grid-ui/tests/pointer_routing.rs` (new, 23 tests) holds the\nresolution to the spec, including every edge case the task named: a leave no neighbour can veto; the\nfirst click never held back (a run *adds* `DoubleClick` on top of `Click`); a right-click that never\nalso fires a click; a widget removed between press and release; bubbling through every container\nthat used to own its walk; a control taking the left press and letting every other button past.\n`tests/pointer_delivery.rs` reworked to the resolved vocabulary.\n\n# Documentation\n\nRustdoc throughout, including a long entry on **`Handled`** at his explicit request (\"must be well\ndocumented otherwise noone will know how to work\"): the DOM comparison (`stopPropagation` +\n`preventDefault` in one), the third meaning the DOM lacks (the *host* reads the accumulated answer\nto decide whether the terminal gets the input), the three jobs a `Yes` on a `PointerDown` does, a\nwhich-answer-to-give table, and the events whose answer is ignored. `docs/widgets.md`: the event\nmodel rewritten, `EventExt` + `one_click_target` in the builder tables, the `Component` table, the\nhost wiring recipe. `AGENTS.md`: a SETTLED block so none of it is re-derived.\n\n# Files\n\nNew: `heca-grid-ui/src/event.rs`, `src/pointer.rs`, `tests/pointer_routing.rs`. Touched: every\nwidget in `heca-grid-ui/src/widgets/`, `component.rs`, `builders.rs`, `focus.rs`, `layout.rs`,\n`keymap.rs`, `lib.rs`; `heca/src/app/events.rs`, `app/input.rs`, `chrome/mod.rs`, `mouse.rs`;\n`heca-view-realize/src/lib.rs`; `heca-renderer/examples/showcase.rs`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-001-event-carries-button-modifiers-on-pointer-down-up-right-click-and-middle-click-reach-widgets",
+          "number": 1,
+          "title": "Event carries button + modifiers on pointer down/up; right_click and middle_click reach widgets",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-002-click-double-click-triple-click-resolved-once-by-the-framework-from-the-raw-stream",
+          "number": 2,
+          "title": "click / double_click / triple_click resolved once by the framework from the raw stream",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-003-pointer-enter-pointer-leave-delivered-by-the-framework-remove-the-six-private-bounds-contains-copies",
+          "number": 3,
+          "title": "pointer_enter / pointer_leave delivered by the framework; remove the six private bounds.contains copies",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-004-scroll-carries-a-position-remove-scrollregion-s-manual-hover-gate",
+          "number": 4,
+          "title": "Scroll carries a position; remove ScrollRegion's manual hover gate",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-005-target-bubbling-with-stop-propagation-capture-becomes-an-explicit-opt-in",
+          "number": 5,
+          "title": "Target + bubbling with stop_propagation(); capture becomes an explicit opt-in",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-006-handler-slots-on-base-an-eventext-builder-trait-layoutext-styleext-navext-pattern",
+          "number": 6,
+          "title": "Handler slots on Base + an EventExt builder trait (LayoutExt/StyleExt/NavExt pattern)",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-007-contextmenu-menuitem-as-values-with-closure-handlers-no-dependency-on-wmaction",
+          "number": 7,
+          "title": "ContextMenu + MenuItem as values with closure handlers; no dependency on WmAction",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-008-host-installed-menu-sink-install-frame-request-pattern-show-at-show-under-public",
+          "number": 8,
+          "title": "Host-installed menu sink (install_frame_request pattern); show_at / show_under public",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-009-context-menu-closure-on-base-declaration-implemented-in-terms-of-show",
+          "number": 9,
+          "title": ".context_menu(closure) on Base; declaration implemented in terms of show()",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-010-open-context-menu-generalised-from-focused-pane-to-focused-widget-bubbling-shift-f10-and-menu-added-as-bindings-on-the-same-action",
+          "number": 10,
+          "title": "open_context_menu generalised from 'focused pane' to 'focused widget, bubbling'; Shift+F10 and Menu added as bindings on the same action",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-011-delete-context-path-the-menu-id-builder-registry-the-menu-constants-and-open-row-context-menu",
+          "number": 11,
+          "title": "Delete context_path, the menu(id, builder) registry, the MENU_* constants and open_row_context_menu",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-012-focus-blur-events-text-input-distinct-from-key-mount-unmount",
+          "number": 12,
+          "title": "focus / blur events; text_input distinct from Key; mount / unmount",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-013-drag-events-in-the-vocabulary-so-a-plugin-widget-can-participate",
+          "number": 13,
+          "title": "Drag events in the vocabulary so a plugin widget can participate",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-014-full-documentation-vocabulary-target-bubble-model-eventext-context-menus-the-host-sink",
+          "number": 14,
+          "title": "Full documentation: vocabulary, target/bubble model, EventExt, context menus, the host sink",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-015-hand-antonio-a-build-and-wait-green-tests-said-nothing-about-the-six-input-regressions-this-session-t395-does-not-start-until-he-has-driven-this-one",
+          "number": 15,
+          "title": "Hand Antonio a build and WAIT — green tests said nothing about the six input regressions this session; T395 does not start until he has driven this one",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T14:46:03.579Z",
+      "completedAt": "2026-08-06T16:04:16.587Z",
+      "createdAt": "2026-08-06T09:33:43.977Z",
+      "updatedAt": "2026-08-06T16:04:16.587Z"
+    },
+    {
+      "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 395,
+      "shortId": "BLRSH",
+      "priority": 7,
+      "shortName": "context-menus-declared-on-the",
+      "title": "Context menus declared on the widget — a ContextMenu value, a host sink, and one generalised action",
+      "status": "in-progress",
+      "description": "**Part 2 of 2. `P084(F004)/T394` (the event vocabulary + framework-owned routing) is DONE and driven\nby Antonio in the app, 2026-08-06.**\n\n# ⚠️ THE API WAS RE-DECIDED BY ANTONIO 2026-08-07 — this section wins over everything below it\n\nThe first implementation grew `path` / `target` / `about` / `alter_menus` / `MenuPath::declare` /\n`MenuRow::at`. **Every one of those existed only so a *different* component could add a row to your\nmenu**, and that single requirement reshaped the whole API. Antonio: *\"the API is too verbose and\nerror prone\"*, *\"why a function that return vec?? still the same as before.. WHY?? i want simple\nAPIs\"*. All of it is dropped.\n\n## The decided model\n\n**A menu is a value, built where the data is, attached by putting it in the tree.**\n\n```rust\nlet menu = Menu::new(\"Pane\", \"What you can do with this pane\")\n    .name(\"workspaces.pane\")                       // OPTIONAL — see below\n    .child(MenuItem::new(\"Rename\").on_click(move || rename(id)))\n    .child(MenuItem::new(\"Close\").danger(true).on_click(move || close(id)));\n\nRow::new()\n    .child(Label::new(&pane.name))\n    .child(menu);        // ← attached here; shown when this row is right-clicked\n```\n\n- **No path, no target, no `about`, no registry lookup, no id string anywhere.** `id` is captured by\n  the closure, because the menu is built in the loop that is already drawing that row from that\n  pane's data. That is the whole point of declaring it on the widget.\n- **`Menu::new(title, description)`** — the description is what makes a menu self-documenting rather\n  than needing a separate declaration step.\n- **`.name(\"workspaces.pane\")` is OPTIONAL** and is the *only* thing left of the contribution\n  design: it gives other components a handle to add rows to. A menu without a name is closed and\n  needs nothing.\n- **Reuse is a factory, not a borrow.** `.child(&ws_menu)` cannot work — children are owned\n  (`Box<dyn Component>`) and a menu holds closures, which are not `Clone`. Use\n  `let ws_menu = || Menu::new(..)…;` then `.child(ws_menu())`. Agreed with Antonio.\n- **Consequence of dropping `about`, recorded so nobody is surprised:** a row contributed by another\n  component to a *named* menu has no per-row payload, so it acts on app state (the focused pane,\n  the selected row) rather than on the row the menu was opened for. If that turns out to matter it\n  is one additive builder later — do not pre-build it.\n\n## Then, in this task, after the API above is built\n\n- **Menu rows composed of children**: `MenuItem` content becomes `.child(Icon::new(..))`,\n  `.child(Label::new(..))` instead of a label+icon record. This is the settled widget architecture\n  (\"a hand-drawn leaf is a refactor target\") and it is a **rewrite of `ContextMenu`'s paint and\n  hit-test**, not an added method — the rows are drawn by hand today. Antonio wants to see it on\n  screen before it is called done.\n- Antonio, same message: *\"we need to also rewrite that button to be a ViewNode at the end but first\n  handle this\"* — the composed-content refactor for `Button`, **after** the menu work.\n\n# Already built (2026-08-06/07, uncommitted, all green)\n\n- `MenuItem::new(label).on_click(f)` + `.icon/.key/.shortcut/.danger/.enabled`; `MenuEntry` kept as\n  an alias so existing callers compile.\n- `ContextMenu::child(item)`, `show_at(point)`, `show_under(bounds)` — both `show*` public, the\n  declaration implemented in terms of them, and **the framework picks the anchor** (cursor for a\n  right-click, under the widget for a keyboard trigger) so an author never chooses one. `show_under`\n  hangs the panel off the widget's bottom edge (it used to centre *on* the widget, covering the row\n  the menu was about).\n- `Base::context_menu` + `EventExt::context_menu(closure)` — universal, like `nav_key`.\n- `heca-grid-ui/src/menu.rs`: `install_menu_sink` (the `install_frame_request` pattern), bubbling to\n  the nearest declaring ancestor, `open_for_focused` for the keyboard trigger.\n- Router: an **unclaimed** `RightClick` opens the nearest declared menu, so a widget answering its\n  own right-click still wins.\n- App: the sink is installed at startup and queues (`AppState::pending_menus`); the event loop\n  drains it once a frame into a layer via `chrome::overlay::present_menu`, sharing\n  `insert_menu_layer` with `open_dropdown`. `ContextMenu::after_select` lets the host take the layer\n  down so an item stays a plain closure.\n- `heca-grid-ui/tests/context_menu_declaration.rs` — 8 tests, one per settled rule.\n\n**To rework against the decided model:** `ContextMenu::path()` / `.target()` and\n`overlay::merge_contributions` were built for the dropped design — `path`/`target` become\n`Menu::name()`, and merging keys off the name.\n\n# What this still deletes (unchanged)\n\n`context_path` (providers/workspaces/mod.rs:311), the `menu(id, builder)` registrations (:300), the\n`MENU_PANE`/`MENU_COLUMN`/`MENU_WORKSPACE` constants (:1263), `open_row_context_menu` (mouse.rs:156)\nand its position archaeology, and the `nav_key`-or-no-menu trap.\n\n# Triggers, anchors, bubbling (settled, unchanged)\n\n| Trigger | Target | Anchor |\n|---|---|---|\n| `Event::RightClick` | the widget under the pointer | the pointer |\n| the `open_context_menu` action (`prefix+>`, `Shift+F10`, `Menu`) | the focused widget | under the widget |\n\nBoth bubble to the **nearest** ancestor holding a menu; menus are never merged; nothing declared ⇒\nnothing opens (a host that wants \"right-click empty space\" puts one on the root).\n`open_context_menu` is **generalised, not duplicated**: it stops meaning \"the focused pane's menu\"\nand starts meaning \"the focused widget's, bubbling\"; `Shift+F10` and `Menu` become extra bindings on\nthe **same** catalogued action, deliberately not a `[keys.widgets]` entry.\n\n# Verification\n\nHeadless tests per rule, but the real check is Antonio right-clicking a pane, a column, a workspace,\nempty sidebar space and a plugin widget, plus `prefix+>` and `Shift+F10`. **Do not claim it works.**",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-001-contextmenu-menuitem-as-values-with-closure-handlers-no-dependency-on-wmaction",
+          "number": 1,
+          "title": "ContextMenu + MenuItem as values with closure handlers; no dependency on WmAction",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-002-host-installed-menu-sink-install-frame-request-pattern-show-at-point-show-under-bounds-public",
+          "number": 2,
+          "title": "Host-installed menu sink (install_frame_request pattern); show_at(point) / show_under(bounds) public",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-003-context-menu-closure-slot-on-base-implemented-in-terms-of-show",
+          "number": 3,
+          "title": ".context_menu(closure) slot on Base, implemented in terms of show()",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-004-right-click-trigger-target-widget-under-the-pointer-bubbling-to-the-nearest-declaring-ancestor",
+          "number": 4,
+          "title": "right_click trigger: target = widget under the pointer, bubbling to the nearest declaring ancestor",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-005-open-context-menu-generalised-from-focused-pane-to-focused-widget-bubbling-anchored-to-the-widget-s-bounds",
+          "number": 5,
+          "title": "open_context_menu generalised from 'focused pane' to 'focused widget, bubbling'; anchored to the widget's bounds",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-006-shift-f10-and-menu-added-as-bindings-on-the-same-open-context-menu-action-not-a-keys-widgets-entry",
+          "number": 6,
+          "title": "Shift+F10 and Menu added as bindings on the same open_context_menu action (not a [keys.widgets] entry)",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-007-delete-context-path-the-menu-id-builder-registry-the-menu-constants-and-open-row-context-menu",
+          "number": 7,
+          "title": "Delete context_path, the menu(id, builder) registry, the MENU_* constants and open_row_context_menu",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-008-port-the-existing-pane-column-workspace-menus-to-the-declaration-form",
+          "number": 8,
+          "title": "Port the existing pane / column / workspace menus to the declaration form",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-009-root-level-menu-for-empty-sidebar-space-new-workspace-via-bubbling-no-special-hit-test",
+          "number": 9,
+          "title": "Root-level menu for empty sidebar space (New workspace) via bubbling, no special hit-test",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-010-documentation-menu-api-triggers-bubbling-anchors-host-sink-plugin-author-example",
+          "number": 10,
+          "title": "Documentation: menu API, triggers, bubbling, anchors, host sink, plugin author example",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:38:27.771Z",
+      "completedAt": "",
+      "createdAt": "2026-08-06T11:00:40.920Z",
+      "updatedAt": "2026-08-06T22:31:32.744Z"
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-07-29T06:14:44.166Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-06T22:31:32.744Z",
+  "handoff": "# P084 handoff — 2026-08-07 (T394 done and driven; T395 mid-flight)\n\n## State\n\nBranch `feat/palette-modes`. **1228 tests, clippy 0 warnings** (the only line is `block v0.1.6`'s\nfuture-incompat note, from a dependency). **NOTHING IS COMMITTED** — Antonio's standing rule: never\ncommit unless asked.\n\n- **`T394` (X7SSB) — DONE.** Built, and **driven by Antonio in the GPU app** (\"its good\"). The full\n  record is in the task's completion summary; read it rather than re-deriving.\n- **`T395` (BLRSH) — in-progress, 4/10.** The API was **re-decided by Antonio on 2026-08-07** and\n  the task description now leads with that decision. **Read the task description first** — it wins\n  over anything older.\n\n## The decided menu model (2026-08-07) — do not re-open\n\nAntonio rejected the design that had grown `path` / `target` / `about` / `alter_menus` /\n`MenuPath::declare` / `MenuRow::at`: *\"the API is too verbose and error prone\"*, *\"why a function\nthat return vec?? still the same as before.. WHY?? i want simple APIs\"*. Then he corrected the\ntaxonomy himself, and that correction is the shape:\n\n| | |\n|---|---|\n| `MenuItem` | one row: label, icon, enabled, danger, `on_click` |\n| `Menu` | a titled list of items. **Content only** — knows nothing about triggers, anchors or keys |\n| `ContextMenu` | a **presenter**: shows a `Menu` on right-click / `open_context_menu` |\n| `MenuPanel` | the floating panel a presenter puts on screen (host-facing; the old `ContextMenu` widget, renamed) |\n| `MenuBar` | *not built* — the presenter that proves the split is real: same `Menu`, different trigger and keys |\n\n```rust\nRow::new()\n    .child(Label::new(&pane.name))\n    .context_menu(Menu::new(\"Pane\", \"What you can do with this pane\")\n        .name(\"workspaces.pane\")                       // OPTIONAL: only so others may add rows\n        .child(MenuItem::new(\"Rename\").on_click(move || rename(id)))\n        .child(MenuItem::new(\"Close\").danger(true).on_click(move || close(id))));\n```\n\n- **No `about`.** Dropped on his instruction — he never got its purpose, and it existed only to give\n  a *contributed* row a per-row payload. Consequence, recorded so nobody is surprised: a row another\n  component adds to a **named** menu acts on app state, not on the row the menu was opened for. One\n  additive builder later **if** it ever matters. Do not pre-build it.\n- **The anchor is never the author's.** Pointer → cursor, keyboard → under the widget.\n  `menu::show(menu, MenuAnchor::…)` is the escape hatch for a trigger you invent, and the\n  declaration is implemented in terms of it.\n- **Reuse is a factory, not a borrow** — `.child(&ws_menu)` cannot work (children are owned). Agreed\n  with him. `MenuItem` holds `Rc<dyn Fn()>` so a `Menu` value is `Clone` and one row's menu can be\n  opened repeatedly.\n\n## Built so far (T395, all green)\n\n- `Menu` (title, description, optional `name`, items, `into_panel`, `extend`), `MenuItem::new(label)\n  .on_click(f)` (+ icon/key/shortcut/danger/enabled), `MenuEntry` kept as an alias.\n- `ContextMenu::new(menu)` / `ContextMenu::build(closure)`; `MenuAnchor::{At, Under}` with\n  `MenuAnchor::open(panel)`.\n- `Base::context_menu: Option<Box<ContextMenu>>`; `EventExt::context_menu(menu)` /\n  `context_menu_built(closure)` — universal, like `nav_key`.\n- `heca-grid-ui/src/menu.rs`: `install_menu_sink(|menu, anchor|)`, `menu::show`, bubbling to the\n  nearest presenter (`presenter_on`), `open_for_focused` for the keyboard trigger.\n- Router (`pointer.rs`): an **unclaimed** `RightClick` opens the nearest declared menu — a widget\n  that answers its own right-click still wins.\n- App: sink installed in `startup.rs`, queued on `AppState::pending_menus`, drained once a frame by\n  `chrome::drain_pending_menus` (called at the top of `render_frame`) into\n  `chrome::overlay::present_menu`, which merges contributions for a **named** menu and mounts it via\n  `insert_menu_layer` (shared with `open_dropdown`). `MenuPanel::after_select` closes the layer so an\n  item stays a plain closure.\n- `heca-grid-ui/tests/context_menu_declaration.rs` — 8 tests, one per settled rule.\n\n## Left (6/10) — in this order\n\n1. **Port the workspaces provider's menus to the declaration form.** Its three row kinds build their\n   menus in `heca/src/providers/workspaces/mod.rs` (`build_pane_row_menu` :1286, `pane_row_items`,\n   and the column/workspace equivalents). Each row already has its id in hand where it is built —\n   capture it, no key strings.\n2. **Root-level menu for empty sidebar space** (\"New workspace\") via bubbling — no empty-space\n   hit-test.\n3. **Delete**: `context_path` (providers/workspaces/mod.rs:311), the `menu(id, builder)`\n   registrations (:300), `MENU_PANE`/`MENU_COLUMN`/`MENU_WORKSPACE` (:1263), `open_row_context_menu`\n   (mouse.rs:156) and its position archaeology.\n4. **Generalise `open_context_menu`** from \"the focused pane's menu\" to \"the focused widget's,\n   bubbling\" (`heca_grid_ui::open_for_focused`), and add `Shift+F10` + `Menu` as bindings on the\n   **same** catalogued action in `keybindings.default.toml` (it already has `prefix+>`).\n   Deliberately **not** a `[keys.widgets]` entry — `Escape` being both WM `close_overlay` and widget\n   `dismiss` is the split that swallowed `q`.\n5. **Docs**: the menu API, the taxonomy table, the two triggers, bubbling, the anchors, the host\n   sink, a plugin author's minimal example — rustdoc **and** `docs/widgets.md`, per the mandatory\n   both-audiences rule.\n6. **Hand Antonio a build and WAIT**: right-click a pane, a column, a workspace, empty sidebar\n   space, plus `prefix+>` and `Shift+F10`.\n\n## Then, still his instruction, in this order\n\n- **Menu rows composed of children** — `MenuItem` content becomes `.child(Icon::new(..))`,\n  `.child(Label::new(..))`. This is a **rewrite of `MenuPanel`'s paint and hit-test** (rows are drawn\n  by hand today), not an added method. He wants to see it on screen before it is called done.\n- **`Button` composed content / ViewNode** — *\"we need to also rewrite that button to be a ViewNode\n  at the end but first handle this\"*.\n- **Then DnD**: `P079(F004)/T318` (rewritten to **delete** `DragSurfaceId` and the per-surface\n  machinery, not extend it) and `T396` (the drag ghost + insertion line move into grid-ui). `T330`\n  is rejected — there is no enum left to open.\n\n## How Antonio works — read before writing a line\n\n- **He is discussing, not commissioning, until he says otherwise.** Answer the question; wait for\n  \"go\".\n- **Never commit unless asked.**\n- **N copies of a rule = a missing API. Fix the model, not the call site.** He caught me writing the\n  same `Event::PointerDown(_) => Handled::Yes` into nine widgets *while fixing that exact class of\n  bug* — it became `Base::one_click_target`, one declaration the router applies.\n- **He rejects ceremony.** A trait method returning a `Vec`, a registration struct, a builder\n  registry — all rejected on sight. If an API needs a paragraph to justify, it is wrong.\n- **Do not silently deviate from a shape he sketched.** When his example did not compile as written\n  (`MenuItem::new(label)` vs the old two-arg constructor), the type changed to match the sketch.\n- **He drives every visual check and finds what tests cannot.** Do not claim it works.\n",
+  "handoffUpdatedAt": "2026-08-06T23:28:54.494Z",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "0056d3b9-bcce-4813-8102-c2fae8ebb2e6",
+      "date": "2026-08-06T10:59:59.433Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }

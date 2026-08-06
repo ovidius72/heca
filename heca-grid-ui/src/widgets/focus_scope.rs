@@ -148,13 +148,20 @@ impl Component for FocusScope {
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
+        // **The pointer is never gated, and never forwarded from here.** The router carries it to
+        // the widget under it and back up through this wrapper, so a press on an unfocused dock
+        // reaches it — which is how you focus the thing in the first place. Forwarding it here as
+        // well would deliver it twice.
+        if ev.pointer().is_some() {
+            return Handled::No;
+        }
         // Keys belong to whoever has focus. An unfocused scope returns `No` — *not mine* — rather
         // than consuming, so the walk continues to the sibling that does have it.
         if matches!(ev, Event::Key { .. } | Event::Widget(_)) && !self.focused.get_untracked() {
             return Handled::No;
         }
-        // Everything else — the whole pointer set, modifiers, and keys while focused — enters
-        // exactly as it would without this wrapper.
+        // Everything else — modifiers, and keys while focused — enters exactly as it would
+        // without this wrapper.
         route_event(&mut self.base.children, ev)
     }
 
@@ -204,6 +211,7 @@ impl Parent for FocusScope {}
 
 #[cfg(test)]
 mod tests {
+    use crate::event::PointerButton;
     use super::*;
     use crate::layout::LayoutEngine;
     use crate::reactive::SignalUpdate;
@@ -415,22 +423,28 @@ mod tests {
         LayoutEngine::new().compute(&mut scope, Size::new(200.0, 100.0));
         let pos = heca_core::layout::Point::new(10.0, 10.0);
         for ev in [
-            Event::PointerMoved { pos },
-            Event::PointerPressed { pos },
-            Event::PointerReleased { pos },
-            Event::Scroll {
-                delta_x: 0.0,
-                delta_y: 1.0,
-            },
+            Event::pointer_moved(pos),
+            Event::pointer_pressed(pos, PointerButton::Left),
+            Event::pointer_released(pos, PointerButton::Left),
+            Event::wheel(pos, 0.0, 1.0),
         ] {
             crate::component::dispatch(&mut scope, &ev);
         }
-        assert_eq!(
-            seen.borrow().len(),
-            4,
-            "every pointer kind entered an unfocused scope: {:?}",
-            seen.borrow(),
-        );
+        let seen = seen.borrow();
+        let kinds: Vec<&str> = seen.iter().map(|s| s.split('(').next().unwrap_or(s)).collect();
+        for want in [
+            "PointerEnter",
+            "PointerMove",
+            "PointerDown",
+            "PointerUp",
+            "Click",
+            "Scroll",
+        ] {
+            assert!(
+                kinds.contains(&want),
+                "{want} entered an unfocused scope: {kinds:?}",
+            );
+        }
     }
 
     /// The gate follows the signal, with no rebuild — the same flip that shows the ring.

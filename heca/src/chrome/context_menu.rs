@@ -207,7 +207,7 @@ pub(crate) fn open_context_menu_for(
 ///
 /// A provider declares *where* and *what*; the host decides *when*. This is the "when": one pass
 /// over what is mounted, at the moment the menu opens.
-fn plugin_providers_for(
+pub(crate) fn plugin_providers_for(
     host: &crate::chrome::ChromeHost,
     ctx: &ChromeCtx,
     path: &str,

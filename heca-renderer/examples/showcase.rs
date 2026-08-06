@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
-use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, Rectangle, Scene, Size};
-use heca_grid_ui::widgets::{KeyCap, NfGlyph, NfIcon};
+use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, RawPointer, RawPointerKind, Rectangle, Scene, Size};
+use heca_grid_ui::widgets::{KeyCap, ContextMenu, NfGlyph, NfIcon};
 use heca_view::build::{self, Parent as _, Style as _};
 use heca_view::{Intent, PropValue, ViewNode};
 use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
@@ -404,29 +404,29 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
     let menu = ContextMenu::new()
         .entry(
-            MenuEntry::new("Rename", || println!("[showcase] rename"))
+            MenuItem::new("Rename").on_click(|| println!("[showcase] rename"))
                 .icon(Glyph::NotePencil)
                 .key('r')
                 .shortcut(display_shortcut("prefix+$")),
         )
         .entry(
-            MenuEntry::new("Move to workspace", || println!("[showcase] → workspace"))
+            MenuItem::new("Move to workspace").on_click(|| println!("[showcase] → workspace"))
                 .icon(Glyph::ArrowRight)
                 .key('w'),
         )
         .entry(
-            MenuEntry::new("Move to column", || println!("[showcase] → column"))
+            MenuItem::new("Move to column").on_click(|| println!("[showcase] → column"))
                 .icon(Glyph::SquareSplitVertical)
                 .key('c'),
         )
         .entry(
-            MenuEntry::new("Duplicate", || println!("[showcase] duplicate"))
+            MenuItem::new("Duplicate").on_click(|| println!("[showcase] duplicate"))
                 .icon(Glyph::Cards)
                 .key('d')
                 .enabled(false),
         )
         .entry(
-            MenuEntry::new("Close", || println!("[showcase] close"))
+            MenuItem::new("Close").on_click(|| println!("[showcase] close"))
                 .icon(Glyph::FolderSimpleMinus)
                 .key('x')
                 .danger(true)
@@ -2471,6 +2471,24 @@ impl GpuState {
         }
     }
 
+    /// A raw pointer event at the current cursor, carrying the button and the live modifier
+    /// state.
+    ///
+    /// A host builds **one** kind of pointer event and the framework works out what it means —
+    /// which widget it is for, whether the pair of them was a click, whether the pointer just
+    /// left something. The modifiers ride on the event rather than being read from state later,
+    /// because an event that carries its own cannot be read against a state that has moved on.
+    fn raw(&self, kind: RawPointerKind, button: PointerButton) -> RawPointer {
+        RawPointer::new(kind, self.cursor)
+            .with_button(button)
+            .with_modifiers(Modifiers {
+                ctrl: self.ctrl,
+                alt: false,
+                shift: self.shift,
+                meta: self.meta,
+            })
+    }
+
     /// The logical→physical scale actually used: the window's HiDPI factor times the
     /// global UI zoom. Everything (layout viewport, glyph rasterization, scissor +
     /// cursor mapping) goes through this, so changing zoom scales the whole UI.
@@ -2876,7 +2894,7 @@ impl ApplicationHandler for App {
                 // buttons behind it still hover/animate while toasts show), otherwise
                 // it falls to the page tree (whose own overlay scan covers an open
                 // Select dropdown) and then the widget under the cursor.
-                let ev = Event::PointerMoved { pos: state.cursor };
+                let ev = Event::Raw(state.raw(RawPointerKind::Moved, PointerButton::Left));
                 if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                     state.focus.dispatch(&mut state.ui, &ev);
                 }
@@ -2892,7 +2910,7 @@ impl ApplicationHandler for App {
                 // overlay scan lets an open Select dropdown capture clicks on rows
                 // outside its layout bounds; otherwise dispatch focuses the clicked
                 // widget (clearing focus on a miss) and delivers the press.
-                let ev = Event::PointerPressed { pos: state.cursor };
+                let ev = Event::Raw(state.raw(RawPointerKind::Pressed, PointerButton::Left));
                 if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                     state.focus.dispatch(&mut state.ui, &ev);
                 }
@@ -2913,9 +2931,15 @@ impl ApplicationHandler for App {
                 // does NOT occlude — a second right-click re-anchors it (standard
                 // menu behavior). Both trees are scanned: the overlay layer and the
                 // page (whose open Select panels also occlude).
+                // The press goes into the trees first, with the button on it: a widget that
+                // declares `on_right_click` owns its own menu, and the host only falls back to
+                // its page-level one when nothing claimed the press.
+                let ev = Event::Raw(state.raw(RawPointerKind::Pressed, PointerButton::Right));
+                let claimed = state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::Yes
+                    || state.focus.dispatch(&mut state.ui, &ev) == Handled::Yes;
                 let occluded = heca_grid_ui::overlay_occluded_at(&state.overlays, state.cursor)
                     || heca_grid_ui::overlay_occluded_at(&state.ui, state.cursor);
-                if !occluded {
+                if !claimed && !occluded {
                     state.menu_anchor.set(state.cursor);
                     state.menu_open.set(true);
                     state.layout_dirty = true;
@@ -2931,7 +2955,7 @@ impl ApplicationHandler for App {
                 // thumb drag in the page, a pressed Dialog button in the overlay layer)
                 // always ends its grab — a release must never be swallowed by one tree
                 // away from the other.
-                let ev = Event::PointerReleased { pos: state.cursor };
+                let ev = Event::Raw(state.raw(RawPointerKind::Released, PointerButton::Left));
                 state.focus_ov.dispatch(&mut state.overlays, &ev);
                 state.focus.dispatch(&mut state.ui, &ev);
                 state.window.request_redraw();
@@ -2964,7 +2988,10 @@ impl ApplicationHandler for App {
                     // embedded ScrollRegion under the cursor consumes it, and otherwise
                     // the ROOT ScrollRegion scrolls the whole page (T009 — the manual
                     // `scroll_y` fallback is gone; the page is a real scroll viewport).
-                    let ev = Event::Scroll { delta_x: dx, delta_y: dy };
+                    let mut raw = state.raw(RawPointerKind::Wheel, PointerButton::Left);
+                    raw.delta_x = dx;
+                    raw.delta_y = dy;
+                    let ev = Event::Raw(raw);
                     if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                         state.focus.dispatch(&mut state.ui, &ev);
                     }

@@ -365,6 +365,9 @@ pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
         if ws_idx < state.last_visited_pane_per_ws.len() {
             state.last_visited_pane_per_ws.remove(ws_idx);
         }
+        if ws_idx < state.expose_cursor_per_ws.len() {
+            state.expose_cursor_per_ws.remove(ws_idx);
+        }
     }
 }
 

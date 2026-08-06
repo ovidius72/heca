@@ -427,6 +427,18 @@ pub fn on_mouse_input(
         // Nothing is restored any more, so the constraint went with it.
         (MouseButton::Right, ElementState::Pressed) => {
             aim_keyboard_at_click(state, pos);
+            // **The widget gets the right-click first.** It carries its button now, so a widget
+            // that declares `on_right_click` owns its own menu and the host never has to work out
+            // what was under the cursor on its behalf. Only when nothing claims it does the app's
+            // own row-menu path run.
+            if crate::chrome::chrome_dispatch_button_press(
+                state,
+                pos,
+                heca_grid_ui::PointerButton::Right,
+            ) {
+                state.needs_redraw = true;
+                return None;
+            }
             if open_row_context_menu(state, pos) {
                 return None;
             }
@@ -667,7 +679,10 @@ fn search_field_press(state: &mut AppState, pos: (f32, f32)) -> bool {
     if let Some(search) = state.searches.get(&pane_id) {
         let mut field = search.input.borrow_mut();
         field.base_mut().focused.set(true);
-        heca_grid_ui::dispatch(&mut *field, &heca_grid_ui::Event::PointerPressed { pos });
+        heca_grid_ui::dispatch(
+            &mut *field,
+            &heca_grid_ui::Event::pointer_pressed(pos, heca_grid_ui::PointerButton::Left),
+        );
     }
     state.input_mode = crate::app_state::InputMode::Search;
     state.needs_redraw = true;

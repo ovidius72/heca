@@ -63,6 +63,19 @@ auto_scroll_edge = true
 # Center a single column even when it already fits in the viewport.
 always_center_single_column = false
 
+# When focusing a column re-centers the view.
+#   "never"       — scroll it to the nearest edge and leave it there (default)
+#   "on_overflow" — center it only when it cannot fit beside the previously focused column
+#   "always"      — the focused column is always centered
+center_focused_column = "never"
+
+# How large the exposé (prefix+Tab) draws the session, as a fraction of life size.
+# 0.5 means a workspace row is half the screen. Clamped to 0.05..=0.75.
+overview_zoom = 0.5
+
+# Gap between workspace rows in the exposé, as a fraction of a screen height.
+overview_gap = 0.1
+
 # Modifier held to start an interactive pane drag with the mouse.
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"

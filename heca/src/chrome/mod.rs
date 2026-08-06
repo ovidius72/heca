@@ -30,7 +30,10 @@ mod state;
 // Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
-pub(crate) use layers::{DynamicLayer, LayerBand, LayerId, LayerKind, LayerRegistry};
+pub(crate) use expose::record_expose_cursor;
+pub(crate) use layers::{
+    LayerBackdrop, LayerBand, LayerId, LayerKind, LayerRegistry,
+};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
 // cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
@@ -1275,12 +1278,15 @@ fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
 /// the input this tree needs is not a per-caller choice.
 ///
 /// That choice is what kept breaking. A widget with a *gesture* needs the whole set or it fails in
-/// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives
-/// `PointerReleased` leaves its thumb welded to the cursor, and one that never receives `Scroll`
-/// simply does not scroll. Both are silent: it lays out, paints and hit-tests perfectly. The modal
-/// path used to forward `PointerMoved` and `PointerPressed` only, so both happened, and the fix
-/// had already been written twice elsewhere (`Dialog::event`, `dispatch_pane_viewport_release`)
-/// without the hole here being visible from either.
+/// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives the
+/// release leaves its thumb welded to the cursor, and one that never receives the wheel simply
+/// does not scroll. Both are silent: it lays out, paints and hit-tests perfectly. The modal path
+/// used to forward the move and the press only, so both happened, and the fix had already been
+/// written twice elsewhere without the hole here being visible from either.
+///
+/// Since F004/P084/T394 there is only one pointer event to forward — [`Event::Raw`] — and the
+/// framework resolves it into whatever it meant. The set cannot go missing a kind because there
+/// are no longer kinds to choose between.
 ///
 /// So: a caller says *a pointer event happened*, not *which kinds this surface deigns to forward*.
 pub(crate) fn dispatch_modal_pointer(
@@ -1288,13 +1294,7 @@ pub(crate) fn dispatch_modal_pointer(
     ev: &Event,
 ) -> bool {
     debug_assert!(
-        matches!(
-            ev,
-            Event::PointerMoved { .. }
-                | Event::PointerPressed { .. }
-                | Event::PointerReleased { .. }
-                | Event::Scroll { .. }
-        ),
+        matches!(ev, Event::Raw(_)),
         "dispatch_modal_pointer is the pointer path; keys go through the keymap",
     );
     if top_modal(state).is_none() {
@@ -1325,7 +1325,7 @@ pub(crate) fn dispatch_pane_header_press(
         .map(|(id, _)| *id)?;
     let header = state.pane_headers.get_mut(&hit)?;
     let consumed =
-        heca_grid_ui::dispatch(&mut header.root, &Event::PointerPressed { pos: point })
+        heca_grid_ui::dispatch(&mut header.root, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes;
     Some((hit, consumed))
 }
@@ -1341,7 +1341,7 @@ pub(crate) fn dispatch_pane_header_move(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut over = false;
     for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerMoved { pos: point });
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_moved(point));
         if rect_contains(header.root.base().bounds, point) {
             over = true;
         }
@@ -1362,7 +1362,7 @@ pub(crate) fn dispatch_pane_header_release(
 ) {
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerReleased { pos: point });
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left));
     }
 }
 
@@ -1389,9 +1389,9 @@ pub(crate) fn dispatch_pane_viewport_press(
 ) -> bool {
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     for widgets in state.pane_viewport_widgets.values_mut() {
-        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerPressed { pos: point })
+        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes
-            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerPressed { pos: point })
+            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
                 == heca_grid_ui::Handled::Yes
         {
             return true;
@@ -1409,9 +1409,9 @@ pub(crate) fn dispatch_pane_viewport_move(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut over = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerMoved { pos: point })
+        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_moved(point))
             == heca_grid_ui::Handled::Yes;
-        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerMoved { pos: point })
+        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_moved(point))
             == heca_grid_ui::Handled::Yes;
         if badge_handled || scrollbar_handled {
             over = true;
@@ -1436,9 +1436,9 @@ pub(crate) fn dispatch_pane_viewport_release(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut handled = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerReleased { pos: point })
+        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes;
-        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerReleased { pos: point })
+        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes;
     }
     handled
@@ -2323,7 +2323,10 @@ pub(crate) fn paint_layers(
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     for layer in layers {
-        layer.root().paint(&mut cx);
+        // A layer on its way out paints at falling opacity rather than vanishing between two
+        // frames. `PaintCx` scales every command it emits, so the layer's own widgets know nothing
+        // about it — a fade is something done *to* a surface.
+        cx.with_opacity(layer.opacity(), |cx| layer.root().paint(cx));
     }
 }
 
@@ -3535,16 +3538,55 @@ pub(crate) fn chrome_dispatch_press(
     state: &mut crate::app_state::AppState,
     pos: (f32, f32),
 ) -> bool {
+    chrome_dispatch_button_press(state, pos, heca_grid_ui::PointerButton::Left)
+}
+
+/// The same, for a **named button** — so a right-press reaches the tree instead of being read off
+/// it from the outside.
+///
+/// A press carries its button now, which is what makes a widget able to answer a right-click at
+/// all. The app still has its own menu path behind this (F004/P084/T395 is what removes it); this
+/// is the door that lets a widget claim the press before any of that runs.
+pub(crate) fn chrome_dispatch_button_press(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+    button: heca_grid_ui::PointerButton,
+) -> bool {
     state
         .chrome_tree
         .as_mut()
         .map(|tree| {
             heca_grid_ui::dispatch(
                 &mut tree.root,
-                &Event::PointerPressed { pos: Point::new(pos.0 as f64, pos.1 as f64) },
+                &Event::pointer_pressed(Point::new(pos.0 as f64, pos.1 as f64), button),
             ) == heca_grid_ui::Handled::Yes
         })
         .unwrap_or(false)
+}
+
+/// Mount every menu a widget declared and asked to open since the last frame.
+///
+/// The other half of the sink installed at startup: the widget layer cannot reach a layer, so it
+/// queues, and the host drains. One place, called once a frame, so a menu opened from a click, from
+/// a key, or from a widget's own timer all arrive the same way.
+pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
+    let queued: Vec<_> = state.pending_menus.borrow_mut().drain(..).collect();
+    for (menu, anchor) in queued {
+        overlay::present_menu(state, menu, anchor);
+    }
+}
+
+/// Tell every retained tree the pointer is gone: hover clears, any capture or drag ends.
+///
+/// One call per tree the host mounts, because each keeps its own hover — that is the point of the
+/// state living on the widgets rather than in one router the host would have to own.
+pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, ev: &Event) {
+    if let Some(tree) = state.chrome_tree.as_mut() {
+        let _ = heca_grid_ui::dispatch(&mut tree.root, ev);
+    }
+    for header in state.pane_headers.values_mut() {
+        let _ = heca_grid_ui::dispatch(&mut header.root, ev);
+    }
 }
 
 /// Which container a point is inside, or `None` when it is outside every one (F003/P086/T365).
@@ -3574,9 +3616,7 @@ pub(crate) fn nav_key_at(state: &crate::app_state::AppState, pos: (f32, f32)) ->
 /// release ends the gesture wherever the cursor drifted to.
 pub(crate) fn chrome_dispatch_release(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::PointerReleased {
-            pos: Point::new(pos.0 as f64, pos.1 as f64),
-        });
+        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), heca_grid_ui::PointerButton::Left));
     }
 }
 
@@ -3625,9 +3665,7 @@ pub(crate) fn chrome_dispatch_widget(
 /// and must persist across moves; the caller already requests a repaint.
 pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::PointerMoved {
-            pos: Point::new(pos.0 as f64, pos.1 as f64),
-        });
+        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_moved(Point::new(pos.0 as f64, pos.1 as f64)));
     }
 }
 

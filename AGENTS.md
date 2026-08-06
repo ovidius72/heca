@@ -879,6 +879,22 @@ Button::destructive("Delete")
     .on_click(move || emit(intent))
 ```
 
+**SETTLED — the input model (F004/P084/T394, 2026-08-06):**
+- **A host builds ONE pointer event**, `Event::Raw(RawPointer)`, carrying the **button** and the
+  **modifiers**. The framework resolves it once — hit-test, hover, press/release pairing, click
+  runs, drag threshold — and delivers what it meant: `Click`, `RightClick`, `PointerEnter`,
+  `Scroll`, `Drop`, `Focus`, `Mount`, … **A widget never hit-tests a pointer event, and never
+  forwards one to its children.** If you are writing `bounds.contains(pos)` in a widget, stop.
+- **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
+  raw `GridKey::Char` is a shortcut. Do not re-introduce a host-side "deliver the real character"
+  fixup — that patch existed only because a field rebuilt text from keys.
+- **Handlers live on `Base`**, written with `EventExt` (`.on_click`, `.on_right_click`,
+  `.on_pointer_enter`, `.on(kind, …)` + `cx.stop_propagation()`) — the same one-line opt-in as
+  `LayoutExt`/`NavExt`/`DragExt`. Every widget has them; none opts in.
+- **Events say what happened, never what to do about it**: `right_click`, not `context_menu`.
+- Full model: [`docs/widgets.md` → the event model](docs/widgets.md); the rules are held by
+  `heca-grid-ui/tests/pointer_routing.rs` and `tests/pointer_delivery.rs`.
+
 **Genuinely OPEN (the live design space):** a typed builder SDK over `ViewNode`; and `Label`
 truncation/ellipsis + wrapping (a long label overflows its box today).
 

@@ -48,7 +48,6 @@ pub struct Row {
     /// Sidebar-nav cursor state: a hollow outline, distinct from `active`.
     nav: Signal<bool>,
     marker: ActiveMarker,
-    hovered: Signal<bool>,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
     /// Override for the hover/active highlight color. Defaults to the row's own
@@ -74,7 +73,6 @@ impl Row {
             active: signal(false),
             nav: signal(false),
             marker: ActiveMarker::Bar,
-            hovered: signal(false),
             flash: Flash::new(),
             on_activate: None,
             highlight: None,
@@ -99,6 +97,7 @@ impl Row {
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
+        self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
     }
 
@@ -145,6 +144,15 @@ impl Row {
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self
+    }
+
+    /// The row's **hover** signal — `true` while the pointer is over it.
+    ///
+    /// Read-only for the host: the row sets it from its own hit-testing, which is the one place
+    /// that knows where the row is. Wire it into a list's cursor (`GridCell::hovered`) so pointing
+    /// at a row is the same act as arrowing onto it, or bind a preview to it.
+    pub fn hovered(&self) -> Signal<bool> {
+        self.base.pointer.hovered
     }
 
     /// The nav-cursor signal — bind UI to it reactively.
@@ -228,7 +236,7 @@ impl Component for Row {
                 sel_radius,
                 None,
             );
-        } else if self.hovered.get_untracked() {
+        } else if self.base.hovered() {
             let c = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_hover_fill)
             } else {
@@ -333,18 +341,32 @@ impl Component for Row {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.base.bounds.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+            // No focus check here, and none in any of the other six widgets that were doing this by
+            // hand: `dispatch` only offers a raw key to the widget that owns the keyboard. The rule
+            // is the framework's, made once, so a widget cannot take a key meant for something else
+            // — which is what made a row eat the Enter that belonged to the list it sits in.
+            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.interactive() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.activate();
                 Handled::Yes
             }

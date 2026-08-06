@@ -9,7 +9,7 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, Handled, route_event};
+use crate::component::{Base, Component, Event, Handled};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::Direction;
 use crate::widgets::{Item, Label};
@@ -25,6 +25,10 @@ const HEADER: usize = 0;
 pub struct ItemGroup {
     base: Base,
     expanded: Signal<bool>,
+    /// `expanded` as it was when the current event entered this widget, so
+    /// [`after_subtree`](crate::component::Component::after_subtree) can tell whether the subtree
+    /// flipped it.
+    was_expanded: bool,
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
     on_toggle: Option<Box<dyn Fn(Action)>>,
@@ -49,6 +53,7 @@ impl ItemGroup {
         Self {
             base,
             expanded,
+            was_expanded: expanded.get_untracked(),
             chevron,
             on_toggle: None,
         }
@@ -110,25 +115,28 @@ impl Component for ItemGroup {
     }
 
     /// This widget **watches what its own subtree did**: the header row flips `expanded`, and the
-    /// group reports that as a toggle. That has to happen even when the header consumed the click,
-    /// which is after-the-walk-always — not something either hook expresses. So it owns the walk,
-    /// and `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
-    fn routes_own_subtree(&self) -> bool {
-        true
+    /// group reports that as a toggle. That has to happen even when the header consumed the click
+    /// — which is the normal case, not the exception.
+    ///
+    /// It used to own the whole child walk to get that, which made every event kind depend on this
+    /// one container forwarding it correctly forever. [`after_subtree`](Component::after_subtree)
+    /// is the same observation with none of that: the framework still does the walk.
+    /// Capture is where the "before" is taken: it runs on the way down, before anything in the
+    /// subtree can have flipped anything. Nothing is consumed here.
+    fn on_event_capture(&mut self, _ev: &Event) -> Handled {
+        self.was_expanded = self.expanded.get_untracked();
+        Handled::No
     }
 
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        let was = self.expanded.get_untracked();
-        // The header Item flips `expanded` on click/Enter; the controls slot gets first refusal.
-        let handled = route_event(&mut self.base.children, ev);
+    fn after_subtree(&mut self, _ev: &Event, _handled: Handled) {
         let now = self.expanded.get_untracked();
-        if now != was {
+        if now != self.was_expanded {
+            self.was_expanded = now;
             self.sync();
             if let Some(f) = &self.on_toggle {
                 f(Action::value("group-toggle", SignalData::Bool(now)));
             }
         }
-        handled
     }
 }
 

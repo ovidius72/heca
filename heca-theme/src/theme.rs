@@ -292,6 +292,16 @@ pub struct Theme {
     /// surface rather than a filled block. Theme/config-driven.
     #[serde(default = "default_card_background_alpha")]
     pub card_background_alpha: f32,
+    /// Blur radius, in **logical px**, of the frosted backdrop behind a layer that asks for one
+    /// (the exposé). `0.0` = flat: whatever is behind shows through sharp.
+    ///
+    /// Theme-owned for the same reason [`InteractionAlphas::scrim`] is: the treatment of what sits
+    /// *behind* an overlay is a design decision about the surface, not an ambient effect the user
+    /// switches on. It is deliberately **not** `appearance.blur`, whose contract is that every
+    /// appearance default is off — an overview whose backdrop is a flat fill is a different screen
+    /// rather than a lens over this one, so this one is on by default and tuned here.
+    #[serde(default = "default_overlay_frost_radius")]
+    pub overlay_frost_radius: f32,
 
     /// Interaction-state alpha tokens (hover / active / border / tonal-fill /
     /// scrim …). Theme-owned so the whole UI's interaction feel is tuned in one
@@ -527,6 +537,12 @@ fn default_active_wash_alpha() -> f32 {
 }
 fn default_card_background_alpha() -> f32 {
     0.02
+}
+/// Default frosted-backdrop radius: `24` logical px — strong enough that text behind a full-screen
+/// overlay becomes texture rather than words, gentle enough that the shapes of the session stay
+/// recognisable underneath it.
+fn default_overlay_frost_radius() -> f32 {
+    24.0
 }
 fn default_float_bg() -> Color {
     Color::new(49, 50, 68, 255)

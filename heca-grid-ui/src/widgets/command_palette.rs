@@ -1205,13 +1205,23 @@ impl Component for CommandPalette {
                 // lives off-tree, so it forwards by hand.
                 _ => {
                     let before = self.query_text();
-                    let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
+                    let handled = crate::component::deliver(&mut *self.query.borrow_mut(), ev);
                     if self.query_text() != before {
                         self.on_query_changed();
                     }
                     handled
                 }
             },
+            // Typed text goes to the query field, exactly as a key does — and for the same reason:
+            // the palette is a surface around a field, not a text widget of its own.
+            Event::TextInput(_) => {
+                let before = self.query_text();
+                let handled = crate::component::deliver(&mut *self.query.borrow_mut(), ev);
+                if self.query_text() != before {
+                    self.on_query_changed();
+                }
+                handled
+            }
             Event::Key { pressed: true, .. } => {
                 // The query field owns editing keys (typing, selection, char/word/line delete,
                 // caret moves). Return **what the field did**: a single-line `Input` ignores
@@ -1219,19 +1229,21 @@ impl Component for CommandPalette {
                 // resolves them to a `WidgetIntent` (MenuUp/MenuDown/Activate). Modal capture is
                 // the host's job — do NOT hardcode `Handled::Yes` here.
                 let before = self.query_text();
-                let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
+                let handled = crate::component::deliver(&mut *self.query.borrow_mut(), ev);
                 if self.query_text() != before {
                     self.on_query_changed();
                 }
                 handled
             }
-            Event::PointerMoved { pos } => {
+            // Rows drawn from data, hit-tested inside a panel the router already put the pointer
+            // over (`hit_bounds`) — a move anywhere else never reaches this widget.
+            Event::PointerMove(p) => {
                 // Hover-select a row.
                 let results = self.results();
                 let (panel, _q, list_top) = self.layout(&results);
                 let mut moved = false;
                 for (ri, row) in self.row_rects(&results, panel, list_top) {
-                    if row.contains(*pos) {
+                    if row.contains(p.pos) {
                         moved = self.selected != ri;
                         self.selected = ri;
                         break;
@@ -1242,33 +1254,36 @@ impl Component for CommandPalette {
                 }
                 Handled::Yes
             }
-            Event::PointerPressed { pos } => {
+            Event::PointerDown(p) => {
                 let results = self.results();
                 let (panel, query_rect, list_top) = self.layout(&results);
                 // A click on the query line places the caret / selects (the Input
                 // needs its current bounds + font to hit-test the char position).
-                if query_rect.contains(*pos) {
+                // Delivered by hand, to a field the palette holds off-tree and places itself —
+                // the one case where a resolved event is handed to a widget the router could not
+                // have found, and the rect above is the guard that makes it honest.
+                if query_rect.contains(p.pos) {
                     let font = self.base.font;
                     let mut q = self.query.borrow_mut();
                     q.base_mut().bounds = query_rect;
                     q.base_mut().font = font;
-                    crate::component::dispatch(&mut *q, ev);
+                    crate::component::deliver(&mut *q, ev);
                     return Handled::Yes;
                 }
-                let mut ran = false;
                 for (ri, row) in self.row_rects(&results, panel, list_top) {
-                    if row.contains(*pos) {
+                    if row.contains(p.pos) {
                         self.selected = ri;
                         self.run_selected();
-                        ran = true;
                         break;
                     }
                 }
-                // A click outside the panel dismisses.
-                if !ran && !panel.contains(*pos) {
-                    self.close();
-                }
                 Handled::Yes
+            }
+            // The press that landed somewhere else closes the palette — no panel geometry of its
+            // own to keep in step with the placement.
+            Event::PointerDownOutside(_) => {
+                self.close();
+                Handled::No
             }
             // Swallow all other input while open.
             _ => Handled::Yes,
@@ -1311,6 +1326,16 @@ impl Component for CommandPalette {
             self.panel.get()
         } else {
             self.base.bounds
+        }
+    }
+
+    /// The palette's **input** surface is the panel it draws — its query line and rows live
+    /// there, not in the layout box it was placed in. Closed, it takes nothing.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if self.is_open() {
+            Some(self.panel.get())
+        } else {
+            None
         }
     }
 }

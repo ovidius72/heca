@@ -8,9 +8,9 @@
 //! two things beyond a press:
 //!
 //! - **`Scroll`** — or the wheel does nothing at all.
-//! - **`PointerReleased`** — or a thumb drag never ends, and the thumb stays welded to the cursor.
+//! - **`PointerUp`** — or a thumb drag never ends, and the thumb stays welded to the cursor.
 //!
-//! A container that forwards `PointerMoved` and `PointerPressed` and stops there looks completely
+//! A container that forwards the move and the press and stops there looks completely
 //! correct. The region is mounted, sized, drawn, and dead. Nothing failed, so nothing was noticed
 //! until someone tried to scroll — and the fix went into that one container, leaving every other
 //! one to be discovered the same way later.
@@ -18,6 +18,11 @@
 //! So the rule is written down as a test instead of as a habit: mount a probe where a scroll region
 //! would go, in each container that takes part in dispatch, and require all four kinds to arrive. A
 //! container that forwards a subset fails here rather than in the app, months later.
+//!
+//! **Since F004/P084/T394 no container forwards anything**: the framework hit-tests the pointer and
+//! carries it to the target and back up through whatever contains it, so the omission this file
+//! guards against is no longer a line anyone can write. The test stays: it is what proves that is
+//! still true, in each of the containers that used to own the walk.
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::widgets::{Dialog, FocusScope, Overlay, ScrollRegion};
@@ -78,10 +83,10 @@ impl Component for Probe {
     /// below wanted, and a leaf has nobody below.
     fn on_event(&mut self, ev: &Event) -> Handled {
         let kind = match ev {
-            Event::PointerMoved { .. } => Some(Kind::Moved),
-            Event::PointerPressed { .. } => Some(Kind::Pressed),
-            Event::PointerReleased { .. } => Some(Kind::Released),
-            Event::Scroll { .. } => Some(Kind::Wheel),
+            Event::PointerMove(_) => Some(Kind::Moved),
+            Event::PointerDown(_) => Some(Kind::Pressed),
+            Event::PointerUp(_) => Some(Kind::Released),
+            Event::Scroll(_) => Some(Kind::Wheel),
             _ => None,
         };
         if let Some(kind) = kind {
@@ -98,10 +103,10 @@ fn deliver(mut host: Box<dyn Component>, bounds: &Rc<Cell<Rectangle>>) {
     LayoutEngine::new().compute(host.as_mut(), Size::new(600.0, 400.0));
     let b = bounds.get();
     let pos = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::PointerMoved { pos });
-    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::PointerPressed { pos });
-    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::PointerReleased { pos });
-    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::Scroll { delta_x: 0.0, delta_y: 1.0 });
+    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::pointer_moved(pos));
+    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::pointer_pressed(pos, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::pointer_released(pos, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(host.as_mut(), &Event::wheel(pos, 0.0, 1.0));
 }
 
 fn assert_full_set(
@@ -178,10 +183,10 @@ fn a_scroll_region_delivers_the_whole_pointer_set_to_its_children() {
 
 // ── The behaviour the set exists for ────────────────────────────────────────────────────────
 
-/// A region whose content overflows scrolls on the wheel — the hover gate is a `PointerMoved`,
-/// which is why that one is in the required set too.
+/// A region whose content overflows scrolls on the wheel — which now needs no move first, because
+/// the wheel carries its own position and is routed by it.
 #[test]
-fn the_wheel_scrolls_a_region_that_received_a_move_first() {
+fn the_wheel_scrolls_the_region_it_is_over() {
     let mut region = ScrollRegion::new()
         .width(Length::Px(200.0))
         .height(Length::Px(100.0))
@@ -189,8 +194,7 @@ fn the_wheel_scrolls_a_region_that_received_a_move_first() {
     let offset = region.scroll_offset();
 
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(100.0, 50.0) });
-    heca_grid_ui::dispatch(&mut region, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 });
+    heca_grid_ui::dispatch(&mut region, &Event::wheel(Point::new(100.0, 50.0), 0.0, 1.0));
 
     assert!(offset.get_untracked() > 0.0, "the wheel scrolled it");
 }
@@ -207,14 +211,14 @@ fn a_thumb_drag_ends_on_a_release_outside_the_region() {
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
 
     // Grab the thumb in its lane at the right edge, drag down.
-    heca_grid_ui::dispatch(&mut region, &Event::PointerPressed { pos: Point::new(196.0, 10.0) });
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(196.0, 60.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_pressed(Point::new(196.0, 10.0), PointerButton::Left));
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 60.0)));
     let dragged = offset.get_untracked();
     assert!(dragged > 0.0, "the drag scrolled it");
 
     // Release far outside, then keep moving: the thumb must not follow any more.
-    heca_grid_ui::dispatch(&mut region, &Event::PointerReleased { pos: Point::new(900.0, 900.0) });
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(196.0, 95.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_released(Point::new(900.0, 900.0), PointerButton::Left));
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 95.0)));
     assert_eq!(
         offset.get_untracked(),
         dragged,
@@ -233,12 +237,12 @@ fn a_press_recovers_a_grab_whose_release_never_arrived() {
     let offset = region.scroll_offset();
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
 
-    heca_grid_ui::dispatch(&mut region, &Event::PointerPressed { pos: Point::new(196.0, 10.0) });
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(196.0, 60.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_pressed(Point::new(196.0, 10.0), PointerButton::Left));
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 60.0)));
     // No release — the host dropped it.
-    heca_grid_ui::dispatch(&mut region, &Event::PointerPressed { pos: Point::new(20.0, 20.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_pressed(Point::new(20.0, 20.0), PointerButton::Left));
     let after = offset.get_untracked();
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(196.0, 95.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 95.0)));
 
     assert_eq!(offset.get_untracked(), after, "the stale grab did not survive the next press");
 }
@@ -327,12 +331,12 @@ fn the_scrollbar_lane_does_not_leak_hover_to_the_content_behind_it() {
     LayoutEngine::new().compute(&mut region, Size::new(200.0, 100.0));
 
     // Over the content: the probe hears about it.
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(40.0, 50.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(40.0, 50.0)));
     let after_content = seen.borrow().len();
     assert!(after_content > 0, "a move over the content reaches it");
 
     // Over the thumb lane at the right edge: it does not.
-    heca_grid_ui::dispatch(&mut region, &Event::PointerMoved { pos: Point::new(196.0, 50.0) });
+    heca_grid_ui::dispatch(&mut region, &Event::pointer_moved(Point::new(196.0, 50.0)));
     assert_eq!(
         seen.borrow().len(),
         after_content,

@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-04T20:58:23.521Z
+**Last updated:** 2026-08-06T22:31:32.780Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -146,9 +146,9 @@ Status: 🚧 `in-progress`
 - 📋 **ce5d5ea4-0f84-4e5a-909a-77d8344a2a87** P046 — gridui-04: Showcase coverage and visual regression (0/2 tasks)
 - 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** P052 — gridui-07: Crate-review debt (0/10 tasks)
 - 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P074 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
-- 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P079 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/5 tasks)
+- 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P079 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/6 tasks)
 - 📋 **029ef1b3-822b-4151-b5b0-b296b042b350** P081 — gridui-09: One border-width control — three paths currently disagree (0/4 tasks)
-- 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (3/5 tasks)
+- 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (4/7 tasks)
 
 ### ✅ b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -823,7 +823,7 @@ The drag framework ships but only the left sidebar is a drag surface. Regions an
 
 Status: 📋 `planned`
 
-**Tasks:** 0/5
+**Tasks:** 0/6
 
 ### 📋 029ef1b3-822b-4151-b5b0-b296b042b350 — P081 — gridui-09: One border-width control — three paths currently disagree
 
@@ -839,7 +839,7 @@ The framework walks children, not the widget; ScrollRegion owns its whole gestur
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 3/5
+**Tasks:** 4/7
 
 ### ✅ 1b6f739f-8774-4da2-af4f-5f88d0514507 — P091 — gridui-11: Text fits its box — Label truncation and Item's second line
 

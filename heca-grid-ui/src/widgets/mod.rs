@@ -63,7 +63,7 @@ pub use checkbox::{Checkbox, LabelSide};
 pub use chrome_region::{ChromeRegion, RegionMode};
 pub use card_grid::{CardGrid, GridCell};
 pub use command_palette::{Command, CommandPalette};
-pub use context_menu::{ContextMenu, MenuEntry};
+pub use context_menu::{ContextMenu, Menu, MenuAnchor, MenuEntry, MenuItem};
 pub use dialog::Dialog;
 pub use overlay::{
     paint_panel_chrome, place_anchored, place_anchored_on, place_at_point, place_beside,
@@ -97,7 +97,7 @@ pub use spinner::Spinner;
 pub use status_dot::{DotStatus, StatusDot};
 pub use surface::Surface;
 pub use scroll_bar::ScrollBar;
-pub use scroll_region::{ScrollAxes, ScrollInfo, ScrollRegion};
+pub use scroll_region::{RevealAlign, ScrollAxes, ScrollInfo, ScrollRegion};
 pub use tabs::Tabs;
 pub use tag::Tag;
 pub use toast::{Toast, ToastSeverity};

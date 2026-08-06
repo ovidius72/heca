@@ -21,6 +21,24 @@ pub enum ModifierKey {
     Shift,
 }
 
+/// When the workspace view centres the focused column, mirroring
+/// `heca_core::layout::CenterFocusedColumn`.
+///
+/// Mirrored rather than shared because `heca-config` depends on nothing but the theme — the same
+/// arrangement every other layout value here uses, with `startup.rs` converting at the boundary.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CenterFocusedColumn {
+    /// Never centre: focusing an off-screen column scrolls it to the nearest edge. **The default**,
+    /// matching niri's, and the one that keeps the view where you put it.
+    #[default]
+    Never,
+    /// Centre a column only when it cannot fit on screen beside the previously focused one.
+    OnOverflow,
+    /// The focused column is always centred.
+    Always,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Default-value helpers (used by serde attributes on SettingsConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -55,6 +73,17 @@ fn default_window_height() -> u32 {
 
 fn default_auto_scroll_edge() -> bool {
     true
+}
+
+/// Default overview zoom: `0.5`, niri's — half life size, where a workspace row is half the
+/// screen and about one and a half rows are on screen at once.
+fn default_overview_zoom() -> f64 {
+    0.5
+}
+
+/// Default gap between overview rows: a tenth of a screen height, niri's.
+fn default_overview_gap() -> f64 {
+    0.1
 }
 
 fn default_always_center_single_column() -> bool {
@@ -221,6 +250,16 @@ pub struct SettingsConfig {
     /// Center a single column even when it fits within the viewport.
     #[serde(default = "default_always_center_single_column")]
     pub always_center_single_column: bool,
+    /// When focusing a column re-centres the view: `never` | `on_overflow` | `always`.
+    #[serde(default)]
+    pub center_focused_column: CenterFocusedColumn,
+    /// How large the exposé draws the session, as a fraction of life size (niri's `overview.zoom`).
+    /// Clamped to `0.05..=0.75`; everything in the map is real size times this.
+    #[serde(default = "default_overview_zoom")]
+    pub overview_zoom: f64,
+    /// Gap between workspace rows in the exposé, as a fraction of a screen height.
+    #[serde(default = "default_overview_gap")]
+    pub overview_gap: f64,
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
@@ -324,6 +363,9 @@ impl Default for SettingsConfig {
             auto_scroll_edge: default_auto_scroll_edge(),
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
+            center_focused_column: CenterFocusedColumn::default(),
+            overview_zoom: default_overview_zoom(),
+            overview_gap: default_overview_gap(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),
             pane_show_cwd: default_pane_show_cwd(),

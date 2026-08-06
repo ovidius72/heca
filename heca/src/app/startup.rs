@@ -149,6 +149,19 @@ pub(crate) async fn init_state(
         let _ = redraw_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
     });
 
+    // **The host's one job in a declared context menu** (F004/P084/T395): put it on screen. The
+    // widget built it and the framework anchored it; only the host can reach a layer. Queued
+    // rather than mounted here because this closure has no `&mut AppState` — the event loop drains
+    // it before the next frame.
+    type PendingMenu = (heca_grid_ui::widgets::Menu, heca_grid_ui::widgets::MenuAnchor);
+    let pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>> = Default::default();
+    let queue = pending_menus.clone();
+    let menu_proxy = event_proxy.clone();
+    heca_grid_ui::install_menu_sink(move |menu, anchor| {
+        queue.borrow_mut().push((menu, anchor));
+        let _ = menu_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
     let appearance = app_config.config.appearance.clone();
     let window_attrs = Window::default_attributes()
         .with_title("heca")
@@ -269,12 +282,21 @@ pub(crate) async fn init_state(
     let pane_area = chrome.content_rect(log_w, log_h);
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
+    use heca_core::layout::types::CenterFocusedColumn as C;
     let layout_options = heca_core::layout::types::LayoutOptions {
         gaps: app_config
             .config
             .appearance
             .effective_pane_gap(&app_config.theme) as f64,
         always_center_single_column: app_config.config.settings.always_center_single_column,
+        // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
+        overview_scale: app_config.config.settings.overview_zoom.clamp(0.05, 0.75),
+        overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
+        center_focused_column: match app_config.config.settings.center_focused_column {
+            heca_config::settings::CenterFocusedColumn::Never => C::Never,
+            heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
+            heca_config::settings::CenterFocusedColumn::Always => C::Always,
+        },
         ..Default::default()
     };
     let mut session = Session::new(
@@ -425,6 +447,7 @@ pub(crate) async fn init_state(
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],
+        expose_cursor_per_ws: vec![None; ws_count],
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,
@@ -445,6 +468,7 @@ pub(crate) async fn init_state(
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
+        pending_menus: pending_menus.clone(),
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,

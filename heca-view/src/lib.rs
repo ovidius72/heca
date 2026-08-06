@@ -241,6 +241,16 @@ pub enum ViewScrollAxes {
     Both,
 }
 
+/// Where a scroll region puts the descendant it follows — mirrors grid-ui `RevealAlign`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewRevealAlign {
+    /// Scroll the least that makes it visible.
+    Minimal,
+    /// Keep it at the centre of the viewport.
+    Center,
+}
+
 /// How serious a message is — mirrors both grid-ui `ToastSeverity` **and** `AlertVariant`, which
 /// carry the same four values. One mirror, because two would be the same list written twice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,6 +355,7 @@ macro_rules! value_set {
 value_set! {
     ViewOrientation { Horizontal => "horizontal", Vertical => "vertical" }
     ViewScrollAxes { Vertical => "vertical", Horizontal => "horizontal", Both => "both" }
+    ViewRevealAlign { Minimal => "minimal", Center => "center" }
     ViewSeverity { Info => "info", Success => "success", Warning => "warning", Danger => "danger" }
     ViewLabelSide { Right => "right", Left => "left" }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
@@ -1050,6 +1061,7 @@ mod tests {
         }
         check(ViewOrientation::ALL, ViewOrientation::name);
         check(ViewScrollAxes::ALL, ViewScrollAxes::name);
+        check(ViewRevealAlign::ALL, ViewRevealAlign::name);
         check(ViewSeverity::ALL, ViewSeverity::name);
         check(ViewLabelSide::ALL, ViewLabelSide::name);
         check(ViewMarker::ALL, ViewMarker::name);

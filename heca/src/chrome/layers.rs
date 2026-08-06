@@ -15,6 +15,7 @@
 //! carries `#![allow(dead_code)]` like the other chrome seam modules until then.
 #![allow(dead_code)]
 
+use heca_grid_ui::effects::Fade;
 use heca_grid_ui::Component;
 use heca_view::ViewNode;
 
@@ -87,11 +88,43 @@ pub(crate) enum LayerKind {
     OnDemand,
 }
 
+/// What a layer wants **behind** it — the one thing a widget tree cannot draw for itself.
+///
+/// A layer paints into a `Scene`, whose vocabulary is rects, text and clips. "Everything already
+/// on screen, blurred" is not a shape: it is a GPU pass over the frame so far, which only the
+/// renderer can run. So a layer *declares* the backdrop it wants and the host performs it, exactly
+/// as [`covers_content`](DynamicLayer::covers_content) declares what it obscures and the router
+/// acts on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(crate) enum LayerBackdrop {
+    /// Whatever is behind shows through unchanged (the historical behaviour).
+    #[default]
+    Plain,
+    /// The frame so far, blurred, stamped under the layer — depth for a full-screen surface, and
+    /// the reason a map reads as *above* the session rather than as a replacement for it.
+    ///
+    /// Strength is the theme's `overlay_frost_radius`, so a theme that wants a flat backdrop sets
+    /// it to `0` and every frosted layer answers together.
+    Frosted,
+}
+
 /// A dynamically registered layer. Its content is either a native retained tree or a
 /// [`ViewNode`] description — see [`LayerContent`].
 pub(crate) struct DynamicLayer {
     pub(crate) id: LayerId,
     pub(crate) band: LayerBand,
+    /// What this layer wants drawn behind it. See [`LayerBackdrop`].
+    pub(crate) backdrop: LayerBackdrop,
+    /// Set while a **removal** is waiting on the dissolve: the layer is gone as far as its owner is
+    /// concerned and only the picture is still playing out. [`LayerRegistry::tick`] drops it.
+    pub(crate) doomed: bool,
+    /// The dissolve this layer plays on its way out — [`Fade`], the same effect any widget embeds.
+    ///
+    /// Declared, not decided by the hider: whether a surface should dissolve or cut is a property
+    /// of the surface — a full-screen map that vanishes mid-keystroke reads as a glitch, a context
+    /// menu that lingers reads as lag. A zero duration (the default) means "cut", so a layer that
+    /// never asked for one needs no special case anywhere.
+    pub(crate) fade: Fade,
     pub(crate) kind: LayerKind,
     /// Captures the context while active — suppresses everything beneath it.
     pub(crate) modal: bool,
@@ -173,6 +206,24 @@ impl LayerContent {
 }
 
 impl DynamicLayer {
+    /// How opaque to paint this layer — `1.0` normally, falling to `0` across a fade-out.
+    pub(crate) fn opacity(&self) -> f32 {
+        self.fade.amount()
+    }
+
+    /// Is this layer **still in charge** — capturing input, covering the panes, answering as the
+    /// front-most modal?
+    ///
+    /// A dissolving layer is not. It is on screen and it is being painted, but the decision to
+    /// dismiss it has already been made, so from that moment it is a picture rather than a modal.
+    /// Getting this wrong is not subtle: the exposé closes by dismissing itself and *then* focusing
+    /// the pane you chose, and while the dissolve still counted as coverage the focus was refused
+    /// by `Domain::Overlay` for the whole length of the animation — every activation blocked, with
+    /// `blocked intent from Keyboard` in the log.
+    pub(crate) fn is_active(&self) -> bool {
+        self.visible && !self.fade.is_running()
+    }
+
     /// The live tree — what the host lays out, paints and hint-walks.
     ///
     /// For a `Native` layer that is the content itself; for a `View` layer it is
@@ -224,6 +275,9 @@ impl LayerRegistry {
         self.layers.push(DynamicLayer {
             id,
             band,
+            backdrop: LayerBackdrop::default(),
+            doomed: false,
+            fade: Fade::new(0.0),
             kind,
             modal,
             covers_content,
@@ -252,6 +306,9 @@ impl LayerRegistry {
         self.layers.push(DynamicLayer {
             id,
             band,
+            backdrop: LayerBackdrop::default(),
+            doomed: false,
+            fade: Fade::new(0.0),
             kind,
             modal,
             covers_content,
@@ -287,11 +344,87 @@ impl LayerRegistry {
         id
     }
 
+    /// Declare what a layer wants drawn behind it (see [`LayerBackdrop`]).
+    ///
+    /// Set after registering rather than passed to `add`, the way [`name`](Self::add_named) is:
+    /// every layer has a backdrop and almost every one wants the default, so it does not belong in
+    /// the argument list four call sites would have to carry.
+    pub(crate) fn set_backdrop(&mut self, id: LayerId, backdrop: LayerBackdrop) {
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.backdrop = backdrop;
+        }
+    }
+
+    /// Is any layer participating this frame?
+    ///
+    /// Asked by the renderer rather than "did the layer scene draw anything", because an
+    /// [`Overlay`](heca_grid_ui::Overlay) paints its whole panel into the scene's **overlay** layer
+    /// — its base layer is empty, so a scene-emptiness check silently skipped the flush and the
+    /// exposé drew nothing at all.
+    pub(crate) fn any_visible(&self) -> bool {
+        self.layers.iter().any(|l| l.visible)
+    }
+
+    /// Declare that this layer dissolves over `seconds` when hidden instead of cutting.
+    pub(crate) fn set_fade_out(&mut self, id: LayerId, seconds: f32) {
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.fade = Fade::new(seconds);
+        }
+    }
+
+    /// How opaque a layer should be painted this frame — `1.0` unless it is on its way out.
+    pub(crate) fn opacity(&self, id: LayerId) -> f32 {
+        self.layers
+            .iter()
+            .find(|l| l.id == id)
+            .map_or(1.0, DynamicLayer::opacity)
+    }
+
+    /// Advance any fade in flight, retiring layers whose fade has run out. Returns `true` while one
+    /// is still going, which is what keeps frames coming — a fade nobody ticks is a frozen layer.
+    pub(crate) fn tick(&mut self, dt: f32) -> bool {
+        let mut fading = false;
+        for l in &mut self.layers {
+            let was_running = l.fade.is_running();
+            match l.fade.tick(dt) {
+                true => fading = true,
+                // The frame a running fade reports finished is the frame the layer can go.
+                false if was_running => l.visible = false,
+                false => {}
+            }
+        }
+        // A layer whose removal was waiting on its dissolve leaves for good now.
+        self.layers.retain(|l| !l.doomed || l.fade.is_running());
+        fading
+    }
+
+    /// How strongly to stamp the frosted backdrop this frame — the **boldest** frosted layer's own
+    /// opacity, so the blur under a dissolving map dissolves with it instead of snapping back
+    /// sharp in one frame at the end.
+    pub(crate) fn frost_opacity(&self) -> f32 {
+        self.layers
+            .iter()
+            .filter(|l| l.visible && l.backdrop == LayerBackdrop::Frosted)
+            .map(DynamicLayer::opacity)
+            .fold(0.0, f32::max)
+    }
+
+    /// Does any layer participating this frame want a frosted backdrop?
+    ///
+    /// One question for the renderer, because the blur is **one pass over the whole frame**: two
+    /// frosted layers up at once share it rather than each paying for their own.
+    pub(crate) fn wants_frost(&self) -> bool {
+        self.layers
+            .iter()
+            .any(|l| l.visible && l.backdrop == LayerBackdrop::Frosted)
+    }
+
     /// The layer registered under `name`, if any.
     pub(crate) fn by_name(&self, name: &str) -> Option<LayerId> {
         self.layers
             .iter()
-            .find(|l| l.name.as_deref() == Some(name))
+            // A layer already on its way out is not the one a name means any more.
+            .find(|l| l.name.as_deref() == Some(name) && !l.doomed)
             .map(|l| l.id)
     }
 
@@ -299,7 +432,7 @@ impl LayerRegistry {
     pub(crate) fn is_visible_named(&self, name: &str) -> bool {
         self.layers
             .iter()
-            .any(|l| l.name.as_deref() == Some(name) && l.visible)
+            .any(|l| l.name.as_deref() == Some(name) && l.is_active())
     }
 
     /// Reserve the next id **without** adding a layer, for the case where the layer's own
@@ -326,6 +459,9 @@ impl LayerRegistry {
         self.layers.push(DynamicLayer {
             id,
             band,
+            backdrop: LayerBackdrop::default(),
+            doomed: false,
+            fade: Fade::new(0.0),
             kind,
             modal,
             covers_content,
@@ -336,8 +472,24 @@ impl LayerRegistry {
         });
     }
 
-    /// Remove a layer entirely.
+    /// Remove a layer entirely — **after its dissolve, if it declared one.**
+    ///
+    /// A layer that fades is still on screen for those few frames, so taking it out of the registry
+    /// the instant it is resolved makes it vanish between two frames and the fade never plays. This
+    /// is the path Escape and a widget's own dismiss take (`overlay::resolve`), which is why the
+    /// map cut on Escape while it dissolved on a click: the two dismissals went different ways.
+    ///
+    /// Its completion has already run by then; what lingers is only the picture. [`tick`](Self::tick)
+    /// finishes the job.
     pub(crate) fn remove(&mut self, id: LayerId) {
+        let Some(l) = self.layers.iter_mut().find(|l| l.id == id) else { return };
+        if l.visible {
+            l.fade.start();
+        }
+        if l.fade.is_running() {
+            l.doomed = true;
+            return;
+        }
         self.layers.retain(|l| l.id != id);
     }
 
@@ -345,31 +497,53 @@ impl LayerRegistry {
     pub(crate) fn show(&mut self, id: LayerId) {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.visible = true;
+            // Re-shown mid-fade: cancel it and be fully there again, rather than opening
+            // half-transparent and finishing a disappearance nobody still wants.
+            l.fade.cancel();
         }
     }
 
     /// Hide a layer. `HideLayer` dispatches here.
+    ///
+    /// A layer that declared a [`fade_out`](DynamicLayer::fade_out) does not go now — it starts
+    /// dissolving and stays visible until [`tick`](Self::tick) runs the fade out. Everything that
+    /// reads `visible` therefore keeps treating it as up for those few frames, which is right:
+    /// while you can still see a modal it is still covering the panes.
     pub(crate) fn hide(&mut self, id: LayerId) {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
-            l.visible = false;
+            if l.visible {
+                l.fade.start();
+            }
+            // No fade declared (or none left to run) ⇒ it goes now.
+            if !l.fade.is_running() {
+                l.visible = false;
+            }
         }
     }
 
     /// Is the tiled area covered by any visible layer? The input to `Domain::Overlay`
     /// (F003/P086/T371).
     ///
-    /// **A `modal` layer counts whether or not it declared coverage** — it captures the keyboard and
-    /// demands a choice, so acting on the panes behind it is refused by construction. Derived here
-    /// rather than trusted at each `insert`, because a call site that passes `false` for a modal
-    /// re-opens exactly one hole: the prefix sequence deliberately falls through the overlay key
-    /// path (`app/events.rs`, so `prefix+/` can pick a menu entry), reaches the router, and runs.
-    /// `prefix+x` with a context menu open raising the close-pane confirm was that hole (user,
-    /// 2026-07-30). The declared flag is what a **non-modal** overlay — a plugin panel over the
-    /// scrolling area — uses to get the same protection.
+    /// **A `Modal`-band layer counts whether or not it declared coverage.** It demands a decision,
+    /// so acting on the panes behind it is refused by construction rather than trusted at each
+    /// `insert` — a call site passing `false` there re-opens exactly one hole: the prefix sequence
+    /// deliberately falls through the overlay key path (`app/events.rs`, so `prefix+/` can pick a
+    /// menu entry), reaches the router, and runs. `prefix+x` with a context menu open raising the
+    /// close-pane confirm was that hole (user, 2026-07-30).
+    ///
+    /// **Below that band it is `covers_content` alone**, and `modal` has nothing to do with it.
+    /// The two answer different questions and conflating them left one surface impossible to
+    /// describe: `modal` is "does this take the keyboard", `covers_content` is "may actions still
+    /// touch the panes". The exposé is both at once — it takes the keyboard, and it is a *map of
+    /// the panes*, so acting on the one you can see in it is the entire point. While `modal`
+    /// implied coverage, the map blocked every act on the pane it was built to let you choose, and
+    /// no arrangement of intents could get past it (Antonio, 2026-08-05: *"we have actions in
+    /// ActionRegistry for all the methods we need — why is this so difficult here?"*). It was not
+    /// the actions; it was this.
     pub(crate) fn content_covered(&self) -> bool {
         self.layers
             .iter()
-            .any(|l| l.visible && (l.covers_content || l.modal))
+            .any(|l| l.is_active() && (l.covers_content || l.band == LayerBand::Modal))
     }
 
     /// The currently-visible layers, in **front → back** order (highest band first, then
@@ -403,7 +577,7 @@ impl LayerRegistry {
         self.layers
             .iter()
             .rev()
-            .find(|l| l.visible && l.modal)
+            .find(|l| l.is_active() && l.modal)
             .map(|l| l.id)
     }
 
@@ -413,7 +587,7 @@ impl LayerRegistry {
         self.layers
             .iter_mut()
             .rev()
-            .find(|l| l.visible && l.modal)
+            .find(|l| l.is_active() && l.modal)
             .map(|l| l.root_mut().as_mut())
     }
 }
@@ -427,20 +601,102 @@ mod tests {
         Box::new(Flex::row())
     }
 
-    /// **A modal covers whatever it declared** — the property no call site can get wrong
-    /// (F003/P086/T371). A layer that captures the keyboard and demands a choice must refuse acts on
-    /// the panes behind it; the alternative is trusting a `bool` at every `insert`, and the one that
+    /// **A frost is only paid for while the layer asking for it is up.** The blur is a full-frame
+    /// GPU pass, so a hidden exposé must not keep the renderer running it, and a plain dialog must
+    /// never trigger one it did not ask for.
+    #[test]
+    fn only_a_visible_layer_that_asked_for_it_wants_a_frost() {
+        let mut reg = LayerRegistry::default();
+        let plain = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        let frosted = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, true, empty_root());
+        reg.set_backdrop(frosted, LayerBackdrop::Frosted);
+
+        assert!(!reg.wants_frost(), "both are hidden — nothing to frost behind");
+        reg.show(plain);
+        assert!(!reg.wants_frost(), "a plain layer does not summon a blur pass");
+        reg.show(frosted);
+        assert!(reg.wants_frost());
+        reg.hide(frosted);
+        assert!(!reg.wants_frost(), "hidden again, and the pass stops with it");
+    }
+
+    /// **A dissolving layer is removed only after its dissolve.** Escape and a widget's own
+    /// dismiss both go through `overlay::resolve`, which *removes*; hiding was the only path that
+    /// faded. So the map dissolved on a click and cut on Escape — two dismissals, two behaviours.
+    #[test]
+    fn removing_a_fading_layer_waits_for_the_fade() {
+        let mut reg = LayerRegistry::default();
+        let id = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, true, empty_root());
+        reg.set_fade_out(id, 0.1);
+        reg.show(id);
+
+        reg.remove(id);
+        assert!(reg.any_visible(), "it is on its way out, not gone");
+        assert!(reg.tick(0.05), "still dissolving");
+        assert!(reg.opacity(id) < 1.0, "and visibly on its way: {}", reg.opacity(id));
+        assert!(!reg.tick(0.05), "and now it is done");
+        assert!(!reg.any_visible(), "the layer is gone for good");
+    }
+
+    /// **A dissolving layer stops being in charge the moment it is dismissed**, even though it is
+    /// still on screen.
+    ///
+    /// The exposé closes by dismissing itself and *then* focusing the pane you chose. While the
+    /// dissolve still counted as coverage, that focus was refused by `Domain::Overlay` for the
+    /// whole animation — Enter and Space did nothing and the log filled with `blocked intent from
+    /// Keyboard`. Adding a fade must not make a surface hold onto input it has already given up.
+    #[test]
+    fn a_dissolving_layer_no_longer_covers_the_content() {
+        let mut reg = LayerRegistry::default();
+        let id = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, true, empty_root());
+        reg.set_fade_out(id, 0.1);
+        reg.show(id);
+        assert!(reg.content_covered(), "up and in charge");
+
+        reg.hide(id);
+        assert!(!reg.content_covered(), "dismissed — a picture now, not a modal");
+        assert!(reg.any_visible(), "and still painted while it dissolves");
+        assert!(reg.top_modal_id().is_none(), "so it takes no more input either");
+    }
+
+    /// A layer with no dissolve declared still goes at once — a menu that lingers reads as lag.
+    #[test]
+    fn removing_a_plain_layer_is_immediate() {
+        let mut reg = LayerRegistry::default();
+        let id = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        reg.show(id);
+        reg.remove(id);
+        assert!(!reg.any_visible());
+    }
+
+    /// **A `Modal`-band layer covers whatever it declared** — the property no call site can get
+    /// wrong (F003/P086/T371). It demands a decision, so acts on the panes behind it are refused by
+    /// construction; the alternative is trusting a `bool` at every `insert`, and the one that
     /// passed `false` let `prefix+x` raise the close-pane confirm with a context menu open (user,
     /// 2026-07-30).
     #[test]
-    fn a_modal_covers_the_content_even_if_it_says_otherwise() {
+    fn a_modal_band_layer_covers_the_content_even_if_it_says_otherwise() {
         let mut reg = LayerRegistry::default();
         // Deliberately declaring `false`, as the dropdown path once did.
-        reg.insert(LayerId(7), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        reg.insert(LayerId(7), LayerBand::Modal, LayerKind::OnDemand, true, false, empty_root());
         assert!(
             reg.content_covered(),
-            "capturing input IS coverage, whatever the flag says",
+            "a decision-demanding surface covers, whatever the flag says",
         );
+    }
+
+    /// **Below the `Modal` band, coverage is what the layer declared — `modal` says nothing about
+    /// it.** The two answer different questions: `modal` is "does this take the keyboard",
+    /// `covers_content` is "may actions still touch the panes". Conflating them made one surface
+    /// impossible to describe — the exposé takes the keyboard *and* is a map of the panes, so while
+    /// `modal` implied coverage it refused every act on the pane it exists to let you choose.
+    #[test]
+    fn an_overlay_that_takes_the_keyboard_can_still_declare_it_covers_nothing() {
+        let mut reg = LayerRegistry::default();
+        let map = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        reg.show(map);
+        assert!(!reg.content_covered(), "a map of the panes does not cover them");
+        assert_eq!(reg.top_modal_id(), Some(map), "and it still owns the keyboard");
     }
 
     /// The one input `Domain::Overlay` reads: a *visible* covering layer, and only that

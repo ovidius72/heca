@@ -175,9 +175,17 @@ pub struct LayoutOptions {
     pub always_center_single_column: bool,
     /// Default width for new columns.
     pub default_column_width: Option<ColumnWidth>,
-    /// Overview scale factor (e.g., 0.25 means workspaces rendered at 25%).
+    /// How large the overview draws things, as a fraction of life size — niri's `overview { zoom }`.
+    ///
+    /// **Everything is drawn at real size times this**, which is what makes the map a map: a
+    /// workspace row is the viewport's shape, a column keeps its real proportion of the screen, and
+    /// a strip scrolled past one screen really is wider than its row.
     pub overview_scale: f64,
-    /// Gap between workspaces in overview mode.
+    /// Gap between workspace rows in the overview, as a **fraction of a screen height** (times the
+    /// scale) — niri's `workspace_gap = view_size.h * 0.1 * zoom`.
+    ///
+    /// A fraction rather than a pixel count, because the gap has to stay the same *picture* at
+    /// every scale: 16px is a canyon at 0.75 and a hairline at 0.1.
     pub overview_gap: f64,
 }
 
@@ -188,8 +196,9 @@ impl Default for LayoutOptions {
             center_focused_column: CenterFocusedColumn::Never,
             always_center_single_column: false,
             default_column_width: Some(ColumnWidth::Proportion(0.5)),
-            overview_scale: 0.25,
-            overview_gap: 16.0,
+            // niri's defaults: zoom 0.5, gap a tenth of a screen.
+            overview_scale: 0.5,
+            overview_gap: 0.1,
         }
     }
 }
@@ -197,9 +206,14 @@ impl Default for LayoutOptions {
 /// When to center the focused column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CenterFocusedColumn {
+    /// Focusing an off-screen column scrolls it to the nearest edge and leaves it there.
+    ///
+    /// **The default, matching niri's.** It was `OnOverflow` while nothing could configure it; a
+    /// view that re-centres itself on every focus change moves more than the user asked for, and
+    /// the ones who want that now have a setting to say so.
+    #[default]
     Never,
     /// Center only when the column doesn't fit with neighbors.
-    #[default]
     OnOverflow,
     Always,
 }

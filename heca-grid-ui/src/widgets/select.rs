@@ -729,43 +729,63 @@ impl Component for Select {
         true
     }
 
+    /// The select's **input** surface: the trigger, plus the list it is showing. The options are
+    /// real children with real bounds, so they hit-test themselves — but the panel's own chrome
+    /// (its padding, the gap between rows) belongs to the select, and a wheel over it is the
+    /// list's, not the page's.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        let trigger = self.base.bounds;
+        if !self.open {
+            return Some(trigger);
+        }
+        let panel = self.panel_rect();
+        let x0 = trigger.loc.x.min(panel.loc.x);
+        let y0 = trigger.loc.y.min(panel.loc.y);
+        let x1 = (trigger.loc.x + trigger.size.w).max(panel.loc.x + panel.size.w);
+        let y1 = (trigger.loc.y + trigger.size.h).max(panel.loc.y + panel.size.h);
+        Some(Rectangle::new(
+            Point::new(x0, y0),
+            Size::new(x1 - x0, y1 - y0),
+        ))
+    }
+
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                if self.open {
-                    if let Some(i) = self.row_at(*pos) {
-                        self.highlight = i;
-                    }
-                    // The panel is opaque: consume the move so the widgets it covers don't light up
-                    // as hovered *behind* it. The host offers the event to the open overlay first
-                    // and only falls through on `No` — so this is the whole fix.
-                    if self.panel_rect().contains(*pos) {
-                        return Handled::Yes;
-                    }
+            // The open panel is opaque by construction now: it is what the router hit-tested, so
+            // a move that reaches this widget is over the trigger or the list, and the widgets the
+            // panel covers are not on the path at all — they cannot light up behind it.
+            Event::PointerMove(p) => {
+                if self.open
+                    && let Some(i) = self.row_at(p.pos)
+                {
+                    self.highlight = i;
                 }
                 Handled::No
             }
-            Event::PointerPressed { pos } => {
+            Event::PointerDown(p) => {
                 if self.open {
-                    if let Some(i) = self.row_at(*pos) {
+                    if let Some(i) = self.row_at(p.pos) {
                         self.commit(i);
                     }
-                    // Any press while open closes it (option, trigger, or outside).
+                    // A press on the option or the trigger closes it; one outside arrives as
+                    // `PointerDownOutside` below.
                     self.close();
                     Handled::Yes
-                } else if self.base.bounds.contains(*pos) {
+                } else {
                     self.open_list();
                     Handled::Yes
-                } else {
-                    Handled::No
                 }
             }
-            Event::Scroll { delta_y, .. } if self.open => {
+            Event::PointerDownOutside(_) if self.open => {
+                self.close();
+                Handled::No
+            }
+            Event::Scroll(p) if self.open => {
                 let max = self.max_scroll() as f32;
-                self.scroll = (self.scroll as f32 + delta_y).clamp(0.0, max).round() as usize;
+                self.scroll = (self.scroll as f32 + p.delta_y).clamp(0.0, max).round() as usize;
                 self.place_options();
                 Handled::Yes
             }

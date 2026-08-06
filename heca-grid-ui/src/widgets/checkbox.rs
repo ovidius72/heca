@@ -60,7 +60,6 @@ pub struct Checkbox {
     progress: f32,
     /// Press flash (brightens on toggle, fades out).
     flash: Flash,
-    hovered: Signal<bool>,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -70,6 +69,7 @@ impl Checkbox {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
+        base.one_click_target = true; // and one click target (Base::one_click_target)
         base.style.layout.width = Length::Px(BOX_SIZE as f32);
         base.style.layout.height = Length::Px(BOX_SIZE as f32);
         Self {
@@ -79,7 +79,6 @@ impl Checkbox {
             label_side: LabelSide::Right,
             progress: 0.0,
             flash: Flash::new(),
-            hovered: signal(false),
             on_change: None,
         }
     }
@@ -179,9 +178,6 @@ impl Checkbox {
         Rectangle::new(Point::new(x, b.loc.y), Size::new(w, b.size.h))
     }
 
-    fn contains(&self, p: Point) -> bool {
-        self.base.bounds.contains(p)
-    }
 
     /// Flip the state: animate the indicator, flash, and emit `checkbox-change`.
     fn flip(&mut self) {
@@ -293,21 +289,31 @@ impl Component for Checkbox {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.contains(*pos) => {
-                self.flip();
-                Handled::Yes
-            }
             Event::Key {
                 key: GridKey::Enter | GridKey::Space,
                 pressed: true,
             } => {
+                self.flip();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.flip();
                 Handled::Yes
             }

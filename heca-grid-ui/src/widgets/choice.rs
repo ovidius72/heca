@@ -72,7 +72,6 @@ pub struct Choice {
     value: String,
     /// Selected (chosen) — a tinted pill + accent content.
     selected: Signal<bool>,
-    hovered: Signal<bool>,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
 }
@@ -94,7 +93,6 @@ impl Choice {
             base,
             value: value.into(),
             selected: signal(false),
-            hovered: signal(false),
             flash: Flash::new(),
             on_activate: None,
         };
@@ -130,7 +128,7 @@ impl Choice {
 
     /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
-        self.hovered
+        self.base.pointer.hovered
     }
 
     /// Make the option activatable (click / `Enter` / `Space`), which also makes it focusable.
@@ -141,6 +139,7 @@ impl Choice {
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive options are focusable (Component::focusable)
+        self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
     }
 
@@ -196,7 +195,7 @@ impl Component for Choice {
         // `Item`, so an option and a list row read as the same family.
         if selected {
             cx.rect(b, accent.with_alpha(ia.row_active_fill), None, radius, None);
-        } else if self.hovered.get_untracked() {
+        } else if self.base.hovered() {
             cx.rect(b, foreground.with_alpha(ia.row_hover_fill), None, radius, None);
         }
 
@@ -233,21 +232,31 @@ impl Component for Choice {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.base.bounds.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
-                self.activate();
-                Handled::Yes
-            }
             Event::Key {
                 key: GridKey::Enter | GridKey::Space,
                 pressed: true,
             } => {
+                self.activate();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.interactive() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.activate();
                 Handled::Yes
             }

@@ -23,6 +23,8 @@ use crate::reactive::{Signal, SignalGet, SignalUpdate};
 pub struct GridCell {
     key: String,
     selected: Signal<bool>,
+    /// The card's own hover signal, when the caller wired one — see [`GridCell::hovered`].
+    hovered: Option<Signal<bool>>,
 }
 
 impl GridCell {
@@ -33,12 +35,25 @@ impl GridCell {
     /// A cell **carries no body**: the caller draws the card inside the row layout it passes to
     /// [`CardGrid::row`], so there is one place the visuals live rather than two that can disagree.
     pub fn new(key: impl Into<String>, selected: Signal<bool>) -> Self {
-        Self { key: key.into(), selected }
+        Self { key: key.into(), selected, hovered: None }
+    }
+
+    /// Wire the card's **hover** signal, so pointing at a card moves the cursor onto it.
+    ///
+    /// The cursor stays single-valued: hovering *moves* it rather than raising a second claim
+    /// beside it, so the keyboard and the mouse can never disagree about where you are — and
+    /// anything watching the cursor (a scroll region centring it, a preview pane) follows the mouse
+    /// for free, with nothing wired per surface.
+    ///
+    /// Optional: a grid whose caller passes no hover signal behaves exactly as before.
+    pub fn hovered(mut self, hovered: Signal<bool>) -> Self {
+        self.hovered = Some(hovered);
+        self
     }
 }
 
-/// One column's cells, top to bottom: their keys and the signals that light them.
-type Cells = Vec<(String, Signal<bool>)>;
+/// One column's cells, top to bottom: their key, the signal that lights them, and their hover.
+type Cells = Vec<(String, Signal<bool>, Option<Signal<bool>>)>;
 /// One row's columns, left to right.
 type Columns = Vec<Cells>;
 
@@ -50,9 +65,20 @@ pub struct CardGrid {
     base: Base,
     /// Per row, the cards left to right: their keys and their light signals.
     rows: Vec<Columns>,
+    /// Per row, an optional signal lit while the cursor is **anywhere in that row**. See
+    /// [`row_cursor`](CardGrid::row_cursor).
+    row_cursors: Vec<Option<Signal<bool>>>,
     /// (row, column, index within the column) — three axes, because a map has three.
     cursor: (usize, usize, usize),
+    /// Per row, the `(column, cell)` the cursor was last on there.
+    ///
+    /// **Leaving a row and coming back returns to where you were in it.** Without this the cursor
+    /// carries its column index across and clamps, so stepping through a row of one column and back
+    /// lands on the first card every time — the position is quietly destroyed by the trip.
+    row_marks: Vec<(usize, usize)>,
     on_activate: Option<OnActivate>,
+    /// Told the key the cursor moved onto, every time it moves. See [`on_move`](CardGrid::on_move).
+    on_move: Option<OnActivate>,
     on_dismiss: Option<Box<dyn Fn()>>,
 }
 
@@ -67,8 +93,11 @@ impl CardGrid {
         Self {
             base,
             rows: Vec::new(),
+            row_marks: Vec::new(),
+            row_cursors: Vec::new(),
             cursor: (0, 0, 0),
             on_activate: None,
+            on_move: None,
             on_dismiss: None,
         }
     }
@@ -84,10 +113,42 @@ impl CardGrid {
         self.rows.push(
             columns
                 .iter()
-                .map(|col| col.iter().map(|c| (c.key.clone(), c.selected)).collect())
+                .map(|col| col.iter().map(|c| (c.key.clone(), c.selected, c.hovered)).collect())
                 .collect(),
         );
         self.base.children.push(Box::new(layout));
+        self.row_marks.push((0, 0));
+        self
+    }
+
+    /// Bind a signal lit while the cursor is anywhere in the **row just added**.
+    ///
+    /// The per-cell signals answer "is the cursor on *this card*"; a surface often needs the
+    /// coarser question — which row you are in — to light the row, position a map on it, or decide
+    /// which of several regions is the one that matters. Deriving that from the cell signals means
+    /// every caller writing the same fold, and getting the empty-row case wrong: a row with no
+    /// cards is still a row you can stand on, and no cell signal would ever say so.
+    ///
+    /// Chained after [`row`](Self::row) rather than passed to it, so the common case stays two
+    /// arguments and the signal can be created before the row's layout that binds it.
+    #[heca_grid_ui_macros::host_only("a live signal, not a scalar")]
+    pub fn row_cursor(mut self, lit: Signal<bool>) -> Self {
+        if let Some(slot) = self.row_cursors.last_mut() {
+            *slot = Some(lit);
+        }
+        self.sync();
+        self
+    }
+
+    /// Called with the card's key **each time the cursor moves onto it** — keyboard, hover, or a
+    /// programmatic selection.
+    ///
+    /// What a host uses to keep the position somewhere that outlives the widget. A surface rebuilt
+    /// from scratch every time it opens has no memory of its own, so "open where I left it" is
+    /// something only the host can answer; this is how the host hears the answer.
+    #[heca_grid_ui_macros::host_only("a callback, not a scalar")]
+    pub fn on_move(mut self, f: impl Fn(&str) + 'static) -> Self {
+        self.on_move = Some(Box::new(f));
         self
     }
 
@@ -114,7 +175,7 @@ impl CardGrid {
         let key = key.into();
         if let Some(at) = self.rows.iter().enumerate().find_map(|(r, row)| {
             row.iter().enumerate().find_map(|(c, col)| {
-                col.iter().position(|(k, _)| *k == key).map(|i| (r, c, i))
+                col.iter().position(|(k, ..)| *k == key).map(|i| (r, c, i))
             })
         }) {
             self.cursor = at;
@@ -129,15 +190,30 @@ impl CardGrid {
             .get(self.cursor.0)
             .and_then(|r| r.get(self.cursor.1))
             .and_then(|c| c.get(self.cursor.2))
-            .map(|(k, _)| k.as_str())
+            .map(|(k, ..)| k.as_str())
     }
 
-    /// Light the card under the cursor and darken the rest — one signal write per card, never a
-    /// rebuild.
+    /// Light the card under the cursor, darken the rest, and tell the host where the cursor now is.
+    ///
+    /// One signal write per card, never a rebuild.
     fn sync(&self) {
+        if let (Some(f), Some(key)) = (&self.on_move, self.selected_key()) {
+            f(key);
+        }
+        self.sync_lights();
+    }
+
+    fn sync_lights(&self) {
+        for (r, lit) in self.row_cursors.iter().enumerate() {
+            let Some(lit) = lit else { continue };
+            let on = r == self.cursor.0;
+            if lit.get_untracked() != on {
+                lit.set(on);
+            }
+        }
         for (r, row) in self.rows.iter().enumerate() {
             for (c, col) in row.iter().enumerate() {
-                for (i, (_, sig)) in col.iter().enumerate() {
+                for (i, (_, sig, _)) in col.iter().enumerate() {
                     let on = (r, c, i) == self.cursor;
                     if sig.get_untracked() != on {
                         sig.set(on);
@@ -156,14 +232,64 @@ impl CardGrid {
     /// Move down (`1`) or up (`-1`) on whichever vertical axis has depth here: the cells of the
     /// current column when it holds more than one, the rows otherwise.
     pub fn step_vertical(&mut self, d: isize) {
-        let deep = self
+        let cells = self
             .rows
             .get(self.cursor.0)
             .and_then(|r| r.get(self.cursor.1))
-            .is_some_and(|col| col.len() > 1);
-        match deep {
+            .map_or(0, Vec::len);
+        // **At the end of a column it falls through to the next row.** Walking the cells of a split
+        // column and walking the rows are the same gesture — "further down" — so stopping dead at
+        // the last pane of a column makes the key do nothing when there is obviously somewhere to
+        // go. A column of one has no cells to walk, so it moves by rows immediately.
+        let at_end = match d < 0 {
+            true => self.cursor.2 == 0,
+            false => self.cursor.2 + 1 >= cells,
+        };
+        match cells > 1 && !at_end {
             true => self.step(0, d, 0),
-            false => self.step(0, 0, d),
+            false => {
+                let before = self.cursor;
+                self.step(0, 0, d);
+                // The row did not move (already the first or last), so stay where we are rather
+                // than silently landing on a different cell of the same column.
+                if self.cursor.0 == before.0 {
+                    self.cursor = before;
+                    self.sync();
+                    return;
+                }
+                // **Enter the new column at the edge you arrived from**: coming down, its first
+                // pane; coming up, its last. Keeping the old index instead drops you into the
+                // middle of a split column and reads as a jump rather than a step.
+                let landed = self
+                    .rows
+                    .get(self.cursor.0)
+                    .and_then(|r| r.get(self.cursor.1))
+                    .map_or(0, Vec::len);
+                self.cursor.2 = match d < 0 {
+                    true => landed.saturating_sub(1),
+                    false => 0,
+                };
+                self.sync();
+            }
+        }
+    }
+
+    /// Move the cursor onto whichever card reports itself hovered, if any.
+    ///
+    /// Runs on pointer moves. A move that leaves every card unhovered changes nothing — the cursor
+    /// stays where it was rather than snapping back to a corner, because "the mouse is over
+    /// nothing" is not a choice the user made.
+    fn follow_hover(&mut self) {
+        let at = self.rows.iter().enumerate().find_map(|(r, row)| {
+            row.iter().enumerate().find_map(|(c, col)| {
+                col.iter()
+                    .position(|(_, _, hov)| hov.is_some_and(|h| h.get_untracked()))
+                    .map(|i| (r, c, i))
+            })
+        });
+        if let Some(at) = at.filter(|at| *at != self.cursor) {
+            self.cursor = at;
+            self.sync();
         }
     }
 
@@ -172,7 +298,19 @@ impl CardGrid {
             return;
         }
         let (mut r, mut c, mut i) = self.cursor;
+        // Leaving this row: remember where in it we were, so coming back lands there.
+        if let Some(mark) = self.row_marks.get_mut(r) {
+            *mark = (c, i);
+        }
         r = ((r as isize + drow).clamp(0, self.rows.len() as isize - 1)) as usize;
+        // Arriving in a different row: resume from its own remembered place rather than carrying
+        // this row's column index across and clamping it to something that means nothing there.
+        if r != self.cursor.0
+            && let Some(&(mc, mi)) = self.row_marks.get(r)
+        {
+            c = mc;
+            i = mi;
+        }
         let cols = self.rows[r].len();
         if cols == 0 {
             // A row with no columns is still a row you can stand on — reachable, not skipped.
@@ -197,6 +335,7 @@ impl CardGrid {
 // the widget baking in spacing it cannot know the right value for.
 impl crate::builders::LayoutExt for CardGrid {}
 
+
 impl Default for CardGrid {
     fn default() -> Self {
         Self::new()
@@ -213,6 +352,14 @@ impl Component for CardGrid {
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
+        // **Pointing at a card moves the cursor onto it**, so the mouse and the keyboard share one
+        // position instead of each having their own. Read from the cards' own hover signals — they
+        // already hit-test themselves, so this needs no geometry of its own and cannot disagree
+        // with what the card is drawing. Not consumed: the card still gets its own hover.
+        if matches!(ev, Event::PointerMove(_) | Event::PointerEnter(_)) {
+            self.follow_hover();
+            return Handled::No;
+        }
         let Event::Widget(intent) = ev else {
             return Handled::No;
         };
@@ -250,5 +397,73 @@ impl Component for CardGrid {
             _ => return Handled::No,
         }
         Handled::Yes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reactive::signal;
+
+    /// Two rows: the first a split column of two panes, the second a single pane.
+    fn grid() -> CardGrid {
+        let cell = |k: &str| GridCell::new(k, signal(false));
+        CardGrid::new()
+            .row(vec![vec![cell("a"), cell("b")]], crate::widgets::Flex::row())
+            .row(vec![vec![cell("c")]], crate::widgets::Flex::row())
+    }
+
+    /// **The vertical axis is one gesture.** Walking the panes of a split column and walking the
+    /// workspaces are both "further down", so stopping dead at the last pane of a column makes the
+    /// key do nothing when there is plainly somewhere to go.
+    #[test]
+    fn moving_down_past_the_last_pane_of_a_column_reaches_the_next_row() {
+        let mut g = grid().selected("a");
+        g.step_vertical(1);
+        assert_eq!(g.selected_key(), Some("b"), "within the split column first");
+        g.step_vertical(1);
+        assert_eq!(g.selected_key(), Some("c"), "then through to the next row");
+    }
+
+    /// And back up the same way.
+    #[test]
+    fn moving_up_from_a_row_reaches_the_column_above() {
+        let mut g = grid().selected("c");
+        g.step_vertical(-1);
+        assert_eq!(g.selected_key(), Some("b"), "into the row above");
+        g.step_vertical(-1);
+        assert_eq!(g.selected_key(), Some("a"));
+    }
+
+    /// **A row remembers where you were in it.** Without that the cursor carries its column index
+    /// across and clamps, so stepping out of a row and back lands on the first card every time —
+    /// the position is destroyed by the trip, not by anything the user did.
+    #[test]
+    fn leaving_a_row_and_coming_back_returns_to_where_you_were() {
+        let cell = |k: &str| GridCell::new(k, signal(false));
+        let mut g = CardGrid::new()
+            .row(
+                vec![vec![cell("a")], vec![cell("b")], vec![cell("c")]],
+                crate::widgets::Flex::row(),
+            )
+            .row(vec![vec![cell("z")]], crate::widgets::Flex::row())
+            .selected("c");
+
+        g.step(0, 0, 1); // down to the second row (one column)
+        assert_eq!(g.selected_key(), Some("z"));
+        g.step(0, 0, -1); // back up
+        assert_eq!(g.selected_key(), Some("c"), "the third column, where we left it");
+    }
+
+    /// At the very end there is nowhere to fall through to, and the cursor stays put rather than
+    /// jumping to some other cell of the same column.
+    #[test]
+    fn the_ends_hold() {
+        let mut g = grid().selected("c");
+        g.step_vertical(1);
+        assert_eq!(g.selected_key(), Some("c"));
+        let mut g = grid().selected("a");
+        g.step_vertical(-1);
+        assert_eq!(g.selected_key(), Some("a"));
     }
 }

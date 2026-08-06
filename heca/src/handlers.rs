@@ -1315,6 +1315,9 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
     if target_ws < state.last_visited_pane_per_ws.len() {
         state.last_visited_pane_per_ws.remove(target_ws);
     }
+    if target_ws < state.expose_cursor_per_ws.len() {
+        state.expose_cursor_per_ws.remove(target_ws);
+    }
 
     after_layout_change(state);
 }
@@ -1482,6 +1485,9 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     );
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
+    }
+    while state.expose_cursor_per_ws.len() <= new_idx {
+        state.expose_cursor_per_ws.push(None);
     }
     after_layout_change(state);
 }

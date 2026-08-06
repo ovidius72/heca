@@ -24,7 +24,8 @@ const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
     ("Visibility", "wrapper around a signal"),
     ("ToastStack", "host-owned queue, driven by the notification store"),
     ("CommandPalette", "host-owned overlay, fed by the command registry"),
-    ("ContextMenu", "host-owned overlay, built from MenuEntry values"),
+    ("ContextMenu", "host-owned overlay: it holds a Menu and shows it; the Menu's items are the property surface"),
+    ("Menu", "its rows are MenuItem values carrying closures, which static data cannot supply — the items are the property surface"),
     ("KeyHint", "host-owned overlay, targets come from the hint registry"),
     ("Overlay", "host-owned surface; placement is decided by the host"),
     ("Dialog", "host-owned overlay; body/actions arrive as realized subtrees"),
@@ -32,6 +33,7 @@ const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
     ("Spinner", "no configurable properties"),
     ("ToastSpec", "a value describing a toast, not a widget; the Toast built from it carries the properties"),
     ("ActiveMarker", "an enum, not a widget"),
+    ("GridCell", "a value describing one cell, and everything it carries is a live host signal — a selection light and a hover — which static data cannot supply"),
     ("PaneFrame", "an enum, not a widget"),
 ];
 
