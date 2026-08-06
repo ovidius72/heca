@@ -539,7 +539,7 @@
       "phaseId": "e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2",
       "number": 193,
       "shortId": "ACYAN",
-      "priority": 8,
+      "priority": 9,
       "shortName": "toast-adapter",
       "title": "Project visible AppNotification into ToastSpec",
       "status": "planned",
@@ -585,11 +585,11 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-06T14:12:40.656Z"
+      "updatedAt": "2026-08-06T14:21:54.468Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:45.770Z",
+  "updatedAt": "2026-08-06T14:21:54.468Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
