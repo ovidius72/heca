@@ -171,8 +171,8 @@
       "priority": 1,
       "shortName": "config-default",
       "title": "Add notification configuration defaults",
-      "status": "in-progress",
-      "description": "Aggiungere ai default embedded e a `heca-config/src/settings.rs` `notification_system = \"app\"`. Aggiungere un limite configurabile e documentato per la cronologia (default 100, con validazione maggiore di zero o semantica zero esplicita). Non aggiungere configurazione visuale che duplichi `Theme`/ToastStack. Il massimo di quattro elementi visibili resta contratto della prima versione, non un numero sparso tra più file.",
+      "status": "done",
+      "description": "Aggiungere ai default embedded e a `heca-config/src/settings.rs` `notification_system = \"app\"`. Aggiungere un limite configurabile e documentato per la cronologia (default 100, con validazione maggiore di zero o semantica zero esplicita). Non aggiungere configurazione visuale che duplichi `Theme`/ToastStack. Il massimo di quattro elementi visibili resta contratto della prima versione, non un numero sparso tra più file.\n\n---\n**Completion summary:**\nAdded notification config defaults to `heca-config/src/settings.rs` + `config.default.toml` (depends on T191's `NotificationSystem` enum, now done):\n\n`heca-config/src/settings.rs`:\n- `SettingsConfig.notification_system: NotificationSystem` — `#[serde(default, alias = \"notification-system\")]` → defaults to `App`. Doc points to `NotificationSystem`.\n- `SettingsConfig.notification_history_limit: usize` — `#[serde(default = \"default_notification_history_limit\", alias = \"notification-history-limit\")]` → 100. Doc states `0` = keep no history (explicit zero semantics per task).\n- `default_notification_history_limit() -> 100` helper.\n- `impl Default for SettingsConfig`: added both fields (`NotificationSystem::default()`, `default_notification_history_limit()`).\n\n`config.default.toml` (embedded single source, after `terminal_scrollback_lines`):\n- New \"Notifications\" section: `notification_system = \"app\"` + `notification_history_limit = 100` with comments explaining app/system/none and that the max-4-visible-toasts is a first-version ToastStack widget contract, NOT a setting (it does not appear here — per task: \"il massimo di quattro elementi visibili resta contratto della prima versione, non un numero sparso tra più file\").\n\nNo visual config duplicating Theme/ToastStack (per task). No delivery logic in the config crate (per T191 contract).\n\nTests (3 new in `settings::tests`, total 89 in crate): `settings_default_notification_fields` (App + 100), `settings_notification_system_overrides_parse` (kebab alias none + 250), `settings_notification_history_limit_zero_is_valid` (0 is valid, not error). Existing `config_default_toml_parses` guard in loader.rs still passes with the new toml fields.\n\ncargo test -p heca-config: 89 passed. cargo check -p heca: clean (new serde-defaulted fields don't break consumers). clippy --workspace --all-targets --all-features: clean.\n\nFiles: heca-config/src/settings.rs (2 fields + helper + Default impl + 3 tests), config.default.toml (Notifications section).\n\nNext in dependency order: T187 (Document notification configuration semantics) or T188 (Define canonical AppNotification and NotificationId). T187 is doc-only.",
       "notes": "",
       "statusLog": [
         {
@@ -221,9 +221,9 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-08-07T09:41:04.429Z",
-      "completedAt": "",
+      "completedAt": "2026-08-07T09:44:57.293Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-07T09:42:54.824Z"
+      "updatedAt": "2026-08-07T09:44:57.293Z"
     },
     {
       "id": "64b075f7-f924-4811-9e5a-30e3aee7ff42",
@@ -286,7 +286,7 @@
       "priority": 7,
       "shortName": "app-notification-model",
       "title": "Define canonical AppNotification and NotificationId",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Creare tipi app-owned fortemente tipizzati: `NotificationId` monotono e non riutilizzato nella sessione; `AppNotification` con id, dedup_key opzionale, source, severity, title, body opzionale, lifecycle, action opzionale, dismissible e metadati temporali/stato necessari allo store. Separare dati canonici dallo stato di collocazione in attesa/visibile/cronologia quando questo rende invarianti più chiare. Non memorizzare Toast o callback UI. Prevedere clone mirati per la proiezione senza clonare inutilmente l'intero store.",
       "notes": "",
       "statusLog": [],
@@ -326,10 +326,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-08-07T11:07:58.515Z",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-06T14:21:40.150Z"
+      "updatedAt": "2026-08-07T11:07:58.515Z"
     },
     {
       "id": "994de278-bc6a-4744-8865-d0e0f1fb0876",
@@ -598,7 +598,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-07T09:42:54.824Z",
+  "updatedAt": "2026-08-07T11:07:58.515Z",
   "handoff": "# Canonical session handoff\n\nCreated at: 2026-08-06T23:23:54Z\nUpdated at: 2026-08-06T23:23:54Z\nReason: Preserve the completed notification-foundation context and resume the same Notification System workstream at its next phase, after P058 finished.\n\n## Current focus\n\n- Feature: `F009` — 🔔 Notification System — **in-progress**\n- Phase: `P061(F009)` — notification-01: Domain Model + Config — **planned**\n- Task: `P061(F009)/T184` — Define extensible notification source model — **planned**\n\nP061 is the next phase in the active notification workstream. No task in P061 has started yet; T184 is the first planned task.\n\n## What was being done\n\nThe session completed `P058(F009)` — Toast / ToastStack Widget Foundation, including the previously failed GPU UAT around exit fragments and smooth vertical reflow.\n`Toast` now uses real retained children; `ToastStack` reconciles same-ID payload changes, preserves runtime/transition state, retains inert exiting cards until animation completion, reports real hint targets, and damages both old and new motion bounds.\nThe showcase demonstrates batch insertion, same-ID update, action, dismiss, non-dismissible cards, enter/exit/reflow, viewport capacity policy, and pass-through to the page layer.\nThe final architecture test task added explicit pointer move/press/release pass-through, exactly-once action/dismiss activation, and tick/repaint/damage coverage.\n`cargo test -p heca-grid-ui toast_` passed 20 relevant tests and `cargo clippy --workspace --all-targets --all-features` passed; only the existing upstream `block v0.1.6` future-incompatibility warning remains.\nThe completed work was committed and pushed as `b0ddb24` on `feature/notification-system`; no PR was created.\nA separate visual-effect audit was explicitly deferred and recorded as `F010/P094/T396`; it is not part of the notification-domain phase.\n\n## How to resume\n\n1. Read this handoff with `handoff_show P061(F009)` and inspect `phase_get(full=true)` plus `task_list` for P061.\n2. Open `P061(F009)/T184` with `task_get(full=true)` and verify its dependencies/order against the remaining P061 tasks before editing.\n3. Inspect the completed presentation seam first: `heca-grid-ui/src/widgets/toast.rs`, `heca-grid-ui/src/widgets/toast_stack.rs`, and the notification examples in `heca-renderer/examples/showcase.rs`.\n4. Inspect the intended app/config boundaries named by the phase: `heca-config/src/settings.rs`, `heca/src/app/interaction.rs`, and the `heca-view` Intent model. Keep queue, lifecycle, timers and dedup out of grid-ui.\n5. Run the mandatory written UI/action pre-flight. P061 defines domain/config data; it must not introduce ad-hoc UI, closures in notification actions, or direct `WmAction`-only storage.\n6. Before any code edit, call `task_start P061(F009)/T184`.\n7. Run baseline `cargo check`; implement one task-sized slice with focused tests; validate with targeted tests and `cargo clippy --workspace --all-targets --all-features`.\n8. Do not commit, push, create a PR, or perform any other git mutation without separate explicit user authorization.\n\n## Files touched\n\nSource/documentation files modified by the completed P058 work:\n\n- `heca-grid-ui/src/component.rs`\n- `heca-grid-ui/src/hint.rs`\n- `heca-grid-ui/src/widgets/toast.rs`\n- `heca-grid-ui/src/widgets/toast_stack.rs`\n- `heca-grid-ui/tests/phase_a.rs`\n- `heca-renderer/examples/showcase.rs`\n- `heca-view-realize/src/lib.rs`\n- `docs/widgets.md`\n\nPlanner files materially updated or created:\n\n- `.planner/phases/949d48a4-6001-42b2-a12c-25ba69a95c24.json` — completed P058 and its five tasks\n- `.planner/phases/cd9bbc0d-5e78-4656-8f5f-c7c6ee089220.json` — deferred F010/P094/T396 effect-token normalization\n- `.planner/generated/PLAN.md` and generated phase/feature views regenerated by the planner\n\nCommit containing the completed work: `b0ddb24` on `feature/notification-system` and `origin/feature/notification-system`.\n\n## Blockers\n\nNone recorded.\n\n## Next steps\n\n1. Start `P061(F009)/T184` — Define extensible notification source model.\n2. Continue the P061 domain model in dependency order: lifecycle/defaults, canonical IDs/model, Intent-backed actions, severity mapping, config enum/defaults, draft builder, then thin `ToastSpec` projection.\n3. Keep presentation-only responsibilities in grid-ui and host-owned lifecycle/queue/dedup in Heca.\n4. Leave `F010/P094/T396` deferred until explicitly scheduled.\n\n## Recent decisions\n\n- The next resume target follows the actual Notification System workstream: `P058` is done, therefore resume at `P061`, not the stale global P031 bookmark.\n- Notification actions store `heca_view::Intent`, not closures and not only `WmAction`.\n- ToastStack `max_visible` remains host-owned lifecycle policy rather than a Theme/widget token.\n- Glow/bracket/ToastStack metric normalization is deferred to `F010/P094/T396`.\n- No PR was created; the GitHub URL printed after push was only the remote’s suggestion.\n\n## Reminder\n\nOnce work on P061 has genuinely resumed and this context has been absorbed, clear this phase handoff explicitly with `handoff_clear P061(F009)`.",
   "handoffUpdatedAt": "2026-08-06T23:24:27.934Z",
   "handoffReadAt": "",

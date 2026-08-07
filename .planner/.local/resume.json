@@ -1,7 +1,9 @@
 {
-  "updatedAt": "2026-08-07T09:18:30.759Z",
+  "updatedAt": "2026-08-07T11:09:46.511Z",
   "currentPhaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
-  "inProgressTaskIds": [],
+  "inProgressTaskIds": [
+    "7dfd4996-aceb-4501-8670-9d7da7c11025"
+  ],
   "nextSteps": [
     "F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.",
     "Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.",

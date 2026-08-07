@@ -2,7 +2,7 @@
 
 **Status:** 🚧 `in-progress`
 **Created:** 2026-07-03T22:50:20.126Z
-**Updated:** 2026-08-07T09:44:57.293Z
+**Updated:** 2026-08-07T11:13:35.326Z
 
 Definire modello app-owned, azioni Intent e configurazione app/system/none.
 
@@ -145,11 +145,29 @@ Documentare vicino ai default config e nelle API config il significato preciso d
 - [ ] None non promette silenzio dei log.
 - [ ] History runtime/limit documentati.
 
-### 📋 7dfd4996-aceb-4501-8670-9d7da7c11025 — T188 — Define canonical AppNotification and NotificationId
+### ✅ 7dfd4996-aceb-4501-8670-9d7da7c11025 — T188 — Define canonical AppNotification and NotificationId
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Creare tipi app-owned fortemente tipizzati: `NotificationId` monotono e non riutilizzato nella sessione; `AppNotification` con id, dedup_key opzionale, source, severity, title, body opzionale, lifecycle, action opzionale, dismissible e metadati temporali/stato necessari allo store. Separare dati canonici dallo stato di collocazione in attesa/visibile/cronologia quando questo rende invarianti più chiare. Non memorizzare Toast o callback UI. Prevedere clone mirati per la proiezione senza clonare inutilmente l'intero store.
+
+---
+**Completion summary:**
+Added canonical notification model to `heca/src/notification.rs` (T188):
+
+- `NotificationId(u64)` — `Debug/Clone/Copy/PartialEq/Eq/Hash/PartialOrd/Ord/Serialize/Deserialize` (serializes as bare u64). Session-monotonic, never-reused via `NotificationId::next()` using a process-wide `AtomicU64` counter (Relaxed ordering — host store serializes use). `from_raw` is test-only (`#[doc(hidden)]`). `as_u64()` for logging.
+- `NotificationPlacement { Queued | Visible { expires_at: Option<Instant> } | History }` — **not** Serialize/Deserialize (Instant is not serializable; runtime-only state). Default = Queued. Separates placement bucket from immutable content so the store moves notifications between buckets without rewriting identity.
+- `AppNotification { id, dedup_key, source, severity, title, body, lifecycle, action, created_at, placement }` — **not** Serialize/Deserialize (Instant + runtime state). `Debug/Clone/PartialEq`. Builder setters `dedup_key`/`body`/`lifecycle`/`action`. Accessors `is_visible`/`is_history`/`expires_at`. `new(id, source, severity, title, created_at: Instant)` — `created_at` injected explicitly (deterministic tests per T185 rule). `action: Option<heca_view::Intent>` — name-keyed + args, never a closure (T189 formalizes helpers).
+
+Contract honored: monotonic non-reused id, optional dedup_key, separated canonical data vs placement state (Queued/Visible/History), no Toast widget / no UI callback stored, targeted clone for projection (fields pub for projection reads), instants out of the builder.
+
+Removed `Serialize, Deserialize` from `AppNotification`/`NotificationPlacement` because `Instant` is not serializable and these are runtime state (not persisted; future history persistence is a separate serializable projection).
+
+Tests: 8 new (total 26 in module) — id monotonic/unique, id serde-as-u64, placement default=Queued, new() defaults, builder chain, visible+expiry, history placement, clone-for-projection. `cargo test -p heca notification::` green. clippy clean (fixed a rustdoc false-positive by rewording a "+ args" line).
+
+Files: heca/src/notification.rs (extended). `#![allow(dead_code)]` still covers staged phase until store wiring.
+
+Next: T189 (Define notification actions as heca_view::Intent — formalize the action helpers/builders), then T190 (severity + ToastSeverity mapping, replaces the placeholder), T192 (draft builder), T193 (ToastSpec projection).
 
 **Checklist:**
 - [ ] Nuovo ID type.

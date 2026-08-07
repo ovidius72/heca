@@ -38,6 +38,9 @@
 #![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+use heca_view::Intent;
 
 /// The closed vocabulary of notification origins.
 ///
@@ -311,6 +314,183 @@ pub enum NotificationSeverity {
     Info,
 }
 
+/// A session-monotonic, never-reused notification identity.
+///
+/// Allocated via [`NotificationId::next`] from a process-wide atomic counter, so
+/// ids strictly increase and are never recycled within a session — even after a
+/// notification is dismissed and archived. This is what the store reconciles on
+/// and what `on_dismiss`/`on_action` report back.
+///
+/// Deliberately **not** `Copy`-able across the host boundary in a way that lets
+/// two owners mutate the same id; it is `Clone` (cheap, just a `u64`) for
+/// projection, but the counter only moves forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct NotificationId(u64);
+
+impl NotificationId {
+    /// The raw counter value. Mainly for logging/debug; do not parse semantics
+    /// out of it.
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Allocate the next id. Monotonic across the whole process; never reused
+    /// within a session. The counter only ever increases.
+    pub fn next() -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        // Relaxed: we only need monotonicity per-call, not cross-thread ordering
+        // of *which* id went to *which* thread — the host store serializes use.
+        let v = COUNTER.fetch_add(1, Ordering::Relaxed);
+        Self(v)
+    }
+
+    /// Construct an id from a known value. **Test-only** — production code must
+    /// use [`next`](Self::next) so ids stay monotonic and unique.
+    #[doc(hidden)]
+    pub fn from_raw(v: u64) -> Self {
+        Self(v)
+    }
+}
+
+/// Where a notification currently sits in the host store.
+///
+/// Separated from the canonical [`AppNotification`] data so the store can
+/// move a notification between buckets (queued → visible → history) without
+/// rewriting its immutable identity/content. The data fields (source, title,
+/// …) are set once at creation; only [`placement`](AppNotification::placement)
+/// and [`expires_at`](AppNotification::expires_at) change over its lifetime.
+///
+/// - `Queued` — accepted but not yet promoted to visible (e.g. over the
+///   max-visible cap; waiting for a slot).
+/// - `Visible` — in the active toast stack; may carry an `expires_at` computed
+///   lazily by the store at promotion time (T185 contract).
+/// - `History` — dismissed/expired/archived; kept up to
+///   `notification_history_limit` then dropped (FIFO).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationPlacement {
+    Queued,
+    Visible { expires_at: Option<Instant> },
+    History,
+}
+
+impl Default for NotificationPlacement {
+    /// New notifications start `Queued`; the store promotes them to `Visible`.
+    fn default() -> Self {
+        Self::Queued
+    }
+}
+
+/// The canonical notification the host store owns.
+///
+/// Immutable identity + content (set at creation) plus two mutable placement
+/// fields the store owns: [`placement`](Self::placement) and
+/// [`expires_at`](Self::expires_at) (the latter lives on `Visible` to keep the
+/// serde model clean). Stores no `Toast` widget and no UI callback — those are
+/// presentation concerns; this type only describes *what* the notification is.
+///
+/// The optional [`action`](Self::action) is a [`heca_view::Intent`] (a routing
+/// name plus args), never a closure — per the phase contract. T189 formalizes
+/// the action helpers for notifications; T188 just carries the field.
+///
+/// `Clone` is cheap-ish (title/body/action are `Arc`-shared on clone in a
+/// follow-up; for now they are owned `String`s — clone only for projection, not
+/// on every frame). Targeted projection to [`ToastSpec`] (T193) reads the
+/// fields it needs without cloning the whole store.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppNotification {
+    /// Session-monotonic, never-reused identity.
+    pub id: NotificationId,
+    /// Optional dedup key. When set, the store treats two notifications with the
+    /// same key as the same logical event (updates in place rather than
+    /// stacking). Constructed from the source + a caller-supplied suffix.
+    pub dedup_key: Option<String>,
+    /// Descriptive provenance (log/history/dedup). T184.
+    pub source: NotificationSource,
+    pub severity: NotificationSeverity,
+    pub title: String,
+    pub body: Option<String>,
+    /// Lifecycle policy (lifetime + dismissibility). T185.
+    pub lifecycle: NotificationLifecycle,
+    /// Optional inline action, dispatched as an [`Intent`] (T189 formalizes).
+    pub action: Option<Intent>,
+    /// When the notification was created. Injected by the caller (not `now()`)
+    /// so domain tests are deterministic — per T185's rule that instants stay
+    /// out of the builder when tests need them.
+    pub created_at: Instant,
+    /// Current placement bucket. Mutated by the store; not by the builder.
+    pub placement: NotificationPlacement,
+}
+
+impl AppNotification {
+    /// Build a notification with the given identity + title. Prefer the
+    /// [`NotificationDraft`] builder (T192) for ergonomics; this is the canonical
+    /// constructor the builder reduces to.
+    ///
+    /// `created_at` is taken explicitly so tests stay deterministic (T185 rule).
+    pub fn new(
+        id: NotificationId,
+        source: NotificationSource,
+        severity: NotificationSeverity,
+        title: impl Into<String>,
+        created_at: Instant,
+    ) -> Self {
+        Self {
+            id,
+            dedup_key: None,
+            source,
+            severity,
+            title: title.into(),
+            body: None,
+            lifecycle: NotificationLifecycle::default(),
+            action: None,
+            created_at,
+            placement: NotificationPlacement::default(),
+        }
+    }
+
+    /// Set an optional dedup key.
+    pub fn dedup_key(mut self, key: impl Into<String>) -> Self {
+        self.dedup_key = Some(key.into());
+        self
+    }
+
+    /// Set an optional body.
+    pub fn body(mut self, body: impl Into<String>) -> Self {
+        self.body = Some(body.into());
+        self
+    }
+
+    /// Set the lifecycle policy.
+    pub fn lifecycle(mut self, l: NotificationLifecycle) -> Self {
+        self.lifecycle = l;
+        self
+    }
+
+    /// Set the optional action (an [`Intent`]).
+    pub fn action(mut self, intent: Intent) -> Self {
+        self.action = Some(intent);
+        self
+    }
+
+    /// Whether the notification is currently visible in the toast stack.
+    pub fn is_visible(&self) -> bool {
+        matches!(self.placement, NotificationPlacement::Visible { .. })
+    }
+
+    /// Whether the notification has been archived to history.
+    pub fn is_history(&self) -> bool {
+        matches!(self.placement, NotificationPlacement::History)
+    }
+
+    /// The computed expiry instant, if any (only `Visible` with a deadline).
+    pub fn expires_at(&self) -> Option<Instant> {
+        match self.placement {
+            NotificationPlacement::Visible { expires_at } => expires_at,
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -489,5 +669,120 @@ mod tests {
         assert!(sjson.contains("\"dismissible\":true"), "got {sjson}");
         let sback: NotificationLifecycle = serde_json::from_str(&sjson).unwrap();
         assert_eq!(sback, sticky);
+    }
+
+    // -- canonical model (T188) -------------------------------------------
+
+    #[test]
+    fn notification_ids_are_monotonic_and_unique() {
+        let a = NotificationId::next();
+        let b = NotificationId::next();
+        let c = NotificationId::next();
+        assert!(b.as_u64() > a.as_u64());
+        assert!(c.as_u64() > b.as_u64());
+        assert_ne!(a, b);
+        assert_ne!(b, c);
+    }
+
+    #[test]
+    fn notification_id_serializes_as_u64() {
+        let id = NotificationId::from_raw(42);
+        let json = serde_json::to_string(&id).unwrap();
+        assert_eq!(json, "42");
+        let back: NotificationId = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, id);
+    }
+
+    #[test]
+    fn placement_default_is_queued() {
+        assert_eq!(NotificationPlacement::default(), NotificationPlacement::Queued);
+    }
+
+    #[test]
+    fn app_notification_new_has_defaults() {
+        let id = NotificationId::from_raw(1);
+        let now = Instant::now();
+        let n = AppNotification::new(
+            id,
+            NotificationSource::app("test"),
+            NotificationSeverity::Info,
+            "Build done",
+            now,
+        );
+        assert_eq!(n.id, id);
+        assert!(n.dedup_key.is_none());
+        assert!(n.body.is_none());
+        assert!(n.action.is_none());
+        assert_eq!(n.placement, NotificationPlacement::Queued);
+        assert!(!n.is_visible());
+        assert!(!n.is_history());
+        assert!(n.expires_at().is_none());
+        assert_eq!(n.created_at, now);
+    }
+
+    #[test]
+    fn app_notification_builders_set_fields() {
+        let id = NotificationId::from_raw(7);
+        let n = AppNotification::new(
+            id,
+            NotificationSource::new(NotificationSourceKind::Plugin, "git"),
+            NotificationSeverity::Error,
+            "Push failed",
+            Instant::now(),
+        )
+        .dedup_key("git-push")
+        .body("rejected by remote")
+        .lifecycle(NotificationLifecycle::sticky())
+        .action(Intent::new("git.push"));
+        assert_eq!(n.dedup_key.as_deref(), Some("git-push"));
+        assert_eq!(n.body.as_deref(), Some("rejected by remote"));
+        assert!(n.lifecycle.is_dismissible());
+        assert_eq!(n.action.as_ref().unwrap().action, "git.push");
+    }
+
+    #[test]
+    fn app_notification_visible_carries_expiry() {
+        let mut n = AppNotification::new(
+            NotificationId::from_raw(2),
+            NotificationSource::app("t"),
+            NotificationSeverity::Info,
+            "x",
+            Instant::now(),
+        );
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        n.placement = NotificationPlacement::Visible { expires_at: Some(deadline) };
+        assert!(n.is_visible());
+        assert_eq!(n.expires_at(), Some(deadline));
+    }
+
+    #[test]
+    fn app_notification_history_placement() {
+        let mut n = AppNotification::new(
+            NotificationId::from_raw(3),
+            NotificationSource::app("t"),
+            NotificationSeverity::Info,
+            "x",
+            Instant::now(),
+        );
+        n.placement = NotificationPlacement::History;
+        assert!(n.is_history());
+        assert!(!n.is_visible());
+        assert!(n.expires_at().is_none()); // History has no expiry
+    }
+
+    #[test]
+    fn app_notification_clones_for_projection() {
+        let n = AppNotification::new(
+            NotificationId::from_raw(4),
+            NotificationSource::app("t"),
+            NotificationSeverity::Success,
+            "Done",
+            Instant::now(),
+        );
+        let proj = n.clone(); // cheap clone for projection (T193 will read fields)
+        assert_eq!(proj.id, n.id);
+        assert_eq!(proj.title, n.title);
+        // original untouched by projection
+        assert_eq!(n.placement, NotificationPlacement::Queued);
     }
 }
