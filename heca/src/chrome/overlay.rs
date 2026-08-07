@@ -27,7 +27,7 @@ use crate::host::App;
 use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
-use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
+use crate::app::interaction::{InteractionIntent, InteractionSource};
 use heca_view::Intent;
 use crate::app_state::AppState;
 use crate::input::WmAction;
@@ -387,10 +387,10 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
 /// chose the anchor, so this only mounts it and wires the two things a widget cannot reach — the
 /// layer it lives in, and the close that follows a choice.
 ///
-/// Plugin entries still merge: a menu that named a [`path`](ContextMenu::path) is offered to the
-/// mounted providers for that path, so "Open in Docker" can still appear on a row a different
-/// component declared. A menu that named no path is simply itself.
-pub(crate) fn present_menu(state: &mut AppState, menu: Menu, anchor: MenuAnchor) -> OverlayId {
+/// Plugin entries still merge: a menu that gave itself a [`name`](Menu::name) is offered to the
+/// mounted providers for that name, so "Open in Docker" can still appear on a row a different
+/// component declared. A menu that named itself nothing is simply itself.
+pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuAnchor) -> OverlayId {
     let id = OverlayId(state.layers.reserve_id());
     let event_proxy = state.event_proxy.clone();
     let source = InteractionSource::MouseContent;
@@ -399,7 +399,8 @@ pub(crate) fn present_menu(state: &mut AppState, menu: Menu, anchor: MenuAnchor)
     });
 
     // Rows other components added to this menu — only if it named itself.
-    let menu = merge_contributions(state, menu, id, &emit);
+    let mut ctx = ctx;
+    ctx.set_menu(merge_contributions(state, ctx.menu().clone(), id, &emit));
 
     // Choosing an entry runs its own closure; taking the layer down afterwards is the host's, so an
     // item stays a plain closure that knows nothing about overlays. The anchor was chosen by
@@ -409,7 +410,7 @@ pub(crate) fn present_menu(state: &mut AppState, menu: Menu, anchor: MenuAnchor)
     let closing = close.clone();
     let dismiss = emit.clone();
     let panel = anchor
-        .open(menu.into_panel())
+        .open(ctx)
         .after_select(move || after(closing.clone()))
         .on_dismiss(move || dismiss(close.clone()));
 
@@ -432,10 +433,9 @@ fn merge_contributions(
     };
     // A contributed row has no per-row payload (that was `about`, dropped 2026-08-07): it acts on
     // app state, not on the row this menu was opened for.
-    let target = ContextTarget::Row {
-        container: path.clone(),
-        key: String::new(),
-    };
+    // A contribution carries no row payload — see `ContextTarget::Contribution`. The menu's name
+    // is `path`, passed to `items_for` beside this.
+    let target = ContextTarget::Contribution;
     let ctx = ChromeCtx::new(App::new(&state.chrome_state));
     let plugin = super::context_menu::plugin_providers_for(&state.chrome_host, &ctx, &path);
     let items = state
@@ -448,7 +448,8 @@ fn merge_contributions(
             action: item.id.clone(),
         });
         let emit_e = emit.clone();
-        let mut entry = MenuItem::new(item.label.clone())
+        let mut entry = MenuItem::new()
+            .label(item.label.clone())
             .on_click(move || emit_e(carrier.clone()))
             .danger(item.danger)
             .enabled(item.enabled);
@@ -473,36 +474,39 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
     });
 
-    let mut menu = ContextMenu::new().anchor(spec.anchor).centered(spec.centered);
-    let mut letters = 'a'..='z';
-    for item in &spec.items {
-        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: id,
-            action: item.id.clone(),
-        });
-        let emit_e = emit.clone();
-        let mut entry = MenuItem::new(item.label.clone()).on_click(move || emit_e(carrier.clone()))
-            .danger(item.danger)
-            .enabled(item.enabled);
-        if let Some(glyph) = state.action_catalog.icon(&item.id) {
-            entry = entry.icon(glyph);
-        }
-        // Host-assigned single-letter quick-pick (works while open), rendered as a bordered
-        // keycap — the only accelerator shown on the row (no separate global-binding label).
-        if item.enabled
-            && let Some(k) = letters.next()
-        {
-            entry = entry.key(k);
-        }
-        menu = menu.entry(entry);
-    }
-    let emit_dismiss = emit.clone();
+    // **The same builder every declared menu uses.** A dropdown has no declaring widget — the host
+    // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
+    // two drift: they already had, one with quick-pick keycaps and one without, which is how the
+    // same menu came to have two shapes on screen (Antonio, 2026-08-07).
+    let items = super::context_menu::menu_from_items(
+        "",
+        "",
+        "",
+        spec.items,
+        &state.action_catalog,
+        &emit,
+    );
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
-    let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
+    let emit_dismiss = emit.clone();
+    let dismiss_close = close.clone();
+    let emit_after = emit.clone();
+    let menu = ContextMenu::new("dropdown")
+        .child(items)
+        .anchor(spec.anchor)
+        .centered(spec.centered)
+        .on_dismiss(move || emit_dismiss(dismiss_close.clone()))
+        // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
+        // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
+        // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
+        // panel hid itself while the layer stayed registered: still modal, still holding the
+        // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
+        // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
+        .after_select(move || emit_after(close.clone()))
+        .open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
     // its panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Its own entries
-    // are unaffected — they dispatch `SubmitOverlay`, which is intercepted before routing.
+    // are unaffected — they dispatch their `Intent` on `after_select`, after the layer is down.
     //
     // Without this, the prefix sequence that deliberately falls through the overlay key path
     // (`app/events.rs`, so `prefix+/` can still pick an entry) reaches the router and runs:
@@ -510,26 +514,6 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     // this replaced had prevented (found by the user, 2026-07-30).
     insert_menu_layer(state, id, menu);
 
-    let items = spec.items;
-    state.overlays.completions.insert(
-        id,
-        Box::new(move |state, registry, result| {
-            if let ModalResult::Action { id: chosen, .. } = result
-                && let Some(item) = items.iter().find(|i| i.id == chosen)
-            {
-                // The entry's Intent goes through the ONE dispatch door, so a built-in and a
-                // plugin's own action are dispatched identically — and the interaction policy and
-                // the confirm gate still apply (a "Delete workspace" entry prompts exactly as the
-                // keybinding does).
-                dispatch_intent(
-                    state,
-                    registry,
-                    source,
-                    InteractionIntent::View(item.intent.clone()),
-                );
-            }
-        }),
-    );
     state.needs_redraw = true;
     id
 }

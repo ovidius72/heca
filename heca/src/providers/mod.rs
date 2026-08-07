@@ -370,6 +370,13 @@ impl<'a> ProviderCx<'a> {
 struct RenderInputs<'a> {
     theme: &'a GuiTheme,
     emit: &'a ChromeIntentEmitter,
+    /// The action catalog, so a container can ask what an action **looks like**.
+    ///
+    /// Carried rather than reached for because `ActionMeta.icon` is "the single source of an
+    /// action's `Glyph`. Every surface that renders this action reads it from here instead of
+    /// inventing its own" (`heca/src/actions.rs`) — and a container that declares a menu over
+    /// built-in actions (`close`, `delete_column`, …) has no other way to honour that.
+    catalog: &'a crate::actions::ActionCatalog,
 }
 
 /// The provider/plugin-facing facade (contract §3.4.1). It *extends* the shipped
@@ -402,11 +409,28 @@ impl<'a> ChromeCtx<'a> {
 
     /// A context for a **render pass**, carrying the frame's read-only inputs so a
     /// container's `build` closure can project them. Built by the chrome render path.
-    pub fn for_build(app: App, theme: &'a GuiTheme, emit: &'a ChromeIntentEmitter) -> Self {
+    pub fn for_build(
+        app: App,
+        theme: &'a GuiTheme,
+        emit: &'a ChromeIntentEmitter,
+        catalog: &'a crate::actions::ActionCatalog,
+    ) -> Self {
         Self {
             app,
-            render: Some(RenderInputs { theme, emit }),
+            render: Some(RenderInputs { theme, emit, catalog }),
         }
+    }
+
+    /// **The action catalog** — the one place that owns what an action looks like and what it is
+    /// called.
+    ///
+    /// A container declaring a context menu over an action names the *action*, never a glyph, so
+    /// the sidebar's "Close pane" and the command palette's `close` cannot drift apart. It is the
+    /// catalog rather than a single lookup because `menu_from_items` — the **one** way a menu is
+    /// built, for every surface — takes a catalog, and the host has one too. `None` outside a
+    /// render pass.
+    pub fn action_catalog(&self) -> Option<&crate::actions::ActionCatalog> {
+        self.render.as_ref().map(|r| r.catalog)
     }
 
     /// The underlying host facade.
@@ -590,7 +614,8 @@ mod tests {
         let store = store();
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
 
         let Contribution::Container(c) = Quiet.build_contribution(&ctx) else {
             panic!("the quiet dock contributes a container");

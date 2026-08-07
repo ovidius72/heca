@@ -232,6 +232,18 @@ pub fn handle_zoom_column_at_index(state: &mut AppState, action: &WmAction) {
 /// container had been driving. Chrome focus is not a mode and the transition does not touch it, so
 /// there is nothing left to carry across and the stash is gone.
 pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
+    // **The focused widget's own menu first** (F004/P084/T395). Generalised, not duplicated: this
+    // action stopped meaning "the focused pane's menu" and started meaning "the focused widget's,
+    // bubbling outwards" — so `prefix+>`, `Shift+F10` and the Menu key all reach a pane row, a
+    // column, a workspace or a plugin's row through one catalogued action, and the host knows what
+    // none of them are. Deliberately NOT a `[keys.widgets]` intent: `Escape` meaning both the WM's
+    // `close_overlay` and the widget's `dismiss` is the split that swallowed `q`.
+    if crate::chrome::open_declared_menu_for_focus(state) {
+        state.needs_redraw = true;
+        return;
+    }
+    // Nothing declared one: the content pane is the app's own domain and still resolves the old
+    // way, since a terminal surface is not a widget that can carry a declaration.
     let Some((path, target)) = crate::chrome::resolve_active_context(state) else {
         return;
     };

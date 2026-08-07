@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
 use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, RawPointer, RawPointerKind, Rectangle, Scene, Size};
-use heca_grid_ui::widgets::{KeyCap, ContextMenu, NfGlyph, NfIcon};
+use heca_grid_ui::widgets::{ContextMenu, KeyCap, Menu, NfGlyph, NfIcon};
 use heca_view::build::{self, Parent as _, Style as _};
 use heca_view::{Intent, PropValue, ViewNode};
 use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
@@ -402,35 +402,57 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
     // The keycap is the shared `paint_keycap` primitive in its `Bordered` variant —
     // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
-    let menu = ContextMenu::new()
-        .entry(
-            MenuItem::new("Rename").on_click(|| println!("[showcase] rename"))
-                .icon(Glyph::NotePencil)
-                .key('r')
-                .shortcut(display_shortcut("prefix+$")),
-        )
-        .entry(
-            MenuItem::new("Move to workspace").on_click(|| println!("[showcase] → workspace"))
-                .icon(Glyph::ArrowRight)
-                .key('w'),
-        )
-        .entry(
-            MenuItem::new("Move to column").on_click(|| println!("[showcase] → column"))
-                .icon(Glyph::SquareSplitVertical)
-                .key('c'),
-        )
-        .entry(
-            MenuItem::new("Duplicate").on_click(|| println!("[showcase] duplicate"))
-                .icon(Glyph::Cards)
-                .key('d')
-                .enabled(false),
-        )
-        .entry(
-            MenuItem::new("Close").on_click(|| println!("[showcase] close"))
-                .icon(Glyph::FolderSimpleMinus)
-                .key('x')
-                .danger(true)
-                .shortcut(display_shortcut("prefix+x")),
+    // Both row forms are here on purpose: the first four are the **sugar** form (a label and an
+    // icon), and "Close" is **composed** out of widgets — the two are laid out by the same engine
+    // and read as the same list, which is the thing to check on screen.
+    let menu = ContextMenu::new("showcase.pane")
+        .child(
+            Menu::new("Pane", "What you can do with this pane")
+                .child(
+                    MenuItem::new()
+                        .label("Rename")
+                        .icon(Glyph::NotePencil)
+                        .on_click(|| println!("[showcase] rename"))
+                        .key('r')
+                        .shortcut(display_shortcut("prefix+$")),
+                )
+                .child(
+                    MenuItem::new()
+                        .label("Move to workspace")
+                        .icon(Glyph::ArrowRight)
+                        .on_click(|| println!("[showcase] → workspace"))
+                        .key('w'),
+                )
+                .child(
+                    MenuItem::new()
+                        .label("Move to column")
+                        .icon(Glyph::SquareSplitVertical)
+                        .on_click(|| println!("[showcase] → column"))
+                        .key('c'),
+                )
+                .child(
+                    MenuItem::new()
+                        .label("Duplicate")
+                        .icon(Glyph::Cards)
+                        .on_click(|| println!("[showcase] duplicate"))
+                        .key('d')
+                        .enabled(false),
+                )
+                .child(
+                    MenuItem::new()
+                        .child(|| {
+                            Flex::row()
+                                .gap(10.0)
+                                .align(Align::Center)
+                                .child(Icon::new(Glyph::FolderSimpleMinus))
+                                .child(Label::new("Close"))
+                                .child(Badge::new("⌫"))
+                        })
+                        .on_click(|| println!("[showcase] close"))
+                        .key('x')
+                        .danger(true)
+                        .shortcut(display_shortcut("prefix+x")),
+                ),
         )
         // Fired only on Esc / outside-click (a dismissal, not a selection) — the host wires this
         // to its overlay-close path (in `heca`, emit `CloseOverlay`).

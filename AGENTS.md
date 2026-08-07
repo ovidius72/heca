@@ -825,6 +825,58 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 - The existing chrome becomes a **consumer** of `heca-grid-ui`; over time this should evolve toward a pluggable chrome host with left/right/top/bottom regions.
 - Important separation: the `Sidebar` in `heca-grid-ui` is a **shell/layout widget**, while the current workspace tree should evolve into a built-in `WorkspacesContainer` mounted inside that shell.
 
+### ⭐⭐ RULE ZERO — A CAPABILITY IS ONE BUILDER ON THE WIDGET
+
+**Antonio, 2026-08-07: *"I want everything we build to be available for whoever wants to build a
+plugin or contribute to the project. THIS IS THE FIRST MOST IMPORTANT RULE."*** It outranks
+everything below it, including the architecture section.
+
+**The test — apply it BEFORE writing any capability. Write the line a *plugin author* would type:**
+
+```rust
+Row::new().child(…).on_peek(move || cursor_to(row_id))     // ✅ one line, on the widget
+```
+
+> Can someone get this behaviour by writing **one line on their widget**, without touching anything
+> host-private?
+
+**If it needs a registry, an id, or a crate-private type, that IS the bug** — what exists is
+ceremony around a missing API. The framework owns everything behind the builder: collection, ids,
+dispatch, drawing. The declarative path then maps the same builder to an `Intent` (as `on_press`
+already is), so a plugin writes the identical line. **One door, never two.**
+
+**The worked example, live in this repo (hint targets / `prefix+/`) — currently WRONG:**
+
+```rust
+let id = hints.register(InteractionIntent::FocusPaneThenAction { … }); // host-only enum + registry
+button.hint_target(id)                                                  // …and carry an id around
+```
+
+Three things a caller must know: that a registry exists, that they must pre-register, and a
+`pub(crate)` enum (`InteractionIntent`, `heca/src/app/interaction.rs`). **A plugin can construct
+none of it** — it only reaches the `HintTargets` seam, which takes a plain `Intent`, so its rows
+cannot say "focus my container first" and are refused by `ActionPolicy::ContainerFocused`. That is a
+second-class version of a shipped feature, which this rule exists to forbid.
+
+**Corollaries:**
+- A host-private composite (`FocusPaneThenAction`, `FocusContainerThenAction`) means the behaviour
+  has **no name a plugin can say**. Give it one; do not reach for the private enum.
+- **Never add a second path beside one that exists.** Two paths over one input cannot stay
+  identical, and nothing fails when they drift — the tests exercise one, the user sees the other.
+  On 2026-08-07 this produced two row builders, two quick-pick loops, two menu shapes (a hand-written
+  `Clone` that dropped the panel's own style) and two keyboard lookups, all in one session, all
+  found by Antonio by eye against a green suite.
+- A rule a **caller** has to remember (assign the letters, pick an anchor, choose a lookup) belongs
+  in the widget. See the `⛔ SETTLED` note on `Base::one_click_target` and
+  `ContextMenu::assign_quick_picks`.
+- Tests must be written in the **agreed authoring API**, because a test is documentation of how the
+  thing is meant to be used.
+
+This is what made `.context_menu()` replace `context_path` + a builder registry + a `nav_key` nobody
+remembered (F004/P084/T395). When you touch a capability, check its neighbours for the same shape.
+
+---
+
 ### ⭐ THE WIDGET ARCHITECTURE — `ViewNode` + composition (READ FIRST; applies to EVERY widget change)
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
@@ -879,6 +931,15 @@ Button::destructive("Delete")
     .on_click(move || emit(intent))
 ```
 
+> ⚠️ **DECIDED 2026-08-07, NOT YET BUILT — `P084(F004)/T400`.** The model below is being taken
+> further, in the direction of RULE ZERO: **delivery follows focus and bubbles** (`takes_raw_keys`
+> and `takes_text_input` go), **`bounds === what is drawn === what is clickable`** so a floating
+> widget *places* itself rather than describing itself (`hit_bounds` / `damage_bounds` go),
+> **children are always traversed** and you stop a walk by stopping it (`routes_own_subtree` goes),
+> and there is **one handler spelling** carrying the event *and* `stop_propagation()`. Antonio:
+> *"I want transparent APIs… always prefer common and well known APIs."* Read T400 before writing
+> anything that touches routing — do not add a new self-describing predicate.
+
 **SETTLED — the input model (F004/P084/T394, 2026-08-06):**
 - **A host builds ONE pointer event**, `Event::Raw(RawPointer)`, carrying the **button** and the
   **modifiers**. The framework resolves it once — hit-test, hover, press/release pairing, click
@@ -894,6 +955,44 @@ Button::destructive("Delete")
 - **Events say what happened, never what to do about it**: `right_click`, not `context_menu`.
 - Full model: [`docs/widgets.md` → the event model](docs/widgets.md); the rules are held by
   `heca-grid-ui/tests/pointer_routing.rs` and `tests/pointer_delivery.rs`.
+
+**SETTLED — the menu model (F004/P084/T395, decided by Antonio 2026-08-07):**
+
+Four names, and there is no fifth. **The panel is `ContextMenu`'s own body, not a separate type** —
+inventing a `MenuPanel` for it was rejected outright.
+
+| type | what it is |
+|---|---|
+| `MenuItem` | one row: sugar (`.label()` / `.icon()`) **or** any widget subtree (`.child(\|\| …)`); children win |
+| `Menu` | a titled list of items. **Content only** — no triggers, no anchors, no keys |
+| `ContextMenu` | a **named** presenter holding **one** `Menu`; it *is* the panel |
+| `MenuBar` | not built — will show the **same `Menu` value** as a strip |
+
+- **One `Menu` per `ContextMenu`, several `MenuItem`s in it.** Asked directly whether a context menu
+  could hold several menus as sections: *"No. Only one menu that contains severl MenuItem"*.
+- **`ContextMenu::new("name")` — the name is an id**, not a title. `Menu` carries title + description.
+- **`MenuItem::child` takes a builder (`Fn() -> impl Component`), not a widget.** A menu can be shown
+  twice and an owned subtree can be handed over once; a builder makes the whole chain `Clone`, so one
+  menu value serves every row of a list. `.context_menu()` therefore accepts **a value or a closure**
+  (`IntoContextMenu`).
+- **Rows are real children** — taffy lays them out. This widget owns no layout beyond shifting the
+  finished panel to its anchor (the `shift_subtree` trick `Overlay`/`Select` use). Row colour is
+  published at paint with `with_content_color`, so composed rows read danger/disabled for free.
+- **The anchor comes out of the event** (`Event::position()` / `Event::target_bounds()`, stamped once
+  by the router) — never chosen by an author. His idea, and better than the ambient lookup proposed.
+- **Bubbling stops at the nearest declaration; menus are never merged.** Nothing declared ⇒ nothing
+  opens. "Right-click empty space" is a menu on the root, not an empty-space hit test.
+- **`Menu::name()` is the entire plugin surface**: a named menu can be contributed to. A plugin never
+  writes a closure — it names an action, and the entry dispatches an `Intent` through the central
+  gate. An entry's icon comes from `ActionCatalog::icon`, so surfaces cannot drift.
+- ⚠️ **A right-click is a press AND a release.** `RightClick` is synthesised from the pair; a host
+  delivering only presses produces no clicks and no menu opens. Lint:
+  `heca/tests/pointer_funnel.rs`. Behaviour tests cannot see this — they dispatch both halves.
+- **Rejected, so nobody rebuilds them:** `path` / `target` / `about` on the menu; `alter_menus`;
+  `MenuPath::declare`; `MenuRow::at`; `fn context_menus() -> Vec<…>` (*"why a function that return
+  vec?? still the same as before.. WHY?? i want simple APIs"*); and a `MenuPanel` type
+  (*"YOU HAVE TO ASK AND NOT TO INVENT"*).
+- Full model: [`docs/widgets.md` → Menus](docs/widgets.md).
 
 **Genuinely OPEN (the live design space):** a typed builder SDK over `ViewNode`; and `Label`
 truncation/ellipsis + wrapping (a long label overflows its box today).

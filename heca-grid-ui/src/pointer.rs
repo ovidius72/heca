@@ -50,7 +50,7 @@ use crate::event::{
     DragEvent, Event, EventKind, Handled, PointerButton, PointerEvent, RawPointer, RawPointerKind,
 };
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use heca_core::layout::Point;
+use heca_core::layout::{Point, Rectangle};
 use std::cell::Cell;
 use std::time::Instant;
 
@@ -168,7 +168,7 @@ fn route_move(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     // A gesture in flight owns the pointer: it hears the move wherever the cursor went. Otherwise
     // the move belongs to whatever is under it now.
     if let Some(path) = capture.as_ref().or(target.as_ref()) {
-        handled = deliver_path(root, path, &Event::PointerMove(pointer_event(raw, 0)));
+        handled = deliver_targeted(root, path, Event::PointerMove(pointer_event(raw, 0)));
     }
     // A drag is driven from the widget the button went down on, **whether or not anything
     // consumed that press**: a draggable row that ignores presses is still draggable, and a
@@ -216,7 +216,7 @@ fn route_press(root: &mut dyn Component, raw: &RawPointer) -> Handled {
         count
     };
 
-    let handled = deliver_path(root, &path, &Event::PointerDown(pointer_event(raw, count)));
+    let handled = deliver_targeted(root, &path, Event::PointerDown(pointer_event(raw, count)));
     if handled == Handled::Yes {
         // Whoever took the press owns the rest of the gesture.
         set_capture(root, &path);
@@ -232,8 +232,8 @@ fn route_release(root: &mut dyn Component, raw: &RawPointer) -> Handled {
 
     let capture = capture_path(root);
     let mut handled = match (&capture, &target) {
-        (Some(path), _) => deliver_path(root, path, &up),
-        (None, Some(path)) => deliver_path(root, path, &up),
+        (Some(path), _) => deliver_targeted(root, path, up),
+        (None, Some(path)) => deliver_targeted(root, path, up),
         (None, None) => Handled::No,
     };
 
@@ -265,7 +265,7 @@ fn route_release(root: &mut dyn Component, raw: &RawPointer) -> Handled {
                 EventKind::MiddleClick => Event::MiddleClick(e),
                 _ => Event::Click(e),
             };
-            handled = or(handled, deliver_path(root, &path, &base));
+            handled = or(handled, deliver_targeted(root, &path, base));
             // **A declared menu is what happens when nothing claims the right-click.** A widget
             // that answers one itself still wins; this is the fallback, resolved by walking
             // outwards from the widget that was clicked to the nearest one carrying a menu.
@@ -301,7 +301,7 @@ fn route_wheel(root: &mut dyn Component, raw: &RawPointer) -> Handled {
     let Some(path) = hit_test(root, raw.pos) else {
         return Handled::No;
     };
-    deliver_path(root, &path, &Event::Scroll(pointer_event(raw, 0)))
+    deliver_targeted(root, &path, Event::Scroll(pointer_event(raw, 0)))
 }
 
 /// The pointer left the window, or the host is cancelling: nothing may stay hovered, captured,
@@ -707,7 +707,31 @@ fn pointer_event(raw: &RawPointer, click_count: u32) -> PointerEvent {
         click_count,
         delta_x: raw.delta_x,
         delta_y: raw.delta_y,
+        // Filled in by `deliver_targeted` on the way down — the router knows the target, the
+        // constructor does not.
+        target_bounds: None,
     }
+}
+
+/// The laid-out bounds of the node `path` leads to.
+fn bounds_at(root: &dyn Component, path: &[usize]) -> Rectangle {
+    let mut node = root;
+    for i in path {
+        match node.base().children.get(*i) {
+            Some(child) => node = child.as_ref(),
+            None => break,
+        }
+    }
+    node.base().bounds
+}
+
+/// Deliver `ev` down `path`, **stamped with the target widget's bounds**.
+///
+/// The one place the stamp happens, so every routed pointer event carries it and no widget has to
+/// arrange for its own. [`deliver_path`] stays the raw walk underneath.
+fn deliver_targeted(root: &mut dyn Component, path: &[usize], ev: Event) -> Handled {
+    let ev = ev.with_target_bounds(bounds_at(root, path));
+    deliver_path(root, path, &ev)
 }
 
 fn drag_event(item: crate::drag::DragItemId, raw: &RawPointer, side: DropSide) -> DragEvent {

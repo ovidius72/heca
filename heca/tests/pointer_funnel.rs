@@ -129,3 +129,36 @@ fn the_button_branch_feeds_the_funnel_both_press_and_release() {
         );
     }
 }
+
+/// `heca/src/mouse.rs` is the **second** place a button reaches the chrome tree, and it had the same
+/// half-gesture defect the event loop was fixed for — found by the user in the running app, on the
+/// day it was introduced, with the whole suite green.
+///
+/// The right-button branch dispatched a **press** into the chrome tree and no release. That is not
+/// half a click, it is *no* click: the framework synthesises `Click` / `RightClick` from a press and
+/// a release on the same widget, so a host that sends only presses produces neither. Every context
+/// menu declared on a widget stopped opening, and nothing failed — the declaration tests dispatch
+/// both halves themselves, so they passed while the app sent one.
+///
+/// A lint, like its neighbours above: what it guards is *absence*, which no behaviour test can see.
+#[test]
+fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
+    let src = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"),
+    )
+    .expect("read the mouse layer");
+
+    assert!(
+        src.contains("chrome_dispatch_button_press"),
+        "the mouse layer no longer presses into the chrome tree — if that moved, move this guard \
+         with it rather than deleting it",
+    );
+    assert!(
+        src.contains("chrome_dispatch_button_release"),
+        "the mouse layer dispatches a button PRESS to the chrome tree and never a RELEASE.\n\
+         A press with no release is not a click: `Click` and `RightClick` are synthesised from the \
+         pair, so nothing that depends on a click happens at all — a widget's declared context \
+         menu never opens, and a widget that captured the press never learns the gesture ended.\n\
+         This is not caught by any behaviour test: they dispatch both halves themselves.",
+    );
+}

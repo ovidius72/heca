@@ -357,6 +357,12 @@ impl Component for Dialog {
     /// `tests/pointer_delivery.rs`: the release and the wheel arms exist because a `ScrollRegion`
     /// in a dialog body was found stuck and unscrollable, and nothing but that test stops the next
     /// kind going missing the same way.
+    /// It types **on behalf of its field**: a dialog body holds inputs, and it forwards typed
+    /// text to whichever one is focused.
+    fn takes_text_input(&self) -> bool {
+        true
+    }
+
     fn routes_own_subtree(&self) -> bool {
         true
     }

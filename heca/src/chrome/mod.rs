@@ -3414,6 +3414,7 @@ pub(crate) fn build_chrome_root(
         crate::host::App::new(&state.chrome_state),
         &theme,
         &emit_intent,
+        &state.action_catalog,
     );
 
     let left_w = chrome.left_sidebar_width;
@@ -3562,6 +3563,59 @@ pub(crate) fn chrome_dispatch_button_press(
             ) == heca_grid_ui::Handled::Yes
         })
         .unwrap_or(false)
+}
+
+/// Deliver a **button release** to the chrome tree.
+///
+/// The other half of [`chrome_dispatch_button_press`], and not optional: the framework synthesises
+/// `Click` / `RightClick` from a press **and** a release on the same widget, so a host that
+/// delivers only presses produces no clicks at all — a declared context menu would never open, and
+/// a widget that captured the press would never learn the gesture ended.
+pub(crate) fn chrome_dispatch_button_release(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+    button: heca_grid_ui::PointerButton,
+) -> bool {
+    state
+        .chrome_tree
+        .as_mut()
+        .map(|tree| {
+            heca_grid_ui::dispatch(
+                &mut tree.root,
+                &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), button),
+            ) == heca_grid_ui::Handled::Yes
+        })
+        .unwrap_or(false)
+}
+
+/// **Open the menu declared nearest the focused widget**, bubbling outwards — the keyboard
+/// counterpart of an unclaimed right-click (F004/P084/T395).
+///
+/// Returns whether anything declared one. The action that calls this used to mean "the focused
+/// pane's menu"; it now means "the focused widget's", which is what makes one binding work for a
+/// pane, a column, a workspace and a plugin's own row without the host knowing any of them exist.
+pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppState) -> bool {
+    // **Where the keyboard is, in a chrome surface, is the focused container's cursor** — the
+    // `nav_key` of the row it sits on. `Base::focused` is real keyboard focus, which a text field
+    // has and a list row does not, so asking only about that found nothing here and `prefix+>`
+    // opened nothing at all. Both are tried: a genuinely focused widget (a plugin's input) still
+    // answers for itself.
+    let cursor = {
+        use heca_grid_ui::reactive::SignalGet as _;
+        state
+            .chrome_state
+            .focused_container()
+            .and_then(|mount| state.chrome_state.container_cursor(&mount).get())
+    };
+    let Some(tree) = state.chrome_tree.as_ref() else {
+        return false;
+    };
+    if let Some(key) = cursor.as_deref()
+        && heca_grid_ui::open_for_nav_key(&tree.root, key)
+    {
+        return true;
+    }
+    heca_grid_ui::open_for_focused(&tree.root)
 }
 
 /// Mount every menu a widget declared and asked to open since the last frame.
@@ -4345,10 +4399,12 @@ mod tests {
         // The component reads its model from its own state, so the fixture puts it there rather
         // than handing it to the context (F003/P086/T367).
         *chrome.workspaces.tree_mut() = tree.clone();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
         let ctx = crate::providers::ChromeCtx::for_build(
             crate::host::App::new(chrome),
             theme,
             &emit,
+            &catalog,
         );
         super::build_region_content(&host, super::RegionId::LeftSidebar, &ctx, signals, drag, hints)
     }

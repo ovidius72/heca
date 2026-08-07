@@ -1095,6 +1095,11 @@ impl Component for CommandPalette {
 
     /// Owns its walk. While open it grabs the viewport — typing, nav and outside-click dismissal —
     /// and it paints its row children itself, in the overlay panel it positions them into.
+    /// It types: the query field is its own, and every character re-filters the list.
+    fn takes_text_input(&self) -> bool {
+        true
+    }
+
     fn routes_own_subtree(&self) -> bool {
         true
     }

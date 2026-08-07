@@ -10,30 +10,43 @@
 //! What is left is one declaration on the widget. These tests are what says so.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem};
+use heca_grid_ui::widgets::{ContextMenu, Glyph, Icon, Menu, MenuAnchor, MenuItem};
 use heca_grid_ui::{Component, Event, LayoutEngine, Point, PointerButton, Size};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Every menu the sink was handed, by the label of its first row — enough to say *which* menu
-/// opened, which is the whole question in these tests.
-type Opened = Rc<RefCell<Vec<String>>>;
+/// Every menu the sink was handed, **as the host opened it** — so a test can ask both *which* menu
+/// opened and what it actually looks like, without building one itself.
+type Opened = Rc<RefCell<Vec<ContextMenu>>>;
 
-/// Install a sink that records what opened. The host's one job is presenting the menu; a test can
-/// be that host in three lines, which is the point of the seam.
+/// Install a sink that plays host: open what it is handed, and keep it.
+///
+/// Opening is the host's job and the step that realizes the rows into children — a sink that only
+/// recorded a name would be testing a menu nobody ever showed. Tests below never anchor or open a
+/// menu themselves; they write `.context_menu(..)` and right-click, like any author.
 fn recording_sink() -> Opened {
     let opened: Opened = Rc::new(RefCell::new(Vec::new()));
     let sink = opened.clone();
-    heca_grid_ui::install_menu_sink(move |menu, _anchor| {
-        sink.borrow_mut()
-            .push(menu.item_labels().first().cloned().unwrap_or_default());
+    heca_grid_ui::install_menu_sink(move |menu, anchor| {
+        sink.borrow_mut().push(anchor.open(menu));
     });
     opened
 }
 
-fn menu_named(first: &str) -> Menu {
+/// The first row's label of each menu that opened — the usual question here.
+fn labels(opened: &Opened) -> Vec<String> {
+    opened
+        .borrow()
+        .iter()
+        .map(|m| m.entry_labels().first().cloned().flatten().unwrap_or_default())
+        .collect()
+}
+
+fn menu_named(first: &str) -> ContextMenu {
     let first = first.to_string();
-    Menu::new("Test", "a menu").child(MenuItem::new(first).on_click(|| {}))
+    ContextMenu::new("test-menu").child(
+        Menu::new("Test", "a menu").child(MenuItem::new().label(first).on_click(|| {})),
+    )
 }
 
 fn right_click(root: &mut dyn Component, pos: Point) {
@@ -56,7 +69,7 @@ fn a_right_click_opens_the_menu_the_widget_declares() {
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
 
     right_click(&mut root, AT);
-    assert_eq!(*opened.borrow(), vec!["Rename"]);
+    assert_eq!(labels(&opened), vec!["Rename"]);
 }
 
 /// **You click the label, the row's menu opens.** The menu belongs to the row; the label inside it
@@ -79,7 +92,7 @@ fn the_click_bubbles_out_to_the_declaring_ancestor() {
         &mut root,
         Point::new(label.loc.x + 2.0, label.loc.y + label.size.h / 2.0),
     );
-    assert_eq!(*opened.borrow(), vec!["Rename"]);
+    assert_eq!(labels(&opened), vec!["Rename"]);
 }
 
 /// **Nearest wins, and it stops there.** Two declarations on one path are not merged — a menu is a
@@ -100,7 +113,7 @@ fn the_innermost_declaration_wins_and_menus_are_never_merged() {
 
     right_click(&mut root, AT);
     assert_eq!(
-        *opened.borrow(),
+        labels(&opened),
         vec!["Rename"],
         "the row's menu, once — not the container's, and not both",
     );
@@ -135,7 +148,7 @@ fn nothing_declared_opens_nothing_and_a_root_declaration_covers_the_gaps() {
     LayoutEngine::new().compute(&mut with_root, Size::new(400.0, 40.0));
     // A point past the row — the "empty space" case, with nothing declared about empty space.
     right_click(&mut with_root, Point::new(300.0, 10.0));
-    assert_eq!(*opened.borrow(), vec!["New workspace"]);
+    assert_eq!(labels(&opened), vec!["New workspace"]);
 }
 
 /// **The closure runs at trigger time**, so a menu describes the state it is opened in. Building
@@ -149,7 +162,7 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
         Row::new()
             .width(Length::Px(100.0))
             .height(Length::Px(40.0))
-            .context_menu_built(move || {
+            .context_menu(move || {
                 menu_named(if r.get() { "Use default name" } else { "Rename" })
             }),
     );
@@ -158,7 +171,7 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
     right_click(&mut root, AT);
     renamed.set(true);
     right_click(&mut root, AT);
-    assert_eq!(*opened.borrow(), vec!["Rename", "Use default name"]);
+    assert_eq!(labels(&opened), vec!["Rename", "Use default name"]);
 }
 
 /// A widget that answers its own right-click **wins**: the declared menu is what happens when
@@ -207,12 +220,12 @@ fn the_keyboard_trigger_finds_the_same_declaration_from_focus() {
         .focused
         .set(true);
     assert!(heca_grid_ui::open_for_focused(&root));
-    assert_eq!(*opened.borrow(), vec!["Rename"]);
+    assert_eq!(labels(&opened), vec!["Rename"]);
 }
 
-/// Any trigger at all: `show_at` / `show_under` are public, so a left click, a long press or a
-/// timer opens a menu through the same path the declaration uses. A parallel path for the
-/// convenient case is how one widget's `hide()` came to fade while its `remove()` cut.
+/// Any trigger at all: `menu::show` is public, so a left click, a long press or a timer opens a
+/// menu through the same path the declaration uses. A parallel path for the convenient case is how
+/// one widget's `hide()` came to fade while its `remove()` cut.
 #[test]
 fn a_menu_can_be_opened_by_any_trigger_the_author_invents() {
     let opened = recording_sink();
@@ -231,5 +244,222 @@ fn a_menu_can_be_opened_by_any_trigger_the_author_invents() {
 
     let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_pressed(AT, PointerButton::Left));
     let _ = heca_grid_ui::dispatch(&mut root, &Event::pointer_released(AT, PointerButton::Left));
-    assert_eq!(*opened.borrow(), vec!["Deploy to staging"]);
+    assert_eq!(labels(&opened), vec!["Deploy to staging"]);
+}
+
+/// **A value or a closure, one method.** Both spellings reach the same slot, so the choice is about
+/// when the rows are built and never about which builder to remember.
+#[test]
+fn a_menu_is_declared_as_a_value_or_as_a_closure() {
+    let opened = recording_sink();
+    let ctx = menu_named("Rename");
+    let mut root = Flex::row()
+        .child(
+            Row::new()
+                .width(Length::Px(100.0))
+                .height(Length::Px(40.0))
+                .context_menu(ctx.clone()),
+        )
+        .child(
+            Row::new()
+                .width(Length::Px(100.0))
+                .height(Length::Px(40.0))
+                .context_menu(move || ctx.clone()),
+        );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+
+    right_click(&mut root, AT);
+    right_click(&mut root, Point::new(150.0, 10.0));
+    assert_eq!(labels(&opened), vec!["Rename", "Rename"]);
+}
+
+/// **A menu value can be declared on several rows**, because it is `Clone` — that is the whole
+/// reason the composed content is a builder behind an `Rc` rather than an owned subtree.
+#[test]
+fn one_menu_value_serves_every_row_in_a_list() {
+    let opened = recording_sink();
+    let ctx = menu_named("Close");
+    let mut root = Flex::row();
+    for _ in 0..3 {
+        root = root.child(
+            Row::new()
+                .width(Length::Px(100.0))
+                .height(Length::Px(40.0))
+                .context_menu(ctx.clone()),
+        );
+    }
+    LayoutEngine::new().compute(&mut root, Size::new(300.0, 40.0));
+
+    right_click(&mut root, AT);
+    right_click(&mut root, Point::new(150.0, 10.0));
+    right_click(&mut root, Point::new(250.0, 10.0));
+    assert_eq!(labels(&opened), vec!["Close", "Close", "Close"]);
+}
+
+/// **A composed row is built again for every opening.** An owned subtree can be handed over once;
+/// this is the test that says the second right-click still has a menu to show.
+#[test]
+fn a_composed_row_survives_being_opened_twice() {
+    let built = Rc::new(std::cell::Cell::new(0u32));
+    let b = built.clone();
+    let ctx = ContextMenu::new("pane-menu").child(
+        Menu::new("Pane", "what you can do").child(
+            MenuItem::new()
+                .child(move || {
+                    b.set(b.get() + 1);
+                    Icon::new(Glyph::Trash)
+                })
+                .on_click(|| {}),
+        ),
+    );
+
+    let _opened = recording_sink();
+    let mut root = Flex::row().child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .context_menu(ctx),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+
+    right_click(&mut root, AT);
+    assert_eq!(built.get(), 1, "the subtree is built when the menu opens");
+    right_click(&mut root, AT);
+    assert_eq!(built.get(), 2, "and built again for the second opening");
+}
+
+/// **Composed content wins over the sugar**, the same precedence `Button` has — and both forms end
+/// up as real children the layout engine sizes, which is what keeps this widget free of a layout
+/// implementation of its own.
+#[test]
+fn composed_content_wins_over_the_label_and_both_become_real_children() {
+    let menu = Menu::new("Pane", "what you can do")
+        .child(MenuItem::new().label("Rename").on_click(|| {}))
+        .child(
+            MenuItem::new()
+                .label("ignored")
+                .child(|| Label::new("Close"))
+                .on_click(|| {}),
+        );
+    let mut panel = MenuAnchor::At(Point::new(0.0, 0.0))
+        .open(ContextMenu::new("pane-menu").child(menu));
+    LayoutEngine::new().compute(&mut panel, Size::new(400.0, 400.0));
+
+    assert_eq!(
+        panel.base().children.len(),
+        2,
+        "one real child per row, laid out by the engine",
+    );
+    for (i, row) in panel.base().children.iter().enumerate() {
+        let b = row.base().bounds;
+        assert!(
+            b.size.w > 0.0 && b.size.h > 0.0,
+            "row {i} was measured by the layout engine: {b:?}",
+        );
+    }
+}
+
+/// **The anchor comes out of the event.** A pointer event answers with the cursor, a widget-bounds
+/// event answers with the widget — and an event carrying neither opens nothing rather than
+/// guessing a corner of the screen.
+#[test]
+fn the_anchor_is_read_from_the_event_that_asked_for_the_menu() {
+    use heca_grid_ui::event::PointerEvent;
+    use heca_grid_ui::Rectangle;
+
+    let at = Point::new(30.0, 40.0);
+    assert_eq!(
+        MenuAnchor::from_event(&Event::RightClick(PointerEvent::at(at))),
+        Some(MenuAnchor::At(at)),
+        "a pointer event anchors at the cursor",
+    );
+
+    let bounds = Rectangle::new(Point::new(4.0, 8.0), Size::new(100.0, 20.0));
+    let no_pos = Event::Widget(heca_grid_ui::component::WidgetIntent::Activate);
+    assert_eq!(
+        MenuAnchor::from_event(&no_pos),
+        None,
+        "an event with neither a position nor a target shows nothing",
+    );
+
+    // The panel hangs off the bottom edge, so the row it is *about* stays readable.
+    let panel = MenuAnchor::Under(bounds).open(ContextMenu::new("m"));
+    assert_eq!(
+        panel.anchor_signal().get_untracked(),
+        Point::new(bounds.loc.x, bounds.loc.y + bounds.size.h),
+    );
+}
+
+/// **The rows stack.** A menu is a vertical list, and the declared path always clones — so
+/// anything `Clone` drops is missing from every declared menu while a directly built one is fine.
+///
+/// It happened: `Clone` rebuilt a bare `Base`, losing `Direction::Column` (whose default is `Row`),
+/// so declared menus laid their rows out **side by side** while the host's own dropdown stayed a
+/// vertical list. Two menus, one widget, two shapes on screen. Thirteen tests here passed, because
+/// none of them looked at where the rows ended up (Antonio, 2026-08-07, with screenshots).
+#[test]
+fn rows_stack_vertically() {
+    let opened = recording_sink();
+    let mut root = Flex::row().child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .context_menu(
+                ContextMenu::new("pane-menu").child(
+                    Menu::new("Pane", "what you can do")
+                        .child(MenuItem::new().label("Rename").on_click(|| {}))
+                        .child(MenuItem::new().label("Close").on_click(|| {})),
+                ),
+            ),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+    right_click(&mut root, AT);
+
+    // Laid out **in place**: cloning it again would hand back a fresh, unrealized panel — this is
+    // the one the host opened, which is already a clone of what the widget declared.
+    let mut panels = opened.borrow_mut();
+    let panel = &mut panels[0];
+    LayoutEngine::new().compute(panel, Size::new(600.0, 600.0));
+    let rows: Vec<_> = panel.base().children.iter().map(|c| c.base().bounds).collect();
+
+    assert_eq!(rows.len(), 2, "one child per row");
+    assert!(
+        rows[1].loc.y > rows[0].loc.y,
+        "the second row must sit BELOW the first — a menu is a vertical list. Got {rows:?}",
+    );
+    assert!(
+        (rows[1].loc.x - rows[0].loc.x).abs() < 0.5,
+        "rows share a left edge; they are stacked, not side by side. Got {rows:?}",
+    );
+}
+
+/// **The menu hands out the quick-pick letters**, not its caller. Two hosts each wrote
+/// `let mut letters = 'a'..='z'` beside their own loop, so the same menu had keycaps built one way
+/// and none built the other.
+#[test]
+fn the_menu_assigns_quick_pick_letters() {
+    let opened = recording_sink();
+    let mut root = Flex::row().child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .context_menu(
+                ContextMenu::new("m").child(
+                    Menu::new("Pane", "what you can do")
+                        .child(MenuItem::new().label("Rename").on_click(|| {}))
+                        .child(MenuItem::new().label("Split").key('s').on_click(|| {}))
+                        .child(MenuItem::new().label("Nope").enabled(false).on_click(|| {}))
+                        .child(MenuItem::new().label("Close").on_click(|| {})),
+                ),
+            ),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+    right_click(&mut root, AT);
+
+    let keys = opened.borrow()[0].quick_pick_keys();
+    assert_eq!(keys[1], Some('s'), "an explicit key is kept");
+    assert_eq!(keys[2], None, "a disabled row cannot be picked, so it gets no letter");
+    assert!(keys[0].is_some() && keys[3].is_some(), "every enabled row got one: {keys:?}");
+    assert_ne!(keys[0], keys[3], "and no letter is handed out twice");
+    assert!(keys[0] != Some('s') && keys[3] != Some('s'), "the explicit letter was not reused");
 }

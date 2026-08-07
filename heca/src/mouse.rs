@@ -142,47 +142,6 @@ fn aim_keyboard_at_click(state: &mut AppState, pos: (f32, f32)) {
     }
 }
 
-/// Open the right-click menu for the **container row** under `pos`, if there is one
-/// (F003/P086/T365).
-///
-/// Generic, and that is the whole change: the row is named by the container under the point and the
-/// `nav_key` that row declared, and the *component* says which menu path describes it. This used to
-/// map a `ChromeDragItem` — `Pane | Column | Workspace` — onto one of three workspace-shaped
-/// targets, so it worked for exactly one component's rows, in one sidebar, and a Docker row could
-/// not be right-clicked at all. Nothing here now knows what kind of rows exist.
-///
-/// Returns whether a menu was opened: a press inside a container that lands on no row (its padding,
-/// a gap between rows) opens nothing, exactly as before.
-fn open_row_context_menu(state: &mut AppState, pos: (f32, f32)) -> bool {
-    use crate::app::interaction::InteractionSource;
-    use crate::chrome::ContextTarget;
-    let Some(container) = crate::chrome::container_at(state, pos) else {
-        return false;
-    };
-    let Some(key) = crate::chrome::nav_key_at(state, pos) else {
-        return false;
-    };
-    // Scoped: the facade borrows the store, and opening the menu needs `&mut AppState`.
-    let path = {
-        let ctx = crate::providers::ChromeCtx::new(crate::host::App::new(&state.chrome_state));
-        state
-            .chrome_host
-            .provider(&container)
-            .and_then(|p| p.context_path(&key, &ctx))
-    };
-    let Some(path) = path else {
-        return false;
-    };
-    crate::chrome::open_context_menu_for(
-        state,
-        &path,
-        ContextTarget::Row { container, key },
-        heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
-        InteractionSource::MouseLeftSidebar,
-    );
-    true
-}
-
 /// Sync the current drag mode with modifier state changes.
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
@@ -416,6 +375,20 @@ pub fn on_mouse_input(
         (MouseButton::Right, ElementState::Released) if resize::on_release(state) => {
             return None;
         }
+        // **The release is what makes it a click.** The framework pairs a press with a release on
+        // the same widget and only then emits `RightClick` — which is what an unclaimed right-click
+        // turns into a declared context menu (F004/P084/T395). Delivering only the press produced
+        // no clicks at all, so no sidebar row opened a menu.
+        (MouseButton::Right, ElementState::Released) => {
+            if crate::chrome::chrome_dispatch_button_release(
+                state,
+                pos,
+                heca_grid_ui::PointerButton::Right,
+            ) {
+                state.needs_redraw = true;
+            }
+            return None;
+        }
         // Right-click → the menu for whatever is under the cursor: a container's row, else the
         // content pane. **A right-click aims the keyboard the same way a left-click does**
         // (F003/P086/T365): clicking a container's row focuses that container, and clicking
@@ -437,9 +410,6 @@ pub fn on_mouse_input(
                 heca_grid_ui::PointerButton::Right,
             ) {
                 state.needs_redraw = true;
-                return None;
-            }
-            if open_row_context_menu(state, pos) {
                 return None;
             }
             if let Some(pane_id) = hit_test_pane(state, pos) {

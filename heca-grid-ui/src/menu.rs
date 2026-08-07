@@ -2,12 +2,14 @@
 //!
 //! ```
 //! use heca_grid_ui::prelude::*;
-//! use heca_grid_ui::widgets::{Menu, MenuItem};
+//! use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
 //!
 //! let save = Button::new("Save").context_menu(
-//!     Menu::new("Save", "Ways to save this file")
-//!         .child(MenuItem::new("Save as…").on_click(|| {}))
-//!         .child(MenuItem::new("Revert").enabled(false).on_click(|| {})),
+//!     ContextMenu::new("save-menu").child(
+//!         Menu::new("Save", "Ways to save this file")
+//!             .child(MenuItem::new().label("Save as…").on_click(|| {}))
+//!             .child(MenuItem::new().label("Revert").enabled(false).on_click(|| {})),
+//!     ),
 //! );
 //! ```
 //!
@@ -32,11 +34,15 @@
 //! bug — and its root cause was that a press carried no button, so a right-click could not reach a
 //! widget at all and the app had to reconstruct the target from geometry.
 //!
-//! # A closure, not a value
+//! # A value or a closure — realized at trigger time either way
 //!
-//! The declaration is `Fn() -> ContextMenu`, run **at trigger time**, so items reflect live state —
-//! "Use default name" greys out exactly when the row has a custom one. Building menus lazily was
-//! the only reason a host-owned builder registry existed.
+//! The slot is `Fn() -> ContextMenu`, and
+//! [`IntoContextMenu`](crate::builders::IntoContextMenu) lets you fill it with a menu value or a
+//! closure. It runs **at trigger time**, which is what makes two things work: rows reflect live
+//! state ("Use default name" greys out exactly when the row has a custom one), and a row composed
+//! of widgets can be built again for the second right-click, since a widget subtree is owned and
+//! can only be handed over once. Building menus lazily was the only reason a host-owned builder
+//! registry existed.
 //!
 //! # Two triggers, one rule
 //!
@@ -59,12 +65,12 @@
 //! it. No `AppState`, no host type, in any closure a widget holds.
 
 use crate::component::Component;
-use crate::widgets::{Menu, MenuAnchor};
+use crate::widgets::{ContextMenu, MenuAnchor};
 use heca_core::layout::{Point, Rectangle};
 use std::cell::RefCell;
 
-/// The host's presenter: given a built, anchored, open menu, put it on screen.
-type MenuSink = Box<dyn Fn(Menu, MenuAnchor)>;
+/// The host's presenter: given a built, anchored menu, put it on screen.
+type MenuSink = Box<dyn Fn(ContextMenu, MenuAnchor)>;
 
 thread_local! {
     /// Host-installed sink every [`ContextMenu::show_at`] posts to. Thread-local because the UI
@@ -83,22 +89,23 @@ thread_local! {
 ///     layers.insert_menu(menu);
 /// });
 /// ```
-pub fn install_menu_sink(f: impl Fn(Menu, MenuAnchor) + 'static) {
+pub fn install_menu_sink(f: impl Fn(ContextMenu, MenuAnchor) + 'static) {
     MENU_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
 }
 
-/// **Show a menu yourself**, for a trigger you invented: a left click, a long press, a timer.
+/// **Show a menu at an anchor you chose yourself** — the low road, for a host or a trigger with no
+/// event behind it.
 ///
-/// The escape hatch, and the same door the declaration uses — `.context_menu(..)` is implemented in
-/// terms of this, so an author's own trigger runs the same code rather than a parallel path. The
-/// anchor is explicit here precisely because there is no trigger for the framework to read it from.
-pub fn show(menu: Menu, anchor: MenuAnchor) {
+/// Prefer [`ContextMenu::show`](crate::widgets::ContextMenu::show), which reads the anchor out of
+/// the event that asked for the menu; this exists for the caller that genuinely has a position and
+/// no event, and it is the same door — every road ends here.
+pub fn show(menu: ContextMenu, anchor: MenuAnchor) {
     present(menu, anchor);
 }
 
-/// Hand a built, anchored, open menu to the host. A no-op until a sink is installed, so widget
+/// Hand a built, anchored menu to the host. A no-op until a sink is installed, so widget
 /// code and headless tests can always call it.
-pub(crate) fn present(menu: Menu, anchor: MenuAnchor) {
+pub(crate) fn present(menu: ContextMenu, anchor: MenuAnchor) {
     MENU_SINK.with(|c| {
         if let Some(f) = c.borrow().as_ref() {
             f(menu, anchor);
@@ -149,12 +156,53 @@ pub fn open_for_focused(root: &dyn Component) -> bool {
     }
 }
 
+/// Open the menu declared nearest the widget carrying `nav_key`, anchored under it. Returns
+/// whether anything declared one.
+///
+/// The **other** keyboard trigger, and the one a chrome surface needs. `Base::focused` is real
+/// keyboard focus — a text field has it, a list row does not: a container tracks *its* cursor as
+/// the `nav_key` of the row it is on, which is the same declaration
+/// [`nav_key_at`](crate::nav::nav_key_at) reads for the mouse. Asking only about `focused` found
+/// nothing in a chrome tree and `prefix+>` opened nothing at all.
+pub fn open_for_nav_key(root: &dyn Component, nav_key: &str) -> bool {
+    let Some(path) = nav_key_path(root, nav_key) else {
+        return false;
+    };
+    let bounds = node_bounds(root, &path);
+    match menu_on(root, &path) {
+        Some(menu) => {
+            present(menu, MenuAnchor::Under(bounds));
+            true
+        }
+        None => false,
+    }
+}
+
+/// The path to the widget that declared `nav_key`.
+fn nav_key_path(root: &dyn Component, nav_key: &str) -> Option<Vec<usize>> {
+    fn walk(node: &dyn Component, want: &str, at: &mut Vec<usize>) -> bool {
+        if node.base().nav_key.as_deref() == Some(want) {
+            return true;
+        }
+        for (i, child) in node.base().children.iter().enumerate() {
+            at.push(i);
+            if walk(child.as_ref(), want, at) {
+                return true;
+            }
+            at.pop();
+        }
+        false
+    }
+    let mut path = Vec::new();
+    walk(root, nav_key, &mut path).then_some(path)
+}
+
 /// Build the menu declared by the innermost widget at or above `path`.
 ///
 /// **Nearest wins, and it stops there.** Two ancestors declaring menus do not produce a merged one:
 /// a menu is a statement about one thing, and stitching two together would make the entries mean
 /// different targets in the same list.
-fn menu_on(root: &dyn Component, path: &[usize]) -> Option<Menu> {
+fn menu_on(root: &dyn Component, path: &[usize]) -> Option<ContextMenu> {
     let mut node = root;
     let mut best = root.base().context_menu.as_deref();
     for i in path {

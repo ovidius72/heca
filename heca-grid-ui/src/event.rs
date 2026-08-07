@@ -50,7 +50,7 @@
 //! ```
 
 use crate::drag::DragItemId;
-use heca_core::layout::Point;
+use heca_core::layout::{Point, Rectangle};
 /// **The answer every widget gives to every event: "was this mine?"**
 ///
 /// It is the only lever a widget has over the walk, and it does more than it looks like it does —
@@ -208,6 +208,13 @@ pub struct PointerEvent {
     pub delta_x: f32,
     /// Wheel movement in lines along Y. See [`delta_x`](Self::delta_x).
     pub delta_y: f32,
+    /// **The laid-out bounds of the widget this event is being delivered to**, stamped by the
+    /// router at delivery.
+    ///
+    /// It is what lets a handler anchor something to the widget it fired on without the author
+    /// measuring anything — `ContextMenu::show(ev)` reads it to hang a menu under the row that was
+    /// right-clicked. `None` on a synthetic event nobody routed.
+    pub target_bounds: Option<Rectangle>,
 }
 
 impl PointerEvent {
@@ -221,7 +228,15 @@ impl PointerEvent {
             click_count: 0,
             delta_x: 0.0,
             delta_y: 0.0,
+            target_bounds: None,
         }
+    }
+
+    /// The same event stamped with the delivery target's bounds — what the router does on the way
+    /// in, and what a test does to stand in for it.
+    pub fn with_target_bounds(mut self, bounds: Rectangle) -> Self {
+        self.target_bounds = Some(bounds);
+        self
     }
 
     /// The same event with `button` instead.
@@ -442,6 +457,92 @@ impl Event {
             RawPointerKind::Cancelled,
             Point::new(f64::MIN, f64::MIN),
         ))
+    }
+
+    /// **Where this event happened**, if it happened anywhere in particular.
+    ///
+    /// Every pointer-carrying event answers with the cursor; a key, a text commit or a lifecycle
+    /// event answers `None`, because they did not occur at a position and inventing one is how a
+    /// panel ends up in the corner of the screen.
+    pub fn position(&self) -> Option<Point> {
+        match self {
+            Self::Raw(r) => Some(r.pos),
+            Self::PointerDown(p)
+            | Self::PointerUp(p)
+            | Self::PointerMove(p)
+            | Self::PointerEnter(p)
+            | Self::PointerLeave(p)
+            | Self::Click(p)
+            | Self::DoubleClick(p)
+            | Self::TripleClick(p)
+            | Self::RightClick(p)
+            | Self::MiddleClick(p)
+            | Self::PointerDownOutside(p)
+            | Self::Scroll(p) => Some(p.pos),
+            Self::DragStart(d)
+            | Self::Drag(d)
+            | Self::DragEnd(d)
+            | Self::DragEnter(d)
+            | Self::DragOver(d)
+            | Self::DragLeave(d)
+            | Self::Drop(d) => Some(d.pos),
+            _ => None,
+        }
+    }
+
+    /// **The bounds of the widget this event was delivered to**, as stamped by the router.
+    ///
+    /// The other half of "an author never picks an anchor": [`position`](Self::position) is where
+    /// the pointer is, this is what it is on. A menu opened from a right-click hangs off the
+    /// cursor; one opened from a widget hangs under the widget — and the handler picks neither,
+    /// it just passes the event along.
+    ///
+    /// `None` for events that carry no pointer, and for a synthetic event nobody routed.
+    pub fn target_bounds(&self) -> Option<Rectangle> {
+        match self {
+            Self::PointerDown(p)
+            | Self::PointerUp(p)
+            | Self::PointerMove(p)
+            | Self::PointerEnter(p)
+            | Self::PointerLeave(p)
+            | Self::Click(p)
+            | Self::DoubleClick(p)
+            | Self::TripleClick(p)
+            | Self::RightClick(p)
+            | Self::MiddleClick(p)
+            | Self::PointerDownOutside(p)
+            | Self::Scroll(p) => p.target_bounds,
+            _ => None,
+        }
+    }
+
+    /// The same event, stamped with the bounds of the widget it is being delivered to.
+    ///
+    /// The router calls this once per delivery, which is why every handler can ask
+    /// [`target_bounds`](Self::target_bounds) without any widget arranging for it. A non-pointer
+    /// event is returned unchanged — there is nowhere to put it, and nothing that reads it.
+    pub(crate) fn with_target_bounds(self, bounds: Rectangle) -> Self {
+        let stamp = |mut p: PointerEvent| {
+            p.target_bounds = Some(bounds);
+            p
+        };
+        match self {
+            Self::PointerDown(p) => Self::PointerDown(stamp(p)),
+            Self::PointerUp(p) => Self::PointerUp(stamp(p)),
+            Self::PointerMove(p) => Self::PointerMove(stamp(p)),
+            Self::PointerEnter(p) => Self::PointerEnter(stamp(p)),
+            Self::PointerLeave(p) => Self::PointerLeave(stamp(p)),
+            Self::Click(p) => Self::Click(stamp(p)),
+            Self::DoubleClick(p) => Self::DoubleClick(stamp(p)),
+            Self::TripleClick(p) => Self::TripleClick(stamp(p)),
+            Self::RightClick(p) => Self::RightClick(stamp(p)),
+            Self::MiddleClick(p) => Self::MiddleClick(stamp(p)),
+            Self::Scroll(p) => Self::Scroll(stamp(p)),
+            // Deliberately NOT `PointerDownOutside`: it is broadcast to everything the press did
+            // *not* land on, so "the target" is somebody else's widget and stamping each receiver
+            // with its own bounds would be a lie about where the press was.
+            other => other,
+        }
     }
 
     /// This event's kind — the key a [`Base`] handler is registered under.

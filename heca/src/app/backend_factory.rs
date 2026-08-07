@@ -191,6 +191,9 @@ fn terminal_backend_options(
         shell_integration,
         scrollback_size,
         scroll_animations,
+        // The user's own `$SHELL` — this is a pane they opened, so their interactive rc is exactly
+        // what they expect. Only tests pin a shell (see `TerminalBackendOptions::shell_override`).
+        shell_override: None,
     }
 }
 

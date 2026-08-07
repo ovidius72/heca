@@ -215,6 +215,23 @@ pub trait LayoutExt: Component + Sized {
         self
     }
 
+    /// Ceiling for the height — a box that may not grow past it however tall its content is.
+    fn max_height(mut self, h: Length) -> Self {
+        self.base_mut().style.layout.max_height = Some(h);
+        self
+    }
+
+    /// Ceiling for the width, the counterpart to [`min_width`](LayoutExt::min_width).
+    ///
+    /// A panel sized to its content wants both: a floor so a one-word menu is not a sliver, and a
+    /// ceiling so one long row does not stretch it across the screen. Past the ceiling the content
+    /// is the child's problem — a [`Label`](crate::widgets::Label) with
+    /// [`truncate`](crate::widgets::Label::truncate) cuts, anything else overflows.
+    fn max_width(mut self, w: Length) -> Self {
+        self.base_mut().style.layout.max_width = Some(w);
+        self
+    }
+
     fn grow(mut self, g: f32) -> Self {
         self.base_mut().style.layout.flex_grow = g;
         self
@@ -408,6 +425,41 @@ pub trait Parent: Component + Sized {
 /// The named builders below consume the event (an `on_click` that let the click carry on to the
 /// row behind it would be a surprise). Use [`on`](EventExt::on) with
 /// [`EventCx`](crate::event::EventCx) when you want to observe without consuming.
+/// **What [`EventExt::context_menu`] accepts: a menu, or a way to make one.**
+///
+/// One method, two spellings, because both are honest ways to say the same thing:
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+/// use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
+///
+/// # fn build_menu(_: u64) -> ContextMenu { ContextMenu::new("m") }
+/// let ctx = ContextMenu::new("pane").child(Menu::new("Pane", "…"));
+/// Row::new().context_menu(ctx.clone());               // a value
+/// Row::new().context_menu(move || build_menu(7));     // a closure
+/// ```
+///
+/// A [`ContextMenu`](crate::widgets::ContextMenu) is `Clone` — its content is plain data and `Rc`
+/// closures — so the value form is a clone per opening, not a shared panel. Reach for the closure
+/// when the menu's rows depend on state this widget's tree is not rebuilt on, or when building it
+/// eagerly would be wasted work.
+pub trait IntoContextMenu {
+    /// Produce the menu to show. Called **each time** the menu is triggered.
+    fn build(&self) -> crate::widgets::ContextMenu;
+}
+
+impl IntoContextMenu for crate::widgets::ContextMenu {
+    fn build(&self) -> crate::widgets::ContextMenu {
+        self.clone()
+    }
+}
+
+impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
+    fn build(&self) -> crate::widgets::ContextMenu {
+        self()
+    }
+}
+
 pub trait EventExt: Component + Sized {
     /// Register `f` for `kind`, with full control: `f` receives an
     /// [`EventCx`](crate::event::EventCx) and consumes the event only if it calls
@@ -574,14 +626,19 @@ pub trait EventExt: Component + Sized {
     ///
     /// ```
     /// use heca_grid_ui::prelude::*;
-    /// use heca_grid_ui::widgets::{Menu, MenuItem};
+    /// use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
     ///
     /// let id = 7u64;
-    /// let row = Row::new().child(Label::new("nvim")).context_menu(
+    /// let ctx = ContextMenu::new("pane-menu").child(
     ///     Menu::new("Pane", "What you can do with this pane")
-    ///         .child(MenuItem::new("Rename").on_click(move || { let _ = id; }))
-    ///         .child(MenuItem::new("Close").danger(true).on_click(move || { let _ = id; })),
+    ///         .child(MenuItem::new().label("Rename").on_click(move || { let _ = id; }))
+    ///         .child(MenuItem::new().label("Close").danger(true).on_click(move || { let _ = id; })),
     /// );
+    ///
+    /// // A value — and the same value again on the next row, because a menu is `Clone`.
+    /// let row = Row::new().child(Label::new("nvim")).context_menu(ctx.clone());
+    /// // …or a closure, when the rows must read state at the moment it opens.
+    /// let other = Row::new().context_menu(move || ctx.clone());
     /// ```
     ///
     /// Nothing else is needed: no row identity, no path string, no registered builder, no
@@ -589,17 +646,10 @@ pub trait EventExt: Component + Sized {
     /// what triggered the menu. Universal, like `nav_key`, so an `Icon` and a plugin's own widget
     /// carry one on the same terms as a `Row`. See [`crate::menu`] for bubbling and the host sink.
     ///
-    /// Items whose labels or `enabled` depend on state the tree is **not** rebuilt on want
-    /// [`context_menu_built`](EventExt::context_menu_built) instead.
-    fn context_menu(mut self, menu: crate::widgets::Menu) -> Self {
-        self.base_mut().context_menu = Some(Box::new(move || menu.clone()));
-        self
-    }
-
-    /// The same, with the menu **built when it is triggered** — for items that must read state
-    /// this widget's tree is not rebuilt on.
-    fn context_menu_built(mut self, f: impl Fn() -> crate::widgets::Menu + 'static) -> Self {
-        self.base_mut().context_menu = Some(Box::new(f));
+    /// **A value or a closure** — see [`IntoContextMenu`]. Either way the menu is realized when it
+    /// is triggered, so a composed row's subtree is built fresh for each opening.
+    fn context_menu(mut self, menu: impl IntoContextMenu + 'static) -> Self {
+        self.base_mut().context_menu = Some(Box::new(move || menu.build()));
         self
     }
 

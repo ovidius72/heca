@@ -48,6 +48,9 @@ struct ShellLaunch<'a> {
 
 struct CommandLaunch<'a> {
     command: &'a str,
+    /// The shell to run it under, or `None` for the user's `$SHELL` — see
+    /// [`TerminalBackendOptions::shell_override`].
+    shell_override: Option<&'a str>,
 }
 
 enum LaunchTarget<'a> {
@@ -69,6 +72,17 @@ pub struct TerminalBackendOptions {
     pub scrollback_size: usize,
     /// Enable backend-side viewport easing for animated scroll APIs.
     pub scroll_animations: bool,
+    /// Run a spawned command under **this** shell instead of the user's `$SHELL`.
+    ///
+    /// A command is spawned as `<shell> -ic <command>` so terminal-first programs keep the
+    /// interactive shell's job control and rc — see `command_for_spawned_command`. That is right
+    /// for a pane the user opened and wrong for anything that must behave the same everywhere: an
+    /// interactive rc is the user's, and it may print, prompt, or block. heca's own tests set this
+    /// to `/bin/sh` for exactly that reason (an `oh-my-zsh` "Would you like to update? [Y/n]"
+    /// prompt made a spawn test hang for its full 30s timeout, on one machine and not another).
+    ///
+    /// `None` — the default — uses `$SHELL`, falling back to `/bin/sh`.
+    pub shell_override: Option<String>,
 }
 
 impl TerminalBackendOptions {
@@ -86,6 +100,7 @@ impl Default for TerminalBackendOptions {
             shell_integration: None,
             scrollback_size: Self::DEFAULT_SCROLLBACK_SIZE,
             scroll_animations: true,
+            shell_override: None,
         }
     }
 }
@@ -189,6 +204,7 @@ impl TerminalBackend {
                 shell_integration: None,
                 scrollback_size: TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
                 scroll_animations: true,
+                shell_override: None,
             },
         )
     }
@@ -233,7 +249,10 @@ impl TerminalBackend {
             options.wake_on_output,
             options.scrollback_size,
             options.scroll_animations,
-            LaunchTarget::Command(CommandLaunch { command }),
+            LaunchTarget::Command(CommandLaunch {
+                command,
+                shell_override: options.shell_override.as_deref(),
+            }),
         )
     }
 
@@ -280,6 +299,7 @@ impl TerminalBackend {
                     cell_size,
                     wake_on_output,
                     command.command,
+                    command.shell_override,
                 )?,
                 false,
             ),
@@ -1262,7 +1282,15 @@ mod tests {
             8.4,
             14.0,
             "printf 'phase6-ok\\n'; exit 7",
-            TerminalBackendOptions::default(),
+            TerminalBackendOptions {
+                // **A test may not run the developer's shell.** A command is spawned as
+                // `<shell> -ic`, so with `$SHELL` this ran the user's interactive rc: an
+                // `oh-my-zsh` "Would you like to update? [Y/n]" prompt sat waiting for input that
+                // never came, the command never reached `exit 7`, and this test hung for its full
+                // 30s timeout — on one machine, and not on another.
+                shell_override: Some("/bin/sh".to_string()),
+                ..TerminalBackendOptions::default()
+            },
         )
         .expect("command backend should initialize");
 

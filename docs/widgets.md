@@ -25,6 +25,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
@@ -297,7 +298,7 @@ contain the point: a [`Select`](#select)'s option list is a child placed outside
 belongs to, and it is still the thing under the cursor.
 
 A widget whose input surface is not its layout box says so with **`hit_bounds() -> Option<Rectangle>`**
-— a [`ContextMenu`](#contextmenu) or [`CommandPalette`](#commandpalette) reports the panel it draws;
+— a [`ContextMenu`](#menus--menuitem-menu-contextmenu) or [`CommandPalette`](#commandpalette) reports the panel it draws;
 a closed [`Overlay`](#overlay) returns `None`, which takes its whole subtree out of the pointer's
 reach while leaving it laid out. It is the input twin of `damage_bounds`, for the same reason: what
 a widget draws, what it damages and where it can be clicked are three questions.
@@ -2176,7 +2177,7 @@ panel, while still looking like an open control. The rows stay *placed children*
   to the chosen `Choice`'s **value** for declarative authors).
 - **Keys** (`widget-keys-config`): a **closed** trigger opens on a raw `Enter` / `Space` / `↓`
   (activation, like a button). The **open** list is a **vertical** overlay driven by the semantic
-  `Event::Widget` intents — shared with [`ContextMenu`](#contextmenu) / [`CommandPalette`](#commandpalette):
+  `Event::Widget` intents — shared with [`ContextMenu`](#menus--menuitem-menu-contextmenu) / [`CommandPalette`](#commandpalette):
   `MenuUp`/`MenuDown` move the cursor (scroll into view), `Activate` commits, `Dismiss` closes. The
   host resolves the configurable `menu_up`/`menu_down`/`activate`/`dismiss` `[keys.widgets]` keys into
   it (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter, Esc). Click a row to choose, click outside to close;
@@ -3098,7 +3099,7 @@ overlay pass) or reused by other overlays (the **context-menu** quick-pick). Thi
     **full-strength accent border** (the `color`/`accent` at full alpha, so it reads as the theme
     accent, not a washed tint), **no glow**, accent glyph. Matches the showcase KeyHint (which has
     no background). For keycaps on an already-dark, host-owned surface (e.g. the
-    [ContextMenu](#contextmenu) quick-pick inside the menu panel). The [ContextMenu](#contextmenu)
+    [ContextMenu](#menus--menuitem-menu-contextmenu) quick-pick inside the menu panel). The [ContextMenu](#menus--menuitem-menu-contextmenu)
     draws its letter at a **sub-font scale** so the chip stays compact.
 
 ```rust
@@ -3296,7 +3297,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   `place_anchored_on(..., side: AnchorSide)` is the full form of the former: `AnchorSide::Auto`
   (default — flip by available room), or `Below`/`Above` to **force** a side the caller already
   chose (still clamped into the viewport, never flipped away). Both
-  [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#contextmenu)
+  [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#menus--menuitem-menu-contextmenu)
   (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
 - **Sizing**: `.panel_size(width: Length, height: Length)` gives the panel an explicit size instead
   of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
@@ -3313,7 +3314,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
 - **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow, elevation })` is the single
   authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
   surface fill, the per-widget accents, and the panel's **edge**. The base `Overlay` passes
-  `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#contextmenu), and
+  `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), and
   [`CommandPalette`](#commandpalette) call the same painter with their own accent border + glow,
   because each owns content that cannot be handed to an `Overlay` as a single panel child (`Select`'s
   option rows are *placed children*; the menu/palette draw their rows from data). Call it inside a
@@ -3342,7 +3343,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
 
   | `PanelElevation` | Used by | Shadow |
   |---|---|---|
-  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette) | full depth |
+  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), [`CommandPalette`](#commandpalette) | full depth |
   | `Hover` | [`Tooltip`](#tooltip) | 25% of it (blur *and* drop scale together) |
 
   Why it exists: the panel shadow is tuned for surfaces hundreds of pixels across. Applied unscaled
@@ -3467,9 +3468,9 @@ impl Component for MySelect {
 | You have | Call | Used by |
 |---|---|---|
 | A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
-| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#contextmenu) |
+| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#menus--menuitem-menu-contextmenu) |
 | A target rect, **centered on any of 4 sides** (hover bubble) | `place_beside(anchor, panel, vp, gap, side)` with `BesideSide::{Top,Bottom,Left,Right}` | [`Tooltip`](#tooltip) |
-| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
 
 The three placement authorities differ in **alignment**, which is why they are three functions and
 not one with flags:
@@ -3724,123 +3725,174 @@ let open = palette.open_signal();
 > Needs the same host wiring as `Dialog` (route keys to the overlay). Because it tracks `Ctrl` for
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
 
-### ContextMenu
+### Menus — `MenuItem`, `Menu`, `ContextMenu`
 
-A **cursor-anchored action menu** overlay — the pointer counterpart to the keyboard pick flows
-(same input-capturing contract as `CommandPalette`). A floating list of entries, each with
-an optional **icon**, an optional **quick-pick keycap** (the shared
-[`paint_keycap`](#standalone-keycap--paint_keycap--keycap_size--keycapvariant) primitive in its
-`Bordered` variant — press the letter to run; never hand-drawn), an optional textual shortcut hint,
-a `danger` flag (destructive entries render red), and an
-`enabled` flag. Open/close **and the anchor point** are host-owned signals — right-click detection
-lives at the app level (grid-ui pointer events carry no button), so the host sets the anchor to the
-cursor and flips `open`. The panel sizes to its content and flips/clamps to stay on-screen.
+**Menus, split by what each part actually knows.**
 
-- **Construct**: `ContextMenu::new()`; add entries with `.entry(MenuEntry::new(label, on_select)
-  .icon(Glyph)?.key('x')?.shortcut("prefix+x")?.danger(bool)?.enabled(bool)?)`; `.open(bool)`, `.anchor(Point)`.
-- **Accessors**: `.open_signal() -> Signal<bool>`, `.anchor_signal() -> Signal<Point>`.
-- **Dismiss callback**: `.on_dismiss(impl Fn())` — fired on **Esc / outside-click** (a *dismissal*,
-  not a selection; selecting an entry runs its `on_select` instead). The host points this at its
-  overlay-close path (in `heca`, emit `CloseOverlay`), mirroring [`Dialog::on_dismiss`](#dialog).
-- **Occlusion**: deliberately keeps the default `overlay_occludes` = `false` even while open — a
-  second right-click **re-anchors** the menu at the new point (the standard menu affordance), so its
-  panel must not block the host's right-click gate (see [`Component` trait](#component-trait)).
+| type | what it is |
+|---|---|
+| `MenuItem` | one row: either sugar (a label and an icon) or **any widget subtree** |
+| `Menu` | a titled list of items. **Content only** — it knows nothing about triggers, anchors or keys |
+| `ContextMenu` | a named presenter: contains one `Menu` and shows it on right-click or the host's `open_context_menu` action |
+| `MenuBar` | *not built yet*: contains `Menu`s and shows them as a strip, on a click of a title or its own keybinding |
 
-**Host right-click gate (native).** Right-click detection is app-level, and the host must not open
-the menu on a point an overlay above the page owns — an open `Dialog`/`CommandPalette`, a toast
-card, an open `Select` panel. Gate it with `overlay_occluded_at` (scans a tree for
-`Component::overlay_occludes` hits); page content (buttons, inputs, panes) never occludes, so
-right-click there opens the menu as usual:
+There is no fourth type, and **the panel is not one** — a `ContextMenu` *is* the panel it shows: it
+holds the rows, lays them out, paints them and hit-tests them. The split above is at the joint a
+menu bar proves is real: a `MenuBar` will show the **same `Menu` value** as a strip, with its own
+trigger and keyboard convention. The trigger, the anchor and the shortcut belong to whatever
+*contains* the menu; the menu is content, and stays reusable across every surface that shows one.
+
+#### What you write
 
 ```rust
-// On the host's right-click event (winit/etc.):
-let occluded = heca_grid_ui::overlay_occluded_at(&overlay_layer_tree, cursor)
-    || heca_grid_ui::overlay_occluded_at(&page_tree, cursor); // open Select panels live here
-if !occluded {
-    menu_anchor.set(cursor); // ContextMenu re-anchors even while already open
-    menu_open.set(true);
-}
+let ctx = ContextMenu::new("pane-menu").child(
+    Menu::new("Pane", "What you can do with this pane")
+        // sugar form — a label and an optional icon
+        .child(MenuItem::new().label("Rename").icon(Glyph::Pencil).on_click(move || rename(id)))
+        // composed form — any widget subtree, with props
+        .child(MenuItem::new().child(|| {
+            Grid::new().prop("gap", 10)
+                .child(Icon::new(Glyph::Trash))
+                .child(Label::new("Close"))
+        })),
+);
+
+Row::new().child(Label::new(&pane.name)).context_menu(ctx);
 ```
 
-(Host-side only — occlusion is a `Component` method, not a `ViewNode` prop; a declarative tree gets
-this behavior from the host that realizes and mounts it.)
+**There is no row identity to declare, no path string, no menu id to register and no builder
+registry**: the closure captured `id` in the loop that was already drawing that row. That is the
+whole point of declaring the menu on the widget.
+
+Getting a menu onto a row used to take **four** things, three of them invisible: a `context_path`
+mapping a row key to a menu-id string, a builder registered for that id, the items, and — the one
+nobody would think of — a `.nav_key(..)` on the row, because the host resolved *what did you
+right-click* from a **position** and read the answer off `Base::nav_key`. A workspace header had the
+first three and not the fourth: right-clicking it opened **nothing**, with no error and no failing
+test. The design was the bug.
+
+#### The two forms of a row, and why `child` takes a closure
+
+`MenuItem::label` / `MenuItem::icon` are **sugar** for the row nearly every menu wants.
+`MenuItem::child` takes any widget subtree instead, and **children win when both are given** — the
+same precedence `Button` has.
+
+`child` takes a `Fn() -> impl Component` rather than a widget **value** because a menu can be shown
+more than once, and a widget subtree is owned (`Box<dyn Component>`): handed over once, it is gone.
+A *builder* can run again, which is what makes the whole chain — `MenuItem`, `Menu`, `ContextMenu` —
+`Clone`, so one menu value can be declared on several rows and captured by handlers. It also means
+the rows are built **at the moment the menu opens**, so `enabled(is_custom_name)` is an answer about
+the state you are opening it in rather than the state it was written in.
+
+The rows are **real children**, laid out by the same engine as everything else — `gap`, `grow`,
+padding and font inheritance all work inside a row, and this widget contains no layout code of its
+own beyond placing the finished panel at its anchor (the same `shift_subtree` trick `Overlay` and
+`Select` use).
+
+A row's colour is decided at **paint**, from the theme and the row's state, and published to the
+subtree with `PaintCx::with_content_color` — which is what lets a composed row (an `Icon` and a
+`Label` an author wrote) read as `danger`, or dim when disabled, without knowing anything about
+menus. The quick-pick keycap and the textual shortcut are the *menu's* affordances rather than the
+row's content, so the panel paints them into space the row reserved, and a composed row never has to
+lay them out.
+
+#### Declaring it: a value or a closure
+
+`EventExt::context_menu` accepts either, via `IntoContextMenu`:
+
+```rust
+Row::new().context_menu(ctx.clone());            // a value — `ContextMenu` is `Clone`
+Row::new().context_menu(move || build_menu(id)); // a closure — rows read state at open time
+```
+
+Universal, like `nav_key`: an `Icon`, a `Label` and a plugin's own widget carry one on the same
+terms as a `Row`, because the declaration lives on `Base`.
+
+#### Two roads to show a menu
+
+```rust
+// 1. Declared on the widget — covers the two standard triggers.
+Row::new().context_menu(ctx);
+
+// 2. Shown from a handler — for a trigger you invent.
+Button::new("More").on_click(move |ev| ctx.show(ev));
+```
+
+The declaration exists **because the keyboard needs it**: with the menu only inside a closure,
+`prefix+>` / `Shift+F10` has nothing to find. Both roads run the same code — the declaration is
+implemented in terms of `ContextMenu::show`.
+
+#### Triggers, anchors, bubbling
+
+| Trigger | Target | Anchor |
+|---|---|---|
+| `Event::RightClick` | the widget under the pointer | the pointer |
+| the host's `open_context_menu` action (`prefix+>`) | the focused widget | under the widget |
+
+**The anchor is read out of the event**, never chosen by an author: `Event::position()` gives the
+cursor, `Event::target_bounds()` gives the widget the event was delivered to (the router stamps it
+once, at delivery). An event with neither shows nothing rather than guessing a corner of the screen.
+
+Both triggers **bubble to the nearest ancestor that declares a menu**: you right-click the `Label`
+inside a row, not the row; focus sits on a cell, and the menu belongs to the row. Bubbling stops at
+the first declaring ancestor — **menus are never merged**, because a menu is a statement about one
+thing. Nothing in the chain declares one ⇒ nothing opens, with no hidden fallback.
+
+A host that wants **"right-click empty space"** puts a menu on the **root**, which needs no
+empty-space hit-test: a click that lands between rows or below the last one simply finds nothing on
+the way down and bubbles out to it.
+
+> ⚠️ **A right-click needs a press *and* a release.** `RightClick` is synthesised from the pair on
+> the same widget, so a host that delivers only presses produces no clicks at all and **no declared
+> menu ever opens**. heca lints this in `heca/tests/pointer_funnel.rs`; it is not visible to
+> behaviour tests, which dispatch both halves themselves.
+
+#### The one host dependency
+
+A menu opens above everything, which is a *layer*, and a widget cannot reach one. So the host
+installs a sink once at startup — the same shape as `install_frame_request` — and every show posts
+to it:
+
+```rust
+heca_grid_ui::install_menu_sink(move |menu, anchor| {
+    // The menu arrives with its anchor; mount it as a layer.
+    queue.borrow_mut().push((menu, anchor));
+});
+```
+
+No `AppState`, no host type, in any closure a widget holds. `ContextMenu::after_select` lets the
+host take the layer down after an entry ran, so an item stays a plain closure that knows nothing
+about layers — requiring every author to close the menu they opened is a rule that gets forgotten
+exactly once per menu.
+
+#### Contributions — the plugin surface
+
+`Menu::name("workspaces.pane")` is **optional**, and it is the only thing left of the contribution
+design: a named menu is one a host can offer to everything mounted before it is shown, so a plugin's
+"Open in container" can appear on a row it does not own. A menu without a name is closed and needs
+nothing.
+
+A contributed row has **no per-row payload**, so it acts on app state (the focused pane, the selected
+row) rather than on the row the menu was opened for.
+
+**A plugin never writes a closure.** It registers an action and contributes a row that names it; the
+host turns those into `MenuItem`s whose behaviour is an `Intent` dispatched through the central gate,
+so a menu entry gets exactly the policy and destructive-confirm a keypress or an RPC call gets. An
+entry's **icon comes from the action** (`ActionCatalog::icon`), which is why the sidebar's "Close
+pane" and the command palette's `close` cannot drift apart.
+
+#### Behaviour and nav
+
 - **Nav (host-driven, configurable)**: **no hardcoded nav keys** — as a vertical list the menu
   responds to `Event::Widget(WidgetIntent::{MenuUp,MenuDown,Activate,Dismiss})`, which the host
   resolves from the configurable `menu_up` / `menu_down` / `activate` / `dismiss` `[keys.widgets]`
   bindings (defaults ↑/Ctrl+k, ↓/Ctrl+j, Enter, Esc). Raw `Event::Key` is only a **quick-pick
-  letter** that runs its entry directly.
-  Hover highlights; click runs; outside-click dismisses.
+  letter** that runs its entry directly. Hover highlights; click runs; outside-click dismisses.
+- **`on_dismiss`** fires on **Esc / outside-click** — a *dismissal*, not a selection. Selecting an
+  entry runs its `on_click` and then `after_select`.
+- **Occlusion**: deliberately keeps the default `overlay_occludes` = `false` even while open, so a
+  second right-click **re-anchors** the menu at the new point (the standard menu affordance).
 
-```rust
-let menu = ContextMenu::new()
-    .entry(MenuEntry::new("Rename", || wm.rename()).icon(Glyph::FileCode).key('r'))
-    .entry(MenuEntry::new("Close", || wm.close()).icon(Glyph::XSquare).key('x').danger(true));
-let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
-// host: on right-click → anchor.set(cursor); open.set(true); add `menu` to the tree
-```
-
-> Same host wiring as `CommandPalette` (route keys to the overlay). The app decides *when*
-> (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
-
-> **Declaring from data — host + plugins (shipped, `context-menu` phase).** The preferred path is a
-> **data spec** the host owns, not hand-built closures: `OverlayHost::open_dropdown(DropdownSpec {
-> anchor, entries, centered })`, where each `MenuEntrySpec { id, label, action, danger, enabled }`
-> carries an **`Intent`/`WmAction`** (not a closure) and its **icon resolves from the action
-> registry** (`ActionCatalog::icon`). The host realizes the entries into this widget, injects the
-> `SubmitOverlay{overlay,id}` intent + a KeyHint target + the host-assigned quick-pick letter, pushes
-> it as an Overlay-band **modal layer**, and on select dispatches the action **through the central
-> confirm gate**. `centered = true` centers the panel on the anchor (keyboard-opened menus). Dismiss →
-> `CloseOverlay` (the `on_dismiss` hook above).
-
-> **Context-aware content (`ContextMenuRegistry`).** Which entries appear is resolved from **where**
-> the menu is opened: a dotted **`ContextPath`** (`"pane"` — the host's own — plus whatever a
-> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + a **`ContextTarget`**.
-> The host resolves the path from the click / keyboard focus (`resolve_active_context`), looks up all
-> providers registered for it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a
-> plugin inserts entries between built-ins. Same menu widget; different content per context.
->
-> **A target names a row; it does not describe it (F003/P086/T365).** `ContextTarget` has two arms:
-> `Pane { pane_id, hyperlink }` for a content pane — the app's own domain — and
-> **`Row { container, key }`** for a row of any mounted container, where `container` is the *mount
-> id* and `key` is the `nav_key` that row declared. That is everything the host knows, and it never
-> parses a key. It used to carry three workspace-shaped variants pre-filled with facts the host had
-> looked up (a pane's column, a workspace's custom name), which is precisely why a Docker row could
-> not be right-clicked at all: there was no variant for it, and adding one meant the host learning
-> what Docker is.
->
-> Two calls make it work, and both belong to the component:
->
-> ```rust
-> // 1. "Which of my menus describes this row?" — matched against its own rows, never parsed.
-> fn context_path(&self, key: &str, ctx: &ChromeCtx<'_>) -> Option<String>;
->
-> // 2. …and its builder resolves the same key against its own model for the facts it needs.
-> ContextMenuContribution { context_path, weight, build: Rc<dyn Fn(&ChromeCtx, &ContextTarget)> }
-> ```
->
-> A component seated **twice** is asked for every menu twice, so a builder must answer for its own
-> placement (`Row { container, .. } if container == self.id()`) and return `vec![]` otherwise —
-> without that guard every entry appears twice in the merged menu.
->
-> **The general hazard (worth reading before you write the next one).** Anything that walks
-> `ChromeHost::mounted_providers()` and *merges* what it gets back is asking a **type** a question
-> and receiving one answer per **seating**. With one placement on screen the duplication is
-> invisible, which is exactly how this shipped. Either key the answer by mount id (as the menus,
-> the cursor, the scroll offset and the keyboard target all do) or de-duplicate by `kind()`; and
-> when in doubt, seat the component twice — it is the cheapest way to find the next one.
->
-> **From a plugin.** A plugin never draws the menu — it either attaches entries declaratively on a
-> `ViewNode` (`.on_context([ item("restart","Restart"), … ])`), or registers a
-> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }` plus a
-> `context_path` for its row keys. On right-click / keyboard-open the host opens the (merged) menu,
-> owns z-order / focus / Esc / click-outside, and returns the chosen entry as an **intent**. See
-> **[chrome-and-ui.md](chrome-and-ui.md) → "Context menus & KeyHint"**.
-
-> **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
-> `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
-> `heca::shortcut::format_shortcut(keys, with_prefix)` — e.g. `format_shortcut("prefix+x", true)` →
-> `"λ x"`. Feed that into `.shortcut(...)` so the symbol/formatting live in one place (the showcase
-> mirrors this with its own `display_shortcut`).
 
 ### ToastStack
 

@@ -228,14 +228,16 @@ pub struct Base {
     /// widget that has one — see [`crate::menu`] for the whole model. Written with
     /// [`EventExt::context_menu`](crate::builders::EventExt::context_menu).
     ///
-    /// Produces the [`Menu`](crate::widgets::Menu) to show. A factory, so a menu whose items
-    /// depend on state the tree is not rebuilt on is current when it opens; a plain value is
-    /// wrapped in one (a `Menu` is `Clone` — its items hold `Rc` closures).
+    /// Produces the [`ContextMenu`](crate::widgets::ContextMenu) to show. A factory, so a menu
+    /// whose rows depend on state the tree is not rebuilt on is current when it opens, and so a
+    /// composed row's subtree can be built again on the second right-click. A plain value is
+    /// wrapped in one — see
+    /// [`IntoContextMenu`](crate::builders::IntoContextMenu).
     ///
-    /// The **menu is content**: the same value could be shown by a menu bar instead. What makes it
-    /// a *context* menu is being here — attached to a widget, opened by a right-click or the
-    /// keyboard action.
-    pub context_menu: Option<Box<dyn Fn() -> crate::widgets::Menu>>,
+    /// The **menu inside it is content**: the same [`Menu`](crate::widgets::Menu) value could be
+    /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
+    /// widget, opened by a right-click or the keyboard action.
+    pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
     /// Whether [`Event::Mount`] has been delivered. Set by the first layout pass that sees this
     /// widget — the first moment it is both in a live tree and laid out.
     pub(crate) mounted: Cell<bool>,
@@ -557,6 +559,26 @@ pub trait Component {
         self.routes_own_subtree()
     }
 
+    /// Does this widget **type**? That is: may it claim [`Event::TextInput`]?
+    ///
+    /// A separate question from [`takes_raw_keys`](Self::takes_raw_keys), because they are separate
+    /// things and answering them together is a bug. A menu wants raw keys — its quick-pick letters
+    /// — and does **not** type; an [`Input`](crate::widgets::Input) wants both; nothing wants text
+    /// without keys.
+    ///
+    /// **Default `false`, and the default is the safe answer**: typed text belongs only to
+    /// something that puts it somewhere. A widget that claims it and does nothing with it swallows
+    /// the character, and a host delivers text *before* the key path — so the key never arrives
+    /// either. That is what stopped **every context-menu quick-pick letter** from working
+    /// (Antonio, 2026-08-07): the menu opted into raw keys, which used to opt it into text as
+    /// well, and its catch-all ate the letter before the keymap could deliver the key.
+    ///
+    /// Unlike raw keys, **focus does not grant this**. A focused widget that does not type still
+    /// must not eat typing: the alternative is text vanishing into whatever happens to hold focus.
+    fn takes_text_input(&self) -> bool {
+        false
+    }
+
     fn wants_visible(&self) -> bool {
         self.base().focused.get_untracked()
     }
@@ -788,16 +810,26 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
 /// it may no longer do is take a key out of the air before the walk has reached whoever it was for.
 /// Children are walked either way — a container must never hide a focused descendant.
 ///
-/// [`Event::TextInput`] follows the same rule, for the same reason: typed text belongs to whatever
-/// holds the keyboard, and an unfocused field that swallowed it would be typing into itself while
-/// the user looked at something else.
+/// [`Event::TextInput`] follows a **stricter** rule: only a widget that declares
+/// [`takes_text_input`](Component::takes_text_input) may claim it, focused or not. Typed text
+/// belongs to something that puts it somewhere — an unfocused field swallowing it would be typing
+/// into itself, and a *focused* non-typing widget swallowing it loses the character and the key
+/// that would have followed.
 ///
 /// `Event::Widget` is untouched: a semantic intent is *addressed*, not typed, and the widgets that
 /// answer one are exactly the ones a keymap resolved it for.
 fn deaf_to_raw_key(node: &dyn Component, ev: &Event) -> bool {
-    matches!(ev, Event::Key { .. } | Event::TextInput(_))
-        && !node.takes_raw_keys()
-        && !node.base().focused.get_untracked()
+    match ev {
+        // A raw key: the focus owner, or a widget that declared it owns keys for its subtree.
+        Event::Key { .. } => {
+            !node.takes_raw_keys() && !node.base().focused.get_untracked()
+        }
+        // Typed text: **only something that types**, focused or not. See
+        // [`Component::takes_text_input`] — a widget that claims text and does nothing with it
+        // swallows the character *and* the key that would have followed it.
+        Event::TextInput(_) => !node.takes_text_input(),
+        _ => false,
+    }
 }
 
 /// The bounds of the first descendant (or `node` itself) asking to be kept in view, in tree order.

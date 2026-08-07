@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-06T22:31:32.780Z
+**Last updated:** 2026-08-07T13:39:04.093Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -120,7 +120,7 @@ Status: 🚧 `in-progress`
 - 📋 **f94d6da1-43b0-4b6a-a954-b404164126bd** P051 — plugin-09: Multi-region proof + config integration (0/3 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P053 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - ✅ **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P066 — action-interaction: Declarative action interaction (confirm + response buttons) (5/6 tasks)
-- 🚧 **99d19246-1ba9-4720-9895-e70c66acf144** P067 — plugin-ui: Declarative widget-tree UI model (ViewNode) (18/21 tasks)
+- ⏸️ **99d19246-1ba9-4720-9895-e70c66acf144** P067 — plugin-ui: Declarative widget-tree UI model (ViewNode) (18/21 tasks)
 - ✅ **8f760a9b-3ce8-4932-8286-67d742397f2e** P068 — context-menu: Contextual menu → OverlayHost + plugin-declarable (8/8 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P069 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P070 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
@@ -130,6 +130,8 @@ Status: 🚧 `in-progress`
 - 🚧 **2219cca3-9ed4-4708-9e4c-bc480faad753** P080 — plugin-10: Keybinding + command-palette integration for contributed actions (2/5 tasks)
 - 🚧 **5464ff74-fa17-4412-abaa-95aa19810b33** P082 — plugin-11: Layer content from a ViewNode + paint and input through the layer stack (3/4 tasks)
 - 📋 **961a2d9f-8fc2-4af7-b302-4cbd1b2493d5** P083 — plugin-12: Region display modes — the collapsed rail + render-per-mode Provider contract (0/5 tasks)
+- 🚧 **5de43f15-8304-4f64-870f-8514d534d5a5** P085 — Components declare their actions; chrome focus is the mode (8/11 tasks)
+- ✅ **2e5af5db-420b-45bb-8bde-7e763c69cbea** P086 — A component declares its keys, its mouse and its focus — generically, for any component (10/10 tasks)
 
 ### 🚧 cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -148,7 +150,9 @@ Status: 🚧 `in-progress`
 - 📋 **402d22d4-a658-47d7-8481-fb074ce43a00** P074 — button-shortcut: Button accelerator / shortcut (0/2 tasks)
 - 📋 **3ef2f8e6-c79f-47d5-876c-c91ac6f36462** P079 — gridui-08: Drag a container between chrome regions — DnD hooks + the plugin escape hatch (0/6 tasks)
 - 📋 **029ef1b3-822b-4151-b5b0-b296b042b350** P081 — gridui-09: One border-width control — three paths currently disagree (0/4 tasks)
-- 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (4/7 tasks)
+- 🚧 **0e4c21e5-1cf7-4c0a-a00e-76ffbef60703** P084 — gridui-10: A widget cannot drop a child's event — framework-owned routing + a self-contained ScrollRegion (4/11 tasks)
+- ✅ **1b6f739f-8774-4da2-af4f-5f88d0514507** P091 — gridui-11: Text fits its box — Label truncation and Item's second line (5/6 tasks)
+- ✅ **9a4fa5f5-62a8-4243-85ab-de8edaed21e8** P092 — gridui-12: Fuzzy search, frecency ranking and per-scope query history — one reusable seam (7/7 tasks)
 
 ### ✅ b5d04826-7fd8-4094-ace5-96dc93b825a0 — F005 — 🌫️ Compositor Frost
 
@@ -389,14 +393,6 @@ Phases: `c192c5ca-f6ac-493a-bd8d-d95117c430aa`, `5cab2dbb-ce1b-4a33-b6bc-ede8437
 
 ---
 ## Phases
-
-### 📄 227d7422-e493-41ff-b786-8e659bf2f88c — P064 — notification-03
-
-Status: 📄 `draft`
-
-### 📄 e544983e-887a-4978-985d-4f9a279496ff — P065 — notification-06
-
-Status: 📄 `draft`
 
 ### 📋 0d4b8645-a638-4774-a9e1-ed8edb37e53f — P023 — nvim-01: Embed nvim + RPC + render single grid
 
@@ -839,7 +835,7 @@ The framework walks children, not the widget; ScrollRegion owns its whole gestur
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 4/7
+**Tasks:** 4/11
 
 ### ✅ 1b6f739f-8774-4da2-af4f-5f88d0514507 — P091 — gridui-11: Text fits its box — Label truncation and Item's second line
 
@@ -937,11 +933,11 @@ Status: ✅ `done`
 
 **Tasks:** 5/6
 
-### 🚧 99d19246-1ba9-4720-9895-e70c66acf144 — P067 — plugin-ui: Declarative widget-tree UI model (ViewNode)
+### ⏸️ 99d19246-1ba9-4720-9895-e70c66acf144 — P067 — plugin-ui: Declarative widget-tree UI model (ViewNode)
 
 The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node holds a vector of child widgets — plus the host mapper that realizes it into the retained heca-grid-ui tree. Gate/consumers: the rich overlay body (plugin-task-15), config-plugin render (plugin-task-21), and the WASM contribution description (plugin-task-26) all build on this. Source: docs/chrome-and-ui.md §2.6.1–2.6.2.
 
-Status: 🚧 `in-progress`
+Status: ⏸️ `deferred`
 
 **Tasks:** 18/21
 

@@ -67,7 +67,7 @@ pub use event::{
     DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,
     RawPointerKind,
 };
-pub use menu::{has_menu_sink, install_menu_sink, open_for_focused};
+pub use menu::{has_menu_sink, install_menu_sink, open_for_focused, open_for_nav_key};
 pub use pointer::{PointerState, clear_hover, hit_test};
 pub use keymap::{KeyChord, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};

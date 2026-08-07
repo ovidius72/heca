@@ -132,6 +132,7 @@ impl PtyHandle {
         cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
         command: &str,
+        shell_override: Option<&str>,
     ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows, cell_px);
@@ -139,7 +140,11 @@ impl PtyHandle {
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = default_shell();
+        // An explicit shell wins over `$SHELL`: a caller that needs the same behaviour on every
+        // machine cannot have the user's interactive rc in the way.
+        let shell = shell_override
+            .map(str::to_string)
+            .unwrap_or_else(default_shell);
         let cmd = command_for_spawned_command(&shell, command);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }

@@ -575,12 +575,12 @@ fn one_click_target_is_declared_not_written_out() {
 /// geometry of its own and nothing for the host to arrange.
 #[test]
 fn a_press_outside_an_open_menu_dismisses_it() {
-    use heca_grid_ui::widgets::{MenuItem, ContextMenu};
+    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
     let dismissed = Rc::new(std::cell::Cell::new(false));
     let d = dismissed.clone();
-    let mut menu = ContextMenu::new()
+    let mut menu = ContextMenu::new("test-menu")
+        .child(Menu::new("Test", "a menu").child(MenuItem::new().label("Close").on_click(|| {})))
         .anchor(Point::new(40.0, 40.0))
-        .entry(MenuItem::new("Close").on_click(|| {}))
         .on_dismiss(move || d.set(true))
         .open(true);
     LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));

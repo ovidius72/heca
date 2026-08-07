@@ -153,7 +153,7 @@ pub(crate) async fn init_state(
     // widget built it and the framework anchored it; only the host can reach a layer. Queued
     // rather than mounted here because this closure has no `&mut AppState` — the event loop drains
     // it before the next frame.
-    type PendingMenu = (heca_grid_ui::widgets::Menu, heca_grid_ui::widgets::MenuAnchor);
+    type PendingMenu = (heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor);
     let pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>> = Default::default();
     let queue = pending_menus.clone();
     let menu_proxy = event_proxy.clone();

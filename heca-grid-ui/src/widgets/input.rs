@@ -543,6 +543,11 @@ impl Component for Input {
     /// is, and a surface that mounts one has already decided keys go there. So it takes raw keys
     /// without requiring `Base::focused`, unlike the button-shaped widgets, which may only act on a
     /// key when they are the focused thing.
+    /// It types — that is what it is. Both halves of the keyboard are its own.
+    fn takes_text_input(&self) -> bool {
+        true
+    }
+
     fn takes_raw_keys(&self) -> bool {
         true
     }

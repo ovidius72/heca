@@ -36,7 +36,7 @@ focus_down  = ["prefix+j", "prefix+ArrowDown"]
 split_horizontal = "prefix+Enter"   # New column to the right
 split_vertical   = "prefix+v"       # New pane in current column
 zoom_column      = "prefix+z"       # Toggle active column full-width
-open_context_menu = "prefix+>"     # Open the focused pane's context menu (at the cursor)
+open_context_menu = "prefix+>"     # Open the context menu of whatever the keyboard is on
 
 # ── Horizontal view scroll (pan to reach off-screen / overflowing columns) ──
 scroll_view_left  = "prefix+Shift+ArrowLeft"
@@ -194,6 +194,18 @@ args   = { mode = "pane" }
 keys   = "prefix+Ctrl+o"
 action = "command_palette"
 args   = { mode = "workspace" }
+
+# The context menu of whatever the keyboard is on — the focused widget (a sidebar row, a
+# plugin's row), else the focused pane. `prefix+>` above is the heca-shaped binding; these two are
+# the platform conventions, on the SAME action, so rebinding or unbinding it moves all of them.
+# Global (no `prefix+`), because that is how every other app spells them.
+[[keys.bind]]
+keys   = "Shift+F10"
+action = "open_context_menu"
+
+[[keys.bind]]
+keys   = "ContextMenu"          # the dedicated Menu key, where a keyboard has one
+action = "open_context_menu"
 
 # The exposé — a bird's-eye view of every workspace, its columns and its panes
 # (F003/P082/T327). niri binds its equivalent to `toggle-overview`; this is the same idea.

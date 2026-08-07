@@ -872,7 +872,7 @@ pub struct AppState {
     /// startup, and inserting a layer needs `&mut AppState`; and rather than an `AppEvent` because
     /// a menu carries closures and a winit user event must be `Send`.
     pub pending_menus: std::rc::Rc<
-        std::cell::RefCell<Vec<(heca_grid_ui::widgets::Menu, heca_grid_ui::widgets::MenuAnchor)>>,
+        std::cell::RefCell<Vec<(heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor)>>,
     >,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
