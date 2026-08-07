@@ -87,6 +87,20 @@ pane_show_cwd = false
 # Mirrors wezterm-term's default of 3500 when unset.
 terminal_scrollback_lines = 3500
 
+# ── Notifications ─────────────────────────────────────────────────────────────
+# Where notifications get delivered (F009 — Notification System):
+#   "app"    (default) render in heca's own toast stack (the grid-ui ToastStack).
+#   "system"          hand to the OS notification daemon (desktop notification).
+#   "none"            do not deliver; the host still records the notification in history.
+notification_system = "app"
+
+# How many dismissed/expired notifications the host keeps in history.
+#   0  keep no history (dismissed notifications are dropped immediately).
+#   N  cap the history ring buffer at N entries.
+# Default 100. The max of 4 *visible* toasts at once is a first-version
+# contract of the ToastStack widget, not a setting — it does not appear here.
+notification_history_limit = 100
+
 # Enable terminal mouse for host scrollback: when true, wheel scrolls the host
 # scrollback viewport instead of forwarding to the terminal (unless the app
 # has grabbed mouse). Shift+wheel always scrolls the host viewport.

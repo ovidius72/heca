@@ -157,36 +157,43 @@
       "checklist": [
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-001-blocked-settle-what-is-a-plugin-technically-with-t1-first-typescript-does-not-compile-to-wasm",
+          "number": 1,
           "title": "BLOCKED: settle \"what is a plugin, technically\" with T1 first — TypeScript does not compile to WASM",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-002-decide-the-artifact-with-the-user-json-schema-first-d-ts-when-the-plugin-model-is-settled",
+          "number": 2,
           "title": "Decide the artifact with the user: JSON Schema first, .d.ts when the plugin model is settled",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-003-prerequisite-f003-p017-t3-s-property-tables-exist-and-are-reusable-outside-the-app",
+          "number": 3,
           "title": "PREREQUISITE: F003/P017/T3's property tables exist and are reusable outside the app",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-004-generate-from-that-one-table-never-hand-maintain-the-type-file",
+          "number": 4,
           "title": "Generate from that one table — never hand-maintain the type file",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-005-build-time-check-that-fails-when-the-checked-in-output-is-stale",
+          "number": 5,
           "title": "Build-time check that fails when the checked-in output is stale",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-006-all-30-kinds-properties-and-events-per-kind-enum-properties-as-string-unions",
+          "number": 6,
           "title": "All 30 kinds, properties AND events, per-kind; enum properties as string unions",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-007-document-it-for-authors-in-the-plugin-authoring-guide",
+          "number": 7,
           "title": "Document it for authors in the plugin authoring guide",
           "checked": false
         }
@@ -204,5 +211,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

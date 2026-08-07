@@ -273,7 +273,7 @@
       "phaseId": "ccefbac4-b29e-45d8-bd1d-e7199afa4907",
       "number": 213,
       "shortId": "6VCDJ",
-      "priority": 4,
+      "priority": 5,
       "shortName": "action-policy-validation",
       "title": "Validate notification action policies and outcomes",
       "status": "planned",
@@ -319,7 +319,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:10.352Z",
-      "updatedAt": "2026-08-06T14:15:35.568Z"
+      "updatedAt": "2026-08-06T14:21:23.399Z"
     },
     {
       "id": "5f8838b3-5cb8-4208-a16e-4955f8fd7441",
@@ -376,7 +376,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:14.217Z",
+  "updatedAt": "2026-08-06T14:21:23.399Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

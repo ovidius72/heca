@@ -488,7 +488,7 @@
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 202,
       "shortId": "MZ5EZ",
-      "priority": 8,
+      "priority": 9,
       "shortName": "lifecycle-expiry",
       "title": "Integrate notification expiry into lifecycle scheduling",
       "status": "planned",
@@ -534,7 +534,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-08-06T14:13:41.155Z"
+      "updatedAt": "2026-08-06T14:21:54.468Z"
     },
     {
       "id": "a2ca34b3-b1c5-475e-8572-48295fe43878",
@@ -591,7 +591,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-06T14:21:45.770Z",
+  "updatedAt": "2026-08-06T14:21:54.468Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

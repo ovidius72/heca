@@ -173,21 +173,25 @@
       "checklist": [
         {
           "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-001-bordered-keycap-via-shared-paint-keycap-add-bordered-variant-in-key-hint-rs",
+          "number": 1,
           "title": "Bordered keycap via shared paint_keycap (add bordered variant in key_hint.rs)",
           "checked": false
         },
         {
           "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-002-done-keyboard-open-anchor-center-of-app-window-implemented-window-center-logical-in-mouse-rs-anchor-window-center-dropdownspec-centered-flag-contextmenu-centered-builder-heca-grid-ui-context-menu-rs-layout-centers-panel-on-anchor-when-set-open-dropdown-passes-it-keyboard-path-sets-centered-true-mouse-path-false-unit-test-centered-places-panel-center-on-asserts-panel-center-anchor-backlog-updated",
+          "number": 2,
           "title": "DONE: Keyboard-open anchor -> center of app window. Implemented: window_center_logical in mouse.rs (anchor=window center), DropdownSpec.centered flag + ContextMenu::centered() builder (heca-grid-ui context_menu.rs layout centers panel on anchor when set), open_dropdown passes it, keyboard path sets centered=true, mouse path false. Unit test centered_places_panel_center_on_asserts panel center==anchor. Backlog updated.",
           "checked": false
         },
         {
           "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-003-done-default-binding-prefix-prefix-resolved-live-conflict-with-sidebar-right",
+          "number": 3,
           "title": "DONE: default binding prefix+. -> prefix+> (resolved live conflict with sidebar_right)",
           "checked": false
         },
         {
           "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-004-done-opencontextmenu-reclassified-tiledonly-focusedpanelocal-shows-with-floating-pane-active-spot-check-assertion-routing-test-added",
+          "number": 4,
           "title": "DONE: OpenContextMenu reclassified TiledOnly -> FocusedPaneLocal (shows with floating pane active). Spot-check assertion + routing test added.",
           "checked": false
         }
@@ -293,5 +297,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

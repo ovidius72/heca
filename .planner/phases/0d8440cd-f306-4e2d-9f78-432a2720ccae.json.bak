@@ -23,7 +23,8 @@
   "completionCriteria": [],
   "taskIds": [
     "43790755-8b19-4cd3-a591-dc2032e68adb",
-    "e3ecbc59-0a1e-4fb9-8e0c-d7f301c54d80"
+    "e3ecbc59-0a1e-4fb9-8e0c-d7f301c54d80",
+    "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3"
   ],
   "tasks": [
     {
@@ -131,10 +132,63 @@
       "completedAt": "",
       "createdAt": "2026-08-06T14:22:47.471Z",
       "updatedAt": "2026-08-06T14:22:47.471Z"
+    },
+    {
+      "id": "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3",
+      "phaseId": "0d8440cd-f306-4e2d-9f78-432a2720ccae",
+      "number": 399,
+      "shortId": "K3527",
+      "priority": 3,
+      "shortName": "spawn-failure-notification",
+      "title": "Add spawn-command failure notification producer",
+      "status": "planned",
+      "description": "Nel percorso registrato di spawn, emettere una notifica Danger/Warning soltanto quando il comando fallisce realmente, includendo programma e messaggio sanificato senza segreti. Usare dedup coerente con tentativo/comando per non nascondere errori distinti né produrre spam. Conservare stderr e passare dal delivery router. Un eventuale Retry usa un `heca_view::Intent` strutturato, non una shell string non validata.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3-check-001-individuare-handler-spawn-registrato",
+          "number": 1,
+          "title": "Individuare handler spawn registrato.",
+          "checked": false
+        },
+        {
+          "id": "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3-check-002-sanificare-messaggio",
+          "number": 2,
+          "title": "Sanificare messaggio.",
+          "checked": false
+        },
+        {
+          "id": "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3-check-003-dedup-appropriato",
+          "number": 3,
+          "title": "Dedup appropriato.",
+          "checked": false
+        },
+        {
+          "id": "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3-check-004-retry-intent-strutturato-se-sicuro",
+          "number": 4,
+          "title": "Retry Intent strutturato se sicuro.",
+          "checked": false
+        },
+        {
+          "id": "2ce5009e-35e0-4ae7-96e6-894c5d76a1d3-check-005-test-success-nessuna-notifica-failure-una-notifica",
+          "number": 5,
+          "title": "Test success nessuna notifica/failure una notifica.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-06T14:22:55.060Z",
+      "updatedAt": "2026-08-06T14:22:55.060Z"
     }
   ],
   "createdAt": "2026-08-06T14:22:29.635Z",
-  "updatedAt": "2026-08-06T14:22:47.471Z",
+  "updatedAt": "2026-08-06T14:22:55.060Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

@@ -65,8 +65,8 @@
       "priority": 3,
       "shortName": "notification-source",
       "title": "Define extensible notification source model",
-      "status": "planned",
-      "description": "Definire nel modulo notifiche app-owned una sorgente descrittiva ed estensibile per log, cronologia e dedup, senza inserire concetti in `heca-grid-ui`. Supportare almeno App/Config/Pane/Provider/Plugin/Command con identificatore opaco opzionale; non aggiungere Agent perché appartiene a un'altra feature. Evitare riferimenti mutabili obbligatori a indici workspace/pane che possono diventare invalidi dopo l'archiviazione. Documentare che la source non decide routing o ActionPolicy.",
+      "status": "done",
+      "description": "Definire nel modulo notifiche app-owned una sorgente descrittiva ed estensibile per log, cronologia e dedup, senza inserire concetti in `heca-grid-ui`. Supportare almeno App/Config/Pane/Provider/Plugin/Command con identificatore opaco opzionale; non aggiungere Agent perché appartiene a un'altra feature. Evitare riferimenti mutabili obbligatori a indici workspace/pane che possono diventare invalidi dopo l'archiviazione. Documentare che la source non decide routing o ActionPolicy.\n\n---\n**Completion summary:**\nAdded `heca/src/notification.rs` (new app module, registered in `heca/src/main.rs:10`) with:\n\n- `NotificationSourceKind` enum (serde snake_case): `App | Config | Pane | Provider | Plugin | Command`. Deliberately **no `Agent`** variant (belongs to another feature); a compile-time exhaustive-match guard test (`no_agent_variant_exists`) fails to compile if one is added. `Copy + Default(App)` + `as_label()` stable lowercase label. The opaque-id `Option<String>` on `NotificationSource` is the \"Other/custom\" extension point (plugin id, command name, pane handle-as-string).\n- `NotificationSource` struct (Debug/Clone/PartialEq/Eq/Hash/Serialize/Deserialize): `kind` + opaque `Option<String>` id. Constructors `new`/`of`/`app`/`default`; getters `kind()`/`id()`; `dedup_segment()` -> `<kind>[:<id>]` for log/history/dedup. No mutable refs to workspace/pane indices (opaque strings only, per task constraint).\n\nContract honored: descriptive only — no routing, no `ActionPolicy`, no closures, no bare `WmAction`, no UI, no `heca_grid_ui` dependency (only `serde`/`std`). Module doc explicitly contrasts `NotificationSource` with `InteractionSource` (input provenance vs. routing classifier). `ToastSpec` projection stays in T193.\n\nTests: 10 unit tests covering kind labels, no-Agent compile guard, constructors, default, dedup segment with/without id, serde snake_case round-trip, Eq+Hash stability — i.e. sources with and without identifiers. `cargo test -p heca notification::` green.\n\nclippy: workspace clean (`--all-targets --all-features`) after a documented, module-scoped `#![allow(dead_code)]` for the staged phase (consumers land in T185-T188; drop the allow then). No other warnings beyond the known upstream `block v0.1.6` future-incompat.\n\nFiles: heca/src/notification.rs (new), heca/src/main.rs (+1 line `mod notification;`).\n\nNext: T185 (Define lifecycle semantics and defaults).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -105,10 +105,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-07T09:32:13.511Z",
+      "completedAt": "2026-08-07T09:34:04.242Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-06T14:21:02.600Z"
+      "updatedAt": "2026-08-07T09:34:04.242Z"
     },
     {
       "id": "2167fa5e-750b-42b1-be11-1658c13913b6",
@@ -118,8 +118,8 @@
       "priority": 5,
       "shortName": "lifecycle-defaults",
       "title": "Define lifecycle semantics and defaults",
-      "status": "planned",
-      "description": "Definire lifecycle app-owned per notifica: durata automatica, sticky e dismissibility. La durata non produce `expires_at` al push: il timer parte quando lo store promuove la notifica a visibile. Stabilire default documentati per severity/lifecycle e mantenere gli istanti fuori dal builder di dominio quando servono test deterministici. Le notifiche sticky non scadono ma possono essere chiuse se dismissible.",
+      "status": "done",
+      "description": "Definire lifecycle app-owned per notifica: durata automatica, sticky e dismissibility. La durata non produce `expires_at` al push: il timer parte quando lo store promuove la notifica a visibile. Stabilire default documentati per severity/lifecycle e mantenere gli istanti fuori dal builder di dominio quando servono test deterministici. Le notifiche sticky non scadono ma possono essere chiuse se dismissible.\n\n---\n**Completion summary:**\nExtended `heca/src/notification.rs` with lifecycle semantics (app-owned, no UI, no store/timer logic):\n\n- `NotificationLifetime { Auto(Duration) | Sticky }` — serde snake_case, `Default` = Auto 5s. Carries NO `Instant`/`expires_at` (computed lazily by the store on promotion, per T185 contract).\n- `NotificationLifecycle { lifetime, dismissible }` — struct with builders `new`/`auto`/`sticky`/`sticky_persistent` + setter `dismissible(bool)`; getters `lifetime()`/`is_dismissible()`/`expires()`. Sticky+dismissible = stays until closed; sticky+non-dismissible = stays until replaced; auto+non-dismissible = expires on its own, cannot be closed early. `Default` = dismissible Auto 5s.\n- `default_lifetime_for_severity(NotificationSeverity) -> NotificationLifetime`: Error/Warning → Sticky, Success → Auto 4s, Info → Auto 5s. Domain semantics, not user-tunable (kept out of config).\n- `NotificationSeverity { Error | Warning | Success | Info }` with `#[default] Info` — placeholder mirroring `ToastSeverity`'s variants so T190 is a rename/re-export, not a redesign.\n\nContract honored: no Instant in the domain builder (deterministic tests), timer starts on promote not at push, sticky doesn't expire but is closeable when dismissible, no closures, no WmAction, no UI, no grid-ui dependency.\n\nTests: 8 new (total 18 in module) — default, sticky dismissible/non-dismissible, dismissible toggle, expires semantics, no-Instant-in-public-API assertion, severity→lifetime mapping, serde snake_case round-trip. `cargo test -p heca notification::` green.\n\nclippy: workspace clean after replacing manual `impl Default for NotificationSeverity` with `#[derive(Default)]` + `#[default]` on `Info` (clippy suggestion). `#![allow(dead_code)]` still covers the staged-phase public API until T188 wires `AppNotification`.\n\nFiles: heca/src/notification.rs (extended). No other files touched.\n\nNext: T186 (Add notification configuration defaults — `notification_system = \"app\"` + history limit in heca-config).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -158,10 +158,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-07T09:37:56.575Z",
+      "completedAt": "2026-08-07T09:40:59.083Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-06T14:21:23.398Z"
+      "updatedAt": "2026-08-07T09:40:59.083Z"
     },
     {
       "id": "5e0face8-7901-4eba-ac34-12fc1b9e26ad",
@@ -171,10 +171,19 @@
       "priority": 1,
       "shortName": "config-default",
       "title": "Add notification configuration defaults",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Aggiungere ai default embedded e a `heca-config/src/settings.rs` `notification_system = \"app\"`. Aggiungere un limite configurabile e documentato per la cronologia (default 100, con validazione maggiore di zero o semantica zero esplicita). Non aggiungere configurazione visuale che duplichi `Theme`/ToastStack. Il massimo di quattro elementi visibili resta contratto della prima versione, non un numero sparso tra più file.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "5e0face8-7901-4eba-ac34-12fc1b9e26ad-check-001-in-progress-planned",
+          "date": "2026-08-07T09:41:19.482Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "T186 adds `notification_system = \"app\"` field + default, which requires the `NotificationSystem` enum type from T191 to exist first. Doing T191 (the enum) first to avoid a forward reference; T186 follows immediately on the same file.",
+          "description": "T186 adds `notification_system = \"app\"` field + default, which requires the `NotificationSystem` enum type from T191 to exist first. Doing T191 (the enum) first to avoid a forward reference; T186 follows immediately on the same file."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -211,10 +220,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-08-07T09:41:04.429Z",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-06T14:20:46.284Z"
+      "updatedAt": "2026-08-07T09:42:54.824Z"
     },
     {
       "id": "64b075f7-f924-4811-9e5a-30e3aee7ff42",
@@ -436,8 +445,8 @@
       "priority": 0,
       "shortName": "notification-system-enum",
       "title": "Define NotificationSystem config enum",
-      "status": "planned",
-      "description": "Aggiungere `NotificationSystem { App, System, None }` in `heca-config/src/settings.rs` con serde snake_case, `Default::App`, Clone/Copy/Debug/Eq appropriati e accesso tramite Settings. Parsing invalido deve produrre un errore config normale e non modificare la configurazione runtime esistente durante reload. Non inserire logica di consegna nel crate config.",
+      "status": "done",
+      "description": "Aggiungere `NotificationSystem { App, System, None }` in `heca-config/src/settings.rs` con serde snake_case, `Default::App`, Clone/Copy/Debug/Eq appropriati e accesso tramite Settings. Parsing invalido deve produrre un errore config normale e non modificare la configurazione runtime esistente durante reload. Non inserire logica di consegna nel crate config.\n\n---\n**Completion summary:**\nAdded `NotificationSystem` config enum to `heca-config/src/settings.rs` (after `SearchCase`):\n\n- `NotificationSystem { App, System, None }` — `#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]`, `#[serde(rename_all = \"snake_case\")]`, `#[default] App`. Doc explains it's the only notification *delivery* knob in the config crate (no delivery logic here), and that an unknown value is a normal config error that leaves the running config untouched on reload (no silent fallback).\n\nTests (3 new in `settings::tests`, total 86 in crate): `notification_system_default_is_app`, `notification_system_parses_snake_case` (absent→App, app/system/none), `notification_system_rejects_unknown_value` (carrier-pigeon → Err). A documented `#[allow(dead_code)]` on the test-only `W` struct (its field drives deserialization only).\n\ncargo test -p heca-config: 86 passed. clippy -p heca-config: clean.\n\nFiles: heca-config/src/settings.rs (enum + 3 tests). The `SettingsConfig` field + `config.default.toml` default + history limit are T186 (next), which depends on this enum existing.\n\nNext: T186 — add `notification_system: NotificationSystem` field to `SettingsConfig` + `notification_system = \"app\"` to `config.default.toml` + configurable history limit (default 100, >0 validation).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -476,10 +485,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-07T09:41:19.483Z",
+      "completedAt": "2026-08-07T09:42:51.354Z",
       "createdAt": "2026-07-03T22:51:04.232Z",
-      "updatedAt": "2026-08-06T14:20:28.741Z"
+      "updatedAt": "2026-08-07T09:42:51.354Z"
     },
     {
       "id": "b5a302b6-06ed-4409-b3f2-3a857b410cb0",
@@ -589,9 +598,9 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:54.468Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-07T09:42:54.824Z",
+  "handoff": "# Canonical session handoff\n\nCreated at: 2026-08-06T23:23:54Z\nUpdated at: 2026-08-06T23:23:54Z\nReason: Preserve the completed notification-foundation context and resume the same Notification System workstream at its next phase, after P058 finished.\n\n## Current focus\n\n- Feature: `F009` — 🔔 Notification System — **in-progress**\n- Phase: `P061(F009)` — notification-01: Domain Model + Config — **planned**\n- Task: `P061(F009)/T184` — Define extensible notification source model — **planned**\n\nP061 is the next phase in the active notification workstream. No task in P061 has started yet; T184 is the first planned task.\n\n## What was being done\n\nThe session completed `P058(F009)` — Toast / ToastStack Widget Foundation, including the previously failed GPU UAT around exit fragments and smooth vertical reflow.\n`Toast` now uses real retained children; `ToastStack` reconciles same-ID payload changes, preserves runtime/transition state, retains inert exiting cards until animation completion, reports real hint targets, and damages both old and new motion bounds.\nThe showcase demonstrates batch insertion, same-ID update, action, dismiss, non-dismissible cards, enter/exit/reflow, viewport capacity policy, and pass-through to the page layer.\nThe final architecture test task added explicit pointer move/press/release pass-through, exactly-once action/dismiss activation, and tick/repaint/damage coverage.\n`cargo test -p heca-grid-ui toast_` passed 20 relevant tests and `cargo clippy --workspace --all-targets --all-features` passed; only the existing upstream `block v0.1.6` future-incompatibility warning remains.\nThe completed work was committed and pushed as `b0ddb24` on `feature/notification-system`; no PR was created.\nA separate visual-effect audit was explicitly deferred and recorded as `F010/P094/T396`; it is not part of the notification-domain phase.\n\n## How to resume\n\n1. Read this handoff with `handoff_show P061(F009)` and inspect `phase_get(full=true)` plus `task_list` for P061.\n2. Open `P061(F009)/T184` with `task_get(full=true)` and verify its dependencies/order against the remaining P061 tasks before editing.\n3. Inspect the completed presentation seam first: `heca-grid-ui/src/widgets/toast.rs`, `heca-grid-ui/src/widgets/toast_stack.rs`, and the notification examples in `heca-renderer/examples/showcase.rs`.\n4. Inspect the intended app/config boundaries named by the phase: `heca-config/src/settings.rs`, `heca/src/app/interaction.rs`, and the `heca-view` Intent model. Keep queue, lifecycle, timers and dedup out of grid-ui.\n5. Run the mandatory written UI/action pre-flight. P061 defines domain/config data; it must not introduce ad-hoc UI, closures in notification actions, or direct `WmAction`-only storage.\n6. Before any code edit, call `task_start P061(F009)/T184`.\n7. Run baseline `cargo check`; implement one task-sized slice with focused tests; validate with targeted tests and `cargo clippy --workspace --all-targets --all-features`.\n8. Do not commit, push, create a PR, or perform any other git mutation without separate explicit user authorization.\n\n## Files touched\n\nSource/documentation files modified by the completed P058 work:\n\n- `heca-grid-ui/src/component.rs`\n- `heca-grid-ui/src/hint.rs`\n- `heca-grid-ui/src/widgets/toast.rs`\n- `heca-grid-ui/src/widgets/toast_stack.rs`\n- `heca-grid-ui/tests/phase_a.rs`\n- `heca-renderer/examples/showcase.rs`\n- `heca-view-realize/src/lib.rs`\n- `docs/widgets.md`\n\nPlanner files materially updated or created:\n\n- `.planner/phases/949d48a4-6001-42b2-a12c-25ba69a95c24.json` — completed P058 and its five tasks\n- `.planner/phases/cd9bbc0d-5e78-4656-8f5f-c7c6ee089220.json` — deferred F010/P094/T396 effect-token normalization\n- `.planner/generated/PLAN.md` and generated phase/feature views regenerated by the planner\n\nCommit containing the completed work: `b0ddb24` on `feature/notification-system` and `origin/feature/notification-system`.\n\n## Blockers\n\nNone recorded.\n\n## Next steps\n\n1. Start `P061(F009)/T184` — Define extensible notification source model.\n2. Continue the P061 domain model in dependency order: lifecycle/defaults, canonical IDs/model, Intent-backed actions, severity mapping, config enum/defaults, draft builder, then thin `ToastSpec` projection.\n3. Keep presentation-only responsibilities in grid-ui and host-owned lifecycle/queue/dedup in Heca.\n4. Leave `F010/P094/T396` deferred until explicitly scheduled.\n\n## Recent decisions\n\n- The next resume target follows the actual Notification System workstream: `P058` is done, therefore resume at `P061`, not the stale global P031 bookmark.\n- Notification actions store `heca_view::Intent`, not closures and not only `WmAction`.\n- ToastStack `max_visible` remains host-owned lifecycle policy rather than a Theme/widget token.\n- Glow/bracket/ToastStack metric normalization is deferred to `F010/P094/T396`.\n- No PR was created; the GitHub URL printed after push was only the remote’s suggestion.\n\n## Reminder\n\nOnce work on P061 has genuinely resumed and this context has been absorbed, clear this phase handoff explicitly with `handoff_clear P061(F009)`.",
+  "handoffUpdatedAt": "2026-08-06T23:24:27.934Z",
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": []

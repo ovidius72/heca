@@ -46,16 +46,19 @@
       "checklist": [
         {
           "id": "region-drag-surfaces-c1",
+          "number": 1,
           "title": "New surface variants added additively",
           "checked": false
         },
         {
           "id": "region-drag-surfaces-c2",
+          "number": 2,
           "title": "No existing type or variant changed",
           "checked": false
         },
         {
           "id": "region-drag-surfaces-c3",
+          "number": 3,
           "title": "Compiler-required match arms filled in",
           "checked": false
         }
@@ -84,16 +87,19 @@
       "checklist": [
         {
           "id": "dockframe-drag-handle-c1",
+          "number": 1,
           "title": "Drag handle drives SurfaceDragState",
           "checked": false
         },
         {
           "id": "dockframe-drag-handle-c2",
+          "number": 2,
           "title": "Ghost renders in the overlay layer",
           "checked": false
         },
         {
           "id": "dockframe-drag-handle-c3",
+          "number": 3,
           "title": "USER drags a container",
           "checked": false
         }
@@ -122,16 +128,19 @@
       "checklist": [
         {
           "id": "region-drop-targets-c1",
+          "number": 1,
           "title": "Region and gaps set hover_item",
           "checked": false
         },
         {
           "id": "region-drop-targets-c2",
+          "number": 2,
           "title": "Multiple targets highlight at once",
           "checked": false
         },
         {
           "id": "region-drop-targets-c3",
+          "number": 3,
           "title": "Insertion line renders in the overlay layer",
           "checked": false
         }
@@ -160,11 +169,13 @@
       "checklist": [
         {
           "id": "plugin-escape-hatch-c1",
+          "number": 1,
           "title": "Defer until plugins exist",
           "checked": false
         },
         {
           "id": "plugin-escape-hatch-c2",
+          "number": 2,
           "title": "One open variant each, additive",
           "checked": false
         }
@@ -193,21 +204,25 @@
       "checklist": [
         {
           "id": "action-first-then-drag-c1",
+          "number": 1,
           "title": "Actions exist and work from keyboard + RPC first",
           "checked": false
         },
         {
           "id": "action-first-then-drag-c2",
+          "number": 2,
           "title": "Drop dispatches the action, never mutates",
           "checked": false
         },
         {
           "id": "action-first-then-drag-c3",
+          "number": 3,
           "title": "Follow the full Adding-New-Actions checklist",
           "checked": false
         },
         {
           "id": "action-first-then-drag-c4",
+          "number": 4,
           "title": "USER confirms keyboard and mouse agree",
           "checked": false
         }
@@ -225,5 +240,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

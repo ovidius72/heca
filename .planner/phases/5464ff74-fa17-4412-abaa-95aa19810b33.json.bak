@@ -45,16 +45,19 @@
       "checklist": [
         {
           "id": "confirm-dialog-as-layer-c1",
+          "number": 1,
           "title": "Confirm dialog goes through OverlayHost::open_modal",
           "checked": false
         },
         {
           "id": "confirm-dialog-as-layer-c2",
+          "number": 2,
           "title": "Its buttons are real components with hint targets",
           "checked": false
         },
         {
           "id": "confirm-dialog-as-layer-c3",
+          "number": 3,
           "title": "USER confirms the keycaps appear",
           "checked": false
         }
@@ -83,16 +86,19 @@
       "checklist": [
         {
           "id": "show-layer-actions-c1",
+          "number": 1,
           "title": "ShowLayer/HideLayer drive OnDemand layers",
           "checked": false
         },
         {
           "id": "show-layer-actions-c2",
+          "number": 2,
           "title": "Bindable + RPC-reachable like any action",
           "checked": false
         },
         {
           "id": "show-layer-actions-c3",
+          "number": 3,
           "title": "A first native exposé proves it",
           "checked": false
         }
@@ -121,21 +127,25 @@
       "checklist": [
         {
           "id": "paint-input-through-stack-c1",
+          "number": 1,
           "title": "Layers painted in stack order",
           "checked": false
         },
         {
           "id": "paint-input-through-stack-c2",
+          "number": 2,
           "title": "Input routed to the active/modal layer",
           "checked": false
         },
         {
           "id": "paint-input-through-stack-c3",
+          "number": 3,
           "title": "No hardcoded z anywhere",
           "checked": false
         },
         {
           "id": "paint-input-through-stack-c4",
+          "number": 4,
           "title": "USER confirms a layer opened from another sits above it",
           "checked": false
         }
@@ -164,16 +174,19 @@
       "checklist": [
         {
           "id": "layer-content-viewnode-c1",
+          "number": 1,
           "title": "Add LayerContent with both arms",
           "checked": false
         },
         {
           "id": "layer-content-viewnode-c2",
+          "number": 2,
           "title": "Realize View through realize.rs, not a second path",
           "checked": false
         },
         {
           "id": "layer-content-viewnode-c3",
+          "number": 3,
           "title": "Occluder read from real layout",
           "checked": false
         }
@@ -191,5 +204,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

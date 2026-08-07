@@ -10,7 +10,7 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Centralizzare app/system/none e definire fallback OS; mantenere i produttori aggiuntivi fuori dalla prima versione.",
-  "description": "Implementare un unico ingresso app-owned per i producer, ad esempio `NotificationRuntime::notify(draft, now)`, che applica `[settings].notification_system` prima di inserire nello store. `App` consegna all'overlay in-app. `None` non inserisce né presenta notifiche, ma non sopprime stderr/debug log. `System`, finché il backend OS non esiste, usa deterministically il percorso in-app e registra un solo avviso per sessione; il flag one-shot appartiene al runtime e si resetta al riavvio. Questa fase non introduce notifiche degli agenti né notifiche per azioni rifiutate. Pane exit, provider/plugin error e spawn failure restano attività post-v1 esplicitamente differite, da riattivare solo dopo aver verificato i rispettivi punti producer ed evitando emissioni per-frame. Il router deve accettare `NotificationDraft` e `Instant now`, non dipendere da ToastSpec.",
+  "description": "Implementare un unico ingresso app-owned per i producer, ad esempio `NotificationRuntime::notify(draft, now)`, che applica `[settings].notification_system` prima di inserire nello store. `App` consegna all'overlay in-app. `None` non inserisce né presenta notifiche, ma non sopprime stderr/debug log. `System`, finché il backend OS non esiste, usa deterministicamente il percorso in-app e registra un solo avviso per sessione; il flag one-shot appartiene al runtime e si resetta al riavvio. Questa fase completa il router della prima versione e usa come primo producer il reload config di P062. I produttori pane/provider/plugin/spawn sono isolati in P093 post-v1; notifiche agent e notifiche per azioni rifiutate non appartengono a F009. Il router accetta `NotificationDraft` e `Instant now`, non dipende da ToastSpec.",
   "notes": "",
   "goals": [
     "Un solo percorso producer indipendente dal canale.",
@@ -31,7 +31,7 @@
   "dependsOn": [],
   "risks": [
     "Un warning implementato come notifica potrebbe ricorsivamente attraversare System; il warning one-shot deve essere loggato senza ricorsione e la notifica originale consegnata all'app.",
-    "Producer agganciati a polling per-frame possono creare spam; richiedere dedup e trigger edge-based."
+    "Il router deve essere completo senza aspettare produttori post-v1."
   ],
   "openQuestions": [],
   "decisions": [
@@ -44,7 +44,8 @@
     "Test router per tutti e tre i modi.",
     "System fallback consegna ogni notifica ma avvisa una sola volta.",
     "None lascia verificabili i log/risultati producer senza elementi nello store.",
-    "Nessuna dipendenza da widget nel router."
+    "Nessuna dipendenza da widget nel router.",
+    "La fase può essere chiusa prima dei produttori post-v1 di P093."
   ],
   "taskIds": [
     "25a3e40a-1bea-433b-9499-14e37faddd13",
@@ -213,7 +214,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-06T14:23:10.389Z",
+  "updatedAt": "2026-08-06T14:23:21.891Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

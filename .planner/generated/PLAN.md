@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-08-06T23:00:15.806Z
+**Last updated:** 2026-08-07T07:36:47.589Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -207,7 +207,7 @@ Status: 🚧 `in-progress`
 - ✅ **949d48a4-6001-42b2-a12c-25ba69a95c24** P058 — notification-00: Toast / ToastStack Widget Foundation (5/5 tasks)
 - 📋 **ccefbac4-b29e-45d8-bd1d-e7199afa4907** P059 — notification-04: Intent Dispatch, Dismiss Action + KeyHint (0/6 tasks)
 - 📋 **e298f926-f6b3-4147-abcc-eea87171cd81** P060 — notification-03: Persistent Overlay Integration (0/6 tasks)
-- 📋 **e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2** P061 — notification-01: Domain Model + Config (0/10 tasks)
+- 🚧 **e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2** P061 — notification-01: Domain Model + Config (4/10 tasks)
 - 📋 **e8d54d82-7357-4436-9b81-22cf2eaef545** P062 — notification-06: Reload Config Producer (0/5 tasks)
 - 📋 **941d82d3-2770-4e6f-b42f-76b36e160c37** P063 — notification-09: Native OS Notification Backend (post-v1) (0/5 tasks)
 - 📋 **0d8440cd-f306-4e2d-9f78-432a2720ccae** P093 — notification-08: Additional Producers (post-v1) (0/3 tasks)
@@ -1152,11 +1152,11 @@ Dependencies: P058(F009) ToastStack corretto., P056(F009) proiezione visibile st
 
 **Tasks:** 0/6
 
-### 📋 e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2 — P061 — notification-01: Domain Model + Config
+### 🚧 e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2 — P061 — notification-01: Domain Model + Config
 
 Definire modello app-owned, azioni Intent e configurazione app/system/none.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 Dependencies: P058(F009) definisce il contratto ToastSpec/target effettivo da consumare.
 
 **Completion criteria:**
@@ -1165,7 +1165,7 @@ Dependencies: P058(F009) definisce il contratto ToastSpec/target effettivo da co
 - Nessuna closure o WmAction-only nel modello azione.
 - Conversione verso ToastSpec completa e domain-neutral.
 
-**Tasks:** 0/10
+**Tasks:** 4/10
 
 ### 📋 e8d54d82-7357-4436-9b81-22cf2eaef545 — P062 — notification-06: Reload Config Producer
 

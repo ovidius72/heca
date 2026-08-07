@@ -46,16 +46,19 @@
       "checklist": [
         {
           "id": "bind-any-action-by-name-c1",
+          "number": 1,
           "title": "Bind by name in config for contributed actions",
           "checked": false
         },
         {
           "id": "bind-any-action-by-name-c2",
+          "number": 2,
           "title": "Same syntax as built-ins",
           "checked": false
         },
         {
           "id": "bind-any-action-by-name-c3",
+          "number": 3,
           "title": "Unknown name is reported, not silently ignored",
           "checked": false
         }
@@ -84,16 +87,19 @@
       "checklist": [
         {
           "id": "palette-lists-contributed-c1",
+          "number": 1,
           "title": "Palette reads describe_all()",
           "checked": false
         },
         {
           "id": "palette-lists-contributed-c2",
+          "number": 2,
           "title": "Label, icon and category shown",
           "checked": false
         },
         {
           "id": "palette-lists-contributed-c3",
+          "number": 3,
           "title": "Running one dispatches it",
           "checked": false
         }
@@ -122,16 +128,19 @@
       "checklist": [
         {
           "id": "read-default-binding-c1",
+          "number": 1,
           "title": "Read default_binding at registration",
           "checked": false
         },
         {
           "id": "read-default-binding-c2",
+          "number": 2,
           "title": "Route through KeymapRegistry, never hardcoded",
           "checked": false
         },
         {
           "id": "read-default-binding-c3",
+          "number": 3,
           "title": "Test: a registered action's default key fires it",
           "checked": false
         }
@@ -160,21 +169,25 @@
       "checklist": [
         {
           "id": "collision-and-policy-c1",
+          "number": 1,
           "title": "BLOCKING: settle collision behaviour with the user",
           "checked": false
         },
         {
           "id": "collision-and-policy-c2",
+          "number": 2,
           "title": "Refused bindings are reported to the user",
           "checked": false
         },
         {
           "id": "collision-and-policy-c3",
+          "number": 3,
           "title": "ActionPolicy honoured at dispatch",
           "checked": false
         },
         {
           "id": "collision-and-policy-c4",
+          "number": 4,
           "title": "Policy spot-check tests",
           "checked": false
         }
@@ -203,11 +216,13 @@
       "checklist": [
         {
           "id": "unbind-on-unmount-c1",
+          "number": 1,
           "title": "Binding withdrawn on unmount via the existing handle",
           "checked": false
         },
         {
           "id": "unbind-on-unmount-c2",
+          "number": 2,
           "title": "Test: unmount frees the key",
           "checked": false
         }
@@ -225,5 +240,6 @@
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

@@ -7,6 +7,7 @@ mod host;
 mod input;
 mod keymap;
 mod mouse;
+mod notification;
 mod providers;
 mod rpc;
 mod search_state;

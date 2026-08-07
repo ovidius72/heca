@@ -87,6 +87,11 @@ fn default_terminal_scrollback_lines() -> usize {
     3500
 }
 
+/// Default notification history limit (T186): 100 dismissed/expired entries kept.
+fn default_notification_history_limit() -> usize {
+    100
+}
+
 fn default_terminal_mouse() -> bool {
     true
 }
@@ -153,6 +158,28 @@ pub enum SearchCase {
     Sensitive,
     /// Never case-sensitive.
     Insensitive,
+}
+
+/// Where notifications get delivered, as a coarse system-wide switch.
+///
+/// This is the only notification *delivery* knob in `heca-config` — the crate
+/// holds no delivery logic, just the choice. `App` renders heca's own toast
+/// stack; `System` defers to the OS notification daemon; `None` suppresses
+/// delivery entirely (notifications are still logged by the host app, T184).
+///
+/// Serde uses snake_case (`app` / `system` / `none`). An unknown value is a
+/// normal config error: the loader rejects it and leaves the running config
+/// untouched on reload — it never silently falls back to `App`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationSystem {
+    /// Render in heca's own toast stack (the grid-ui `ToastStack`).
+    #[default]
+    App,
+    /// Hand to the OS notification daemon (desktop notification).
+    System,
+    /// Do not deliver; the host still records the notification in history.
+    None,
 }
 
 /// User-configurable settings that control behaviour and appearance.
@@ -296,6 +323,17 @@ pub struct SettingsConfig {
     /// Show the bottom bar (status bar). `false` fully hides it (zero height).
     #[serde(default = "default_show_chrome_region", alias = "show-bottom-bar")]
     pub show_bottom_bar: bool,
+    /// Where notifications get delivered (`app` / `system` / `none`). See
+    /// [`NotificationSystem`]. The default is `app` (heca's own toast stack).
+    #[serde(default, alias = "notification-system")]
+    pub notification_system: NotificationSystem,
+    /// How many dismissed/expired notifications the host keeps in history.
+    ///
+    /// `0` means keep **no** history (dismissed notifications are dropped
+    /// immediately). Any positive value caps the ring buffer. Values are clamped
+    /// at load: a negative or non-integer value is a normal config error.
+    #[serde(default = "default_notification_history_limit", alias = "notification-history-limit")]
+    pub notification_history_limit: usize,
     // Destructive-action confirmation moved to the generic `[confirm]` table
     // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
 }
@@ -337,6 +375,8 @@ impl Default for SettingsConfig {
             show_right_sidebar: default_show_chrome_region(),
             show_top_bar: default_show_chrome_region(),
             show_bottom_bar: default_show_chrome_region(),
+            notification_system: NotificationSystem::default(),
+            notification_history_limit: default_notification_history_limit(),
         }
     }
 }
@@ -417,5 +457,74 @@ mod tests {
     fn test_terminal_foreground_override_parses() {
         let s: SettingsConfig = toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
         assert!(s.terminal_foreground.is_some());
+    }
+
+    #[test]
+    fn notification_system_default_is_app() {
+        assert_eq!(NotificationSystem::default(), NotificationSystem::App);
+    }
+
+    #[test]
+    fn notification_system_parses_snake_case() {
+        #[derive(Deserialize)]
+        struct W {
+            #[serde(default)]
+            x: NotificationSystem,
+        }
+        // default (key absent) = App
+        assert_eq!(
+            toml::from_str::<W>("").unwrap().x,
+            NotificationSystem::App
+        );
+        assert_eq!(
+            toml::from_str::<W>(r#"x = "app""#).unwrap().x,
+            NotificationSystem::App
+        );
+        assert_eq!(
+            toml::from_str::<W>(r#"x = "system""#).unwrap().x,
+            NotificationSystem::System
+        );
+        assert_eq!(
+            toml::from_str::<W>(r#"x = "none""#).unwrap().x,
+            NotificationSystem::None
+        );
+    }
+
+    #[test]
+    fn notification_system_rejects_unknown_value() {
+        // An unknown value must be a normal config error, not a silent fallback to App.
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // exists only to drive deserialization; x is never read here
+        struct W {
+            #[serde(default)]
+            x: NotificationSystem,
+        }
+        let res = toml::from_str::<W>(r#"x = "carrier-pigeon""#);
+        assert!(res.is_err(), "unknown notification_system value must error");
+    }
+
+    #[test]
+    fn settings_default_notification_fields() {
+        let s = SettingsConfig::default();
+        assert_eq!(s.notification_system, NotificationSystem::App);
+        assert_eq!(s.notification_history_limit, 100);
+    }
+
+    #[test]
+    fn settings_notification_system_overrides_parse() {
+        let s: SettingsConfig =
+            toml::from_str(r#"notification-system = "none""#).expect("kebab alias should parse");
+        assert_eq!(s.notification_system, NotificationSystem::None);
+        let s: SettingsConfig =
+            toml::from_str(r#"notification_history_limit = 250"#).expect("history limit should parse");
+        assert_eq!(s.notification_history_limit, 250);
+    }
+
+    #[test]
+    fn settings_notification_history_limit_zero_is_valid() {
+        // 0 is the documented "keep no history" semantics, not an error.
+        let s: SettingsConfig =
+            toml::from_str(r#"notification_history_limit = 0"#).expect("0 is valid");
+        assert_eq!(s.notification_history_limit, 0);
     }
 }

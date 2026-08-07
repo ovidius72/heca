@@ -280,8 +280,8 @@
       "priority": 4,
       "shortName": "toast-architecture-tests",
       "title": "Add Toast/ToastStack architecture and routing tests",
-      "status": "in-progress",
-      "description": "Aggiungere test in `heca-grid-ui/src/widgets/toast.rs` o moduli test dedicati per verificare il contratto architetturale, non flag cosmetici: l'albero contiene figli reali per icon/testo/action/dismiss; gli update same-ID cambiano la scena; pointer move/press/release nello spazio vuoto restituiscono `Handled::No`; action/dismiss consumano il proprio evento una sola volta; modalità non-dismissible rimuove il target; tick conserva animazione e richiede repaint. Usare un tema di test e bounds reali calcolati da `LayoutEngine`, senza dipendenze GPU o AppState.",
+      "status": "done",
+      "description": "Aggiungere test in `heca-grid-ui/src/widgets/toast.rs` o moduli test dedicati per verificare il contratto architetturale, non flag cosmetici: l'albero contiene figli reali per icon/testo/action/dismiss; gli update same-ID cambiano la scena; pointer move/press/release nello spazio vuoto restituiscono `Handled::No`; action/dismiss consumano il proprio evento una sola volta; modalità non-dismissible rimuove il target; tick conserva animazione e richiede repaint. Usare un tema di test e bounds reali calcolati da `LayoutEngine`, senza dipendenze GPU o AppState.\n\n---\n**Completion summary:**\nCompletata la copertura architetturale/routing headless per Toast e ToastStack in `heca-grid-ui/tests/phase_a.rs`, integrando i test già presenti. Verificati: subtree reale icon/content/action/dismiss con bounds da LayoutEngine; target reali e rimozione dei ghost target/non-dismissible; callback action/dismiss consumate una sola volta (PointerReleased non riattiva né propaga al card); miss dello stack per PointerMoved/PointerPressed/PointerReleased sempre `Handled::No`; update same-ID cambia payload/scena senza duplicare o riavviare enter; tick mantiene l’animazione, marca needs_paint e produce damage finito/non vuoto; exit/reflow e revival restano coperti dai test interni ToastStack. Validazione: `cargo test -p heca-grid-ui toast_` — 20 test verdi; `cargo clippy --workspace --all-targets --all-features` verde, salvo warning upstream preesistente `block v0.1.6`. Nessun commit.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -321,13 +321,13 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-08-06T23:07:25.143Z",
-      "completedAt": "",
+      "completedAt": "2026-08-06T23:09:16.308Z",
       "createdAt": "2026-08-06T14:11:12.775Z",
-      "updatedAt": "2026-08-06T23:09:07.152Z"
+      "updatedAt": "2026-08-06T23:09:16.308Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T23:09:07.152Z",
+  "updatedAt": "2026-08-06T23:09:16.308Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

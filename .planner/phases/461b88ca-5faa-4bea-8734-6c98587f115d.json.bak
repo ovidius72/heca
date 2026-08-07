@@ -272,7 +272,7 @@
       "phaseId": "461b88ca-5faa-4bea-8734-6c98587f115d",
       "number": 239,
       "shortId": "ZEP42",
-      "priority": 5,
+      "priority": 7,
       "shortName": "readme-docs",
       "title": "Document the notification system in README and defaults",
       "status": "planned",
@@ -318,7 +318,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-08-06T14:17:58.981Z"
+      "updatedAt": "2026-08-06T14:21:40.150Z"
     },
     {
       "id": "b4d18180-bcb3-487d-8de8-324425c64408",
@@ -481,7 +481,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:28.932Z",
+  "updatedAt": "2026-08-06T14:21:40.150Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

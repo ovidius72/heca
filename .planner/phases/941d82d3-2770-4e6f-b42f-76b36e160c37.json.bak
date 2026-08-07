@@ -3,9 +3,9 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 63,
   "shortId": "K928J",
-  "priority": 8,
-  "slug": "notification-08-native-os-notification-backend-post-v1",
-  "title": "notification-08: Native OS Notification Backend (post-v1)",
+  "priority": 9,
+  "slug": "notification-09-native-os-notification-backend-post-v1",
+  "title": "notification-09: Native OS Notification Backend (post-v1)",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -24,7 +24,8 @@
     "Sincronizzazione cronologia con Notification Center OS."
   ],
   "dependencies": [
-    "P057(F009) prima versione verificata e stabile."
+    "P057(F009) prima versione verificata e stabile.",
+    "P093(F009) è indipendente: i produttori aggiuntivi possono precedere o seguire il backend OS."
   ],
   "dependsOn": [],
   "risks": [
@@ -404,7 +405,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.127Z",
-  "updatedAt": "2026-08-06T14:20:10.163Z",
+  "updatedAt": "2026-08-06T14:23:27.634Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
