@@ -1,8 +1,8 @@
 # e5ceaa1e-9b7a-4d44-b155-edb7fe4b7ef2 — P061 — notification-01: Domain Model + Config
 
-**Status:** 🚧 `in-progress`
+**Status:** ✅ `done`
 **Created:** 2026-07-03T22:50:20.126Z
-**Updated:** 2026-08-07T11:13:35.326Z
+**Updated:** 2026-08-07T14:40:57.244Z
 
 Definire modello app-owned, azioni Intent e configurazione app/system/none.
 
@@ -132,11 +132,24 @@ Next in dependency order: T187 (Document notification configuration semantics) o
 - [ ] Commenti concisi senza promettere backend OS v1.
 - [ ] Test default e override.
 
-### 📋 64b075f7-f924-4811-9e5a-30e3aee7ff42 — T187 — Document notification configuration semantics
+### ✅ 64b075f7-f924-4811-9e5a-30e3aee7ff42 — T187 — Document notification configuration semantics
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Documentare vicino ai default config e nelle API config il significato preciso di `app`, `system` e `none`: app usa ToastStack; system, fino a P063, ricade in-app e produce un solo warning log per sessione; none sopprime presentazione ma non stderr/debug log. Documentare `notification_history_limit` e chiarire che la cronologia è runtime, non persistita. La sezione README completa resta P057/T239.
+
+---
+**Completion summary:**
+Documented notification configuration semantics in API rustdoc and embedded defaults:
+
+- `NotificationSystem::App`: in-app grid-ui ToastStack.
+- `NotificationSystem::System`: until P063 adds a native OS backend, falls back to in-app ToastStack and emits one warning log per session.
+- `NotificationSystem::None`: suppresses presentation but still permits stderr/debug logging by the host.
+- `notification_history_limit`: runtime-only in-memory history; `0` drops dismissed/expired entries immediately, positive values cap the ring; not persisted across restarts. The max four visible toasts remains a ToastStack contract, not a setting.
+
+Files: `heca-config/src/settings.rs` rustdoc and `config.default.toml` comments. README full configuration reference remains explicitly deferred to P057/T239.
+
+Validation: `cargo test -p heca-config` (89 passed), `cargo test -p heca notification::` (37 passed), workspace clippy clean.
 
 **Checklist:**
 - [ ] Commenti default config.
@@ -176,11 +189,24 @@ Next: T189 (Define notification actions as heca_view::Intent — formalize the a
 - [ ] Invarianti temporali esplicite.
 - [ ] Test costruzione e identità.
 
-### 📋 994de278-bc6a-4744-8865-d0e0f1fb0876 — T189 — Define notification actions as heca_view::Intent
+### ✅ 994de278-bc6a-4744-8865-d0e0f1fb0876 — T189 — Define notification actions as heca_view::Intent
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Definire `NotificationAction { label, intent: heca_view::Intent, dismiss_after }`. L'Intent conserva nome azione e `PropMap` argomenti ed è risolto soltanto all'attivazione tramite `dispatch_view_intent`; non usare closure e non limitare il modello a `WmAction`. Documentare la semantica: `dismiss_after=false` per Retry; per azioni dismissive, chiudere soltanto secondo l'esito concordato del dispatch e senza aggirare ActionRegistry. Il modello non entra in heca-grid-ui; ToastSpec riceve etichetta/target generico.
+
+---
+**Completion summary:**
+Defined notification actions in `heca/src/notification.rs`:
+
+- Added `NotificationAction { label: String, intent: heca_view::Intent, dismiss_after: bool }`, deriving Debug/Clone/PartialEq/Serialize/Deserialize.
+- `NotificationAction::new(label, intent)` defaults `dismiss_after=false` (retry semantics). Added `.dismiss_after(bool)` builder and `NotificationAction::dismissing(...)` convenience constructor.
+- Updated `AppNotification.action` from `Option<Intent>` to `Option<NotificationAction>` and its `.action(...)` setter. The Intent remains name-keyed with `PropMap` args and is resolved only on activation via the existing `dispatch_view_intent`/ActionRegistry path; no closures and no WmAction-only model.
+- Documented that dismissive actions close only according to dispatch success/policy, never by bypassing ActionRegistry; ToastSpec remains a generic presentation target outside this model.
+
+Tests: 3 new action tests (29 notification tests total): retry defaults non-dismissive, Intent args survive, serde round-trip contains action data and no callback. Existing AppNotification builder test updated to exercise dismissing action. `cargo test -p heca notification::` passed; `cargo clippy --workspace --all-targets --all-features` clean.
+
+Files: `heca/src/notification.rs` only. Next: T190 severity + ToastSeverity mapping.
 
 **Checklist:**
 - [ ] Usare Intent name-keyed con args.
@@ -189,11 +215,24 @@ Definire `NotificationAction { label, intent: heca_view::Intent, dismiss_after }
 - [ ] Test clone/equality necessari al dedup update.
 - [ ] Nessuna closure o ActionHandler nel modello.
 
-### 📋 ae6aecf5-b9dd-4327-9cb6-0306aa40551d — T190 — Define severity and ToastSeverity mapping
+### ✅ ae6aecf5-b9dd-4327-9cb6-0306aa40551d — T190 — Define severity and ToastSeverity mapping
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Definire una severity canonica app-owned (Info, Success, Warning, Danger/Error secondo nomenclatura coerente) indipendente dal widget e una conversione totale verso `heca_grid_ui::ToastSeverity`. Severity influenza presentazione e default lifecycle, non riordina continuamente le card già visibili. Tenere la conversione nell'adattatore app e aggiungere match esaustivi/test per evitare fallback silenziosi quando cresce l'enum.
+
+---
+**Completion summary:**
+Finalized canonical app-owned severity and its presentation adapter in `heca/src/notification.rs`:
+
+- `NotificationSeverity { Info, Success, Warning, Error }` is now documented as the domain enum (no longer a placeholder), independent of grid-ui. Its default lifecycle semantics remain in `default_lifetime_for_severity`; severity does not reorder already-visible cards.
+- Added total exhaustive `NotificationSeverity::as_toast_severity()` mapping: Info→Info, Success→Success, Warning→Warning, Error→Danger.
+- Added `From<NotificationSeverity> for heca_grid_ui::widgets::ToastSeverity`, keeping the conversion in the app adapter rather than the UI crate.
+- Adding a future domain severity forces an explicit match decision; no silent fallback.
+
+Tests: 2 new mapping tests (31 notification tests total), including exhaustive variant assertions and From/adapter parity. `cargo test -p heca notification::` passed; `cargo clippy --workspace --all-targets --all-features` clean.
+
+Next: T192 NotificationDraft builder API (T187 remains doc-only and can be handled alongside final docs).
 
 **Checklist:**
 - [ ] Enum app-owned.
@@ -229,11 +268,24 @@ Next: T186 — add `notification_system: NotificationSystem` field to `SettingsC
 - [ ] Test app/system/none e valore invalido.
 - [ ] Nessuna dipendenza app/widget.
 
-### 📋 b5a302b6-06ed-4409-b3f2-3a857b410cb0 — T192 — Define NotificationDraft builder API
+### ✅ b5a302b6-06ed-4409-b3f2-3a857b410cb0 — T192 — Define NotificationDraft builder API
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Creare un `NotificationDraft` ergonomico per i producer con campi obbligatori minimi e builder per body, severity, source, lifecycle, dismissible, dedup_key e `NotificationAction`. Il draft non assegna ID, non decide il canale, non legge `Instant::now()` e non converte in ToastSpec: il router/store compiono queste operazioni. Usare ownership/borrowing idiomatici e impedire stati impossibili dove pratico.
+
+---
+**Completion summary:**
+Added `NotificationDraft` to `heca/src/notification.rs`:
+
+- Required input is only `title`; defaults are source `App`, severity `Info`, dismissible Auto 5s lifecycle.
+- Builder methods: `source`, `severity`, `lifecycle`, `dismissible`, `body`, `dedup_key`, `action(NotificationAction)`.
+- `build(id, created_at)` materializes `AppNotification` but deliberately does not allocate an id, call `Instant::now()`, choose `NotificationSystem`, mark visible, or project to ToastSpec. The router/store supplies id + injected creation time and starts lifecycle timing on promotion.
+- Ownership is straightforward: draft owns producer strings and action data, then moves them into the canonical notification without callbacks or UI types.
+
+Tests: 3 new draft tests (34 notification tests total): domain defaults, all optional fields, and queued/not-visible invariant. `cargo test -p heca notification::` passed; workspace clippy clean.
+
+Next: T193 thin `AppNotification -> ToastSpec` projection; T187 remains documentation-only.
 
 **Checklist:**
 - [ ] Costruttore minimo title/source.
@@ -242,11 +294,25 @@ Creare un `NotificationDraft` ergonomico per i producer con campi obbligatori mi
 - [ ] Test default e override.
 - [ ] Doc example reload failure.
 
-### 📋 f11023cb-6ce5-4962-a971-23d14a858f9e — T193 — Project visible AppNotification into ToastSpec
+### ✅ f11023cb-6ce5-4962-a971-23d14a858f9e — T193 — Project visible AppNotification into ToastSpec
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
 Implementare l'adattatore app da una notifica visibile a `ToastSpec` usando il contratto corretto da P058: stesso ID runtime, titolo/corpo/severity, action label, dismissibility e target generici stabili per action/dismiss. Non copiare l'`Intent` dentro grid-ui e non calcolare timer/queue nella conversione. La mappatura target deve poter essere registrata dall'host nel `HintTargetRegistry`. Aggiornamenti same-ID devono produrre uno spec diverso che ToastStack applica in loco.
+
+---
+**Completion summary:**
+Added thin app-owned projection adapter in `heca/src/notification.rs`:
+
+- `project_visible_toast(&AppNotification, action_target: Option<HintTargetId>, dismiss_target: Option<HintTargetId>) -> Option<ToastSpec>`.
+- Returns `None` for Queued/History; projects only Visible notifications.
+- Maps runtime id, title/body, app severity via `as_toast_severity`, action label, lifecycle dismissibility, and host-registered opaque `HintTargetId`s. The Intent itself never enters grid-ui.
+- Does not calculate timers, queue/dedup, dispatch actions, or allocate hint IDs. Host registers Intent/dismiss targets in `HintTargetRegistry` and passes them in.
+- Same-id content updates create distinct `ToastSpec` payloads for ToastStack's in-place reconciliation.
+
+Tests: 3 projection tests (37 notification tests total): queued/history omitted, visible mapping with generic targets and no Intent leakage, same-id changed payload produces a different spec. `cargo test -p heca notification::` passed; workspace clippy clean.
+
+P061 domain/model/config tasks are now complete except T187 documentation-only: T184/T185/T186/T188/T189/T190/T191/T192/T193 done.
 
 **Checklist:**
 - [ ] Mapping campi totale.

@@ -41,6 +41,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use heca_view::Intent;
+use heca_grid_ui::hint::HintTargetId;
+use heca_grid_ui::widgets::{ToastSeverity, ToastSpec};
 
 /// The closed vocabulary of notification origins.
 ///
@@ -297,13 +299,12 @@ pub fn default_lifetime_for_severity(severity: NotificationSeverity) -> Notifica
     }
 }
 
-/// Placeholder severity enum so the lifecycle defaults compile before T190
-/// lands the real mapping. T190 replaces this with the canonical
-/// `NotificationSeverity` + its `ToastSeverity` projection; until then the
-/// lifecycle default depends on this closed set.
+/// Canonical app-owned notification severity.
 ///
-/// Deliberately mirrors `heca_grid_ui::widgets::ToastSeverity`'s variants so
-/// T190 is a rename/re-export, not a new design.
+/// This enum is deliberately independent of the grid-ui presentation enum;
+/// severity drives domain defaults (including lifecycle) while the adapter
+/// [`NotificationSeverity::as_toast_severity`] maps it to paint-time tokens.
+/// It does not reorder notifications already visible in the store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationSeverity {
@@ -312,6 +313,67 @@ pub enum NotificationSeverity {
     Success,
     #[default]
     Info,
+}
+
+impl NotificationSeverity {
+    /// Convert to the presentation severity used by `ToastSpec`/`Toast`.
+    ///
+    /// This is total and exhaustive: adding a new domain severity requires an
+    /// explicit presentation decision instead of silently falling back.
+    pub fn as_toast_severity(self) -> ToastSeverity {
+        match self {
+            Self::Info => ToastSeverity::Info,
+            Self::Success => ToastSeverity::Success,
+            Self::Warning => ToastSeverity::Warning,
+            Self::Error => ToastSeverity::Danger,
+        }
+    }
+}
+
+impl From<NotificationSeverity> for ToastSeverity {
+    fn from(severity: NotificationSeverity) -> Self {
+        severity.as_toast_severity()
+    }
+}
+
+/// A notification action: a user-facing label plus a serializable view intent.
+///
+/// The intent stores a name-keyed action id and optional `PropMap` arguments. It
+/// is resolved only when activated through the app's `dispatch_view_intent`
+/// path; this type never stores a closure and is not limited to `WmAction`.
+/// `dismiss_after` controls the post-dispatch policy: keep it `false` for
+/// retry-like actions, while dismissive actions close only according to the
+/// dispatch result and never bypass `ActionRegistry`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NotificationAction {
+    /// Label rendered on the action affordance.
+    pub label: String,
+    /// Name-keyed action intent with optional arguments.
+    pub intent: Intent,
+    /// Whether a successful activation may dismiss the notification.
+    pub dismiss_after: bool,
+}
+
+impl NotificationAction {
+    /// Create a non-dismissing action (appropriate for Retry).
+    pub fn new(label: impl Into<String>, intent: Intent) -> Self {
+        Self {
+            label: label.into(),
+            intent,
+            dismiss_after: false,
+        }
+    }
+
+    /// Set whether successful activation may dismiss the notification.
+    pub fn dismiss_after(mut self, dismiss: bool) -> Self {
+        self.dismiss_after = dismiss;
+        self
+    }
+
+    /// Convenience constructor for an action that dismisses on successful dispatch.
+    pub fn dismissing(label: impl Into<String>, intent: Intent) -> Self {
+        Self::new(label, intent).dismiss_after(true)
+    }
 }
 
 /// A session-monotonic, never-reused notification identity.
@@ -411,8 +473,9 @@ pub struct AppNotification {
     pub body: Option<String>,
     /// Lifecycle policy (lifetime + dismissibility). T185.
     pub lifecycle: NotificationLifecycle,
-    /// Optional inline action, dispatched as an [`Intent`] (T189 formalizes).
-    pub action: Option<Intent>,
+    /// Optional inline action, dispatched as a name-keyed [`Intent`] with a
+    /// label and post-dispatch dismiss policy.
+    pub action: Option<NotificationAction>,
     /// When the notification was created. Injected by the caller (not `now()`)
     /// so domain tests are deterministic — per T185's rule that instants stay
     /// out of the builder when tests need them.
@@ -466,9 +529,9 @@ impl AppNotification {
         self
     }
 
-    /// Set the optional action (an [`Intent`]).
-    pub fn action(mut self, intent: Intent) -> Self {
-        self.action = Some(intent);
+    /// Set the optional notification action.
+    pub fn action(mut self, action: NotificationAction) -> Self {
+        self.action = Some(action);
         self
     }
 
@@ -488,6 +551,142 @@ impl AppNotification {
             NotificationPlacement::Visible { expires_at } => expires_at,
             _ => None,
         }
+    }
+}
+
+/// Project a visible notification into the grid-ui presentation contract.
+///
+/// The host supplies opaque hint targets after registering the corresponding
+/// `Intent`/dismiss operation in its `HintTargetRegistry`. Only presentation
+/// data crosses the seam: id, title/body, mapped severity, action label,
+/// dismissibility, and generic targets. The `Intent`, queue, dedup policy, and
+/// timer state stay in the app domain. `None` means the notification is not
+/// currently visible (`Queued` or `History`).
+///
+/// Same-id updates naturally produce a new `ToastSpec`; `ToastStack` reconciles
+/// that payload in place according to its P058 contract.
+pub fn project_visible_toast(
+    notification: &AppNotification,
+    action_target: Option<HintTargetId>,
+    dismiss_target: Option<HintTargetId>,
+) -> Option<ToastSpec> {
+    if !notification.is_visible() {
+        return None;
+    }
+
+    let mut spec = ToastSpec::new(notification.id.as_u64(), notification.title.clone())
+        .severity(notification.severity.as_toast_severity())
+        .dismissible(notification.lifecycle.is_dismissible());
+
+    if let Some(target) = dismiss_target {
+        spec = spec.dismiss_target(target);
+    }
+    if let Some(body) = &notification.body {
+        spec = spec.body(body.clone());
+    }
+    if let Some(action) = &notification.action {
+        spec = spec.action(action.label.clone());
+        if let Some(target) = action_target {
+            spec = spec.action_target(target);
+        }
+    }
+
+    Some(spec)
+}
+
+/// Producer-facing builder for an [`AppNotification`].
+///
+/// The only required input is a title. Defaults are app-owned: source `App`,
+/// severity `Info`, and the default dismissible five-second lifecycle. The
+/// draft deliberately does **not** allocate a [`NotificationId`], read
+/// `Instant::now()`, choose a delivery channel, or project to `ToastSpec`.
+/// The router/store supplies the id and creation instant at acceptance time;
+/// this keeps producer code deterministic and prevents a draft from claiming
+/// visibility before the store promotes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NotificationDraft {
+    title: String,
+    body: Option<String>,
+    source: NotificationSource,
+    severity: NotificationSeverity,
+    lifecycle: NotificationLifecycle,
+    dedup_key: Option<String>,
+    action: Option<NotificationAction>,
+}
+
+impl NotificationDraft {
+    /// Start a draft with the required title and domain defaults.
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            body: None,
+            source: NotificationSource::default(),
+            severity: NotificationSeverity::default(),
+            lifecycle: NotificationLifecycle::default(),
+            dedup_key: None,
+            action: None,
+        }
+    }
+
+    /// Set the descriptive producer source.
+    pub fn source(mut self, source: NotificationSource) -> Self {
+        self.source = source;
+        self
+    }
+
+    /// Set app-owned severity (presentation mapping happens later).
+    pub fn severity(mut self, severity: NotificationSeverity) -> Self {
+        self.severity = severity;
+        self
+    }
+
+    /// Set the complete lifecycle policy.
+    pub fn lifecycle(mut self, lifecycle: NotificationLifecycle) -> Self {
+        self.lifecycle = lifecycle;
+        self
+    }
+
+    /// Set only dismissibility while retaining the configured lifetime.
+    pub fn dismissible(mut self, dismissible: bool) -> Self {
+        self.lifecycle = self.lifecycle.dismissible(dismissible);
+        self
+    }
+
+    /// Set optional body text.
+    pub fn body(mut self, body: impl Into<String>) -> Self {
+        self.body = Some(body.into());
+        self
+    }
+
+    /// Set an optional deduplication key.
+    pub fn dedup_key(mut self, key: impl Into<String>) -> Self {
+        self.dedup_key = Some(key.into());
+        self
+    }
+
+    /// Set an optional name-keyed notification action.
+    pub fn action(mut self, action: NotificationAction) -> Self {
+        self.action = Some(action);
+        self
+    }
+
+    /// Materialize the draft into a queued notification.
+    ///
+    /// The caller supplies both the monotonic id and creation instant; this
+    /// method never calls `Instant::now()` and never marks the result visible.
+    pub fn build(self, id: NotificationId, created_at: Instant) -> AppNotification {
+        let mut notification = AppNotification::new(
+            id,
+            self.source,
+            self.severity,
+            self.title,
+            created_at,
+        )
+        .lifecycle(self.lifecycle);
+        notification.body = self.body;
+        notification.dedup_key = self.dedup_key;
+        notification.action = self.action;
+        notification
     }
 }
 
@@ -671,6 +870,158 @@ mod tests {
         assert_eq!(sback, sticky);
     }
 
+    // -- severity adapter (T190) ------------------------------------------
+
+    #[test]
+    fn notification_severity_maps_totally_to_toast_severity() {
+        assert_eq!(NotificationSeverity::Info.as_toast_severity(), ToastSeverity::Info);
+        assert_eq!(NotificationSeverity::Success.as_toast_severity(), ToastSeverity::Success);
+        assert_eq!(NotificationSeverity::Warning.as_toast_severity(), ToastSeverity::Warning);
+        assert_eq!(NotificationSeverity::Error.as_toast_severity(), ToastSeverity::Danger);
+    }
+
+    #[test]
+    fn notification_severity_from_matches_adapter() {
+        let severities = [
+            NotificationSeverity::Info,
+            NotificationSeverity::Success,
+            NotificationSeverity::Warning,
+            NotificationSeverity::Error,
+        ];
+        for severity in severities {
+            assert_eq!(ToastSeverity::from(severity), severity.as_toast_severity());
+        }
+    }
+
+    // -- notification actions (T189) --------------------------------------
+
+    #[test]
+    fn notification_action_defaults_to_non_dismissive_retry() {
+        let action = NotificationAction::new("Retry", Intent::new("build.retry"));
+        assert_eq!(action.label, "Retry");
+        assert_eq!(action.intent.action, "build.retry");
+        assert!(!action.dismiss_after);
+    }
+
+    #[test]
+    fn notification_action_preserves_intent_arguments() {
+        let intent = Intent::new("deploy.retry").arg("attempt", heca_view::PropValue::Int(2));
+        let action = NotificationAction::new("Retry", intent).dismiss_after(true);
+        assert!(action.dismiss_after);
+        assert_eq!(action.intent.args.get("attempt"), Some(&heca_view::PropValue::Int(2)));
+    }
+
+    #[test]
+    fn notification_action_serializes_as_data_without_callbacks() {
+        let action = NotificationAction::dismissing("Open", Intent::new("open_log"));
+        let json = serde_json::to_string(&action).unwrap();
+        assert!(json.contains("open_log"));
+        assert!(json.contains("dismiss_after"));
+        let back: NotificationAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, action);
+    }
+
+    // -- ToastSpec projection (T193) --------------------------------------
+
+    #[test]
+    fn queued_and_history_notifications_do_not_project() {
+        let queued = NotificationDraft::new("Queued")
+            .build(NotificationId::from_raw(20), Instant::now());
+        assert!(project_visible_toast(&queued, None, None).is_none());
+
+        let mut history = queued;
+        history.placement = NotificationPlacement::History;
+        assert!(project_visible_toast(&history, None, None).is_none());
+    }
+
+    #[test]
+    fn visible_notification_projects_presentation_data_and_opaque_targets() {
+        let mut notification = NotificationDraft::new("Build failed")
+            .source(NotificationSource::app("test"))
+            .severity(NotificationSeverity::Error)
+            .body("compiler exited with code 1")
+            .action(NotificationAction::new("Retry", Intent::new("build.retry")))
+            .build(NotificationId::from_raw(21), Instant::now());
+        notification.placement = NotificationPlacement::Visible { expires_at: None };
+
+        let spec = project_visible_toast(
+            &notification,
+            Some(HintTargetId::new(7)),
+            Some(HintTargetId::new(8)),
+        )
+        .expect("visible notification projects");
+        assert_eq!(spec.id, 21);
+        assert_eq!(spec.title, "Build failed");
+        assert_eq!(spec.body.as_deref(), Some("compiler exited with code 1"));
+        assert_eq!(spec.severity, ToastSeverity::Danger);
+        assert_eq!(spec.action.as_deref(), Some("Retry"));
+        assert_eq!(spec.action_target, Some(HintTargetId::new(7)));
+        assert_eq!(spec.dismiss_target, Some(HintTargetId::new(8)));
+        // The Intent itself does not cross into ToastSpec.
+    }
+
+    #[test]
+    fn same_id_payload_update_produces_a_different_spec() {
+        let id = NotificationId::from_raw(22);
+        let now = Instant::now();
+        let mut first = NotificationDraft::new("Connecting")
+            .build(id, now);
+        first.placement = NotificationPlacement::Visible { expires_at: None };
+        let mut second = NotificationDraft::new("Connected")
+            .severity(NotificationSeverity::Success)
+            .build(id, now);
+        second.placement = NotificationPlacement::Visible { expires_at: None };
+
+        let first_spec = project_visible_toast(&first, None, None).unwrap();
+        let second_spec = project_visible_toast(&second, None, None).unwrap();
+        assert_eq!(first_spec.id, second_spec.id);
+        assert_ne!(first_spec, second_spec);
+        assert_eq!(second_spec.severity, ToastSeverity::Success);
+    }
+
+    // -- draft builder (T192) ---------------------------------------------
+
+    #[test]
+    fn notification_draft_has_domain_defaults() {
+        let draft = NotificationDraft::new("Hello");
+        let now = Instant::now();
+        let notification = draft.build(NotificationId::from_raw(10), now);
+        assert_eq!(notification.title, "Hello");
+        assert_eq!(notification.source.kind(), NotificationSourceKind::App);
+        assert_eq!(notification.severity, NotificationSeverity::Info);
+        assert_eq!(notification.lifecycle, NotificationLifecycle::default());
+        assert_eq!(notification.placement, NotificationPlacement::Queued);
+        assert_eq!(notification.created_at, now);
+    }
+
+    #[test]
+    fn notification_draft_sets_all_optional_fields() {
+        let now = Instant::now();
+        let notification = NotificationDraft::new("Failed")
+            .source(NotificationSource::new(NotificationSourceKind::Plugin, "git"))
+            .severity(NotificationSeverity::Error)
+            .lifecycle(NotificationLifecycle::sticky())
+            .dismissible(false)
+            .body("remote rejected")
+            .dedup_key("git-push")
+            .action(NotificationAction::new("Retry", Intent::new("git.retry")))
+            .build(NotificationId::from_raw(11), now);
+        assert_eq!(notification.source.id(), Some("git"));
+        assert_eq!(notification.severity, NotificationSeverity::Error);
+        assert!(!notification.lifecycle.is_dismissible());
+        assert_eq!(notification.body.as_deref(), Some("remote rejected"));
+        assert_eq!(notification.dedup_key.as_deref(), Some("git-push"));
+        assert_eq!(notification.action.unwrap().intent.action, "git.retry");
+    }
+
+    #[test]
+    fn notification_draft_build_does_not_make_notification_visible() {
+        let n = NotificationDraft::new("Queued").build(NotificationId::from_raw(12), Instant::now());
+        assert_eq!(n.placement, NotificationPlacement::Queued);
+        assert!(!n.is_visible());
+        assert!(n.expires_at().is_none());
+    }
+
     // -- canonical model (T188) -------------------------------------------
 
     #[test]
@@ -733,11 +1084,13 @@ mod tests {
         .dedup_key("git-push")
         .body("rejected by remote")
         .lifecycle(NotificationLifecycle::sticky())
-        .action(Intent::new("git.push"));
+        .action(NotificationAction::dismissing("Push", Intent::new("git.push")));
         assert_eq!(n.dedup_key.as_deref(), Some("git-push"));
         assert_eq!(n.body.as_deref(), Some("rejected by remote"));
         assert!(n.lifecycle.is_dismissible());
-        assert_eq!(n.action.as_ref().unwrap().action, "git.push");
+        assert_eq!(n.action.as_ref().unwrap().intent.action, "git.push");
+        assert_eq!(n.action.as_ref().unwrap().label, "Push");
+        assert!(n.action.as_ref().unwrap().dismiss_after);
     }
 
     #[test]

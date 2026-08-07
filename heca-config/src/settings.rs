@@ -164,8 +164,9 @@ pub enum SearchCase {
 ///
 /// This is the only notification *delivery* knob in `heca-config` — the crate
 /// holds no delivery logic, just the choice. `App` renders heca's own toast
-/// stack; `System` defers to the OS notification daemon; `None` suppresses
-/// delivery entirely (notifications are still logged by the host app, T184).
+/// stack. Until P063 adds a native system backend, `System` falls back to the
+/// in-app ToastStack and emits one warning log per session. `None` suppresses
+/// presentation but still permits stderr/debug logging by the host app.
 ///
 /// Serde uses snake_case (`app` / `system` / `none`). An unknown value is a
 /// normal config error: the loader rejects it and leaves the running config
@@ -327,10 +328,11 @@ pub struct SettingsConfig {
     /// [`NotificationSystem`]. The default is `app` (heca's own toast stack).
     #[serde(default, alias = "notification-system")]
     pub notification_system: NotificationSystem,
-    /// How many dismissed/expired notifications the host keeps in history.
+    /// How many dismissed/expired notifications the host keeps in runtime history.
     ///
     /// `0` means keep **no** history (dismissed notifications are dropped
-    /// immediately). Any positive value caps the ring buffer. Values are clamped
+    /// immediately). Any positive value caps the ring buffer. This history is
+    /// runtime-only and is not persisted across restarts. Values are clamped
     /// at load: a negative or non-integer value is a normal config error.
     #[serde(default = "default_notification_history_limit", alias = "notification-history-limit")]
     pub notification_history_limit: usize,

@@ -89,16 +89,18 @@ terminal_scrollback_lines = 3500
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 # Where notifications get delivered (F009 — Notification System):
-#   "app"    (default) render in heca's own toast stack (the grid-ui ToastStack).
-#   "system"          hand to the OS notification daemon (desktop notification).
-#   "none"            do not deliver; the host still records the notification in history.
+#   "app"    (default) render in heca's own grid-ui ToastStack.
+#   "system"          until P063 adds a native OS backend, fall back to the
+#                     in-app ToastStack and emit one warning log per session.
+#   "none"            suppress presentation, but keep stderr/debug logging.
 notification_system = "app"
 
-# How many dismissed/expired notifications the host keeps in history.
+# How many dismissed/expired notifications the host keeps in runtime history.
 #   0  keep no history (dismissed notifications are dropped immediately).
-#   N  cap the history ring buffer at N entries.
-# Default 100. The max of 4 *visible* toasts at once is a first-version
-# contract of the ToastStack widget, not a setting — it does not appear here.
+#   N  cap the in-memory history ring buffer at N entries.
+# History is not persisted across restarts. Default 100. The max of 4
+# *visible* toasts at once is a first-version contract of ToastStack, not a
+# setting — it does not appear here.
 notification_history_limit = 100
 
 # Enable terminal mouse for host scrollback: when true, wheel scrolls the host
