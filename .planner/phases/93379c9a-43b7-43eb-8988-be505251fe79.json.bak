@@ -64,10 +64,10 @@
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 194,
       "shortId": "83CXV",
-      "priority": 3,
+      "priority": 2,
       "shortName": "store-expire",
       "title": "Implement visibility-based expiry",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Implementare expiry soltanto per notifiche visibili auto-dismiss. Calcolare `visible_since`/`expires_at` alla promozione; le pending non hanno scadenza attiva. `expire_due(now)` archivia tutte le visibili dovute, preserva l'ordine degli slot rimasti, promuove pending negli spazi liberati e assegna loro un nuovo timer completo. Sticky non entra mai nell'insieme delle scadenze. Un update deduplicato visibile riavvia la durata.",
       "notes": "",
       "statusLog": [],
@@ -78,39 +78,33 @@
           "id": "951e11b5-372b-46b7-a516-840784a11251-check-001-pending-non-scade-anche-dopo-tempo-lungo",
           "number": 1,
           "title": "Pending non scade anche dopo tempo lungo.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "951e11b5-372b-46b7-a516-840784a11251-check-002-timer-parte-alla-promozione",
           "number": 2,
           "title": "Timer parte alla promozione.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "951e11b5-372b-46b7-a516-840784a11251-check-003-sticky-ignorata",
           "number": 3,
           "title": "Sticky ignorata.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "951e11b5-372b-46b7-a516-840784a11251-check-004-pi-expiry-simultanee-gestite",
           "number": 4,
           "title": "Più expiry simultanee gestite.",
-          "checked": false
-        },
-        {
-          "id": "951e11b5-372b-46b7-a516-840784a11251-check-005-dedup-visibile-resetta-timer",
-          "number": 5,
-          "title": "Dedup visibile resetta timer.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-08-08T17:10:00.925Z",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-06T14:21:02.600Z"
+      "updatedAt": "2026-08-08T17:14:41.044Z"
     },
     {
       "id": "a395e3d6-2d24-495d-a496-22f9c60c5599",
@@ -156,6 +150,12 @@
           "number": 5,
           "title": "Indice coerente dopo trim.",
           "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-006-duplicato-visibile-aggiorna-in-loco-e-riavvia-il-timer-senza-cambiare-slot",
+          "number": 6,
+          "title": "Duplicato visibile aggiorna in loco e riavvia il timer senza cambiare slot.",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -163,7 +163,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-06T14:21:14.216Z"
+      "updatedAt": "2026-08-08T17:14:37.941Z"
     },
     {
       "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
@@ -173,8 +173,8 @@
       "priority": 1,
       "shortName": "store-push",
       "title": "Implement push, monotonic IDs and slot promotion",
-      "status": "in-progress",
-      "description": "Implementare `push(draft, now)` attraverso le invarianti dello store. Assegnare un nuovo `NotificationId` monotono soltanto quando la dedup non trova una voce esistente. Se esiste uno slot libero, promuovere immediatamente la voce e iniziare il timer; altrimenti inserirla nella coda senza expiry. Quando una visibile esce, promuovere la prima in attesa nello slot libero senza spostare le altre card. Gestire overflow ID in modo esplicito e testabile.",
+      "status": "done",
+      "description": "Implementare `push(draft, now)` attraverso le invarianti dello store. Assegnare un nuovo `NotificationId` monotono soltanto quando la dedup non trova una voce esistente. Se esiste uno slot libero, promuovere immediatamente la voce e iniziare il timer; altrimenti inserirla nella coda senza expiry. Quando una visibile esce, promuovere la prima in attesa nello slot libero senza spostare le altre card. Gestire overflow ID in modo esplicito e testabile.\n\n---\n**Completion summary:**\nImplementato `NotificationStore::push(draft, now)` in `heca/src/notification.rs`. Lo store assegna ID monotoni senza riuso, restituisce `IdExhausted` testabile dopo `u64::MAX`, mantiene dedup index e riusa l’ID noto senza duplicare, accoda quando 4 slot stabili sono occupati e promuove FIFO nei soli slot vacanti. La promozione avvia l’expiry dal `now` iniettato; queued non hanno expiry. Risultato host-owned: `NotificationStorePush` + `NotificationStoreUpdate`, senza inferenza del consumer. Aggiunti test push/queue/dedup/overflow e promozione nello slot liberato senza riordinare gli altri. Validazione: `cargo test -p heca notification` (45 pass), `cargo check -p heca`, `cargo clippy --workspace --all-targets --all-features`, `git diff --check` (tutti pass; solo warning future-incompatibility della dipendenza `block`).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -214,16 +214,16 @@
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-08-08T17:04:21.776Z",
-      "completedAt": "",
+      "completedAt": "2026-08-08T17:07:16.330Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-08T17:07:05.072Z"
+      "updatedAt": "2026-08-08T17:13:45.666Z"
     },
     {
       "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3",
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 197,
       "shortId": "SDKQ7",
-      "priority": 5,
+      "priority": 3,
       "shortName": "store-dismiss",
       "title": "Implement dismiss and archive transition",
       "status": "planned",
@@ -269,7 +269,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-06T14:21:23.399Z"
+      "updatedAt": "2026-08-08T17:13:40.446Z"
     },
     {
       "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
@@ -322,14 +322,14 @@
       "startedAt": "2026-08-08T13:32:54.632Z",
       "completedAt": "2026-08-08T13:39:39.161Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-08T13:39:39.161Z"
+      "updatedAt": "2026-08-08T17:13:45.666Z"
     },
     {
       "id": "113d5dd1-0639-4492-912c-aaf088e1587a",
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 199,
       "shortId": "MXHQK",
-      "priority": 2,
+      "priority": 5,
       "shortName": "visible-toasts",
       "title": "Implement stable four-slot visible projection",
       "status": "planned",
@@ -375,14 +375,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.843Z",
-      "updatedAt": "2026-08-06T14:20:54.383Z"
+      "updatedAt": "2026-08-08T17:13:40.448Z"
     },
     {
       "id": "671754ad-5b4d-4472-997c-d379b4986ad5",
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 200,
       "shortId": "VPAR5",
-      "priority": 7,
+      "priority": 6,
       "shortName": "store-action-for",
       "title": "Implement notification action and target lookup",
       "status": "planned",
@@ -428,14 +428,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.843Z",
-      "updatedAt": "2026-08-06T14:21:40.150Z"
+      "updatedAt": "2026-08-08T17:13:40.449Z"
     },
     {
       "id": "d976a997-ed47-4b76-819d-2028cefa9eed",
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 201,
       "shortId": "L3GQ7",
-      "priority": 8,
+      "priority": 7,
       "shortName": "next-expiry",
       "title": "Compute next visible notification expiry",
       "status": "planned",
@@ -481,14 +481,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-08-06T14:21:45.770Z"
+      "updatedAt": "2026-08-08T17:13:40.447Z"
     },
     {
       "id": "e2f02933-4071-40d3-a069-60da05391c32",
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 202,
       "shortId": "MZ5EZ",
-      "priority": 9,
+      "priority": 8,
       "shortName": "lifecycle-expiry",
       "title": "Integrate notification expiry into lifecycle scheduling",
       "status": "planned",
@@ -534,14 +534,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-08-06T14:21:54.468Z"
+      "updatedAt": "2026-08-08T17:13:40.448Z"
     },
     {
       "id": "a2ca34b3-b1c5-475e-8572-48295fe43878",
       "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
       "number": 395,
       "shortId": "252SA",
-      "priority": 6,
+      "priority": 9,
       "shortName": "notification-history",
       "title": "Implement bounded runtime notification history",
       "status": "planned",
@@ -587,11 +587,11 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-06T14:13:50.024Z",
-      "updatedAt": "2026-08-06T14:21:28.931Z"
+      "updatedAt": "2026-08-08T17:13:40.449Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-08T17:07:05.072Z",
+  "updatedAt": "2026-08-08T17:14:41.044Z",
   "handoff": "# P056 — NotificationStore foundation; P061 context and T196 next\n\nCreated at: 2026-08-08T14:50:26Z\nUpdated at: 2026-08-08T14:50:26Z\nReason: Consolidated the completed P061 domain/config context with the newer P056/T198 store-foundation work. P056 is the active notification phase and this is the canonical resume point.\n\n## Current focus\n- Feature: `F009` — 🔔 Notification System — **in-progress**.\n- Phase: `P056(F009)` — notification-02: Store, Queue, Visibility + History — **in-progress**.\n- Task: `T198` — Define NotificationStore invariants and structures — **done**. Next planned task: `T196` — Implement push, monotonic IDs and slot promotion.\n\n## What was being done\n- P061 is complete: it established the app-owned notification domain/config, including extensible sources, lifecycles/defaults, canonical drafts/actions/severity, `NotificationSystem`, `notification_history_limit`, and the thin `AppNotification → ToastSpec` projection.\n- The host, not grid-ui, owns queue, deduplication, lifecycle timers, history and action dispatch; `ToastStack` receives presentation data and opaque hint targets only.\n- T198 then created `NotificationStore` in `heca/src/notification.rs` as the sole mutable owner: canonical storage, dedup index, pending FIFO, four stable visible slots, bounded history and store-owned next-id counter.\n- `AppNotification::placement` is private, preventing consumers from moving entries between lifecycle buckets.\n- `transition_at(now, ...)` is the private mutation funnel: future operations receive caller-injected `Instant`, debug-validate representation invariants, and return `NotificationStoreUpdate::visible_projection_changed()` rather than requiring the host to infer refreshes.\n- Focused tests cover empty state, disabled history and the time/update transaction contract; 40 notification tests and workspace clippy pass.\n\n## How to resume\n1. Read this handoff and inspect `heca/src/notification.rs` around `NotificationStore`, `NotificationStoreUpdate`, `transition_at` and `assert_invariants`.\n2. Start `T196` before editing.\n3. Implement the public push path only through `transition_at(now, ...)`: allocate the store-owned monotonic id, create canonical storage/index entries, enqueue, then promote into the first vacant stable slot without moving existing visible ids.\n4. Reuse P061 contracts: a producer yields `NotificationDraft`; action remains a name-keyed `heca_view::Intent`; projection remains `project_visible_toast`; no closure, bare `WmAction`, grid-ui queue logic or consumer-side lifecycle inference.\n5. Leave expiry, dedup policy, dismissal/archive, history trimming, toast host integration/action dispatch and lifecycle wake scheduling to their dedicated planned tasks (`T194`, `T195`, `T197`, `T199`–`T202`, `T395`, P059 and P060).\n6. Add deterministic tests with caller-supplied `Instant`; run `cargo test -p heca notification`, `cargo check -p heca`, and `cargo clippy --workspace --all-targets --all-features`.\n\n## Files touched\n- `heca/src/notification.rs`\n- `heca-config/src/settings.rs` (P061)\n- `config.default.toml` (P061)\n- `agent-rules.md` (session rule recording)\n\n## Blockers\nNone recorded.\n\n## Next steps\n- T196: store-owned monotonic ID allocation, push and stable-slot promotion.\n- Continue P056 in task order without exposing queue, slot, dedup or lifecycle policy to application consumers.\n- Only after store behavior is ready, proceed to the already-planned host integration and action-dispatch phases.\n\n## Recent decisions\n- `NotificationStore` alone owns mutable notification lifecycle; consumers consume a projection/update result and do not reconstruct domain state.\n- Four simultaneous cards are centralized in `MAX_VISIBLE_NOTIFICATIONS`, not scattered literals.\n- All store transitions accept caller-injected `Instant`; the store never reads the wall clock.\n- Notification actions preserve `heca_view::Intent`, not callbacks or only `WmAction`.\n- `NotificationSystem::System` falls back to the in-app ToastStack with one warning per session until P063; `None` suppresses presentation but preserves stderr/debug logging.\n- Runtime history is not persisted.\n\n## Reminder\nThis supersedes the P061 handoff. When P056 is fully resumed and its work is complete, clear this entity-scoped handoff with `handoff_clear(P056(F009))`.",
   "handoffUpdatedAt": "2026-08-08T14:52:23.016Z",
   "handoffReadAt": "",

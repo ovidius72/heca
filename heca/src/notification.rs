@@ -432,7 +432,12 @@ impl NotificationId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationPlacement {
     Queued,
-    Visible { expires_at: Option<Instant> },
+    Visible {
+        /// The instant at which the store promoted this entry into a slot.
+        visible_since: Instant,
+        /// Auto-dismiss deadline; absent for sticky notifications.
+        expires_at: Option<Instant>,
+    },
     History,
 }
 
@@ -613,6 +618,35 @@ impl NotificationStore {
         self.notifications.is_empty()
     }
 
+    /// Archive every visible auto-dismiss notification due at `now`.
+    ///
+    /// Slots are cleared in place and then refilled FIFO from pending entries;
+    /// occupied slots retain their positions. Sticky notifications have no
+    /// deadline and are never selected.
+    pub fn expire_due(&mut self, now: Instant) -> NotificationStoreUpdate {
+        let (_, update) = self.transition_at(now, |store, now| {
+            for slot in &mut store.visible {
+                let Some(notification_id) = *slot else {
+                    continue;
+                };
+                let due = store.notifications[&notification_id]
+                    .expires_at()
+                    .is_some_and(|expires_at| expires_at <= now);
+                if due {
+                    *slot = None;
+                    let notification = store
+                        .notifications
+                        .get_mut(&notification_id)
+                        .expect("visible notification must have canonical storage");
+                    notification.placement = NotificationPlacement::History;
+                    store.history.push_back(notification_id);
+                }
+            }
+            ((), store.promote_pending(now))
+        });
+        update
+    }
+
     /// Accept a producer draft into the canonical store.
     ///
     /// A new id is allocated only when no known deduplication key resolves to
@@ -675,6 +709,7 @@ impl NotificationStore {
                 .get_mut(&notification_id)
                 .expect("queued notification must have canonical storage");
             notification.placement = NotificationPlacement::Visible {
+                visible_since: now,
                 expires_at: match notification.lifecycle.lifetime() {
                     NotificationLifetime::Auto(duration) => now.checked_add(duration),
                     NotificationLifetime::Sticky => None,
@@ -816,10 +851,18 @@ impl AppNotification {
         matches!(self.placement, NotificationPlacement::History)
     }
 
+    /// The store-assigned instant at which this entry became visible.
+    pub fn visible_since(&self) -> Option<Instant> {
+        match self.placement {
+            NotificationPlacement::Visible { visible_since, .. } => Some(visible_since),
+            _ => None,
+        }
+    }
+
     /// The computed expiry instant, if any (only `Visible` with a deadline).
     pub fn expires_at(&self) -> Option<Instant> {
         match self.placement {
-            NotificationPlacement::Visible { expires_at } => expires_at,
+            NotificationPlacement::Visible { expires_at, .. } => expires_at,
             _ => None,
         }
     }
@@ -1050,6 +1093,46 @@ mod tests {
         assert_eq!(store.visible[2], Some(visible_ids[2]));
         assert_eq!(store.visible[3], Some(visible_ids[3]));
         assert!(store.queued.is_empty());
+    }
+
+    #[test]
+    fn expire_due_archives_due_visible_entries_and_promotes_pending() {
+        let now = Instant::now();
+        let later = now + std::time::Duration::from_secs(1);
+        let mut store = NotificationStore::new(100);
+        let mut visible_ids = Vec::new();
+        for number in 0..MAX_VISIBLE_NOTIFICATIONS {
+            visible_ids.push(
+                store.push(
+                    NotificationDraft::new(format!("Visible {number}"))
+                        .lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(1))),
+                    now,
+                )
+                .unwrap()
+                .notification_id(),
+            );
+        }
+        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+
+        let update = store.expire_due(later);
+        assert!(update.visible_projection_changed());
+        assert_eq!(store.visible[0], Some(queued_id));
+        assert!(visible_ids.iter().all(|id| store.notifications[id].is_history()));
+        assert_eq!(store.history.len(), MAX_VISIBLE_NOTIFICATIONS);
+        assert_eq!(store.notifications[&queued_id].visible_since(), Some(later));
+    }
+
+    #[test]
+    fn sticky_notifications_do_not_expire() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let id = store.push(
+            NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
+            now,
+        ).unwrap().notification_id();
+
+        assert!(!store.expire_due(now + std::time::Duration::from_secs(60)).visible_projection_changed());
+        assert_eq!(store.visible[0], Some(id));
     }
 
     #[test]
@@ -1323,7 +1406,7 @@ mod tests {
             .body("compiler exited with code 1")
             .action(NotificationAction::new("Retry", Intent::new("build.retry")))
             .build(NotificationId::from_raw(21), Instant::now());
-        notification.placement = NotificationPlacement::Visible { expires_at: None };
+        notification.placement = NotificationPlacement::Visible { visible_since: Instant::now(), expires_at: None };
 
         let spec = project_visible_toast(
             &notification,
@@ -1347,11 +1430,11 @@ mod tests {
         let now = Instant::now();
         let mut first = NotificationDraft::new("Connecting")
             .build(id, now);
-        first.placement = NotificationPlacement::Visible { expires_at: None };
+        first.placement = NotificationPlacement::Visible { visible_since: now, expires_at: None };
         let mut second = NotificationDraft::new("Connected")
             .severity(NotificationSeverity::Success)
             .build(id, now);
-        second.placement = NotificationPlacement::Visible { expires_at: None };
+        second.placement = NotificationPlacement::Visible { visible_since: now, expires_at: None };
 
         let first_spec = project_visible_toast(&first, None, None).unwrap();
         let second_spec = project_visible_toast(&second, None, None).unwrap();
@@ -1484,7 +1567,7 @@ mod tests {
             Instant::now(),
         );
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
-        n.placement = NotificationPlacement::Visible { expires_at: Some(deadline) };
+        n.placement = NotificationPlacement::Visible { visible_since: deadline - std::time::Duration::from_secs(5), expires_at: Some(deadline) };
         assert!(n.is_visible());
         assert_eq!(n.expires_at(), Some(deadline));
     }
