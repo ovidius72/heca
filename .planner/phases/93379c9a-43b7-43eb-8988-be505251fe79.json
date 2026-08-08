@@ -173,8 +173,8 @@
       "priority": 1,
       "shortName": "store-push",
       "title": "Implement push, monotonic IDs and slot promotion",
-      "status": "planned",
-      "description": "Implementare `push(draft, now)` attraverso le invarianti dello store. Assegnare un nuovo `NotificationId` monotono soltanto quando la dedup non trova una voce esistente. Se esiste uno slot libero, promuovere immediatamente la voce e iniziare il timer; altrimenti inserirla nella coda senza expiry. Quando una visibile esce, promuovere la prima in attesa nello slot libero senza spostare le altre card. Gestire overflow ID in modo esplicito e testabile.",
+      "status": "done",
+      "description": "Implementare `push(draft, now)` attraverso le invarianti dello store. Assegnare un nuovo `NotificationId` monotono soltanto quando la dedup non trova una voce esistente. Se esiste uno slot libero, promuovere immediatamente la voce e iniziare il timer; altrimenti inserirla nella coda senza expiry. Quando una visibile esce, promuovere la prima in attesa nello slot libero senza spostare le altre card. Gestire overflow ID in modo esplicito e testabile.\n\n---\n**Completion summary:**\nImplementato `NotificationStore::push(draft, now)` in `heca/src/notification.rs`. Lo store assegna ID monotoni senza riuso, restituisce `IdExhausted` testabile dopo `u64::MAX`, mantiene dedup index e riusa l’ID noto senza duplicare, accoda quando 4 slot stabili sono occupati e promuove FIFO nei soli slot vacanti. La promozione avvia l’expiry dal `now` iniettato; queued non hanno expiry. Risultato host-owned: `NotificationStorePush` + `NotificationStoreUpdate`, senza inferenza del consumer. Aggiunti test push/queue/dedup/overflow e promozione nello slot liberato senza riordinare gli altri. Validazione: `cargo test -p heca notification` (45 pass), `cargo check -p heca`, `cargo clippy --workspace --all-targets --all-features`, `git diff --check` (tutti pass; solo warning future-incompatibility della dipendenza `block`).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -184,39 +184,39 @@
           "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-001-id-non-riutilizzati",
           "number": 1,
           "title": "ID non riutilizzati.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-002-push-con-slot-libero",
           "number": 2,
           "title": "Push con slot libero.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-003-push-con-quattro-slot-pieni",
           "number": 3,
           "title": "Push con quattro slot pieni.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-004-promozione-nello-slot-liberato",
           "number": 4,
           "title": "Promozione nello slot liberato.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-005-nessun-riordinamento-degli-slot-occupati",
           "number": 5,
           "title": "Nessun riordinamento degli slot occupati.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T17:04:21.776Z",
+      "completedAt": "2026-08-08T17:07:16.330Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-06T14:20:46.285Z"
+      "updatedAt": "2026-08-08T17:07:16.330Z"
     },
     {
       "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3",
@@ -279,8 +279,8 @@
       "priority": 0,
       "shortName": "store-struct",
       "title": "Define NotificationStore invariants and structures",
-      "status": "planned",
-      "description": "Definire `NotificationStore` con: contatore ID monotono; storage canonico; coda d'attesa ordinata; quattro slot visibili stabili; cronologia ordinata e limitata; indice `dedup_key → NotificationId`. Esplicitare invarianti e centralizzare tutte le transizioni per impedire ID presenti in più stati o indici dangling. Preferire API che accettano `Instant now` e restituiscono se la proiezione visibile è cambiata, così l'host aggiorna il signal soltanto quando necessario.",
+      "status": "done",
+      "description": "Definire `NotificationStore` con: contatore ID monotono; storage canonico; coda d'attesa ordinata; quattro slot visibili stabili; cronologia ordinata e limitata; indice `dedup_key → NotificationId`. Esplicitare invarianti e centralizzare tutte le transizioni per impedire ID presenti in più stati o indici dangling. Preferire API che accettano `Instant now` e restituiscono se la proiezione visibile è cambiata, così l'host aggiorna il signal soltanto quando necessario.\n\n---\n**Completion summary:**\n`NotificationStore` in `heca/src/notification.rs` ora possiede il modello strutturale canonico (counter, storage, dedup index, coda, quattro slot stabili, history limitata), invarianti debug e placement privata. `transition_at(now, ...)` è l’unico funnel per le future mutazioni: riceve `Instant` dal chiamante, verifica invarianti e restituisce `NotificationStoreUpdate::visible_projection_changed()` così l’host non ricostruisce lo stato. Aggiunti test per store iniziale, history disabilitata e contratto della transazione. Validazione: `cargo test -p heca notification` (40 pass), `cargo clippy --workspace --all-targets --all-features` (pass; warning future-incompatibility di `block` esterno).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -290,39 +290,39 @@
           "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-001-strutture-pending-visible-history-index",
           "number": 1,
           "title": "Strutture pending/visible/history/index.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-002-invarianti-documentate",
           "number": 2,
           "title": "Invarianti documentate.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-003-api-now-injected",
           "number": 3,
           "title": "API now-injected.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-004-segnalazione-visible-projection-changed",
           "number": 4,
           "title": "Segnalazione visible projection changed.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-005-test-store-vuoto-e-limiti",
           "number": 5,
           "title": "Test store vuoto e limiti.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T13:32:54.632Z",
+      "completedAt": "2026-08-08T13:39:39.161Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-06T14:20:28.742Z"
+      "updatedAt": "2026-08-08T13:39:39.161Z"
     },
     {
       "id": "113d5dd1-0639-4492-912c-aaf088e1587a",
@@ -591,9 +591,9 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-06T14:21:54.468Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-08T17:07:16.330Z",
+  "handoff": "# P056 — NotificationStore foundation; P061 context and T196 next\n\nCreated at: 2026-08-08T14:50:26Z\nUpdated at: 2026-08-08T14:50:26Z\nReason: Consolidated the completed P061 domain/config context with the newer P056/T198 store-foundation work. P056 is the active notification phase and this is the canonical resume point.\n\n## Current focus\n- Feature: `F009` — 🔔 Notification System — **in-progress**.\n- Phase: `P056(F009)` — notification-02: Store, Queue, Visibility + History — **in-progress**.\n- Task: `T198` — Define NotificationStore invariants and structures — **done**. Next planned task: `T196` — Implement push, monotonic IDs and slot promotion.\n\n## What was being done\n- P061 is complete: it established the app-owned notification domain/config, including extensible sources, lifecycles/defaults, canonical drafts/actions/severity, `NotificationSystem`, `notification_history_limit`, and the thin `AppNotification → ToastSpec` projection.\n- The host, not grid-ui, owns queue, deduplication, lifecycle timers, history and action dispatch; `ToastStack` receives presentation data and opaque hint targets only.\n- T198 then created `NotificationStore` in `heca/src/notification.rs` as the sole mutable owner: canonical storage, dedup index, pending FIFO, four stable visible slots, bounded history and store-owned next-id counter.\n- `AppNotification::placement` is private, preventing consumers from moving entries between lifecycle buckets.\n- `transition_at(now, ...)` is the private mutation funnel: future operations receive caller-injected `Instant`, debug-validate representation invariants, and return `NotificationStoreUpdate::visible_projection_changed()` rather than requiring the host to infer refreshes.\n- Focused tests cover empty state, disabled history and the time/update transaction contract; 40 notification tests and workspace clippy pass.\n\n## How to resume\n1. Read this handoff and inspect `heca/src/notification.rs` around `NotificationStore`, `NotificationStoreUpdate`, `transition_at` and `assert_invariants`.\n2. Start `T196` before editing.\n3. Implement the public push path only through `transition_at(now, ...)`: allocate the store-owned monotonic id, create canonical storage/index entries, enqueue, then promote into the first vacant stable slot without moving existing visible ids.\n4. Reuse P061 contracts: a producer yields `NotificationDraft`; action remains a name-keyed `heca_view::Intent`; projection remains `project_visible_toast`; no closure, bare `WmAction`, grid-ui queue logic or consumer-side lifecycle inference.\n5. Leave expiry, dedup policy, dismissal/archive, history trimming, toast host integration/action dispatch and lifecycle wake scheduling to their dedicated planned tasks (`T194`, `T195`, `T197`, `T199`–`T202`, `T395`, P059 and P060).\n6. Add deterministic tests with caller-supplied `Instant`; run `cargo test -p heca notification`, `cargo check -p heca`, and `cargo clippy --workspace --all-targets --all-features`.\n\n## Files touched\n- `heca/src/notification.rs`\n- `heca-config/src/settings.rs` (P061)\n- `config.default.toml` (P061)\n- `agent-rules.md` (session rule recording)\n\n## Blockers\nNone recorded.\n\n## Next steps\n- T196: store-owned monotonic ID allocation, push and stable-slot promotion.\n- Continue P056 in task order without exposing queue, slot, dedup or lifecycle policy to application consumers.\n- Only after store behavior is ready, proceed to the already-planned host integration and action-dispatch phases.\n\n## Recent decisions\n- `NotificationStore` alone owns mutable notification lifecycle; consumers consume a projection/update result and do not reconstruct domain state.\n- Four simultaneous cards are centralized in `MAX_VISIBLE_NOTIFICATIONS`, not scattered literals.\n- All store transitions accept caller-injected `Instant`; the store never reads the wall clock.\n- Notification actions preserve `heca_view::Intent`, not callbacks or only `WmAction`.\n- `NotificationSystem::System` falls back to the in-app ToastStack with one warning per session until P063; `None` suppresses presentation but preserves stderr/debug logging.\n- Runtime history is not persisted.\n\n## Reminder\nThis supersedes the P061 handoff. When P056 is fully resumed and its work is complete, clear this entity-scoped handoff with `handoff_clear(P056(F009))`.",
+  "handoffUpdatedAt": "2026-08-08T14:52:23.016Z",
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": []
