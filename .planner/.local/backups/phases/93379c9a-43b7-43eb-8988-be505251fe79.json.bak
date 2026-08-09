@@ -1,0 +1,600 @@
+{
+  "id": "93379c9a-43b7-43eb-8988-be505251fe79",
+  "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
+  "number": 56,
+  "shortId": "FVRFU",
+  "priority": 2,
+  "slug": "notification-02-store-queue-visibility-history",
+  "title": "notification-02: Store, Queue, Visibility + History",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Implementare coda d'attesa, quattro slot visibili stabili, dedup, expiry e cronologia limitata.",
+  "description": "Implementare `NotificationStore` come unica autorità per ID, dedup, lifecycle e proiezione. Gli stati operativi sono espliciti: in attesa, visibile e archiviata. Massimo quattro notifiche sono visibili contemporaneamente; quelle in attesa non iniziano il timer e non scadono. Una notifica promossa a visibile riceve l'istante di inizio/scadenza. Gli elementi già visibili non cambiano posto: un duplicato visibile aggiorna i dati nello stesso slot e riavvia il timer, un duplicato in attesa passa in testa alla coda, un duplicato presente solo nella cronologia viene riattivato. Dismiss e scadenza spostano una voce nella cronologia limitata. `next_expiry()` considera soltanto visibili non sticky e `heca/src/app/lifecycle.rs:168-172` usa il minimo tra prossimo frame animato e prossima scadenza, senza busy-loop. Tutte le API temporali ricevono `Instant now` per test deterministici.",
+  "notes": "",
+  "goals": [
+    "Nessuna notifica persa quando i quattro slot sono occupati.",
+    "Nessuna scadenza mentre una notifica è ancora in attesa.",
+    "Nessun salto o riordinamento delle card già visibili.",
+    "Dedup e cronologia con comportamento deterministico.",
+    "Wake-up esatto per la prossima scadenza."
+  ],
+  "nonGoals": [
+    "Pannello grafico della cronologia.",
+    "Persistenza della cronologia tra riavvii.",
+    "Routing app/system/none."
+  ],
+  "dependencies": [
+    "P061(F009) fornisce i tipi canonici."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "HashMap da sola non conserva ordine e slot; usare strutture esplicite e un indice dedup coerente.",
+    "Le notifiche sticky possono occupare slot indefinitamente: è comportamento intenzionale, ma la coda deve restare osservabile/testabile."
+  ],
+  "openQuestions": [],
+  "decisions": [
+    "Quattro slot visibili.",
+    "Timer avviato alla promozione, non al push.",
+    "Duplicato visibile aggiornato in loco; duplicato in attesa prioritario senza espellere una card visibile.",
+    "Cronologia limitata inclusa, nessuna UI di cronologia in questa fase."
+  ],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Transizioni in attesa→visibile→archiviata coperte da test.",
+    "Dedup non produce duplicati né spostamenti visivi.",
+    "next_expiry ignora coda e sticky.",
+    "Lifecycle dorme fino al prossimo evento necessario."
+  ],
+  "taskIds": [
+    "951e11b5-372b-46b7-a516-840784a11251",
+    "a395e3d6-2d24-495d-a496-22f9c60c5599",
+    "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
+    "cb773621-1f27-4e0d-ae2a-e012cea246e3",
+    "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
+    "113d5dd1-0639-4492-912c-aaf088e1587a",
+    "671754ad-5b4d-4472-997c-d379b4986ad5",
+    "d976a997-ed47-4b76-819d-2028cefa9eed",
+    "e2f02933-4071-40d3-a069-60da05391c32",
+    "a2ca34b3-b1c5-475e-8572-48295fe43878"
+  ],
+  "tasks": [
+    {
+      "id": "951e11b5-372b-46b7-a516-840784a11251",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 194,
+      "shortId": "83CXV",
+      "priority": 3,
+      "shortName": "store-expire",
+      "title": "Implement visibility-based expiry",
+      "status": "planned",
+      "description": "Implementare expiry soltanto per notifiche visibili auto-dismiss. Calcolare `visible_since`/`expires_at` alla promozione; le pending non hanno scadenza attiva. `expire_due(now)` archivia tutte le visibili dovute, preserva l'ordine degli slot rimasti, promuove pending negli spazi liberati e assegna loro un nuovo timer completo. Sticky non entra mai nell'insieme delle scadenze. Un update deduplicato visibile riavvia la durata.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-001-pending-non-scade-anche-dopo-tempo-lungo",
+          "number": 1,
+          "title": "Pending non scade anche dopo tempo lungo.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-002-timer-parte-alla-promozione",
+          "number": 2,
+          "title": "Timer parte alla promozione.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-003-sticky-ignorata",
+          "number": 3,
+          "title": "Sticky ignorata.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-004-pi-expiry-simultanee-gestite",
+          "number": 4,
+          "title": "Più expiry simultanee gestite.",
+          "checked": false
+        },
+        {
+          "id": "951e11b5-372b-46b7-a516-840784a11251-check-005-dedup-visibile-resetta-timer",
+          "number": 5,
+          "title": "Dedup visibile resetta timer.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:21:02.600Z"
+    },
+    {
+      "id": "a395e3d6-2d24-495d-a496-22f9c60c5599",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 195,
+      "shortId": "BBSS4",
+      "priority": 4,
+      "shortName": "store-dedup",
+      "title": "Implement dedup without visual jumps",
+      "status": "planned",
+      "description": "Implementare dedup per chiave esplicita. Duplicato visibile: mantenere ID e slot, sostituire dati canonici, aggiornare target/action e riavviare il timer. Duplicato pending: mantenere ID, aggiornare dati e spostare la voce in testa alla coda d'attesa senza espellere una card visibile. Duplicato presente soltanto in cronologia: rimuoverlo dalla cronologia, aggiornare i dati e riattivarlo come voce più recente secondo disponibilità slot, mantenendo l'ID per continuità dedup. Una chiave assente crea un nuovo ID. Mantenere coerente l'indice in dismiss/expiry/history trimming.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-001-caso-visible-in-place",
+          "number": 1,
+          "title": "Caso visible in-place.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-002-caso-pending-prioritario",
+          "number": 2,
+          "title": "Caso pending prioritario.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-003-caso-archived-riattivato",
+          "number": 3,
+          "title": "Caso archived riattivato.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-004-caso-nuova-chiave",
+          "number": 4,
+          "title": "Caso nuova chiave.",
+          "checked": false
+        },
+        {
+          "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-005-indice-coerente-dopo-trim",
+          "number": 5,
+          "title": "Indice coerente dopo trim.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:21:14.216Z"
+    },
+    {
+      "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 196,
+      "shortId": "MPHXW",
+      "priority": 1,
+      "shortName": "store-push",
+      "title": "Implement push, monotonic IDs and slot promotion",
+      "status": "planned",
+      "description": "Implementare `push(draft, now)` attraverso le invarianti dello store. Assegnare un nuovo `NotificationId` monotono soltanto quando la dedup non trova una voce esistente. Se esiste uno slot libero, promuovere immediatamente la voce e iniziare il timer; altrimenti inserirla nella coda senza expiry. Quando una visibile esce, promuovere la prima in attesa nello slot libero senza spostare le altre card. Gestire overflow ID in modo esplicito e testabile.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-001-id-non-riutilizzati",
+          "number": 1,
+          "title": "ID non riutilizzati.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-002-push-con-slot-libero",
+          "number": 2,
+          "title": "Push con slot libero.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-003-push-con-quattro-slot-pieni",
+          "number": 3,
+          "title": "Push con quattro slot pieni.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-004-promozione-nello-slot-liberato",
+          "number": 4,
+          "title": "Promozione nello slot liberato.",
+          "checked": false
+        },
+        {
+          "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979-check-005-nessun-riordinamento-degli-slot-occupati",
+          "number": 5,
+          "title": "Nessun riordinamento degli slot occupati.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:20:46.285Z"
+    },
+    {
+      "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 197,
+      "shortId": "SDKQ7",
+      "priority": 5,
+      "shortName": "store-dismiss",
+      "title": "Implement dismiss and archive transition",
+      "status": "planned",
+      "description": "Implementare la mutazione store invocata esclusivamente dall'handler registrato `DismissNotification`. Dismiss di una visibile/pending rimuove la voce dal relativo stato, la archivia con causa e timestamp, aggiorna gli indici e promuove pending se necessario. ID sconosciuto è un no-op deterministico riportabile all'handler, non un panic. Rispettare `dismissible`: il percorso utente non chiude una voce non dismissible; i producer/runtime possono avere un'API interna distinta per rimuovere errori risolti, come `config.reload.failed`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-001-dismiss-visible-e-pending",
+          "number": 1,
+          "title": "Dismiss visible e pending.",
+          "checked": false
+        },
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-002-unknown-id-no-panic",
+          "number": 2,
+          "title": "Unknown ID no panic.",
+          "checked": false
+        },
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-003-non-dismissible-bloccata-dal-percorso-utente",
+          "number": 3,
+          "title": "Non-dismissible bloccata dal percorso utente.",
+          "checked": false
+        },
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-004-rimozione-interna-per-risoluzione-producer",
+          "number": 4,
+          "title": "Rimozione interna per risoluzione producer.",
+          "checked": false
+        },
+        {
+          "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-005-promozione-e-indici-coerenti",
+          "number": 5,
+          "title": "Promozione e indici coerenti.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:21:23.399Z"
+    },
+    {
+      "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 198,
+      "shortId": "56N9J",
+      "priority": 0,
+      "shortName": "store-struct",
+      "title": "Define NotificationStore invariants and structures",
+      "status": "planned",
+      "description": "Definire `NotificationStore` con: contatore ID monotono; storage canonico; coda d'attesa ordinata; quattro slot visibili stabili; cronologia ordinata e limitata; indice `dedup_key → NotificationId`. Esplicitare invarianti e centralizzare tutte le transizioni per impedire ID presenti in più stati o indici dangling. Preferire API che accettano `Instant now` e restituiscono se la proiezione visibile è cambiata, così l'host aggiorna il signal soltanto quando necessario.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-001-strutture-pending-visible-history-index",
+          "number": 1,
+          "title": "Strutture pending/visible/history/index.",
+          "checked": false
+        },
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-002-invarianti-documentate",
+          "number": 2,
+          "title": "Invarianti documentate.",
+          "checked": false
+        },
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-003-api-now-injected",
+          "number": 3,
+          "title": "API now-injected.",
+          "checked": false
+        },
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-004-segnalazione-visible-projection-changed",
+          "number": 4,
+          "title": "Segnalazione visible projection changed.",
+          "checked": false
+        },
+        {
+          "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8-check-005-test-store-vuoto-e-limiti",
+          "number": 5,
+          "title": "Test store vuoto e limiti.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.842Z",
+      "updatedAt": "2026-08-06T14:20:28.742Z"
+    },
+    {
+      "id": "113d5dd1-0639-4492-912c-aaf088e1587a",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 199,
+      "shortId": "MXHQK",
+      "priority": 2,
+      "shortName": "visible-toasts",
+      "title": "Implement stable four-slot visible projection",
+      "status": "planned",
+      "description": "Esporre la proiezione ordinata delle notifiche visibili verso `Vec<ToastSpec>` mantenendo la posizione relativa degli elementi già visibili. Il limite è quattro. La rimozione lascia uno slot che viene riempito dalla prima pending; non risortare tutte le card per severity o timestamp a ogni aggiornamento. Fornire un modo economico per rilevare cambiamenti della proiezione e registrare target Hint per le sole affordance visibili.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-001-massimo-quattro-spec",
+          "number": 1,
+          "title": "Massimo quattro spec.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-002-ordine-stabile-dopo-dismiss-expiry-update",
+          "number": 2,
+          "title": "Ordine stabile dopo dismiss/expiry/update.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-003-promozione-pending-deterministica",
+          "number": 3,
+          "title": "Promozione pending deterministica.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-004-nessuna-severity-sort-continua",
+          "number": 4,
+          "title": "Nessuna severity sort continua.",
+          "checked": false
+        },
+        {
+          "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-005-test-sequenza-con-pi-di-quattro-notifiche",
+          "number": 5,
+          "title": "Test sequenza con più di quattro notifiche.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.843Z",
+      "updatedAt": "2026-08-06T14:20:54.383Z"
+    },
+    {
+      "id": "671754ad-5b4d-4472-997c-d379b4986ad5",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 200,
+      "shortId": "VPAR5",
+      "priority": 7,
+      "shortName": "store-action-for",
+      "title": "Implement notification action and target lookup",
+      "status": "planned",
+      "description": "Esporre lookup read-only per ID visibile che restituisce/clona la `NotificationAction` e i target runtime necessari all'host. Non eseguire l'Intent nello store. Rifiutare azioni per ID archiviati, rimossi o senza action; evitare borrow dello store attraverso il dispatch, perché l'handler dell'Intent può mutare AppState. Fornire lookup per dedup key usato dal producer reload per risolvere/rimuovere l'errore sticky.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-001-lookup-action-visibile",
+          "number": 1,
+          "title": "Lookup action visibile.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-002-no-action-per-archived-missing",
+          "number": 2,
+          "title": "No action per archived/missing.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-003-clone-prima-del-dispatch",
+          "number": 3,
+          "title": "Clone prima del dispatch.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-004-lookup-dedup-key",
+          "number": 4,
+          "title": "Lookup dedup key.",
+          "checked": false
+        },
+        {
+          "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-005-test-action-aggiornata-same-id",
+          "number": 5,
+          "title": "Test action aggiornata same-ID.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.843Z",
+      "updatedAt": "2026-08-06T14:21:40.150Z"
+    },
+    {
+      "id": "d976a997-ed47-4b76-819d-2028cefa9eed",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 201,
+      "shortId": "L3GQ7",
+      "priority": 8,
+      "shortName": "next-expiry",
+      "title": "Compute next visible notification expiry",
+      "status": "planned",
+      "description": "Implementare `next_expiry()` come minimo degli `expires_at` delle sole notifiche visibili auto-dismiss. Restituire `None` con sole pending/sticky o store vuoto. Dopo push, dedup, dismiss, expiry e promozione il risultato deve riflettere immediatamente il nuovo stato. Non chiamare `Instant::now` internamente.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-001-minimo-tra-visibili",
+          "number": 1,
+          "title": "Minimo tra visibili.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-002-pending-sticky-ignorate",
+          "number": 2,
+          "title": "Pending/sticky ignorate.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-003-aggiornamento-dopo-reset-timer",
+          "number": 3,
+          "title": "Aggiornamento dopo reset timer.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-004-none-corretto",
+          "number": 4,
+          "title": "None corretto.",
+          "checked": false
+        },
+        {
+          "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-005-test-con-scadenze-uguali",
+          "number": 5,
+          "title": "Test con scadenze uguali.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.844Z",
+      "updatedAt": "2026-08-06T14:21:45.770Z"
+    },
+    {
+      "id": "e2f02933-4071-40d3-a069-60da05391c32",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 202,
+      "shortId": "MZ5EZ",
+      "priority": 9,
+      "shortName": "lifecycle-expiry",
+      "title": "Integrate notification expiry into lifecycle scheduling",
+      "status": "planned",
+      "description": "Integrare store e `next_expiry()` in `heca/src/app/lifecycle.rs:87-172`. A ogni tick pertinente chiamare `expire_due(now)`, sincronizzare signal/hint soltanto se cambia la proiezione e richiedere redraw. Nel calcolo `ControlFlow`, scegliere il minimo tra prossimo frame necessario alle animazioni e prossima scadenza; se nessuno esiste usare Wait. Evitare wake-up per pending/sticky e busy-loop quando una deadline è già trascorsa: processarla prima di impostare il prossimo wait.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-001-expire-prima-del-nuovo-wait",
+          "number": 1,
+          "title": "Expire prima del nuovo wait.",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-002-min-frame-deadline-notification-deadline",
+          "number": 2,
+          "title": "Min(frame_deadline, notification_deadline).",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-003-wait-con-sole-pending-sticky",
+          "number": 3,
+          "title": "Wait con sole pending/sticky.",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-004-redraw-sync-su-transizione",
+          "number": 4,
+          "title": "Redraw/sync su transizione.",
+          "checked": false
+        },
+        {
+          "id": "e2f02933-4071-40d3-a069-60da05391c32-check-005-test-o-helper-puro-per-scelta-deadline",
+          "number": 5,
+          "title": "Test o helper puro per scelta deadline.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:32.844Z",
+      "updatedAt": "2026-08-06T14:21:54.468Z"
+    },
+    {
+      "id": "a2ca34b3-b1c5-475e-8572-48295fe43878",
+      "phaseId": "93379c9a-43b7-43eb-8988-be505251fe79",
+      "number": 395,
+      "shortId": "252SA",
+      "priority": 6,
+      "shortName": "notification-history",
+      "title": "Implement bounded runtime notification history",
+      "status": "planned",
+      "description": "Implementare la cronologia runtime limitata secondo `notification_history_limit` definito in `heca-config/src/settings.rs`. Archiviare almeno causa (`Dismissed`, `Expired`, `Resolved`), timestamp e snapshot della notifica; applicare trimming deterministico degli elementi più vecchi e mantenere coerente l'indice dedup. Esporre API read-only per futuri consumer e test, senza costruire una schermata UI e senza persistenza su disco. Una notifica deduplicata presente soltanto nella cronologia viene rimossa dalla cronologia e riattivata secondo la policy dello store.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-001-record-con-causa-e-timestamp",
+          "number": 1,
+          "title": "Record con causa e timestamp.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-002-limite-configurabile-applicato",
+          "number": 2,
+          "title": "Limite configurabile applicato.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-003-trim-pi-vecchi-e-indice-coerente",
+          "number": 3,
+          "title": "Trim più vecchi e indice coerente.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-004-api-read-only",
+          "number": 4,
+          "title": "API read-only.",
+          "checked": false
+        },
+        {
+          "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-005-test-riattivazione-da-history-e-limit-1-100",
+          "number": 5,
+          "title": "Test riattivazione da history e limit=1/100.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-06T14:13:50.024Z",
+      "updatedAt": "2026-08-06T14:21:28.931Z"
+    }
+  ],
+  "createdAt": "2026-07-03T22:50:20.125Z",
+  "updatedAt": "2026-08-06T14:21:54.468Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

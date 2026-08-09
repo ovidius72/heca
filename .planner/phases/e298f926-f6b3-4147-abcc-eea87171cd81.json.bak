@@ -52,7 +52,8 @@
     "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
     "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
     "98793de9-2224-4fb4-b156-e989e3301033",
-    "e1a0a159-85ee-489c-8347-688c7b4e46a6"
+    "e1a0a159-85ee-489c-8347-688c7b4e46a6",
+    "c491924e-458b-4324-8b5a-b40652046a30"
   ],
   "tasks": [
     {
@@ -63,8 +64,8 @@
       "priority": 2,
       "shortName": "mount-toaststack",
       "title": "Mount ToastStack as a persistent Overlay layer",
-      "status": "planned",
-      "description": "Durante l'inizializzazione chrome/app registrare ToastStack nel `LayerRegistry` di `heca/src/chrome/layers.rs` con `LayerBand::Overlay`, `LayerKind::Persistent`, `modal=false`, `covers_content=false`. Il root riempie il viewport per consentire corner anchoring ma non diventa un target opaco. Conservare il `LayerId` nel NotificationRuntime. Affidarsi ai pass generici `layout_layers`, `paint_layers` e tick; non inserire ToastStack nel Flex restituito da `chrome_root` e non aggiungere pass di paint dedicati.",
+      "status": "done",
+      "description": "Durante l'inizializzazione chrome/app registrare ToastStack nel `LayerRegistry` di `heca/src/chrome/layers.rs` con `LayerBand::Overlay`, `LayerKind::Persistent`, `modal=false`, `covers_content=false`. Il root riempie il viewport per consentire corner anchoring ma non diventa un target opaco. Conservare il `LayerId` nel NotificationRuntime. Affidarsi ai pass generici `layout_layers`, `paint_layers` e tick; non inserire ToastStack nel Flex restituito da `chrome_root` e non aggiungere pass di paint dedicati.\n\n---\n**Completion summary:**\nToastStack retained montato lazy-once nel LayerRegistry come Overlay Persistent, non modale e non coprente; LayerId conservato nel runtime. Layout/paint/tick usano i pass generici.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -103,10 +104,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T22:02:57.032Z",
+      "completedAt": "2026-08-08T22:03:49.438Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-06T14:20:54.383Z"
+      "updatedAt": "2026-08-08T22:03:49.438Z"
     },
     {
       "id": "3206fec1-67f3-4190-98ca-7a9d96492140",
@@ -116,8 +117,8 @@
       "priority": 5,
       "shortName": "sync-toast-signal",
       "title": "Synchronize visible notifications into the retained layer",
-      "status": "planned",
-      "description": "Aggiungere un helper di sincronizzazione analogo agli altri retained runtime: legge la proiezione stabile dello store, converte tramite l'adapter P061/T193 e aggiorna il signal soltanto se dati/ordine visibile sono cambiati. Registrare/rimuovere nello stesso pass i target Hint action/dismiss delle sole notifiche visibili, evitando target obsoleti dopo dismiss/expiry. L'helper restituisce un booleano per redraw e viene chiamato dopo push, dedup, dismiss, expiry, reload e cambi rilevanti, non tramite polling cieco per frame.",
+      "status": "done",
+      "description": "Aggiungere un helper di sincronizzazione analogo agli altri retained runtime: legge la proiezione stabile dello store, converte tramite l'adapter P061/T193 e aggiorna il signal soltanto se dati/ordine visibile sono cambiati. Registrare/rimuovere nello stesso pass i target Hint action/dismiss delle sole notifiche visibili, evitando target obsoleti dopo dismiss/expiry. L'helper restituisce un booleano per redraw e viene chiamato dopo push, dedup, dismiss, expiry, reload e cambi rilevanti, non tramite polling cieco per frame.\n\n---\n**Completion summary:**\nAggiunto sync retained: il runtime proietta store→signal solo se Vec/ordine cambia; lifecycle lo invoca dopo expiry e richiede redraw. Target opachi restano None fino alla fase hint dedicata.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -156,10 +157,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T22:03:51.926Z",
+      "completedAt": "2026-08-08T22:14:38.652Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-06T14:21:23.400Z"
+      "updatedAt": "2026-08-08T22:14:38.652Z"
     },
     {
       "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
@@ -169,8 +170,8 @@
       "priority": 1,
       "shortName": "toast-signal",
       "title": "Create and retain the visible ToastSpec signal",
-      "status": "planned",
-      "description": "Creare una sola `Signal<Vec<ToastSpec>>` nel NotificationRuntime e passarla a ToastStack al mount del layer. Non ricreare signal o ToastStack per frame. Il signal contiene soltanto la proiezione dei quattro slot visibili e usa ID/target stabili; pending/history non entrano nella scena né nell'HintTargetRegistry. Verificare che la clonazione dei dati sia limitata alla proiezione necessaria.",
+      "status": "done",
+      "description": "Creare una sola `Signal<Vec<ToastSpec>>` nel NotificationRuntime e passarla a ToastStack al mount del layer. Non ricreare signal o ToastStack per frame. Il signal contiene soltanto la proiezione dei quattro slot visibili e usa ID/target stabili; pending/history non entrano nella scena né nell'HintTargetRegistry. Verificare che la clonazione dei dati sia limitata alla proiezione necessaria.\n\n---\n**Completion summary:**\nIl signal unico `NotificationRuntime::visible_toasts` è creato con il runtime e trattenuto per tutta la vita AppState; T203 lo consumerà nel ToastStack retained e T204 lo aggiornerà solo dopo una proiezione cambiata.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -209,10 +210,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T21:56:42.280Z",
+      "completedAt": "2026-08-08T21:56:57.476Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-06T14:20:46.286Z"
+      "updatedAt": "2026-08-08T21:56:57.476Z"
     },
     {
       "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
@@ -222,8 +223,8 @@
       "priority": 4,
       "shortName": "toast-callback-events",
       "title": "Bridge Toast callbacks into the app event loop",
-      "status": "planned",
-      "description": "Collegare i callback generici `on_action(id)` e `on_dismiss(id)` di ToastStack al proxy del ciclo eventi. Dismiss costruisce/trasporta l'Intent `notification.dismiss { id }`; action trasporta soltanto l'ID necessario a recuperare l'Intent corrente dallo store sul thread app. Nessuna closure widget cattura `&mut AppState`, nessuna callback esegue direttamente handler o store mutation. Riutilizzare `AppEvent::ChromeIntent` quando il payload è già un Intent; introdurre un evento specifico action-requested soltanto se necessario per il lookup late-bound.",
+      "status": "done",
+      "description": "Collegare i callback generici `on_action(id)` e `on_dismiss(id)` di ToastStack al proxy del ciclo eventi. Dismiss costruisce/trasporta l'Intent `notification.dismiss { id }`; action trasporta soltanto l'ID necessario a recuperare l'Intent corrente dallo store sul thread app. Nessuna closure widget cattura `&mut AppState`, nessuna callback esegue direttamente handler o store mutation. Riutilizzare `AppEvent::ChromeIntent` quando il payload è già un Intent; introdurre un evento specifico action-requested soltanto se necessario per il lookup late-bound.\n\n---\n**Completion summary:**\nToastStack callback invia AppEvent con id; thread UI esegue dismiss tramite store o risolve l’Intent late-bound e passa per dispatch_intent. Nessuna callback cattura AppState.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -262,10 +263,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T22:14:41.239Z",
+      "completedAt": "2026-08-08T22:14:47.436Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-06T14:21:14.216Z"
+      "updatedAt": "2026-08-08T22:14:47.436Z"
     },
     {
       "id": "98793de9-2224-4fb4-b156-e989e3301033",
@@ -275,8 +276,8 @@
       "priority": 3,
       "shortName": "toast-pass-through",
       "title": "Route non-modal overlay pointer events with pass-through",
-      "status": "planned",
-      "description": "Estendere il routing attuale dei layer in `heca/src/chrome/layers.rs:212-238` e nei call site input: se esiste un modal visibile, esso resta il target esclusivo. Altrimenti dispatch pointer move/press/release ai layer non modali visibili in ordine front-to-back; fermarsi al primo `Handled::Yes`, continuare su `Handled::No`, quindi consegnare al chrome/content sottostante. Non creare un caso speciale ToastStack. Verificare capture tra press e release, hover leave quando cambia layer e nessun doppio click. Il comportamento deve corrispondere alla ricetta showcase `heca-renderer/examples/showcase.rs:2873-2880`.",
+      "status": "done",
+      "description": "Estendere il routing attuale dei layer in `heca/src/chrome/layers.rs:212-238` e nei call site input: se esiste un modal visibile, esso resta il target esclusivo. Altrimenti dispatch pointer move/press/release ai layer non modali visibili in ordine front-to-back; fermarsi al primo `Handled::Yes`, continuare su `Handled::No`, quindi consegnare al chrome/content sottostante. Non creare un caso speciale ToastStack. Verificare capture tra press e release, hover leave quando cambia layer e nessun doppio click. Il comportamento deve corrispondere alla ricetta showcase `heca-renderer/examples/showcase.rs:2873-2880`.\n\n---\n**Completion summary:**\nLayerRegistry ora offre pointer events ai layer non-modali front-to-back e prosegue con Handled::No; il modale resta esclusivo. dispatch_modal_pointer inoltra poi a chrome/content solo se nessun overlay gestisce l’evento. Validazione: cargo check, 55 test notification, clippy e diff-check pass (un warning preesistente/temporaneo sul flag fallback).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -315,10 +316,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T22:15:32.978Z",
+      "completedAt": "2026-08-08T22:15:39.624Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-06T14:21:02.601Z"
+      "updatedAt": "2026-08-08T22:15:39.624Z"
     },
     {
       "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6",
@@ -328,8 +329,8 @@
       "priority": 0,
       "shortName": "appstate-store",
       "title": "Add NotificationRuntime to AppState",
-      "status": "planned",
-      "description": "Aggiungere ad `heca/src/app_state.rs` un runtime coeso che possiede `NotificationStore`, signal degli spec visibili, identificativo del layer persistente e flag one-shot del fallback system. Inizializzarlo insieme agli altri runtime AppState e aggiornarne configurazione/limite cronologia al reload. Non distribuire questi campi tra ChromeSignals e HecaApp senza un'unica ownership. Il runtime deve essere testabile senza Window e non deve possedere ActionRegistry.",
+      "status": "done",
+      "description": "Aggiungere ad `heca/src/app_state.rs` un runtime coeso che possiede `NotificationStore`, signal degli spec visibili, identificativo del layer persistente e flag one-shot del fallback system. Inizializzarlo insieme agli altri runtime AppState e aggiornarne configurazione/limite cronologia al reload. Non distribuire questi campi tra ChromeSignals e HecaApp senza un'unica ownership. Il runtime deve essere testabile senza Window e non deve possedere ActionRegistry.\n\n---\n**Completion summary:**\nCreato `NotificationRuntime` testabile senza Window, proprietario di store, signal Vec<ToastSpec>, LayerId opzionale e flag fallback; AppState ora lo usa e reload aggiorna history limit. Il mount/sync consumeranno i campi nei task T203–T205.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -351,7 +352,7 @@
           "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-003-accesso-store-signal-layer-id",
           "number": 3,
           "title": "Accesso store/signal/layer id.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-004-flag-fallback-one-shot",
@@ -368,14 +369,55 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T21:55:08.568Z",
+      "completedAt": "2026-08-08T21:56:38.886Z",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-06T14:20:28.741Z"
+      "updatedAt": "2026-08-08T21:56:38.886Z"
+    },
+    {
+      "id": "c491924e-458b-4324-8b5a-b40652046a30",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 401,
+      "shortId": "BZZWG",
+      "priority": 6,
+      "shortName": "consolidate-notification-actio",
+      "title": "Consolidate notification action API contract",
+      "status": "in-progress",
+      "description": "Aggiornare la descrizione di F009 e `notification-system-plane.md` con le decisioni API: massimo tre azioni inline per toast, una primary e le restanti secondary/destructive; icon e variante vivono su NotificationAction/ToastActionSpec, non su Intent; Intent resta name-keyed con args; app handler usa NotificationRuntime, chiamanti senza AppState usano NotificationSender/EventLoopProxy. Nessuna implementazione UI in questo task.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c491924e-458b-4324-8b5a-b40652046a30-check-001-aggiornare-descrizione-feature",
+          "number": 1,
+          "title": "Aggiornare descrizione feature",
+          "checked": false
+        },
+        {
+          "id": "c491924e-458b-4324-8b5a-b40652046a30-check-002-aggiornare-piano-notification-system-plane-md",
+          "number": 2,
+          "title": "Aggiornare piano notification-system-plane.md",
+          "checked": false
+        },
+        {
+          "id": "c491924e-458b-4324-8b5a-b40652046a30-check-003-verificare-coerenza-intent-presentazione",
+          "number": 3,
+          "title": "Verificare coerenza Intent/presentazione",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-08T22:48:08.195Z",
+      "completedAt": "",
+      "createdAt": "2026-08-08T22:48:03.424Z",
+      "updatedAt": "2026-08-08T22:48:08.195Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:23.400Z",
+  "updatedAt": "2026-08-08T22:48:08.195Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

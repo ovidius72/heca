@@ -1,0 +1,329 @@
+{
+  "id": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+  "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
+  "number": 62,
+  "shortId": "6LMC3",
+  "priority": 6,
+  "slug": "notification-06-reload-config-producer",
+  "title": "notification-06: Reload Config Producer",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Produrre feedback deduplicato sul reload preservando la configurazione valida e rimuovendo errori risolti.",
+  "description": "Rendere `HecaApp::reload_config` in `heca/src/main.rs:157-191` result-aware senza applicare configurazioni parziali. Un fallimento mantiene config, keymap, tema e setting correnti, continua a scrivere su stderr e invia una notifica sticky Danger deduplicata con chiave `config.reload.failed` e azione Retry (`Intent` verso l'azione reload esistente, `dismiss_after=false`). Un successo applica prima la nuova configurazione, incluso `notification_system`, rimuove esplicitamente qualsiasi `config.reload.failed` ancora attivo/in attesa, poi emette o aggiorna `config.reload.success`. Il fallimento usa il modo notifiche ancora valido; il successo usa il nuovo modo appena applicato. Gli errori ripetuti aggiornano lo stesso ID e quindi la card visibile in loco.",
+  "notes": "",
+  "goals": [
+    "Un config file invalido non degrada lo stato attivo.",
+    "Retry usa la stessa azione registrata del keybinding/RPC.",
+    "Un errore risolto non resta sticky.",
+    "Log stderr conservati in tutte le modalità."
+  ],
+  "nonGoals": [
+    "Cambiare il formato generale del config.",
+    "Mostrare confirmation modal.",
+    "Nascondere errori quando notification_system=none: restano nei log."
+  ],
+  "dependencies": [
+    "P055(F009) fornisce il router app/system/none.",
+    "P059(F009) fornisce dispatch Intent e dismiss registrato."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Ordine successo: applicare nuova config prima di decidere il canale, ma rimuovere l'errore anche se la nuova modalità è none.",
+    "Evitare successi duplicati a ogni frame: emettere soltanto sull'evento reload."
+  ],
+  "openQuestions": [],
+  "decisions": [
+    "Successo rimuove `config.reload.failed` prima della notifica success.",
+    "Failure sticky con Retry non auto-dismissivo.",
+    "Stderr non viene sostituito dalle notifiche."
+  ],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Test success/failure/retry con config precedente preservata.",
+    "Cambio runtime app/system/none effettivo senza restart.",
+    "Nessuna card di errore residua dopo Retry riuscito.",
+    "Dedup stesso ID aggiorna testo/timer correttamente."
+  ],
+  "taskIds": [
+    "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9",
+    "2578fea2-2f40-4c58-b39e-6efda6534a1f",
+    "3d4fb332-e3f1-40a9-ab42-55b10cd53b14",
+    "b0b0c8f3-452c-4247-9e7f-09f38260d8b7",
+    "f024c6cc-af06-4908-97d8-acccd9c67c2b"
+  ],
+  "tasks": [
+    {
+      "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9",
+      "phaseId": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+      "number": 214,
+      "shortId": "X27ET",
+      "priority": 1,
+      "shortName": "reload-notification-mode",
+      "title": "Apply notification settings during runtime reload",
+      "status": "planned",
+      "description": "Nel reload config di `heca/src/main.rs:157-191`, applicare atomicamente `notification_system` e `notification_history_limit` al NotificationRuntime insieme agli altri setting soltanto dopo parsing/validation riusciti. Un fallimento conserva valori correnti. Un limite history ridotto applica trimming deterministico; il cambio di canale influenza soltanto notifiche future, senza migrare o riemettere quelle soppresse. Il successo producer viene instradato con il nuovo modo.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-001-apply-solo-dopo-successo",
+          "number": 1,
+          "title": "Apply solo dopo successo.",
+          "checked": false
+        },
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-002-failure-conserva-runtime",
+          "number": 2,
+          "title": "Failure conserva runtime.",
+          "checked": false
+        },
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-003-history-limit-trim",
+          "number": 3,
+          "title": "History limit trim.",
+          "checked": false
+        },
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-004-cambio-canale-future-only",
+          "number": 4,
+          "title": "Cambio canale future-only.",
+          "checked": false
+        },
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-005-test-senza-restart",
+          "number": 5,
+          "title": "Test senza restart.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-06T14:20:46.285Z"
+    },
+    {
+      "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f",
+      "phaseId": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+      "number": 215,
+      "shortId": "LBQPE",
+      "priority": 0,
+      "shortName": "reload-result",
+      "title": "Make reload_config return a structured Result",
+      "status": "planned",
+      "description": "Rifattorizzare `HecaApp::reload_config` in `heca/src/main.rs:157-191` affinché separi caricamento/validazione/applicazione e restituisca un risultato strutturato utile al producer. Non applicare parzialmente keymap/theme/settings in caso di errore. Il risultato di errore deve fornire un messaggio user-facing sanificato e mantenere la causa dettagliata per stderr. Tutte le entrate reload (keybinding, RPC, Retry notification) continuano a passare dall'azione registrata esistente.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f-check-001-result-strutturato",
+          "number": 1,
+          "title": "Result strutturato.",
+          "checked": false
+        },
+        {
+          "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f-check-002-apply-atomico",
+          "number": 2,
+          "title": "Apply atomico.",
+          "checked": false
+        },
+        {
+          "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f-check-003-messaggio-ui-dettaglio-log",
+          "number": 3,
+          "title": "Messaggio UI + dettaglio log.",
+          "checked": false
+        },
+        {
+          "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f-check-004-tutte-le-entrate-stesso-handler",
+          "number": 4,
+          "title": "Tutte le entrate stesso handler.",
+          "checked": false
+        },
+        {
+          "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f-check-005-test-config-invalida-preserva-stato",
+          "number": 5,
+          "title": "Test config invalida preserva stato.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-06T14:20:28.742Z"
+    },
+    {
+      "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14",
+      "phaseId": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+      "number": 216,
+      "shortId": "SHG5S",
+      "priority": 3,
+      "shortName": "reload-success-toast",
+      "title": "Emit reload success and resolve prior failure",
+      "status": "planned",
+      "description": "Dopo un reload riuscito e l'applicazione della nuova configurazione, rimuovere tramite API interna di risoluzione qualsiasi notifica con dedup key `config.reload.failed` da visible/pending, archiviandola come Resolved. Poi inviare tramite il delivery router una Success auto-dismiss con dedup `config.reload.success`. Se la nuova modalità è none non compare nulla ma l'errore precedente deve comunque essere risolto; se è system senza backend usa il fallback app. Evitare emissioni su startup normale.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14-check-001-resolve-failure-prima-del-success",
+          "number": 1,
+          "title": "Resolve failure prima del success.",
+          "checked": false
+        },
+        {
+          "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14-check-002-usare-nuovo-notification-system",
+          "number": 2,
+          "title": "Usare nuovo notification_system.",
+          "checked": false
+        },
+        {
+          "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14-check-003-success-deduplicato-auto-dismiss",
+          "number": 3,
+          "title": "Success deduplicato auto-dismiss.",
+          "checked": false
+        },
+        {
+          "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14-check-004-none-risolve-senza-mostrare",
+          "number": 4,
+          "title": "None risolve senza mostrare.",
+          "checked": false
+        },
+        {
+          "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14-check-005-solo-evento-reload",
+          "number": 5,
+          "title": "Solo evento reload.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-06T14:21:02.601Z"
+    },
+    {
+      "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7",
+      "phaseId": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+      "number": 217,
+      "shortId": "SL24P",
+      "priority": 2,
+      "shortName": "reload-failure-toast",
+      "title": "Emit sticky reload failure with Retry Intent",
+      "status": "planned",
+      "description": "In caso di reload fallito, mantenere integralmente config/keymap/theme/settings correnti e inviare tramite il router corrente una notifica Danger sticky, dismissible, dedup `config.reload.failed`. Body contiene errore sanificato; action label Retry conserva un `heca_view::Intent` verso l'azione reload registrata con `dismiss_after=false`. Errori successivi aggiornano stesso ID/slot e testo, riavviando soltanto gli aspetti applicabili (sticky non ha expiry). Il Retry non chiude la notifica: soltanto un reload realmente riuscito la risolve in T216.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7-check-001-config-corrente-preservata",
+          "number": 1,
+          "title": "Config corrente preservata.",
+          "checked": false
+        },
+        {
+          "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7-check-002-danger-sticky-dedup",
+          "number": 2,
+          "title": "Danger sticky dedup.",
+          "checked": false
+        },
+        {
+          "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7-check-003-retry-intent-name-keyed",
+          "number": 3,
+          "title": "Retry Intent name-keyed.",
+          "checked": false
+        },
+        {
+          "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7-check-004-dismiss-after-false",
+          "number": 4,
+          "title": "dismiss_after false.",
+          "checked": false
+        },
+        {
+          "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7-check-005-errore-aggiornato-same-id",
+          "number": 5,
+          "title": "Errore aggiornato same-ID.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-06T14:20:54.384Z"
+    },
+    {
+      "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b",
+      "phaseId": "e8d54d82-7357-4436-9b81-22cf2eaef545",
+      "number": 218,
+      "shortId": "4WN7W",
+      "priority": 4,
+      "shortName": "reload-stderr",
+      "title": "Preserve stderr diagnostics for reload outcomes",
+      "status": "planned",
+      "description": "Mantenere i log stderr/debug esistenti durante il refactor: errore completo su failure anche con notification_system=none; messaggio conciso su successo secondo convenzione corrente; warning system-backend assente gestito una sola volta dal router, non dal producer. Non includere percorsi sensibili o contenuti non necessari nel testo visuale. Aggiungere test/capture dove praticabile o isolare la formattazione in helper puro.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b-check-001-failure-sempre-nei-log",
+          "number": 1,
+          "title": "Failure sempre nei log.",
+          "checked": false
+        },
+        {
+          "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b-check-002-none-non-sopprime-diagnostics",
+          "number": 2,
+          "title": "None non sopprime diagnostics.",
+          "checked": false
+        },
+        {
+          "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b-check-003-testo-ui-sanificato",
+          "number": 3,
+          "title": "Testo UI sanificato.",
+          "checked": false
+        },
+        {
+          "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b-check-004-warning-system-non-duplicato",
+          "number": 4,
+          "title": "Warning system non duplicato.",
+          "checked": false
+        },
+        {
+          "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b-check-005-nessun-doppio-log-per-retry",
+          "number": 5,
+          "title": "Nessun doppio log per Retry.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:52:28.341Z",
+      "updatedAt": "2026-08-06T14:21:14.216Z"
+    }
+  ],
+  "createdAt": "2026-07-03T22:50:20.126Z",
+  "updatedAt": "2026-08-06T14:21:14.216Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

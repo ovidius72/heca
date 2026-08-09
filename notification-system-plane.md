@@ -381,7 +381,8 @@ NotificationAction {
 
 - Do not store `Box<dyn Fn()>`.
 - Do not mutate `AppState` from toast callbacks.
-- Do not add multiple actions in v1; `ToastSpec` supports one inline action.
+- Do not store `primary`/`secondary`/`destructive` in `Intent`: they are `NotificationAction` presentation metadata.
+- Do not exceed three inline actions; more choices must open a Dialog or menu.
 
 #### Validation
 
@@ -960,6 +961,23 @@ Verify `ToastStack` consumes only pointer events on toast cards.
 - Click action triggers `NotificationAction` event.
 
 ---
+
+## Ergonomic application API
+
+Code with `&mut AppState` uses `state.notifications.notify(draft)`; it owns store
+mutation, signal sync and redraw. Code that must not depend on `AppState` receives a
+cloneable `NotificationSender`, which posts `AppEvent::Notify(NotificationDraft)` to
+the event loop. This preserves one app-thread owner of lifecycle state while making
+notifications easy to request from backends, providers and components.
+
+```rust
+notifications
+    .notify("Connection failed")
+    .warning()
+    .primary_action("Retry", Glyph::ArrowClockwise, Intent::new("backend.retry"))
+    .secondary_action("Cancel", Glyph::X, Intent::new("backend.cancel"))
+    .send();
+```
 
 # Feature F4 — Toast Action Dispatch
 

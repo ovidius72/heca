@@ -85,6 +85,7 @@ fn ring_system_bell() {
 }
 
 pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut AppState) {
+    crate::chrome::mount_notification_toasts(state);
     let should_timeout = matches!(
         state.input_mode,
         InputMode::Prefix | InputMode::Chord { .. }
@@ -94,6 +95,12 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     if should_timeout {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
+        state.mark_full_redraw();
+    }
+
+    if state.notifications.store.expire_due(Instant::now()).visible_projection_changed()
+        && state.notifications.sync_visible_toasts(&mut state.hint_targets)
+    {
         state.mark_full_redraw();
     }
 
@@ -160,15 +167,14 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.window.request_redraw();
     }
 
-    if state.session.are_animations_ongoing()
+    let animation_deadline = (state.session.are_animations_ongoing()
         || terminal_animating
         || image_animating
-        || chrome_animating
-    {
-        event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + crate::chrome::FRAME_INTERVAL,
-        ));
-    } else {
-        event_loop.set_control_flow(ControlFlow::Wait);
+        || chrome_animating)
+        .then(|| Instant::now() + crate::chrome::FRAME_INTERVAL);
+    match (animation_deadline, state.notifications.store.next_expiry()) {
+        (Some(frame), Some(expiry)) => event_loop.set_control_flow(ControlFlow::WaitUntil(frame.min(expiry))),
+        (Some(deadline), None) | (None, Some(deadline)) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
+        (None, None) => event_loop.set_control_flow(ControlFlow::Wait),
     }
 }

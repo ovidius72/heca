@@ -1,0 +1,336 @@
+{
+  "id": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+  "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
+  "number": 58,
+  "shortId": "9N7V3",
+  "priority": 0,
+  "slug": "notification-00-toast-toaststack-widget-foundation",
+  "title": "notification-00: Toast / ToastStack Widget Foundation",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Correggere Toast e ToastStack secondo la widget architecture e aggiornare lo showcase prima dell'integrazione Heca.",
+  "description": "Prerequisito UI obbligatorio. L'implementazione corrente in `heca-grid-ui/src/widgets/toast.rs:96-390` misura, dipinge e hit-testa manualmente icona, testo, azione e chiusura; deve essere trasformata in composizione reale tramite `Base.children`, riusando widget generici esistenti e leggendo lo stile dal `Theme`. `ToastStack` deve riconciliare anche le modifiche di uno `ToastSpec` con ID invariato, non soltanto aggiunte/rimozioni. Azione e chiusura devono esporre target stabili utilizzabili dal sistema globale KeyHint senza dipingere keycap manuali. Aggiornare il riferimento vivo in `heca-renderer/examples/showcase.rs:311-320,509-519,2873-2880,3050-3061` per dimostrare inserimento, aggiornamento deduplicato, azione, chiusura, animazione e pass-through. Questa fase non introduce concetti Heca (`Intent`, AppState, provider) dentro grid-ui.",
+  "notes": "",
+  "goals": [
+    "Toast composto da veri widget figli percorsi dal framework per layout, paint e routing.",
+    "ToastStack aggiorna correttamente lo stesso ID preservando lo stato transitorio sensato.",
+    "Affordance azione/chiusura indirizzabili da mouse, focus e KeyHint tramite seam generici.",
+    "Showcase allineato al contratto reale e usato come test d'integrazione visuale."
+  ],
+  "nonGoals": [
+    "Store, deduplicazione applicativa o timer Heca.",
+    "Importare heca_view o tipi applicativi dentro heca-grid-ui.",
+    "Dipingere manualmente keycap o ricostruire inline la forma Toast nell'app."
+  ],
+  "dependencies": [
+    "Widget framework routing di P084(F004) quando necessario; non aggiungere un nuovo router locale alternativo."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Ricostruire lo stesso ID può perdere hover/focus/animazione: distinguere aggiornamento dei dati da sostituzione completa.",
+    "ToastStack è un overlay pass-through: la composizione non deve trasformare l'intero viewport in un target opaco."
+  ],
+  "openQuestions": [],
+  "decisions": [
+    "L'attuale fase differita KeyHint è sostituita dalla fondazione widget perché il sistema globale HintKey è già atterrato.",
+    "I target UI restano generici; Heca assocerà successivamente target runtime a Intent applicativi."
+  ],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Nessuna affordance Toast composta tramite pittura manuale.",
+    "Aggiornamento dello stesso ID visibile nello showcase e coperto da test.",
+    "Click fuori dalle card restituisce Handled::No; azione/chiusura consumano soltanto i propri eventi.",
+    "docs/widgets.md e showcase descrivono l'API effettiva."
+  ],
+  "taskIds": [
+    "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3",
+    "ba7b9582-f445-4e8c-a585-709b8471ea47",
+    "80f9eec0-65cf-4929-a81c-d29491985168",
+    "ef72c9de-8dbe-4948-a2e5-9cd374175ae3",
+    "562b75ec-1a8a-4e1c-a038-70464bfb87a5"
+  ],
+  "tasks": [
+    {
+      "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3",
+      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+      "number": 228,
+      "shortId": "S54BN",
+      "priority": 0,
+      "shortName": "toast-keycap-paint",
+      "title": "Refactor Toast into real child composition",
+      "status": "done",
+      "description": "In `heca-grid-ui/src/widgets/toast.rs:96-390` sostituire misura, paint e hit-test manuali di icona, titolo, corpo, azione e chiusura con veri widget figli conservati in `Base.children`. Riutilizzare i widget generici già disponibili (`Flex`/`Surface`, `Icon`, `Label`, `Button` o equivalente, `IconButton`) e i relativi builder; `Toast` può dipingere soltanto il chrome che non appartiene già a un figlio. Tutti i valori visivi e dimensionali devono derivare da `Theme`/token semantici, non da nuove costanti locali. Preservare il contratto pubblico utile di `ToastSpec` e i comportamenti disabled/focus/hover/press/animation. Verificare che layout, paint e capture/bubble attraversino realmente i figli.\n\n---\n**Completion summary:**\nCompletato il refactor di `Toast` verso la composizione reale. `heca-grid-ui/src/widgets/toast.rs` ora conserva slot stabili `[leading, content, dismiss]` in `Base.children`: `Icon`, `Label`, `Button` e `IconButton` possiedono layout, paint, hover, focus, press e hit-test; Toast dipinge soltanto superficie severity-tinted, bracket frame, flash/focus/dim theme-driven. Padding e gap usano `Spacing`, dimensioni controllo usano `WidgetSize`, body/title usano Label truncate; rimossi Rects/Region, metriche carattere e coordinate manuali. Action/dismiss condividono il signal disabled del parent e ricevono gli eventi prima del bubble click della card.\n\n`heca-grid-ui/src/widgets/toast_stack.rs` esegue `LayoutEngine` per ogni Toast e usa `shift_subtree` per collocare root e figli nello slot overlay, mantenendo bounds == drawn == clickable. `heca-grid-ui/tests/phase_a.rs` usa bounds reali, verifica struttura retained, focus/disabled, child-before-card e flash localizzato. `heca-view-realize/src/lib.rs` verifica i tre slot e title/body/action reali.\n\nValidazione: `cargo test -p heca-grid-ui` (174 unit + 174 integration + 12 pointer + 2 prop + doc test), `cargo test -p heca-view-realize` (56), `cargo check -p heca-renderer --example showcase`, `cargo check --workspace --all-targets --all-features`, `cargo clippy --workspace --all-targets --all-features`, `git diff --check` — tutti verdi. Nessun commit eseguito.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3-check-001-inventariare-le-primitive-hand-painted-correnti-e-mapparle-a-widget-esistenti",
+          "number": 1,
+          "title": "Inventariare le primitive hand-painted correnti e mapparle a widget esistenti.",
+          "checked": true
+        },
+        {
+          "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3-check-002-costruire-i-figli-in-base-children-senza-dipendenze-heca",
+          "number": 2,
+          "title": "Costruire i figli in Base.children senza dipendenze Heca.",
+          "checked": true
+        },
+        {
+          "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3-check-003-rimuovere-hit-test-e-paint-duplicati-delle-affordance",
+          "number": 3,
+          "title": "Rimuovere hit-test e paint duplicati delle affordance.",
+          "checked": true
+        },
+        {
+          "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3-check-004-aggiungere-test-headless-della-struttura-e-della-scena",
+          "number": 4,
+          "title": "Aggiungere test headless della struttura e della scena.",
+          "checked": true
+        },
+        {
+          "id": "4ed083d9-beb8-4a14-a7b9-10a2a73c7eb3-check-005-verificare-tema-focus-e-stato-disabled",
+          "number": 5,
+          "title": "Verificare tema, focus e stato disabled.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T14:37:26.919Z",
+      "completedAt": "2026-08-06T14:48:14.064Z",
+      "createdAt": "2026-07-03T22:53:21.680Z",
+      "updatedAt": "2026-08-06T14:48:14.064Z"
+    },
+    {
+      "id": "ba7b9582-f445-4e8c-a585-709b8471ea47",
+      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+      "number": 231,
+      "shortId": "2PDDR",
+      "priority": 1,
+      "shortName": "toast-hint-fields",
+      "title": "Make Toast action and dismiss first-class targets",
+      "status": "done",
+      "description": "Estendere il contratto generico di `Toast`/`ToastSpec` in `heca-grid-ui/src/widgets/toast.rs` affinché azione e chiusura siano figli interattivi distinti con target runtime stabili, callback separate, bounds reali, focus e metadati HintTarget compatibili con il sistema globale. Non importare `heca_view::Intent` né nomi di azioni Heca: grid-ui espone identificativi/slot generici e il consumer li associa ai propri Intent. Eliminare la precedente idea di dipingere keycap sopra rettangoli calcolati manualmente. Verificare che un'azione assente non produca un target fantasma e che `dismissible=false` elimini anche il target di chiusura.\n\n---\n**Completion summary:**\nCompletato il contratto first-class target per Toast.\n\n`heca-grid-ui/src/widgets/toast.rs`: aggiunti `action_target(HintTargetId)` e `dismiss_target(HintTargetId)` host-only; gli ID opachi sono conservati indipendentemente dall'ordine dei builder e applicati ai veri figli `Button`/`IconButton`. Un action target senza action non crea controlli; `dismissible(false)` sostituisce il dismiss con lo slot vuoto e rimuove anche il target. Callback action/dismiss restano separati e click/tastiera passano dai controlli nativi.\n\n`heca-grid-ui/src/widgets/toast_stack.rs`: `ToastSpec` espone `action_target`/`dismiss_target` opzionali e builder relativi; `build()` li proietta nel Toast. Il viewport headless usa `INFINITY` per selezionare geometry fallback finita. `ToastStack::visit_hint_targets` rende visibili al collector globale i Toast retained per ID usando gli stessi bounds di layout/paint/input.\n\n`heca-grid-ui/src/component.rs` + `hint.rs`: introdotto hook object-safe `visit_hint_targets` con walk predefinito di `Base.children`; cache retained possono fare override senza proxy o geometria duplicata. Subtree hidden/disabled sono esclusi perché non azionabili.\n\n`heca-view-realize/src/lib.rs`: gli eventi declarativi `action` e dismiss visibile registrano lo stesso carrier `Intent` nel sink `HintTargets` e lo applicano al controllo che emette il callback; action senza label e `dismissible=false` non allocano target fantasma.\n\n`heca-grid-ui/tests/phase_a.rs`: coperti bounds reali, ordine builder, affordance assenti, focus e attivazione Enter/Space separata, disabled, collector attraverso ToastStack e fallback headless. `docs/widgets.md` documenta API, ownership host e assenza keycap manuali.\n\nValidazione finale: `cargo test -p heca-grid-ui` (174 unit + 178 integration + 12 pointer + 2 prop + doctest), `cargo test -p heca-view-realize` (56), `cargo check -p heca-renderer --example showcase`, `cargo check --workspace --all-targets --all-features`, `cargo clippy --workspace --all-targets --all-features`, `git diff --check` — tutti verdi. Rimane solo il warning preesistente future-incompat della dipendenza `block v0.1.6`. Nessun commit eseguito.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ba7b9582-f445-4e8c-a585-709b8471ea47-check-001-definire-target-generici-per-action-e-dismiss",
+          "number": 1,
+          "title": "Definire target generici per action e dismiss.",
+          "checked": true
+        },
+        {
+          "id": "ba7b9582-f445-4e8c-a585-709b8471ea47-check-002-collegarli-ai-veri-button-iconbutton-figli",
+          "number": 2,
+          "title": "Collegarli ai veri Button/IconButton figli.",
+          "checked": true
+        },
+        {
+          "id": "ba7b9582-f445-4e8c-a585-709b8471ea47-check-003-verificare-focus-click-e-attivazione-da-tastiera",
+          "number": 3,
+          "title": "Verificare focus, click e attivazione da tastiera.",
+          "checked": true
+        },
+        {
+          "id": "ba7b9582-f445-4e8c-a585-709b8471ea47-check-004-assicurare-assenza-target-quando-l-affordance-non-esiste",
+          "number": 4,
+          "title": "Assicurare assenza target quando l'affordance non esiste.",
+          "checked": true
+        },
+        {
+          "id": "ba7b9582-f445-4e8c-a585-709b8471ea47-check-005-documentare-il-seam-in-docs-widgets-md",
+          "number": 5,
+          "title": "Documentare il seam in docs/widgets.md.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T14:59:09.817Z",
+      "completedAt": "2026-08-06T15:11:47.181Z",
+      "createdAt": "2026-07-03T22:53:21.680Z",
+      "updatedAt": "2026-08-06T15:11:47.181Z"
+    },
+    {
+      "id": "80f9eec0-65cf-4929-a81c-d29491985168",
+      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+      "number": 233,
+      "shortId": "5XK2E",
+      "priority": 2,
+      "shortName": "toast-hint-activation",
+      "title": "Reconcile ToastStack updates with the same ID",
+      "status": "done",
+      "description": "Correggere `ToastStack` in `heca-grid-ui/src/widgets/toast.rs` affinché `reconcile()` non conservi dati obsoleti quando uno `ToastSpec` mantiene lo stesso ID ma cambia titolo, corpo, severity, azione, dismissibility o target. Conservare posizione/animazione/focus quando possibile; aggiornare o ricostruire soltanto la voce interessata. Aggiungere confronto o segnali espliciti senza rendere il consumer responsabile di cambiare ID per forzare il refresh. Coprire aggiornamenti durante enter/steady/exit e impedire duplicati dello stesso ID.\n\n---\n**Completion summary:**\nImplementata riconciliazione keyed completa di ToastStack. `Entry` conserva ultimo `ToastSpec`, widget retained, progresso visibilità e presenza host. Same-ID aggiornato ricostruisce solo la card interessata preservando transizione e stato/focus dei controlli sopravvissuti. Duplicati: prima posizione della chiave, ultimo payload. Rimozioni: exit inert ma occludente; revival mid-exit riusa e inverte la stessa entry; damage include il rettangolo lasciato libero. Aggiornati rustdoc/docs e test per tutti i campi, enter/steady/exit, focus, target, dedup e revival. Verifiche verdi: suite grid-ui completa, showcase check, workspace check, clippy workspace, diff check. Solo warning preesistente `block v0.1.6`. Nessun commit.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "80f9eec0-65cf-4929-a81c-d29491985168-check-001-riprodurre-con-test-il-contenuto-obsoleto-same-id",
+          "number": 1,
+          "title": "Riprodurre con test il contenuto obsoleto same-ID.",
+          "checked": true
+        },
+        {
+          "id": "80f9eec0-65cf-4929-a81c-d29491985168-check-002-applicare-update-puntuale-preservando-stato-transitorio-sensato",
+          "number": 2,
+          "title": "Applicare update puntuale preservando stato transitorio sensato.",
+          "checked": true
+        },
+        {
+          "id": "80f9eec0-65cf-4929-a81c-d29491985168-check-003-coprire-cambio-action-dismiss-target",
+          "number": 3,
+          "title": "Coprire cambio action/dismiss target.",
+          "checked": true
+        },
+        {
+          "id": "80f9eec0-65cf-4929-a81c-d29491985168-check-004-coprire-same-id-mentre-la-voce-visibile-e-durante-transizioni",
+          "number": 4,
+          "title": "Coprire same-ID mentre la voce è visibile e durante transizioni.",
+          "checked": true
+        },
+        {
+          "id": "80f9eec0-65cf-4929-a81c-d29491985168-check-005-verificare-nessun-duplicato-entry",
+          "number": 5,
+          "title": "Verificare nessun duplicato Entry.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T15:39:32.668Z",
+      "completedAt": "2026-08-06T15:50:45.985Z",
+      "createdAt": "2026-07-03T22:53:21.681Z",
+      "updatedAt": "2026-08-06T15:50:45.985Z"
+    },
+    {
+      "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3",
+      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+      "number": 234,
+      "shortId": "M74U6",
+      "priority": 3,
+      "shortName": "keyboard-first-contract",
+      "title": "Update the showcase notification example",
+      "status": "done",
+      "description": "Aggiornare il riferimento vivo in `heca-renderer/examples/showcase.rs:311-320,509-519,2873-2880,3050-3061`. Mantenere `ToastStack` nel livello overlay separato dalla pagina; dimostrare: inserimento di più notifiche, aggiornamento di uno spec con lo stesso ID, azione, chiusura, non-dismissible, animazione e pass-through verso un controllo sottostante. I commenti devono descrivere il contratto effettivo dei veri figli e dei target, non il vecchio paint manuale. Il demo resta domain-neutral e non simula AppState/Intent Heca.\n\n---\n**Completion summary:**\nShowcase ToastStack aggiornato come riferimento vivo. `t` inserisce un batch di tre notifiche (success, warning con action, info non-dismissible); pressioni successive aggiungono card indipendenti. `u` alterna pending/restored sullo stesso ID e reinserisce la chiave se era stata chiusa. L'action Retry applica anch'essa un update same-ID; × esercita exit e reflow. Aggiunto PAGE PASS-THROUGH PROBE nel page layer per verificare che un miss dello stack raggiunga il controllo sottostante. Stack mantenuto nel tree overlay separato; commenti aggiornati per veri figli e target opachi, senza keycap manuali. Check/clippy showcase e workspace, più diff check, tutti verdi. Solo warning preesistente `block v0.1.6`. Nessun commit.\n\n---\n**Completion summary:**\nShowcase ToastStack completato e verificato. Il demo mantiene lo stack nel layer overlay separato e dimostra batch di notifiche, update same-ID, action, dismiss, non-dismissible, enter/exit/reflow e pass-through verso un controllo pagina. La correzione finale conserva le card uscenti fino al termine della transizione, unisce bounds precedenti/correnti nel damage e anima il reflow senza teleport; l’utente ha accettato il risultato GPU. Validazione finale: `cargo test -p heca-grid-ui toast_stack` (8 test pertinenti verdi) e `cargo clippy --workspace --all-targets --all-features` verde; resta solo il warning upstream preesistente `block v0.1.6`. L’audit separato sulle metriche glow/bracket/ToastStack è stato registrato in F010/P094/T396 e non è scope di questo task. Nessun commit.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3-check-001-done-planned",
+          "date": "2026-08-06T16:19:53.313Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "UAT visiva fallita sul punto 5: exit lascia frammenti/troncamenti e il reflow verticale è scattoso; il demo permette inoltre overflow oltre viewport.",
+          "description": "UAT visiva fallita sul punto 5: exit lascia frammenti/troncamenti e il reflow verticale è scattoso; il demo permette inoltre overflow oltre viewport."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3-check-001-aggiungere-un-percorso-dimostrabile-per-update-same-id",
+          "number": 1,
+          "title": "Aggiungere un percorso dimostrabile per update same-ID.",
+          "checked": true
+        },
+        {
+          "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3-check-002-verificare-callback-action-e-dismiss",
+          "number": 2,
+          "title": "Verificare callback action e dismiss.",
+          "checked": true
+        },
+        {
+          "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3-check-003-verificare-hover-click-dietro-lo-spazio-vuoto-dello-stack",
+          "number": 3,
+          "title": "Verificare hover/click dietro lo spazio vuoto dello stack.",
+          "checked": true
+        },
+        {
+          "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3-check-004-verificare-che-card-affordance-consumino-gli-eventi-pertinenti",
+          "number": 4,
+          "title": "Verificare che card/affordance consumino gli eventi pertinenti.",
+          "checked": true
+        },
+        {
+          "id": "ef72c9de-8dbe-4948-a2e5-9cd374175ae3-check-005-aggiornare-commenti-e-istruzioni-visibili-dello-showcase",
+          "number": 5,
+          "title": "Aggiornare commenti e istruzioni visibili dello showcase.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T15:50:59.542Z",
+      "completedAt": "2026-08-06T23:07:09.565Z",
+      "createdAt": "2026-07-03T22:53:21.681Z",
+      "updatedAt": "2026-08-06T23:07:09.565Z"
+    },
+    {
+      "id": "562b75ec-1a8a-4e1c-a038-70464bfb87a5",
+      "phaseId": "949d48a4-6001-42b2-a12c-25ba69a95c24",
+      "number": 394,
+      "shortId": "GH2ZR",
+      "priority": 4,
+      "shortName": "toast-architecture-tests",
+      "title": "Add Toast/ToastStack architecture and routing tests",
+      "status": "done",
+      "description": "Aggiungere test in `heca-grid-ui/src/widgets/toast.rs` o moduli test dedicati per verificare il contratto architetturale, non flag cosmetici: l'albero contiene figli reali per icon/testo/action/dismiss; gli update same-ID cambiano la scena; pointer move/press/release nello spazio vuoto restituiscono `Handled::No`; action/dismiss consumano il proprio evento una sola volta; modalità non-dismissible rimuove il target; tick conserva animazione e richiede repaint. Usare un tema di test e bounds reali calcolati da `LayoutEngine`, senza dipendenze GPU o AppState.\n\n---\n**Completion summary:**\nCompletata la copertura architetturale/routing headless per Toast e ToastStack in `heca-grid-ui/tests/phase_a.rs`, integrando i test già presenti. Verificati: subtree reale icon/content/action/dismiss con bounds da LayoutEngine; target reali e rimozione dei ghost target/non-dismissible; callback action/dismiss consumate una sola volta (PointerReleased non riattiva né propaga al card); miss dello stack per PointerMoved/PointerPressed/PointerReleased sempre `Handled::No`; update same-ID cambia payload/scena senza duplicare o riavviare enter; tick mantiene l’animazione, marca needs_paint e produce damage finito/non vuoto; exit/reflow e revival restano coperti dai test interni ToastStack. Validazione: `cargo test -p heca-grid-ui toast_` — 20 test verdi; `cargo clippy --workspace --all-targets --all-features` verde, salvo warning upstream preesistente `block v0.1.6`. Nessun commit.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "562b75ec-1a8a-4e1c-a038-70464bfb87a5-check-001-test-albero-figli-e-layout",
+          "number": 1,
+          "title": "Test albero figli e layout.",
+          "checked": true
+        },
+        {
+          "id": "562b75ec-1a8a-4e1c-a038-70464bfb87a5-check-002-test-scena-prima-dopo-same-id",
+          "number": 2,
+          "title": "Test scena prima/dopo same-ID.",
+          "checked": true
+        },
+        {
+          "id": "562b75ec-1a8a-4e1c-a038-70464bfb87a5-check-003-test-pass-through-spazio-vuoto",
+          "number": 3,
+          "title": "Test pass-through spazio vuoto.",
+          "checked": true
+        },
+        {
+          "id": "562b75ec-1a8a-4e1c-a038-70464bfb87a5-check-004-test-action-dismiss-una-sola-emissione",
+          "number": 4,
+          "title": "Test action/dismiss una sola emissione.",
+          "checked": true
+        },
+        {
+          "id": "562b75ec-1a8a-4e1c-a038-70464bfb87a5-check-005-test-focus-hint-target-condizionali",
+          "number": 5,
+          "title": "Test focus/hint target condizionali.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T23:07:25.143Z",
+      "completedAt": "2026-08-06T23:09:16.308Z",
+      "createdAt": "2026-08-06T14:11:12.775Z",
+      "updatedAt": "2026-08-06T23:09:16.308Z"
+    }
+  ],
+  "createdAt": "2026-07-03T22:50:20.126Z",
+  "updatedAt": "2026-08-06T23:09:16.308Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

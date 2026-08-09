@@ -1,0 +1,26 @@
+{
+  "id": "873f81ba-ce7c-4bcc-90ed-27a25a742285",
+  "number": 11,
+  "shortId": "GQFBY",
+  "priority": 1,
+  "name": "🧱 Component Breakout",
+  "description": "# Component Breakout\n\n**App-level UI is written inline where it is used, so nothing can be reused by name.** Every composed shape — a dock row, a pane header, an action button — exists only inside the one function that needed it. The bricks are shared (grid-ui widgets); the walls are not. The moment a second dock (F003/P085/T359) or a plugin wants the same row, the only route is to read that provider and copy it.\n\n**The rule this feature applies is NOT written here.** Widget-vs-component, how a component is built, how it is used, and the pre-flight that precedes any UI code are **project-level global rules** (planner project `globalRules`) and AGENTS.md § 0/0b. They govern every feature, not this one — a second copy here would drift and would imply the rule expires when the feature closes. This feature is only the **work**: create the folder, extract the compositions, test them, delete the inline copies.\n\n# Current state — the inline compositions, by file\n\n**`heca/src/providers/workspaces/mod.rs`** (35 composition sites)\n- `pane_card()` :728 — the dock's pane row. **Eleven parameters**: entry, mount, programs, theme, emit, active pane, container state, and the three `BuildCx` registries. Registers a drag source/target, a hint target, a nav key, an active marker, info segments and badges. This is the row a second dock and every plugin needs, and it is unreachable outside this file.\n- `column_view()` :1008 — the column row, same shape, separately written.\n- `build_workspaces_container()` :1084, `build_body()` :624 — the tree body.\n\n**`heca/src/chrome/mod.rs`** (30 composition sites, 4960 lines — host logic and UI composition in one file)\n- `build_pane_info_bar()` :323 — icon+text segments with a hand-rolled overflow budget (:391) that measures with its own `char_w = font * 0.6`, a copy of `MONO_ADVANCE_RATIO`, and left-ellipsises one segment via `truncate_path_left()` :286.\n- `build_pane_header()` :782 — title + action buttons, each wired by hand through the two-step recipe AGENTS documents (`action_tooltip()` :521 + `hints.register(...)`).\n- `build_pane_viewport_widgets()` :906, `build_region_content()` :1623, `build_sidebar_shell()` :1699, `build_chrome_root()` :3336.\n\n**Already-shared app seams — the shape the rest should have**: `open_modal()` / `open_dropdown()` (`heca/src/chrome/overlay.rs` :162/:303) — every menu and confirm dialog goes through one builder; `action_tooltip()` composes every button's tip identically; `realize()` turns a described tree into widgets for anyone.\n\n# Goals\n\n1. **`heca/src/components/`** — the one home for reusable app-level compositions.\n2. **Named components built from grid-ui widgets** — no hand-painting, no re-deriving a measure, a hit-test or a scroll offset a widget already owns.\n3. **A unit test per component**, headless — which is what the project rule \"never `&AppState`\" exists *for*.\n4. **Replace every inline copy** with the component, in the same task that extracts it — an extraction with the old code still in place is two sources of truth.\n\n# Behaviors to preserve\n\n- **Pixel-identical output.** Every one of these is a visual surface the maintainer verifies by hand; an extraction that changes the look is a regression, not a refactor.\n- Theme-driven styling only — no hardcoded size/padding/alpha/colour survives the move.\n- Host id registration keeps going through `BuildCx`, and hint ids stay **monotonic** across trees (`HintTargetRegistry`, the `remove_range` contract).\n- Action wiring keeps going through the central path: the action's **name** resolves its icon, shortcut and tooltip — a component never spells a shortcut or picks a glyph itself.\n- Drag/drop, nav keys and per-mount cursors keep their current semantics (`nav_key`, `container_cursor`, `ChromeDragItem`).\n\n# Dependencies\n\nSome extractions are blocked on the library owning what it should: `Label` truncation (recorded as an open gap in AGENTS.md, never filed as a task — the pane info bar's budget fitter cannot move cleanly until it exists) and a second line on `Item`. Those are **grid-ui** work (F004), not this feature; file and land them there first where a phase says so.",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "66b0de41-be11-474f-badf-f2b9b934eaf9",
+    "65a7a9a7-741e-4f42-b40f-5dc8a784c2e9",
+    "26f801e6-3338-4548-994b-f5a7c916a1a8",
+    "839f99ba-5604-47a5-bb43-1968ee9cf697"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-30T13:26:20.944Z",
+  "updatedAt": "2026-07-30T13:37:17.607Z"
+}

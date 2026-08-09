@@ -515,6 +515,15 @@ pub enum WmAction {
         dock: Option<crate::chrome::ContainerId>,
     },
 
+    /// Dismiss one visible notification by its runtime identity.
+    ///
+    /// Contextual only: it has no static binding because a caller must supply the
+    /// notification id. Mouse, KeyHint and RPC all construct it through the
+    /// name-keyed `notification.dismiss` intent.
+    DismissNotification {
+        notification_id: u64,
+    },
+
     /// Forget the past queries a search surface remembers (F004/P092/T392).
     ///
     /// `scope` is **optional**, and that is what makes one action serve both doors: bare it forgets
@@ -948,6 +957,9 @@ pub fn build_action(
         "open_link" => Some(WmAction::OpenLink {
             url: get_string(args, "url")?,
         }),
+        "notification.dismiss" => Some(WmAction::DismissNotification {
+            notification_id: get_u64(args, "id")?,
+        }),
 
         // ── Chrome container placement (plugin-04/T1) ──
         // These carry DOTTED, namespaced ids — unlike every other built-in, whose config name is
@@ -1162,6 +1174,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::DeleteWorkspace { .. }
         | WmAction::TakePane { .. }
         | WmAction::OpenLink { .. }
+        | WmAction::DismissNotification { .. }
         | WmAction::PaneTake
         | WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
@@ -1564,6 +1577,7 @@ mod tests {
                 pane_id: PaneId(0),
                 focus_after: false,
             },
+            WmAction::DismissNotification { notification_id: 0 },
             WmAction::ReloadConfig,
         ]
     }
@@ -1639,6 +1653,17 @@ mod tests {
             missing.is_empty(),
             "these actions cannot be reached by name — each needs an `ActionDescriptor` (with its \
              `args` declared, if it takes any): {missing:#?}"
+        );
+    }
+
+    #[test]
+    fn notification_dismiss_requires_an_id() {
+        let mut args = std::collections::HashMap::new();
+        assert_eq!(build_action("notification.dismiss", &args), None);
+        args.insert("id".to_string(), "42".to_string());
+        assert_eq!(
+            build_action("notification.dismiss", &args),
+            Some(WmAction::DismissNotification { notification_id: 42 }),
         );
     }
 

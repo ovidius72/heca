@@ -2556,7 +2556,28 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
     state.needs_redraw = true;
 }
 
-// ── Config ──
+// ── Notifications / config ──
+
+/// Dismiss a notification through the store-owned lifecycle path.
+///
+/// The action arrives from an ID-bearing Intent (toast click, KeyHint or RPC),
+/// so it must not mutate the toast widget directly. The store decides whether
+/// the entry is known and dismissible, promotes a queued replacement if needed,
+/// and the runtime refreshes its retained projection only when it changed.
+pub fn handle_dismiss_notification(state: &mut AppState, action: &WmAction) {
+    let WmAction::DismissNotification { notification_id } = action else {
+        return;
+    };
+    let result = state
+        .notifications
+        .store
+        .dismiss(crate::notification::NotificationId::from_raw(*notification_id), std::time::Instant::now());
+    if matches!(result, crate::notification::NotificationDismissResult::Dismissed(_))
+        && state.notifications.sync_visible_toasts(&mut state.hint_targets)
+    {
+        state.mark_full_redraw();
+    }
+}
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
     state.pending_reload = true;

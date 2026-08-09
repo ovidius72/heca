@@ -1016,6 +1016,10 @@ pub fn build_registry() -> ActionRegistry {
         },
         handle_spawn_command,
     );
+    registry.register(
+        &WmAction::DismissNotification { notification_id: 0 },
+        handle_dismiss_notification,
+    );
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
     registry.register(
         &WmAction::OpenLink {
@@ -1501,11 +1505,11 @@ mod tests {
         assert!("nowhere".parse::<RegionId>().is_err());
     }
 
-    /// The dotted ids are the ONLY built-ins with a dotted name — no snake_case alias was quietly
-    /// added for them, and no existing snake_case built-in was quietly renamed to a dotted id.
-    /// (Renaming the existing ~115 is a migration nobody has decided on.)
+    /// Dotted built-ins are explicitly allowlisted — chrome placement plus the
+    /// contextual notification dismissal action. No snake_case alias is quietly
+    /// added, and existing snake_case built-ins remain unrenamed.
     #[test]
-    fn only_the_chrome_placement_builtins_carry_dotted_names() {
+    fn dotted_builtin_names_are_explicitly_allowlisted() {
         let catalog = crate::actions::ActionCatalog::with_builtins();
         let dotted: Vec<&str> = crate::actions::ActionRegistry::ALL
             .iter()
@@ -1520,6 +1524,7 @@ mod tests {
                 "chrome.container.move_right_sidebar",
                 "chrome.container.reorder_before",
                 "chrome.container.reorder_after",
+                "notification.dismiss",
             ]
         );
         // No snake_case alias for the same capability.

@@ -1,0 +1,227 @@
+{
+  "id": "cc0308d4-2f40-4516-b389-1422b4aaa7fb",
+  "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
+  "number": 95,
+  "shortId": "WN72Q",
+  "priority": 10,
+  "slug": "notification-10-multi-action-api-plugin-safe-sender",
+  "title": "notification-10: Multi-action API + plugin-safe sender",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Estendere il contratto notifiche con fino a tre azioni iconiche e una facade invocabile senza AppState.",
+  "description": "Implementare il contratto consolidato in `notification-system-plane.md`: `heca/src/notification.rs` passa da una action opzionale a una raccolta ordinata di massimo tre `NotificationAction`, con `NotificationActionId`, `NotificationActionVariant` e icona serializzabile. `heca-grid-ui/src/widgets/toast.rs` e `toast_stack.rs` devono comporre una action row reale e callback `(toast_id, action_id)`, senza closure di dominio. Introdurre un `NotificationSender` clonabile, basato su `EventLoopProxy<AppEvent>`, così backend/provider/componenti inviano draft senza dipendere da `AppState`; `NotificationRuntime` resta l’unica autorità di store/signal/sync. Per plugin usare `heca_view::Intent` e `ViewGlyph` (entrambi serde e già attraversano il boundary), mai `AppState`, closure o `heca_grid_ui::Glyph`. Aggiornare adapter/proiezione, routing action, Hint target e test. Preservare: una sola primary, max tre inline, Intent senza stile, più scelte tramite Dialog/menu.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "2409b253-d1b9-4343-93b4-09e9d45ee50e",
+    "afc81145-65fa-491b-98c1-bb63342a8d47",
+    "564f6849-bfd5-4686-8040-92fbe967a7f6",
+    "b20761b7-c018-4fc6-b454-16bf693d0d28"
+  ],
+  "tasks": [
+    {
+      "id": "2409b253-d1b9-4343-93b4-09e9d45ee50e",
+      "phaseId": "cc0308d4-2f40-4516-b389-1422b4aaa7fb",
+      "number": 402,
+      "shortId": "M6V4Q",
+      "priority": 1,
+      "shortName": "model-multiple-icon-bearing-no",
+      "title": "Model multiple icon-bearing notification actions",
+      "status": "in-progress",
+      "description": "In `heca/src/notification.rs`, replace `Option<NotificationAction>` with an ordered bounded collection (max 3); introduce stable NotificationActionId, NotificationActionVariant (Primary/Secondary/Destructive) and an icon representation compatible with plugin serialization. Enforce at most one Primary and preserve action ids through same-notification dedup updates. Intent remains name-keyed behavior only. Add domain tests for validation and late lookup by notification/action id.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2409b253-d1b9-4343-93b4-09e9d45ee50e-check-001-max-three-and-one-primary-enforced",
+          "number": 1,
+          "title": "Max three and one Primary enforced",
+          "checked": false
+        },
+        {
+          "id": "2409b253-d1b9-4343-93b4-09e9d45ee50e-check-002-action-ids-stable-through-update",
+          "number": 2,
+          "title": "Action IDs stable through update",
+          "checked": false
+        },
+        {
+          "id": "2409b253-d1b9-4343-93b4-09e9d45ee50e-check-003-intent-has-no-presentation-fields",
+          "number": 3,
+          "title": "Intent has no presentation fields",
+          "checked": false
+        },
+        {
+          "id": "2409b253-d1b9-4343-93b4-09e9d45ee50e-check-004-domain-tests-pass",
+          "number": 4,
+          "title": "Domain tests pass",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-08T22:51:30.355Z",
+      "completedAt": "",
+      "createdAt": "2026-08-08T22:50:07.894Z",
+      "updatedAt": "2026-08-08T22:51:30.355Z"
+    },
+    {
+      "id": "afc81145-65fa-491b-98c1-bb63342a8d47",
+      "phaseId": "cc0308d4-2f40-4516-b389-1422b4aaa7fb",
+      "number": 403,
+      "shortId": "U4DFL",
+      "priority": 1,
+      "shortName": "expose-plugin-safe-notificatio",
+      "title": "Expose plugin-safe notification descriptor boundary",
+      "status": "planned",
+      "description": "Define the plugin-facing notification descriptor using heca_view::Intent and ViewGlyph rather than closures, AppState references or heca_grid_ui::Glyph. Add conversion/validation at the host boundary and tests proving serialized plugin descriptors preserve action order, icon, variant and Intent args. Reuse the existing ViewNode/Intent serialization vocabulary; do not invent a parallel plugin action dispatcher.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "afc81145-65fa-491b-98c1-bb63342a8d47-check-001-descriptor-uses-intent-and-viewglyph",
+          "number": 1,
+          "title": "Descriptor uses Intent and ViewGlyph",
+          "checked": false
+        },
+        {
+          "id": "afc81145-65fa-491b-98c1-bb63342a8d47-check-002-no-appstate-closure-crosses-boundary",
+          "number": 2,
+          "title": "No AppState/closure crosses boundary",
+          "checked": false
+        },
+        {
+          "id": "afc81145-65fa-491b-98c1-bb63342a8d47-check-003-host-conversion-validates-limits",
+          "number": 3,
+          "title": "Host conversion validates limits",
+          "checked": false
+        },
+        {
+          "id": "afc81145-65fa-491b-98c1-bb63342a8d47-check-004-serialization-and-dispatch-tests-pass",
+          "number": 4,
+          "title": "Serialization and dispatch tests pass",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-08T22:50:07.893Z",
+      "updatedAt": "2026-08-08T22:50:07.893Z"
+    },
+    {
+      "id": "564f6849-bfd5-4686-8040-92fbe967a7f6",
+      "phaseId": "cc0308d4-2f40-4516-b389-1422b4aaa7fb",
+      "number": 404,
+      "shortId": "QL6V9",
+      "priority": 1,
+      "shortName": "compose-multi-action-toast-and",
+      "title": "Compose multi-action Toast and ToastStack controls",
+      "status": "planned",
+      "description": "Extend `heca-grid-ui/src/widgets/toast.rs` and `toast_stack.rs` with a real child-composed action row. ToastActionSpec carries id, label, optional icon, semantic variant and opaque target; stack callback returns toast id plus action id. Styling comes exclusively from Theme/widget variants. Update ViewNode realization/docs/showcase and headless scene/event tests. Do not add app-specific closures or hand-draw controls.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "564f6849-bfd5-4686-8040-92fbe967a7f6-check-001-action-row-uses-child-buttons-icons",
+          "number": 1,
+          "title": "Action row uses child buttons/icons",
+          "checked": false
+        },
+        {
+          "id": "564f6849-bfd5-4686-8040-92fbe967a7f6-check-002-variant-styling-is-theme-driven",
+          "number": 2,
+          "title": "Variant styling is theme-driven",
+          "checked": false
+        },
+        {
+          "id": "564f6849-bfd5-4686-8040-92fbe967a7f6-check-003-callback-carries-both-ids",
+          "number": 3,
+          "title": "Callback carries both IDs",
+          "checked": false
+        },
+        {
+          "id": "564f6849-bfd5-4686-8040-92fbe967a7f6-check-004-docs-showcase-tests-updated",
+          "number": 4,
+          "title": "Docs/showcase/tests updated",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-08T22:50:07.893Z",
+      "updatedAt": "2026-08-08T22:50:07.893Z"
+    },
+    {
+      "id": "b20761b7-c018-4fc6-b454-16bf693d0d28",
+      "phaseId": "cc0308d4-2f40-4516-b389-1422b4aaa7fb",
+      "number": 405,
+      "shortId": "CR96U",
+      "priority": 1,
+      "shortName": "add-notificationsender-and-app",
+      "title": "Add NotificationSender and app-thread notify event",
+      "status": "planned",
+      "description": "Add a cloneable NotificationSender around EventLoopProxy<AppEvent> and an AppEvent payload carrying NotificationDraft. The app thread accepts the event, pushes through NotificationRuntime store, synchronizes visible specs/hints and requests redraw. Keep direct NotificationRuntime API for handlers with &mut AppState; sender users never receive AppState. Define result/ID semantics explicitly for asynchronous sends.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b20761b7-c018-4fc6-b454-16bf693d0d28-check-001-sender-can-be-cloned-without-appstate",
+          "number": 1,
+          "title": "Sender can be cloned without AppState",
+          "checked": false
+        },
+        {
+          "id": "b20761b7-c018-4fc6-b454-16bf693d0d28-check-002-only-app-thread-mutates-runtime-store",
+          "number": 2,
+          "title": "Only app thread mutates runtime/store",
+          "checked": false
+        },
+        {
+          "id": "b20761b7-c018-4fc6-b454-16bf693d0d28-check-003-push-syncs-projection-and-redraw",
+          "number": 3,
+          "title": "Push syncs projection and redraw",
+          "checked": false
+        },
+        {
+          "id": "b20761b7-c018-4fc6-b454-16bf693d0d28-check-004-thread-event-tests-added",
+          "number": 4,
+          "title": "Thread/event tests added",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-08T22:50:07.894Z",
+      "updatedAt": "2026-08-08T22:50:07.894Z"
+    }
+  ],
+  "createdAt": "2026-08-08T22:49:54.278Z",
+  "updatedAt": "2026-08-08T22:51:30.355Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

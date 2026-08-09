@@ -16,7 +16,7 @@ mod shortcut;
 use app::events::AppEvent;
 use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
-use app::interaction::dispatch_intent;
+use app::interaction::{IntentOutcome, InteractionSource, dispatch_intent, dispatch_view_intent};
 use app::lifecycle::{handle_about_to_wait, poll_backends};
 pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
@@ -202,6 +202,9 @@ impl HecaApp {
             state.command_palette_size = self.app_config.config.settings.command_palette_size;
             state.search_case = self.app_config.config.settings.search_case;
             state.search_history = self.app_config.config.settings.search_history;
+            state.notifications.set_history_limit(
+                self.app_config.config.settings.notification_history_limit,
+            );
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();
@@ -388,6 +391,37 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 dispatch_intent(state, &self.registry, source, intent);
                 state.mark_full_redraw();
                 state.window.request_redraw();
+            }
+            AppEvent::NotificationActionRequested { notification_id } => {
+                let action = state
+                    .notifications
+                    .store
+                    .action_for_visible(crate::notification::NotificationId::from_raw(notification_id))
+                    .cloned();
+                if let Some(action) = action {
+                    let outcome = dispatch_view_intent(
+                        state,
+                        &self.registry,
+                        InteractionSource::ChromeOverlay,
+                        &action.intent,
+                    );
+                    // `dispatch_view_intent` currently reports `Ran` after handing a built-in to
+                    // `dispatch_action`; it cannot distinguish a policy refusal there yet. Keep
+                    // this limitation local to the general dispatcher rather than adding a second
+                    // notification-only policy path. Dynamic failures remain explicit outcomes.
+                    if outcome == IntentOutcome::Ran && action.dismiss_after {
+                        let dismiss = crate::chrome::Intent::new("notification.dismiss")
+                            .arg("id", crate::chrome::PropValue::Text(notification_id.to_string()));
+                        let _ = dispatch_view_intent(
+                            state,
+                            &self.registry,
+                            InteractionSource::ChromeOverlay,
+                            &dismiss,
+                        );
+                    }
+                    state.mark_full_redraw();
+                    state.window.request_redraw();
+                }
             }
         }
     }

@@ -2,6 +2,11 @@ use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
+use crate::notification::{NotificationId, NotificationStore};
+use crate::chrome::LayerId;
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use heca_grid_ui::widgets::ToastSpec;
+use heca_grid_ui::HintTargetId;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
@@ -21,6 +26,130 @@ use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
+
+/// App-owned notification runtime, intentionally independent of window and actions.
+///
+/// It keeps the canonical lifecycle store and the retained presentation seam together,
+/// while chrome owns only the generic layer that later consumes this signal.
+pub struct NotificationRuntime {
+    pub store: NotificationStore,
+    pub visible_toasts: Signal<Vec<ToastSpec>>,
+    pub layer_id: Option<LayerId>,
+    /// Stable opaque KeyHint ids for each currently-visible notification.
+    /// The host updates their intents on same-id dedup changes rather than
+    /// replacing them, so retained Toast controls never target stale behavior.
+    hint_targets: HashMap<NotificationId, NotificationHintTargets>,
+    #[expect(
+        dead_code,
+        reason = "P055 consumes this one-session flag when NotificationSystem::System falls back to the in-app router."
+    )]
+    pub system_fallback_warned: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+struct NotificationHintTargets {
+    action: Option<HintTargetId>,
+    dismiss: Option<HintTargetId>,
+}
+
+impl NotificationRuntime {
+    pub fn new(history_limit: usize) -> Self {
+        Self {
+            store: NotificationStore::new(history_limit),
+            visible_toasts: signal(Vec::new()),
+            layer_id: None,
+            hint_targets: HashMap::new(),
+            system_fallback_warned: false,
+        }
+    }
+
+    pub fn set_history_limit(&mut self, history_limit: usize) {
+        self.store.set_history_limit(history_limit);
+    }
+
+    /// Refresh retained toast specs and their global KeyHint targets together.
+    ///
+    /// The store remains the lifecycle authority. This adapter only projects its
+    /// visible entries, registering opaque ids whose Intent behavior is owned by
+    /// the app. Same-id data updates retain target ids and replace their mapped
+    /// behavior before the retained ToastStack receives its new specs.
+    pub fn sync_visible_toasts(&mut self, hints: &mut crate::chrome::HintTargetRegistry) -> bool {
+        let visible: Vec<_> = self
+            .store
+            .visible()
+            .map(|notification| {
+                (
+                    notification.id,
+                    notification.action.as_ref().map(|action| action.intent.clone()),
+                    notification.lifecycle.is_dismissible(),
+                )
+            })
+            .collect();
+        let visible_ids: std::collections::HashSet<_> = visible.iter().map(|(id, _, _)| *id).collect();
+
+        let stale: Vec<_> = self
+            .hint_targets
+            .keys()
+            .copied()
+            .filter(|id| !visible_ids.contains(id))
+            .collect();
+        for id in stale {
+            if let Some(targets) = self.hint_targets.remove(&id) {
+                if let Some(target) = targets.action {
+                    hints.remove(target);
+                }
+                if let Some(target) = targets.dismiss {
+                    hints.remove(target);
+                }
+            }
+        }
+
+        for (id, action, dismissible) in visible {
+            let targets = self.hint_targets.entry(id).or_default();
+            match action {
+                Some(intent) => {
+                    let routed = crate::app::interaction::InteractionIntent::View(intent);
+                    match targets.action {
+                        Some(target) => hints.replace(target, routed),
+                        None => targets.action = Some(hints.register(routed)),
+                    }
+                }
+                None => {
+                    if let Some(target) = targets.action.take() {
+                        hints.remove(target);
+                    }
+                }
+            }
+
+            match dismissible {
+                true => {
+                    let intent = crate::chrome::Intent::new("notification.dismiss")
+                        .arg("id", crate::chrome::PropValue::Text(id.as_u64().to_string()));
+                    let routed = crate::app::interaction::InteractionIntent::View(intent);
+                    match targets.dismiss {
+                        Some(target) => hints.replace(target, routed),
+                        None => targets.dismiss = Some(hints.register(routed)),
+                    }
+                }
+                false => {
+                    if let Some(target) = targets.dismiss.take() {
+                        hints.remove(target);
+                    }
+                }
+            }
+        }
+
+        let next = self.store.visible_toasts(|id| {
+            let targets = self.hint_targets.get(&id).copied().unwrap_or_default();
+            (targets.action, targets.dismiss)
+        });
+        if self.visible_toasts.get_untracked() == next {
+            return false;
+        }
+        self.visible_toasts.set(next);
+        true
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SidebarItemState {
@@ -638,6 +767,8 @@ pub struct AppState {
     /// Host-owned git metadata cache keyed by repo root / pane cwd.
     pub git_runtime_cache: crate::app::git_monitor::GitRuntimeCache,
     pub session: Session,
+    /// Canonical notification lifecycle and retained presentation state.
+    pub notifications: NotificationRuntime,
     /// Content backends for panes that have one.
     pub backends: BackendStore,
     pub theme: Theme,

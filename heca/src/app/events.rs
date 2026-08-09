@@ -29,6 +29,10 @@ pub enum AppEvent {
         source: InteractionSource,
         intent: InteractionIntent,
     },
+    /// Request late-bound resolution of the action currently stored for a
+    /// visible notification. It transports only the runtime id; dispatch stays
+    /// in the app thread through `dispatch_view_intent`.
+    NotificationActionRequested { notification_id: u64 },
 }
 
 pub(crate) fn handle_window_event(

@@ -380,6 +380,9 @@ pub(crate) async fn init_state(
         background,
         git_runtime_cache: crate::app::git_monitor::GitRuntimeCache::default(),
         session,
+        notifications: crate::app_state::NotificationRuntime::new(
+            app_config.config.settings.notification_history_limit,
+        ),
         backends,
         theme: app_config.theme.clone(),
         programs: std::rc::Rc::new(app_config.config.programs.clone()),

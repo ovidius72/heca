@@ -167,12 +167,44 @@ use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     BadgeButton, Flex, FocusScope, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label, Pane,
-    ScrollBar, Separator, Surface, Tag,
+    ScrollBar, Separator, Surface, Tag, ToastCorner, ToastStack,
     Tooltip,
     TooltipSide,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
+
+/// Mount the application-owned toast presentation once as a persistent overlay.
+pub(crate) fn mount_notification_toasts(state: &mut crate::app_state::AppState) {
+    if state.notifications.layer_id.is_some() {
+        return;
+    }
+    let dismiss_proxy = state.event_proxy.clone();
+    let action_proxy = state.event_proxy.clone();
+    let stack = ToastStack::new(state.notifications.visible_toasts)
+        .corner(ToastCorner::TopRight)
+        .on_dismiss(move |id| {
+            let intent = crate::chrome::Intent::new("notification.dismiss")
+                .arg("id", crate::chrome::PropValue::Text(id.to_string()));
+            let _ = dismiss_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                source: crate::app::interaction::InteractionSource::ChromeOverlay,
+                intent: crate::app::interaction::InteractionIntent::View(intent),
+            });
+        })
+        .on_action(move |notification_id| {
+            let _ = action_proxy.send_event(
+                crate::app::events::AppEvent::NotificationActionRequested { notification_id },
+            );
+        });
+    let id = state.layers.add(
+        LayerBand::Overlay,
+        LayerKind::Persistent,
+        false,
+        false,
+        Box::new(stack),
+    );
+    state.notifications.layer_id = Some(id);
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PaneInfoView {
@@ -1282,14 +1314,18 @@ pub(crate) fn dispatch_modal_pointer(
         ),
         "dispatch_modal_pointer is the pointer path; keys go through the keymap",
     );
-    if top_modal(state).is_none() {
-        return false;
+    if top_modal(state).is_some() {
+        if let Some(root) = state.layers.top_modal_root_mut() {
+            let _ = heca_grid_ui::dispatch(root, ev);
+        }
+        state.mark_full_redraw();
+        return true;
     }
-    if let Some(root) = state.layers.top_modal_root_mut() {
-        let _ = heca_grid_ui::dispatch(root, ev);
+    let handled = state.layers.dispatch_non_modal_pointer(ev) == heca_grid_ui::Handled::Yes;
+    if handled {
+        state.mark_full_redraw();
     }
-    state.mark_full_redraw();
-    true
+    handled
 }
 
 /// Dispatch a pointer press at `pos` into the retained pane headers. Returns
@@ -2810,6 +2846,24 @@ impl HintTargetRegistry {
         for i in range {
             self.intents.remove(&heca_grid_ui::HintTargetId::new(i));
         }
+    }
+
+    /// Replace the intent behind an already-laid-out target without changing
+    /// its opaque identity. Used for retained controls whose same-ID data updates
+    /// must not make a KeyHint candidate point at stale behavior.
+    pub(crate) fn replace(
+        &mut self,
+        id: heca_grid_ui::HintTargetId,
+        intent: crate::app::interaction::InteractionIntent,
+    ) {
+        if let Some(slot) = self.intents.get_mut(&id) {
+            *slot = intent;
+        }
+    }
+
+    /// Remove one target as its individual control disappears from a retained tree.
+    pub(crate) fn remove(&mut self, id: heca_grid_ui::HintTargetId) {
+        self.intents.remove(&id);
     }
 
     /// The intent for `id` (`None` if it is not a live target).
@@ -4927,6 +4981,7 @@ mod tests {
 #[cfg(test)]
 mod search_bar_tests {
     use super::*;
+    use crate::app::interaction::InteractionIntent;
 
     /// A pane deliberately far from the window origin: a bar placed relative to the
     /// window instead of the pane lands nowhere near this rect.
@@ -4984,6 +5039,19 @@ mod search_bar_tests {
             right_gap < p.size.w / 2.0 && bottom_gap < p.size.h / 2.0,
             "expected bottom-right; gaps were right={right_gap} bottom={bottom_gap}"
         );
+    }
+
+    #[test]
+    fn hint_target_replacement_keeps_its_opaque_id_and_removal_makes_it_unreachable() {
+        let mut hints = super::HintTargetRegistry::default();
+        let id = hints.register(InteractionIntent::View(Intent::new("notification.old")));
+        hints.replace(id, InteractionIntent::View(Intent::new("notification.new")));
+        assert!(matches!(
+            hints.get(id),
+            Some(InteractionIntent::View(intent)) if intent.action == "notification.new"
+        ));
+        hints.remove(id);
+        assert!(hints.get(id).is_none());
     }
 
     /// The bar is sized by the field the engine measured, not by arithmetic — the old

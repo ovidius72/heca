@@ -235,6 +235,25 @@ impl LayerRegistry {
             .map(|l| l.id)
     }
 
+    /// Offer a pointer event to visible non-modal layers from front to back.
+    ///
+    /// Returning `Handled::No` keeps the underlying chrome/content interactive.
+    pub(crate) fn dispatch_non_modal_pointer(&mut self, event: &heca_grid_ui::Event) -> heca_grid_ui::Handled {
+        let ids: Vec<_> = self.visible_front_to_back()
+            .into_iter()
+            .filter(|layer| !layer.modal)
+            .map(|layer| layer.id)
+            .collect();
+        for id in ids {
+            let layer = self.layers.iter_mut().find(|layer| layer.id == id)
+                .expect("visible layer id came from this registry");
+            if heca_grid_ui::dispatch(layer.root.as_mut(), event) == heca_grid_ui::Handled::Yes {
+                return heca_grid_ui::Handled::Yes;
+            }
+        }
+        heca_grid_ui::Handled::No
+    }
+
     /// The root of the front-most visible modal layer, mutably — the input target while a modal
     /// is up. Pairs with [`top_modal_id`](Self::top_modal_id).
     pub(crate) fn top_modal_root_mut(&mut self) -> Option<&mut (dyn Component + 'static)> {

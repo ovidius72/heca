@@ -60,6 +60,11 @@ pub(crate) enum InteractionSource {
     MouseContent,
     /// Mouse click or drag in the left sidebar.
     MouseLeftSidebar,
+    /// Activation from a persistent, non-modal chrome overlay such as the toast stack.
+    ///
+    /// This identifies the surface for policy/audit purposes; it does not elevate
+    /// the action above the policy it declares.
+    ChromeOverlay,
     /// A mounted **component** asking the host for something from inside its `perform`
     /// (`ProviderCx::dispatch`, F003/P085/T353).
     ///
@@ -412,7 +417,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ── Global: true app-level action, allowed even when Floating ──
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
-        WmAction::ReloadConfig => ActionPolicy::Global,
+        WmAction::ReloadConfig | WmAction::DismissNotification { .. } => ActionPolicy::Global,
         // Forgetting a search memory touches no layout and no pane, so there is no domain in which
         // it should be refused.
         WmAction::ClearSearchHistory { .. } | WmAction::ClearSearchRanking { .. } => {
@@ -648,6 +653,7 @@ fn policy_allows(
                     InteractionSource::Keyboard => false,
                     InteractionSource::MouseContent => false,
                     InteractionSource::MouseLeftSidebar => false,
+                    InteractionSource::ChromeOverlay => false,
                     // A component gets no more reach than the user driving it: if the same request
                     // would be blocked from a key while a pane is floating, asking for it from
                     // inside `perform` must be blocked too.
@@ -729,6 +735,7 @@ pub(crate) fn can_focus_pane(
             InteractionSource::Keyboard => true,
             InteractionSource::MouseContent => true,
             InteractionSource::MouseLeftSidebar => true,
+            InteractionSource::ChromeOverlay => true,
             // A component asking to focus a pane is the sidebar's "activate this row" in another
             // shape — allowed in the tiled domain like every other source, as is a script's.
             InteractionSource::Provider | InteractionSource::Rpc => true,
@@ -1362,6 +1369,58 @@ mod tests {
         }
     }
 
+    #[test]
+    fn chrome_overlay_has_no_policy_bypass() {
+        let session = test_session();
+        assert!(policy_allows(
+            &session,
+            Domain::Floating,
+            InteractionSource::ChromeOverlay,
+            ActionPolicy::Global,
+            None,
+        ));
+        assert!(!policy_allows(
+            &session,
+            Domain::Floating,
+            InteractionSource::ChromeOverlay,
+            ActionPolicy::TiledOnly,
+            None,
+        ));
+        assert!(!policy_allows(
+            &session,
+            Domain::Overlay,
+            InteractionSource::ChromeOverlay,
+            ActionPolicy::FocusedPaneLocal,
+            None,
+        ));
+    }
+
+    #[test]
+    fn chrome_overlay_applies_declared_dynamic_policy() {
+        let session = test_session();
+        assert!(policy_allows(
+            &session,
+            Domain::Floating,
+            InteractionSource::ChromeOverlay,
+            ActionPolicy::Global,
+            None,
+        ));
+        assert!(!policy_allows(
+            &session,
+            Domain::Floating,
+            InteractionSource::ChromeOverlay,
+            ActionPolicy::WorkspaceLevel,
+            None,
+        ));
+        assert!(!policy_allows(
+            &session,
+            Domain::Overlay,
+            InteractionSource::ChromeOverlay,
+            ActionPolicy::TiledOnly,
+            None,
+        ));
+    }
+
     /// **A script is judged like a key, not like a click** (F003/P085/T358).
     ///
     /// A click lands *on* something and is judged by what it landed on; a script lands on nothing,
@@ -1684,6 +1743,10 @@ mod tests {
             ActionPolicy::AlwaysAllowed
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
+        assert_eq!(
+            action_policy(&WmAction::DismissNotification { notification_id: 1 }),
+            ActionPolicy::Global,
+        );
         // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused
         // container's own `activate`/`peek` move pane focus and are reached through the first, so it
         // must not open while a float owns the domain — but a way out that can be blocked is not a

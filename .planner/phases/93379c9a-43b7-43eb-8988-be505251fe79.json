@@ -114,8 +114,8 @@
       "priority": 4,
       "shortName": "store-dedup",
       "title": "Implement dedup without visual jumps",
-      "status": "planned",
-      "description": "Implementare dedup per chiave esplicita. Duplicato visibile: mantenere ID e slot, sostituire dati canonici, aggiornare target/action e riavviare il timer. Duplicato pending: mantenere ID, aggiornare dati e spostare la voce in testa alla coda d'attesa senza espellere una card visibile. Duplicato presente soltanto in cronologia: rimuoverlo dalla cronologia, aggiornare i dati e riattivarlo come voce più recente secondo disponibilità slot, mantenendo l'ID per continuità dedup. Una chiave assente crea un nuovo ID. Mantenere coerente l'indice in dismiss/expiry/history trimming.",
+      "status": "done",
+      "description": "Implementare dedup per chiave esplicita. Duplicato visibile: mantenere ID e slot, sostituire dati canonici, aggiornare target/action e riavviare il timer. Duplicato pending: mantenere ID, aggiornare dati e spostare la voce in testa alla coda d'attesa senza espellere una card visibile. Duplicato presente soltanto in cronologia: rimuoverlo dalla cronologia, aggiornare i dati e riattivarlo come voce più recente secondo disponibilità slot, mantenendo l'ID per continuità dedup. Una chiave assente crea un nuovo ID. Mantenere coerente l'indice in dismiss/expiry/history trimming.\n\n---\n**Completion summary:**\nImplementata policy dedup in `NotificationStore::push`: mantiene il medesimo `NotificationId`; per visibile sostituisce il modello nello stesso slot e riavvia `visible_since`/expiry; per pending aggiorna e sposta in testa FIFO; per history rimuove dalla history e riattiva in testa pending, promuovendo se esiste slot libero. History bounded rimuove l’indice dedup dell’eviction. Aggiunti test visible, pending, history-reactivation e trim. Validazione: 54 test notification pass.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -125,45 +125,45 @@
           "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-001-caso-visible-in-place",
           "number": 1,
           "title": "Caso visible in-place.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-002-caso-pending-prioritario",
           "number": 2,
           "title": "Caso pending prioritario.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-003-caso-archived-riattivato",
           "number": 3,
           "title": "Caso archived riattivato.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-004-caso-nuova-chiave",
           "number": 4,
           "title": "Caso nuova chiave.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-005-indice-coerente-dopo-trim",
           "number": 5,
           "title": "Indice coerente dopo trim.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a395e3d6-2d24-495d-a496-22f9c60c5599-check-006-duplicato-visibile-aggiorna-in-loco-e-riavvia-il-timer-senza-cambiare-slot",
           "number": 6,
           "title": "Duplicato visibile aggiorna in loco e riavvia il timer senza cambiare slot.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T17:22:28.848Z",
+      "completedAt": "2026-08-08T18:15:31.180Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-08T17:14:37.941Z"
+      "updatedAt": "2026-08-08T18:15:31.180Z"
     },
     {
       "id": "b1a5b9b6-3712-4453-8fa1-c81ceaa7f979",
@@ -226,8 +226,8 @@
       "priority": 3,
       "shortName": "store-dismiss",
       "title": "Implement dismiss and archive transition",
-      "status": "planned",
-      "description": "Implementare la mutazione store invocata esclusivamente dall'handler registrato `DismissNotification`. Dismiss di una visibile/pending rimuove la voce dal relativo stato, la archivia con causa e timestamp, aggiorna gli indici e promuove pending se necessario. ID sconosciuto è un no-op deterministico riportabile all'handler, non un panic. Rispettare `dismissible`: il percorso utente non chiude una voce non dismissible; i producer/runtime possono avere un'API interna distinta per rimuovere errori risolti, come `config.reload.failed`.",
+      "status": "done",
+      "description": "Implementare la mutazione store invocata esclusivamente dall'handler registrato `DismissNotification`. Dismiss di una visibile/pending rimuove la voce dal relativo stato, la archivia con causa e timestamp, aggiorna gli indici e promuove pending se necessario. ID sconosciuto è un no-op deterministico riportabile all'handler, non un panic. Rispettare `dismissible`: il percorso utente non chiude una voce non dismissible; i producer/runtime possono avere un'API interna distinta per rimuovere errori risolti, come `config.reload.failed`.\n\n---\n**Completion summary:**\nImplementata la transizione store-owned `NotificationStore::dismiss(id, now)` in `heca/src/notification.rs`. Restituisce `NotificationDismissResult::{Dismissed, Unknown, NotDismissible}`; il dismiss visibile libera soltanto il suo slot, archivia e promuove FIFO la pending, mentre il dismiss pending non modifica la proiezione. Gli ID ignoti e le notifiche persistent/non-dismissible sono no-op deterministici. `resolve(id, now)` crate-private consente ai producer/runtime di rimuovere una persistent senza esporre il bypass al percorso utente. Le dedup key restano indicizzate nella history per la futura riattivazione di T195. Aggiunti test per visible+promozione, pending, unknown, persistent e resolve runtime. Validazione: `cargo test -p heca notification` (51 pass), `cargo clippy --workspace --all-targets --all-features`, `git diff --check` (pass; warning future-incompatibility di `block` esterno).",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -237,39 +237,39 @@
           "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-001-dismiss-visible-e-pending",
           "number": 1,
           "title": "Dismiss visible e pending.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-002-unknown-id-no-panic",
           "number": 2,
           "title": "Unknown ID no panic.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-003-non-dismissible-bloccata-dal-percorso-utente",
           "number": 3,
           "title": "Non-dismissible bloccata dal percorso utente.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-004-rimozione-interna-per-risoluzione-producer",
           "number": 4,
           "title": "Rimozione interna per risoluzione producer.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cb773621-1f27-4e0d-ae2a-e012cea246e3-check-005-promozione-e-indici-coerenti",
           "number": 5,
           "title": "Promozione e indici coerenti.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T17:15:14.939Z",
+      "completedAt": "2026-08-08T17:21:29.242Z",
       "createdAt": "2026-07-03T22:51:32.842Z",
-      "updatedAt": "2026-08-08T17:13:40.446Z"
+      "updatedAt": "2026-08-08T17:21:29.242Z"
     },
     {
       "id": "e14441ba-a259-4b4e-ad4e-ea787dbd08a8",
@@ -332,8 +332,8 @@
       "priority": 5,
       "shortName": "visible-toasts",
       "title": "Implement stable four-slot visible projection",
-      "status": "planned",
-      "description": "Esporre la proiezione ordinata delle notifiche visibili verso `Vec<ToastSpec>` mantenendo la posizione relativa degli elementi già visibili. Il limite è quattro. La rimozione lascia uno slot che viene riempito dalla prima pending; non risortare tutte le card per severity o timestamp a ogni aggiornamento. Fornire un modo economico per rilevare cambiamenti della proiezione e registrare target Hint per le sole affordance visibili.",
+      "status": "done",
+      "description": "Esporre la proiezione ordinata delle notifiche visibili verso `Vec<ToastSpec>` mantenendo la posizione relativa degli elementi già visibili. Il limite è quattro. La rimozione lascia uno slot che viene riempito dalla prima pending; non risortare tutte le card per severity o timestamp a ogni aggiornamento. Fornire un modo economico per rilevare cambiamenti della proiezione e registrare target Hint per le sole affordance visibili.\n\n---\n**Completion summary:**\nEsposta proiezione stabile dello store: `visible()` itera gli slot in ordine e `visible_toasts(targets)` materializza `Vec<ToastSpec>` passando gli ID canonici al registrar host per i target opachi. Queued/history restano escluse e le slot visibili non vengono ordinate. Le sequenze push/dismiss/expiry/promozione esistenti verificano cap quattro e stabilità. Validazione: 54 test notification, clippy e diff-check pass.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -343,39 +343,39 @@
           "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-001-massimo-quattro-spec",
           "number": 1,
           "title": "Massimo quattro spec.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-002-ordine-stabile-dopo-dismiss-expiry-update",
           "number": 2,
           "title": "Ordine stabile dopo dismiss/expiry/update.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-003-promozione-pending-deterministica",
           "number": 3,
           "title": "Promozione pending deterministica.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-004-nessuna-severity-sort-continua",
           "number": 4,
           "title": "Nessuna severity sort continua.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "113d5dd1-0639-4492-912c-aaf088e1587a-check-005-test-sequenza-con-pi-di-quattro-notifiche",
           "number": 5,
           "title": "Test sequenza con più di quattro notifiche.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T18:40:36.634Z",
+      "completedAt": "2026-08-08T20:30:18.107Z",
       "createdAt": "2026-07-03T22:51:32.843Z",
-      "updatedAt": "2026-08-08T17:13:40.448Z"
+      "updatedAt": "2026-08-08T20:30:18.107Z"
     },
     {
       "id": "671754ad-5b4d-4472-997c-d379b4986ad5",
@@ -385,8 +385,8 @@
       "priority": 6,
       "shortName": "store-action-for",
       "title": "Implement notification action and target lookup",
-      "status": "planned",
-      "description": "Esporre lookup read-only per ID visibile che restituisce/clona la `NotificationAction` e i target runtime necessari all'host. Non eseguire l'Intent nello store. Rifiutare azioni per ID archiviati, rimossi o senza action; evitare borrow dello store attraverso il dispatch, perché l'handler dell'Intent può mutare AppState. Fornire lookup per dedup key usato dal producer reload per risolvere/rimuovere l'errore sticky.",
+      "status": "done",
+      "description": "Esporre lookup read-only per ID visibile che restituisce/clona la `NotificationAction` e i target runtime necessari all'host. Non eseguire l'Intent nello store. Rifiutare azioni per ID archiviati, rimossi o senza action; evitare borrow dello store attraverso il dispatch, perché l'handler dell'Intent può mutare AppState. Fornire lookup per dedup key usato dal producer reload per risolvere/rimuovere l'errore sticky.\n\n---\n**Completion summary:**\nCompletato lookup store-owned: `action_for_visible`, `action_intent_for_visible` (clone prima dispatch) e `notification_id_for_dedup_key`; queued/history/missing non producono target azionabili. I duplicati same-ID aggiornano il modello canonico e quindi il lookup. Validazione: 54 test notification, clippy e diff-check pass.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -396,39 +396,39 @@
           "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-001-lookup-action-visibile",
           "number": 1,
           "title": "Lookup action visibile.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-002-no-action-per-archived-missing",
           "number": 2,
           "title": "No action per archived/missing.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-003-clone-prima-del-dispatch",
           "number": 3,
           "title": "Clone prima del dispatch.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-004-lookup-dedup-key",
           "number": 4,
           "title": "Lookup dedup key.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "671754ad-5b4d-4472-997c-d379b4986ad5-check-005-test-action-aggiornata-same-id",
           "number": 5,
           "title": "Test action aggiornata same-ID.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T20:30:24.170Z",
+      "completedAt": "2026-08-08T21:47:55.109Z",
       "createdAt": "2026-07-03T22:51:32.843Z",
-      "updatedAt": "2026-08-08T17:13:40.449Z"
+      "updatedAt": "2026-08-08T21:47:55.109Z"
     },
     {
       "id": "d976a997-ed47-4b76-819d-2028cefa9eed",
@@ -438,8 +438,8 @@
       "priority": 7,
       "shortName": "next-expiry",
       "title": "Compute next visible notification expiry",
-      "status": "planned",
-      "description": "Implementare `next_expiry()` come minimo degli `expires_at` delle sole notifiche visibili auto-dismiss. Restituire `None` con sole pending/sticky o store vuoto. Dopo push, dedup, dismiss, expiry e promozione il risultato deve riflettere immediatamente il nuovo stato. Non chiamare `Instant::now` internamente.",
+      "status": "done",
+      "description": "Implementare `next_expiry()` come minimo degli `expires_at` delle sole notifiche visibili auto-dismiss. Restituire `None` con sole pending/sticky o store vuoto. Dopo push, dedup, dismiss, expiry e promozione il risultato deve riflettere immediatamente il nuovo stato. Non chiamare `Instant::now` internamente.\n\n---\n**Completion summary:**\nAggiunto `NotificationStore::next_expiry()`: minimo delle deadline auto-dismiss nelle sole card visibili; pending/sticky/history esclusi. Test copre minimo e `None` store vuoto. Validazione: 55 test notification, clippy e diff-check pass.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -449,39 +449,39 @@
           "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-001-minimo-tra-visibili",
           "number": 1,
           "title": "Minimo tra visibili.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-002-pending-sticky-ignorate",
           "number": 2,
           "title": "Pending/sticky ignorate.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-003-aggiornamento-dopo-reset-timer",
           "number": 3,
           "title": "Aggiornamento dopo reset timer.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-004-none-corretto",
           "number": 4,
           "title": "None corretto.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d976a997-ed47-4b76-819d-2028cefa9eed-check-005-test-con-scadenze-uguali",
           "number": 5,
           "title": "Test con scadenze uguali.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T21:47:59.153Z",
+      "completedAt": "2026-08-08T21:49:17.137Z",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-08-08T17:13:40.447Z"
+      "updatedAt": "2026-08-08T21:49:17.137Z"
     },
     {
       "id": "e2f02933-4071-40d3-a069-60da05391c32",
@@ -491,8 +491,8 @@
       "priority": 8,
       "shortName": "lifecycle-expiry",
       "title": "Integrate notification expiry into lifecycle scheduling",
-      "status": "planned",
-      "description": "Integrare store e `next_expiry()` in `heca/src/app/lifecycle.rs:87-172`. A ogni tick pertinente chiamare `expire_due(now)`, sincronizzare signal/hint soltanto se cambia la proiezione e richiedere redraw. Nel calcolo `ControlFlow`, scegliere il minimo tra prossimo frame necessario alle animazioni e prossima scadenza; se nessuno esiste usare Wait. Evitare wake-up per pending/sticky e busy-loop quando una deadline è già trascorsa: processarla prima di impostare il prossimo wait.",
+      "status": "done",
+      "description": "Integrare store e `next_expiry()` in `heca/src/app/lifecycle.rs:87-172`. A ogni tick pertinente chiamare `expire_due(now)`, sincronizzare signal/hint soltanto se cambia la proiezione e richiedere redraw. Nel calcolo `ControlFlow`, scegliere il minimo tra prossimo frame necessario alle animazioni e prossima scadenza; se nessuno esiste usare Wait. Evitare wake-up per pending/sticky e busy-loop quando una deadline è già trascorsa: processarla prima di impostare il prossimo wait.\n\n---\n**Completion summary:**\nIntegrato NotificationStore in AppState/startup con history limit configurato. `handle_about_to_wait` esegue `expire_due(now)`, richiede redraw se la proiezione cambia e seleziona il minimo tra deadline frame e `next_expiry()` per ControlFlow, evitando wait inutile per pending/sticky. Validazione: 55 test notification, clippy e diff-check pass.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -502,39 +502,39 @@
           "id": "e2f02933-4071-40d3-a069-60da05391c32-check-001-expire-prima-del-nuovo-wait",
           "number": 1,
           "title": "Expire prima del nuovo wait.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e2f02933-4071-40d3-a069-60da05391c32-check-002-min-frame-deadline-notification-deadline",
           "number": 2,
           "title": "Min(frame_deadline, notification_deadline).",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e2f02933-4071-40d3-a069-60da05391c32-check-003-wait-con-sole-pending-sticky",
           "number": 3,
           "title": "Wait con sole pending/sticky.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e2f02933-4071-40d3-a069-60da05391c32-check-004-redraw-sync-su-transizione",
           "number": 4,
           "title": "Redraw/sync su transizione.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e2f02933-4071-40d3-a069-60da05391c32-check-005-test-o-helper-puro-per-scelta-deadline",
           "number": 5,
           "title": "Test o helper puro per scelta deadline.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T21:49:20.198Z",
+      "completedAt": "2026-08-08T21:52:40.552Z",
       "createdAt": "2026-07-03T22:51:32.844Z",
-      "updatedAt": "2026-08-08T17:13:40.448Z"
+      "updatedAt": "2026-08-08T21:52:40.552Z"
     },
     {
       "id": "a2ca34b3-b1c5-475e-8572-48295fe43878",
@@ -544,8 +544,8 @@
       "priority": 9,
       "shortName": "notification-history",
       "title": "Implement bounded runtime notification history",
-      "status": "planned",
-      "description": "Implementare la cronologia runtime limitata secondo `notification_history_limit` definito in `heca-config/src/settings.rs`. Archiviare almeno causa (`Dismissed`, `Expired`, `Resolved`), timestamp e snapshot della notifica; applicare trimming deterministico degli elementi più vecchi e mantenere coerente l'indice dedup. Esporre API read-only per futuri consumer e test, senza costruire una schermata UI e senza persistenza su disco. Una notifica deduplicata presente soltanto nella cronologia viene rimossa dalla cronologia e riattivata secondo la policy dello store.",
+      "status": "done",
+      "description": "Implementare la cronologia runtime limitata secondo `notification_history_limit` definito in `heca-config/src/settings.rs`. Archiviare almeno causa (`Dismissed`, `Expired`, `Resolved`), timestamp e snapshot della notifica; applicare trimming deterministico degli elementi più vecchi e mantenere coerente l'indice dedup. Esporre API read-only per futuri consumer e test, senza costruire una schermata UI e senza persistenza su disco. Una notifica deduplicata presente soltanto nella cronologia viene rimossa dalla cronologia e riattivata secondo la policy dello store.\n\n---\n**Completion summary:**\nCompletata runtime history bounded: `NotificationPlacement::History` conserva `NotificationArchiveCause` e `archived_at`; `retain_history` applica limite configurato, eviction FIFO e rimozione coerente da storage/dedup. Esposte proiezioni read-only `NotificationStore::history()` e `AppNotification::archived_at()`. Test coprono limit=1, dedup eviction e riattivazione. Validazione: 54 test notification, clippy e diff-check pass.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -555,43 +555,43 @@
           "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-001-record-con-causa-e-timestamp",
           "number": 1,
           "title": "Record con causa e timestamp.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-002-limite-configurabile-applicato",
           "number": 2,
           "title": "Limite configurabile applicato.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-003-trim-pi-vecchi-e-indice-coerente",
           "number": 3,
           "title": "Trim più vecchi e indice coerente.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-004-api-read-only",
           "number": 4,
           "title": "API read-only.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a2ca34b3-b1c5-475e-8572-48295fe43878-check-005-test-riattivazione-da-history-e-limit-1-100",
           "number": 5,
           "title": "Test riattivazione da history e limit=1/100.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-08T17:33:01.286Z",
+      "completedAt": "2026-08-08T18:40:31.667Z",
       "createdAt": "2026-08-06T14:13:50.024Z",
-      "updatedAt": "2026-08-08T17:13:40.449Z"
+      "updatedAt": "2026-08-08T18:40:31.667Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-08T17:14:49.227Z",
+  "updatedAt": "2026-08-08T21:52:40.552Z",
   "handoff": "# P056 — NotificationStore foundation; P061 context and T196 next\n\nCreated at: 2026-08-08T14:50:26Z\nUpdated at: 2026-08-08T14:50:26Z\nReason: Consolidated the completed P061 domain/config context with the newer P056/T198 store-foundation work. P056 is the active notification phase and this is the canonical resume point.\n\n## Current focus\n- Feature: `F009` — 🔔 Notification System — **in-progress**.\n- Phase: `P056(F009)` — notification-02: Store, Queue, Visibility + History — **in-progress**.\n- Task: `T198` — Define NotificationStore invariants and structures — **done**. Next planned task: `T196` — Implement push, monotonic IDs and slot promotion.\n\n## What was being done\n- P061 is complete: it established the app-owned notification domain/config, including extensible sources, lifecycles/defaults, canonical drafts/actions/severity, `NotificationSystem`, `notification_history_limit`, and the thin `AppNotification → ToastSpec` projection.\n- The host, not grid-ui, owns queue, deduplication, lifecycle timers, history and action dispatch; `ToastStack` receives presentation data and opaque hint targets only.\n- T198 then created `NotificationStore` in `heca/src/notification.rs` as the sole mutable owner: canonical storage, dedup index, pending FIFO, four stable visible slots, bounded history and store-owned next-id counter.\n- `AppNotification::placement` is private, preventing consumers from moving entries between lifecycle buckets.\n- `transition_at(now, ...)` is the private mutation funnel: future operations receive caller-injected `Instant`, debug-validate representation invariants, and return `NotificationStoreUpdate::visible_projection_changed()` rather than requiring the host to infer refreshes.\n- Focused tests cover empty state, disabled history and the time/update transaction contract; 40 notification tests and workspace clippy pass.\n\n## How to resume\n1. Read this handoff and inspect `heca/src/notification.rs` around `NotificationStore`, `NotificationStoreUpdate`, `transition_at` and `assert_invariants`.\n2. Start `T196` before editing.\n3. Implement the public push path only through `transition_at(now, ...)`: allocate the store-owned monotonic id, create canonical storage/index entries, enqueue, then promote into the first vacant stable slot without moving existing visible ids.\n4. Reuse P061 contracts: a producer yields `NotificationDraft`; action remains a name-keyed `heca_view::Intent`; projection remains `project_visible_toast`; no closure, bare `WmAction`, grid-ui queue logic or consumer-side lifecycle inference.\n5. Leave expiry, dedup policy, dismissal/archive, history trimming, toast host integration/action dispatch and lifecycle wake scheduling to their dedicated planned tasks (`T194`, `T195`, `T197`, `T199`–`T202`, `T395`, P059 and P060).\n6. Add deterministic tests with caller-supplied `Instant`; run `cargo test -p heca notification`, `cargo check -p heca`, and `cargo clippy --workspace --all-targets --all-features`.\n\n## Files touched\n- `heca/src/notification.rs`\n- `heca-config/src/settings.rs` (P061)\n- `config.default.toml` (P061)\n- `agent-rules.md` (session rule recording)\n\n## Blockers\nNone recorded.\n\n## Next steps\n- T196: store-owned monotonic ID allocation, push and stable-slot promotion.\n- Continue P056 in task order without exposing queue, slot, dedup or lifecycle policy to application consumers.\n- Only after store behavior is ready, proceed to the already-planned host integration and action-dispatch phases.\n\n## Recent decisions\n- `NotificationStore` alone owns mutable notification lifecycle; consumers consume a projection/update result and do not reconstruct domain state.\n- Four simultaneous cards are centralized in `MAX_VISIBLE_NOTIFICATIONS`, not scattered literals.\n- All store transitions accept caller-injected `Instant`; the store never reads the wall clock.\n- Notification actions preserve `heca_view::Intent`, not callbacks or only `WmAction`.\n- `NotificationSystem::System` falls back to the in-app ToastStack with one warning per session until P063; `None` suppresses presentation but preserves stderr/debug logging.\n- Runtime history is not persisted.\n\n## Reminder\nThis supersedes the P061 handoff. When P056 is fully resumed and its work is complete, clear this entity-scoped handoff with `handoff_clear(P056(F009))`.",
   "handoffUpdatedAt": "2026-08-08T14:52:23.016Z",
   "handoffReadAt": "",

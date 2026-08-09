@@ -1,0 +1,384 @@
+{
+  "id": "e298f926-f6b3-4147-abcc-eea87171cd81",
+  "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
+  "number": 60,
+  "shortId": "CYZQB",
+  "priority": 3,
+  "slug": "notification-03-persistent-overlay-integration",
+  "title": "notification-03: Persistent Overlay Integration",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Integrare NotificationRuntime e ToastStack come overlay persistente, non modale e pass-through.",
+  "description": "Aggiungere lo store/runtime notifiche ad `AppState` e ospitare `ToastStack` in un `LayerBand::Overlay` persistente, non modale e non coprente. Questa scelta segue il riferimento esplicito dello showcase in `heca-renderer/examples/showcase.rs:311-320`, dove gli overlay viewport-anchored sono separati dalla pagina e modellano il `LayerRegistry` dell'app. Il runtime conserva il signal `Vec<ToastSpec>` e l'eventuale `LayerId`; `sync_chrome_state` o un helper dedicato aggiorna il signal soltanto quando cambia la proiezione visibile. Estendere il routing dei livelli: un modale davanti cattura come oggi; in assenza di modale, i livelli visibili non modali ricevono pointer event front-to-back e il dispatch prosegue quando restituiscono `Handled::No`. ToastStack deve quindi consumare soltanto card/affordance e lasciare passare il resto. Layout, paint e tick restano generici attraverso `LayerRegistry`, `layout_layers`, `paint_layers` e `visible_roots_mut` in `heca/src/chrome/layers.rs:212-238`, `heca/src/chrome/mod.rs:2279-2312` e `heca/src/app/lifecycle.rs:126-131`.",
+  "notes": "",
+  "goals": [
+    "Un solo runtime app-owned per store, signal e stato fallback.",
+    "Overlay ancorato al viewport e ordinato sotto i modali.",
+    "Pointer pass-through generico e riutilizzabile per livelli non modali.",
+    "Aggiornamento reattivo senza ricostruire l'albero ogni frame."
+  ],
+  "nonGoals": [
+    "Inserire ToastStack nel normale Flex del chrome.",
+    "Aggiungere un router speciale soltanto per le notifiche.",
+    "Eseguire direttamente azioni dal widget."
+  ],
+  "dependencies": [
+    "P058(F009) ToastStack corretto.",
+    "P056(F009) proiezione visibile stabile."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Routing non modale può duplicare hover/click se non rispetta Handled; testare press/release/move.",
+    "Un modale deve occludere interazione e hint dei toast dietro di esso.",
+    "Conservare signal/layer id in ChromeSignals potrebbe mescolare runtime di dominio e chrome; preferire un NotificationRuntime dedicato in AppState."
+  ],
+  "openQuestions": [],
+  "decisions": [
+    "LayerBand::Overlay persistente, modal=false, covers_content=false.",
+    "Nessun mount nel chrome root normale.",
+    "Gli eventi non gestiti proseguono all'interfaccia sottostante."
+  ],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "ToastStack segue viewport e band ordering.",
+    "Click fuori dai toast raggiunge il contenuto sottostante.",
+    "Modale aperto impedisce azioni sui toast dietro.",
+    "Signal e retained tree non vengono ricreati inutilmente."
+  ],
+  "taskIds": [
+    "03455c50-7d6c-418d-9010-bcf66524628e",
+    "3206fec1-67f3-4190-98ca-7a9d96492140",
+    "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
+    "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
+    "98793de9-2224-4fb4-b156-e989e3301033",
+    "e1a0a159-85ee-489c-8347-688c7b4e46a6"
+  ],
+  "tasks": [
+    {
+      "id": "03455c50-7d6c-418d-9010-bcf66524628e",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 203,
+      "shortId": "9L56V",
+      "priority": 2,
+      "shortName": "mount-toaststack",
+      "title": "Mount ToastStack as a persistent Overlay layer",
+      "status": "planned",
+      "description": "Durante l'inizializzazione chrome/app registrare ToastStack nel `LayerRegistry` di `heca/src/chrome/layers.rs` con `LayerBand::Overlay`, `LayerKind::Persistent`, `modal=false`, `covers_content=false`. Il root riempie il viewport per consentire corner anchoring ma non diventa un target opaco. Conservare il `LayerId` nel NotificationRuntime. Affidarsi ai pass generici `layout_layers`, `paint_layers` e tick; non inserire ToastStack nel Flex restituito da `chrome_root` e non aggiungere pass di paint dedicati.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-001-insert-persistente-una-volta",
+          "number": 1,
+          "title": "Insert persistente una volta.",
+          "checked": false
+        },
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-002-overlay-sotto-modal-e-sopra-content",
+          "number": 2,
+          "title": "Overlay sotto Modal e sopra Content.",
+          "checked": false
+        },
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-003-full-viewport-layout",
+          "number": 3,
+          "title": "Full viewport layout.",
+          "checked": false
+        },
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-004-nessun-paint-tick-speciale",
+          "number": 4,
+          "title": "Nessun paint/tick speciale.",
+          "checked": false
+        },
+        {
+          "id": "03455c50-7d6c-418d-9010-bcf66524628e-check-005-layerid-conservato-rimosso-correttamente-nel-lifecycle-app",
+          "number": 5,
+          "title": "LayerId conservato/rimosso correttamente nel lifecycle app.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:52.451Z",
+      "updatedAt": "2026-08-06T14:20:54.383Z"
+    },
+    {
+      "id": "3206fec1-67f3-4190-98ca-7a9d96492140",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 204,
+      "shortId": "R65KC",
+      "priority": 5,
+      "shortName": "sync-toast-signal",
+      "title": "Synchronize visible notifications into the retained layer",
+      "status": "planned",
+      "description": "Aggiungere un helper di sincronizzazione analogo agli altri retained runtime: legge la proiezione stabile dello store, converte tramite l'adapter P061/T193 e aggiorna il signal soltanto se dati/ordine visibile sono cambiati. Registrare/rimuovere nello stesso pass i target Hint action/dismiss delle sole notifiche visibili, evitando target obsoleti dopo dismiss/expiry. L'helper restituisce un booleano per redraw e viene chiamato dopo push, dedup, dismiss, expiry, reload e cambi rilevanti, non tramite polling cieco per frame.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3206fec1-67f3-4190-98ca-7a9d96492140-check-001-diff-prima-di-set-signal",
+          "number": 1,
+          "title": "Diff prima di set signal.",
+          "checked": false
+        },
+        {
+          "id": "3206fec1-67f3-4190-98ca-7a9d96492140-check-002-sync-dopo-ogni-transizione",
+          "number": 2,
+          "title": "Sync dopo ogni transizione.",
+          "checked": false
+        },
+        {
+          "id": "3206fec1-67f3-4190-98ca-7a9d96492140-check-003-target-hint-aggiunti-rimossi",
+          "number": 3,
+          "title": "Target hint aggiunti/rimossi.",
+          "checked": false
+        },
+        {
+          "id": "3206fec1-67f3-4190-98ca-7a9d96492140-check-004-boolean-redraw-corretto",
+          "number": 4,
+          "title": "Boolean redraw corretto.",
+          "checked": false
+        },
+        {
+          "id": "3206fec1-67f3-4190-98ca-7a9d96492140-check-005-test-same-id-cambia-contenuto-senza-cambiare-slot",
+          "number": 5,
+          "title": "Test same-ID cambia contenuto senza cambiare slot.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:52.451Z",
+      "updatedAt": "2026-08-06T14:21:23.400Z"
+    },
+    {
+      "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 205,
+      "shortId": "NHF4N",
+      "priority": 1,
+      "shortName": "toast-signal",
+      "title": "Create and retain the visible ToastSpec signal",
+      "status": "planned",
+      "description": "Creare una sola `Signal<Vec<ToastSpec>>` nel NotificationRuntime e passarla a ToastStack al mount del layer. Non ricreare signal o ToastStack per frame. Il signal contiene soltanto la proiezione dei quattro slot visibili e usa ID/target stabili; pending/history non entrano nella scena né nell'HintTargetRegistry. Verificare che la clonazione dei dati sia limitata alla proiezione necessaria.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10-check-001-signal-creato-una-volta",
+          "number": 1,
+          "title": "Signal creato una volta.",
+          "checked": false
+        },
+        {
+          "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10-check-002-solo-visible-projection",
+          "number": 2,
+          "title": "Solo visible projection.",
+          "checked": false
+        },
+        {
+          "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10-check-003-id-target-stabili",
+          "number": 3,
+          "title": "ID/target stabili.",
+          "checked": false
+        },
+        {
+          "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10-check-004-nessuna-pending-history-in-ui",
+          "number": 4,
+          "title": "Nessuna pending/history in UI.",
+          "checked": false
+        },
+        {
+          "id": "6d6a62cb-ce80-4e77-b050-eeefb3fbfa10-check-005-nessuna-ricostruzione-per-frame",
+          "number": 5,
+          "title": "Nessuna ricostruzione per frame.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:52.451Z",
+      "updatedAt": "2026-08-06T14:20:46.286Z"
+    },
+    {
+      "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 206,
+      "shortId": "ASWH3",
+      "priority": 4,
+      "shortName": "toast-callback-events",
+      "title": "Bridge Toast callbacks into the app event loop",
+      "status": "planned",
+      "description": "Collegare i callback generici `on_action(id)` e `on_dismiss(id)` di ToastStack al proxy del ciclo eventi. Dismiss costruisce/trasporta l'Intent `notification.dismiss { id }`; action trasporta soltanto l'ID necessario a recuperare l'Intent corrente dallo store sul thread app. Nessuna closure widget cattura `&mut AppState`, nessuna callback esegue direttamente handler o store mutation. Riutilizzare `AppEvent::ChromeIntent` quando il payload è già un Intent; introdurre un evento specifico action-requested soltanto se necessario per il lookup late-bound.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-001-callback-send-static-compatibili-col-proxy",
+          "number": 1,
+          "title": "Callback Send/'static compatibili col proxy.",
+          "checked": false
+        },
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-002-dismiss-arriva-come-intent",
+          "number": 2,
+          "title": "Dismiss arriva come Intent.",
+          "checked": false
+        },
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-003-action-lookup-resta-sul-thread-app",
+          "number": 3,
+          "title": "Action lookup resta sul thread app.",
+          "checked": false
+        },
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-004-nessuna-mutazione-diretta",
+          "number": 4,
+          "title": "Nessuna mutazione diretta.",
+          "checked": false
+        },
+        {
+          "id": "8fd7b322-a5d5-45b7-bfc2-d742a6457881-check-005-redraw-sync-dopo-gestione-evento",
+          "number": 5,
+          "title": "Redraw/sync dopo gestione evento.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:52.451Z",
+      "updatedAt": "2026-08-06T14:21:14.216Z"
+    },
+    {
+      "id": "98793de9-2224-4fb4-b156-e989e3301033",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 207,
+      "shortId": "FX4M7",
+      "priority": 3,
+      "shortName": "toast-pass-through",
+      "title": "Route non-modal overlay pointer events with pass-through",
+      "status": "planned",
+      "description": "Estendere il routing attuale dei layer in `heca/src/chrome/layers.rs:212-238` e nei call site input: se esiste un modal visibile, esso resta il target esclusivo. Altrimenti dispatch pointer move/press/release ai layer non modali visibili in ordine front-to-back; fermarsi al primo `Handled::Yes`, continuare su `Handled::No`, quindi consegnare al chrome/content sottostante. Non creare un caso speciale ToastStack. Verificare capture tra press e release, hover leave quando cambia layer e nessun doppio click. Il comportamento deve corrispondere alla ricetta showcase `heca-renderer/examples/showcase.rs:2873-2880`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "98793de9-2224-4fb4-b156-e989e3301033-check-001-api-iterazione-mutable-front-to-back-sicura",
+          "number": 1,
+          "title": "API iterazione mutable front-to-back sicura.",
+          "checked": false
+        },
+        {
+          "id": "98793de9-2224-4fb4-b156-e989e3301033-check-002-modal-resta-esclusivo",
+          "number": 2,
+          "title": "Modal resta esclusivo.",
+          "checked": false
+        },
+        {
+          "id": "98793de9-2224-4fb4-b156-e989e3301033-check-003-move-press-release-pass-through",
+          "number": 3,
+          "title": "Move/press/release pass-through.",
+          "checked": false
+        },
+        {
+          "id": "98793de9-2224-4fb4-b156-e989e3301033-check-004-capture-non-perde-release",
+          "number": 4,
+          "title": "Capture non perde release.",
+          "checked": false
+        },
+        {
+          "id": "98793de9-2224-4fb4-b156-e989e3301033-check-005-test-click-card-spazio-vuoto-e-controllo-sottostante",
+          "number": 5,
+          "title": "Test click card, spazio vuoto e controllo sottostante.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:52.451Z",
+      "updatedAt": "2026-08-06T14:21:02.601Z"
+    },
+    {
+      "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6",
+      "phaseId": "e298f926-f6b3-4147-abcc-eea87171cd81",
+      "number": 208,
+      "shortId": "EZC94",
+      "priority": 0,
+      "shortName": "appstate-store",
+      "title": "Add NotificationRuntime to AppState",
+      "status": "planned",
+      "description": "Aggiungere ad `heca/src/app_state.rs` un runtime coeso che possiede `NotificationStore`, signal degli spec visibili, identificativo del layer persistente e flag one-shot del fallback system. Inizializzarlo insieme agli altri runtime AppState e aggiornarne configurazione/limite cronologia al reload. Non distribuire questi campi tra ChromeSignals e HecaApp senza un'unica ownership. Il runtime deve essere testabile senza Window e non deve possedere ActionRegistry.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-001-struct-runtime-coesa",
+          "number": 1,
+          "title": "Struct runtime coesa.",
+          "checked": false
+        },
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-002-init-appstate",
+          "number": 2,
+          "title": "Init AppState.",
+          "checked": false
+        },
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-003-accesso-store-signal-layer-id",
+          "number": 3,
+          "title": "Accesso store/signal/layer id.",
+          "checked": false
+        },
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-004-flag-fallback-one-shot",
+          "number": 4,
+          "title": "Flag fallback one-shot.",
+          "checked": false
+        },
+        {
+          "id": "e1a0a159-85ee-489c-8347-688c7b4e46a6-check-005-reload-aggiorna-setting-senza-perdere-invarianti",
+          "number": 5,
+          "title": "Reload aggiorna setting senza perdere invarianti.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-03T22:51:52.451Z",
+      "updatedAt": "2026-08-06T14:20:28.741Z"
+    }
+  ],
+  "createdAt": "2026-07-03T22:50:20.126Z",
+  "updatedAt": "2026-08-06T14:21:23.400Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

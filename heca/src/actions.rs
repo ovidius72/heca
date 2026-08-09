@@ -1312,6 +1312,14 @@ impl ActionRegistry {
             icon: Some(Glyph::Gear),
             args: &[],
         },
+        ActionDescriptor {
+            name: "notification.dismiss",
+            label: "Dismiss Notification",
+            description: "Dismiss a visible notification when its lifecycle permits it.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[ArgDescriptor::required("id", ArgKind::Int, "The notification runtime id.")],
+        },
         // ── Scrollback (host terminal viewport) ──
         ActionDescriptor {
             name: "scrollback_page_up",

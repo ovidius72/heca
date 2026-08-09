@@ -1,0 +1,191 @@
+{
+  "id": "029ef1b3-822b-4151-b5b0-b296b042b350",
+  "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
+  "number": 81,
+  "shortId": "WU7SY",
+  "priority": 10,
+  "slug": "gridui-09-one-border-width-control-three-paths-currently-disagree",
+  "title": "gridui-09: One border-width control — three paths currently disagree",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "User-reported 2026-06-23: with the global border set to 0, toasts/modals/bracketed panes still show a hairline, and raising it adds no border to a plain Pane.",
+  "description": "Rescued from PLAN.md 2026-07-26 before that file was deleted. Reported by the user 2026-06-23,\nanalysed then, never tracked. The analysis below is theirs and the line numbers are from that date —\nre-verify before building.\n\n═══ WHAT THE USER SAW ═══\n- With the global BORDER set to **0**: notifications (`Toast`), `Modal`, and `Bracketed` panes\n  **still show a hairline border**, and the showcase demo panes keep a 2px border.\n- Raising BORDER **adds no border** to the default `DASHBOARD` `Pane`.\n\n═══ WHY — THREE BORDER PATHS THAT DISAGREE ═══\n1. **`theme.border_width`-driven** — `Button`, `Input`, `Select`, `Checkbox`, `Tag`, `Card`.\n   `PaintCx::border()` (component.rs, ~line 567 as of 2026-06-23) returns `None` at width 0.\n   **This one is already correct: 0 means none.**\n2. **`PaintCx::bracket_frame`** — used by `Toast` (toast.rs ~332), `Modal` (modal.rs ~257) and\n   `Pane::Bracketed` (pane.rs ~143). At `border_width == 0` it deliberately falls back to a solid\n   hairline (`BRACKET_HAIRLINE_WIDTH` / `BRACKET_HAIRLINE_ALPHA`) so the container \"stays framed\".\n   **That fallback is why Toast/Modal/Bracketed keep a border at 0.**\n3. **Hardcoded literals in the showcase** — `heca-renderer/examples/showcase.rs` (~762, 771, 793,\n   819): `.border(theme.accent, 2.0)`. Ignores the global control entirely.\n\nPlus: a `Bordered` `Pane` draws `style.visual.border`, which comes from an explicit\n`.border(color, width)` call. A pane that never called it (the DASHBOARD pane, showcase.rs ~635)\nshows no border whatever the global setting says.\n\nNOTE 2026-07-26: border now lives at `style.visual.border` after the Layout/Visual split\n(F003/P017/T1, commit 8718718). Re-check the line numbers above against current code.\n\n═══ THE PROPOSED MODEL (designed 2026-06-23, NOT built — the user chose \"plan, don't code\") ═══\n- `theme.border_width` becomes the ONE global control.\n- **`border_width == 0` means no border anywhere.** That means dropping the `bracket_frame`\n  hairline fallback AND updating the test that currently asserts it:\n  `bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners` in\n  `heca-grid-ui/tests/phase_a.rs`.\n- A container's border **width always comes from `theme.border_width`**; a widget picks only the\n  colour. A `Bordered` pane with no explicit colour uses the theme border colour.\n- The showcase reads `theme.border_width` instead of the literal `2.0`.\n\n═══ THE OPEN DECISION — SETTLE WITH THE USER BEFORE BUILDING ═══\nDoes an explicit `.border(color, width)` still override the global width, or is width **always**\ntheme-driven? Both are defensible and the answer changes the widget API.\nThis ties into the planned config options (memory `border-style-config-options`:\n`sidebar_border_style` / `pane_border_style`).\n\n═══ SEPARATE FROM ═══\nThe bracket reticle fix on branch `fix/bracket-frame-render`. Do not conflate them.\n\n═══ VERIFICATION ═══\nBorders are visible. Green tests are not verification: build the showcase, set the global width to\n0 and then to something large, and have the USER confirm every container agrees.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+    "88963acd-0cce-4897-837c-6fd617d604b8",
+    "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+    "f226ca8f-7f28-4f4e-97f6-83a89b03f12c"
+  ],
+  "tasks": [
+    {
+      "id": "5266fb8f-0e99-4993-8613-f5b88a1c6e1b",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 323,
+      "shortId": "2T7E5",
+      "priority": 4,
+      "shortName": "verify-visually",
+      "title": "USER verifies every container agrees at 0 and at a large width",
+      "status": "planned",
+      "description": "Borders are visible. Green tests are not verification. Build the showcase, set the global width to 0 and then to something large, and confirm Toast, Modal, Bracketed panes, plain Panes and the control widgets all agree.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "verify-visually-c1",
+          "number": 1,
+          "title": "USER confirms at width 0",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c2",
+          "number": 2,
+          "title": "USER confirms at a large width",
+          "checked": false
+        },
+        {
+          "id": "verify-visually-c3",
+          "number": 3,
+          "title": "Separate from fix/bracket-frame-render — do not conflate",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "88963acd-0cce-4897-837c-6fd617d604b8",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 328,
+      "shortId": "WAZD5",
+      "priority": 1,
+      "shortName": "decide-override-rule",
+      "title": "DECIDE FIRST: does an explicit .border(color, width) override the global?",
+      "status": "planned",
+      "description": "⛔ Blocking, and it is the user's call. Either an explicit `.border(color, width)` still overrides the global width, or width is ALWAYS theme-driven and a widget picks only the colour. Both are defensible and the answer changes the widget API. Ties into the planned config (memory `border-style-config-options`: sidebar_border_style / pane_border_style).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "decide-override-rule-c1",
+          "number": 1,
+          "title": "BLOCKING: put both options to the user with the trade-off",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "b2600373-eb4e-4d59-ab66-ad548a5076dc",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 332,
+      "shortId": "VGTZY",
+      "priority": 3,
+      "shortName": "showcase-reads-theme",
+      "title": "The showcase stops hardcoding 2.0",
+      "status": "planned",
+      "description": "heca-renderer/examples/showcase.rs has literal `.border(theme.accent, 2.0)` calls (~762, 771, 793, 819 as of 2026-06-23) that ignore the global control entirely. Read `theme.border_width` instead. This is also why the demo panes kept a border at 0.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "showcase-reads-theme-c1",
+          "number": 1,
+          "title": "Showcase reads theme.border_width",
+          "checked": false
+        },
+        {
+          "id": "showcase-reads-theme-c2",
+          "number": 2,
+          "title": "No literal border widths left",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    },
+    {
+      "id": "f226ca8f-7f28-4f4e-97f6-83a89b03f12c",
+      "phaseId": "029ef1b3-822b-4151-b5b0-b296b042b350",
+      "number": 337,
+      "shortId": "T8G9T",
+      "priority": 2,
+      "shortName": "one-global-control",
+      "title": "theme.border_width becomes the one control; 0 means none everywhere",
+      "status": "planned",
+      "description": "Path 1 (Button, Input, Select, Checkbox, Tag, Card via `PaintCx::border()`) is already correct. Path 2 is the problem: `PaintCx::bracket_frame` falls back to a solid hairline at width 0 so the container 'stays framed' — which is why Toast, Modal and Bracketed panes keep a border when you set 0. Drop that fallback AND update the test that asserts it: `bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners` in heca-grid-ui/tests/phase_a.rs.\n\nNOTE: border now lives at `style.visual.border` after the Layout/Visual split (F003/P017/T1, commit 8718718) — re-verify the line references first.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "one-global-control-c1",
+          "number": 1,
+          "title": "Drop the bracket_frame hairline fallback",
+          "checked": false
+        },
+        {
+          "id": "one-global-control-c2",
+          "number": 2,
+          "title": "Update the test that asserts the hairline",
+          "checked": false
+        },
+        {
+          "id": "one-global-control-c3",
+          "number": 3,
+          "title": "Container width always comes from theme.border_width",
+          "checked": false
+        },
+        {
+          "id": "one-global-control-c4",
+          "number": 4,
+          "title": "A Bordered pane with no explicit colour uses the theme colour",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-26T11:44:50.918444Z",
+      "updatedAt": "2026-07-26T11:44:50.918444Z"
+    }
+  ],
+  "createdAt": "2026-07-26T11:20:26.506Z",
+  "updatedAt": "2026-07-27T11:40:15.496Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

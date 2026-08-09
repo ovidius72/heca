@@ -407,10 +407,10 @@ impl NotificationId {
         Self(v)
     }
 
-    /// Construct an id from a known value. **Test-only** — production code must
-    /// use [`next`](Self::next) so ids stay monotonic and unique.
-    #[doc(hidden)]
-    pub fn from_raw(v: u64) -> Self {
+    /// Reconstruct an id supplied by a transport boundary (RPC, a widget event,
+    /// or a serialized Intent). Allocation remains store-owned through
+    /// [`next`](Self::next); this constructor never advances the counter.
+    pub const fn from_raw(v: u64) -> Self {
         Self(v)
     }
 }
@@ -430,6 +430,16 @@ impl NotificationId {
 /// - `History` — dismissed/expired/archived; kept up to
 ///   `notification_history_limit` then dropped (FIFO).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationArchiveCause {
+    /// Removed through the user-facing dismiss path.
+    Dismissed,
+    /// Auto-dismiss deadline elapsed while visible.
+    Expired,
+    /// Cleared by a Heca-owned producer/runtime integration.
+    Resolved,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationPlacement {
     Queued,
     Visible {
@@ -438,7 +448,10 @@ pub enum NotificationPlacement {
         /// Auto-dismiss deadline; absent for sticky notifications.
         expires_at: Option<Instant>,
     },
-    History,
+    History {
+        cause: NotificationArchiveCause,
+        archived_at: Instant,
+    },
 }
 
 impl Default for NotificationPlacement {
@@ -511,6 +524,21 @@ pub struct NotificationStoreUpdate {
 pub struct NotificationStorePush {
     notification_id: NotificationId,
     update: NotificationStoreUpdate,
+}
+
+/// Outcome of a user-requested notification dismissal.
+///
+/// The store treats an unknown id and a non-dismissible lifecycle as stable
+/// no-ops, allowing the future action handler to report either case without a
+/// panic or a second lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationDismissResult {
+    /// The entry moved to runtime history.
+    Dismissed(NotificationStoreUpdate),
+    /// No canonical notification has the requested id.
+    Unknown,
+    /// The lifecycle deliberately prevents user dismissal.
+    NotDismissible,
 }
 
 impl NotificationStorePush {
@@ -613,9 +641,135 @@ impl NotificationStore {
         self.history_limit
     }
 
+    /// Change the bounded archived-history retention policy.
+    pub fn set_history_limit(&mut self, history_limit: usize) {
+        self.history_limit = history_limit;
+        while self.history.len() > self.history_limit {
+            let notification_id = self.history.pop_front().expect("history length was above its limit");
+            self.remove_canonical(notification_id);
+        }
+    }
+
+    /// Iterate retained archived notifications from oldest to newest.
+    ///
+    /// The store keeps ownership of all lifecycle buckets; callers receive no
+    /// mutable access and cannot reorder or reinsert history entries.
+    pub fn history(&self) -> impl Iterator<Item = &AppNotification> {
+        self.history.iter().filter_map(|id| self.notifications.get(id))
+    }
+
+    /// Iterate visible notifications in stable ToastStack slot order.
+    pub fn visible(&self) -> impl Iterator<Item = &AppNotification> {
+        self.visible.iter().filter_map(|id| id.and_then(|id| self.notifications.get(&id)))
+    }
+
+    /// Return the earliest auto-dismiss deadline among visible slots.
+    ///
+    /// Pending and sticky entries have no active timer and are excluded.
+    pub fn next_expiry(&self) -> Option<Instant> {
+        self.visible().filter_map(AppNotification::expires_at).min()
+    }
+
+    /// Look up the action for a currently visible notification.
+    ///
+    /// Queued and archived entries deliberately have no activatable target.
+    pub fn action_for_visible(&self, notification_id: NotificationId) -> Option<&NotificationAction> {
+        self.visible()
+            .find(|notification| notification.id == notification_id)
+            .and_then(|notification| notification.action.as_ref())
+    }
+
+    /// Clone the serializable action intent immediately before dispatch.
+    pub fn action_intent_for_visible(&self, notification_id: NotificationId) -> Option<Intent> {
+        self.action_for_visible(notification_id)
+            .map(|action| action.intent.clone())
+    }
+
+    /// Resolve an explicit deduplication key to its canonical ID.
+    pub fn notification_id_for_dedup_key(&self, key: &str) -> Option<NotificationId> {
+        self.dedup_index.get(key).copied()
+    }
+
+    /// Project the stable visible slots to `ToastSpec`s.
+    ///
+    /// The caller owns registration of opaque hint targets. It receives each
+    /// canonical id once, in visible-slot order, and the store remains the
+    /// only owner of queueing and lifecycle state.
+    pub fn visible_toasts(
+        &self,
+        mut targets: impl FnMut(NotificationId) -> (Option<HintTargetId>, Option<HintTargetId>),
+    ) -> Vec<ToastSpec> {
+        self.visible()
+            .filter_map(|notification| {
+                let (action_target, dismiss_target) = targets(notification.id);
+                project_visible_toast(notification, action_target, dismiss_target)
+            })
+            .collect()
+    }
+
     /// Whether the store holds no queued, visible, or retained notification.
     pub fn is_empty(&self) -> bool {
         self.notifications.is_empty()
+    }
+
+    /// Dismiss an entry through the user-facing lifecycle path.
+    ///
+    /// Visible entries vacate only their current slot; pending entries are
+    /// removed from the FIFO. Both are archived, then a pending entry fills a
+    /// newly-vacant slot without moving cards already on screen. Dedup keys
+    /// remain indexed while in history so T195 can reactivate the same ID.
+    pub fn dismiss(
+        &mut self,
+        notification_id: NotificationId,
+        now: Instant,
+    ) -> NotificationDismissResult {
+        self.archive(notification_id, now, true)
+    }
+
+    /// Resolve an entry from a producer/runtime path, regardless of its user
+    /// dismissibility. This is intentionally crate-private: only Heca-owned
+    /// runtime integrations may clear a persistent status notification.
+    pub(crate) fn resolve(&mut self, notification_id: NotificationId, now: Instant) -> NotificationDismissResult {
+        self.archive(notification_id, now, false)
+    }
+
+    fn archive(
+        &mut self,
+        notification_id: NotificationId,
+        now: Instant,
+        require_dismissible: bool,
+    ) -> NotificationDismissResult {
+        let Some(notification) = self.notifications.get(&notification_id) else {
+            return NotificationDismissResult::Unknown;
+        };
+        if require_dismissible && !notification.lifecycle.is_dismissible() {
+            return NotificationDismissResult::NotDismissible;
+        }
+        if notification.is_history() {
+            return NotificationDismissResult::Unknown;
+        }
+
+        let cause = if require_dismissible {
+            NotificationArchiveCause::Dismissed
+        } else {
+            NotificationArchiveCause::Resolved
+        };
+        let (_, update) = self.transition_at(now, |store, now| {
+            store.queued.retain(|id| *id != notification_id);
+            for slot in &mut store.visible {
+                if *slot == Some(notification_id) {
+                    *slot = None;
+                }
+            }
+            store
+                .notifications
+                .get_mut(&notification_id)
+                .expect("known notification must have canonical storage")
+                .placement = NotificationPlacement::History { cause, archived_at: now };
+            store.retain_history(notification_id);
+            ((), store.promote_pending(now))
+        });
+        NotificationDismissResult::Dismissed(update)
     }
 
     /// Archive every visible auto-dismiss notification due at `now`.
@@ -625,6 +779,7 @@ impl NotificationStore {
     /// deadline and are never selected.
     pub fn expire_due(&mut self, now: Instant) -> NotificationStoreUpdate {
         let (_, update) = self.transition_at(now, |store, now| {
+            let mut due_ids = Vec::new();
             for slot in &mut store.visible {
                 let Some(notification_id) = *slot else {
                     continue;
@@ -634,13 +789,19 @@ impl NotificationStore {
                     .is_some_and(|expires_at| expires_at <= now);
                 if due {
                     *slot = None;
-                    let notification = store
-                        .notifications
-                        .get_mut(&notification_id)
-                        .expect("visible notification must have canonical storage");
-                    notification.placement = NotificationPlacement::History;
-                    store.history.push_back(notification_id);
+                    due_ids.push(notification_id);
                 }
+            }
+            for notification_id in due_ids {
+                store
+                    .notifications
+                    .get_mut(&notification_id)
+                    .expect("visible notification must have canonical storage")
+                    .placement = NotificationPlacement::History {
+                        cause: NotificationArchiveCause::Expired,
+                        archived_at: now,
+                    };
+                store.retain_history(notification_id);
             }
             ((), store.promote_pending(now))
         });
@@ -667,7 +828,7 @@ impl NotificationStore {
         {
             return Ok(NotificationStorePush {
                 notification_id,
-                update: NotificationStoreUpdate::default(),
+                update: self.update_duplicate(notification_id, draft, now),
             });
         }
 
@@ -693,6 +854,72 @@ impl NotificationStore {
             notification_id,
             update,
         })
+    }
+
+    /// Retain an archived entry, evicting the oldest records and their dedup
+    /// keys once the configured runtime history bound is exceeded.
+    fn retain_history(&mut self, notification_id: NotificationId) {
+        if self.history_limit == 0 {
+            self.remove_canonical(notification_id);
+            return;
+        }
+        self.history.push_back(notification_id);
+        while self.history.len() > self.history_limit {
+            let evicted_id = self.history.pop_front().expect("history length was above its limit");
+            self.remove_canonical(evicted_id);
+        }
+    }
+
+    fn remove_canonical(&mut self, notification_id: NotificationId) {
+        let Some(notification) = self.notifications.remove(&notification_id) else {
+            return;
+        };
+        if let Some(key) = notification.dedup_key
+            && self.dedup_index.get(&key) == Some(&notification_id)
+        {
+            self.dedup_index.remove(&key);
+        }
+    }
+
+    /// Replace a known deduplicated entry while retaining its canonical id.
+    fn update_duplicate(
+        &mut self,
+        notification_id: NotificationId,
+        draft: NotificationDraft,
+        now: Instant,
+    ) -> NotificationStoreUpdate {
+        let (_, update) = self.transition_at(now, |store, now| {
+            let previous = store.notifications[&notification_id].placement;
+            let mut replacement = draft.build(notification_id, now);
+            let projection_changed = match previous {
+                NotificationPlacement::Visible { .. } => {
+                    replacement.placement = NotificationPlacement::Visible {
+                        visible_since: now,
+                        expires_at: match replacement.lifecycle.lifetime() {
+                            NotificationLifetime::Auto(duration) => now.checked_add(duration),
+                            NotificationLifetime::Sticky => None,
+                        },
+                    };
+                    true
+                }
+                NotificationPlacement::Queued => {
+                    replacement.placement = NotificationPlacement::Queued;
+                    store.queued.retain(|id| *id != notification_id);
+                    store.queued.push_front(notification_id);
+                    false
+                }
+                NotificationPlacement::History { .. } => {
+                    store.history.retain(|id| *id != notification_id);
+                    replacement.placement = NotificationPlacement::Queued;
+                    store.queued.push_front(notification_id);
+                    false
+                }
+            };
+            store.notifications.insert(notification_id, replacement);
+            let promoted = store.promote_pending(now);
+            ((), projection_changed || promoted)
+        });
+        update
     }
 
     /// Promote pending notifications into vacant slots without reordering an
@@ -769,7 +996,7 @@ impl NotificationStore {
             for id in &self.history {
                 assert!(placed.insert(*id), "notification id appears in multiple placements");
                 assert!(
-                    matches!(self.notifications.get(id).map(|n| n.placement), Some(NotificationPlacement::History)),
+                    matches!(self.notifications.get(id).map(|n| n.placement), Some(NotificationPlacement::History { .. })),
                     "history id must resolve to an archived notification"
                 );
             }
@@ -848,7 +1075,15 @@ impl AppNotification {
 
     /// Whether the notification has been archived to history.
     pub fn is_history(&self) -> bool {
-        matches!(self.placement, NotificationPlacement::History)
+        matches!(self.placement, NotificationPlacement::History { .. })
+    }
+
+    /// The store-owned archive cause and instant, if this entry is retained.
+    pub fn archived_at(&self) -> Option<(NotificationArchiveCause, Instant)> {
+        match self.placement {
+            NotificationPlacement::History { cause, archived_at } => Some((cause, archived_at)),
+            _ => None,
+        }
     }
 
     /// The store-assigned instant at which this entry became visible.
@@ -1064,8 +1299,9 @@ mod tests {
         let duplicate = store.push(NotificationDraft::new("Still connecting").dedup_key("network"), now).unwrap();
 
         assert_eq!(duplicate.notification_id(), first.notification_id());
-        assert!(!duplicate.update().visible_projection_changed());
+        assert!(duplicate.update().visible_projection_changed());
         assert_eq!(store.notifications.len(), 1);
+        assert_eq!(store.notifications[&first.notification_id()].title, "Still connecting");
     }
 
     #[test]
@@ -1083,7 +1319,7 @@ mod tests {
         let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
 
         let released_id = store.visible[1].take().expect("second slot is visible");
-        store.notifications.get_mut(&released_id).unwrap().placement = NotificationPlacement::History;
+        store.notifications.get_mut(&released_id).unwrap().placement = NotificationPlacement::History { cause: NotificationArchiveCause::Dismissed, archived_at: now };
         store.history.push_back(released_id);
 
         let (_, update) = store.transition_at(now, |store, now| ((), store.promote_pending(now)));
@@ -1123,6 +1359,22 @@ mod tests {
     }
 
     #[test]
+    fn next_expiry_uses_only_the_earliest_visible_auto_deadline() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let first = now + std::time::Duration::from_secs(2);
+        let second = now + std::time::Duration::from_secs(5);
+        store.push(NotificationDraft::new("Later").lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(5))), now).unwrap();
+        store.push(NotificationDraft::new("Earlier").lifecycle(NotificationLifecycle::auto(std::time::Duration::from_secs(2))), now).unwrap();
+        store.push(NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()), now).unwrap();
+        assert_eq!(store.next_expiry(), Some(first));
+        assert_ne!(store.next_expiry(), Some(second));
+
+        let full = NotificationStore::new(100);
+        assert_eq!(full.next_expiry(), None);
+    }
+
+    #[test]
     fn sticky_notifications_do_not_expire() {
         let now = Instant::now();
         let mut store = NotificationStore::new(100);
@@ -1133,6 +1385,113 @@ mod tests {
 
         assert!(!store.expire_due(now + std::time::Duration::from_secs(60)).visible_projection_changed());
         assert_eq!(store.visible[0], Some(id));
+    }
+
+    #[test]
+    fn dismiss_visible_archives_it_and_refills_only_its_slot() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let visible_ids: Vec<_> = (0..MAX_VISIBLE_NOTIFICATIONS)
+            .map(|number| store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap().notification_id())
+            .collect();
+        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+
+        let result = store.dismiss(visible_ids[1], now);
+        assert!(matches!(result, NotificationDismissResult::Dismissed(update) if update.visible_projection_changed()));
+        assert!(store.notifications[&visible_ids[1]].is_history());
+        assert_eq!(store.history, VecDeque::from([visible_ids[1]]));
+        assert_eq!(store.visible, [Some(visible_ids[0]), Some(queued_id), Some(visible_ids[2]), Some(visible_ids[3])]);
+    }
+
+    #[test]
+    fn dismiss_pending_archives_without_changing_visible_slots() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let visible_ids: Vec<_> = (0..MAX_VISIBLE_NOTIFICATIONS)
+            .map(|number| store.push(NotificationDraft::new(format!("Visible {number}")), now).unwrap().notification_id())
+            .collect();
+        let queued_id = store.push(NotificationDraft::new("Queued"), now).unwrap().notification_id();
+
+        let result = store.dismiss(queued_id, now);
+        assert!(matches!(result, NotificationDismissResult::Dismissed(update) if !update.visible_projection_changed()));
+        assert!(store.notifications[&queued_id].is_history());
+        assert!(store.queued.is_empty());
+        assert_eq!(store.visible, [Some(visible_ids[0]), Some(visible_ids[1]), Some(visible_ids[2]), Some(visible_ids[3])]);
+    }
+
+    #[test]
+    fn dismiss_unknown_or_persistent_notification_is_a_noop() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let persistent_id = store.push(
+            NotificationDraft::new("Persistent").lifecycle(NotificationLifecycle::sticky_persistent()),
+            now,
+        ).unwrap().notification_id();
+
+        assert_eq!(store.dismiss(NotificationId::from_raw(99), now), NotificationDismissResult::Unknown);
+        assert_eq!(store.dismiss(persistent_id, now), NotificationDismissResult::NotDismissible);
+        assert_eq!(store.visible[0], Some(persistent_id));
+        assert!(store.history.is_empty());
+    }
+
+    #[test]
+    fn dedup_pending_moves_entry_to_fifo_front_without_displacing_visible() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        for index in 0..MAX_VISIBLE_NOTIFICATIONS {
+            store.push(NotificationDraft::new(format!("Visible {index}")), now).unwrap();
+        }
+        let pending_id = store.push(NotificationDraft::new("Old").dedup_key("pending"), now).unwrap().notification_id();
+        let later_id = store.push(NotificationDraft::new("Later"), now).unwrap().notification_id();
+
+        let duplicate = store.push(NotificationDraft::new("Updated").dedup_key("pending"), now).unwrap();
+        assert_eq!(duplicate.notification_id(), pending_id);
+        assert!(!duplicate.update().visible_projection_changed());
+        assert_eq!(store.queued, VecDeque::from([pending_id, later_id]));
+        assert_eq!(store.notifications[&pending_id].title, "Updated");
+    }
+
+    #[test]
+    fn dedup_history_reactivates_the_same_id() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let id = store.push(NotificationDraft::new("Old").dedup_key("history"), now).unwrap().notification_id();
+        assert!(matches!(store.dismiss(id, now), NotificationDismissResult::Dismissed(_)));
+
+        let duplicate = store.push(NotificationDraft::new("New").dedup_key("history"), now).unwrap();
+        assert_eq!(duplicate.notification_id(), id);
+        assert!(duplicate.update().visible_projection_changed());
+        assert_eq!(store.visible[0], Some(id));
+        assert!(store.history.is_empty());
+    }
+
+    #[test]
+    fn history_limit_evicts_oldest_entry_and_its_dedup_key() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(1);
+        let first = store.push(NotificationDraft::new("First").dedup_key("first"), now).unwrap().notification_id();
+        let second = store.push(NotificationDraft::new("Second").dedup_key("second"), now).unwrap().notification_id();
+
+        assert!(matches!(store.dismiss(first, now), NotificationDismissResult::Dismissed(_)));
+        assert!(matches!(store.dismiss(second, now), NotificationDismissResult::Dismissed(_)));
+        assert_eq!(store.history, VecDeque::from([second]));
+        assert!(!store.notifications.contains_key(&first));
+        assert!(!store.dedup_index.contains_key("first"));
+        assert_eq!(store.dedup_index.get("second"), Some(&second));
+    }
+
+    #[test]
+    fn resolve_allows_runtime_to_clear_a_persistent_notification() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let id = store.push(
+            NotificationDraft::new("Resolved error").lifecycle(NotificationLifecycle::sticky_persistent()),
+            now,
+        ).unwrap().notification_id();
+
+        assert!(matches!(store.resolve(id, now), NotificationDismissResult::Dismissed(_)));
+        assert!(store.notifications[&id].is_history());
+        assert!(store.visible.iter().all(Option::is_none));
     }
 
     #[test]
@@ -1394,7 +1753,7 @@ mod tests {
         assert!(project_visible_toast(&queued, None, None).is_none());
 
         let mut history = queued;
-        history.placement = NotificationPlacement::History;
+        history.placement = NotificationPlacement::History { cause: NotificationArchiveCause::Dismissed, archived_at: Instant::now() };
         assert!(project_visible_toast(&history, None, None).is_none());
     }
 
@@ -1581,7 +1940,7 @@ mod tests {
             "x",
             Instant::now(),
         );
-        n.placement = NotificationPlacement::History;
+        n.placement = NotificationPlacement::History { cause: NotificationArchiveCause::Dismissed, archived_at: Instant::now() };
         assert!(n.is_history());
         assert!(!n.is_visible());
         assert!(n.expires_at().is_none()); // History has no expiry
