@@ -3,3 +3,8 @@
 /.agents
 book/
 heca-ui/
+.planner/.local
+.planner/**/*.bak
+.planner/.bak
+.planner/**/*.tmp.*
+.planner/generated/
