@@ -2,7 +2,7 @@ use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
-use crate::notification::{NotificationId, NotificationStore};
+use crate::notification::{NotificationDraft, NotificationId, NotificationStore, NotificationStoreError};
 use crate::chrome::LayerId;
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::widgets::ToastSpec;
@@ -10,6 +10,7 @@ use heca_grid_ui::HintTargetId;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
+use heca_config::settings::NotificationSystem;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
@@ -33,17 +34,45 @@ use winit::window::Window;
 /// while chrome owns only the generic layer that later consumes this signal.
 pub struct NotificationRuntime {
     pub store: NotificationStore,
+    notification_system: NotificationSystem,
     pub visible_toasts: Signal<Vec<ToastSpec>>,
     pub layer_id: Option<LayerId>,
     /// Stable opaque KeyHint ids for each currently-visible notification.
     /// The host updates their intents on same-id dedup changes rather than
     /// replacing them, so retained Toast controls never target stale behavior.
     hint_targets: HashMap<NotificationId, NotificationHintTargets>,
-    #[expect(
-        dead_code,
-        reason = "P055 consumes this one-session flag when NotificationSystem::System falls back to the in-app router."
-    )]
-    pub system_fallback_warned: bool,
+    system_fallback_warned: bool,
+}
+
+/// Channel-neutral result of routing a notification producer draft.
+///
+/// The app can use [`Self::visible_projection_changed`] to decide whether to
+/// update the retained toast tree. A future OS backend will use
+/// [`Self::PresentedBySystem`] without making producers depend on a widget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationDelivery {
+    /// The in-app store accepted the draft.
+    PresentedInApp {
+        notification_id: NotificationId,
+        visible_projection_changed: bool,
+        system_fallback_warning: bool,
+    },
+    /// Configuration intentionally suppressed delivery before store insertion.
+    Suppressed,
+}
+
+impl NotificationDelivery {
+    /// Whether the retained in-app presentation needs refreshing.
+    pub fn visible_projection_changed(self) -> bool {
+        matches!(
+            self,
+            Self::PresentedInApp {
+                visible_projection_changed: true,
+                ..
+            }
+        )
+    }
+
 }
 
 #[derive(Clone, Copy, Default)]
@@ -53,9 +82,10 @@ struct NotificationHintTargets {
 }
 
 impl NotificationRuntime {
-    pub fn new(history_limit: usize) -> Self {
+    pub fn new(history_limit: usize, notification_system: NotificationSystem) -> Self {
         Self {
             store: NotificationStore::new(history_limit),
+            notification_system,
             visible_toasts: signal(Vec::new()),
             layer_id: None,
             hint_targets: HashMap::new(),
@@ -65,6 +95,39 @@ impl NotificationRuntime {
 
     pub fn set_history_limit(&mut self, history_limit: usize) {
         self.store.set_history_limit(history_limit);
+    }
+
+    /// Update the configured delivery channel without resetting runtime state.
+    pub fn set_notification_system(&mut self, notification_system: NotificationSystem) {
+        self.notification_system = notification_system;
+    }
+
+    /// Route one producer draft through the configured delivery channel.
+    ///
+    /// The caller supplies `now` so tests and producer boundaries remain deterministic.
+    /// `None` does not allocate or store an entry. Until P063 supplies an OS backend,
+    /// `System` deterministically uses the app store and logs one warning per runtime.
+    pub fn notify(
+        &mut self,
+        draft: NotificationDraft,
+        now: std::time::Instant,
+    ) -> Result<NotificationDelivery, NotificationStoreError> {
+        match self.notification_system {
+            NotificationSystem::None => Ok(NotificationDelivery::Suppressed),
+            NotificationSystem::App | NotificationSystem::System => {
+                let system_fallback_warning = matches!(self.notification_system, NotificationSystem::System)
+                    && !std::mem::replace(&mut self.system_fallback_warned, true);
+                if system_fallback_warning {
+                    eprintln!("[heca] notification_system=system has no OS backend; using the in-app notification stack");
+                }
+                let push = self.store.push(draft, now)?;
+                Ok(NotificationDelivery::PresentedInApp {
+                    notification_id: push.notification_id(),
+                    visible_projection_changed: push.update().visible_projection_changed(),
+                    system_fallback_warning,
+                })
+            }
+        }
     }
 
     /// Refresh retained toast specs and their global KeyHint targets together.
@@ -995,6 +1058,28 @@ pub struct AppState {
 
 impl AppState {
 
+    /// Deliver one producer notification and synchronize the retained in-app projection.
+    ///
+    /// Producers pass their draft and their clock explicitly. They never construct a
+    /// `ToastSpec`, allocate hint ids, or inspect the configured delivery channel.
+    #[expect(
+        dead_code,
+        reason = "P062 is the first in-app producer and calls this P055 delivery boundary."
+    )]
+    pub fn notify(
+        &mut self,
+        draft: NotificationDraft,
+        now: std::time::Instant,
+    ) -> Result<NotificationDelivery, NotificationStoreError> {
+        let delivery = self.notifications.notify(draft, now)?;
+        if delivery.visible_projection_changed()
+            && self.notifications.sync_visible_toasts(&mut self.hint_targets)
+        {
+            self.mark_full_redraw();
+        }
+        Ok(delivery)
+    }
+
     /// The scrollback search for `pane`, if it has one.
     pub fn search_for(&self, pane: PaneId) -> Option<&SearchState> {
         self.searches.get(&pane)
@@ -1209,5 +1294,60 @@ mod tests {
         let t = RenameTarget::Workspace(3);
         let copied = t; // RenameTarget is Copy — `t` stays usable below.
         assert_eq!(t, copied);
+    }
+
+    #[test]
+    fn notification_router_none_suppresses_without_allocating_or_replaying() {
+        let now = std::time::Instant::now();
+        let mut runtime = NotificationRuntime::new(10, NotificationSystem::None);
+        assert_eq!(
+            runtime.notify(NotificationDraft::new("Hidden"), now).unwrap(),
+            NotificationDelivery::Suppressed
+        );
+        assert_eq!(runtime.store.visible().count(), 0);
+        assert_eq!(runtime.store.history().count(), 0);
+
+        runtime.set_notification_system(NotificationSystem::App);
+        let delivered = runtime.notify(NotificationDraft::new("Future"), now).unwrap();
+        assert!(delivered.visible_projection_changed());
+        assert!(matches!(
+            delivered,
+            NotificationDelivery::PresentedInApp {
+                notification_id,
+                system_fallback_warning: false,
+                ..
+            } if notification_id.as_u64() == 1
+        ));
+        assert_eq!(runtime.store.visible().count(), 1);
+    }
+
+    #[test]
+    fn system_delivery_falls_back_once_per_runtime() {
+        let now = std::time::Instant::now();
+        let mut runtime = NotificationRuntime::new(10, NotificationSystem::System);
+        assert!(matches!(
+            runtime.notify(NotificationDraft::new("First"), now).unwrap(),
+            NotificationDelivery::PresentedInApp {
+                system_fallback_warning: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            runtime.notify(NotificationDraft::new("Second"), now).unwrap(),
+            NotificationDelivery::PresentedInApp {
+                system_fallback_warning: false,
+                ..
+            }
+        ));
+        runtime.set_notification_system(NotificationSystem::App);
+        runtime.set_notification_system(NotificationSystem::System);
+        assert!(matches!(
+            runtime.notify(NotificationDraft::new("Third"), now).unwrap(),
+            NotificationDelivery::PresentedInApp {
+                system_fallback_warning: false,
+                ..
+            }
+        ));
+        assert_eq!(runtime.store.visible().count(), 3);
     }
 }

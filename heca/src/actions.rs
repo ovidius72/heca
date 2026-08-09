@@ -1320,6 +1320,14 @@ impl ActionRegistry {
             icon: Some(Glyph::XSquare),
             args: &[ArgDescriptor::required("id", ArgKind::Int, "The notification runtime id.")],
         },
+        ActionDescriptor {
+            name: "dismiss_last_notification",
+            label: "Dismiss Last Notification",
+            description: "Dismiss the first eligible visible notification in stable toast order.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[],
+        },
         // ── Scrollback (host terminal viewport) ──
         ActionDescriptor {
             name: "scrollback_page_up",

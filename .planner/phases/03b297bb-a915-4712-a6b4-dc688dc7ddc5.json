@@ -50,7 +50,8 @@
   "taskIds": [
     "25a3e40a-1bea-433b-9499-14e37faddd13",
     "46aefbb4-8ad0-4440-a951-ec249b507662",
-    "750b8ef0-b707-4693-a58d-21511d60f882"
+    "750b8ef0-b707-4693-a58d-21511d60f882",
+    "5ad128fe-f2bf-4436-9bfb-ec5c271f7d23"
   ],
   "tasks": [
     {
@@ -61,8 +62,8 @@
       "priority": 0,
       "shortName": "notify-helper",
       "title": "Add the single notification delivery router",
-      "status": "planned",
-      "description": "Implementare su NotificationRuntime/AppState un unico ingresso `notify(draft, now)` usato da tutti i producer. Il router legge `NotificationSystem` runtime e delega: App→store; None→nessun inserimento; System senza backend→store app più warning log one-shot. Non riceve ToastSpec, non esegue azioni e non chiama `Instant::now()` internamente. Restituire un esito utile ai test e al redraw (`PresentedInApp`, `Suppressed`, futuro `PresentedBySystem`) senza esporre dettagli widget.",
+      "status": "done",
+      "description": "Implementare su NotificationRuntime/AppState un unico ingresso `notify(draft, now)` usato da tutti i producer. Il router legge `NotificationSystem` runtime e delega: App→store; None→nessun inserimento; System senza backend→store app più warning log one-shot. Non riceve ToastSpec, non esegue azioni e non chiama `Instant::now()` internamente. Restituire un esito utile ai test e al redraw (`PresentedInApp`, `Suppressed`, futuro `PresentedBySystem`) senza esporre dettagli widget.\n\n---\n**Completion summary:**\nAggiunti `NotificationRuntime::notify(draft, now)` e outcome `NotificationDelivery`; il runtime conserva `NotificationSystem`, aggiornato a startup e reload. `AppState::notify` sincronizza Hint/Toast e redraw quando cambia la proiezione. App inserisce nello store, None sopprime, System fa fallback app con warning one-shot. Test App/None/System e clippy strict superati.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -101,10 +102,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T07:20:23.421Z",
+      "completedAt": "2026-08-09T07:24:47.871Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-08-06T14:20:28.742Z"
+      "updatedAt": "2026-08-09T07:24:47.871Z"
     },
     {
       "id": "46aefbb4-8ad0-4440-a951-ec249b507662",
@@ -114,8 +115,8 @@
       "priority": 1,
       "shortName": "none-mode",
       "title": "Implement notification_system = none",
-      "status": "planned",
-      "description": "Quando il setting runtime è `None`, il router non assegna ID e non inserisce la notifica in pending/visible/history. Il producer continua comunque il proprio logging stderr/debug e ritorna un esito Suppressed verificabile. Un passaggio runtime da none ad app non deve far riapparire notifiche già soppresse; quelle future usano il nuovo modo. Non nascondere errori di config dietro il sistema notifiche.",
+      "status": "done",
+      "description": "Quando il setting runtime è `None`, il router non assegna ID e non inserisce la notifica in pending/visible/history. Il producer continua comunque il proprio logging stderr/debug e ritorna un esito Suppressed verificabile. Un passaggio runtime da none ad app non deve far riapparire notifiche già soppresse; quelle future usano il nuovo modo. Non nascondere errori di config dietro il sistema notifiche.\n\n---\n**Completion summary:**\nVerificato `NotificationSystem::None`: `notify` restituisce `Suppressed` prima di allocazione/store; il test prova zero visible/history, ID 1 per la prima notifica futura dopo passaggio a App e assenza di replay. Corretta la doc config coerentemente (log producer restano fuori dal router). Test mirato e clippy strict superati.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -154,10 +155,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T07:24:57.918Z",
+      "completedAt": "2026-08-09T07:25:40.748Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-08-06T14:20:46.285Z"
+      "updatedAt": "2026-08-09T07:25:40.748Z"
     },
     {
       "id": "750b8ef0-b707-4693-a58d-21511d60f882",
@@ -167,8 +168,8 @@
       "priority": 2,
       "shortName": "system-mode-v1",
       "title": "Implement temporary system-mode in-app fallback",
-      "status": "planned",
-      "description": "Finché P063 non fornisce un backend OS, `NotificationSystem::System` consegna ogni draft allo store in-app e scrive un solo warning per sessione indicante che il backend nativo non è disponibile. Conservare il flag nel NotificationRuntime; non emettere il warning come una notifica che rientra ricorsivamente nel router. Reload system→app→system nella stessa sessione non ripete il warning. Documentare che questo è comportamento temporaneo ma deterministico.",
+      "status": "done",
+      "description": "Finché P063 non fornisce un backend OS, `NotificationSystem::System` consegna ogni draft allo store in-app e scrive un solo warning per sessione indicante che il backend nativo non è disponibile. Conservare il flag nel NotificationRuntime; non emettere il warning come una notifica che rientra ricorsivamente nel router. Reload system→app→system nella stessa sessione non ripete il warning. Documentare che questo è comportamento temporaneo ma deterministico.\n\n---\n**Completion summary:**\n`System` usa deterministicamente lo store in-app finché P063 non aggiunge backend OS; il flag runtime emette il warning e lo espone nell’outcome solo una volta. Test copre tre delivery e transizione System→App→System: tutte visibili, warning solo per la prima. Clippy strict superato.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -207,16 +208,63 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T07:25:51.883Z",
+      "completedAt": "2026-08-09T07:26:19.113Z",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-08-06T14:20:54.382Z"
+      "updatedAt": "2026-08-09T07:26:19.113Z"
+    },
+    {
+      "id": "5ad128fe-f2bf-4436-9bfb-ec5c271f7d23",
+      "phaseId": "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
+      "number": 406,
+      "shortId": "6P9HM",
+      "priority": 3,
+      "shortName": "dismiss-last-notification",
+      "title": "Dismiss the first eligible visible notification via a default action",
+      "status": "done",
+      "description": "In `heca/src/input.rs` introdurre `WmAction::DismissLastNotification` senza argomenti e mantenerlo esaustivo in `action_from_name()`, `action_priority()` e nella policy di `heca/src/app/interaction.rs`. Registrare descriptor e handler tramite `heca/src/actions.rs`, `heca/src/app/registry.rs` e `heca/src/handlers.rs`; il handler deve interrogare `AppState.notification_runtime` / `NotificationStore` (`heca/src/notification.rs`) e dismissare la prima notifica eleggibile nello stack visibile, dall’alto verso il basso, senza identificatore fornito dal chiamante. Una notifica sticky resta esclusa; una persistent o non-dismissible resta esclusa; una notifica con `NotificationAction` ma dismissible resta eleggibile. Se non esiste un elemento eleggibile, l’azione è un no-op. Aggiungere `prefix+Shift+n` come binding predefinito configurabile in `keybindings.default.toml`, senza hardcode nel gestore. Conservare `notification.dismiss { id }` per click/KeyHint e aggiungere test per ordinamento, filtri, no-op, parsing/registry/keymap e policy.\n\n---\n**Completion summary:**\nAggiunta `DismissLastNotification` con parser, priorità, policy Global, descriptor, registry, handler e binding `prefix+Shift+n`. Il selettore store sceglie la prima visible auto-dismissable, escludendo sticky e persistent/non-dismissible, conservando eleggibili card con NotificationAction; nessun target è no-op. Test parsing, policy, ordinamento/filtri/no-op; suite heca e clippy workspace passano.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5ad128fe-f2bf-4436-9bfb-ec5c271f7d23-check-001-definire-wmaction-parsing-priorit-descriptor-handler-e-policy",
+          "number": 1,
+          "title": "Definire WmAction, parsing, priorità, descriptor, handler e policy",
+          "checked": false
+        },
+        {
+          "id": "5ad128fe-f2bf-4436-9bfb-ec5c271f7d23-check-002-selezionare-e-dismissare-la-prima-notifica-visibile-eleggibile",
+          "number": 2,
+          "title": "Selezionare e dismissare la prima notifica visibile eleggibile",
+          "checked": false
+        },
+        {
+          "id": "5ad128fe-f2bf-4436-9bfb-ec5c271f7d23-check-003-aggiungere-il-keybinding-default-configurabile-prefix-shift-n",
+          "number": 3,
+          "title": "Aggiungere il keybinding default configurabile prefix+Shift+n",
+          "checked": false
+        },
+        {
+          "id": "5ad128fe-f2bf-4436-9bfb-ec5c271f7d23-check-004-coprire-ordine-esclusioni-no-op-e-integrazione-action-keymap",
+          "number": 4,
+          "title": "Coprire ordine, esclusioni, no-op e integrazione action/keymap",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T07:26:25.044Z",
+      "completedAt": "2026-08-09T10:36:29.791Z",
+      "createdAt": "2026-08-09T07:19:37.275Z",
+      "updatedAt": "2026-08-09T10:36:29.791Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-06T14:23:21.891Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-09T10:36:29.791Z",
+  "handoff": "# P055 — router di delivery, fallback System e dismiss globale conclusi\n\n## Risultato\n- `NotificationRuntime::notify(draft, now)` centralizza i canali `App`, `None` e `System`.\n- `AppState::notify` è il confine per i producer: sincronizza Toast/Hint e richiede redraw solo se cambia la proiezione visibile.\n- `None` restituisce `NotificationDelivery::Suppressed` prima di allocare o scrivere nello store; i log del producer restano esterni al router.\n- `System`, fino a P063, consegna nello store in-app e marca il warning di fallback una sola volta per runtime.\n- `DismissLastNotification` (`prefix+Shift+n`) seleziona la prima card visibile auto-dismissable nell'ordine stabile dello stack e delega a `DismissNotification { id }`.\n\n## Decisioni e contratti\n- Sticky, persistent e non-dismissible non sono eleggibili per `DismissLastNotification`; una card con `NotificationAction` resta eleggibile se auto-dismissable e dismissible.\n- Il no-op senza card eleggibili non muta store o ToastStack.\n- `notification.dismiss { id }` resta il percorso parametrico per click, KeyHint e RPC.\n- La nuova action è `Global`, quindi resta disponibile anche nel dominio floating.\n\n## File toccati\n- `heca/src/app_state.rs` — runtime/router e confine app.\n- `heca/src/notification.rs` — selettore store `first_auto_dismissible_visible_id` e test.\n- `heca/src/input.rs` — variant, parser e priorità.\n- `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app/interaction.rs` — action wiring completo.\n- `heca-config/src/settings.rs` — documentazione `notification_system = none`.\n- `keybindings.default.toml` — binding predefinito `prefix+Shift+n`.\n\n## Validazione\n- `cargo test -p heca`: 529 unit test + 3 integration test passati.\n- `cargo clippy --workspace --all-targets --all-features -- -D warnings`: passato.\n- `git diff --check`: passato.\n\n## Prossimo lavoro\n- P062 può diventare il primo producer reale del confine `AppState::notify` (reload config).\n- P063 sostituirà il fallback `System` con un backend OS, mantenendo l'outcome e il contratto di fallback documentato.",
+  "handoffUpdatedAt": "2026-08-09T10:37:00.256Z",
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": []

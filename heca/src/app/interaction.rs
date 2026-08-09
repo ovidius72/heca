@@ -417,7 +417,9 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // ── Global: true app-level action, allowed even when Floating ──
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
-        WmAction::ReloadConfig | WmAction::DismissNotification { .. } => ActionPolicy::Global,
+        WmAction::ReloadConfig
+        | WmAction::DismissNotification { .. }
+        | WmAction::DismissLastNotification => ActionPolicy::Global,
         // Forgetting a search memory touches no layout and no pane, so there is no domain in which
         // it should be refused.
         WmAction::ClearSearchHistory { .. } | WmAction::ClearSearchRanking { .. } => {
@@ -1745,6 +1747,10 @@ mod tests {
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
         assert_eq!(
             action_policy(&WmAction::DismissNotification { notification_id: 1 }),
+            ActionPolicy::Global,
+        );
+        assert_eq!(
+            action_policy(&WmAction::DismissLastNotification),
             ActionPolicy::Global,
         );
         // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused

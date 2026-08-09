@@ -2564,6 +2564,19 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
 /// so it must not mutate the toast widget directly. The store decides whether
 /// the entry is known and dismissible, promotes a queued replacement if needed,
 /// and the runtime refreshes its retained projection only when it changed.
+/// Dismiss the first eligible auto-expiring visible card in stable toast order.
+pub fn handle_dismiss_last_notification(state: &mut AppState, action: &WmAction) {
+    if !matches!(action, WmAction::DismissLastNotification) {
+        return;
+    }
+    let Some(notification_id) = state.notifications.store.first_auto_dismissible_visible_id() else {
+        return;
+    };
+    handle_dismiss_notification(state, &WmAction::DismissNotification {
+        notification_id: notification_id.as_u64(),
+    });
+}
+
 pub fn handle_dismiss_notification(state: &mut AppState, action: &WmAction) {
     let WmAction::DismissNotification { notification_id } = action else {
         return;

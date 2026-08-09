@@ -524,6 +524,9 @@ pub enum WmAction {
         notification_id: u64,
     },
 
+    /// Dismiss the first visible auto-dismissable notification in stable toast order.
+    DismissLastNotification,
+
     /// Forget the past queries a search surface remembers (F004/P092/T392).
     ///
     /// `scope` is **optional**, and that is what makes one action serve both doors: bare it forgets
@@ -960,6 +963,7 @@ pub fn build_action(
         "notification.dismiss" => Some(WmAction::DismissNotification {
             notification_id: get_u64(args, "id")?,
         }),
+        "dismiss_last_notification" => Some(WmAction::DismissLastNotification),
 
         // ── Chrome container placement (plugin-04/T1) ──
         // These carry DOTTED, namespaced ids — unlike every other built-in, whose config name is
@@ -1175,6 +1179,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::TakePane { .. }
         | WmAction::OpenLink { .. }
         | WmAction::DismissNotification { .. }
+        | WmAction::DismissLastNotification
         | WmAction::PaneTake
         | WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
@@ -1578,6 +1583,7 @@ mod tests {
                 focus_after: false,
             },
             WmAction::DismissNotification { notification_id: 0 },
+            WmAction::DismissLastNotification,
             WmAction::ReloadConfig,
         ]
     }

@@ -663,6 +663,20 @@ impl NotificationStore {
         self.visible.iter().filter_map(|id| id.and_then(|id| self.notifications.get(&id)))
     }
 
+    /// Return the first visible card eligible for the default dismissal action.
+    ///
+    /// The stable visible-slot order chooses the target. Sticky entries are
+    /// deliberately excluded, even when manually dismissible: they require
+    /// explicit acknowledgement through their own close affordance.
+    pub fn first_auto_dismissible_visible_id(&self) -> Option<NotificationId> {
+        self.visible()
+            .find(|notification| {
+                notification.lifecycle.is_dismissible()
+                    && matches!(notification.lifecycle.lifetime(), NotificationLifetime::Auto(_))
+            })
+            .map(|notification| notification.id)
+    }
+
     /// Return the earliest auto-dismiss deadline among visible slots.
     ///
     /// Pending and sticky entries have no active timer and are excluded.
@@ -1417,6 +1431,29 @@ mod tests {
         assert!(store.notifications[&queued_id].is_history());
         assert!(store.queued.is_empty());
         assert_eq!(store.visible, [Some(visible_ids[0]), Some(visible_ids[1]), Some(visible_ids[2]), Some(visible_ids[3])]);
+    }
+
+    #[test]
+    fn first_auto_dismissible_visible_id_skips_sticky_and_persistent_cards() {
+        let now = Instant::now();
+        let mut store = NotificationStore::new(100);
+        let sticky = store.push(
+            NotificationDraft::new("Sticky").lifecycle(NotificationLifecycle::sticky()),
+            now,
+        ).unwrap().notification_id();
+        let persistent = store.push(
+            NotificationDraft::new("Persistent").lifecycle(NotificationLifecycle::sticky_persistent()),
+            now,
+        ).unwrap().notification_id();
+        assert_eq!(store.first_auto_dismissible_visible_id(), None);
+        let eligible = store.push(
+            NotificationDraft::new("Auto").action(NotificationAction::new("Retry", Intent::new("retry"))),
+            now,
+        ).unwrap().notification_id();
+
+        assert_ne!(sticky, eligible);
+        assert_ne!(persistent, eligible);
+        assert_eq!(store.first_auto_dismissible_visible_id(), Some(eligible));
     }
 
     #[test]

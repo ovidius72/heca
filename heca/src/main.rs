@@ -205,6 +205,9 @@ impl HecaApp {
             state.notifications.set_history_limit(
                 self.app_config.config.settings.notification_history_limit,
             );
+            state.notifications.set_notification_system(
+                self.app_config.config.settings.notification_system,
+            );
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();

@@ -1020,6 +1020,10 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::DismissNotification { notification_id: 0 },
         handle_dismiss_notification,
     );
+    registry.register(
+        &WmAction::DismissLastNotification,
+        handle_dismiss_last_notification,
+    );
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
     registry.register(
         &WmAction::OpenLink {

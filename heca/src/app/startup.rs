@@ -382,6 +382,7 @@ pub(crate) async fn init_state(
         session,
         notifications: crate::app_state::NotificationRuntime::new(
             app_config.config.settings.notification_history_limit,
+            app_config.config.settings.notification_system,
         ),
         backends,
         theme: app_config.theme.clone(),
