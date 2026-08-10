@@ -31,8 +31,7 @@
     "ef50268d-2dcf-412b-904f-e995c6d314dc",
     "ff38079b-e9d7-4ed1-a6fc-1cb05cbaddaa",
     "bd6b5935-a55b-4ad0-b26d-fcfd3985c611",
-    "d9527a20-4e5e-4da2-ba02-c795d966d04e",
-    "8a6c0f2b-5a10-4195-bff6-de91257c5bd4"
+    "d9527a20-4e5e-4da2-ba02-c795d966d04e"
   ],
   "tasks": [
     {
@@ -254,35 +253,22 @@
       "completedAt": "",
       "createdAt": "2026-07-28T06:21:53.247Z",
       "updatedAt": "2026-07-28T06:21:53.247Z"
-    },
-    {
-      "id": "8a6c0f2b-5a10-4195-bff6-de91257c5bd4",
-      "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
-      "number": 402,
-      "shortId": "DQZKC",
-      "priority": 11,
-      "shortName": "collapsing-an-itemgroup-piles",
-      "title": "Collapsing an ItemGroup piles its rows on top of each other above the group",
-      "status": "planned",
-      "description": "**Reported by Antonio, driving the showcase, 2026-08-08 and 2026-08-10, with screenshots.** Collapsing EXPLORER or SOURCE CONTROL in the showcase's sidebar leaves the group's row text drawn **overlapping itself**, stacked above the collapsed group — several file names rendered on top of one another at the top-left of the frame (\"chrome_region.rs\" over \"showcase.rs\" over \"old_sidebar.rs\"), while the group header itself draws correctly.\n\n**This predates the 2026-08 event-model work** (F004/P084/T394/T395/T400) — it survived a full revert of T400's decision 2 unchanged, so do not look for it there.\n\n# Where to look\n\n`ItemGroup` (`heca-grid-ui/src/widgets/item_group.rs`) collapses by setting `style.layout.hidden` on the rows (taffy `display: none`). Two things follow from that, and the bug is almost certainly one of them:\n\n- **A `display: none` subtree is collapsed to zero size at the top-left by taffy**, so its bounds are stale/zero. `component::paint_child` skips hidden children for exactly this reason — *\"painting it would stamp its (stale, overlapping) contents there\"*. A container with a **bespoke paint loop** that iterates `base.children` directly, rather than through `paint_child`, will draw them. `Pane` and `DockFrame` are called out in that function's doc as the ones that must reuse it; check every paint loop on the path from the sidebar down to the rows, including any added since.\n- **Damage.** `collect_damage` (`heca-grid-ui/src/component.rs`) skips hidden subtrees, so the rows' *old* pixels are never invalidated when they become hidden. If the collapse is not repainting the region the rows occupied, the pile is stale pixels rather than a live paint — which the screenshot cannot distinguish from the first cause.\n\n# How to tell the two apart before fixing\n\nPaint the collapsed tree into a `Scene` headlessly and read the `DrawCommand::Text` entries with their rects (the pattern `heca-grid-ui/tests/phase_a.rs` uses throughout). If the texts are **in** the scene, it is a paint loop; if they are absent, it is damage, and the fix is in the host's repaint rect.\n\n# Verification\n\nAntonio drives the showcase: collapse and expand both groups repeatedly, and scroll while collapsed. A headless test that asserts a collapsed group emits no text for its rows is the regression guard.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
-      "createdAt": "2026-08-10T19:16:04.666Z",
-      "updatedAt": "2026-08-10T19:16:04.666Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-08-10T19:16:04.666Z",
+  "updatedAt": "2026-08-10T19:20:30.596Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "41eb609e-cac1-4762-9675-f269fff7af14",
+      "date": "2026-08-10T19:20:27.715Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ]
 }

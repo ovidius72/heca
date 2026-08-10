@@ -72,9 +72,10 @@
     }
   ],
   "createdAt": "2026-07-14T18:13:04.164Z",
-  "updatedAt": "2026-07-27T11:40:15.471Z",
+  "updatedAt": "2026-08-10T19:20:37.530Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }
