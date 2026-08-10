@@ -347,26 +347,16 @@ impl Component for Dialog {
     // which owns the whole layer presentation (scrim, shadow, panel fill, bracket
     // reticle, and the panel's children) inside `with_overlay`.
 
-    /// Owns its walk. A modal routes through an **overlay-aware focus scan**
-    /// (`dispatch_trapped` / `offer_to_overlay`), not a child walk: a nested open overlay — a
-    /// `Select` dropdown in the body — gets input first even when the pointer is outside the
-    /// panel, because its list can extend past the panel edge. Focus is also trapped, so a press
-    /// on empty panel space must keep the focused button's ring rather than clear it.
+    /// Capture is now only about the **pointer**: focus trapping, and the modal swallow.
     ///
-    /// The per-kind arms below are the reason this widget is held to
-    /// `tests/pointer_delivery.rs`: the release and the wheel arms exist because a `ScrollRegion`
-    /// in a dialog body was found stuck and unscrollable, and nothing but that test stops the next
-    /// kind going missing the same way.
-    /// It types **on behalf of its field**: a dialog body holds inputs, and it forwards typed
-    /// text to whichever one is focused.
-    fn takes_text_input(&self) -> bool {
-        true
-    }
-
-    fn routes_own_subtree(&self) -> bool {
-        true
-    }
-
+    /// A dialog used to forward every key, every intent and all typed text to its focused field by
+    /// hand — an overlay-aware focus scan running beside the framework's own. It no longer needs
+    /// to. Keyboard events are delivered to the focus owner and bubble, and the focus owner inside
+    /// an open dialog *is* the field or button this widget's own [`FocusManager`] focused, so the
+    /// field gets its text first and the dialog hears what the field declined on the way back up
+    /// (in [`on_event`](Component::on_event)). A nested open overlay — a `Select` in the body — is
+    /// focused for the same reason, so it answers `Dismiss` before the dialog does, with nothing
+    /// declared.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
@@ -398,82 +388,59 @@ impl Component for Dialog {
             // it, and the blocking `Overlay` inside this dialog swallows whatever nothing took —
             // which is what keeps the page behind a modal still.
             _ if ev.pointer().is_some() => Handled::No,
-            // Track modifiers (for Shift+Tab) and forward the broadcast to the panel so a focused
-            // field's own modifier-aware editing (word/line motion) sees it. Not consumed.
+            // Track modifiers (for Shift+Tab); the broadcast reaches the panel on its own.
             Event::ModifiersChanged(m) => {
                 self.mods = *m;
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                let _ = crate::component::dispatch(panel, ev);
                 Handled::No
             }
-            // Host-resolved intents (`[keys.widgets]` → `WidgetIntent`). A dialog's focus is a
-            // **horizontal** button row, so it navigates on `ItemPrevious`/`ItemNext`; `Activate`
-            // submits the primary action and `Dismiss` cancels. Every other intent (the `Edit*`
-            // shortcuts, and any vertical `Menu*`) is forwarded **field-first** to the focused
-            // widget — so a focused `Input` gets its `Ctrl+h` delete while a focused button lets
-            // the nav overload through. The host delivers `Edit*` before `Item*`, so a focused
-            // field consumes its edit before the dialog would navigate.
-            Event::Widget(intent) => {
-                // A NESTED open overlay (a Select dropdown in the body) owns the semantic
-                // intents first: `Dismiss` closes IT (not the dialog), `Activate` commits
-                // ITS row, `Menu*` move its cursor. Only unconsumed intents fall through
-                // to the dialog's own handling.
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if self.focus.offer_to_overlay(panel, ev) == Handled::Yes {
-                    return Handled::Yes;
+            _ => Handled::No,
+        }
+    }
+
+    /// **What the focused thing inside the dialog did not want.**
+    ///
+    /// The bubble phase is where a container's own behaviour belongs, and for a modal it is also
+    /// what makes field-first delivery automatic: the walk has already been to the focused field or
+    /// button and come back, so an `Input` has had its `Ctrl+h`, a nested `Select` has had its
+    /// `Dismiss`, and what arrives here is genuinely the dialog's.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.is_open() {
+            return Handled::No;
+        }
+        match ev {
+            // A dialog's focus is a **horizontal** button row, so it navigates on
+            // `ItemPrevious`/`ItemNext`; `Activate` submits the primary action, `Dismiss` cancels.
+            Event::Widget(intent) => match intent {
+                WidgetIntent::ItemNext => {
+                    self.focus_next();
+                    Handled::Yes
                 }
-                match intent {
-                    WidgetIntent::ItemNext => {
-                        self.focus_next();
-                        Handled::Yes
-                    }
-                    WidgetIntent::ItemPrevious => {
-                        self.focus_prev();
-                        Handled::Yes
-                    }
-                    WidgetIntent::Activate => {
-                        self.activate_primary();
-                        Handled::Yes
-                    }
-                    WidgetIntent::Dismiss => {
-                        self.fire_dismiss();
-                        Handled::Yes
-                    }
-                    _ => {
-                        let panel = self.base.children[0].base_mut().children[0].as_mut();
-                        self.focus.deliver_event(panel, ev)
-                    }
+                WidgetIntent::ItemPrevious => {
+                    self.focus_prev();
+                    Handled::Yes
                 }
+                WidgetIntent::Activate => {
+                    self.activate_primary();
+                    Handled::Yes
+                }
+                WidgetIntent::Dismiss => {
+                    self.fire_dismiss();
+                    Handled::Yes
+                }
+                _ => Handled::No,
+            },
+            // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
+            // Universal widget behaviour, not a rebindable `[keys.widgets]` binding.
+            Event::Key { key: GridKey::Tab, pressed: true } => {
+                if self.mods.shift {
+                    self.focus_prev();
+                } else {
+                    self.focus_next();
+                }
+                Handled::Yes
             }
-            // Typed text goes to whoever has the keyboard, like a key — a dialog has no use for
-            // text of its own.
-            Event::TextInput(_) => {
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                self.focus.deliver_event(panel, ev)
-            }
-            // **Field-first**: hand the raw key to the focused widget so it keeps ALL its native
-            // behaviour — an `Input`'s typing, caret motion, Backspace/Delete/Home/End. (A nested
-            // open overlay is usually the focused widget too — clicking its trigger focused it —
-            // so its keys arrive through the same field-first delivery.)
-            Event::Key { key, pressed: true } => {
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if self.focus.deliver_key(panel, *key) == Handled::Yes {
-                    return Handled::Yes;
-                }
-                // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
-                // This is universal widget behaviour, not a rebindable `[keys.widgets]` binding.
-                if matches!(key, GridKey::Tab) {
-                    if self.mods.shift {
-                        self.focus_prev();
-                    } else {
-                        self.focus_next();
-                    }
-                    return Handled::Yes;
-                }
-                // Any other unconsumed key: report `Handled::No` so the host can resolve it against
-                // the configurable `[keys.widgets]` bindings (→ `WidgetIntent`).
-                Handled::No
-            }
+            // Any other unconsumed key: `Handled::No`, so the host can resolve it against the
+            // configurable `[keys.widgets]` bindings (→ `WidgetIntent`).
             _ => Handled::No,
         }
     }

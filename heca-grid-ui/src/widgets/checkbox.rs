@@ -306,7 +306,7 @@ impl Component for Checkbox {
     /// it turns into is delivered to whoever took that press — this control — which is what makes
     /// "one control, one click target" a framework rule rather than something each control
     /// arranges by swallowing events. Bubble, not capture, so an
-    /// [`EventExt`](crate::builders::EventExt) handler registered on this widget gets first
+    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
     /// refusal and can take the click with `stop_propagation`.
     fn on_event(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {

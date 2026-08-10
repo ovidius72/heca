@@ -68,6 +68,11 @@ impl LayoutEngine {
         self.tree.clear();
         // The root has no parent to inherit a size variant from — start at the default.
         let node = self.build(root, WidgetSize::default());
+        // Publish the size the tree is being laid out against **before** anything is placed: a
+        // widget that clamps a floating panel on screen does it in `on_layout`, and reading the
+        // viewport one pass later (from `PaintCx`) is what made a context menu appear at the raw
+        // anchor and jump on the next frame.
+        Self::write_viewport_impl(root, available);
         let space = taffy::Size {
             width: AvailableSpace::Definite(available.w as f32),
             height: AvailableSpace::Definite(available.h as f32),
@@ -91,6 +96,16 @@ impl LayoutEngine {
         // and has a place in it — which is what `mount` means. Anything earlier would fire from a
         // constructor, before the widget is anywhere.
         crate::pointer::fire_mounts(root);
+    }
+
+    /// Stamp `viewport` on every node in the tree.
+    fn write_viewport_impl(c: &mut dyn Component, viewport: Size) {
+        c.base_mut().viewport = viewport;
+        let n = c.base().children.len();
+        for i in 0..n {
+            let child = &mut c.base_mut().children[i];
+            Self::write_viewport_impl(child.as_mut(), viewport);
+        }
     }
 
     /// Recursively create taffy nodes for `c` and its children.

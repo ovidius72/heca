@@ -931,27 +931,42 @@ Button::destructive("Delete")
     .on_click(move || emit(intent))
 ```
 
-> ⚠️ **DECIDED 2026-08-07, NOT YET BUILT — `P084(F004)/T400`.** The model below is being taken
-> further, in the direction of RULE ZERO: **delivery follows focus and bubbles** (`takes_raw_keys`
-> and `takes_text_input` go), **`bounds === what is drawn === what is clickable`** so a floating
-> widget *places* itself rather than describing itself (`hit_bounds` / `damage_bounds` go),
-> **children are always traversed** and you stop a walk by stopping it (`routes_own_subtree` goes),
-> and there is **one handler spelling** carrying the event *and* `stop_propagation()`. Antonio:
-> *"I want transparent APIs… always prefer common and well known APIs."* Read T400 before writing
-> anything that touches routing — do not add a new self-describing predicate.
+> ⚠️ **`P084(F004)/T400` — THREE QUARTERS BUILT (2026-08-10).** Antonio: *"I want transparent APIs… always prefer
+> common and well known APIs."* Delivery follows focus and bubbles (`takes_raw_keys` and
+> `takes_text_input` **deleted**); nobody routes their own subtree (`routes_own_subtree`
+> **deleted**); **one handler spelling** carrying the event *and* `stop_propagation()`, with nothing
+> consumed for you. **Still to build:** `bounds === what is drawn === what is clickable` —
+> `hit_bounds` / `damage_bounds` are still here. The first attempt overwrote `base.bounds` in
+> `on_layout` and was reverted: bounds are read by paint, damage and placement too, and moving them
+> ghosted the screen and stole hit targets. Doing it properly means the floating panels become
+> **real placed children**. **Do not add a new self-describing predicate.**
 
-**SETTLED — the input model (F004/P084/T394, 2026-08-06):**
+**SETTLED — the input model (F004/P084/T394, 2026-08-06; keyboard half rebuilt by T400, 2026-08-10):**
 - **A host builds ONE pointer event**, `Event::Raw(RawPointer)`, carrying the **button** and the
   **modifiers**. The framework resolves it once — hit-test, hover, press/release pairing, click
   runs, drag threshold — and delivers what it meant: `Click`, `RightClick`, `PointerEnter`,
   `Scroll`, `Drop`, `Focus`, `Mount`, … **A widget never hit-tests a pointer event, and never
   forwards one to its children.** If you are writing `bounds.contains(pos)` in a widget, stop.
+- **The keyboard routes by focus, exactly as the pointer routes by position.** The target of a
+  `Key`, a `TextInput` or a `Widget` intent is the **deepest focused widget**: capture down its
+  ancestor chain, handlers and `on_event` back up. A **key or typed text stops at the owner** (one
+  key, one widget — the rule that stops the first row in a list eating an Enter meant for the
+  cursor); a **`Widget` intent enters the focused region's subtree**, because an intent is a
+  capability named out loud rather than a character aimed at whatever is typing. **Nothing focused,
+  nothing delivered.** The focus walk takes the **topmost** claim (children last-first, like
+  hit-testing), because an open layer and the button clicked before it both carry the flag.
+- **A surface that wants keys holds focus**, and a caller wires nothing:
+  `Overlay`/`ContextMenu`/`CommandPalette` bind `Base::focused` to their **open** signal;
+  `FocusScope` and `ScrollRegion` bind it to the host's keyboard-target signal — a dock binds the
+  same signal to both, so the wrapper draws the ring and the region answers the keys; `Select`
+  focuses itself when the list opens. **Do not add a predicate instead.**
 - **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
   raw `GridKey::Char` is a shortcut. Do not re-introduce a host-side "deliver the real character"
   fixup — that patch existed only because a field rebuilt text from keys.
-- **Handlers live on `Base`**, written with `EventExt` (`.on_click`, `.on_right_click`,
-  `.on_pointer_enter`, `.on(kind, …)` + `cx.stop_propagation()`) — the same one-line opt-in as
-  `LayoutExt`/`NavExt`/`DragExt`. Every widget has them; none opts in.
+- **Handlers live on `Base`**, written with `ComponentExt` (`.on_click`, `.on_right_click`, `.on_key`,
+  `.on(kind, …)`) — one trait, blanket-implemented, holding everything every component gets:
+  handlers, `nav_key`, and the drag slots. Every widget has them; none opts in. **One spelling, one argument**: an `&mut EventCx` carrying the event *and*
+  `stop_propagation()`, and **nothing is consumed for you** — a handler that wants the event says so.
 - **Events say what happened, never what to do about it**: `right_click`, not `context_menu`.
 - Full model: [`docs/widgets.md` → the event model](docs/widgets.md); the rules are held by
   `heca-grid-ui/tests/pointer_routing.rs` and `tests/pointer_delivery.rs`.

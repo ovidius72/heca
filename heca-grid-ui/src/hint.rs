@@ -4,7 +4,7 @@
 //! over **every actionable target on screen** and, on the keypress, fires that
 //! target's intent. This is the geometry+opt-in layer for it, mirroring the drag
 //! framework: a widget opts in with an opaque [`HintTargetId`] (via
-//! [`HintExt::hint_target`](crate::builders::HintExt::hint_target)), and
+//! [`ComponentExt::hint_target`](crate::builders::ComponentExt::hint_target)), and
 //! [`collect_hint_targets`] walks the **retained** widget tree (whose `Base.bounds`
 //! are filled in by layout each frame) to enumerate every target + its bounds.
 //!
@@ -48,6 +48,52 @@ pub fn collect_hint_targets(root: &dyn Component) -> Vec<(HintTargetId, Rectangl
     out
 }
 
+/// **Every widget in this tree that says what a pick does to it**, with the rect the letter goes
+/// over, in document order. The path addresses the widget so [`fire_peek`] can reach it again.
+///
+/// The framework's half of [`on_peek`](crate::builders::ComponentExt::on_peek): a host walks its trees,
+/// lays the letters out and draws them, and hands the pick back here. Nothing is registered, and no
+/// id outlives the frame it was collected in — a retained tree rebuilt between the letters
+/// appearing and one being picked simply offers a fresh set.
+pub fn collect_peeks(root: &dyn Component) -> Vec<(Vec<usize>, Rectangle)> {
+    let mut out = Vec::new();
+    peeks_into(root, &mut Vec::new(), &mut out);
+    out
+}
+
+fn peeks_into(node: &dyn Component, path: &mut Vec<usize>, out: &mut Vec<(Vec<usize>, Rectangle)>) {
+    if skip(node) {
+        return;
+    }
+    if node.base().peek.is_some() {
+        out.push((path.clone(), node.base().bounds));
+    }
+    for (i, child) in node.base().children.iter().enumerate() {
+        path.push(i);
+        peeks_into(child.as_ref(), path, out);
+        path.pop();
+    }
+}
+
+/// **Run what the widget at `path` said a pick does.** `false` when the path no longer leads to a
+/// widget that declared one — a tree rebuilt under the letters, which is not an error.
+pub fn fire_peek(root: &dyn Component, path: &[usize]) -> bool {
+    let mut node = root;
+    for step in path {
+        match node.base().children.get(*step) {
+            Some(child) => node = child.as_ref(),
+            None => return false,
+        }
+    }
+    match &node.base().peek {
+        Some(f) => {
+            f();
+            true
+        }
+        None => false,
+    }
+}
+
 fn collect_into(node: &dyn Component, out: &mut Vec<(HintTargetId, Rectangle)>) {
     if skip(node) {
         return;
@@ -63,7 +109,7 @@ fn collect_into(node: &dyn Component, out: &mut Vec<(HintTargetId, Rectangle)>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::HintExt;
+    use crate::builders::ComponentExt;
     use crate::reactive::SignalUpdate;
     use crate::widgets::{Flex, Surface};
     use heca_core::layout::{Point, Size};

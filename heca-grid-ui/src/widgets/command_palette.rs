@@ -273,16 +273,29 @@ pub struct CommandPalette {
 impl CommandPalette {
     /// A new, empty (closed) palette.
     pub fn new() -> Self {
+        let open = signal(false);
+        let mut base = Base::new();
+        // **Open is focused.** The palette's query field is its own (a `RefCell<Input>`, not a
+        // child), so the palette is the widget that types — and it types because it holds the
+        // keyboard, not because it declared that it takes raw keys and text.
+        base.focused = open;
         Self {
-            base: Base::new(),
+            base,
             commands: Vec::new(),
             modes: Vec::new(),
-            query: RefCell::new(Input::new()),
+            // The query field is off-tree, so nothing else can focus it — and the palette hands it
+            // every key and every character it decides is typing. It holds the keyboard for exactly
+            // as long as the palette does.
+            query: RefCell::new({
+                let mut q = Input::new();
+                q.base_mut().focused = open;
+                q
+            }),
             selected: 0,
             scroll: 0,
             placeholder: "Type a command…".to_string(),
             panel_size: WidgetSize::Normal,
-            open: signal(false),
+            open,
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
@@ -1093,15 +1106,12 @@ impl Component for CommandPalette {
         });
     }
 
-    /// Owns its walk. While open it grabs the viewport — typing, nav and outside-click dismissal —
-    /// and it paints its row children itself, in the overlay panel it positions them into.
-    /// It types: the query field is its own, and every character re-filters the list.
-    fn takes_text_input(&self) -> bool {
-        true
-    }
-
-    fn routes_own_subtree(&self) -> bool {
-        true
+    /// **A layer is not scrolled into view.** `Base::focused` says this widget holds the keyboard
+    /// while it is open, and `wants_visible` defaults to exactly that — so an enclosing
+    /// `ScrollRegion` would scroll the page to wherever this widget's layout node happens to sit,
+    /// every frame it is open. A layer draws over the page; the page does not come to it.
+    fn wants_visible(&self) -> bool {
+        false
     }
 
     /// Lay the row text out at **the width it will be drawn at**, in a column.
@@ -1146,6 +1156,24 @@ impl Component for CommandPalette {
             .map(|c| c.base().bounds.size.h)
             .collect();
         self.place_rows();
+    }
+
+    /// The palette paints its panel on the overlay layer, not at its layout `bounds`.
+    fn damage_bounds(&self) -> Rectangle {
+        if self.is_open() {
+            self.panel.get()
+        } else {
+            self.base.bounds
+        }
+    }
+
+    /// Its **input** surface is the panel while open, and nothing while closed.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if self.is_open() {
+            Some(self.panel.get())
+        } else {
+            None
+        }
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -1241,7 +1269,7 @@ impl Component for CommandPalette {
                 handled
             }
             // Rows drawn from data, hit-tested inside a panel the router already put the pointer
-            // over (`hit_bounds`) — a move anywhere else never reaches this widget.
+            // over (its bounds are the panel) — a move anywhere else never reaches this widget.
             Event::PointerMove(p) => {
                 // Hover-select a row.
                 let results = self.results();
@@ -1309,7 +1337,7 @@ impl Component for CommandPalette {
             f
         };
         if open && flipped {
-            self.base.mark_needs_paint(); // collect_damage reads `damage_bounds` (the panel)
+            self.base.mark_needs_paint(); // collect_damage reads the bounds, which ARE the panel
         }
         false
     }
@@ -1324,25 +1352,6 @@ impl Component for CommandPalette {
         }
     }
 
-    /// The palette paints its panel on the overlay layer, not at its layout `bounds`,
-    /// so a caret-blink repaint must target the cached panel rect.
-    fn damage_bounds(&self) -> Rectangle {
-        if self.is_open() {
-            self.panel.get()
-        } else {
-            self.base.bounds
-        }
-    }
-
-    /// The palette's **input** surface is the panel it draws — its query line and rows live
-    /// there, not in the layout box it was placed in. Closed, it takes nothing.
-    fn hit_bounds(&self) -> Option<Rectangle> {
-        if self.is_open() {
-            Some(self.panel.get())
-        } else {
-            None
-        }
-    }
 }
 
 impl LayoutExt for CommandPalette {}

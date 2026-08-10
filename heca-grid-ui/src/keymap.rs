@@ -40,6 +40,21 @@ impl KeyChord {
     }
 }
 
+/// **One key press, as a surface has it**: the key, the text it committed (if any), and the
+/// modifiers held. What [`Keymap::deliver_press`] turns into events.
+///
+/// The text is the platform's, not something derived from the key: `Shift+2` is
+/// [`GridKey::Char('2')`](GridKey) here and `"@"` there, and only the platform knows which.
+#[derive(Debug, Clone)]
+pub struct KeyPress {
+    /// The key itself — what a shortcut, a quick-pick letter or a caret motion reads.
+    pub key: GridKey,
+    /// The text the press committed, if it committed any. `None` for a bare `F5` or an arrow.
+    pub text: Option<String>,
+    /// The modifiers held.
+    pub mods: Modifiers,
+}
+
 /// Host-owned map: a key chord → the [`WidgetIntent`]s it triggers, in delivery order.
 #[derive(Clone, Debug, Default)]
 pub struct Keymap {
@@ -79,6 +94,34 @@ impl Keymap {
     ///
     /// Returns whether anything consumed the key. `deliver` is the host's target — a focused
     /// component, or an overlay's root (which forwards field-first to its own focused child).
+    /// **Deliver a whole key press.** The one call a surface makes, and the only place the order
+    /// is written: the text it committed, then the key, then the intents the key resolves to.
+    ///
+    /// A surface has two facts from the platform — the key, and the text it produced — and turning
+    /// them into events is not a decision each surface should make privately. heca's app and its
+    /// showcase each wrote this sequence out by hand, and the showcase's copy simply had no
+    /// `TextInput` step: the identical [`CommandPalette`](crate::widgets::CommandPalette) typed in
+    /// one surface and was deaf in the other, and nothing in either one was wrong to look at
+    /// (Antonio, 2026-08-10). **A component author mounts a widget in a surface and types into it.
+    /// This is why they never learn any of this.**
+    ///
+    /// `deliver` is the surface's target — a mounted tree, or an open layer's root.
+    pub fn deliver_press(
+        &self,
+        press: &KeyPress,
+        mut deliver: impl FnMut(&Event) -> Handled,
+    ) -> Handled {
+        // Typed text first, **as text**: the character the platform actually produced, case and
+        // shifted symbols intact. A field types from this and from nothing else, so nothing has to
+        // reconstruct a character from a chord.
+        if let Some(text) = crate::event::typed_text(press.text.as_deref(), press.mods)
+            && deliver(&Event::TextInput(text)) == Handled::Yes
+        {
+            return Handled::Yes;
+        }
+        self.dispatch(press.key, press.mods, deliver)
+    }
+
     pub fn dispatch(
         &self,
         key: GridKey,

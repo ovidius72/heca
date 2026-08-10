@@ -221,29 +221,11 @@ fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
 pub(crate) fn combo_to_grid(
     combo: &KeyCombo,
 ) -> Option<(heca_grid_ui::GridKey, heca_grid_ui::Modifiers)> {
-    use heca_grid_ui::GridKey;
-    let lowered = combo.key.to_lowercase();
-    let key = match lowered.as_str() {
-        "enter" | "return" => GridKey::Enter,
-        "space" => GridKey::Space,
-        "tab" => GridKey::Tab,
-        "escape" | "esc" => GridKey::Escape,
-        "backspace" => GridKey::Backspace,
-        "delete" | "del" => GridKey::Delete,
-        "arrowleft" | "left" => GridKey::ArrowLeft,
-        "arrowright" | "right" => GridKey::ArrowRight,
-        "arrowup" | "up" => GridKey::ArrowUp,
-        "arrowdown" | "down" => GridKey::ArrowDown,
-        "home" => GridKey::Home,
-        "end" => GridKey::End,
-        s => {
-            let mut chars = s.chars();
-            match (chars.next(), chars.next()) {
-                (Some(c), None) => GridKey::Char(c),
-                _ => return None,
-            }
-        }
-    };
+    // The **name** table is `GridKey::from_name`'s, not this function's: a config file, a platform
+    // event and an RPC string all name a key, and each surface used to keep its own list of which
+    // key a name meant. What is left here is the part that really is the app's — its normalised
+    // chord, which carries the macOS physical-key fallback for `Ctrl+letter`.
+    let key = heca_grid_ui::GridKey::from_name(&combo.key)?;
     let mods = heca_grid_ui::Modifiers {
         ctrl: combo.ctrl,
         alt: combo.alt,

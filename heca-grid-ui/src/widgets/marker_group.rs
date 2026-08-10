@@ -12,7 +12,7 @@
 //! A group's only *own* surface is its left **gutter** — the rows fill the rest.
 //! That gutter is the seam for the group's universal capabilities, applied by the
 //! host, **not** built in here:
-//! - **Drag**: mark the group `.draggable(payload)` ([`DragExt`](crate::builders::DragExt)).
+//! - **Drag**: mark the group `.draggable(payload)` ([`ComponentExt`](crate::builders::ComponentExt)).
 //!   A pointer press in the gutter resolves to the *group* (move the whole group);
 //!   a press on a child row resolves to the *row* — innermost-first hit-testing
 //!   makes the gutter the group's drag handle for free.

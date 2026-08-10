@@ -24,7 +24,6 @@ use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
-use winit::keyboard::{Key, NamedKey};
 
 /// Paired `(active, error)` state signals for a showcase pane-info card.
 type PaneTitleSignals = (Signal<bool>, Signal<bool>);
@@ -76,24 +75,6 @@ impl Component for IndicatorSwatch {
 impl LayoutExt for IndicatorSwatch {}
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
-fn to_grid_key(key: &Key) -> Option<GridKey> {
-    Some(match key {
-        Key::Named(NamedKey::Tab) => GridKey::Tab,
-        Key::Named(NamedKey::Enter) => GridKey::Enter,
-        Key::Named(NamedKey::Space) => GridKey::Space,
-        Key::Named(NamedKey::Escape) => GridKey::Escape,
-        Key::Named(NamedKey::Backspace) => GridKey::Backspace,
-        Key::Named(NamedKey::Delete) => GridKey::Delete,
-        Key::Named(NamedKey::ArrowLeft) => GridKey::ArrowLeft,
-        Key::Named(NamedKey::ArrowRight) => GridKey::ArrowRight,
-        Key::Named(NamedKey::ArrowUp) => GridKey::ArrowUp,
-        Key::Named(NamedKey::ArrowDown) => GridKey::ArrowDown,
-        Key::Named(NamedKey::Home) => GridKey::Home,
-        Key::Named(NamedKey::End) => GridKey::End,
-        Key::Character(s) => GridKey::Char(s.chars().next()?),
-        _ => return None,
-    })
-}
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
@@ -1775,7 +1756,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
                 let pane_titles = pane_titles.clone();
-                // DnD framework (universal `DragExt`): each card is a drag source
+                // DnD framework (universal `ComponentExt`): each card is a drag source
                 // carrying its index as the opaque id. The app resolves a drop via
                 // `drag::source_at`/`resolve_at` over the laid-out tree and paints
                 // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
@@ -1883,7 +1864,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // PANES: Phase 7 sidebar-style pane cards. Row 1 is a centered inline
             // `status dot + icon + name`; row 2 is a flat git metadata line that
             // hides outside repos.
-            // The dock is a DnD drop target (universal `DragExt`) — its cards drop here.
+            // The dock is a DnD drop target (universal `ComponentExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
                 .drop_target(DragItemId::new(usize::MAX))
                 .child(
@@ -1920,7 +1901,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 ));
             // MarkerGroup: a column-style grouping fronted by a left marker bar
             // that lights to the accent when the group is active (here: the first).
-            // Each group is also a DnD drag source + drop target (universal `DragExt`)
+            // Each group is also a DnD drag source + drop target (universal `ComponentExt`)
             // grabbed by its left grip gutter — this is how the app drags whole
             // *columns* (F4.5). A column drag accepts only column/workspace targets via
             // `drag::resolve_at_filtered`, so nested pane rows fall through to the group.
@@ -2571,10 +2552,9 @@ impl GpuState {
     /// letters, a Modal's own keys), then the semantic `WidgetIntent`(s) the chord resolves to.
     /// `offer_to_overlay` no-ops when no overlay is active, so this returns `false` and the key
     /// falls through to the host's global bindings.
-    fn route_overlay_key(&mut self, gk: GridKey) -> bool {
-        let mods = self.grid_mods();
+    fn route_overlay_key(&mut self, press: &heca_grid_ui::KeyPress) -> bool {
         let keymap = self.keymap.clone();
-        keymap.dispatch(gk, mods, |ev| {
+        keymap.deliver_press(press, |ev| {
             // The overlay layer first (Dialog / palette / menu live above the page);
             // when nothing there is open, an overlay INSIDE the page (an open Select
             // dropdown) still gets its keys via the page tree's own overlay scan.
@@ -2590,10 +2570,9 @@ impl GpuState {
     /// first (an `Input`'s typing / caret / Backspace), then the semantic `WidgetIntent`(s); the
     /// focused widget consumes whichever it understands — an `Input` takes the `Edit*` shortcut, a
     /// `Tabs` takes the horizontal `Item*` nav (so a shared `Ctrl+h` disambiguates by focus).
-    fn route_focused_key(&mut self, gk: GridKey) {
-        let mods = self.grid_mods();
+    fn route_focused_key(&mut self, press: &heca_grid_ui::KeyPress) {
         let keymap = self.keymap.clone();
-        keymap.dispatch(gk, mods, |ev| self.focus.deliver_event(&mut self.ui, ev));
+        keymap.deliver_press(press, |ev| self.focus.deliver_event(&mut self.ui, ev));
     }
 
     /// A key pressed while in zoom mode. The mode stays active (so you can keep
@@ -3038,7 +3017,13 @@ impl ApplicationHandler for App {
                 heca_grid_ui::dispatch(&mut state.overlays, &ev);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let Some(gk) = to_grid_key(&event.logical_key) {
+                // **Committed text goes in as text.** A field types from `Event::TextInput` and
+                // from nothing else (F004/P084/T394) — the character the platform actually produced,
+                // case and shifted symbols intact — while the key beside it is what a shortcut
+                // reads. This host was never taught to send it, so the palette and every `Input`
+                // here were unreachable from the keyboard while the identical widgets typed fine in
+                // the app, which sends both.
+                if let Some(gk) = heca_renderer::input::grid_key(&event.logical_key) {
                     match gk {
                         // ── tmux-style prefix + modes (checked FIRST) ──
                         // heca hosts other apps, so our chords go through a prefix
@@ -3053,7 +3038,11 @@ impl ApplicationHandler for App {
                         // ToastStack eats none — so global keys (`t`, `[`, …) still work
                         // while toasts show. `route_overlay_key` resolves the key via the widget
                         // `Keymap` (the demo host's stand-in for config-driven `[keys.widgets]`).
-                        gk if state.route_overlay_key(gk) => {}
+                        gk if state.route_overlay_key(&heca_grid_ui::KeyPress {
+                            key: gk,
+                            text: event.text.as_ref().map(|t| t.to_string()),
+                            mods: state.grid_mods(),
+                        }) => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
@@ -3110,11 +3099,16 @@ impl ApplicationHandler for App {
                             });
                             state.window.request_redraw();
                         }
-                        // Space/Enter/typing and nav go to the focused widget — via
-                        // `route_focused_key`, which dispatches via the widget `Keymap`: raw key
-                        // first, then the resolved `WidgetIntent`s (Input edits, Tabs item-nav).
+                        // Space/Enter/typing and nav go to the focused widget — through the one
+                        // funnel (`Keymap::deliver_press`): committed text, then the key, then the
+                        // resolved `WidgetIntent`s. This surface writes none of that order.
                         other => {
-                            state.route_focused_key(other);
+                            let press = heca_grid_ui::KeyPress {
+                                key: other,
+                                text: event.text.as_ref().map(|t| t.to_string()),
+                                mods: state.grid_mods(),
+                            };
+                            state.route_focused_key(&press);
                         }
                     }
                     state.layout_dirty = true; // a key can change content/size

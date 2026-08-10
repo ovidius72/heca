@@ -172,32 +172,32 @@ pub struct Base {
     pub children: Vec<Box<dyn Component>>,
     /// If set, this widget is a **drag source**: a press inside its bounds can
     /// begin a drag carrying this opaque id (the app maps it back to a pane /
-    /// column / etc.). Universal opt-in via [`DragExt::draggable`](crate::builders::DragExt::draggable);
+    /// column / etc.). Universal opt-in via [`ComponentExt::draggable`](crate::builders::ComponentExt::draggable);
     /// resolved generically by [`drag::source_at`](crate::drag::source_at).
     pub drag_source: Option<DragItemId>,
-    /// If set, this widget is a **drop target**: a drag released over its bounds
+    /// When set, this widget is a **drop target**: a drag released over its bounds
     /// drops onto this opaque id. Universal opt-in via
-    /// [`DragExt::drop_target`](crate::builders::DragExt::drop_target); resolved
+    /// [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target); resolved
     /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
     pub drop_target: Option<DragItemId>,
-    /// If set, this widget is a **hint target**: the universal leader/vimium
+    /// When set, this widget is a **hint target**: the universal leader/vimium
     /// picker assigns it a letter and, on the keypress, the host fires the intent
     /// it mapped this opaque id to. Universal opt-in via
-    /// [`HintExt::hint_target`](crate::builders::HintExt::hint_target); enumerated
+    /// [`ComponentExt::hint_target`](crate::builders::ComponentExt::hint_target); enumerated
     /// generically by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
     pub hint_target: Option<crate::hint::HintTargetId>,
-    /// If set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
+    /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and (later) drag are three readers of this one declaration.
     ///
     /// Unlike [`hint_target`](Self::hint_target) and [`drag_source`](Self::drag_source) — registry
     /// slots the app hands out — this is a string the component chose about *itself*, so it
-    /// survives a tree rebuild. Universal opt-in via [`NavExt::nav_key`](crate::builders::NavExt::nav_key);
+    /// survives a tree rebuild. Universal opt-in via [`ComponentExt::nav_key`](crate::builders::ComponentExt::nav_key);
     /// enumerated by [`nav::collect_nav_keys`](crate::nav::collect_nav_keys) and hit-tested by
     /// [`nav::nav_key_at`](crate::nav::nav_key_at). Opaque here — nothing in this library parses it.
     pub nav_key: Option<String>,
     /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
     /// the host calls the thing that holds rows. Universal opt-in via
-    /// [`NavExt::scope_key`](crate::builders::NavExt::scope_key); hit-tested by
+    /// [`ComponentExt::scope_key`](crate::builders::ComponentExt::scope_key); hit-tested by
     /// [`nav::scope_at`](crate::nav::scope_at). Opaque here, exactly like `nav_key`.
     ///
     /// A *separate* field rather than a flavour of `nav_key` because the two answer different
@@ -209,6 +209,14 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// The **viewport the tree was laid out against**, written by the layout pass.
+    ///
+    /// A widget that draws a floating panel has to clamp it on screen, and it used to learn the
+    /// viewport from `PaintCx` — one pass *after* the layout that placed the panel. So the first
+    /// frame placed it against a stale size and the next one corrected it, and a context menu
+    /// visibly jumped after it appeared (Antonio, 2026-08-10). The engine already knows the size it
+    /// was told to compute against; this is that size, available at the moment placement happens.
+    pub viewport: Size,
     /// Hover, capture, click-run and drag state, kept by the pointer router (see
     /// [`crate::pointer`]). A widget reads `pointer.hovered`; nothing else here writes it.
     ///
@@ -217,7 +225,7 @@ pub struct Base {
     /// it instead of stranding a press somewhere.
     pub pointer: crate::pointer::PointerState,
     /// This widget's registered event handlers, keyed by [`EventKind`] — what
-    /// [`EventExt`](crate::builders::EventExt) writes and [`dispatch`] runs. `None` until the
+    /// [`ComponentExt`](crate::builders::ComponentExt) writes and [`dispatch`] runs. `None` until the
     /// first one is registered, which is the common case and costs a null pointer.
     pub handlers: Option<Box<Handlers>>,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
@@ -226,7 +234,7 @@ pub struct Base {
     /// an `Icon`, a `Label` and a plugin's own widget carry one on the same terms as a `Row`. A
     /// right-click, or the host's `open_context_menu` action, walks **outwards** to the nearest
     /// widget that has one — see [`crate::menu`] for the whole model. Written with
-    /// [`EventExt::context_menu`](crate::builders::EventExt::context_menu).
+    /// [`ComponentExt::context_menu`](crate::builders::ComponentExt::context_menu).
     ///
     /// Produces the [`ContextMenu`](crate::widgets::ContextMenu) to show. A factory, so a menu
     /// whose rows depend on state the tree is not rebuilt on is current when it opens, and so a
@@ -238,6 +246,17 @@ pub struct Base {
     /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
     /// widget, opened by a right-click or the keyboard action.
     pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
+    /// **What a leader-key pick does to this region** — written with
+    /// [`KeyHint::on_peek`](crate::widgets::KeyHint::on_peek), the wrapper that draws the letter.
+    ///
+    /// The whole of the capability: a wrapped region carrying one is offered a letter by the
+    /// picker, and picking that letter runs it. There is no id to register, no registry to reach,
+    /// and no host type in the closure.
+    ///
+    /// The slot lives here so the collector stays one uniform walk, but **the builder is on the
+    /// wrapper, not on every widget**: being pickable is something you opt a region into, so
+    /// `Label::on_peek` is a method that never has to exist.
+    pub peek: Option<Box<dyn Fn()>>,
     /// Whether [`Event::Mount`] has been delivered. Set by the first layout pass that sees this
     /// widget — the first moment it is both in a live tree and laid out.
     pub(crate) mounted: Cell<bool>,
@@ -245,8 +264,7 @@ pub struct Base {
     /// changed and cleared once it's repainted. Starts `true` (everything paints
     /// on the first frame). The renderer repaints only widgets whose flag is set,
     /// and unions their bounds into the frame's damage region.
-    needs_paint: Cell<bool>,
-}
+    needs_paint: Cell<bool>}
 
 impl Base {
     /// A new base with default style and an empty child list.
@@ -270,9 +288,11 @@ impl Base {
             nav_key: None,
             scope_key: None,
             font: 15.0,
+            viewport: Size::new(f64::MAX, f64::MAX),
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             context_menu: None,
+            peek: None,
             mounted: Cell::new(false),
             needs_paint: Cell::new(true),
         }
@@ -510,18 +530,6 @@ pub trait Component {
         let _ = (ev, handled);
     }
 
-    /// `true` when this widget walks its own children, because its subtree is not a plain tree
-    /// walk. Two widgets do: [`Select`](crate::widgets::Select), whose option rows are *placed*
-    /// children collapsed to zero size while the list is closed, and
-    /// [`Dialog`](crate::widgets::Dialog), which routes through an overlay-aware focus scan.
-    ///
-    /// It is an exception, not a loophole — `tests/pointer_delivery.rs` requires anything claiming
-    /// it to still deliver every pointer kind to its children. Override it with the reason on the
-    /// method, or leave it alone and let [`dispatch`] do the walk.
-    fn routes_own_subtree(&self) -> bool {
-        false
-    }
-
     /// `true` when this widget wants an enclosing scroll region to **keep it in view**.
     ///
     /// The default is keyboard focus, which is what browsers do: focus something off-screen and the
@@ -543,63 +551,27 @@ pub trait Component {
         false
     }
 
-    /// Does this widget take raw [`Event::Key`]s **without** holding focus itself?
-    ///
-    /// **Nobody has to answer this.** It defaults to
-    /// [`routes_own_subtree`](Self::routes_own_subtree), which is the same statement said once:
-    /// a widget that routes events for its children owns the keyboard on their behalf — a menu
-    /// resolving quick-pick letters, a dialog with its own shortcuts, a palette filtering as you
-    /// type. Every other widget acts on a key only when it is the focused thing, which is what an
-    /// author would assume without being told, and [`dispatch`] does not deliver one otherwise.
-    ///
-    /// Overriding it is for the rare widget that owns keys without owning routing. Writing a plain
-    /// widget requires knowing none of this: put it anywhere, handle the keys you care about, and
-    /// they arrive when it is yours to handle.
-    fn takes_raw_keys(&self) -> bool {
-        self.routes_own_subtree()
-    }
-
-    /// Does this widget **type**? That is: may it claim [`Event::TextInput`]?
-    ///
-    /// A separate question from [`takes_raw_keys`](Self::takes_raw_keys), because they are separate
-    /// things and answering them together is a bug. A menu wants raw keys — its quick-pick letters
-    /// — and does **not** type; an [`Input`](crate::widgets::Input) wants both; nothing wants text
-    /// without keys.
-    ///
-    /// **Default `false`, and the default is the safe answer**: typed text belongs only to
-    /// something that puts it somewhere. A widget that claims it and does nothing with it swallows
-    /// the character, and a host delivers text *before* the key path — so the key never arrives
-    /// either. That is what stopped **every context-menu quick-pick letter** from working
-    /// (Antonio, 2026-08-07): the menu opted into raw keys, which used to opt it into text as
-    /// well, and its catch-all ate the letter before the keymap could deliver the key.
-    ///
-    /// Unlike raw keys, **focus does not grant this**. A focused widget that does not type still
-    /// must not eat typing: the alternative is text vanishing into whatever happens to hold focus.
-    fn takes_text_input(&self) -> bool {
-        false
-    }
-
     fn wants_visible(&self) -> bool {
         self.base().focused.get_untracked()
     }
 
     /// The rect this widget occupies **for input**, or `None` when it takes none at all.
     ///
-    /// The default is [`bounds`](Base::bounds), which is right for every widget that is drawn
-    /// where it is laid out. Two kinds of widget are not:
-    ///
-    /// - one that paints a **floating panel** — a [`ContextMenu`](crate::widgets::ContextMenu), a
-    ///   [`CommandPalette`](crate::widgets::CommandPalette) — draws its rows outside its own
-    ///   layout box, and a click on a row has to find it. It reports the panel.
-    /// - one that is **inert right now** — a closed [`Overlay`](crate::widgets::Overlay) is still
-    ///   in the tree, still laid out, and must take nothing. It reports `None`, and the router
-    ///   skips the whole subtree.
-    ///
-    /// This is the input twin of [`damage_bounds`](Self::damage_bounds), and for the same reason:
-    /// what a widget draws, what it damages, and what it can be clicked on are three questions,
-    /// and a widget that answers the first two differently has to be able to answer the third.
+    /// The default is [`bounds`](Base::bounds), which is right for every widget drawn where it is
+    /// laid out. Two kinds are not: one that paints a **floating panel** (a menu, a palette) reports
+    /// the panel, and one that is **inert right now** (a closed [`Overlay`](crate::widgets::Overlay))
+    /// reports `None`, which takes its whole subtree out of the pointer's reach while leaving it
+    /// laid out.
     fn hit_bounds(&self) -> Option<Rectangle> {
         Some(self.base().bounds)
+    }
+
+    /// The rect (logical px) to repaint when this widget is flagged
+    /// [`needs_paint`](Base::needs_paint) — used by [`collect_damage`] in place of `bounds`.
+    /// Overlay widgets that paint **outside** their own bounds (a tooltip bubble, a command-palette
+    /// panel) override it so a redraw covers what they actually drew.
+    fn damage_bounds(&self) -> Rectangle {
+        self.base().bounds
     }
 
     /// `true` when this widget **clips** its children to its own bounds, so a press or a move
@@ -694,16 +666,6 @@ pub trait Component {
         soonest
     }
 
-    /// The rect (logical px) to repaint when this widget is flagged
-    /// [`needs_paint`](Base::needs_paint) — used by [`collect_damage`] in place of
-    /// `bounds`. Overlay widgets that paint **outside** their own bounds (a tooltip
-    /// bubble, a command-palette panel) override this to report where they actually
-    /// draw, so a redraw covers the popover rather than the (often unrelated) layout
-    /// box. Default: the widget's own `bounds`.
-    fn damage_bounds(&self) -> Rectangle {
-        self.base().bounds
-    }
-
     /// The opaque drag-source id if this widget is draggable (see
     /// [`Base::drag_source`]). Default reads the base; widgets needing dynamic
     /// behavior may override. Walked by [`drag::source_at`](crate::drag::source_at).
@@ -759,18 +721,110 @@ pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
     deliver(node, ev)
 }
 
-/// The broadcast walk: capture down, children last-first, bubble up — for the events that have no
-/// position to route by (keys, intents, modifier changes) and for a resolved pointer event a
-/// caller delivers by hand.
+/// Deliver an event that carries no position: a key, typed text, a semantic intent, a modifier
+/// change, a mount.
+///
+/// **Keyboard events go to the focused widget and bubble**, exactly as they do in a browser: the
+/// walk goes down the ancestor chain of whatever holds focus (each ancestor may take it away in
+/// capture), reaches the focus owner, and comes back up through the same chain. Nothing is
+/// declared, nothing is forwarded, and a widget that does not hold focus — or contain the thing
+/// that does — is not offered the key at all.
+///
+/// That last clause used to be three separate flags. A container said `routes_own_subtree` to take
+/// over the walk, `takes_raw_keys` to be offered keys without focus, and `takes_text_input` to be
+/// offered typed text; each was a question about the widget asked so the framework could route,
+/// and each had to be answered right by every author. Focus already says all three: a
+/// [`FocusScope`](crate::widgets::FocusScope) that does not hold the keyboard is simply not on the
+/// path, so it neither hears the key nor has to decline it.
+///
+/// Everything else still broadcasts — a modifier change is an announcement to the whole tree, and
+/// a resolved pointer event a caller delivers by hand carries its own target.
 pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
-    let deaf = deaf_to_raw_key(node, ev);
-    if !deaf && node.on_event_capture(ev) == Handled::Yes {
+    if is_keyboard(ev) {
+        // **Nothing focused, nothing delivered.** A keyboard event with no owner belongs to no
+        // widget, and handing it to the tree anyway is the whole family of bugs this replaced: the
+        // first row in a list answering an Enter meant for the cursor, an unfocused dock answering
+        // an intent aimed at its neighbour. A host that wants a key to reach a surface focuses the
+        // surface — which it already does, because that is what the focus ring means.
+        let Some(path) = focus_path(node) else {
+            return Handled::No;
+        };
+        return deliver_to_path(node, &path, ev);
+    }
+    broadcast(node, ev)
+}
+
+/// Events that follow keyboard focus rather than the whole tree.
+///
+/// [`Event::Widget`] is one of them: a semantic intent is what a key **resolved to**, so it belongs
+/// to whoever the key would have gone to. Delivering it any wider is how one dock answered for
+/// another.
+fn is_keyboard(ev: &Event) -> bool {
+    matches!(
+        ev,
+        Event::Key { .. } | Event::TextInput(_) | Event::Widget(_)
+    )
+}
+
+/// The path from `node` to the **deepest** widget in it holding keyboard focus, or `None` when
+/// nothing in this tree does.
+///
+/// Deepest, because focus nests: a host marks a whole dock as the keyboard's target *and* the field
+/// inside it is focused, and the key belongs to the field. Hidden and invisible subtrees are
+/// skipped — a closed overlay still holds the focus flag its field had when it closed, and that
+/// must not pull the keyboard into something nobody can see.
+pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
+    // **Last-added first**, the same order hit-testing uses: what is drawn on top owns the input.
+    // Several things can carry the focus flag at once — an open layer says it holds the keyboard,
+    // and the button the user clicked before opening it still says so too — and the one on top is
+    // the one that means it. Walking in document order picked the button and left every keystroke
+    // falling through the palette to the page behind it.
+    for (i, child) in node.base().children.iter().enumerate().rev() {
+        if !child.base().visible.get_untracked() || child.base().style.layout.hidden {
+            continue;
+        }
+        if let Some(mut sub) = focus_path(child.as_ref()) {
+            sub.insert(0, i);
+            return Some(sub);
+        }
+    }
+    node.base().focused.get_untracked().then(Vec::new)
+}
+
+/// Capture down `path`, then handlers and [`on_event`](Component::on_event) back up — the same
+/// target-and-bubble walk the pointer uses, for an event whose target is the focus owner.
+///
+/// An empty path means `node` **is** the target, and the walk turns around there. **Its children
+/// are not visited**, for keys, for typed text and for intents alike: the target is the widget that
+/// answers, exactly as it is for the pointer. The difference is only in how each one is found —
+/// hit-testing walks to the deepest widget under the cursor, and focus is asserted by the deepest
+/// widget that holds it.
+///
+/// The alternative — letting an intent descend into the target's subtree — was tried and taken out.
+/// It made a whole region answer for a capability nobody in it had claimed, so two widgets that both
+/// handled one intent was not an error, and reading the tree could not tell you where a key landed.
+fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
+    if node.on_event_capture(ev) == Handled::Yes {
         return Handled::Yes;
     }
-    if !node.routes_own_subtree() {
+    if let Some((head, rest)) = path.split_first() {
+        let from_subtree = match node.base_mut().children.get_mut(*head) {
+            Some(child) => deliver_to_path(child.as_mut(), rest, ev),
+            None => Handled::No,
+        };
+        node.after_subtree(ev, from_subtree);
+        if from_subtree == Handled::Yes {
+            return Handled::Yes;
+        }
+    } else if matches!(ev, Event::Widget(_)) {
+        // **An intent enters the focused region.** It is not a key — it is what a key *resolved to*,
+        // a capability named out loud (`ScrollPageDown`, `Dismiss`), so it is addressed to the
+        // focused region and whichever widget in there owns that capability answers. A raw key
+        // stops at the owner, which is what keeps the first row in a list from eating an Enter
+        // meant for the cursor.
         let mut from_subtree = Handled::No;
         for child in node.base_mut().children.iter_mut().rev() {
-            if deliver(child.as_mut(), ev) == Handled::Yes {
+            if broadcast(child.as_mut(), ev) == Handled::Yes {
                 from_subtree = Handled::Yes;
                 break;
             }
@@ -786,50 +840,27 @@ pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
     node.on_event(ev)
 }
 
-/// **A raw key cannot be claimed on the way down by a widget that does not own the keyboard.**
-///
-/// This is the framework's decision, made once, because it is not any individual widget's business
-/// — the same reason a DOM keydown targets the focused element and bubbles from there instead of
-/// offering itself to every element on the way down.
-///
-/// It replaces the same guard hand-written into seven widgets, six of which wrote it *wrong* by
-/// omitting it entirely: `Row`, `Button`, `IconButton`, `BadgeButton`, `Checkbox`, `Choice` and
-/// `Item` each claimed `Enter`/`Space` in the **capture** phase with no check on whether they were
-/// focused. Capture runs top-down, so in any list the first one reached ate the key and returned
-/// `Handled::Yes` — which stopped the walk before `Keymap::dispatch` could offer the resolved
-/// `Activate` intent to the widget that actually owns the cursor. The exposé's Enter did nothing
-/// for exactly this reason while the mouse worked fine.
-///
-/// Two ways to be a legitimate owner, and **neither costs a widget author anything**:
-/// - **focused** — `Base::focused`, the ordinary case, which is what anyone would assume;
-/// - **[`takes_raw_keys`](Component::takes_raw_keys)** — a widget that routes its own subtree, and
-///   so owns the keyboard on its children's behalf. It already says that for other reasons.
-///
-/// Deliberately the **capture phase only**. A widget still *sees* every key on the way back up, so
-/// a container forwarding to its subtree (a dialog handing typing to its field) is untouched; what
-/// it may no longer do is take a key out of the air before the walk has reached whoever it was for.
-/// Children are walked either way — a container must never hide a focused descendant.
-///
-/// [`Event::TextInput`] follows a **stricter** rule: only a widget that declares
-/// [`takes_text_input`](Component::takes_text_input) may claim it, focused or not. Typed text
-/// belongs to something that puts it somewhere — an unfocused field swallowing it would be typing
-/// into itself, and a *focused* non-typing widget swallowing it loses the character and the key
-/// that would have followed.
-///
-/// `Event::Widget` is untouched: a semantic intent is *addressed*, not typed, and the widgets that
-/// answer one are exactly the ones a keymap resolved it for.
-fn deaf_to_raw_key(node: &dyn Component, ev: &Event) -> bool {
-    match ev {
-        // A raw key: the focus owner, or a widget that declared it owns keys for its subtree.
-        Event::Key { .. } => {
-            !node.takes_raw_keys() && !node.base().focused.get_untracked()
-        }
-        // Typed text: **only something that types**, focused or not. See
-        // [`Component::takes_text_input`] — a widget that claims text and does nothing with it
-        // swallows the character *and* the key that would have followed it.
-        Event::TextInput(_) => !node.takes_text_input(),
-        _ => false,
+/// Capture down, children last-first, bubble up — for the events that are addressed to everything
+/// rather than to one widget.
+fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
+    if node.on_event_capture(ev) == Handled::Yes {
+        return Handled::Yes;
     }
+    let mut from_subtree = Handled::No;
+    for child in node.base_mut().children.iter_mut().rev() {
+        if broadcast(child.as_mut(), ev) == Handled::Yes {
+            from_subtree = Handled::Yes;
+            break;
+        }
+    }
+    node.after_subtree(ev, from_subtree);
+    if from_subtree == Handled::Yes {
+        return Handled::Yes;
+    }
+    if node.base_mut().run_handlers(ev) == Handled::Yes {
+        return Handled::Yes;
+    }
+    node.on_event(ev)
 }
 
 /// The bounds of the first descendant (or `node` itself) asking to be kept in view, in tree order.
@@ -848,18 +879,6 @@ pub(crate) fn reveal_target(node: &dyn Component) -> Option<Rectangle> {
 /// [`reveal_target`] over a child list — what a container scans, since it never reveals *itself*.
 pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectangle> {
     children.iter().find_map(|c| reveal_target(c.as_ref()))
-}
-
-/// Route `ev` to `children` last-added first — the walk [`dispatch`] performs, reachable only by
-/// the two widgets that declare [`routes_own_subtree`](Component::routes_own_subtree) and must
-/// therefore do it themselves.
-pub(crate) fn route_event(children: &mut [Box<dyn Component>], ev: &Event) -> Handled {
-    for child in children.iter_mut().rev() {
-        if deliver(child.as_mut(), ev) == Handled::Yes {
-            return Handled::Yes;
-        }
-    }
-    Handled::No
 }
 
 /// Paint a child, unless it is hidden via `style.hidden` (taffy `display: none`).

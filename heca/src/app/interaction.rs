@@ -217,7 +217,22 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
         source,
         InteractionSource::Keyboard | InteractionSource::Provider | InteractionSource::Rpc
     );
-    if keyboard_driven && state.chrome_state.focused_container().is_some() {
+    // **A modal layer holds the keyboard, so no dock does.** `Domain::Container` means "a dock is
+    // being driven", and it is what permits a component's own cursor verbs
+    // (`workspaces.delete_selected`, the `j`/`k` nav). While a menu, the palette or the exposé is
+    // up, the keys belong to *it* — so a key it had no use for must not fall through and drive the
+    // dock underneath it. Antonio, 2026-08-10: right-clicking a sidebar row opened its menu and
+    // `j`/`k` went on moving the pane cursor behind it.
+    //
+    // The layer used to swallow every key it did not want, by hand, which is the same rule written
+    // in the wrong place: it also ate `q` and `Esc`, which are catalogued actions the host resolves
+    // (F004/P084/T400). Here the layer claims only the keyboard, and `ActionPolicy` decides the
+    // rest — `Global` actions still run, `ContainerFocused` ones do not.
+    let modal_holds_keyboard = state.layers.top_modal_id().is_some();
+    if keyboard_driven
+        && !modal_holds_keyboard
+        && state.chrome_state.focused_container().is_some()
+    {
         return Domain::Container;
     }
     session_domain(&state.session)

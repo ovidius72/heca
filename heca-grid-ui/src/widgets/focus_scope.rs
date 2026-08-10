@@ -16,12 +16,13 @@
 //!
 //! It adds exactly two things, both from that one signal:
 //!
-//! 1. **The gate.** [`Event::Key`](crate::component::Event::Key) and
-//!    [`Event::Widget`](crate::component::Event::Widget) enter the subtree **only while the scope
-//!    holds focus**. An unfocused scope neither reacts nor *consumes*: it declines, so the next
-//!    sibling — the scope that does hold focus — still gets its turn. That is what lets a host
-//!    broadcast one semantic intent into a tree of scopes and have the right one answer, without
-//!    knowing where any of them sits.
+//! 1. **The keyboard.** The signal is bound to [`Base::focused`](crate::component::Base::focused),
+//!    which is how the framework already decides where a key goes: keyboard events are delivered
+//!    down the focus owner's ancestor chain and back up it, so an unfocused scope is simply not on
+//!    the path. It has nothing to gate, nothing to decline and nothing to forward — a host sends
+//!    one semantic intent into a tree of scopes and the focused one is the only one it reaches.
+//!    (This wrapper used to own its subtree's whole event walk to achieve that, and skip it per
+//!    event kind.)
 //! 2. **The outline.** While focused it draws the theme's focus ring around the child's bounds —
 //!    [`PaintCx::focus_ring`], the `focus_ring` colour (or the accent shifted toward `foreground`)
 //!    at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme that turns
@@ -45,7 +46,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
-use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, route_event};
+use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::{Signal, SignalGet, signal};
 use crate::style::{Direction, Length};
 
@@ -97,10 +98,16 @@ impl FocusScope {
 
     /// Bind the **host-owned** focus signal. The host sets it when its keyboard focus moves, so
     /// key, mouse and RPC all drive the affordance through one path.
+    ///
+    /// It is bound to [`Base::focused`] as well, and that is the whole of the gate: keyboard
+    /// events are delivered down the focus owner's ancestor chain, so an unfocused scope is not on
+    /// the path and is never offered a key. There is nothing here to decline, and nothing to
+    /// declare.
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn focus(mut self, focused: Signal<bool>) -> Self {
         self.seen = focused.get_untracked();
         self.focused = focused;
+        self.base.focused = focused;
         self
     }
 
@@ -131,38 +138,6 @@ impl Component for FocusScope {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
-    }
-
-    /// This widget owns its subtree walk **because the gate is per event kind**, which the routing
-    /// hooks cannot express any other way.
-    ///
-    /// Swallowing (`Handled::Yes`) would stop the walk at *this* node, so a sibling scope — the one
-    /// that actually holds focus — would never be reached. Declining without owning the walk would
-    /// let the event through anyway, since [`dispatch`](crate::component::dispatch) does the child
-    /// walk itself. So the scope takes the walk and skips it for the kinds that are not its own.
-    ///
-    /// `tests/pointer_delivery.rs` requires anything claiming this to still deliver every pointer
-    /// kind to its children — which is the point: the pointer is never gated.
-    fn routes_own_subtree(&self) -> bool {
-        true
-    }
-
-    fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        // **The pointer is never gated, and never forwarded from here.** The router carries it to
-        // the widget under it and back up through this wrapper, so a press on an unfocused dock
-        // reaches it — which is how you focus the thing in the first place. Forwarding it here as
-        // well would deliver it twice.
-        if ev.pointer().is_some() {
-            return Handled::No;
-        }
-        // Keys belong to whoever has focus. An unfocused scope returns `No` — *not mine* — rather
-        // than consuming, so the walk continues to the sibling that does have it.
-        if matches!(ev, Event::Key { .. } | Event::Widget(_)) && !self.focused.get_untracked() {
-            return Handled::No;
-        }
-        // Everything else — modifiers, and keys while focused — enters exactly as it would
-        // without this wrapper.
-        route_event(&mut self.base.children, ev)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -211,6 +186,7 @@ impl Parent for FocusScope {}
 
 #[cfg(test)]
 mod tests {
+    use crate::component::{Event, Handled};
     use crate::event::PointerButton;
     use super::*;
     use crate::layout::LayoutEngine;
@@ -360,48 +336,70 @@ mod tests {
         }
     }
 
+    /// A scope wrapping content that does **not** take the keyboard — the wrapper alone is bound.
     fn scope(focused: bool) -> (FocusScope, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
         let (probe, seen) = Probe::new();
         (FocusScope::new(probe).focus(signal(focused)), seen)
     }
 
-    /// A widget intent reaches the focused scope's subtree.
+    /// **A dock, as a host actually builds one**: ONE signal bound to the wrapper (which draws the
+    /// ring) *and* to the widget inside that answers the keys — the same pairing as
+    /// `FocusScope::focus` beside [`ScrollRegion::keyboard_target`](super::ScrollRegion::keyboard_target).
+    ///
+    /// That is what makes the content the focus owner, and keyboard events go to the owner. Binding
+    /// only the wrapper is a real state, tested above: the ring is drawn and the wrapper answers,
+    /// which is right, because nothing inside claimed the keyboard.
+    fn dock(focused: bool) -> (FocusScope, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
+        let (mut probe, seen) = Probe::new();
+        let sig = signal(focused);
+        probe.base_mut().focused = sig;
+        (FocusScope::new(probe).focus(sig), seen)
+    }
+
+    /// A widget intent reaches the widget that holds the keyboard.
     #[test]
-    fn a_widget_intent_enters_the_focused_scope() {
-        let (mut scope, seen) = scope(true);
-        crate::component::dispatch(&mut scope, &Event::Widget(WidgetIntent::ScrollPageDown));
-        assert_eq!(seen.borrow().len(), 1, "the focused scope let it in");
+    fn a_widget_intent_reaches_the_focused_content() {
+        let (mut dock, seen) = dock(true);
+        crate::component::dispatch(&mut dock, &Event::Widget(WidgetIntent::ScrollPageDown));
+        assert_eq!(seen.borrow().len(), 1, "the focus owner answered");
     }
 
     /// …and not an unfocused one's.
     #[test]
     fn a_widget_intent_does_not_enter_an_unfocused_scope() {
-        let (mut scope, seen) = scope(false);
+        let (mut scope, seen) = dock(false);
         crate::component::dispatch(&mut scope, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert!(seen.borrow().is_empty(), "an unfocused scope is inert to keys");
     }
 
-    /// **The load-bearing one.** An unfocused scope must *decline*, not consume — otherwise the
-    /// first scope in a region would swallow the intent and the focused one would never be reached.
+    /// **The load-bearing one.** Two docks side by side: only the one holding the keyboard answers,
+    /// whatever the document order — the intent is routed to it, not offered to the region and
+    /// taken by whoever is reached first.
     #[test]
-    fn an_unfocused_scope_declines_so_a_focused_sibling_still_gets_its_turn() {
-        let (unfocused, quiet) = scope(false);
-        let (focused, heard) = scope(true);
-        // Document order: the inert one FIRST, which is the arrangement that breaks if it consumes.
+    fn only_the_focused_dock_answers_whatever_the_document_order() {
+        let (unfocused, quiet) = dock(false);
+        let (focused, heard) = dock(true);
+        // Document order: the inert one FIRST, which is the arrangement that breaks under a walk.
         let mut region = Flex::column().child(unfocused).child(focused);
 
         let handled =
             crate::component::dispatch(&mut region, &Event::Widget(WidgetIntent::ScrollPageDown));
 
-        assert!(quiet.borrow().is_empty(), "the unfocused scope stayed out of it");
-        assert_eq!(heard.borrow().len(), 1, "and the focused sibling was reached");
+        assert!(quiet.borrow().is_empty(), "the unfocused dock stayed out of it");
+        assert_eq!(heard.borrow().len(), 1, "and the focused one was reached");
         // The probe declines, so nothing claims it — what matters is that the walk got there.
         assert_eq!(handled, Handled::No);
     }
 
-    /// A key is gated the same way an intent is.
+    /// **A key is not gated like an intent — it stops at the focus owner.**
+    ///
+    /// An intent names a capability, so it is offered to the focused region and whatever inside it
+    /// owns that capability answers. A raw key belongs to *one* widget: it reaches the focus owner
+    /// (this scope) and bubbles from there, and it does **not** descend into the subtree. That is
+    /// the rule that stops the first row in a list eating an Enter meant for the row the cursor is
+    /// on — the bug seven widgets used to patch by hand.
     #[test]
-    fn a_key_is_gated_like_an_intent() {
+    fn a_key_stops_at_the_focus_owner_and_does_not_enter_its_subtree() {
         let (mut open, heard) = scope(true);
         let (mut shut, quiet) = scope(false);
         let key = Event::Key {
@@ -410,8 +408,8 @@ mod tests {
         };
         crate::component::dispatch(&mut open, &key);
         crate::component::dispatch(&mut shut, &key);
-        assert_eq!(heard.borrow().len(), 1);
-        assert!(quiet.borrow().is_empty());
+        assert!(heard.borrow().is_empty(), "the key is the scope's, not its content's");
+        assert!(quiet.borrow().is_empty(), "and an unfocused scope hears nothing at all");
     }
 
     /// **The pointer is never gated.** The mouse carries its own target, so it needs no focus to
@@ -447,11 +445,12 @@ mod tests {
         }
     }
 
-    /// The gate follows the signal, with no rebuild — the same flip that shows the ring.
+    /// The keyboard follows the signal, with no rebuild — the same flip that shows the ring.
     #[test]
-    fn the_gate_follows_the_signal() {
-        let (probe, seen) = Probe::new();
+    fn the_keyboard_follows_the_signal() {
+        let (mut probe, seen) = Probe::new();
         let focused = signal(false);
+        probe.base_mut().focused = focused;
         let mut scope = FocusScope::new(probe).focus(focused);
         crate::component::dispatch(&mut scope, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert!(seen.borrow().is_empty());

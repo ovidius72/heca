@@ -90,6 +90,13 @@ impl CardGrid {
         // Rows stack **vertically** — they are rows. Without saying so the default direction lays
         // them side by side, which turned a stack of workspaces into a line of them.
         base.style.layout.direction = crate::style::Direction::Column;
+        // **It moves a cursor with the keyboard, so it takes the keyboard.** Keys go to the widget
+        // that holds focus, so a grid that answers nav intents has to be able to hold it — the same
+        // thing a `tabindex` says about a grid in a page. Its own declaration, in its own
+        // constructor: a surface that mounts one wires nothing.
+        base.focusable = true;
+        // One thing to Tab to and one thing to click, whatever the cards hold.
+        base.focus_barrier = true;
         Self {
             base,
             rows: Vec::new(),

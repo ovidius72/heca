@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, ComponentExt, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerBand, LayerId, LayerKind};

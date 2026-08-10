@@ -56,7 +56,7 @@ pub mod widgets;
 pub use heca_core::layout::{Point, Rectangle, Size};
 
 pub use action::{Action, SignalData};
-pub use builders::{DragExt, EventExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
+pub use builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
@@ -67,9 +67,10 @@ pub use event::{
     DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,
     RawPointerKind,
 };
+pub use event::typed_text;
 pub use menu::{has_menu_sink, install_menu_sink, open_for_focused, open_for_nav_key};
 pub use pointer::{PointerState, clear_hover, hit_test};
-pub use keymap::{KeyChord, Keymap};
+pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
 pub use hint::{HintTargetId, collect_hint_targets};
 pub use nav::{collect_nav_keys, nav_key_at};
@@ -95,7 +96,7 @@ pub use widgets::{
 /// Common imports for building UIs.
 pub mod prelude {
     pub use crate::action::{Action, SignalData};
-    pub use crate::builders::{DragExt, EventExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
+    pub use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};

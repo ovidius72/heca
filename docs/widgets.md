@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[`EventExt`](#eventext--handlers-on-any-widget)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Search](#search--matching-ranking-by-use-and-query-history)**
+- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[`ComponentExt`](#componentext--what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -191,10 +191,9 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `on_event_capture(&mut self, ev) -> Handled` | `No` | Handle an event **before** this widget's children see it. `Yes` stops the walk. See [the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree). |
-| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. Registered [`EventExt`](#eventext--handlers-on-any-widget) handlers run just before it, so an author's handler can take the event from the widget's own behaviour. |
+| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. Registered [`ComponentExt`](#componentext--what-every-widget-gets) handlers run just before it, so an author's handler can take the event from the widget's own behaviour. |
+| `hit_bounds(&self) -> Option<Rectangle>` | `Some(bounds)` | The rect this widget occupies **for input**, or `None` when it takes none at all. Overridden by a widget that draws a floating panel (a menu, a palette) or that is inert right now (a closed [`Overlay`](#overlay), whose subtree is still laid out). |
 | `after_subtree(&mut self, ev, handled)` | no-op | Called **after this widget's subtree has seen `ev`**, consumed or not — for a container that reports what its own rows did ([`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe)). Observation only: it cannot consume the event or revive a consumed one. |
-| `hit_bounds(&self) -> Option<Rectangle>` | `Some(bounds)` | The rect this widget occupies **for input**, or `None` when it takes none at all. Overridden by a widget that draws a floating panel (a menu, a palette) or that is inert right now (a closed [`Overlay`](#overlay), whose subtree is still laid out). The input twin of `damage_bounds`. |
-| `routes_own_subtree(&self) -> bool` | `false` | `true` when this widget walks its own children for the events that have no position to route by (keys, intents). **Pointer events are never forwarded by a widget** — the router carries them. A declared exception, held to the same delivery test. |
 | `clips_children(&self) -> bool` | `false` | `true` when the widget clips its children, so a press or move **outside its bounds** must not reach them — content scrolled out of sight stops being clickable. |
 | `wants_visible(&self) -> bool` | `focused` | `true` when an enclosing [`ScrollRegion`](#scrollregion) should **keep this widget in view**. See [following the cursor](#following-the-cursor). |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
@@ -218,6 +217,12 @@ Event::Raw(RawPointer)                     ← the ONLY pointer event a host bui
        └─ delivery:
               on_event_capture   root → … → target      (Yes stops here)
               handlers, on_event  target → … → root      (Yes stops here)
+
+Event::Key / TextInput / Widget            ← the keyboard, which has no position
+       │
+       └─ the target is THE FOCUS OWNER, and delivery is the same walk:
+              on_event_capture   root → … → focus owner
+              handlers, on_event  focus owner → … → root
 ```
 
 Two halves of the vocabulary, and the line between them is the whole design:
@@ -274,7 +279,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `Scroll(PointerEvent)` | the wheel turned over this widget; deltas are in `delta_x`/`delta_y`. A region that cannot scroll the axis asked for declines and it bubbles outward — which is what makes nested scroll areas work with nothing declared. |
 | `DragStart` / `Drag` / `DragEnd` | a drag from this widget: it declared a [`draggable`](#dragext) id and the pointer passed the 8 px threshold while held. `DragEnd` always arrives, dropped or not. |
 | `DragEnter` / `DragOver` / `DragLeave` / `Drop` | a drag over this **drop target**; `DragEvent::side` (`Before`/`Onto`/`After`) follows the pointer, so an insertion marker tracks it for free. |
-| `Key { key, pressed }` | a key, delivered to the **focused** widget (see below). |
+| `Key { key, pressed }` | a key, delivered to the **focus owner** and then up its ancestors (see [the keyboard](#the-keyboard--delivery-follows-focus)). |
 | `TextInput(String)` | text the user **committed** — typed, pasted, or composed by an IME. Distinct from `Key`: `Shift+2` is `Char('2')` there and `"@"` here. A field types from this and from nothing else. |
 | `ModifiersChanged` | broadcast; observers return `Handled::No`. |
 | `Widget(WidgetIntent)` | a semantic, configurable intent resolved from `[keys.widgets]`. |
@@ -302,6 +307,12 @@ A widget whose input surface is not its layout box says so with **`hit_bounds() 
 a closed [`Overlay`](#overlay) returns `None`, which takes its whole subtree out of the pointer's
 reach while leaving it laid out. It is the input twin of `damage_bounds`, for the same reason: what
 a widget draws, what it damages and where it can be clicked are three questions.
+
+> These two are still here, and T400 means to remove them: a floating widget should *place* itself
+> (bake its offset into its own bounds) rather than describe a second rect. The first attempt at
+> that overwrote `base.bounds` in `on_layout`, which fights every other reader of bounds — paint,
+> damage, placement — and produced ghosting and stray hit targets. Doing it properly means the
+> floating panels become **real placed children**, which is not built yet.
 
 #### Capture
 
@@ -364,7 +375,7 @@ content, a swallow, or state that must be current before anything below is hit-t
 returning `Handled::No` is normal — it means "I looked, carry on".
 
 **Bubble** (`on_event`) for what you do with what nobody below wanted. This is also where a widget's
-own behaviour belongs, so an [`EventExt`](#eventext--handlers-on-any-widget) handler registered on
+own behaviour belongs, so an [`ComponentExt`](#componentext--what-every-widget-gets) handler registered on
 it gets first refusal.
 
 **`after_subtree(ev, handled)`** for a container that **watches what its own subtree did**, whether
@@ -373,19 +384,57 @@ header row inside it flips `expanded`, and the header consuming that click is th
 Before it existed, those containers took over the whole child walk to get the same observation —
 which made every event kind depend on that container forwarding it correctly, forever.
 
-**The exceptions.** Four widgets still declare `routes_own_subtree` — [`Select`](#select),
-[`Dialog`](#dialog), [`Overlay`](#overlay), [`FocusScope`](#focusscope) — and only for the events
-that have no position to route by (keys and intents), where the gate is per event kind. **No
-container forwards a pointer event any more**: the router carries it to the target and back up
-through whatever contains it. `tests/pointer_delivery.rs` mounts a probe inside each container and
-fails if a pointer kind goes missing; `tests/pointer_routing.rs` holds the resolution itself to the
-rules above.
+**There are no exceptions left.** `Select`, `Dialog`, `Overlay`, `CommandPalette`, `ContextMenu` and
+`FocusScope` each used to declare `routes_own_subtree` and walk their own children for the events
+that have no position to route by. That predicate is **gone** (F004/P084/T400): keys route by focus,
+which is the same statement said in the vocabulary the rest of the framework already used, so there
+is nothing left for those widgets to gate. **No container forwards any event any more.**
+`tests/pointer_delivery.rs` mounts a probe inside each container and fails if a pointer kind goes
+missing; `tests/pointer_routing.rs` holds the resolution itself to the rules above.
 
-> **Hosts:** build one kind of pointer event — `Event::Raw(RawPointer)` — with the **button** and
-> the **modifiers** on it, and send it to every tree you mount. Send `Event::pointer_cancelled()`
-> when the pointer leaves the window, or hover survives the cursor going elsewhere. Send
-> `Event::TextInput` for committed text alongside the key: a field types from that and a shortcut
-> reads the key, so neither has to be reconstructed from the other.
+### The keyboard — delivery follows focus
+
+`Event::Key`, `Event::TextInput` and `Event::Widget` carry no position, so the framework routes them
+by the only other thing that says where input is aimed: **`Base::focused`**.
+
+- **The target is the deepest focused widget.** Capture runs from the root down its ancestor chain,
+  then handlers and `on_event` run back up — the same target-and-bubble walk the pointer uses.
+- **A key or typed text stops at the owner.** It belongs to one widget. This is the rule that stops
+  the first row in a list eating an Enter meant for the row the cursor is on; seven widgets used to
+  patch that by hand, six of them by forgetting to.
+- **A `Widget` intent enters the focused region.** An intent is not a key — it is what a key
+  *resolved to*, a capability named out loud (`ScrollPageDown`, `Dismiss`). It is addressed to the
+  focused region, so that subtree is walked and whichever widget owns the capability answers, and a
+  host sends one intent without knowing where any of them sits.
+- **Nothing focused, nothing delivered.** A keyboard event with no owner belongs to no widget.
+
+A surface that wants keys must **hold focus**, which it already had to do to draw a focus ring:
+
+| widget | how it says the keyboard is here |
+|---|---|
+| `Input`, `Button`, `Row`, `Item`, `Choice`, `Tabs` | ordinary focus — a click or Tab, via `FocusManager` |
+| `Overlay`, `ContextMenu`, `CommandPalette` | `Base::focused` is bound to the **open** signal: open *is* focused |
+| `Select` | opening the list focuses it |
+| `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
+| `FocusScope`, `ScrollRegion` | `Base::focused` is bound to the **host's** keyboard-target signal. A dock binds the **same** signal to both: the wrapper draws the ring, the region answers the keys |
+| `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
+
+Three predicates paid for this before: `takes_raw_keys` ("I take keys without being focused"),
+`takes_text_input` ("I may claim typed text") and `routes_own_subtree`. All three were questions a
+widget had to answer *about itself* so the framework could route correctly — and each had a wrong
+answer that failed silently. `ContextMenu` answered "I take raw keys" and ended its match with
+`_ => Handled::Yes`, which ate `Event::TextInput`; because a host offers text before it resolves the
+key, **every quick-pick letter in every menu did nothing** while the suite stayed green.
+
+> **Surfaces:** build one kind of pointer event — `Event::Raw(RawPointer)` — with the **button**
+> and the **modifiers** on it, and send it to every tree you mount. Send
+> `Event::pointer_cancelled()` when the pointer leaves the window, or hover survives the cursor
+> going elsewhere. For the keyboard, hand the whole press to **`Keymap::deliver_press(&KeyPress, deliver)`**
+> and write none of the order yourself: it sends the committed text, then the key, then the intents
+> the key resolves to. heca's app and its showcase each wrote that sequence out privately, and the
+> showcase's copy had no text step at all — so the identical `CommandPalette` typed in one surface
+> and was deaf in the other, with nothing wrong to look at in either. **A component author never
+> meets any of this**: they mount a widget in a surface and type into it.
 
 ### Following the cursor
 
@@ -447,23 +496,48 @@ return `Self` for chaining.
 > Layout-only `Flex` deliberately does **not** implement `StyleExt` — wrap content in a
 > `Surface`/`Card` to give it a background.
 
-<a id="eventext--handlers-on-any-widget"></a>
-**`EventExt`** — handlers on any widget (what happens to it — **every** component gets it, like `NavExt`, `DragExt` and
-`HintExt`):
+<a id="componentext--what-every-widget-gets"></a>
+**`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `nav_key`
+(who it is) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
+split by nothing but the order they were added in; all four were unconditional, so the split carried
+no rule. The two that remain separate do carry one, enforced by the type system: `StyleExt` is
+surfaces only, `Parent` is containers only.
+
+**One spelling, one argument, every kind.** A handler takes an `&mut EventCx` carrying the event
+**and** the one lever over the walk, and `.on(kind, f)` is that same function with the kind as a
+parameter — not a different API:
+
+```rust
+let row = Row::new()
+    .child(Label::new("pane-1"))
+    .on_click(|e| { e.stop_propagation(); select(); })  // mine
+    .on_right_click(|e| open_menu_at(e.pos()))          // watched, not claimed
+    .on_key(|e| { let _ = e.event(); });                // keys, same shape
+```
+
+`EventCx` answers `event()`, `pointer()`, `drag()`, `pos()`, `modifiers()` — and
+`stop_propagation()`.
+
+> **Nothing is consumed for you** (changed in F004/P084/T400 — the DOM's rule). The named builders
+> used to consume the event whether or not you wanted it, so anything that needed to *watch* a click
+> without claiming it had to drop to the differently-shaped `.on(kind, |cx| …)`, which was the only
+> form able to say `stop_propagation`. Two spellings over one input; now there is one. **A handler
+> that used to rely on the implicit claim must now say `e.stop_propagation()`.**
 
 | Method | Effect |
 |--------|--------|
-| `.on_click(f)` / `.on_double_click(f)` / `.on_triple_click(f)` | A left click on this widget. `f` takes `&PointerEvent` (`pos`, `button`, `modifiers`, `click_count`). **Consumes** the event. |
+| `.on_click(f)` / `.on_double_click(f)` / `.on_triple_click(f)` | A left click on this widget (or a descendant that did not take it). |
 | `.on_right_click(f)` / `.on_middle_click(f)` | The same for those buttons. This is the whole of "a widget can have its own menu": it hears the click, on itself, with the position. |
-| `.on_pointer_down(f)` / `.on_pointer_up(f)` / `.on_pointer_move(f)` | The raw halves of a gesture. Consuming a `pointer_down` **captures the pointer** until the release. |
-| `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. **Do not consume** — several widgets on one path enter together. |
-| `.on_scroll(f)` | The wheel over this widget. Consumes it, so it does not also scroll whatever contains this widget. |
+| `.on_pointer_down(f)` / `.on_pointer_up(f)` / `.on_pointer_move(f)` | The raw halves of a gesture. Stopping propagation on a `pointer_down` **captures the pointer** until the release. |
+| `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. Several widgets on one path enter together, so claiming one is almost always wrong. |
+| `.on_scroll(f)` | The wheel over this widget. Stop propagation to keep it from also scrolling whatever contains this widget. |
 | `.on_pointer_down_outside(f)` | A press landed somewhere else — how a popup closes itself. |
+| `.on_key(f)` / `.on_text_input(f)` | A key, or committed text, that reached this widget — it holds the keyboard, or contains what does. Intercepting a shortcut or a quick-pick letter is the same one line as intercepting a click. |
 | `.on_focus_gained(f)` / `.on_focus_lost(f)` | Keyboard focus arrived or left. (Named this way because `Component::on_focus` is the widget's own hook for the same moment.) |
 | `.on_mount(f)` / `.on_unmount(f)` | Entered a live tree (first layout pass) / is being dropped. `on_unmount` is where a widget releases what it registered with the host, at the moment the tree that registered it goes away. |
 | `.on_drag_start(f)` / `.on_drag(f)` / `.on_drag_end(f)` | The drag this widget is the source of. |
 | `.on_drag_enter(f)` / `.on_drag_over(f)` / `.on_drag_leave(f)` / `.on_drop(f)` | A drag over this drop target; `DragEvent::side` says where in it. |
-| `.on(kind, f)` | The general form: `f` takes `&mut EventCx` and consumes the event only if it calls `cx.stop_propagation()`. Use it to observe without claiming. |
+| `.on(kind, f)` | The general form the rest are sugar over. |
 
 **`Base::one_click_target`** — a control declares that the **primary press lands on it, not on the
 content it composes**, and the router applies it during capture. The pointer twin of
@@ -472,19 +546,13 @@ content it composes**, and the router applies it during capture. The pointer twi
 the **left** button only — every other button carries on to whatever answers it, which is what lets
 a right-click on a row reach a menu instead of dying on the row.
 
-```rust
-let row = Row::new()
-    .child(Label::new("pane-1"))
-    .on_click(|_| select())
-    .on_right_click(|e| open_menu_at(e.pos))
-    .on_pointer_enter(|_| preview());
-```
-
 **Handlers run in the bubble phase**, after this widget's descendants have had the event and
 **before** the widget's own `on_event` — so a handler sees what its children declined, and
-`stop_propagation()` takes the event from the widget itself (a `Button` will not fire). A widget's
-own inherent builder wins where it has one: `Button::on_click(|| …)` is the button's, and takes no
-argument.
+`stop_propagation()` takes the event from the widget itself (a `Button` will not fire).
+
+A widget's own inherent builder wins where it has one: `Button::on_click(|| …)` is the **button's
+action** — what a click *or* Enter *or* `activate()` runs — rather than an event listener, so it
+takes no argument and there is no event to carry.
 
 **`Parent`** (containers):
 
@@ -498,7 +566,7 @@ argument.
 > inherent methods win over the trait one. `.child_boxed` is the plain "append it to my
 > children" case.
 
-**`NavExt`** (navigable rows — **every** component gets it, like `DragExt` and `HintExt`):
+**Identity** (part of `ComponentExt`):
 
 | Method | Effect |
 |--------|--------|
@@ -3151,9 +3219,10 @@ elsewhere is worse than no ring.
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
 - **Accessors**: `.focus_signal() -> Signal<bool>`.
-- **Routing**: it claims `routes_own_subtree` — the gate is per event *kind*, which the routing hooks
-  cannot express otherwise (swallowing would stop the walk at this node and strand the focused
-  sibling). That puts it on the hook for delivering the whole pointer set to its child, which it does.
+- **Routing**: none of its own. `.focus(sig)` binds that signal to `Base::focused`, and the
+  framework delivers keyboard events to the focus owner's chain — so an unfocused scope is simply
+  not on the path, and the focused one is, with nothing gated, declined or forwarded. It used to
+  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone (T400).
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -3798,7 +3867,7 @@ lay them out.
 
 #### Declaring it: a value or a closure
 
-`EventExt::context_menu` accepts either, via `IntoContextMenu`:
+`ComponentExt::context_menu` accepts either, via `IntoContextMenu`:
 
 ```rust
 Row::new().context_menu(ctx.clone());            // a value — `ContextMenu` is `Clone`

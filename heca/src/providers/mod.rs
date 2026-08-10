@@ -189,7 +189,7 @@ pub trait Provider {
 
     /// The host moved this placement's cursor to `key` — a click, an RPC call, a script.
     ///
-    /// The key is one **this component wrote** (`NavExt::nav_key`), so only it can say which row
+    /// The key is one **this component wrote** (`ComponentExt::nav_key`), so only it can say which row
     /// that is; the host deliberately never parses it. Whatever the component keeps of its own — a
     /// positional index, a domain-typed selection — reconciles here.
     ///

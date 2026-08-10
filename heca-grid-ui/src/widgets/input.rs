@@ -539,19 +539,12 @@ impl Component for Input {
 
     /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
     /// children, and they must never take the press first — the control is one click target.
-    /// **A text field is the archetypal keyboard owner** — hearing typing is the whole of what it
-    /// is, and a surface that mounts one has already decided keys go there. So it takes raw keys
-    /// without requiring `Base::focused`, unlike the button-shaped widgets, which may only act on a
-    /// key when they are the focused thing.
-    /// It types — that is what it is. Both halves of the keyboard are its own.
-    fn takes_text_input(&self) -> bool {
-        true
-    }
-
-    fn takes_raw_keys(&self) -> bool {
-        true
-    }
-
+    ///
+    /// **A field types because it is focused, and for no other reason.** It used to declare that it
+    /// took raw keys and typed text whether or not it held focus; both flags are gone, along with
+    /// the question they answered. Keys and typed text are delivered to the focus owner, so a
+    /// mounted-but-unfocused field is silent without saying so, and a focused one hears everything
+    /// without asking.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even when disabled is irrelevant; observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {

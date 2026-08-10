@@ -34,7 +34,7 @@
 //!
 //! let row = Row::new()
 //!     .on_click(|_| println!("clicked"))
-//!     .on_right_click(|e| println!("menu at {:?}", e.pos));
+//!     .on_right_click(|e| println!("menu at {:?}", e.pos()));
 //! ```
 //!
 //! …and inside a widget, the same events arrive as ordinary matches:
@@ -139,6 +139,54 @@ pub enum GridKey {
     ArrowDown,
     Home,
     End,
+}
+
+impl GridKey {
+    /// **The key a name means** — the one list, so no surface keeps its own.
+    ///
+    /// A key has more than one spelling in the wild (a config file writes `esc`, a platform reports
+    /// `Escape`, a user types `left`), and every surface that mapped platform input to a `GridKey`
+    /// wrote the list out again: heca's app kept one keyed by lowercase config name and its
+    /// showcase kept another keyed by `winit::NamedKey`, twelve entries each, free to drift.
+    /// Aliases are accepted here so a caller normalises nothing.
+    ///
+    /// A single character is itself: `"a"` is [`Char('a')`](GridKey::Char). Anything longer that is
+    /// not named here is `None` — a function key, a dead key, a modifier on its own.
+    ///
+    /// ```
+    /// use heca_grid_ui::GridKey;
+    ///
+    /// assert_eq!(GridKey::from_name("Escape"), Some(GridKey::Escape));
+    /// assert_eq!(GridKey::from_name("esc"), Some(GridKey::Escape));
+    /// assert_eq!(GridKey::from_name("ArrowLeft"), Some(GridKey::ArrowLeft));
+    /// assert_eq!(GridKey::from_name("left"), Some(GridKey::ArrowLeft));
+    /// assert_eq!(GridKey::from_name("a"), Some(GridKey::Char('a')));
+    /// assert_eq!(GridKey::from_name("F5"), None);
+    /// ```
+    pub fn from_name(name: &str) -> Option<Self> {
+        let lowered = name.to_lowercase();
+        Some(match lowered.as_str() {
+            "enter" | "return" => GridKey::Enter,
+            "space" => GridKey::Space,
+            "tab" => GridKey::Tab,
+            "escape" | "esc" => GridKey::Escape,
+            "backspace" => GridKey::Backspace,
+            "delete" | "del" => GridKey::Delete,
+            "arrowleft" | "left" => GridKey::ArrowLeft,
+            "arrowright" | "right" => GridKey::ArrowRight,
+            "arrowup" | "up" => GridKey::ArrowUp,
+            "arrowdown" | "down" => GridKey::ArrowDown,
+            "home" => GridKey::Home,
+            "end" => GridKey::End,
+            s => {
+                let mut chars = s.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => GridKey::Char(c),
+                    _ => return None,
+                }
+            }
+        })
+    }
 }
 
 /// Keyboard modifier state, renderer-agnostic. The host maps its platform
@@ -256,7 +304,7 @@ impl PointerEvent {
 /// half of the target it landed on.
 ///
 /// The **item** is a [`DragItemId`], the opaque registry slot the app already hands a draggable
-/// widget ([`DragExt::draggable`](crate::builders::DragExt::draggable)). The library moves it
+/// widget ([`ComponentExt::draggable`](crate::builders::ComponentExt::draggable)). The library moves it
 /// around and hands it back; only the host knows what it means.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DragEvent {
@@ -774,6 +822,28 @@ impl<'a> EventCx<'a> {
         self.event.pointer()
     }
 
+    /// The drag payload, if this event has one.
+    pub fn drag(&self) -> Option<&DragEvent> {
+        self.event.drag()
+    }
+
+    /// Where it happened, for the events that happen somewhere.
+    ///
+    /// The common read at a call site — `on_right_click(|e| menu_at(e.pos()))` — so it is one call
+    /// rather than a match on the payload.
+    pub fn pos(&self) -> Option<Point> {
+        self.event.position()
+    }
+
+    /// The modifiers held when it happened.
+    pub fn modifiers(&self) -> Modifiers {
+        self.event
+            .pointer()
+            .map(|p| p.modifiers)
+            .or_else(|| self.event.drag().map(|d| d.modifiers))
+            .unwrap_or_default()
+    }
+
     /// **This widget owns the event**: no ancestor sees it, and the widget's own
     /// [`on_event`](crate::component::Component::on_event) does not run.
     ///
@@ -788,6 +858,36 @@ impl<'a> EventCx<'a> {
     pub fn stopped(&self) -> bool {
         self.stop
     }
+}
+
+/// **The text a keystroke committed, if it committed any** — the one rule that decides whether a
+/// key is *typing* or a *shortcut*.
+///
+/// A host has the platform's two facts (the key, and the text it produced) and has to turn them
+/// into [`Event::TextInput`] plus [`Event::Key`]. Which chords count as typing is not a decision
+/// each host should make: heca's app and its showcase made it separately, and the showcase simply
+/// never made it at all — so the identical `CommandPalette` typed in one and was deaf in the other.
+///
+/// Space **is** typing: a field must be able to type one. A focused button still activates on it,
+/// because a button does not consume `TextInput` and the key follows right behind.
+///
+/// ```
+/// use heca_grid_ui::{typed_text, Modifiers};
+///
+/// let plain = Modifiers::default();
+/// assert_eq!(typed_text(Some("a"), plain).as_deref(), Some("a"));
+/// assert_eq!(typed_text(Some(" "), plain).as_deref(), Some(" "));
+/// // A shortcut is not typing, and neither is a control character.
+/// assert!(typed_text(Some("a"), Modifiers { ctrl: true, ..plain }).is_none());
+/// assert!(typed_text(Some("\u{1}"), plain).is_none());
+/// assert!(typed_text(None, plain).is_none());
+/// ```
+pub fn typed_text(key_text: Option<&str>, mods: Modifiers) -> Option<String> {
+    let text = key_text?;
+    if mods.ctrl || mods.meta || text.is_empty() {
+        return None;
+    }
+    text.chars().all(|c| !c.is_control()).then(|| text.to_string())
 }
 
 /// A widget's registered event handlers, keyed by [`EventKind`].

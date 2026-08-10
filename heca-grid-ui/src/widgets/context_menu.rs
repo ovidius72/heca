@@ -476,17 +476,18 @@ pub struct ContextMenu {
 /// on every row of a list.
 impl Clone for ContextMenu {
     fn clone(&self) -> Self {
+        let open = signal(false);
         Self {
             // `Base::new()` here — not `panel_base()` — cost a released-looking bug: a cloned menu
             // lost `Direction::Column` and fell back to the `Row` default, so **every declared
             // menu laid out horizontally** while `open_dropdown`, which never clones, stayed
             // vertical. Two menus, same widget, different shape. A `Clone` that rebuilds a `Base`
             // must rebuild the widget's box with it.
-            base: Self::panel_base(),
+            base: Self::panel_base(open),
             name: self.name.clone(),
             menu: self.menu.clone(),
             selected: 0,
-            open: signal(false),
+            open,
             anchor: signal(self.anchor.get_untracked()),
             centered: self.centered,
             viewport: Cell::new(self.viewport.get()),
@@ -503,12 +504,13 @@ impl ContextMenu {
     /// `name` is an **id**: what another component refers to this menu by. It is not shown; the
     /// title a panel displays comes from the [`Menu`].
     pub fn new(name: impl Into<String>) -> Self {
+        let open = signal(false);
         Self {
-            base: Self::panel_base(),
+            base: Self::panel_base(open),
             name: name.into(),
             menu: Menu::default(),
             selected: 0,
-            open: signal(false),
+            open,
             anchor: signal(Point::new(0.0, 0.0)),
             centered: false,
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
@@ -523,12 +525,19 @@ impl ContextMenu {
     /// One definition, used by [`new`](ContextMenu::new) **and** by `Clone`: the rows are children,
     /// so everything else about the panel's size is the layout engine's answer, but the box those
     /// children stack in is this widget's and must survive being cloned.
-    fn panel_base() -> Base {
+    ///
+    /// **Open is focused.** `open` is bound to [`Base::focused`], which is the whole of how the
+    /// menu hears the keyboard: keys and the intents they resolve to go to the focus owner and
+    /// bubble, so an open menu is on the path and a closed one is not. It replaces a declaration
+    /// that it took raw keys plus a catch-all that swallowed everything else while open — the pair
+    /// that ate every quick-pick letter.
+    fn panel_base(open: Signal<bool>) -> Base {
         let mut base = Base::new();
         base.style.layout.direction = Direction::Column;
         base.style.layout.padding = PAD;
         base.style.layout.min_width = Some(Length::Px(MIN_W));
         base.style.layout.max_width = Some(Length::Px(MAX_W));
+        base.focused = open;
         base
     }
 
@@ -778,10 +787,13 @@ impl ContextMenu {
         if current.size == Size::new(0.0, 0.0) {
             return; // Not laid out yet — nothing to place.
         }
+        // The viewport the layout pass was given, not the one the last paint cached: placement
+        // happens here, and reading it a pass later is what made the menu appear at the raw anchor
+        // and then jump once it had been clamped.
         let target = place_at_point(
             self.anchor.get_untracked(),
             current.size,
-            self.viewport.get(),
+            self.base.viewport,
             ANCHOR_INSET,
             self.centered,
         );
@@ -939,10 +951,27 @@ impl Component for ContextMenu {
         });
     }
 
-    /// Owns its walk: the rows are content it presents, not independently focusable widgets, and
-    /// while open it captures input over its panel.
-    fn routes_own_subtree(&self) -> bool {
-        true
+    /// **A layer is not scrolled into view.** `Base::focused` says this widget holds the keyboard
+    /// while it is open, and `wants_visible` defaults to exactly that — so an enclosing
+    /// `ScrollRegion` would scroll the page to wherever this widget's layout node happens to sit,
+    /// every frame it is open. A layer draws over the page; the page does not come to it.
+    fn wants_visible(&self) -> bool {
+        false
+    }
+
+    /// The menu's **input** surface is the panel — its own laid-out bounds, since the rows are
+    /// children. Closed, it takes nothing.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if self.is_open() {
+            Some(self.base.bounds)
+        } else {
+            None
+        }
+    }
+
+    /// The menu paints on the overlay layer, so overlay damage targets the panel rect.
+    fn damage_bounds(&self) -> Rectangle {
+        self.base.bounds
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -1025,25 +1054,15 @@ impl Component for ContextMenu {
                 self.fire_dismiss();
                 Handled::No
             }
-            // Swallow all other input while open.
-            _ => Handled::Yes,
+            // **Claim what you act on, and nothing else.** This arm used to be
+            // `_ => Handled::Yes` — "swallow all other input while open" — three arms below the
+            // comment saying modal capture is the host's job. It ate `Event::TextInput`, and
+            // because a host offers text before it resolves the key, every quick-pick letter did
+            // nothing at all while 1230 tests passed.
+            _ => Handled::No,
         }
     }
 
-    /// The menu's **input** surface is the panel, which is its own laid-out bounds now that the
-    /// rows are children. Closed, it takes nothing.
-    fn hit_bounds(&self) -> Option<Rectangle> {
-        if self.is_open() {
-            Some(self.base.bounds)
-        } else {
-            None
-        }
-    }
-
-    /// The menu paints on the overlay layer, so overlay damage targets the panel rect.
-    fn damage_bounds(&self) -> Rectangle {
-        self.base.bounds
-    }
 }
 
 impl LayoutExt for ContextMenu {}

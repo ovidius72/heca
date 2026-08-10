@@ -27,6 +27,16 @@ fn type_text(root: &mut dyn Component, text: &str) -> Handled {
     heca_grid_ui::dispatch(root, &Event::TextInput(text.to_string()))
 }
 
+/// **Hand this widget the keyboard**, the way a host does when you click a field or Tab to it.
+///
+/// Keys and typed text are delivered to the focus owner and nowhere else (F004/P084/T400), so a
+/// test that types has to say who is typing — exactly as a real surface has to. It replaces
+/// nothing: a widget used to be offered every key in the tree and decide for itself, which is why
+/// an unfocused row could answer an Enter meant for the cursor.
+fn give_keyboard(c: &mut dyn Component) {
+    c.base_mut().focused.set(true);
+}
+
 #[test]
 fn row_lays_children_left_to_right_with_gap() {
     let mut root = Flex::row()
@@ -1289,6 +1299,7 @@ fn input_typing_emits_change_and_builds_text() {
     let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = log.clone();
     let mut input = Input::new().on_change(move |a| sink.borrow_mut().push(a));
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     type_text(&mut input, "H");
@@ -1309,6 +1320,7 @@ fn input_typing_emits_change_and_builds_text() {
 #[test]
 fn input_backspace_and_midword_insert_respect_cursor() {
     let mut input = Input::new().value("abc");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     // Caret starts at end (after 'c'). Move left → between 'b' and 'c'.
@@ -1389,6 +1401,7 @@ fn input_click_cycle_selects_word_then_all_then_clears() {
 #[test]
 fn input_typing_replaces_selection() {
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     let pos = Point::new(
         input.base().bounds.loc.x + 14.0,
@@ -1408,6 +1421,7 @@ fn input_typing_replaces_selection() {
 fn input_ctrl_backspace_deletes_previous_word() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1434,6 +1448,7 @@ fn input_ctrl_backspace_deletes_previous_word() {
 fn input_alt_delete_removes_next_word() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     for _ in 0..20 {
         heca_grid_ui::dispatch(&mut input, &Event::Key {
@@ -1469,6 +1484,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
 
     // Meta+Backspace deletes from the caret to the start.
     let mut a = Input::new().value("alpha beta");
+    give_keyboard(&mut a);
     LayoutEngine::new().compute(&mut a, Size::new(400.0, 60.0));
     for _ in 0..4 {
         arrow_left(&mut a); // caret 10 → 6 (start of "beta")
@@ -1485,6 +1501,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
 
     // Meta+Delete deletes from the caret to the end.
     let mut b = Input::new().value("alpha beta");
+    give_keyboard(&mut b);
     LayoutEngine::new().compute(&mut b, Size::new(400.0, 60.0));
     for _ in 0..5 {
         arrow_left(&mut b); // caret 10 → 5 (after "alpha")
@@ -1504,6 +1521,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
 fn shift_arrow_extends_and_shrinks_char_selection() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     let left = |i: &mut Input| {
         heca_grid_ui::dispatch(&mut *i, &Event::Key {
@@ -1540,6 +1558,7 @@ fn shift_arrow_extends_and_shrinks_char_selection() {
 fn shift_ctrl_arrow_selects_to_boundary() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1571,6 +1590,7 @@ fn shift_ctrl_arrow_selects_to_boundary() {
 fn shift_alt_arrow_selects_by_word() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta gamma");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1604,6 +1624,7 @@ fn input_edit_select_all_selects_without_typing() {
     // Select-all is host-configured (`edit_select_all`, default Ctrl+a / Cmd+a) and arrives as
     // the semantic `WidgetIntent::EditSelectAll`; a raw modified 'a' is never typed (separately).
     let mut input = Input::new().value("hello world");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::Widget(WidgetIntent::EditSelectAll));
@@ -1618,6 +1639,7 @@ fn input_edit_select_all_selects_without_typing() {
 #[test]
 fn home_end_move_caret_to_bounds() {
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::Key {
@@ -1647,6 +1669,7 @@ fn home_end_move_caret_to_bounds() {
 fn shift_home_end_select_to_bounds() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1964,6 +1987,7 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
 fn select_rows_outside_the_visible_window_are_not_clickable() {
     let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
     let mut sel = Select::new(opts);
+    give_keyboard(&mut sel);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
 
     let b = sel.base().bounds;
@@ -2073,6 +2097,7 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
 fn select_keyboard_navigates_and_escape_closes() {
     use heca_grid_ui::WidgetIntent;
     let mut sel = Select::new(["A", "B", "C"]);
+    give_keyboard(&mut sel);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
     let raw = |s: &mut Select, k: GridKey| heca_grid_ui::dispatch(&mut *s, &Event::Key { key: k, pressed: true });
     let nav = |s: &mut Select, i: WidgetIntent| heca_grid_ui::dispatch(&mut *s, &Event::Widget(i));
@@ -2107,6 +2132,7 @@ fn tabs_menu_nav_and_click_change_selection() {
     let sink = log.clone();
     let mut tabs =
         Tabs::new(["ALPHA", "BETA", "GAMMA"]).on_change(move |a| sink.borrow_mut().push(a));
+    give_keyboard(&mut tabs);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
     use heca_grid_ui::WidgetIntent;
@@ -2157,6 +2183,7 @@ fn tabs_underline_slides_toward_the_selected_tabs_bounds() {
             .expect("the underline is painted")
     };
     let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
+    give_keyboard(&mut tabs);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
     // It starts on the selected tab — snapped to that child's real bounds, not slid in from the
@@ -4468,6 +4495,7 @@ fn input_edit_deletes_char_and_deletes_to_line_start() {
     // The readline shortcuts are host-configured (`edit_delete_back` / `edit_delete_to_line_start`,
     // default Ctrl+h / Ctrl+u) and arrive as semantic `Edit*` intents, not a raw key.
     let mut inp = Input::new().value("hello world");
+    give_keyboard(&mut inp);
 
     heca_grid_ui::dispatch(&mut inp, &Event::Widget(WidgetIntent::EditDeleteBack));
     assert_eq!(inp.value_str(), "hello worl", "EditDeleteBack removes one char back");
@@ -5521,6 +5549,7 @@ fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
         .on_activate(move |key| *c.borrow_mut() = key.to_string())
         .on_dismiss(move || d.set(true))
         .selected("a");
+    give_keyboard(&mut grid);
 
     assert_eq!(grid.selected_key(), Some("a"));
 

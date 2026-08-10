@@ -40,13 +40,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
-use heca_grid_ui::{
-    Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice,
-    Component, DockFrame, Flex, Gauge, Glyph, Grid, HintExt, HintTargetId, Icon, IconButton, Input,
-    Item, ItemGroup, Label, LayoutExt, MarkerGroup, Panel, PropInput, RailCell,
-    Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs,
-    Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize,
-};
+use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, ComponentExt, HintTargetId, Icon, IconButton, Input, Item, ItemGroup, Label, LayoutExt, MarkerGroup, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
     Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
@@ -2158,6 +2152,10 @@ mod tests {
         LayoutEngine::new().compute(tabs.as_mut(), Size::new(400.0, 100.0));
         assert_eq!(tabs.base().children.len(), 2, "one tab per Choice child");
 
+        // A described tree is driven by the keyboard exactly like a hand-built one: an intent goes
+        // to the focus owner, so the tab strip has to be holding the keyboard to answer one
+        // (F004/P084/T400).
+        heca_grid_ui::reactive::SignalUpdate::set(&tabs.base_mut().focused, true);
         heca_grid_ui::dispatch(tabs.as_mut(), &Event::Widget(WidgetIntent::ItemNext));
         let fired = fired.borrow();
         let [intent] = fired.as_slice() else {

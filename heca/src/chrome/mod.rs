@@ -178,7 +178,7 @@ use crate::providers::workspaces::{PaneEntry, WorkspaceTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{HintExt, LayoutExt, NavExt, Parent, StyleExt};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};

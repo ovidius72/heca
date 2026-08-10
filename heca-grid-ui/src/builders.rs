@@ -293,77 +293,6 @@ pub trait StyleExt: Component + Sized {
     }
 }
 
-/// Drag-and-drop opt-in — **universal**, available on every widget via a blanket
-/// impl (like the base-level `visible`/`disabled` properties). Marks a widget as a
-/// drag source and/or a drop target by storing an opaque [`DragItemId`] the app
-/// interprets. The framework resolves these generically from the retained tree's
-/// laid-out bounds ([`drag::source_at`](crate::drag::source_at) /
-/// [`drag::resolve_at`](crate::drag::resolve_at)) — no per-surface geometry.
-///
-/// Domain-neutral by construction: the id is opaque and the payload (what the drag
-/// *carries*) lives in the app's `DragContext<P>`, never in the widget.
-pub trait DragExt: Component + Sized {
-    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
-    /// can begin a drag; the app maps `id` back to the dragged thing.
-    fn draggable(mut self, id: DragItemId) -> Self {
-        self.base_mut().drag_source = Some(id);
-        self
-    }
-    /// Make this widget a **drop target** identified by `id`. A drag released over
-    /// its bounds drops onto `id`.
-    fn drop_target(mut self, id: DragItemId) -> Self {
-        self.base_mut().drop_target = Some(id);
-        self
-    }
-}
-
-/// Every component gets the drag/drop builders for free.
-impl<T: Component + Sized> DragExt for T {}
-
-/// Opt a widget into the universal leader/vimium **hint picker**: it gets assigned
-/// a letter and, on the keypress, the host fires the intent it mapped `id` to.
-///
-/// Domain-neutral like [`DragExt`]: the id is opaque and the app owns the id→intent
-/// map. Enumerated by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
-pub trait HintExt: Component + Sized {
-    /// Make this widget a **hint target** carrying opaque `id`.
-    fn hint_target(mut self, id: crate::hint::HintTargetId) -> Self {
-        self.base_mut().hint_target = Some(id);
-        self
-    }
-}
-
-/// Every component gets the hint builder for free.
-impl<T: Component + Sized> HintExt for T {}
-
-/// Declaring a widget to be a **navigable row** with an identity of its own.
-pub trait NavExt: Component + Sized {
-    /// Label this row with the identity its component knows it by (`"pane:7"`, `"ws:0"`).
-    ///
-    /// One declaration, three readers: the keyboard cursor, the right-click target, and later the
-    /// drag identity. The string is **opaque to the library** — only the component that wrote it
-    /// and the host routing back to that component ever interpret it — and it must be stable across
-    /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
-    fn nav_key(mut self, key: impl Into<String>) -> Self {
-        self.base_mut().nav_key = Some(key.into());
-        self
-    }
-
-    /// Name this subtree as an enclosing **scope** — a panel, a dock, a tab group.
-    ///
-    /// Stamp it on the wrapper around a region and a press anywhere inside it resolves back to that
-    /// region, including a press a widget consumes (a scrollbar thumb is still *inside* the panel
-    /// holding it). That is what lets "click a panel to focus it" work for every panel with nothing
-    /// declared per panel. See [`crate::nav::scope_at`].
-    fn scope_key(mut self, id: impl Into<String>) -> Self {
-        self.base_mut().scope_key = Some(id.into());
-        self
-    }
-}
-
-/// Every component gets the nav-key builder for free: any widget can be a row.
-impl<T: Component + Sized> NavExt for T {}
-
 /// Components that contain children.
 pub trait Parent: Component + Sized {
     /// Append a child component.
@@ -395,7 +324,7 @@ pub trait Parent: Component + Sized {
 }
 
 /// **Event handlers, on any widget.** The one-line opt-in every widget already has for layout
-/// ([`LayoutExt`]), style ([`StyleExt`]), drag ([`DragExt`]) and navigation ([`NavExt`]) —
+/// ([`LayoutExt`]), style ([`StyleExt`]), drag ([`ComponentExt`]) and navigation ([`ComponentExt`]) —
 /// the same shape, for what happens to it.
 ///
 /// ```
@@ -404,7 +333,7 @@ pub trait Parent: Component + Sized {
 /// let row = Row::new()
 ///     .child(Label::new("pane-1"))
 ///     .on_click(|_| println!("selected"))
-///     .on_right_click(|e| println!("menu at {:?}", e.pos))
+///     .on_right_click(|e| println!("menu at {:?}", e.pos()))
 ///     .on_pointer_enter(|_| println!("hovered"));
 /// ```
 ///
@@ -423,9 +352,9 @@ pub trait Parent: Component + Sized {
 /// ```
 ///
 /// The named builders below consume the event (an `on_click` that let the click carry on to the
-/// row behind it would be a surprise). Use [`on`](EventExt::on) with
+/// row behind it would be a surprise). Use [`on`](ComponentExt::on) with
 /// [`EventCx`](crate::event::EventCx) when you want to observe without consuming.
-/// **What [`EventExt::context_menu`] accepts: a menu, or a way to make one.**
+/// **What [`ComponentExt::context_menu`] accepts: a menu, or a way to make one.**
 ///
 /// One method, two spellings, because both are honest ways to say the same thing:
 ///
@@ -460,10 +389,65 @@ impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
     }
 }
 
-pub trait EventExt: Component + Sized {
-    /// Register `f` for `kind`, with full control: `f` receives an
-    /// [`EventCx`](crate::event::EventCx) and consumes the event only if it calls
-    /// [`stop_propagation`](crate::event::EventCx::stop_propagation).
+/// **Everything every component gets.**
+///
+/// One trait, blanket-implemented for every [`Component`], holding the builders that are true of
+/// all of them: what happens to a widget ([`on_click`](ComponentExt::on_click),
+/// [`on_key`](ComponentExt::on_key), [`context_menu`](ComponentExt::context_menu)), who it is
+/// ([`nav_key`](ComponentExt::nav_key)), and what it does in a drag
+/// ([`draggable`](ComponentExt::draggable), [`drop_target`](ComponentExt::drop_target)).
+///
+/// It was four traits — `ComponentExt`, `ComponentExt`, `ComponentExt`, `ComponentExt` — split by nothing but the order
+/// they were added in. All four were unconditional (`impl<T: Component> … for T {}`), so the split
+/// carried no rule: four names to learn and four imports for one fact. The two splits that *do*
+/// carry a rule are still separate, because the type system enforces them: [`StyleExt`] is
+/// surfaces only (a layout-only `Flex` cannot be given a background), and [`Parent`] is containers
+/// only (a `Label` has no `.child()`).
+pub trait ComponentExt: Component + Sized {
+
+    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
+    /// can begin a drag; the app maps `id` back to the dragged thing.
+    fn draggable(mut self, id: DragItemId) -> Self {
+        self.base_mut().drag_source = Some(id);
+        self
+    }
+    /// Make this widget a **drop target** identified by `id`. A drag released over
+    /// its bounds drops onto `id`.
+    fn drop_target(mut self, id: DragItemId) -> Self {
+        self.base_mut().drop_target = Some(id);
+        self
+    }
+
+    /// Make this widget a **hint target** carrying opaque `id`.
+    fn hint_target(mut self, id: crate::hint::HintTargetId) -> Self {
+        self.base_mut().hint_target = Some(id);
+        self
+    }
+
+    /// Label this row with the identity its component knows it by (`"pane:7"`, `"ws:0"`).
+    ///
+    /// One declaration, three readers: the keyboard cursor, the right-click target, and later the
+    /// drag identity. The string is **opaque to the library** — only the component that wrote it
+    /// and the host routing back to that component ever interpret it — and it must be stable across
+    /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
+    fn nav_key(mut self, key: impl Into<String>) -> Self {
+        self.base_mut().nav_key = Some(key.into());
+        self
+    }
+
+    /// Name this subtree as an enclosing **scope** — a panel, a dock, a tab group.
+    ///
+    /// Stamp it on the wrapper around a region and a press anywhere inside it resolves back to that
+    /// region, including a press a widget consumes (a scrollbar thumb is still *inside* the panel
+    /// holding it). That is what lets "click a panel to focus it" work for every panel with nothing
+    /// declared per panel. See [`crate::nav::scope_at`].
+    fn scope_key(mut self, id: impl Into<String>) -> Self {
+        self.base_mut().scope_key = Some(id.into());
+        self
+    }
+
+    /// Register `f` for `kind`. It receives an [`EventCx`](crate::event::EventCx) and consumes the
+    /// event only if it calls [`stop_propagation`](crate::event::EventCx::stop_propagation).
     fn on(mut self, kind: crate::event::EventKind, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
         self.base_mut()
             .handlers
@@ -472,152 +456,152 @@ pub trait EventExt: Component + Sized {
         self
     }
 
-    /// A left click landed on this widget (or a descendant that did not take it). Consumes it.
-    fn on_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::Click, f)
+    /// A left click landed on this widget (or a descendant that did not take it).
+    fn on_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Click, f)
     }
 
     /// A second click in the same run. The first still arrived as a
-    /// [`click`](EventExt::on_click). Consumes it.
-    fn on_double_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::DoubleClick, f)
+    /// [`click`](ComponentExt::on_click).
+    fn on_double_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DoubleClick, f)
     }
 
-    /// A third click, and any beyond it (`click_count` says which). Consumes it.
-    fn on_triple_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::TripleClick, f)
+    /// A third click, and any beyond it (`click_count` says which).
+    fn on_triple_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::TripleClick, f)
     }
 
-    /// A right click landed on this widget. Consumes it.
+    /// A right click landed on this widget.
     ///
     /// This is the whole of "a widget can have its own menu": the widget hears the click, on
     /// itself, with the position — no registry of row identities, no hit-test at the host, and
     /// nothing to forget to declare.
-    fn on_right_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::RightClick, f)
+    fn on_right_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::RightClick, f)
     }
 
-    /// A middle click landed on this widget. Consumes it.
-    fn on_middle_click(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::MiddleClick, f)
+    /// A middle click landed on this widget.
+    fn on_middle_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::MiddleClick, f)
     }
 
-    /// A button went down on this widget. Consuming it **captures the pointer**: the moves and the
-    /// release that end the gesture come here wherever the cursor goes.
-    fn on_pointer_down(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::PointerDown, f)
+    /// A button went down on this widget. Stopping propagation here **captures the pointer**: the
+    /// moves and the release that end the gesture come here wherever the cursor goes.
+    fn on_pointer_down(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerDown, f)
     }
 
-    /// The button came up. Consumes it.
-    fn on_pointer_up(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::PointerUp, f)
+    /// The button came up.
+    fn on_pointer_up(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerUp, f)
     }
 
     /// The pointer moved over this widget, or anywhere while this widget holds capture.
-    /// Consumes it.
-    fn on_pointer_move(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::PointerMove, f)
+    fn on_pointer_move(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerMove, f)
     }
 
-    /// The pointer came over this widget. **Does not consume** — entering is an announcement, and
-    /// several widgets on one path enter together.
-    fn on_pointer_enter(self, mut f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on(crate::event::EventKind::PointerEnter, move |cx| {
-            if let Some(p) = cx.pointer() {
-                f(p);
-            }
-        })
+    /// The pointer came over this widget. Several widgets on one path enter together, so stopping
+    /// propagation here is almost always wrong.
+    fn on_pointer_enter(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerEnter, f)
     }
 
-    /// The pointer left this widget. **Does not consume**, for the same reason.
-    fn on_pointer_leave(self, mut f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on(crate::event::EventKind::PointerLeave, move |cx| {
-            if let Some(p) = cx.pointer() {
-                f(p);
-            }
-        })
+    /// The pointer left this widget.
+    fn on_pointer_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerLeave, f)
     }
 
-    /// The wheel turned over this widget. Consumes it — so it does **not** also scroll whatever
-    /// contains this widget. Use [`on`](EventExt::on) to watch one without claiming it.
-    fn on_scroll(self, f: impl FnMut(&crate::event::PointerEvent) + 'static) -> Self {
-        self.on_pointer(crate::event::EventKind::Scroll, f)
+    /// The wheel turned over this widget. Stop propagation to keep it from also scrolling whatever
+    /// contains this widget.
+    fn on_scroll(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Scroll, f)
     }
 
     /// A press landed somewhere that is **not** this widget or a descendant — how a popup closes
-    /// itself. Does not consume: the press belongs to whatever it landed on.
+    /// itself. The press belongs to whatever it landed on, so do not claim it.
     fn on_pointer_down_outside(
         self,
-        mut f: impl FnMut(&crate::event::PointerEvent) + 'static,
+        f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
     ) -> Self {
-        self.on(crate::event::EventKind::PointerDownOutside, move |cx| {
-            if let Some(p) = cx.pointer() {
-                f(p);
-            }
-        })
+        self.on(crate::event::EventKind::PointerDownOutside, f)
     }
 
-    /// This widget gained keyboard focus. Does not consume.
+    /// A key reached this widget — it holds the keyboard, or it contains what does.
+    ///
+    /// The other half of "an event listener in every widget": intercepting a key, a quick-pick
+    /// letter or a shortcut is the same one line as intercepting a click, on the same argument,
+    /// with the same way to say the event is yours.
+    fn on_key(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Key, f)
+    }
+
+    /// Text the user committed — typed, pasted, or composed by an IME.
+    fn on_text_input(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::TextInput, f)
+    }
+
+    /// This widget gained keyboard focus.
     ///
     /// Named `on_focus_gained`, not `on_focus`, because [`Component::on_focus`] is the widget's
     /// own hook for the same moment and two same-named methods on one type is a puzzle nobody
     /// should have to solve at a call site.
-    fn on_focus_gained(self, mut f: impl FnMut() + 'static) -> Self {
-        self.on(crate::event::EventKind::Focus, move |_| f())
+    fn on_focus_gained(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Focus, f)
     }
 
-    /// This widget lost keyboard focus — the moment to commit an edit or close a popup. Does not
-    /// consume. Named `on_focus_lost` for the same reason as
-    /// [`on_focus_gained`](EventExt::on_focus_gained).
-    fn on_focus_lost(self, mut f: impl FnMut() + 'static) -> Self {
-        self.on(crate::event::EventKind::Blur, move |_| f())
+    /// This widget lost keyboard focus — the moment to commit an edit or close a popup. Named
+    /// `on_focus_lost` for the same reason as [`on_focus_gained`](ComponentExt::on_focus_gained).
+    fn on_focus_lost(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Blur, f)
     }
 
-    /// This widget entered a live tree (fired on its first layout pass). Does not consume.
-    fn on_mount(self, mut f: impl FnMut() + 'static) -> Self {
-        self.on(crate::event::EventKind::Mount, move |_| f())
+    /// This widget entered a live tree (fired on its first layout pass).
+    fn on_mount(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Mount, f)
     }
 
-    /// This widget is being dropped — the tree that held it was rebuilt or thrown away. Does not
-    /// consume. Use it to release what the widget registered with the host.
-    fn on_unmount(self, mut f: impl FnMut() + 'static) -> Self {
-        self.on(crate::event::EventKind::Unmount, move |_| f())
+    /// This widget is being dropped — the tree that held it was rebuilt or thrown away. Use it to
+    /// release what the widget registered with the host.
+    fn on_unmount(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Unmount, f)
     }
 
-    /// A drag began on this widget (it declared a
-    /// [`draggable`](DragExt::draggable) id and the pointer travelled past the threshold).
-    fn on_drag_start(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::DragStart, f)
+    /// A drag began on this widget (it declared a [`draggable`](ComponentExt::draggable) id and the
+    /// pointer travelled past the threshold).
+    fn on_drag_start(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragStart, f)
     }
 
     /// The drag this widget started moved.
-    fn on_drag(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::Drag, f)
+    fn on_drag(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Drag, f)
     }
 
     /// The drag this widget started ended, dropped or not.
-    fn on_drag_end(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::DragEnd, f)
+    fn on_drag_end(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragEnd, f)
     }
 
     /// A drag came over this drop target.
-    fn on_drag_enter(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::DragEnter, f)
+    fn on_drag_enter(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragEnter, f)
     }
 
     /// A drag moved within this drop target — `side` follows the pointer.
-    fn on_drag_over(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::DragOver, f)
+    fn on_drag_over(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragOver, f)
     }
 
     /// A drag left this drop target.
-    fn on_drag_leave(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::DragLeave, f)
+    fn on_drag_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragLeave, f)
     }
 
     /// A drag was released over this drop target.
-    fn on_drop(self, f: impl FnMut(&crate::event::DragEvent) + 'static) -> Self {
-        self.on_drag_kind(crate::event::EventKind::Drop, f)
+    fn on_drop(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Drop, f)
     }
 
     /// **Give this widget a context menu.** Right-click it — or anything inside it — and the menu
@@ -653,37 +637,8 @@ pub trait EventExt: Component + Sized {
         self
     }
 
-    /// Shared body of the consuming pointer builders.
-    #[doc(hidden)]
-    fn on_pointer(
-        self,
-        kind: crate::event::EventKind,
-        mut f: impl FnMut(&crate::event::PointerEvent) + 'static,
-    ) -> Self {
-        self.on(kind, move |cx| {
-            if let Some(p) = cx.pointer() {
-                f(p);
-                cx.stop_propagation();
-            }
-        })
-    }
-
-    /// Shared body of the drag builders.
-    #[doc(hidden)]
-    fn on_drag_kind(
-        self,
-        kind: crate::event::EventKind,
-        mut f: impl FnMut(&crate::event::DragEvent) + 'static,
-    ) -> Self {
-        self.on(kind, move |cx| {
-            if let Some(d) = cx.event().drag() {
-                f(d);
-                cx.stop_propagation();
-            }
-        })
-    }
 }
 
-/// Every component gets the event builders for free — the point of the whole design: a widget
-/// author positions a widget and the events work, with nothing to opt into and nothing to forward.
-impl<T: Component + Sized> EventExt for T {}
+/// Every component gets them — the point of the design: put a widget in a tree and it works, with
+/// nothing to opt into.
+impl<T: Component + Sized> ComponentExt for T {}

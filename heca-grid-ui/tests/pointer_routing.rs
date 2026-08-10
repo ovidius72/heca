@@ -485,7 +485,7 @@ fn stop_propagation_takes_the_event_from_the_widget_itself() {
 fn mount_fires_once_when_the_tree_is_first_laid_out() {
     let mounted = Rc::new(std::cell::Cell::new(0));
     let m = mounted.clone();
-    let mut root = Flex::row().child(Label::new("x").on_mount(move || m.set(m.get() + 1)));
+    let mut root = Flex::row().child(Label::new("x").on_mount(move |_| m.set(m.get() + 1)));
     assert_eq!(mounted.get(), 0, "nothing happens on construction");
     LayoutEngine::new().compute(&mut root, Size::new(100.0, 50.0));
     assert_eq!(mounted.get(), 1);
@@ -500,7 +500,7 @@ fn unmount_fires_when_the_widget_is_dropped() {
     let gone = Rc::new(std::cell::Cell::new(false));
     let g = gone.clone();
     {
-        let _root = Flex::row().child(Label::new("x").on_unmount(move || g.set(true)));
+        let _root = Flex::row().child(Label::new("x").on_unmount(move |_| g.set(true)));
         assert!(!gone.get());
     }
     assert!(gone.get(), "the rebuilt-away tree said so on its way out");
@@ -515,8 +515,8 @@ fn focus_and_blur_reach_their_widget() {
     let mut root = Flex::row()
         .child(
             Button::primary("A")
-                .on_focus_gained(move || a.borrow_mut().push("focus"))
-                .on_focus_lost(move || b.borrow_mut().push("blur")),
+                .on_focus_gained(move |_| a.borrow_mut().push("focus"))
+                .on_focus_lost(move |_| b.borrow_mut().push("blur")),
         )
         .child(Button::primary("B"));
     LayoutEngine::new().compute(&mut root, Size::new(400.0, 80.0));

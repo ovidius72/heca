@@ -35,7 +35,7 @@ use heca_grid_ui::Handled;
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
-use heca_grid_ui::builders::{DragExt, EventExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -979,7 +979,7 @@ fn pane_card(
 /// groupings whose only user-facing job is to be a move/swap target + drag handle).
 /// The `MarkerGroup` bar brightens to the accent when the column holds the active
 /// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
-/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`DragExt`, not
+/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`ComponentExt`, not
 /// baked into the widget.
 #[expect(
     clippy::too_many_arguments,

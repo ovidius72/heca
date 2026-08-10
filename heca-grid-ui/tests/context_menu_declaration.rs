@@ -174,10 +174,37 @@ fn the_items_are_built_when_the_menu_opens_not_when_it_was_declared() {
     assert_eq!(labels(&opened), vec!["Rename", "Use default name"]);
 }
 
-/// A widget that answers its own right-click **wins**: the declared menu is what happens when
+/// A widget that **claims** its own right-click wins: the declared menu is what happens when
 /// nothing claims the click, not something that overrides a widget's own behaviour.
+///
+/// The claim is a call, not a side effect of registering a handler (F004/P084/T400): a handler
+/// runs and the event carries on, the way a DOM listener does, until one says `stop_propagation`.
 #[test]
-fn a_widget_that_handles_its_own_right_click_beats_the_declaration() {
+fn a_widget_that_claims_its_own_right_click_beats_the_declaration() {
+    let opened = recording_sink();
+    let hits = Rc::new(std::cell::Cell::new(0));
+    let h = hits.clone();
+    let mut root = Flex::row().child(
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(40.0))
+            .on_right_click(move |e| {
+                h.set(h.get() + 1);
+                e.stop_propagation();
+            })
+            .context_menu(menu_named("Rename")),
+    );
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
+
+    right_click(&mut root, AT);
+    assert_eq!(hits.get(), 1, "the widget's own handler ran");
+    assert!(opened.borrow().is_empty(), "and it owned the click");
+}
+
+/// …and a handler that only **watches** the click gets both: it runs, and the declared menu still
+/// opens. Watching without claiming used to need a second, differently-shaped API.
+#[test]
+fn a_handler_that_does_not_claim_the_click_still_lets_the_menu_open() {
     let opened = recording_sink();
     let hits = Rc::new(std::cell::Cell::new(0));
     let h = hits.clone();
@@ -191,8 +218,8 @@ fn a_widget_that_handles_its_own_right_click_beats_the_declaration() {
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
 
     right_click(&mut root, AT);
-    assert_eq!(hits.get(), 1, "the widget's own handler ran");
-    assert!(opened.borrow().is_empty(), "and it owned the click");
+    assert_eq!(hits.get(), 1, "the observer ran");
+    assert_eq!(opened.borrow().len(), 1, "and the menu it did not claim still opened");
 }
 
 /// The **keyboard** trigger: the same declaration, found from focus rather than from a position,
@@ -462,4 +489,108 @@ fn the_menu_assigns_quick_pick_letters() {
     assert!(keys[0].is_some() && keys[3].is_some(), "every enabled row got one: {keys:?}");
     assert_ne!(keys[0], keys[3], "and no letter is handed out twice");
     assert!(keys[0] != Some('s') && keys[3] != Some('s'), "the explicit letter was not reused");
+}
+
+/// **A menu is clamped on its very first frame.** Placement happens during layout, and the
+/// viewport used to be learned one pass later, from the paint — so a menu opened near an edge was
+/// drawn at the raw anchor and then jumped once it had been clamped (Antonio, 2026-08-10). The
+/// layout pass publishes the viewport it was given, so the first placement is the right one.
+#[test]
+fn a_menu_near_the_edge_is_clamped_on_the_first_layout_pass() {
+    let viewport = Size::new(400.0, 300.0);
+    let mut menu = ContextMenu::new("m")
+        .child(
+            Menu::new("Pane", "what you can do")
+                .child(MenuItem::new().label("Rename").on_click(|| {}))
+                .child(MenuItem::new().label("Close").on_click(|| {})),
+        )
+        .open(true);
+    // Anchored hard against the bottom-right corner: unclamped, the panel would hang off-screen.
+    menu.anchor_signal().set(heca_core::layout::Point::new(390.0, 290.0));
+
+    LayoutEngine::new().compute(&mut menu, viewport);
+
+    let b = menu.base().bounds;
+    assert!(
+        b.loc.x + b.size.w <= viewport.w + 0.5 && b.loc.y + b.size.h <= viewport.h + 0.5,
+        "the panel is inside the viewport on the first pass, with no second frame to correct it: {b:?}",
+    );
+}
+
+/// **An open menu answers the keyboard when it is the root of the dispatch** — which is how a host
+/// mounts it: the layer's root *is* the menu. Keys go to the focus owner, and an open menu is one.
+#[test]
+fn an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick() {
+    use heca_grid_ui::WidgetIntent;
+    let dismissed = Rc::new(std::cell::Cell::new(false));
+    let d = dismissed.clone();
+    let ran = Rc::new(std::cell::Cell::new(0u32));
+    let r = ran.clone();
+
+    let mut menu = ContextMenu::new("m")
+        .child(
+            Menu::new("Pane", "what you can do")
+                .child(MenuItem::new().label("Rename").key('r').on_click(move || r.set(1)))
+                .child(MenuItem::new().label("Close").on_click(|| {})),
+        )
+        .on_dismiss(move || d.set(true))
+        .open(true);
+    LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
+
+    // The quick-pick letter, as a raw key.
+    heca_grid_ui::dispatch(&mut menu, &heca_grid_ui::Event::Key {
+        key: heca_grid_ui::GridKey::Char('r'),
+        pressed: true,
+    });
+    assert_eq!(ran.get(), 1, "the quick-pick letter reached the menu");
+
+    // …and the intent the host resolves Esc into, on a menu that is still open (running an entry
+    // closes the one above).
+    let d2 = dismissed.clone();
+    let mut menu = ContextMenu::new("m")
+        .child(Menu::new("Pane", "what you can do").child(MenuItem::new().label("Rename").on_click(|| {})))
+        .on_dismiss(move || d2.set(true))
+        .open(true);
+    LayoutEngine::new().compute(&mut menu, Size::new(400.0, 300.0));
+    heca_grid_ui::dispatch(&mut menu, &heca_grid_ui::Event::Widget(WidgetIntent::Dismiss));
+    assert!(dismissed.get(), "Dismiss reached the menu");
+}
+
+/// **`on_peek` is one line on the wrapper you were already using**, and the framework does the rest: it finds the widgets
+/// that declared one, and running a pick runs the closure the author wrote — no id, no registry,
+/// no host type at the call site (F004/P084/T399).
+#[test]
+fn a_peek_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
+    let picked = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+    let (a, b) = (picked.clone(), picked.clone());
+    let mut root = Flex::column()
+        .width(Length::Px(200.0))
+        .child(
+            heca_grid_ui::widgets::KeyHint::new(
+                Row::new().width(Length::Px(200.0)).height(Length::Px(20.0)),
+            )
+            .on_peek(move || a.borrow_mut().push("first")),
+        )
+        .child(
+            heca_grid_ui::widgets::KeyHint::new(
+                Row::new()
+                    .width(Length::Px(200.0))
+                    .height(Length::Px(20.0))
+                    .child(Label::new("nested")),
+            )
+            .on_peek(move || b.borrow_mut().push("second")),
+        )
+        // A widget that declares nothing is not a target.
+        .child(Row::new().width(Length::Px(200.0)).height(Length::Px(20.0)));
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 60.0));
+
+    let targets = heca_grid_ui::hint::collect_peeks(&root);
+    assert_eq!(targets.len(), 2, "only the widgets that declared one: {targets:?}");
+    assert!(targets[0].1.size.h > 0.0, "each carries the rect its letter goes over");
+
+    assert!(heca_grid_ui::hint::fire_peek(&root, &targets[1].0));
+    assert_eq!(*picked.borrow(), vec!["second"], "the pick ran the closure that row was built with");
+
+    // A path into a tree that no longer has that widget is not an error.
+    assert!(!heca_grid_ui::hint::fire_peek(&root, &[99]));
 }

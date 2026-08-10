@@ -130,28 +130,18 @@ pub(crate) fn handle_window_event(
                 // physical-key fallback for `Ctrl+letter`, unlike the raw logical key) so vim
                 // `Ctrl+h/j/k/l` resolve to the right chord.
                 if let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(&event_combo) {
-                    // **Typed text first, as text.** The character the user committed goes in as
-                    // `Event::TextInput` — case and shifted symbols intact, because it is what the
-                    // platform said, not something reconstructed from a chord. The host used to
-                    // patch the *key* instead (swap the lowercased combo key for the real
-                    // character before sending it) so that a field could rebuild the text from it;
-                    // a field no longer rebuilds anything, so the patch is gone.
-                    if let Some(text) = typed_text(&key_text, mods) {
-                        let typed = state
-                            .layers
-                            .top_modal_root_mut()
-                            .map(|root| {
-                                heca_grid_ui::dispatch(root, &Event::TextInput(text))
-                            })
-                            .unwrap_or(Handled::No);
-                        if matches!(typed, Handled::Yes) {
-                            state.mark_full_redraw();
-                            return;
-                        }
-                    }
-                    let key = combo_key;
+                    // **One call: the surface does not write the order.** Committed text, then the
+                    // key, then the intents it resolves to — all inside `deliver_press`, so this
+                    // surface and every other one feed a widget identically. Writing the sequence
+                    // here is how the showcase came to have no `TextInput` step at all while the
+                    // same `CommandPalette` typed fine in this app.
+                    let press = heca_grid_ui::KeyPress {
+                        key: combo_key,
+                        text: Some(key_text.to_string()),
+                        mods,
+                    };
                     let keymap = state.widget_keymap.clone();
-                    let handled = keymap.dispatch(key, mods, |ev| {
+                    let handled = keymap.deliver_press(&press, |ev| {
                         state
                             .layers
                             .top_modal_root_mut()
@@ -481,20 +471,6 @@ fn handle_wheel_font_zoom(
     };
     dispatch_action(state, registry, InteractionSource::MouseContent, &action);
     true
-}
-
-/// The text a keystroke **committed**, if it committed any: what the platform reports the key
-/// produced, with the modifier chords that are shortcuts rather than typing filtered out.
-///
-/// Space is included — a space is a character a field must be able to type. A focused button still
-/// activates on it, because a button does not consume [`Event::TextInput`] and the key follows
-/// right behind it.
-pub(crate) fn typed_text(key_text: &str, mods: heca_grid_ui::Modifiers) -> Option<String> {
-    if mods.ctrl || mods.meta || key_text.is_empty() {
-        return None;
-    }
-    let printable = key_text.chars().all(|c| !c.is_control());
-    printable.then(|| key_text.to_string())
 }
 
 /// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state

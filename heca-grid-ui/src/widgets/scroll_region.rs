@@ -622,9 +622,13 @@ impl ScrollRegion {
     /// This is what makes "scroll the focused surface" work without the host having to know where
     /// the region sits in the tree (F003/P011/T012): the intent is dispatched into the whole tree
     /// and every region that is not the target declines.
+    /// It binds [`Base::focused`] too, which is how the intent gets here at all: keyboard events
+    /// are delivered to the focus owner and the region it encloses, so a region that says the
+    /// keyboard is aimed at it *is* the owner, and one that says otherwise is not on the path.
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn keyboard_target(mut self, focused: Signal<bool>) -> Self {
         self.keyboard_target = Some(focused);
+        self.base.focused = focused;
         self
     }
 
@@ -1805,9 +1809,14 @@ mod tests {
     /// The unit tests above call the handler directly; this one goes through `dispatch` to prove the
     /// wiring, since `on_event` (not `on_event_capture`) is what gives the innermost region the
     /// first refusal — the same order the wheel uses.
+    ///
+    /// It says the keyboard is aimed here, because that is now the whole of how a keyboard event
+    /// finds anything: an intent is delivered to the focus owner and the region it encloses, so a
+    /// tree with nothing focused has nowhere to deliver one.
     #[test]
     fn a_scroll_intent_arrives_through_dispatch() {
-        let mut r = region_with_children(&[100.0, 100.0, 100.0]);
+        let mut r =
+            region_with_children(&[100.0, 100.0, 100.0]).keyboard_target(crate::reactive::signal(true));
         let handled = crate::component::dispatch(&mut r, &Event::Widget(WidgetIntent::ScrollPageDown));
         assert_eq!(handled, Handled::Yes);
         assert!(r.scroll_offset.get_untracked() > 0.0, "it scrolled");

@@ -117,17 +117,17 @@ impl FocusManager {
     /// [`Event::Widget`](crate::component::Event::Widget) intent forwarded to the
     /// focused text field inside a `Dialog`).
     pub fn deliver_event(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
-        let Some(target) = self.focused else {
-            return Handled::No;
-        };
-        let mut handled = Handled::No;
-        let mut idx = 0;
-        for_each_focusable(root, &mut idx, &mut |i, c| {
-            if i == target {
-                handled = crate::component::dispatch(c, ev);
-            }
-        });
-        handled
+        // **One router.** This used to find the focused widget by *visit index* and dispatch to it
+        // as if it were a root, which is a second way of answering "where does a key go" beside the
+        // framework's own — and the two disagree the moment the tab order changes under them. A
+        // `CommandPalette` is focusable only while open, so opening one renumbers every index after
+        // it: the host went on delivering to the widget that used to hold that number, and typing
+        // in the palette did nothing at all while the same palette worked in an app that dispatched
+        // from the root (Antonio, 2026-08-10).
+        //
+        // `dispatch` routes a keyboard event to the focus owner and bubbles it, so this is the same
+        // question asked once, and ancestors see the event on the way past as they should.
+        crate::component::dispatch(root, ev)
     }
 
     /// Index of the first focusable with an open overlay, if any.

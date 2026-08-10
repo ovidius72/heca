@@ -168,7 +168,7 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
 
 // ── The composition ───────────────────────────────────────────────────────────
 
-use heca_grid_ui::builders::{LayoutExt, NavExt, Parent, StyleExt};
+use heca_grid_ui::builders::{LayoutExt, ComponentExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
@@ -767,7 +767,6 @@ mod tests {
             sink.borrow_mut().push(format!("{intent:?}"));
         });
         let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default());
-
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
         let got = seen.borrow().join(" ");
         assert!(

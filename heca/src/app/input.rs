@@ -82,6 +82,19 @@ pub(crate) fn handle_keyboard_input(
             //
             // `state.focused_pane` is deliberately untouched: only the keyboard is redirected, so
             // `prefix+Enter` still splits the pane you last worked in.
+            // **A layer above the dock holds the keyboard.** `top_modal` proved it is there and
+            // that the layer was offered the key first (`app/events.rs`); what reaches here is a
+            // key it had no use for, and forwarding *that* to the dock is how `j`/`k` went on
+            // moving the sidebar cursor underneath an open context menu (Antonio, 2026-08-10).
+            //
+            // Deliberately **after** the global resolve above, not before: `q` is catalogued and
+            // bound to `close_overlay`, and swallowing everything a layer ignored is exactly what
+            // made `q` dead while the exposé was up. A global binding still runs; a container verb
+            // does not, because the container is not what is being driven.
+            if crate::chrome::top_modal(state).is_some() {
+                return;
+            }
+
             if state.chrome_state.focused_container().is_some() {
                 if let Some(act) =
                     focus_layer_action(state, mode_keymaps, component_keymaps, ctx.event_combo)
@@ -223,7 +236,7 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     // the platform says the key produced, so case and shifted symbols survive without the host
     // patching the key it sends. Mirrors the overlay path.
     let mut edited = false;
-    if let Some(text) = crate::app::events::typed_text(ctx.key_text, mods)
+    if let Some(text) = heca_grid_ui::typed_text(Some(ctx.key_text), mods)
         && let Some(search) = state.active_search_mut()
     {
         let ev = heca_grid_ui::Event::TextInput(text);

@@ -449,6 +449,13 @@ impl Select {
             return;
         }
         self.open = true;
+        // **Focus is not set here.** A list opens either from a click — which focused this widget
+        // through the host's `FocusManager`, clearing whoever held it — or from a key, which this
+        // widget only received because it was focused already. Setting the flag directly instead
+        // made a *second* widget claim focus without releasing the first, and `wants_visible`
+        // defaults to that flag: every enclosing `ScrollRegion` then kept scrolling to a select
+        // that had been opened once and never blurred, so a click anywhere on the page jumped it to
+        // the same spot (Antonio, 2026-08-10).
         self.highlight = self.selected.get_untracked();
 
         let vp = self.viewport.get().h;
@@ -721,18 +728,7 @@ impl Component for Select {
         }
     }
 
-    /// Owns its walk. The option rows are **placed children**: collapsed to zero size while the
-    /// list is closed (so they must not be clickable at all) and hit-tested from baked bounds via
-    /// `choice_at` while open — `bounds === drawn === clickable`, which a plain tree walk in
-    /// z-order would break. `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
-    fn routes_own_subtree(&self) -> bool {
-        true
-    }
-
-    /// The select's **input** surface: the trigger, plus the list it is showing. The options are
-    /// real children with real bounds, so they hit-test themselves — but the panel's own chrome
-    /// (its padding, the gap between rows) belongs to the select, and a wheel over it is the
-    /// list's, not the page's.
+    /// The select's **input** surface: the trigger, plus the list it is showing.
     fn hit_bounds(&self) -> Option<Rectangle> {
         let trigger = self.base.bounds;
         if !self.open {
@@ -743,10 +739,7 @@ impl Component for Select {
         let y0 = trigger.loc.y.min(panel.loc.y);
         let x1 = (trigger.loc.x + trigger.size.w).max(panel.loc.x + panel.size.w);
         let y1 = (trigger.loc.y + trigger.size.h).max(panel.loc.y + panel.size.h);
-        Some(Rectangle::new(
-            Point::new(x0, y0),
-            Size::new(x1 - x0, y1 - y0),
-        ))
+        Some(Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0)))
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {

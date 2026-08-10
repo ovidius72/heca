@@ -8,6 +8,7 @@ pub mod font;
 pub mod gradient;
 pub mod grid;
 pub mod image;
+pub mod input;
 pub mod primitive;
 pub mod scene;
 pub mod terminal;
