@@ -23,7 +23,8 @@
   "completionCriteria": [],
   "taskIds": [
     "d7b4523a-c813-4cfd-bee5-e9726906e036",
-    "e4f328e7-0ef8-45ac-b261-dc7959ec0a0e"
+    "e4f328e7-0ef8-45ac-b261-dc7959ec0a0e",
+    "cc62fd1d-0b28-4bab-bcb8-acbb66756022"
   ],
   "tasks": [
     {
@@ -69,12 +70,35 @@
       "completedAt": "",
       "createdAt": "2026-07-01T18:13:27.647Z",
       "updatedAt": "2026-07-01T18:13:27.647Z"
+    },
+    {
+      "id": "cc62fd1d-0b28-4bab-bcb8-acbb66756022",
+      "phaseId": "ce5d5ea4-0f84-4e5a-909a-77d8344a2a87",
+      "number": 404,
+      "shortId": "ECL7S",
+      "priority": 3,
+      "shortName": "right-clicking-the-showcase-pa",
+      "title": "Right-clicking the showcase page opens an empty strip that dismisses itself",
+      "status": "planned",
+      "description": "**Reported by Antonio, driving the showcase, 2026-08-08, with a screenshot.** A right-click anywhere in the showcase page draws a thin empty bar where the menu should be — a panel with no rows — and the console prints `[showcase] menu dismissed`. The same declared menus work correctly in the app.\n\n# Why it is almost certainly the showcase's hosting, not the widget\n\nA `ContextMenu` mounted as a layer root is exercised headlessly and passes: `heca-grid-ui/tests/context_menu_declaration.rs` covers the declaration, the bubbling, the quick-pick letters, and (added 2026-08-10) `an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick` plus `a_menu_near_the_edge_is_clamped_on_the_first_layout_pass`.\n\nWhat a host has to do, and what the app does (`heca/src/app/startup.rs:160` → `heca/src/chrome/overlay.rs::present_menu`):\n\n1. `install_menu_sink(...)` — take the menu **and its anchor**, queue them, and request a redraw.\n2. Drain the queue and call `anchor.open(menu)` — **this is the step that realizes the rows into children**; a menu whose builders never ran has no rows, which is exactly a thin empty panel.\n3. Mount it as a layer and **lay it out** before painting — placement happens in `on_layout`, and the rows are measured there.\n4. Wire `after_select` and `on_dismiss` so the layer comes down.\n\nCheck the showcase's sink against those four. The `[showcase] menu dismissed` line firing on the same gesture that opened it points at the press being delivered to the menu as a `PointerDownOutside` — i.e. it is mounted, then immediately told the press landed elsewhere.\n\n# Edge cases\n\n- A right-click is a **press and a release** on the same widget; a host that delivers only presses produces no `RightClick` at all (`heca/tests/pointer_funnel.rs` lints the app for this — the showcase has no equivalent).\n- The showcase mounts two trees (`state.ui` and `state.overlays`) and each keeps its own hover and capture, so the menu must be dispatched to consistently.\n\n# Verification\n\nAntonio drives the showcase: right-click the page background, a row, and a widget with its own menu; the panel must show its rows, stay up, respond to quick-pick letters and Esc, and dismiss on an outside click.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-10T19:16:40.836Z",
+      "updatedAt": "2026-08-10T19:16:40.836Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.491Z",
+  "updatedAt": "2026-08-10T19:16:40.836Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

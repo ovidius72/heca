@@ -23,7 +23,8 @@
   "completionCriteria": [],
   "taskIds": [
     "345b6fe4-0f6d-4279-8dfb-aab4fd30a00a",
-    "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567"
+    "23ae642e-96c1-4bb0-a4a1-c5a1adfe7567",
+    "7b9c02bb-2b6e-4b71-bbb7-0b4b9e10c7e1"
   ],
   "tasks": [
     {
@@ -69,12 +70,35 @@
       "completedAt": "",
       "createdAt": "2026-07-14T18:13:43.153Z",
       "updatedAt": "2026-07-14T18:13:43.153Z"
+    },
+    {
+      "id": "7b9c02bb-2b6e-4b71-bbb7-0b4b9e10c7e1",
+      "phaseId": "9cefac90-9fea-427c-9106-9a41e71e8acd",
+      "number": 405,
+      "shortId": "MU2QX",
+      "priority": 3,
+      "shortName": "resizing-a-pane-with-the-mouse",
+      "title": "Resizing a pane with the mouse makes it disappear as soon as it is resized",
+      "status": "planned",
+      "description": "**Reported by Antonio, driving the app, 2026-08-10.** Dragging a pane's edge with the mouse resizes it and the pane then **disappears** as soon as the resize lands.\n\nFiled under app-13 (mouse/input leftovers) because the gesture is the app's: the drag is resolved in `heca/src/mouse/` and the resize is a `WmAction` (`Resize { target, axis, amount }` / `ResizeTo { target, width, height }`) executed through `ActionRegistry`, with the layout itself in `heca-core`.\n\n# Where to look, in the order that costs least\n\n1. **Is it gone, or is it zero-sized?** `heca-core`'s column/pane sizing is the one place that can produce a pane with no area. `Column::pane_sizes` and the height distribution are the candidates — a resize that drives a size to `0` (or negative, then clamped) leaves a pane that is still in the session and simply has nothing to draw. Print the session's pane rects after the gesture before touching anything.\n2. **Or is the session right and the render wrong?** If `heca-core` still reports a sane rect, the loss is in the render/stencil path — check the tiled stencil + content pass in `heca/src/app/render.rs`.\n3. **Does the keyboard path do the same?** `prefix+r` enters resize mode and dispatches the same `WmAction`s. If the keyboard resize is fine and only the mouse one breaks, the fault is in the drag → action conversion (which value is being sent as `amount`), not in the layout.\n\nThat third check is the cheapest discriminator and should be first if the pane's rect is not obviously wrong.\n\n# Rules that apply\n\n- **Column widths are never normalized** and only the active column's width changes on a resize (AGENTS.md, the NIRI layout rules). A fix that renormalizes is wrong even if it makes the symptom go away.\n- The resize must stay a **registry-dispatched action** — no direct layout mutation from the mouse code.\n\n# Verification\n\nAntonio drives it: resize a pane by dragging its edge, in a column with two panes and with three, and horizontally between columns; then the same with `prefix+r`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-10T19:16:56.207Z",
+      "updatedAt": "2026-08-10T19:16:56.207Z"
     }
   ],
   "createdAt": "2026-07-14T18:13:04.164Z",
-  "updatedAt": "2026-07-27T11:40:15.471Z",
+  "updatedAt": "2026-08-10T19:16:56.207Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }
