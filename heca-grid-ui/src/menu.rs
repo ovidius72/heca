@@ -136,36 +136,26 @@ pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) 
     }
 }
 
-/// Open the menu declared nearest to the **focused** widget, anchored on its bounds. Returns
-/// whether anything declared one.
+/// **The keyboard trigger** — open the menu declared nearest to wherever the keyboard is, anchored
+/// under that widget. Returns whether anything declared one. Called by the host's
+/// `open_context_menu` action; nothing there ⇒ `false`, and the host does whatever it does with an
+/// action that found no target.
 ///
-/// The keyboard trigger, called by the host's `open_context_menu` action. No focus, or no
-/// declaration anywhere above it ⇒ `false`, and the host does whatever it does with an action that
-/// found no target.
-pub fn open_for_focused(root: &dyn Component) -> bool {
-    let Some(path) = focused_path(root) else {
-        return false;
-    };
-    let bounds = node_bounds(root, &path);
-    match menu_on(root, &path) {
-        Some(menu) => {
-            present(menu, MenuAnchor::Under(bounds));
-            true
-        }
-        None => false,
-    }
-}
-
-/// Open the menu declared nearest the widget carrying `nav_key`, anchored under it. Returns
-/// whether anything declared one.
+/// **"Where the keyboard is" has two spellings and this is the one place that knows both.**
+/// [`Base::focused`](crate::Base::focused) is real keyboard focus — a text field has it, a list row
+/// does not — while a container tracks *its* cursor as the `nav_key` of the row it sits on, the
+/// same declaration [`nav_key_at`](crate::nav::nav_key_at) reads for the mouse. Asking only about
+/// `focused` found nothing in a chrome tree and `prefix+>` opened nothing at all; asking only about
+/// the cursor would miss a genuinely focused widget (a plugin's input). So `cursor` is tried first
+/// and focus second — and a caller passes what it knows rather than writing the fallback again.
 ///
-/// The **other** keyboard trigger, and the one a chrome surface needs. `Base::focused` is real
-/// keyboard focus — a text field has it, a list row does not: a container tracks *its* cursor as
-/// the `nav_key` of the row it is on, which is the same declaration
-/// [`nav_key_at`](crate::nav::nav_key_at) reads for the mouse. Asking only about `focused` found
-/// nothing in a chrome tree and `prefix+>` opened nothing at all.
-pub fn open_for_nav_key(root: &dyn Component, nav_key: &str) -> bool {
-    let Some(path) = nav_key_path(root, nav_key) else {
+/// It was two exported functions with three identical lines each, and the host wrote the "try both,
+/// in this order" rule beside them. Two spellings of one question, in two places (F004/P084/T399).
+pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
+    let path = cursor
+        .and_then(|key| nav_key_path(root, key))
+        .or_else(|| focused_path(root));
+    let Some(path) = path else {
         return false;
     };
     let bounds = node_bounds(root, &path);

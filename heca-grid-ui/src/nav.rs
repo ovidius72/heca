@@ -6,10 +6,9 @@
 //! declaration. Three readers, one thing said — instead of a closed enum of row kinds that only the
 //! app can extend, which is what made a plugin row impossible to point at.
 //!
-//! # Why a string, when [`DragItemId`](crate::drag::DragItemId) and
-//! [`HintTargetId`](crate::hint::HintTargetId) are opaque integers
+//! # Why a string, when [`DragItemId`](crate::drag::DragItemId) is an opaque integer
 //!
-//! Those two are **registry slots**: the widget takes a token and the app keeps the map, valid for
+//! That one is a **registry slot**: the widget takes a token and the app keeps the map, valid for
 //! as long as the tree that registered it. A nav key is the opposite — it must **survive a tree
 //! rebuild**, because a chrome tree is rebuilt for reasons that have nothing to do with navigation
 //! (a pane's git status changing is enough), and a cursor that resets every time is not a cursor.

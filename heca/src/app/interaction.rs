@@ -1012,7 +1012,14 @@ pub(crate) fn dispatch_view_intent(
     //    argument makes `build_action` return `None` (so the intent looks like an unknown action),
     //    and a misspelled optional one is simply dropped, leaving the action to run with a default
     //    nobody asked for.
-    let args = intent_args_as_strings(intent);
+    let mut args = intent_args_as_strings(intent);
+    // **The seating is an address, not an argument.** A row declares its gesture inside one mounted
+    // container and names it (`SEAT_ARG`) so nothing has to resolve the call back to an instance;
+    // that is the host's business, so it is taken off before the args are judged against what the
+    // action declares — otherwise every addressed call would report an argument the action does not
+    // take. `route_to_owner` takes it off again before `perform`, and `build_action` below never
+    // sees it either.
+    args.remove(crate::providers::SEAT_ARG);
     report_arg_problems(&state.action_catalog, &intent.action, &args);
 
     // 1. Built-in. Parameterized variants are built from the intent's args (`build_action`, the same

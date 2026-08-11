@@ -427,7 +427,6 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
-        hint_targets: crate::chrome::HintTargetRegistry::default(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),

@@ -418,12 +418,6 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
-    /// Make this widget a **hint target** carrying opaque `id`.
-    fn hint_target(mut self, id: crate::hint::HintTargetId) -> Self {
-        self.base_mut().hint_target = Some(id);
-        self
-    }
-
     /// Label this row with the identity its component knows it by (`"pane:7"`, `"ws:0"`).
     ///
     /// One declaration, three readers: the keyboard cursor, the right-click target, and later the

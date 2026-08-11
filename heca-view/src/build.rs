@@ -541,13 +541,16 @@ with_text!(
 );
 
 with_event!(
-    Row { on_press => "press" }
-    Button { on_press => "press" }
-    IconButton { on_press => "press" }
-    BadgeButton { on_press => "press" }
-    Item { on_press => "press" }
-    RailCell { on_press => "press" }
-    Choice { on_press => "press" }
+    // `peek` beside `press` on every actionable kind: **a leader-key pick is its own gesture**, and
+    // a row that answers it differently has to be able to say so. Left unbound it falls back to
+    // `press`, so an actionable node stays reachable by letter with nothing written.
+    Row { on_press => "press", on_peek => "peek" }
+    Button { on_press => "press", on_peek => "peek" }
+    IconButton { on_press => "press", on_peek => "peek" }
+    BadgeButton { on_press => "press", on_peek => "peek" }
+    Item { on_press => "press", on_peek => "peek" }
+    RailCell { on_press => "press", on_peek => "peek" }
+    Choice { on_press => "press", on_peek => "peek" }
     Input { on_change => "change" }
     Toggle { on_change => "change" }
     Checkbox { on_change => "change" }

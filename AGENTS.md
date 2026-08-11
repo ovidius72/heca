@@ -572,31 +572,38 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
   the macOS `⌃⌥⇧⌘` form. Rebinding in `config.toml` + reload updates every tooltip.
 - Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
 
-**2. KeyHint (vimium-style `prefix+/` pick)** — register the **same intent** the click
-sends and attach it to the widget so the picker can target it by letter:
+**2. KeyHint (vimium-style `prefix+/` pick)** — declare **what a pick does** on the
+wrapper that draws the letter. One line, no id, no registry (F004/P084/T399):
 ```rust
-let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
-let button = IconButton::new(icon).hint_target(hint_id).on_click(move || {
-    emit(InteractionIntent::ActivateAction(action.clone()));
-});
+let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
+let peek = crate::chrome::fires(row_peek(pane_nav_key(pane_id)), emit); // the pick
+let row = Row::new().on_activate(fire);
+KeyHint::new(row).on_peek(peek)
 ```
-`hints` is a `&mut HintTargetRegistry` — the **shared** allocator that lives on
-`AppState` and spans **every** retained tree that carries hint targets. It is threaded
-through `build_chrome_root` **and** `build_pane_header`. Ids are **monotonic** (never
-reused), so targets from trees that rebuild on different cadences (the chrome tree vs.
-each per-pane header tree) never collide; each tree records the contiguous id **range**
-it registered and calls `hint_targets.remove_range(range)` when it is rebuilt or pruned
-(see `render.rs` for the chrome tree, `sync_pane_headers` for the headers). The pick
-path (`handle_hint_pick` + `paint_hint_targets`) walks the chrome tree **and** all
-`state.pane_headers` trees; resolution reads the one shared map. See
-`sidebar_toggle_button` for a complete example (tooltip + hint together).
+The slot is `Base::peek`, universal; the **builder is on `KeyHint`**, because being
+pickable is something you opt a region into — so `Label::on_peek` is a method that never
+has to exist. The framework collects the declarations out of the laid-out tree
+(`heca_grid_ui::collect_peeks`) and runs one (`fire_peek`). Nothing is registered, so
+nothing has to be un-registered when a tree rebuilds; a candidate is a
+`chrome::PeekTarget` (which tree + the path in it), valid for exactly as long as the
+letters are up. The pick path is `handle_hint_pick` → `chrome::active_peek_targets`
+(eligibility, once) and `chrome::paint_peek_letters` (live bounds, every frame); both
+walk the chrome tree, every `state.pane_headers` tree and every visible layer. See
+`sidebar_toggle_button` for a complete example (tooltip + peek together).
 
+- **A pick is not a click.** They are different gestures and a region may answer them
+  differently: a sidebar row activates the pane and *leaves* on a click, and stays in the
+  dock on a peek (`workspaces.peek_selected`, aimed at a row by its `key` argument).
+  Pointing one intent at both is what made `prefix+/` walk out of the sidebar. Declare
+  the same closure for both only when they genuinely are the same act (a header button).
 - **Active-targeted buttons must focus first.** A pane button whose action acts on the
-  *focused* pane (zoom/float — no pane id in the `WmAction`) registers
-  `InteractionIntent::FocusPaneThenAction { pane_id, action }`, which `dispatch_intent`
-  expands into a `FocusPane` then the action — mirroring what the click does across two
-  events. Pane-parameterized actions (close/move/split carry the pane) just use
-  `ActivateAction`.
+  *focused* pane (zoom/float — no pane id in the `WmAction`) emits a `FocusPane` before
+  its action — the events are queued and processed in order, so it lands on this pane.
+  Pane-parameterized actions (close/move/split carry the pane) just use `ActivateAction`.
+- **The declarative half is the same declaration.** A described node binds a `peek`
+  event to an `Intent` (`ViewNode::on_peek`), defaulting to its `press` — so every
+  actionable described node is reachable by letter with nothing written, and a plugin's
+  row gets the identical picker.
 - **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
   come from `pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>` (config's
   `[pane] title_actions` today; the documented **plugin seam** appends there later). The
@@ -845,18 +852,24 @@ ceremony around a missing API. The framework owns everything behind the builder:
 dispatch, drawing. The declarative path then maps the same builder to an `Intent` (as `on_press`
 already is), so a plugin writes the identical line. **One door, never two.**
 
-**The worked example, live in this repo (hint targets / `prefix+/`) — currently WRONG:**
+**The worked example, live in this repo (`prefix+/`) — FIXED by F004/P084/T399:**
 
 ```rust
-let id = hints.register(InteractionIntent::FocusPaneThenAction { … }); // host-only enum + registry
-button.hint_target(id)                                                  // …and carry an id around
+// ✅ now — one line, on the widget
+KeyHint::new(row).on_peek(move || emit(intent.clone()))
+
+// ❌ before — a host-only enum, a registry, and an id to carry around
+let id = hints.register(InteractionIntent::FocusPaneThenAction { … });
+button.hint_target(id)
 ```
 
-Three things a caller must know: that a registry exists, that they must pre-register, and a
-`pub(crate)` enum (`InteractionIntent`, `heca/src/app/interaction.rs`). **A plugin can construct
-none of it** — it only reaches the `HintTargets` seam, which takes a plain `Intent`, so its rows
-cannot say "focus my container first" and are refused by `ActionPolicy::ContainerFocused`. That is a
-second-class version of a shipped feature, which this rule exists to forbid.
+The old form needed three things a caller had to know: that a registry existed, that they had to
+pre-register, and a `pub(crate)` enum (`InteractionIntent`, `heca/src/app/interaction.rs`). **A
+plugin could construct none of it** — it only reached the `HintTargets` seam, which took a plain
+`Intent`, so its rows could not say "focus my container first" and were refused by
+`ActionPolicy::ContainerFocused`. That was a second-class version of a shipped feature, which this
+rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and
+`named_press` are all gone; **do not reintroduce any of them.**
 
 **Corollaries:**
 - A host-private composite (`FocusPaneThenAction`, `FocusContainerThenAction`) means the behaviour
@@ -904,7 +917,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 
 | Question | Answer — do NOT re-propose |
 |---|---|
-| Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / `HintTargetRegistry` / theme wiring). |
+| Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / theme wiring). |
 | Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in the **app** (`heca/src/chrome/view.rs`); the library cannot see it. |
 | Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_activate(move \|\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
 | Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge, app-side (`heca/src/chrome/realize.rs`). |

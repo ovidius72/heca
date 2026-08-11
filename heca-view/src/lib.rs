@@ -13,8 +13,9 @@
 //!
 //! Behaviour is expressed **only** through [`Intent`]s (an action id + args), never Rust
 //! closures — so the model stays serializable and uniform for native and plugin UI alike.
-//! A node that carries an `on_press`/`on_change` intent is *actionable*; `realize` gives
-//! every actionable node a KeyHint target automatically, so `prefix+/` reaches it for free.
+//! A node that carries an `on_press`/`on_change` intent is *actionable*; `realize` makes every
+//! actionable node pickable by `prefix+/` for free, and `on_peek` says what a pick does when that
+//! differs from a click.
 //!
 //! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
 //! layout or paint logic — this is pure description.
@@ -905,6 +906,16 @@ impl ViewNode {
         self.on("press", intent)
     }
 
+    /// Convenience: bind the `"peek"` event — **what a leader-key pick (`prefix+/`) does to this
+    /// node**, when that is not simply what a click does.
+    ///
+    /// Unbound, a pick falls back to [`press`](Self::on_press), so every actionable node is
+    /// reachable by letter for free. Bind it when the two genuinely differ: heca's sidebar row
+    /// activates the pane and leaves the sidebar on a click, and stays in the sidebar on a peek.
+    pub fn on_peek(self, intent: Intent) -> Self {
+        self.on("peek", intent)
+    }
+
     /// Append a child node to the [`children`](Self::children) vec. The child is a full `ViewNode`
     /// with its own props/events — style it by putting props on *it*, not on the parent.
     pub fn child(mut self, child: ViewNode) -> Self {
@@ -918,8 +929,8 @@ impl ViewNode {
         self
     }
 
-    /// Whether this node emits an activation intent — an actionable target. `realize` uses
-    /// this to attach a KeyHint target so `prefix+/` can reach it.
+    /// Whether this node emits an activation intent — an actionable target. `realize` makes such a
+    /// node pickable by `prefix+/` even when it binds no `peek` of its own.
     pub fn is_actionable(&self) -> bool {
         self.events.contains_key("press")
     }

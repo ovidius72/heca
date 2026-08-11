@@ -123,13 +123,13 @@ pub enum InputMode {
     DockPick {
         candidates: Vec<(char, crate::chrome::ContainerId)>,
     },
-    /// Universal leader/vimium **hint picker** (entered with `prefix+/`): every
-    /// actionable chrome target gets a letter (a keycap stamped over its bounds);
-    /// the next keypress fires that target's intent. Each candidate carries the
-    /// opaque [`HintTargetId`](heca_grid_ui::HintTargetId) the host maps back to an
-    /// intent via the retained tree's hint-target registry. Any other key / Esc exits.
+    /// Universal leader/vimium **picker** (entered with `prefix+/`): every region that said what a
+    /// pick does to it gets a letter (a keycap stamped over its bounds), and the next keypress runs
+    /// that region's own declaration. Each candidate carries a
+    /// [`PeekTarget`](crate::chrome::PeekTarget) — the tree it lives in and its path in it, valid
+    /// for exactly as long as the letters are up. Any other key / Esc exits.
     HintPick {
-        candidates: Vec<(char, heca_grid_ui::HintTargetId)>,
+        candidates: Vec<(char, crate::chrome::PeekTarget)>,
     },
 }
 
@@ -708,12 +708,6 @@ pub struct AppState {
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
     pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
-    /// Shared allocator + map for the universal KeyHint picker (`prefix+/`), spanning
-    /// EVERY retained tree that carries hint targets — the chrome tree and each pane's
-    /// header tree — which rebuild on independent cadences. Ids are monotonic (never
-    /// reused), so targets from different trees never collide; each tree removes its id
-    /// range on rebuild/prune. See [`crate::chrome::HintTargetRegistry`].
-    pub hint_targets: crate::chrome::HintTargetRegistry,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See

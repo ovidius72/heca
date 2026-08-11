@@ -18,7 +18,7 @@ use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, RawPoi
 use heca_grid_ui::widgets::{ContextMenu, KeyCap, Menu, NfGlyph, NfIcon};
 use heca_view::build::{self, Parent as _, Style as _};
 use heca_view::{Intent, PropValue, ViewNode};
-use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
+use heca_view_realize::{realize, FormBindings, IntentEmitter};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
@@ -199,22 +199,6 @@ fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
         .child(Label::new(label))
 }
 
-/// The showcase's pick registry for a described tree. `realize` registers every actionable node so
-/// a host's picker can reach it by letter; this example has no picker, so the ids are handed out in
-/// order and nothing further is done with them.
-#[derive(Default)]
-struct ShowcaseHints {
-    next: usize,
-}
-
-impl HintTargets for ShowcaseHints {
-    fn register(&mut self, _intent: Intent) -> HintTargetId {
-        let id = HintTargetId::new(self.next);
-        self.next += 1;
-        id
-    }
-}
-
 /// The tree the **described** column renders: a titled `Panel` holding a clickable `Row`, a rule,
 /// and a line whose colour is overridden by **token name** (not a hex literal, so it follows the
 /// theme — press `1`/`2`/`3` and watch it change with everything else).
@@ -275,9 +259,8 @@ fn described_vs_native(theme: &Theme) -> Flex {
             intent.action, intent.args
         );
     });
-    let mut hints = ShowcaseHints::default();
     let mut forms = FormBindings::default();
-    let described = realize(&described_tree(), theme, &emit, &mut hints, &mut forms);
+    let described = realize(&described_tree(), theme, &emit, &mut forms);
 
     // `Box<dyn Component>` is not `Component`, so it cannot go through `child()` — push it the way
     // the mapper itself does.

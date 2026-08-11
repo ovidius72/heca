@@ -217,7 +217,16 @@ pub(crate) fn retire_provider_actions(
 /// therefore holds an `Rc` alias of the store and a queue — never a borrow of the state — and the
 /// queue is applied after the call, when the state is free again.
 fn route_to_owner(state: &mut AppState, intent: &Intent) {
-    let Some(mount) = owning_mount(state, &intent.action) else {
+    // **A call that names its seating is not resolved at all.** A row declares its gesture inside
+    // one mounted container and says which, so seating the same container twice cannot send the
+    // right dock's row to the left dock's copy. `owning_mount` answers only for a call with no
+    // element behind it — a keybinding, a palette entry, a script without `--dock`.
+    let named = match intent.args.get(SEAT_ARG) {
+        Some(crate::chrome::PropValue::Text(id)) => Some(id.clone()),
+        _ => None,
+    };
+    let addressed = named.is_some();
+    let Some(mount) = named.or_else(|| owning_mount(state, &intent.action)) else {
         #[cfg(debug_assertions)]
         eprintln!(
             "[heca] provider action '{}' has no mounted owner",
@@ -225,15 +234,32 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
         );
         return;
     };
+    // The seat is the host's address for the call, not something the component asked for: it is
+    // taken off here so `perform` receives the action's own arguments and nothing else. Same rule
+    // the RPC verb states about `--dock`; a component reads its seating from `ProviderCx::mount`,
+    // which is the one place it is true.
+    let mut aimed = intent.clone();
+    aimed.args.remove(SEAT_ARG);
     let mut cx = ProviderCx::new(&mount, state.chrome_state.clone());
     let queued = match state.chrome_host.provider(&mount) {
         // `&self` — the component reads its own domain state, which is the point of `perform`
         // taking an id rather than the host holding a closure over it.
         Some(provider) => {
-            provider.perform(&intent.action, intent, &mut cx);
+            provider.perform(&aimed.action, &aimed, &mut cx);
             cx.drain()
         }
-        None => return,
+        None => {
+            // An addressed call whose seating is gone declines instead of falling back to a guess:
+            // the row that named it is gone too, so there is nothing the guess could be right about.
+            #[cfg(debug_assertions)]
+            if addressed {
+                eprintln!(
+                    "[heca] provider action '{}' named seating '{mount}', which is not mounted",
+                    intent.action
+                );
+            }
+            return;
+        }
     };
     // `perform` commonly moves the component's own cursor (`publish_cursor`), so the seatings are
     // brought back into step here too — one rule, both writers.
@@ -251,7 +277,30 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
     }
 }
 
-/// Which **placement** owns `action` — written down once, rather than decided per call site.
+/// **The argument that addresses a call at one seating.**
+///
+/// A widget built inside a mounted container knows which seating it is in, so the gesture it
+/// declares says so and nothing has to be resolved back to an instance — the way a DOM handler acts
+/// on the element it is bound to rather than on "whichever one of these has focus". A call that
+/// genuinely names no element (a keybinding, a palette entry) omits it, and only then does
+/// [`owning_mount`] answer.
+///
+/// **It is the host's address, never one of the action's arguments.** [`route_to_owner`] takes it
+/// off before `perform`, and the dispatch path takes it off before judging the args against the
+/// action's declaration — so a component never sees it and cannot be written to depend on it. It
+/// answers the same question the RPC verb's `--dock <id>` does (`heca/src/rpc.rs`), which likewise
+/// never reaches the action.
+///
+/// ⚠️ **The `@` is what keeps it out of the way, and it is not decoration.** This was spelled
+/// `"dock"` for a few hours and collided with the real `dock` argument of the built-in `focus_dock`
+/// action: the dispatch path stripped it as an address, `focus_dock` was left with no dock named,
+/// and a peek that meant "focus THIS seat" opened the **dock picker** instead — a second set of
+/// letters over every dock, and picking one toggled the focus away again. An action argument is a
+/// plain identifier, so a leading `@` cannot be one (F004/P084/T409 follow-up).
+pub(crate) const SEAT_ARG: &str = "@seat";
+
+/// Which **placement** owns `action` when the call did not say — written down once, rather than
+/// decided per call site.
 ///
 /// In order:
 /// 1. the mount that currently holds chrome focus, if it declares the action — the user is looking

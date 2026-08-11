@@ -22,7 +22,8 @@ mod actions;
 pub(crate) mod workspaces;
 
 pub(crate) use actions::{
-    bind_provider_keybindings, move_provider_cursor, owning_mount, register_provider_actions,
+    SEAT_ARG, bind_provider_keybindings, move_provider_cursor, owning_mount,
+    register_provider_actions,
 };
 
 use crate::chrome::{
@@ -622,13 +623,12 @@ mod tests {
         };
         let mut signals = crate::chrome::ChromeSignals::default();
         let mut drag = crate::chrome::DragItemRegistry::default();
-        let mut hints = crate::chrome::HintTargetRegistry::default();
-        let mut bx = crate::chrome::BuildCx::new("quiet", &mut signals, &mut drag, &mut hints);
+        let mut bx = crate::chrome::BuildCx::new("quiet", &mut signals, &mut drag);
         let body = (c.build)(&ctx, &mut bx);
 
         assert!(body.base().children.is_empty(), "one label, no rows");
         assert!(drag.items().is_empty(), "…and it registered nothing host-side");
-        assert_eq!(hints.checkpoint(), 0);
+        assert!(heca_grid_ui::collect_peeks(body.as_ref()).is_empty(), "…and declared no peek");
     }
 
     #[test]

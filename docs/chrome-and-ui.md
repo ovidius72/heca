@@ -23,7 +23,35 @@ planner ids that own the work. Nothing was summarised away.
 # Part I — The declarative UI model
 
 *Owned by F003/P011 (plugin-ui), F003/P015, F003/P016 and F003/P017 (plugin-ui-gaps).*
-*This part is current as of 2026-07-26 and supersedes anything in Part II that contradicts it.*
+*This part is current as of 2026-08-11 and supersedes anything in Part II that contradicts it.*
+
+## 0. What all of this is for — read this before the rules
+
+**heca is meant to be extended by other people.** The target, stated by Antonio and written as
+⭐⭐ RULE ZERO in `AGENTS.md`, is that someone writing a plugin — or contributing to the project —
+authors UI the way they would in **Flutter or SwiftUI**:
+
+- a **declarative tree** of typed widgets, composed to any depth;
+- **behaviour attached to the widget itself**, in one line, on the thing it belongs to;
+- and **exactly what the app's own chrome gets** — the same widgets, the same keyboard picker, the
+  same menus, the same focus and policy — with no host-private type, no registry to pre-register
+  with, and no second-class path.
+
+Everything in this file is downstream of that sentence. Use it as the test when a rule looks like
+ceremony:
+
+> Write the line a **plugin author** would type. If getting the behaviour needs a registry, an id, a
+> `pub(crate)` type, or a rule they must remember, **the API is the bug** — not their code.
+
+Two things this rules out permanently, and they have both been tried:
+
+- **A registry parameter on the bridge.** `realize` once took a `HintTargets` sink so the leader-key
+  picker could reach a described node; the native side used a *different*, host-private registry for
+  the same feature. Two doors, and the plugin's was the poorer one. Deleted in F004/P084/T399: a
+  node declares `peek` and the framework collects it out of the laid-out tree.
+- **A host-private composite as the answer to "and also do X first".** `FocusPaneThenAction` /
+  `FocusContainerThenAction` are `pub(crate)`, so a plugin cannot say them. If the behaviour is
+  needed it gets a **name** a plugin can name, like `focus_pane` and `unfocus_dock` have.
 
 
 ## 1. What the model is
@@ -42,8 +70,19 @@ ViewNode {
 The same tree works for the app's own screens, for anything sent in over RPC, and for a plugin.
 It is plain data, so it survives being turned into bytes.
 
-`realize` (in `heca/src/chrome/realize.rs`) turns a tree into real widgets. It is the only path
-from a description to a widget, and it lives in the app.
+`realize` turns a tree into real widgets. It is the only path from a description to a widget.
+
+⚠️ **Moved 2026-07-27 (F003/P017/T009).** It lived in the app (`heca/src/chrome/realize.rs`) and the
+model beside it (`heca/src/chrome/view.rs`); everything below that says so is out of date. They are
+now two crates **below** `heca`: **`heca-view`** (the model — serde and nothing else, no widget
+library) and **`heca-view-realize`** (the bridge — it owns the `heca-grid-ui` dependency). A plugin
+can therefore name the vocabulary without compiling the renderer, and `heca-renderer`'s showcase —
+which is below the app — renders a described tree beside its hand-built twin.
+
+**And there is a typed SDK on top of the model** (`heca-view/src/build.rs`, F003/P011/T006): one
+Rust type per widget kind, so an author writes `VStack::new().gap(8).child(Button::new("Restart"))`
+and the compiler refuses what the widget cannot do. It lowers to a `ViewNode` and adds no
+capability. **That is the surface a plugin author is meant to use** — see §0 below.
 
 Two ways exist to build a screen and they produce the same widgets:
 
@@ -339,7 +378,21 @@ A context menu is a host-owned dropdown you attach to a node; the host returns t
 an intent.
 
 You never build a keyboard hint. **Any node with a press intent is automatically reachable by the
-leader key.** The host assigns the letters and routes the press. Opt out with `.hintable(false)`.
+leader key** (`prefix+/`): the host assigns the letters, draws them and runs the pick.
+
+**And a pick is not a click** (F004/P084/T399). They are different gestures and a node may answer
+them differently — heca's own sidebar row activates the pane and *leaves* the sidebar on a click,
+and stays in it on a peek. Bind `peek` when they differ; leave it unbound and a pick does what a
+press does:
+
+```rust
+Row::new()
+    .on_press(intent("docker.select", { "id": id }))   // go there
+    .on_peek(intent("docker.reveal", { "id": id }))    // look at it, stay where I am
+```
+
+*(`.hintable(false)` was written here as the opt-out and never existed. There is nothing to opt out
+of: a node with neither `press` nor `peek` is not a pick target.)*
 
 ---
 
@@ -363,11 +416,18 @@ untrusted input and is treated that way.
 - **Two-value builders** (`Overlay::panel_size(width, height)`). Either split them or let a
   property carry a pair.
 - **A registry instead of the fixed widget list** (R5). Allowed by the rules; not built.
-- **Where the plugin-facing types live.** A plugin written in Rust gets no editor help today,
-  because the model is inside the app crate and a plugin cannot depend on the app. Tracked as
-  `F003/P017/T9` and `F003/P001/T1`.
+- ~~**Where the plugin-facing types live.**~~ **Done, F003/P017/T009 (2026-07-27).** The model is
+  `heca-view` and the bridge is `heca-view-realize`, both below the app; a Rust plugin author
+  depends on `heca-view` alone. The typed SDK on top of it (`heca-view/src/build.rs`,
+  `F003/P011/T006`) is what gives the editor help this row was asking for.
 - **Generated type definitions** for plugins in other languages, from the same widget list.
-  Tracked as `F003/P001/T6`.
+  Tracked as `F003/P001/T006`. **This is the gap between "a Rust plugin can do this" and "anyone
+  can write a plugin"** — the Rust author is served, a JS or Python author is not.
+- **No host-only exceptions in the vocabulary.** `F004/P084/T398`: the rule that a widget driven by
+  a live host signal is host-only (R9) is written and enforced per builder; the audit proving the
+  host-only list is *only* those is not done.
+- **Nothing loads a plugin yet.** `F003/P022` (WASM runtime). Everything above is the authoring
+  model, proven by the app and the showcase authoring against it — not by a third party.
 
 ---
 
@@ -386,6 +446,10 @@ untrusted input and is treated that way.
 | 2026-07-26 | The closed widget list is about plugins not inventing widgets. It does not require a fixed enum — a host-filled registry satisfies it. |
 | 2026-07-30 | A context target **names** a row (container + `nav_key`); the component that wrote the key resolves it. The host enumerates no row kinds. (§2.11) |
 | 2026-07-30 | A row's click, double-click and right-click are **named intents**, declared per item kind — never closures — so click, picker, menu, key and RPC are one path. (§2.11) |
+| 2026-07-27 | **The model and the bridge move below the app** (`heca-view`, `heca-view-realize`, F003/P017/T009), so a plugin can depend on the vocabulary without the renderer, and anything that can build widgets can render a description. |
+| 2026-08-07 | ⭐⭐ **RULE ZERO**: a capability is **one builder on the widget**. If getting it needs a registry, an id or a `pub(crate)` type, the API is the bug. Outranks the architecture rules. (`AGENTS.md`) |
+| 2026-08-11 | **A pick is not a click.** `peek` is its own event, defaulting to `press`. The hint registry — host-side *and* the `HintTargets` sink `realize` took — is deleted; a node declares what a pick does and the framework collects it out of the laid-out tree. (F004/P084/T399) |
+| 2026-08-11 | **A gesture names the seating it was declared in.** A widget built inside a mounted container carries that mount on the intent it emits, so the same container seated twice has rows that each answer for themselves — nothing is resolved back to an instance. `owning_mount` answers only for a call with no element behind it (a keybinding, a palette entry, RPC without `--dock`). (F004/P084/T399) |
 
 
 ---
@@ -1055,10 +1119,16 @@ reason a plugin's row could not be right-clicked at all. A component seated twic
 menu twice, so a builder answers for its own **mount id** and returns nothing for another's.
 
 **A click is a name, not a closure.** Each item kind declares its gestures as an `Intent` (an action
-id plus arguments), so the click, the `prefix+/` pick, a menu entry, a keybinding and RPC all reach
-the same thing, routed by that action's own policy and passing the destructive-confirm gate. Native
-code wires it with `named_press`, the mirror of `realize`'s `press_intent` — one declaration, both
-ends. Nothing is inherited between kinds, and a kind with no gesture declares none.
+id plus arguments), so the click, a menu entry, a keybinding and RPC all reach the same thing,
+routed by that action's own policy and passing the destructive-confirm gate. Native code turns one
+into a builder's closure with `chrome::fires`, the mirror of `realize`'s `press_intent`. Nothing is
+inherited between kinds, and a kind with no gesture declares none.
+
+**And the `prefix+/` pick is its own declaration** (F004/P084/T399), on the `KeyHint` wrapper that
+draws the letter: a click on a pane row means *go there and leave*, a pick means *look at that one*
+— `workspaces.peek_selected`, aimed at the picked row by its `key` argument, which brings the pane
+to the front and leaves the keyboard in the dock. Pointing one intent at both is what made
+`prefix+/` walk out of the sidebar.
 
 **Nothing is restored when an overlay closes.** A menu opened from a focused container used to leave
 and re-enter `SidebarNav`; a container's keyboard focus is not a mode and an overlay never takes it

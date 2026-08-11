@@ -4,7 +4,7 @@
 //! The built-in surfaces (panes, sidebar/chrome, current overlays) are still derived from
 //! their existing `AppState` trees; this registry holds the **dynamically added** layers
 //! (an on-demand exposé, a plugin panel, a rich modal) and lets them join the same stack.
-//! `chrome::active_hint_targets` composes both — built-ins + registered layers — into one
+//! `chrome::active_peek_targets` composes both — built-ins + registered layers — into one
 //! band-ordered stack and applies the single visibility rule.
 //!
 //! The registry + its ordering, and both content arms: a native `Box<dyn Component>` tree the
@@ -546,8 +546,14 @@ impl LayerRegistry {
             .any(|l| l.is_active() && (l.covers_content || l.band == LayerBand::Modal))
     }
 
+    /// One layer by id, whatever its visibility — how a [`PeekTarget`](super::PeekTarget) finds
+    /// the tree it was collected from.
+    pub(crate) fn get(&self, id: LayerId) -> Option<&DynamicLayer> {
+        self.layers.iter().find(|l| l.id == id)
+    }
+
     /// The currently-visible layers, in **front → back** order (highest band first, then
-    /// most-recently-added within a band). Consumed by `active_hint_targets`.
+    /// most-recently-added within a band). Consumed by `active_peek_targets`.
     pub(crate) fn visible_front_to_back(&self) -> Vec<&DynamicLayer> {
         let mut out: Vec<&DynamicLayer> = self.layers.iter().filter(|l| l.visible).collect();
         // Stable sort by band rank DESC (front first) — keeps insertion order within a band.

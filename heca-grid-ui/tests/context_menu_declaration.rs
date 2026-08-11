@@ -237,7 +237,7 @@ fn the_keyboard_trigger_finds_the_same_declaration_from_focus() {
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 40.0));
 
     assert!(
-        !heca_grid_ui::open_for_focused(&root),
+        !heca_grid_ui::open_for_keyboard(&root, None),
         "nothing is focused, so nothing opens — not the root's menu",
     );
 
@@ -246,7 +246,7 @@ fn the_keyboard_trigger_finds_the_same_declaration_from_focus() {
         .base_mut()
         .focused
         .set(true);
-    assert!(heca_grid_ui::open_for_focused(&root));
+    assert!(heca_grid_ui::open_for_keyboard(&root, None));
     assert_eq!(labels(&opened), vec!["Rename"]);
 }
 

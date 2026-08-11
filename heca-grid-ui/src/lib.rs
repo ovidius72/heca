@@ -68,11 +68,11 @@ pub use event::{
     RawPointerKind,
 };
 pub use event::typed_text;
-pub use menu::{has_menu_sink, install_menu_sink, open_for_focused, open_for_nav_key};
+pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use pointer::{PointerState, clear_hover, hit_test};
 pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
-pub use hint::{HintTargetId, collect_hint_targets};
+pub use hint::{collect_peeks, fire_peek};
 pub use nav::{collect_nav_keys, nav_key_at};
 pub use effects::{Attention, Eased, Fade, Flash};
 pub use focus::FocusManager;
@@ -102,7 +102,7 @@ pub mod prelude {
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
     pub use crate::keymap::{KeyChord, Keymap};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
-    pub use crate::hint::{HintTargetId, collect_hint_targets};
+    pub use crate::hint::{collect_peeks, fire_peek};
     pub use crate::nav::{collect_nav_keys, nav_key_at};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};

@@ -500,34 +500,27 @@ fn handle_follow_link_mode(
     state.needs_redraw = true;
 }
 
-/// Universal hint picker (`InputMode::HintPick`): a matching letter fires that
-/// target's intent (resolved from the retained tree's hint-target registry and routed
-/// through the interaction policy layer, exactly like a mouse click); any other key /
-/// Esc just exits. Mirrors [`handle_follow_link_mode`].
+/// Universal picker (`InputMode::HintPick`): a matching letter runs what the picked region said a
+/// pick does to it; any other key / Esc just exits. Mirrors [`handle_follow_link_mode`].
+///
+/// **The host resolves nothing.** There is no registry to look an id up in and no intent to route
+/// here: the region declared the behaviour itself (`KeyHint::on_peek`, or a described node's `peek`
+/// event), and running it emits whatever that region emits — which is how a plugin's row gets the
+/// same picker the app's own rows have. A target whose tree was rebuilt under the letters simply
+/// answers `false`.
 fn handle_hint_pick_mode(
-    registry: &ActionRegistry,
+    _registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, heca_grid_ui::HintTargetId)],
+    candidates: &[(char, crate::chrome::PeekTarget)],
     ctx: KeyInputContext<'_>,
 ) {
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
     if let Some(ch) = typed
-        && let Some((_, id)) = candidates.iter().find(|(c, _)| *c == ch)
+        && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        // Resolve the picked target's intent from the shared registry (spans the chrome
-        // + pane-header trees), then dispatch it (owned clone drops the borrow before the
-        // mutable dispatch call).
-        let intent = state.hint_targets.get(*id).cloned();
-        if let Some(intent) = intent {
-            crate::app::interaction::dispatch_intent(
-                state,
-                registry,
-                InteractionSource::Keyboard,
-                intent,
-            );
-        }
+        crate::chrome::fire_peek(state, target);
     }
     state.needs_redraw = true;
 }

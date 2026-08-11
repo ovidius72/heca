@@ -180,17 +180,11 @@ pub struct Base {
     /// [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target); resolved
     /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
     pub drop_target: Option<DragItemId>,
-    /// When set, this widget is a **hint target**: the universal leader/vimium
-    /// picker assigns it a letter and, on the keypress, the host fires the intent
-    /// it mapped this opaque id to. Universal opt-in via
-    /// [`ComponentExt::hint_target`](crate::builders::ComponentExt::hint_target); enumerated
-    /// generically by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
-    pub hint_target: Option<crate::hint::HintTargetId>,
     /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and (later) drag are three readers of this one declaration.
     ///
-    /// Unlike [`hint_target`](Self::hint_target) and [`drag_source`](Self::drag_source) — registry
-    /// slots the app hands out — this is a string the component chose about *itself*, so it
+    /// Unlike [`drag_source`](Self::drag_source) — a registry slot the app hands out — this is a
+    /// string the component chose about *itself*, so it
     /// survives a tree rebuild. Universal opt-in via [`ComponentExt::nav_key`](crate::builders::ComponentExt::nav_key);
     /// enumerated by [`nav::collect_nav_keys`](crate::nav::collect_nav_keys) and hit-tested by
     /// [`nav::nav_key_at`](crate::nav::nav_key_at). Opaque here — nothing in this library parses it.
@@ -284,7 +278,6 @@ impl Base {
             children: Vec::new(),
             drag_source: None,
             drop_target: None,
-            hint_target: None,
             nav_key: None,
             scope_key: None,
             font: 15.0,
@@ -678,13 +671,6 @@ pub trait Component {
     /// [`drag::resolve_at`](crate::drag::resolve_at).
     fn as_drop_target(&self) -> Option<DragItemId> {
         self.base().drop_target
-    }
-
-    /// The opaque hint-target id if this widget is a leader/vimium pick target (see
-    /// [`Base::hint_target`]). Default reads the base. Walked by
-    /// [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
-    fn as_hint_target(&self) -> Option<crate::hint::HintTargetId> {
-        self.base().hint_target
     }
 }
 

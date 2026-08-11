@@ -585,9 +585,9 @@ Row::new()
 closed enum of row kinds that only the app could extend, which is what made a plugin row impossible
 to point at.
 
-**Why a string, when `DragItemId` and `HintTargetId` are opaque integers.** Those two are *registry
-slots*: the widget takes a token and the app keeps the map, valid only for the tree that handed it
-out. A nav key is the opposite — it must **survive a tree rebuild**, because a retained tree is
+**Why a string, when `DragItemId` is an opaque integer.** That one is a *registry slot*: the widget
+takes a token and the app keeps the map, valid only for the tree that handed it out. A nav key is
+the opposite — it must **survive a tree rebuild**, because a retained tree is
 rebuilt for reasons that have nothing to do with navigation (in heca, a pane's git status changing
 is enough), and a cursor that resets every time is not a cursor. An index into a tree cannot do
 that; an identity the row asserts about itself can. It is also why a scoped `FocusManager` — a visit
@@ -634,10 +634,10 @@ Three properties earn it a field of its own rather than a convention on top of `
 Like `nav_key`, the string is opaque here and must survive a tree rebuild.
 
 **It is entirely optional.** It defaults to `None`, and a consumer that never calls `.scope_key(…)`
-never meets it — `scope_at` simply answers `None` everywhere. It is the fifth of five host-facing
-identity slots on `ComponentBase` (`drag_source`, `drop_target`, `hint_target`, `nav_key`,
-`scope_key`), all the same bargain: the library provides the slot and the resolver, the host gives
-it meaning.
+never meets it — `scope_at` simply answers `None` everywhere. It is the fourth of four host-facing
+identity slots on `ComponentBase` (`drag_source`, `drop_target`, `nav_key`, `scope_key`), all the
+same bargain: the library provides the slot and the resolver, the host gives it meaning. (`peek` is
+a fifth slot but not an *identity* one: it carries the behaviour itself, not a token to look up.)
 
 > **Declarative form:** none. A `nav_key` or `scope_key` is authored by the component that owns the
 > row or region, and a described tree carries it as an ordinary prop on the node — see
@@ -1903,7 +1903,8 @@ spellings — never two paint paths.
   — scales font **and** padding, and **cascades into the content**) · `.font_size(f32)` (pin an
   explicit size) · `.glow(bool)` (hover glow, default on) · `.bordered(bool)` (default on).
 - **Behavior builders**: `.on_click(impl Fn() + 'static)`, plus the shared `LayoutExt`
-  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …) and `.hint_target(id)`.
+  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …). To make it pickable by `prefix+/`,
+  wrap it: `KeyHint::new(button).on_peek(…)`.
 - **Accessor**: `.hovered() -> Signal<bool>`.
 - **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
 
@@ -2519,16 +2520,19 @@ row that nothing can activate should not look like a control.
 > tempting for host code to write one that does the thing directly — and then that gesture is
 > reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
 > keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
-> exactly as a described node does**, and `heca`'s `named_press` wires both ends from the one
-> declaration — the mirror of `realize`'s `press_intent`:
+> exactly as a described node does**, and `heca`'s `chrome::fires` turns one into the closure a
+> builder wants — the mirror of `realize`'s `press_intent` / `peek_intent`:
 >
 > ```rust
 > // declarative (heca-view-realize)              native (heca/src/chrome)
-> if let Some((id, carrier)) =                    let (id, press) =
->     press_intent(node, hints) { … }                 named_press(intent, emit, hints);
-> row.hint_target(id)                             row.hint_target(id)
->    .on_activate(move || emit(carrier.clone()))     .on_activate(press);
+> node.on_press(intent)                           row.on_activate(fires(intent, emit))
+> node.on_peek(intent)                            KeyHint::new(row).on_peek(fires(intent, emit))
 > ```
+>
+> **The click and the pick are two declarations, not one** (F004/P084/T399). A click on a sidebar
+> row means *go there and leave*; a `prefix+/` pick means *look at that one* and stays in the dock.
+> Serving both from one intent is what made the picker walk out of the sidebar. A described node
+> that binds only `press` still gets a pick for free — `peek` falls back to it.
 >
 > **Each item kind declares its own**, and nothing is inherited or forced: in the workspaces
 > component a pane row declares `focus_pane { pane_id }`, a workspace row `focus_workspace { ws_idx }`,
@@ -3115,17 +3119,24 @@ ViewNode::new(WidgetKind::RailCell)
 
 ### KeyHint
 
-> **From a plugin:** the leader/pick overlay is **host-owned and universal** — a plugin
-> never creates a `KeyHint`; any plugin widget that exposes an `on_press` intent is
-> auto-hintable ("intent ⇒ hintable"). Likewise a **context menu** is a host-owned
-> dropdown the plugin *requests* (or declares via `.on_context`), not a nested widget.
-> See **[chrome-and-ui.md](chrome-and-ui.md)** → "Context menus & KeyHint".
+> **From a plugin:** the leader/pick overlay is **host-owned and universal**. A described node with
+> a `press` intent is reachable by `prefix+/` with nothing written, and a node that wants a pick to
+> mean something *else* binds `peek` (see the declarative example below). Likewise a **context
+> menu** is a host-owned dropdown the plugin declares with `.context_menu(…)`, not a nested widget.
+> See **[chrome-and-ui.md](chrome-and-ui.md)** → §0 and "Menus and keyboard hints".
 
-A **generic** transparent wrapper that overlays a glowing accent **keycap letter** on any
-actionable child while a host-owned `Signal<Option<String>>` is `Some` — the keyboard pick /
-jump prefix (move/swap/select, command palettes, content panes). It is transparent to focus and
-events (the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so
-mouse, keyboard, and RPC all light it up identically.
+A **generic** transparent wrapper that does two things for the region it wraps: it overlays a
+glowing **keycap letter** while a host-owned `Signal<Option<String>>` is `Some`, and it declares
+**what a leader-key pick does** to that region (`on_peek`). It is transparent to focus and events
+(the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so mouse,
+keyboard, and RPC all light it up identically.
+
+**Why the pick declaration lives here and not on every widget.** Being pickable is something you opt
+a *region* into — and you were already wrapping it to show the letter — so `Label::on_peek` is a
+method that never has to exist and you can read off the tree what is reachable. (A context menu is
+the opposite shape on purpose: a menu is *about* a widget, so it is a slot any widget carries; a
+peek is *aimed at* a region you chose to make reachable.) The slot itself is universal —
+`Base::peek` — so the framework's collector is one uniform walk with no downcasting.
 
 - **Construct**: `KeyHint::new(child)`, or `KeyHint::new_boxed(Box<dyn Component>)` for a subtree built
   dynamically — a `realize`d `ViewNode` tree, or a chrome provider's render seam — where the concrete
@@ -3140,14 +3151,45 @@ mouse, keyboard, and RPC all light it up identically.
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
   tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
   child row fills its column instead of shrinking to content width.
+  `.on_peek(impl Fn() + 'static)` — **what a `prefix+/` pick does to this region.** Host-only
+  (behaviour crosses a description boundary as an `Intent`, never a closure); the declarative
+  spelling is the node's `peek` event. Unset ⇒ the region is not a pick target.
 - **Accessors**: `.hint_signal() -> Signal<Option<String>>`.
+
+**Native:**
 
 ```rust
 let pick = signal(None);
 let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
-    .hint(pick).placement(HintPlacement::Center);
+    .hint(pick)
+    .placement(HintPlacement::Center)
+    // A pick is not a click: this row activates and leaves on a click, and stays put on a peek.
+    .on_peek(move || emit(peek_intent.clone()));
 // during a pick the host sets pick.set(Some("a".into())); clears it on exit
 ```
+
+**Declarative** — there is no `KeyHint` node, because a description does not draw the letter: the
+host does. A described node says only *what a pick does*, and `realize` writes it into the same
+`Base::peek` slot:
+
+```rust
+use heca_view::build::*;
+
+Row::new()
+    .on_press(Intent::new("docker.select").arg("id", id))   // click: go there
+    .on_peek(Intent::new("docker.reveal").arg("id", id))    // pick: look at it, stay
+    .child(Label::new(name))
+```
+
+Bind neither and the node is not a pick target; bind only `press` and a pick does what a click does.
+
+**How the framework uses it** (`heca_grid_ui::hint`): `collect_peeks(root)` walks the laid-out tree
+and returns every declaration in document order with the rect its letter goes over; `fire_peek(root,
+&path)` runs one, answering `false` when the tree was rebuilt under the letters. **Nothing is
+registered** — a target is addressed by its path for exactly as long as the letters are up, so there
+is no allocator to keep in step with three rebuild cadences and nothing to un-register. This
+replaced an opaque `HintTargetId` the host mapped back to a `pub(crate)` enum, which a plugin could
+not construct (F004/P084/T399).
 
 #### Standalone keycap — `paint_keycap` / `keycap_size` / `KeycapVariant`
 
@@ -3176,8 +3218,8 @@ paint_keycap(cx, cap, "a", font, None, KeycapVariant::Filled);   // over content
 paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a panel
 ```
 
-**Plugins** never call this directly — a plugin widget with an `on_press` intent is
-auto-hintable and the host stamps the keycap for it.
+**Plugins** never call this directly — a described node with a `press` (or `peek`) intent is a pick
+target and the host stamps the keycap for it.
 
 ### FocusScope
 
@@ -3293,17 +3335,16 @@ Any chrome button that triggers a `WmAction` gets its **tooltip** and its `prefi
 **KeyHint** from that action, automatically — the caller names the action, never a
 shortcut string, the leader symbol, or a hand-built tip. This keeps every button
 uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
-**`Tooltip`**, and **`hint_target`** ([`KeyHint`](#keyhint) framework); the resolution
-seam is app-side.
+**`Tooltip`**, and **`KeyHint::on_peek`** ([`KeyHint`](#keyhint) framework); the
+resolution seam is app-side.
 
 ```rust
 // heca/src/chrome/mod.rs — one call composes label + the live keybind(s):
-let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
-let button = IconButton::new(icon)
-    .hint_target(hint_id)                       // prefix+/ can pick it (same intent as click)
-    .on_click(move || emit(InteractionIntent::ActivateAction(action.clone())));
-row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
-//                               ▲ action config name  ▲ label
+let fire = move || emit(InteractionIntent::ActivateAction(action.clone()));
+let peek = fire.clone();                        // this button's pick IS its click
+let button = IconButton::new(icon).on_click(fire);
+row.child(action_tooltip(KeyHint::new(button).on_peek(peek), "close", "Close", &state.action_shortcuts));
+//                                                            ▲ action config name  ▲ label
 ```
 
 - **Tooltip text is resolved by action name.** `ActionShortcuts` (on `AppState`, rebuilt
@@ -3314,11 +3355,11 @@ row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
   `λ`, never `⌃⌥⇧⌘`. So a rebind in `config.toml` updates the tip with no code change.
 - **The name is the canonical key**, because the emitted `WmAction` may be a button-only
   variant that isn't itself bound (`ClosePaneById`, `AddPaneToColumn`).
-- **KeyHint** = register the click's intent in the **shared** `HintTargetRegistry` (on
-  `AppState`, a monotonic id allocator spanning the chrome tree **and** every per-pane
-  header tree) and `.hint_target` it. Active-targeted buttons (zoom/float) register a
-  `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
-  Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
+- **KeyHint** = declare on the wrapper what a pick does. Nothing is registered: the
+  framework collects the declarations out of the laid-out tree (`collect_peeks`) and runs
+  one (`fire_peek`), so a plugin's button is as pickable as the app's. Active-targeted
+  buttons (zoom/float) emit a `FocusPane` first, exactly like the click. Full app-side
+  rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
 ### Overlay
 
@@ -3647,8 +3688,8 @@ the dialog) and `Activate` commits its row.
 ```rust
 let dialog = Dialog::new("Delete pane?")
     .body(Label::new("This action cannot be undone."))
-    .action(Button::secondary("Cancel").hint_target(cancel_id).on_click(move || emit(submit_cancel)))
-    .action(Button::destructive("Delete").hint_target(del_id).on_click(move || emit(submit_delete)))
+    .action(KeyHint::new(Button::secondary("Cancel").on_click(cancel)).on_peek(cancel_peek))
+    .action(KeyHint::new(Button::destructive("Delete").on_click(delete)).on_peek(delete_peek))
     .on_dismiss(move || emit(close))
     .open(true);
 ```

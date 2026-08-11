@@ -812,18 +812,19 @@ pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
     }
 }
 
-/// Enter the universal hint picker (`prefix+/`): assign a letter to every actionable
-/// chrome target in the retained tree (document order) and show a keycap over each;
-/// the next keypress fires that target's intent. No-ops if there are no targets or no
-/// chrome tree yet.
+/// Enter the universal picker (`prefix+/`): assign a letter to every region on screen that said
+/// what a pick does to it (document order) and show a keycap over each; the next keypress runs that
+/// region's declaration. No-ops if nothing on screen declares one.
 pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     // Which targets are reachable is decided by the layered surface compositor — one rule
     // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
-    // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
-    let candidates: Vec<(char, heca_grid_ui::HintTargetId)> = crate::chrome::active_hint_targets(state)
+    // See `chrome::active_peek_targets` and `docs/surface-compositor.md`.
+    let candidates: Vec<(char, crate::chrome::PeekTarget)> = crate::chrome::active_peek_targets(state)
         .into_iter()
         .enumerate()
-        .filter_map(|(i, (id, _))| crate::app::selection::candidate_letter(i).map(|ch| (ch, id)))
+        .filter_map(|(i, (target, _))| {
+            crate::app::selection::candidate_letter(i).map(|ch| (ch, target))
+        })
         .collect();
     if !candidates.is_empty() {
         state.input_mode = InputMode::HintPick { candidates };

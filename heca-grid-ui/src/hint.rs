@@ -1,51 +1,26 @@
-//! Universal leader / vimium **hint targets** over a laid-out component tree.
+//! Universal leader / vimium **peek targets** over a laid-out component tree.
 //!
-//! The host's global KeyHint picker (a leader like `prefix+/`) lights a letter
-//! over **every actionable target on screen** and, on the keypress, fires that
-//! target's intent. This is the geometry+opt-in layer for it, mirroring the drag
-//! framework: a widget opts in with an opaque [`HintTargetId`] (via
-//! [`ComponentExt::hint_target`](crate::builders::ComponentExt::hint_target)), and
-//! [`collect_hint_targets`] walks the **retained** widget tree (whose `Base.bounds`
-//! are filled in by layout each frame) to enumerate every target + its bounds.
+//! The host's global picker (a leader like `prefix+/`) lights a letter over **every region that
+//! said what a pick does to it** and runs that region's declaration on the keypress. This module is
+//! the framework's half: [`collect_peeks`] walks the **retained** widget tree (whose `Base.bounds`
+//! are filled in by layout each frame) and enumerates every declaration with the rect its letter
+//! goes over, and [`fire_peek`] runs one.
 //!
-//! Domain-neutral: the id is opaque and the app maps it back to an intent — the
-//! framework never knows what "activating" a target does (same contract as
-//! [`DragItemId`](crate::drag::DragItemId)).
+//! **Nothing is registered and no id exists.** A widget declares the behaviour itself with
+//! [`KeyHint::on_peek`](crate::widgets::KeyHint::on_peek); a target is addressed by its **path**
+//! from the root, which lives exactly as long as the frame it was collected in. That is what makes
+//! the picker something a plugin can join: there is no host registry to reach and no host-private
+//! intent type to name. It replaced an opaque `HintTargetId` the host mapped back to a
+//! `pub(crate)` enum — a shipped feature a plugin could only have a second-class version of.
 
 use crate::component::Component;
 use crate::reactive::SignalGet;
 use heca_core::layout::Rectangle;
 
-/// Opaque hint-target identifier. The host maps it back to an intent to dispatch
-/// when the target's letter is pressed. Construct with [`HintTargetId::new`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct HintTargetId(usize);
-
-impl HintTargetId {
-    /// Create a new hint-target id from a flat index.
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
-
-    /// Access the raw flat index (only in host code that knows how to map it).
-    pub fn raw(self) -> usize {
-        self.0
-    }
-}
-
 /// Should this subtree be enumerated? Hidden widgets have stale bounds and never
 /// receive input, so they're skipped (matching paint / event / drag resolution).
 fn skip(c: &dyn Component) -> bool {
     !c.base().visible.get_untracked() || c.base().style.layout.hidden
-}
-
-/// Enumerate **every** hint target in the tree with its laid-out bounds, in
-/// document order (parents before children). The host assigns letters to the
-/// result and stamps a keycap over each `bounds`. Hidden subtrees are skipped.
-pub fn collect_hint_targets(root: &dyn Component) -> Vec<(HintTargetId, Rectangle)> {
-    let mut out = Vec::new();
-    collect_into(root, &mut out);
-    out
 }
 
 /// **Every widget in this tree that says what a pick does to it**, with the rect the letter goes
@@ -94,79 +69,76 @@ pub fn fire_peek(root: &dyn Component, path: &[usize]) -> bool {
     }
 }
 
-fn collect_into(node: &dyn Component, out: &mut Vec<(HintTargetId, Rectangle)>) {
-    if skip(node) {
-        return;
-    }
-    if let Some(id) = node.as_hint_target() {
-        out.push((id, node.base().bounds));
-    }
-    for child in node.base().children.iter() {
-        collect_into(child.as_ref(), out);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::ComponentExt;
     use crate::reactive::SignalUpdate;
-    use crate::widgets::{Flex, Surface};
+    use crate::widgets::{Flex, KeyHint, Surface};
     use heca_core::layout::{Point, Size};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
-    fn at(mut w: impl Component + 'static, x: f64, y: f64, w_: f64, h_: f64) -> Box<dyn Component> {
-        w.base_mut().bounds = Rectangle::new(Point::new(x, y), Size::new(w_, h_));
-        Box::new(w)
+    /// A peeking wrapper with laid-out bounds, appending `tag` to `log` when it is picked.
+    fn peek_at(
+        tag: &'static str,
+        log: &Rc<RefCell<Vec<&'static str>>>,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    ) -> Box<dyn Component> {
+        let log = log.clone();
+        let mut wrapper = KeyHint::new(Surface::new()).on_peek(move || log.borrow_mut().push(tag));
+        wrapper.base_mut().bounds = Rectangle::new(Point::new(x, y), Size::new(w, h));
+        Box::new(wrapper)
     }
 
     #[test]
-    fn collects_targets_with_bounds_in_document_order() {
+    fn collects_declarations_with_bounds_in_document_order() {
+        let log = Rc::new(RefCell::new(Vec::new()));
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        root.base_mut().children.push(at(
-            Surface::new().hint_target(HintTargetId::new(1)),
-            0.0,
-            0.0,
-            100.0,
-            40.0,
-        ));
-        root.base_mut().children.push(at(
-            Surface::new().hint_target(HintTargetId::new(2)),
-            0.0,
-            50.0,
-            100.0,
-            40.0,
-        ));
+        root.base_mut()
+            .children
+            .push(peek_at("first", &log, 0.0, 0.0, 100.0, 40.0));
+        root.base_mut()
+            .children
+            .push(peek_at("second", &log, 0.0, 50.0, 100.0, 40.0));
 
-        let targets = collect_hint_targets(&root);
+        let targets = collect_peeks(&root);
         assert_eq!(
-            targets.iter().map(|(id, _)| id.raw()).collect::<Vec<_>>(),
-            vec![1, 2]
+            targets.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+            vec![vec![0], vec![1]],
+            "document order, addressed by path"
         );
-        assert_eq!(targets[1].1.loc.y, 50.0);
+        assert_eq!(targets[1].1.loc.y, 50.0, "…each with the rect its letter goes over");
+
+        assert!(fire_peek(&root, &targets[1].0));
+        assert_eq!(*log.borrow(), vec!["second"]);
     }
 
     #[test]
-    fn skips_hidden_subtrees_and_untagged_nodes() {
+    fn skips_hidden_subtrees_and_silent_nodes() {
+        let log = Rc::new(RefCell::new(Vec::new()));
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        // An untagged node with a tagged child, then a hidden tagged node.
-        let mut visible_parent = Flex::column();
-        visible_parent
+        // A silent parent holding a declaring child, then a hidden declaring node.
+        let mut silent_parent = Flex::column();
+        silent_parent
             .base_mut()
             .children
-            .push(at(Surface::new().hint_target(HintTargetId::new(7)), 0.0, 0.0, 10.0, 10.0));
-        root.base_mut().children.push(Box::new(visible_parent));
+            .push(peek_at("nested", &log, 0.0, 0.0, 10.0, 10.0));
+        root.base_mut().children.push(Box::new(silent_parent));
 
-        let mut hidden = Surface::new().hint_target(HintTargetId::new(9));
+        let mut hidden = KeyHint::new(Surface::new()).on_peek(|| unreachable!("hidden"));
         hidden.base_mut().visible.set(false);
         root.base_mut().children.push(Box::new(hidden));
 
-        let targets = collect_hint_targets(&root);
+        let targets = collect_peeks(&root);
         assert_eq!(
-            targets.iter().map(|(id, _)| id.raw()).collect::<Vec<_>>(),
-            vec![7],
-            "untagged parent is transparent; hidden tagged node is skipped"
+            targets.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>(),
+            vec![vec![0, 0]],
+            "a silent parent is transparent; a hidden declaration is skipped"
         );
     }
 }

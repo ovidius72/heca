@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, ComponentExt, Point};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerBand, LayerId, LayerKind};
@@ -203,7 +203,6 @@ pub(crate) fn open_modal(
         // it now. A theme reload rebuilds every overlay, so the token follows (F003/P017/T7).
         &super::chrome_gui_theme(state),
         &emit,
-        &mut state.hint_targets,
         &state.action_shortcuts,
         &mut forms,
     );
@@ -234,7 +233,7 @@ pub(crate) fn open_modal(
 ///
 /// `band`, `modal` and `covers_content` are the caller's: a plugin panel over the scrolling area is
 /// `Overlay` + `covers_content: true` + not modal, a rich dialog is `Modal` + both. **No occluder is
-/// passed** — `active_hint_targets` reads it from the realized tree's laid-out bounds, which is the
+/// passed** — `active_peek_targets` reads it from the realized tree's laid-out bounds, which is the
 /// invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
@@ -259,10 +258,7 @@ pub(crate) fn open_view_layer(
     };
     let theme = super::chrome_gui_theme(state);
     let mut forms = FormBindings::default();
-    let realized = {
-        let mut targets = super::ViewHintTargets(&mut state.hint_targets);
-        super::realize(&node, &theme, &view_emit, &mut targets, &mut forms)
-    };
+    let realized = super::realize(&node, &theme, &view_emit, &mut forms);
     let id = state
         .layers
         .add_view(band, kind, modal, covers_content, node, realized);
@@ -520,7 +516,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
 
 /// Build the realized `Dialog` tree for a modal. Each action becomes a real `Button` wired the
 /// SAME centralized way as every chrome button (AGENTS.md "Chrome buttons → action, tooltip,
-/// KeyHint — do NOT hand-roll"): a KeyHint target + `on_click` both carry `SubmitOverlay`, and
+/// KeyHint — do NOT hand-roll"): its click and its `prefix+/` pick both carry `SubmitOverlay`, and
 /// the button is wrapped in [`action_tooltip`](super::action_tooltip) so its tip + shortcut come
 /// from the action, never a hand-picked string. The `Dialog` itself owns focus/nav/activation.
 fn build_modal_root(
@@ -528,20 +524,18 @@ fn build_modal_root(
     id: OverlayId,
     theme: &heca_grid_ui::Theme,
     emit: &ChromeIntentEmitter,
-    hints: &mut super::HintTargetRegistry,
     shortcuts: &super::ActionShortcuts,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    // `realize` speaks the model's own `Intent` and knows nothing of `InteractionIntent` or the
-    // registry (F003/P017/T009). The carrier is put on here, at the boundary — for the click sink
-    // by a wrapping closure, for the pick registry by `ViewHintTargets`.
+    // `realize` speaks the model's own `Intent` and knows nothing of `InteractionIntent`
+    // (F003/P017/T009). The carrier is put on here, at the boundary, by a wrapping closure — one
+    // sink now, for the click and the `prefix+/` pick alike.
     let body = {
         let view_emit: super::IntentEmitter = {
             let emit = emit.clone();
             Rc::new(move |intent| emit(InteractionIntent::View(intent)))
         };
-        let mut targets = super::ViewHintTargets(hints);
-        super::realize(&spec.body, theme, &view_emit, &mut targets, forms)
+        super::realize(&spec.body, theme, &view_emit, forms)
     };
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
@@ -554,12 +548,12 @@ fn build_modal_root(
             overlay: id,
             action: action.id.clone(),
         });
-        let hid = hints.register(carrier.clone());
         let emit = emit.clone();
+        let fire = move || emit(carrier.clone());
+        let peek = fire.clone();
         let button = Button::new(action.label.clone())
             .variant(variant)
-            .hint_target(hid)
-            .on_click(move || emit(carrier.clone()));
+            .on_click(fire);
         // Reactive validation: disable this button while a required form field is empty (blocks
         // blank submission). Binds the button's `disabled` signal to the field's live value.
         if let Some(field) = &action.disable_when_empty
@@ -568,8 +562,14 @@ fn build_modal_root(
             let disabled = button.base().disabled;
             create_effect(move |_| disabled.set(sig.get().trim().is_empty()));
         }
-        // Tooltip + live shortcut from the action id — the one centralized path.
-        dialog = dialog.action(super::action_tooltip(button, &action.id, &action.label, shortcuts));
+        // Tooltip + live shortcut from the action id — the one centralized path. The pick
+        // declaration goes on the wrapper around the button, where the letter is drawn.
+        dialog = dialog.action(super::action_tooltip(
+            heca_grid_ui::widgets::KeyHint::new(button).on_peek(peek),
+            &action.id,
+            &action.label,
+            shortcuts,
+        ));
     }
     // Esc / scrim dismissal flows through the same emitter as the buttons: a `CloseOverlay`
     // for this overlay, resolved to `ModalResult::Dismissed` in `dispatch_intent`.
@@ -654,27 +654,32 @@ mod tests {
         assert!(spec.dismissible && !spec.danger && spec.actions.is_empty());
     }
 
+    /// Every modal action button declares what a `prefix+/` pick does to it, and it is the same
+    /// `SubmitOverlay` its click carries — so the picker reaches a dialog's buttons with nothing
+    /// registered anywhere.
     #[test]
-    fn build_registers_one_submit_intent_per_action() {
+    fn each_action_button_declares_the_submit_its_click_would_fire() {
         let spec = ModalSpec::message("Delete pane?", "Gone forever.")
             .action(ModalAction::new("cancel", "Cancel"))
             .action(ModalAction::new("confirm", "Delete").danger(true))
             .dismissible(false);
         let id = OverlayId(super::super::LayerRegistry::default().reserve_id());
-        let mut hints = super::super::HintTargetRegistry::default();
         let shortcuts = super::super::ActionShortcuts::default();
-        let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
+        let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
+        let emit: ChromeIntentEmitter = {
+            let fired = fired.clone();
+            Rc::new(move |intent| fired.borrow_mut().push(intent))
+        };
+        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
 
-        // Two actions → two hint targets, each a SubmitOverlay for this overlay.
-        assert_eq!(hints.checkpoint() - before, 2);
+        let targets = heca_grid_ui::collect_peeks(root.as_ref());
+        assert_eq!(targets.len(), 2, "two actions → two pick targets");
         for (offset, action_id) in [(0, "cancel"), (1, "confirm")] {
-            let intent = hints
-                .get(heca_grid_ui::HintTargetId::new(before + offset))
-                .unwrap();
+            assert!(heca_grid_ui::fire_peek(root.as_ref(), &targets[offset].0));
+            let intent = fired.borrow().last().cloned().unwrap();
             assert!(
                 matches!(
-                    intent,
+                    &intent,
                     InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action })
                         if *overlay == id && action == action_id
                 ),
