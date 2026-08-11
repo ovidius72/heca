@@ -93,13 +93,6 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // The chrome build reads selection from here, not from `Session` — the Phase-2
     // state boundary (`pluggable-chrome-plugin-plan.md` §3.3): the WorkspacesContainer
     // (and future providers) consume `chrome_state`, never `Session` directly.
-    #[cfg(debug_assertions)]
-    if prev_focused != state.focused_pane {
-        eprintln!(
-            "[heca] sync_focus {prev_focused:?} -> {:?} (ws {prev_ws} -> {})",
-            state.focused_pane, state.session.active_workspace_idx,
-        );
-    }
     state
         .chrome_state
         .workspaces
