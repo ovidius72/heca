@@ -303,9 +303,22 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
+            // Read before the release block below ends any resize drag, so a release that ended
+            // one still counts as consumed and is not also forwarded to the terminal.
+            let resize_before = mouse::is_resizing(state);
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Released
             {
+                // **The divider resize ends here, at the same level its press started it.** It used
+                // to end inside `mouse::on_mouse_input`, which sits behind the viewport
+                // early-return below — so a release that a pane's scrollbar happened to claim (it
+                // answers one whenever it holds a thumb grab) never reached the resize, and
+                // `state.mouse.resize` stayed `Some`. Every later cursor move then took the
+                // resize branch in `mouse::on_cursor_moved` with no button held, and the pane went
+                // on resizing itself until it was gone. A gesture must never outlive the release
+                // that ends it — the same rule that keeps a scrollbar thumb from welding to the
+                // cursor, one layer up (F004/P084/T409).
+                mouse::resize::on_release(state);
                 // Every retained tree that could have started a gesture gets the release, whether
                 // or not the cursor is still over it — that is what ends a scrollbar drag. The
                 // chrome tree is unconditional: it consumes nothing it did not start, and gating a
@@ -319,7 +332,6 @@ pub(crate) fn handle_window_event(
                 }
             }
             let interactive_before = state.mouse.interactive_move.is_some();
-            let resize_before = mouse::is_resizing(state);
             if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
                 dispatch_action(state, registry, source, &action);
             }

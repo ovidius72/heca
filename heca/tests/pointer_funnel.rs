@@ -162,3 +162,41 @@ fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
          This is not caught by any behaviour test: they dispatch both halves themselves.",
     );
 }
+
+/// **A divider resize must end at the same level its press started it.**
+///
+/// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse
+/// path). The release used to end it two layers down, inside `mouse::on_mouse_input` — which sits
+/// *behind* an early return: if a pane's viewport scrollbar claimed the release (it answers one
+/// whenever it holds a thumb grab), the event loop returned and the resize was never told.
+///
+/// `state.mouse.resize` then stayed `Some`, and every later cursor move took the resize branch in
+/// `mouse::on_cursor_moved` **with no button held** — so the pane went on resizing itself, with the
+/// mouse just moving, until it was gone. Same family as the guards above: a gesture that outlives
+/// the release that ends it (F004/P084/T409).
+///
+/// A lint, because what it guards is *ordering*, and the failure is a state that persists rather
+/// than an event that is wrong.
+#[test]
+fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::MouseInput")
+        .expect("the button branch is still a `WindowEvent::MouseInput` arm");
+
+    let ends = body
+        .find("resize::on_release")
+        .expect(
+            "the button branch no longer ends the divider resize. It must: the press starts the \
+             drag here, so the release has to end it here too, or the drag outlives the button.",
+        );
+    let swallows = body
+        .find("dispatch_pane_viewport_release")
+        .expect("the viewport release moved — move this guard with it rather than deleting it");
+
+    assert!(
+        ends < swallows,
+        "the divider resize is ended AFTER a branch that can return early and swallow the \
+         release.\nA resize that is never told the button came up keeps resizing on every cursor \
+         move, with nothing held down, until the pane is gone.",
+    );
+}
