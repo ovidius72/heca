@@ -38,7 +38,8 @@
     "c83c9b34-35e5-46d7-9dc5-d79906619fda",
     "fc620445-244f-494d-8ae8-60c88ad14ffa",
     "4e627ced-c92e-49ec-89f7-e6c1fb7831ee",
-    "791ea225-2796-42ae-a534-5235203a9f50"
+    "791ea225-2796-42ae-a534-5235203a9f50",
+    "d89b63d6-04f2-42f2-9acc-b947eed95306"
   ],
   "tasks": [
     {
@@ -747,10 +748,32 @@
       "completedAt": "2026-08-11T14:02:17.447Z",
       "createdAt": "2026-08-11T13:54:36.536Z",
       "updatedAt": "2026-08-11T14:02:17.447Z"
+    },
+    {
+      "id": "d89b63d6-04f2-42f2-9acc-b947eed95306",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 414,
+      "shortId": "3JT9Y",
+      "priority": 18,
+      "shortName": "prefix-r-j-k-must-move-a-divid",
+      "title": "prefix+r: j/k must move a divider in one direction, whichever pane is active",
+      "status": "planned",
+      "description": "**Reported by Antonio, driving, 2026-08-11**, immediately after T413 landed: *\"prefix+r work fine at the third one at the bottom. The center and the one at the top j and k act the opposite. why?\"*\n\n# Why it happens\n\n`j`/`k` are **directional** — the user expects them to move an edge one way. The action underneath is **size-based**: `WmAction::Resize { target: Pane, axis: Y, amount }` → `Column::resize_active_pane_height(delta)` → \"grow the active pane by `delta`\".\n\nThose two agree only when the edge that moves is on the same side of the pane:\n\n- A pane with a boundary **below** it (top, middle) grows by moving its **bottom** edge down.\n- The **last** pane has no boundary beneath it, so T413 made it trade with the pane **above**: it grows by moving its **top** edge up.\n\nSame key, same \"grow me\", opposite edge — so the divider travels the other way and it reads as inverted.\n\n**This is a consequence of T413, not a regression it introduced.** Before it, a resize pinned one pane and every other pane absorbed a share of the change, so no single divider visibly moved and the inconsistency did not read. The direction was always ambiguous; T413 made the motion crisp enough to see it.\n\n# What to build\n\nExpress the keyboard resize as **move a boundary in a direction**, not \"grow me\":\n\n- `j` moves the divider **down**, `k` moves it **up**, whichever pane is active.\n- For a pane with a boundary below, that is its own bottom boundary (grow on `j`).\n- For the **last** pane, the only boundary is above it, so `j` moving that divider down means the last pane **shrinks** — which is the correct and consistent reading: the divider went the way the key says.\n\n`Column::resize_pane_height` (`heca-core/src/layout/column.rs`) already performs a boundary transfer and is the right place; what changes is which boundary the keyboard names and the sign it passes, not the transfer itself. The mouse path is unaffected — a drag names its boundary by hit-test and already moves it under the cursor.\n\n# Behaviours to preserve\n\n- **The mouse must keep tracking the cursor.** `mouse::resize::on_drag_move` sends `ResizePaneHeightBy { pane_idx, delta: dy }` where `pane_idx` is the pane above the divider; dragging down must still move that divider down.\n- **T413's transfer stays**: only the two panes either side of a boundary change, the far side stops at `MIN_PANE_HEIGHT`, and the column stays exactly full. Its two tests must still pass.\n- **RPC and the config binding** go through the same `WmAction`, so whatever the sign convention becomes has to be stated in the action's own docs — `resize` is user-bindable and its `amount` is written by hand in `config.toml`.\n\n# Verification\n\nAntonio drives it: three panes in a column, `prefix+r`, then `j`/`k` with each of the three active in turn. The divider must move the same way every time. Then the mouse drag, to confirm it still follows the cursor.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-11T14:04:24.706Z",
+      "updatedAt": "2026-08-11T14:04:24.706Z"
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-08-11T14:02:17.447Z",
+  "updatedAt": "2026-08-11T14:04:24.706Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-08-10T00:00:00.000Z",
   "handoffReadAt": "",
