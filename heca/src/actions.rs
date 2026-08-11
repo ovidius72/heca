@@ -1780,13 +1780,13 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "resize",
             label: "Resize",
-            description: "Resize the focused column or pane along one axis by a relative amount.",
+            description: "Move the boundary the focused column or pane owns, along one axis.",
             category: ActionCategory::Layout,
             icon: None,
             args: &[
                 ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
                 ArgDescriptor::required_enum("axis", <crate::input::ResizeAxis as crate::input::EnumArg>::VALUES, "Which axis to resize along."),
-                ArgDescriptor::required("amount", ArgKind::Float, "How much to grow by; negative shrinks."),
+                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, along the axis: +x is right, +y is DOWN. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active."),
             ],
         },
         ActionDescriptor {

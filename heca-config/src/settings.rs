@@ -86,6 +86,21 @@ fn default_overview_gap() -> f64 {
     0.1
 }
 
+/// Default scale the exposé **opens from**, relative to its own map size: `0.8`.
+///
+/// Below 1.0 the map **grows in** from smaller and shrinks away when it closes — a zoom in on the
+/// way in, out on the way out. Above 1.0 it does the opposite: it starts larger and pulls back, the
+/// way niri's overview does (the panes you were looking at shrinking into cards). `1.0` is no
+/// animation at all.
+///
+/// Both readings are defensible and this is the one Antonio chose after driving them (2026-08-11):
+/// pulling back read as falling in from somewhere, even softened to 1.3, while growing in reads as
+/// the map opening. `1 / overview_zoom` (2.0 at the default) is the literal niri reading — the cards
+/// start at exactly life size — and overshoots badly: the outer rows begin off-screen.
+fn default_overview_zoom_from() -> f64 {
+    0.8
+}
+
 fn default_always_center_single_column() -> bool {
     false
 }
@@ -260,6 +275,10 @@ pub struct SettingsConfig {
     /// Gap between workspace rows in the exposé, as a fraction of a screen height.
     #[serde(default = "default_overview_gap")]
     pub overview_gap: f64,
+    /// The scale the exposé **opens from**, relative to its map size — the zoom it animates out of
+    /// and back into. `1.0` disables the animation. Clamped to `0.2..=4.0`.
+    #[serde(default = "default_overview_zoom_from")]
+    pub overview_zoom_from: f64,
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
@@ -365,6 +384,7 @@ impl Default for SettingsConfig {
             always_center_single_column: default_always_center_single_column(),
             center_focused_column: CenterFocusedColumn::default(),
             overview_zoom: default_overview_zoom(),
+            overview_zoom_from: default_overview_zoom_from(),
             overview_gap: default_overview_gap(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),

@@ -1348,6 +1348,80 @@ mod tests {
         );
     }
 
+    /// **The divider goes the way the key says, whichever pane is active** (F004/P084/T414).
+    ///
+    /// `j` is directional; "grow the active pane" is not. They disagree for the last pane, which
+    /// has no boundary beneath it and so grows *upwards* — which is why `prefix+r` felt inverted on
+    /// the top and middle panes and correct on the bottom one. Naming a boundary instead of a size
+    /// makes one statement of it: a positive amount moves that boundary **down**, always.
+    #[test]
+    fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
+        // Each seat in a three-pane column, and the boundary each one owns.
+        for (active, boundary) in [(0usize, 0usize), (1, 1), (2, 1)] {
+            let mut space = test_scrolling_space();
+            space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+
+            let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+            let (h, gaps) = (
+                space.working_area.size.h,
+                space.options.gaps,
+            );
+            let col = &mut space.columns[0];
+            col.active_pane_idx = active;
+            col.move_active_pane_boundary(40.0, h, gaps);
+            let after: Vec<f64> = col.pane_sizes.iter().map(|s| s.h).collect();
+
+            // A boundary moving DOWN grows the pane above it and shrinks the pane below it — the
+            // same two panes, by the same amount, from whichever seat the key was pressed.
+            assert!(
+                (after[boundary] - (before[boundary] + 40.0)).abs() < 0.5,
+                "active {active}: the pane above the boundary grew, {} -> {}",
+                before[boundary],
+                after[boundary],
+            );
+            assert!(
+                (after[boundary + 1] - (before[boundary + 1] - 40.0)).abs() < 0.5,
+                "active {active}: the pane below it gave exactly that, {} -> {}",
+                before[boundary + 1],
+                after[boundary + 1],
+            );
+            // The third pane is not on this boundary (T413's rule still holds).
+            let untouched = if boundary == 0 { 2 } else { 0 };
+            assert!(
+                (after[untouched] - before[untouched]).abs() < 0.5,
+                "active {active}: pane {untouched} is not on this boundary and must not move",
+            );
+        }
+    }
+
+    /// The size verbs keep meaning size. `pane_height_increase` says "increase", so it grows the
+    /// active pane whichever edge has to move — the opposite reading to the directional one above,
+    /// and both are correct for the words they are spelled with.
+    #[test]
+    fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
+        for active in [0usize, 1, 2] {
+            let mut space = test_scrolling_space();
+            space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+
+            let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+            let (h, gaps) = (space.working_area.size.h, space.options.gaps);
+            let col = &mut space.columns[0];
+            col.active_pane_idx = active;
+            col.resize_active_pane_height(40.0, h, gaps);
+
+            assert!(
+                (col.pane_sizes[active].h - (before[active] + 40.0)).abs() < 0.5,
+                "active {active}: the active pane grew, {} -> {}",
+                before[active],
+                col.pane_sizes[active].h,
+            );
+        }
+    }
+
     #[test]
     fn columns_can_be_zoomed_independently() {
         let mut space = test_scrolling_space();

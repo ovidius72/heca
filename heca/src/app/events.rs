@@ -90,7 +90,40 @@ pub(crate) fn handle_window_event(
             state.mark_full_redraw();
         }
         WindowEvent::KeyboardInput { event, .. } => {
+            // **A release is half a keystroke, and it is delivered.** Returning here meant
+            // `Event::Key { pressed: false }` never existed in this app, so
+            // `ComponentExt::on_key_up` was a builder nothing could ever fire — the exposé's
+            // delete keys did nothing while a headless test that dispatched both halves passed
+            // (Antonio, driving, 2026-08-11). The same shape as the right-click that never opened
+            // a menu because the funnel delivered only presses.
+            //
+            // Only the key itself goes down this path — no text, no resolved intents — which is
+            // `Keymap::deliver_release`'s whole contract; and none of the keymap machinery below
+            // runs, because a release resolves to no action and an in-flight prefix sequence is
+            // driven by presses.
             if event.state != ElementState::Pressed {
+                if crate::chrome::top_modal(state).is_some() {
+                    let key_text = event.logical_key.to_text().unwrap_or("").to_string();
+                    let combo = build_event_combo(
+                        &event.logical_key,
+                        &event.physical_key,
+                        &key_text,
+                        state.modifiers,
+                    );
+                    if let Some((key, _)) = crate::app::registry::combo_to_grid(&combo) {
+                        let keymap = state.widget_keymap.clone();
+                        let handled = keymap.deliver_release(key, |ev| {
+                            state
+                                .layers
+                                .top_modal_root_mut()
+                                .map(|root| heca_grid_ui::dispatch(root, ev))
+                                .unwrap_or(Handled::No)
+                        });
+                        if matches!(handled, Handled::Yes) {
+                            state.mark_full_redraw();
+                        }
+                    }
+                }
                 return;
             }
             state.mark_full_redraw();

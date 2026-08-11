@@ -1507,11 +1507,18 @@ Modes are groups of bindings that stay active until `Escape` or `Enter` is press
 
 ```toml
 # Default built-in: prefix+r enters resize mode
-# In resize mode:
-#   h / l  → resize column narrower / wider
-#   j / k  → resize pane shorter / taller
+# In resize mode the key points the way the DIVIDER travels, whichever
+# column or pane is active — `amount` moves the boundary along the axis,
+# and +x is right, +y is down:
+#   h / l  → move the column's right edge left / right (narrower / wider)
+#   j / k  → move the pane's divider down / up
 #   Arrow keys work too
 #   Escape / Enter → exit mode
+#
+# A pane's divider is the one below it, or the one above when it is the LAST
+# pane — so on the last pane `j` moves that divider down and the pane gets
+# shorter. `prefix+Shift+=` / `prefix+Shift+-` are the size verbs instead:
+# they grow / shrink the active pane whichever edge has to move.
 
 # Custom modes
 [[keys.mode]]

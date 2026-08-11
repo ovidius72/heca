@@ -21,8 +21,33 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
     match kind {
         MutationKind::Layout | MutationKind::Focus | MutationKind::Config => {
             sync_focus(state);
+            // **Structure only.** A layer's content is structural, so what makes it stale is a
+            // pane, column or workspace appearing or going — not the focus moving, which happens
+            // constantly and would rebuild the whole map (and reset the cursor inside it) on every
+            // keystroke.
+            if matches!(kind, MutationKind::Layout) {
+                refresh_visible_layers(state);
+            }
             state.needs_redraw = true;
         }
+    }
+}
+
+/// **A layer that is up shows the session as it is now.**
+///
+/// A layer's content is structural — panes open, columns and workspaces come and go — and a signal
+/// replaces a prop, never a child, so staying current means being rebuilt. Until now that happened
+/// only when a layer was *shown*, which is fine for opening it and wrong for everything that
+/// happens while it is open: deleting a pane from the exposé removed it from the session and left
+/// its card on screen, and only closing the map revealed that it had worked (Antonio, driving,
+/// 2026-08-11).
+///
+/// Here rather than in each handler, because "the map went stale" is not a property of any one
+/// action — it is a property of the session having changed, which is exactly what this hook means.
+/// Nothing happens when no host layer is visible, which is the ordinary case.
+fn refresh_visible_layers(state: &mut AppState) {
+    for name in state.layers.visible_host_layer_names() {
+        crate::chrome::rebuild_named_layer(state, &name);
     }
 }
 

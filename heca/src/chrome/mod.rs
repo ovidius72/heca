@@ -2346,9 +2346,16 @@ pub(crate) fn paint_layers(
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     for layer in layers {
         // A layer on its way out paints at falling opacity rather than vanishing between two
-        // frames. `PaintCx` scales every command it emits, so the layer's own widgets know nothing
-        // about it — a fade is something done *to* a surface.
-        cx.with_opacity(layer.opacity(), |cx| layer.root().paint(cx));
+        // frames, and a layer that declared a zoom paints at its current scale. `PaintCx` applies
+        // both to every command it emits, so the layer's own widgets know nothing about either —
+        // they are things done *to* a surface.
+        //
+        // The zoom's fixed point is the middle of the window: an overview belongs to the whole
+        // screen, so it grows from and shrinks toward the centre rather than a corner.
+        let centre = Point::new(w as f64 / 2.0, h as f64 / 2.0);
+        cx.with_opacity(layer.opacity(), |cx| {
+            cx.with_scale(layer.scale(), centre, |cx| layer.root().paint(cx))
+        });
     }
 }
 

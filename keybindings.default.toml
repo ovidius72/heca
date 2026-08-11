@@ -437,6 +437,12 @@ edit_select_all           = ["Ctrl+a", "Super+a"]    # Input: select the whole f
 # before they are read, so `[keys]` is honoured in either.
 
 # ── resize ── (prefix+r → sticky resize mode)
+#
+# `amount` moves the boundary ALONG THE AXIS: +x is right, +y is DOWN. So the key
+# points the way the divider travels — h/Left move it left, j/Down move it down —
+# whichever column or pane is active. A pane's boundary is the one below it, or the
+# one above when it is the last pane; moving that one down shrinks the last pane,
+# which is the same divider going the same way (F004/P084/T414).
 [[keys.mode]]
 name = "resize"
 trigger = "prefix+r"
@@ -452,11 +458,11 @@ args = { target = "column", axis = "x", amount = "50" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "j"
-args = { target = "pane", axis = "y", amount = "-40" }
+args = { target = "pane", axis = "y", amount = "40" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "k"
-args = { target = "pane", axis = "y", amount = "40" }
+args = { target = "pane", axis = "y", amount = "-40" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Left"
@@ -468,11 +474,11 @@ args = { target = "column", axis = "x", amount = "50" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Down"
-args = { target = "pane", axis = "y", amount = "-40" }
+args = { target = "pane", axis = "y", amount = "40" }
 [[keys.mode.bindings]]
 action = "resize"
 keys = "Up"
-args = { target = "pane", axis = "y", amount = "40" }
+args = { target = "pane", axis = "y", amount = "-40" }
 
 # ── focus ── (entered by focusing a DOCK — focus_dock / a click; no trigger of its own)
 #

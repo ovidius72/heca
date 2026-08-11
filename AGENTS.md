@@ -80,10 +80,48 @@ provider, the sidebar or a plugin — that is how one row shape became unreachab
 that drew it. Need a variation? Add a builder to the component. Copying it is the bug this rule
 exists to stop.
 
+### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling.
+
+**Every agent forgets this and re-invents it.** It is capture → target → bubble, exactly like a
+browser. `heca-grid-ui/src/component.rs` (`dispatch` / `deliver` / `deliver_to_path`) is the whole
+of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
+
+| | The browser | heca |
+|---|---|---|
+| what enters | a device event | `Event::Raw(RawPointer)` — the **only** pointer event a host builds |
+| what a widget sees | `click`, `contextmenu`, `wheel`, … | `Click`, `RightClick`, `Scroll`, `Drop`, … already resolved and hit-tested |
+| pointer target | the element under the cursor | the widget under the pointer |
+| **keyboard target** | `document.activeElement` | the **deepest widget holding `Base::focused`** |
+| the walk | capture down, target, bubble up | capture down, target, bubble up — **identical** |
+| stopping it | `e.stopPropagation()` | `cx.stop_propagation()` (or `Handled::Yes`) |
+| listeners | `el.addEventListener` | `.on_click` / `.on_right_click` / `.on_key_down` / `.on_key_up` / `.on_scroll` / `.on(kind, f)` — on **every** widget, via `ComponentExt`, one argument `&mut EventCx` carrying the event |
+
+**The four things agents get wrong, including in the same session they were told:**
+
+1. **Keys DO bubble.** They go to the focused widget and then up its ancestors. The only thing that
+   does *not* happen is descending **into** the target's children — the browser does not do that
+   either. Do not say or write "a key stops at the owner" as if there were no bubbling.
+2. **A widget never hit-tests and never forwards.** Writing `bounds.contains(pos)`, or a `match`
+   that hands an event to `self.children`, means you are rebuilding the router. There is no
+   container in the library that forwards events, and there must not be one.
+3. **Nothing focused ⇒ nothing delivered.** A surface that wants keys **holds focus**
+   (`Base::focused`, bound to its own open/keyboard-target signal). Do not add a predicate instead
+   — `routes_own_subtree`, `takes_raw_keys` and `takes_text_input` were exactly that and are
+   **deleted**. Never reintroduce them.
+4. **Per-element handlers need that element to be the target.** A cursor inside a container
+   (`CardGrid`, a list) is not focus by itself — same as a browser, where a listbox moves real
+   focus onto the option under the cursor so per-option handlers fire and what they ignore bubbles
+   to the container.
+
+**So: to make something respond to input, declare a handler on the widget and let it bubble.** Do
+not add an intent, a policy arm, a registry or a host-side key match until you have shown a handler
+cannot do it. Full model: `docs/widgets.md` → "The event model" and "The keyboard — delivery follows
+focus".
+
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
 - **Before building ANY UI**, look at what already exists:
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
-  - **Layering / overlays / KeyHint visibility:** the planner (F003/P019) — see the planner (F003/P019) — the surface-tree model that decides which layers/buttons are interactive. **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
+  - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive, and [`docs/overlay-design.md`](docs/overlay-design.md). **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
@@ -552,7 +590,7 @@ tip. This is the one pattern; follow it for any new button.
 > **Which hints are actually shown** is decided by the layered **surface compositor**, not
 > per-feature: a button inherits its layer from the surface it lives in, and one uniform
 > rule (context activation + geometric occlusion, no hardcoded z) picks the visible set.
-> **Read the planner (F003/P019) — see the planner (F003/P019) before adding any new
+> **Read [`docs/surface-compositor.md`](docs/surface-compositor.md) before adding any new
 > layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
 > visibility filter — model the surface instead.
 

@@ -76,6 +76,15 @@ overview_zoom = 0.5
 # Gap between workspace rows in the exposé, as a fraction of a screen height.
 overview_gap = 0.1
 
+# The scale the exposé OPENS FROM, relative to its own map size — it animates out of
+# this and back into it when it closes.
+#   below 1.0  the map GROWS IN and shrinks away  (zoom in / out — the default)
+#   above 1.0  it starts larger and PULLS BACK    (niri's reading: panes shrinking
+#              into cards; 1/overview_zoom = 2.0 starts them at exactly life size)
+#   1.0        no animation
+# Clamped to 0.2..=4.0.
+overview_zoom_from = 0.8
+
 # Modifier held to start an interactive pane drag with the mouse.
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"

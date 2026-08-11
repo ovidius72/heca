@@ -6,7 +6,7 @@
 //!   split-h | split-v
 //!   close-pane | close-pane-id <pane_id>
 //!   float | float-at <pane_id> <x> <y> <w> <h>
-//!   resize <column|pane> <axis> <amount>
+//!   resize <column|pane> <axis> <amount>   (moves the boundary ALONG the axis: +x right, +y down)
 //!   resize-column <col_idx> <delta>
 //!   resize-pane-height <col_idx> <pane_idx> <delta>
 //!   move-pane <pane_id> <target_col>

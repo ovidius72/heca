@@ -122,6 +122,28 @@ impl Keymap {
         self.dispatch(press.key, press.mods, deliver)
     }
 
+    /// The other half of a keystroke: the key came **up**.
+    ///
+    /// A release is only ever the key itself — **no text and no intents**. Text is committed once,
+    /// on the way down, and an intent is what a *press* resolved to, so resolving one again here
+    /// would fire every `Activate` and `Dismiss` twice.
+    ///
+    /// A surface must deliver this as well as [`deliver_press`](Keymap::deliver_press), or
+    /// [`on_key_up`](crate::builders::ComponentExt::on_key_up) is a builder that can never fire —
+    /// which is exactly what heca's own window loop did until 2026-08-11: it returned at
+    /// `event.state != Pressed`, so a widget's release handler was dead in the real app while a
+    /// headless test that dispatched both halves passed (Antonio, driving).
+    pub fn deliver_release(
+        &self,
+        key: crate::event::GridKey,
+        mut deliver: impl FnMut(&Event) -> Handled,
+    ) -> Handled {
+        deliver(&Event::Key {
+            key,
+            pressed: false,
+        })
+    }
+
     pub fn dispatch(
         &self,
         key: GridKey,

@@ -221,10 +221,58 @@ impl Column {
         self.move_offset.current()
     }
 
-    /// Resize the active pane's height by a delta (pixels).
-    /// Only affects panes with preferred_height; others remain auto.
+    /// Resize the active pane's height by a delta (pixels): **positive grows it**, whichever edge
+    /// has to move to do that. This is the *size* verb — `pane_height_increase` /
+    /// `pane_height_decrease` — and it is deliberately not the one the resize mode uses; see
+    /// [`move_active_pane_boundary`](Self::move_active_pane_boundary).
     pub fn resize_active_pane_height(&mut self, delta: f64, working_height: f64, gaps: f64) {
         self.resize_pane_height(self.active_pane_idx, delta, working_height, gaps);
+    }
+
+    /// Move the **boundary the active pane owns** by `delta` logical px **along the axis**, so
+    /// positive is *down the screen*. The direction is the whole point: see
+    /// [`move_pane_boundary`](Self::move_pane_boundary).
+    pub fn move_active_pane_boundary(&mut self, delta: f64, working_height: f64, gaps: f64) {
+        self.move_pane_boundary(self.active_pane_idx, delta, working_height, gaps);
+    }
+
+    /// Move the boundary pane `pane_idx` owns — the one **below** it, or the one **above** when it
+    /// is the last pane — by `delta` logical px **along the axis**: positive is **down**.
+    ///
+    /// # Why this exists beside "grow me"
+    ///
+    /// `j`/`k` are **directional**: the user expects an edge to travel one way. "Grow the active
+    /// pane" only agrees with that while the edge that moves is on the same side of the pane —
+    ///
+    /// - a pane with a boundary **below** it grows by moving its **bottom** edge down;
+    /// - the **last** pane has no boundary beneath it, so it grows by moving its **top** edge up.
+    ///
+    /// Same key, same "grow me", opposite edge. Antonio, driving, 2026-08-11: *"prefix+r work fine
+    /// at the third one at the bottom. The center and the one at the top j and k act the
+    /// opposite."* This is a consequence of [`resize_pane_height`](Self::resize_pane_height)'s
+    /// local transfer (F004/P084/T413), not a regression it introduced: before it, a resize spread
+    /// the change over every auto-sized pane, so no single divider visibly moved and the ambiguity
+    /// did not read.
+    ///
+    /// So the keyboard names a **boundary and a direction**, which is what the mouse already did —
+    /// a divider is named by the pane above it and a drag down moves it down. One convention, one
+    /// call: for the last pane, moving the only boundary it has (the one above) *down* means the
+    /// pane **shrinks**, which is the correct and consistent reading — the divider went the way the
+    /// key says.
+    pub fn move_pane_boundary(
+        &mut self,
+        pane_idx: usize,
+        delta: f64,
+        working_height: f64,
+        gaps: f64,
+    ) {
+        if self.panes.len() <= 1 || pane_idx >= self.panes.len() {
+            return;
+        }
+        // Name the divider by the pane **above** it — `mouse::resize::divider_at`'s convention —
+        // so "grow that pane" and "move this boundary down" are the same statement.
+        let above = pane_idx.min(self.panes.len() - 2);
+        self.resize_pane_height(above, delta, working_height, gaps);
     }
 
     /// Grow pane `pane_idx` by `delta` logical px, **taking the space from the pane on the other

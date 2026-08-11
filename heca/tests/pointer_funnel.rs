@@ -200,3 +200,31 @@ fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
          move, with nothing held down, until the pane is gone.",
     );
 }
+
+/// **A key release reaches the tree, or `on_key_up` is a builder nothing can fire.**
+///
+/// The window loop returned at `event.state != ElementState::Pressed`, so `Event::Key { pressed:
+/// false }` did not exist in this app. A widget's release handler was therefore dead — the exposé's
+/// `x`/`X`/`d` did nothing on screen while a headless test that dispatched both halves passed
+/// (Antonio, driving, 2026-08-11).
+///
+/// Exactly the shape of the pointer guards above: the funnel delivering only one half of a gesture,
+/// invisible to every behaviour test, because a test hands the tree both halves itself.
+#[test]
+fn the_key_funnel_delivers_releases_and_not_only_presses() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::KeyboardInput")
+        .expect("the key branch is still a `WindowEvent::KeyboardInput` arm");
+
+    assert!(
+        body.contains("deliver_press"),
+        "the key branch no longer delivers presses — if that moved, move this guard with it",
+    );
+    assert!(
+        body.contains("deliver_release"),
+        "the key branch delivers a key PRESS and never a RELEASE.\n\
+         `ComponentExt::on_key_up` then exists but can never fire, so a widget that declares one \
+         is silently dead in the real app.\n\
+         This is not caught by any behaviour test: they dispatch both halves themselves.",
+    );
+}

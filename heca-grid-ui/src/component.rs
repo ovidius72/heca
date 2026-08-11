@@ -942,6 +942,10 @@ pub struct PaintCx<'a> {
     /// Alpha multiplier applied to every draw emitted through this context — see
     /// [`with_opacity`](Self::with_opacity). `1.0` normally: a widget paints at its own colours.
     opacity: f32,
+    /// The active [scale](PaintCx::with_scale) — multiplicative, like `opacity`.
+    scale: f32,
+    /// The fixed point the scale shrinks toward, already in scene coordinates.
+    scale_origin: Point,
 }
 
 /// Scale every colour in a draw command by `a`, leaving its geometry alone.
@@ -950,6 +954,54 @@ pub struct PaintCx<'a> {
 /// commands carry colours in several roles — a fill, a border, the light of a glow, the dark of a
 /// shadow — and each has to be dimmed on its own or a fading panel loses its outline a frame before
 /// its body, or keeps a halo around nothing.
+/// Scale one command: its geometry through `place`, and **everything measured in pixels with it** —
+/// the font size, the corner radius, the border width, the glow and shadow falloff and offsets.
+///
+/// That second half is the whole difference between a zoom and a mistake. A rect that halves while
+/// its text stays 14px, its radius stays 6px and its 1px border stays 1px is not the same picture
+/// further away; it is a different, wronger picture. `fade_command` beside it is the same idea for
+/// colour.
+fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangle) -> DrawCommand {
+    let glow = |g: Glow| Glow { radius: g.radius * k, ..g };
+    let shadow = |s: Shadow| Shadow {
+        radius: s.radius * k,
+        dx: s.dx * k,
+        dy: s.dy * k,
+        ..s
+    };
+    match cmd {
+        DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
+            rect: place(r.rect),
+            radius: r.radius * k,
+            border: r.border.map(|b| Border { width: b.width * k, ..b }),
+            glow: r.glow.map(glow),
+            shadow: r.shadow.map(shadow),
+            ..r
+        }),
+        DrawCommand::Text(t) => DrawCommand::Text(TextCmd {
+            rect: place(t.rect),
+            size: t.size * k,
+            glow: t.glow.map(glow),
+            ..t
+        }),
+        DrawCommand::Brackets(b) => DrawCommand::Brackets(BracketCmd {
+            rect: place(b.rect),
+            len: b.len * k,
+            thickness: b.thickness * k,
+            glow: b.glow.map(glow),
+            ..b
+        }),
+        DrawCommand::Scanline(s) => DrawCommand::Scanline(ScanlineCmd {
+            rect: place(s.rect),
+            ..s
+        }),
+        // A clip is geometry too: it must follow the picture it clips, or a scaled subtree is cut
+        // to the rect it had at life size.
+        DrawCommand::PushClip(r) => DrawCommand::PushClip(place(r)),
+        DrawCommand::PopClip => DrawCommand::PopClip,
+    }
+}
+
 fn fade_command(cmd: DrawCommand, a: f32) -> DrawCommand {
     let dim = |c: Color| c.with_alpha((c.a as f32 * a).round().clamp(0.0, 255.0) as u8);
     match cmd {
@@ -990,6 +1042,8 @@ impl<'a> PaintCx<'a> {
             content_glow: None,
             offset: (0.0, 0.0),
             opacity: 1.0,
+            scale: 1.0,
+            scale_origin: Point::new(0.0, 0.0),
         }
     }
 
@@ -1030,9 +1084,67 @@ impl<'a> PaintCx<'a> {
         self.opacity = previous;
     }
 
-    /// Emit a command, scaled by the active [opacity](Self::with_opacity). The one door to the
-    /// scene, so a new draw helper cannot forget to honour a fade it never heard of.
+    /// Paint `f`'s subtree **scaled** by `factor` about `origin` — the whole surface smaller or
+    /// larger, not a different layout.
+    ///
+    /// This is what an overview/exposé opens and closes with, and what a fade cannot express: a map
+    /// that appears by *zooming out from life size* says "this is the same thing, further away",
+    /// where a fade says "a different picture". niri animates its overview exactly this way.
+    ///
+    /// **It scales the picture, not the layout.** Nothing is measured again, no widget is told, and
+    /// no bounds change — which is the point: the tree is laid out once, at life size, and a scale
+    /// is something done *to* it, exactly as [`with_opacity`](Self::with_opacity) is. It therefore
+    /// does not change hit-testing either; a surface mid-zoom is still where its bounds say.
+    ///
+    /// Multiplicative and nesting, like opacity, so a scaled panel inside a scaled layer draws at
+    /// the product. Every command is scaled on its way out through [`emit`](Self::emit) — position
+    /// **and** size, and with them the font size, the corner radius, the border width, the glow and
+    /// the shadow. Scaling geometry while leaving those alone is what makes a naive zoom look
+    /// wrong: text that stays huge in a shrinking box, hairlines that turn into slabs.
+    pub fn with_scale(&mut self, factor: f32, origin: Point, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = (self.scale, self.scale_origin);
+        // Compose about the outer transform's own frame, so nesting behaves.
+        self.scale_origin = self.scaled_point(origin);
+        self.scale = previous.0 * factor.max(0.0);
+        f(self);
+        (self.scale, self.scale_origin) = previous;
+    }
+
+    /// A point under the active scale.
+    fn scaled_point(&self, p: Point) -> Point {
+        if self.scale == 1.0 {
+            return p;
+        }
+        let o = self.scale_origin;
+        Point::new(
+            o.x + (p.x - o.x) * self.scale as f64,
+            o.y + (p.y - o.y) * self.scale as f64,
+        )
+    }
+
+    /// A rect under the active scale: its position moves toward the origin and its size shrinks.
+    fn scaled_rect(&self, r: Rectangle) -> Rectangle {
+        if self.scale == 1.0 {
+            return r;
+        }
+        Rectangle::new(
+            self.scaled_point(r.loc),
+            Size::new(
+                r.size.w * self.scale as f64,
+                r.size.h * self.scale as f64,
+            ),
+        )
+    }
+
+    /// Emit a command, scaled by the active [opacity](Self::with_opacity) and
+    /// [scale](Self::with_scale). The one door to the scene, so a new draw helper cannot forget to
+    /// honour either one — it never hears about them.
     fn emit(&mut self, cmd: DrawCommand) {
+        let cmd = if self.scale == 1.0 {
+            cmd
+        } else {
+            scale_command(cmd, self.scale, |r| self.scaled_rect(r))
+        };
         let a = self.opacity;
         self.scene.push(if a >= 1.0 { cmd } else { fade_command(cmd, a) });
     }

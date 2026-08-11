@@ -791,6 +791,17 @@ pub struct AppState {
     ///
     /// Indexed by workspace, grown with the session like its neighbour above.
     pub expose_cursor_per_ws: Vec<Option<PaneId>>,
+    /// **Which row the map's cursor is currently on** — the workspace, not the pane.
+    ///
+    /// The map is rebuilt whenever the session changes under it, and a rebuild has to put the
+    /// cursor back where it was. Its per-workspace memory above cannot answer that on its own: it
+    /// is read at the *active* workspace's index, so a rebuild while the cursor sat in another
+    /// row moved the highlight to the active row — which reads as the map jumping to a different
+    /// workspace the moment you delete a pane (Antonio, driving, 2026-08-11).
+    ///
+    /// Only consulted while the map is **already up**. Opening it fresh still starts at the
+    /// workspace you are standing in, which is what the memory above is for.
+    pub expose_cursor_ws: Option<usize>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.

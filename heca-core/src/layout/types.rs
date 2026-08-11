@@ -181,6 +181,13 @@ pub struct LayoutOptions {
     /// workspace row is the viewport's shape, a column keeps its real proportion of the screen, and
     /// a strip scrolled past one screen really is wider than its row.
     pub overview_scale: f64,
+    /// The scale the overview **opens from**, relative to [`overview_scale`](Self::overview_scale)
+    /// — it animates out of this and back into it on the way out. `1.0` means no animation.
+    ///
+    /// Here beside the scale it animates from rather than as a constant in the surface, for the
+    /// same reason the scale itself is: a value the user sets belongs where the layout keeps its
+    /// other answers, not in the one screen that happens to read it first.
+    pub overview_zoom_from: f64,
     /// Gap between workspace rows in the overview, as a **fraction of a screen height** (times the
     /// scale) — niri's `workspace_gap = view_size.h * 0.1 * zoom`.
     ///
@@ -198,6 +205,7 @@ impl Default for LayoutOptions {
             default_column_width: Some(ColumnWidth::Proportion(0.5)),
             // niri's defaults: zoom 0.5, gap a tenth of a screen.
             overview_scale: 0.5,
+            overview_zoom_from: 0.8,
             overview_gap: 0.1,
         }
     }

@@ -15,7 +15,7 @@
 //! carries `#![allow(dead_code)]` like the other chrome seam modules until then.
 #![allow(dead_code)]
 
-use heca_grid_ui::effects::Fade;
+use heca_grid_ui::effects::{Fade, Zoom};
 use heca_grid_ui::Component;
 use heca_view::ViewNode;
 
@@ -125,6 +125,14 @@ pub(crate) struct DynamicLayer {
     /// menu that lingers reads as lag. A zero duration (the default) means "cut", so a layer that
     /// never asked for one needs no special case anywhere.
     pub(crate) fade: Fade,
+    /// The **zoom** this layer arrives and leaves with — the counterpart of [`fade`](Self::fade),
+    /// and declared the same way: a surface says how it should come and go, and the host performs
+    /// it. A `from` of 1.0 (the default) means "no zoom", so a layer that never asked for one costs
+    /// nothing and needs no special case anywhere.
+    ///
+    /// niri's overview opens by zooming **out** from life size, which is what an exposé wants: the
+    /// same thing, further away. A fade says "a different picture" instead.
+    pub(crate) zoom: Zoom,
     pub(crate) kind: LayerKind,
     /// Captures the context while active — suppresses everything beneath it.
     pub(crate) modal: bool,
@@ -184,7 +192,7 @@ pub(crate) struct DynamicLayer {
 /// a description its own way would be a parallel implementation of every widget.
 ///
 /// The arm holds the **description only** — the shape ratified in the surface-compositor model
-/// (F003/P019 §9). The node is the source of truth a theme reload or a plugin update re-realizes
+/// (`docs/surface-compositor.md` §9). The node is the source of truth a theme reload or a plugin update re-realizes
 /// from; the tree realized from it is host bookkeeping and lives on
 /// [`DynamicLayer::realized`](DynamicLayer#structfield.realized), outside the vocabulary a plugin
 /// author reads.
@@ -209,6 +217,13 @@ impl DynamicLayer {
     /// How opaque to paint this layer — `1.0` normally, falling to `0` across a fade-out.
     pub(crate) fn opacity(&self) -> f32 {
         self.fade.amount()
+    }
+
+    /// What scale to paint this layer at — `1.0` normally, walking to or from its `from` while a
+    /// zoom runs. Its companion is [`opacity`](Self::opacity): both are things done *to* a surface,
+    /// and the widgets inside know about neither.
+    pub(crate) fn scale(&self) -> f32 {
+        self.zoom.amount()
     }
 
     /// Is this layer **still in charge** — capturing input, covering the panes, answering as the
@@ -278,6 +293,7 @@ impl LayerRegistry {
             backdrop: LayerBackdrop::default(),
             doomed: false,
             fade: Fade::new(0.0),
+            zoom: Zoom::new(0.0, 1.0),
             kind,
             modal,
             covers_content,
@@ -309,6 +325,7 @@ impl LayerRegistry {
             backdrop: LayerBackdrop::default(),
             doomed: false,
             fade: Fade::new(0.0),
+            zoom: Zoom::new(0.0, 1.0),
             kind,
             modal,
             covers_content,
@@ -336,10 +353,48 @@ impl LayerRegistry {
         covers_content: bool,
         root: Box<dyn Component>,
     ) -> LayerId {
-        self.layers.retain(|l| l.name.as_deref() != Some(name.as_str()));
+        // **A re-registration keeps the layer's PLACE in the stack.** It is the same layer with
+        // fresh content, not a new one arriving — and position is what "on top" means here:
+        // `top_modal_root_mut` takes the last active modal in this vector, so a rebuild that
+        // removed and re-appended silently promoted the layer above everything opened since.
+        //
+        // That is how deleting a pane from the exposé did nothing: the confirm dialog opened above
+        // the map, the map was rebuilt (the session had changed), and the rebuild put it back on
+        // top of the dialog — so the click on "Close" was delivered to the map, the dialog never
+        // submitted, and the click landed on a card and moved the focus instead (Antonio, driving,
+        // 2026-08-11).
+        let previous = self
+            .layers
+            .iter()
+            .position(|l| l.name.as_deref() == Some(name.as_str()));
+        // **It also keeps what it was doing**: whether it is up, and any animation in flight. The
+        // replacement is a fresh `DynamicLayer`, which starts hidden — so without this a rebuild
+        // looked like a first appearance and played the arrival again. `prefix+j` behind the exposé
+        // changed the focus, the map rebuilt, and it zoomed open on every keystroke (Antonio,
+        // driving, 2026-08-11).
+        let carried = previous.map(|at| {
+            let l = &self.layers[at];
+            (l.visible, l.fade, l.zoom, l.doomed)
+        });
+        if let Some(at) = previous {
+            self.layers.remove(at);
+        }
         let id = self.add(band, kind, modal, covers_content, root);
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.name = Some(name);
+            if let Some((visible, fade, zoom, doomed)) = carried {
+                l.visible = visible;
+                l.fade = fade;
+                l.zoom = zoom;
+                l.doomed = doomed;
+            }
+        }
+        // `add` pushed it last; put it back where the old one stood.
+        if let Some(at) = previous
+            && let Some(now) = self.layers.iter().position(|l| l.id == id)
+        {
+            let layer = self.layers.remove(now);
+            self.layers.insert(at.min(self.layers.len()), layer);
         }
         id
     }
@@ -367,8 +422,33 @@ impl LayerRegistry {
 
     /// Declare that this layer dissolves over `seconds` when hidden instead of cutting.
     pub(crate) fn set_fade_out(&mut self, id: LayerId, seconds: f32) {
+        self.set_fade_out_after(id, seconds, 0.0);
+    }
+
+    /// The same, but staying fully present for `delay` seconds first — for a layer that leaves by
+    /// doing something else on the way out. A [`Zoom`] shrinking away wants this: fading at the
+    /// same time dims the movement before it has played, so the surface looks like it dissolved
+    /// rather than left.
+    pub(crate) fn set_fade_out_after(&mut self, id: LayerId, seconds: f32, delay: f32) {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
-            l.fade = Fade::new(seconds);
+            l.fade = Fade::new(seconds).delay(delay);
+        }
+    }
+
+    /// Declare that this layer **zooms** between `from` and life size over `seconds` when it is
+    /// shown and hidden, instead of simply appearing.
+    ///
+    /// The counterpart of [`set_fade_out`](Self::set_fade_out), and usable by anything that
+    /// registers a layer — a plugin's panel declares its arrival exactly as the host's exposé does.
+    /// `from` below 1.0 grows in from smaller (niri's overview is `0.5`), above 1.0 drops in from
+    /// larger. Not set ⇒ no zoom, and nothing anywhere pays for it.
+    pub(crate) fn set_zoom(&mut self, id: LayerId, seconds: f32, from: f32) {
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.zoom = Zoom::new(seconds, from);
+            // A layer that is already up when it declares one is *there*, not arriving.
+            if l.visible {
+                l.zoom.cancel();
+            }
         }
     }
 
@@ -385,6 +465,12 @@ impl LayerRegistry {
     pub(crate) fn tick(&mut self, dt: f32) -> bool {
         let mut fading = false;
         for l in &mut self.layers {
+            // The zoom rides alongside: it never decides when a layer goes — the fade does that —
+            // it only asks for frames while the picture is still moving. A layer that declared no
+            // zoom reports `false` immediately and costs nothing.
+            if l.zoom.tick(dt) {
+                fading = true;
+            }
             let was_running = l.fade.is_running();
             match l.fade.tick(dt) {
                 true => fading = true,
@@ -435,6 +521,23 @@ impl LayerRegistry {
             .any(|l| l.name.as_deref() == Some(name) && l.is_active())
     }
 
+    /// The names of the **host's own** visible layers — what
+    /// [`rebuild_named_layer`](crate::chrome::rebuild_named_layer) can refresh when the session
+    /// changes under an open surface.
+    ///
+    /// Host-owned only, by the [`HOST_OWNER`] prefix the naming scheme already guarantees: a
+    /// plugin's layer is rebuilt by the plugin, and calling into one from a mutation hook would
+    /// make every layout change run foreign code.
+    pub(crate) fn visible_host_layer_names(&self) -> Vec<String> {
+        let prefix = format!("{HOST_OWNER}.");
+        self.layers
+            .iter()
+            .filter(|l| l.is_active())
+            .filter_map(|l| l.name.clone())
+            .filter(|n| n.starts_with(&prefix))
+            .collect()
+    }
+
     /// Reserve the next id **without** adding a layer, for the case where the layer's own
     /// content must reference its id *before* the tree exists — e.g. an overlay whose action
     /// buttons carry `SubmitOverlay { overlay: <this id> }`. Pair with [`insert`](Self::insert).
@@ -462,6 +565,7 @@ impl LayerRegistry {
             backdrop: LayerBackdrop::default(),
             doomed: false,
             fade: Fade::new(0.0),
+            zoom: Zoom::new(0.0, 1.0),
             kind,
             modal,
             covers_content,
@@ -485,6 +589,7 @@ impl LayerRegistry {
         let Some(l) = self.layers.iter_mut().find(|l| l.id == id) else { return };
         if l.visible {
             l.fade.start();
+            l.zoom.leave();
         }
         if l.fade.is_running() {
             l.doomed = true;
@@ -496,10 +601,21 @@ impl LayerRegistry {
     /// Show a layer (bring it into the stack this frame). `ShowLayer` dispatches here.
     pub(crate) fn show(&mut self, id: LayerId) {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            // **Showing something already shown is not an arrival.** A layer is re-registered and
+            // re-shown every time the session changes underneath it, so starting the entry zoom
+            // here unconditionally replayed the whole animation on every rebuild: `prefix+j` behind
+            // the map moved the focus, the map rebuilt, and it zoomed in again as if it had just
+            // opened (Antonio, driving, 2026-08-11).
+            let arriving = !l.visible;
             l.visible = true;
             // Re-shown mid-fade: cancel it and be fully there again, rather than opening
             // half-transparent and finishing a disappearance nobody still wants.
             l.fade.cancel();
+            match arriving {
+                true => l.zoom.enter(),
+                // Already up: whatever the zoom was doing, it is *here* now.
+                false => l.zoom.cancel(),
+            }
         }
     }
 
@@ -513,6 +629,7 @@ impl LayerRegistry {
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             if l.visible {
                 l.fade.start();
+                l.zoom.leave();
             }
             // No fade declared (or none left to run) ⇒ it goes now.
             if !l.fade.is_running() {
@@ -579,22 +696,38 @@ impl LayerRegistry {
 
     /// The id of the front-most visible **modal** layer (the one that captures input), if any.
     /// Front-most = most-recently inserted (a later modal opens on top of an earlier one).
-    pub(crate) fn top_modal_id(&self) -> Option<LayerId> {
+    /// The front-most active modal layer, **in the order the user is looking at** — band first,
+    /// insertion order within the band. The same order [`visible_front_to_back`] paints in.
+    ///
+    /// ⚠️ This used to be "the last one added", ignoring the band entirely — so there were **two
+    /// answers to which layer is in front**: painting used the band, input used insertion order,
+    /// and nothing made them agree. A `Modal`-band dialog was drawn over the exposé while an
+    /// `Overlay`-band map added after it quietly took the pointer, which is how a click on a
+    /// confirm dialog's "Close" reached the map behind it and deleted nothing (Antonio, driving,
+    /// 2026-08-11).
+    ///
+    /// A component author never calls this and never declares anything for it: a layer says which
+    /// **band** it belongs to, and that is the whole of what it has to know.
+    fn top_modal_index(&self) -> Option<usize> {
         self.layers
             .iter()
-            .rev()
-            .find(|l| l.is_active() && l.modal)
-            .map(|l| l.id)
+            .enumerate()
+            .filter(|(_, l)| l.is_active() && l.modal)
+            // Band first, then insertion order — the key is compared left to right, so a later
+            // layer in a lower band never wins over an earlier one in a higher band.
+            .max_by_key(|(i, l)| (l.band.rank(), *i))
+            .map(|(i, _)| i)
+    }
+
+    pub(crate) fn top_modal_id(&self) -> Option<LayerId> {
+        self.top_modal_index().map(|i| self.layers[i].id)
     }
 
     /// The root of the front-most visible modal layer, mutably — the input target while a modal
     /// is up. Pairs with [`top_modal_id`](Self::top_modal_id).
     pub(crate) fn top_modal_root_mut(&mut self) -> Option<&mut (dyn Component + 'static)> {
-        self.layers
-            .iter_mut()
-            .rev()
-            .find(|l| l.is_active() && l.modal)
-            .map(|l| l.root_mut().as_mut())
+        let at = self.top_modal_index()?;
+        Some(self.layers[at].root_mut().as_mut())
     }
 }
 
@@ -804,6 +937,102 @@ mod tests {
         assert_eq!(layer_name("docker", ""), None);
     }
 
+    /// **A rebuild does not replay the arrival.** A layer is re-registered and re-shown whenever
+    /// the session changes under it, and an animation that restarts every time reads as the surface
+    /// flickering open again — which is what `prefix+j` behind the exposé did.
+    #[test]
+    fn re_showing_a_visible_layer_does_not_restart_its_zoom() {
+        let mut reg = LayerRegistry::default();
+        let name = layer_name(HOST_OWNER, "expose").expect("valid");
+        let id = reg.add_named(
+            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+        );
+        reg.set_zoom(id, 0.2, 1.3);
+        reg.show(id);
+        assert!(reg.layers[0].zoom.is_running(), "opening animates");
+
+        // Let it finish, the way a few frames would.
+        while reg.layers[0].zoom.tick(0.05) {}
+        assert_eq!(reg.layers[0].scale(), 1.0, "settled at life size");
+
+        // The session changes: the layer is rebuilt and re-shown.
+        let rebuilt = reg.add_named(
+            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+        );
+        reg.set_zoom(rebuilt, 0.2, 1.3);
+        reg.show(rebuilt);
+
+        let l = reg.layers.iter().find(|l| l.id == rebuilt).expect("the rebuilt layer");
+        assert!(!l.zoom.is_running(), "a rebuild must not replay the entry zoom");
+        assert_eq!(l.scale(), 1.0, "it is simply there");
+    }
+
+    /// **Input goes to the layer the user sees in front, which means the BAND decides.**
+    ///
+    /// Painting has always ordered by band; input ordered by "last added" and ignored the band, so
+    /// the two could name different layers. A dialog in the `Modal` band is in front of an exposé
+    /// in the `Overlay` band no matter which was registered first — and now the pointer agrees
+    /// with the picture.
+    #[test]
+    fn input_goes_to_the_front_most_band_not_the_last_one_added() {
+        let mut reg = LayerRegistry::default();
+        // The dialog is registered FIRST, and is still in front: it is in the higher band.
+        let dialog = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        reg.show(dialog);
+        let map = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        reg.show(map);
+
+        assert_eq!(
+            reg.top_modal_id(),
+            Some(dialog),
+            "a Modal-band dialog outranks an Overlay-band map added after it",
+        );
+
+        // Within one band, the later one is in front — insertion order still decides there.
+        let second_dialog = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        reg.show(second_dialog);
+        assert_eq!(reg.top_modal_id(), Some(second_dialog), "same band, later wins");
+
+        // And a layer on its way out never holds the input.
+        reg.remove(second_dialog);
+        assert_eq!(reg.top_modal_id(), Some(dialog), "a dissolving layer is not the target");
+    }
+
+    /// **A rebuild keeps the layer's place, so it cannot climb over what opened above it.**
+    ///
+    /// `top_modal_root_mut` takes the *last* active modal in the stack, so position is what "on
+    /// top" means. Re-registering by removing and re-appending therefore promoted a layer above
+    /// everything opened since — which is how deleting a pane from the exposé did nothing at all:
+    /// the confirm dialog opened above the map, the session change rebuilt the map, the rebuild put
+    /// it back on top of the dialog, and the click on "Close" went to the map (Antonio, driving,
+    /// 2026-08-11).
+    #[test]
+    fn re_registering_a_layer_does_not_promote_it_above_a_newer_one() {
+        let mut reg = LayerRegistry::default();
+        let name = layer_name(HOST_OWNER, "expose").expect("valid");
+        let map = reg.add_named(
+            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+        );
+        reg.show(map);
+        // A confirm dialog opens ON TOP of it.
+        let dialog = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        reg.show(dialog);
+        assert_eq!(reg.top_modal_id(), Some(dialog), "the dialog is the input target");
+
+        // The session changes under both, so the map is rebuilt.
+        let rebuilt = reg.add_named(
+            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+        );
+        reg.show(rebuilt);
+
+        assert_eq!(
+            reg.top_modal_id(),
+            Some(dialog),
+            "the rebuilt map must NOT take the keyboard and the pointer from the dialog above it",
+        );
+        assert_eq!(reg.by_name(&name), Some(rebuilt), "and the name still resolves to the new tree");
+    }
+
     /// A named layer is addressable without knowing its `LayerId` — which is a runtime counter no
     /// keybinding or RPC call could know. Re-registering the name replaces it, as a remount should.
     #[test]
@@ -821,13 +1050,23 @@ mod tests {
         reg.show(first);
         assert!(reg.is_visible_named(&name));
 
-        // A remount registers the same name again: one layer, the new one.
+        // A remount registers the same name again: one layer, the new one — and it **stays up**.
+        //
+        // ⚠️ Changed 2026-08-11. It used to start hidden, which made every caller remember the
+        // `let was_visible = …; if was_visible { show(id) }` dance around its own rebuild — and got
+        // it subtly wrong: re-showing restarted the entry animation, so the exposé zoomed open
+        // again on every keystroke that changed the session behind it. A re-registration is the
+        // same layer with fresh content, so it keeps its place, its visibility and any animation in
+        // flight.
         let second = reg.add_named(
             name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
         );
         assert_ne!(second, first);
         assert_eq!(reg.by_name(&name), Some(second), "the name follows the new registration");
-        assert!(!reg.is_visible_named(&name), "and the replacement starts hidden again");
+        assert!(
+            reg.is_visible_named(&name),
+            "a rebuild of a layer that is up leaves it up — the caller does not re-show it",
+        );
 
         // An anonymous layer answers to no name, and is untouched by a named registration.
         assert_eq!(reg.by_name("heca.nothing"), None);

@@ -522,13 +522,48 @@ pub trait ComponentExt: Component + Sized {
         self.on(crate::event::EventKind::PointerDownOutside, f)
     }
 
-    /// A key reached this widget — it holds the keyboard, or it contains what does.
+    /// A key went **down** on this widget — it holds the keyboard, or it contains what does.
     ///
     /// The other half of "an event listener in every widget": intercepting a key, a quick-pick
     /// letter or a shortcut is the same one line as intercepting a click, on the same argument,
     /// with the same way to say the event is yours.
-    fn on_key(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
-        self.on(crate::event::EventKind::Key, f)
+    ///
+    /// Down and up are separate builders because they are separate events everywhere else — the
+    /// DOM's `keydown` / `keyup`, and every toolkit that copies it. One handler with a `pressed`
+    /// flag inside makes every caller write the same `if`, which is a rule in N call sites rather
+    /// than in the API.
+    ///
+    /// ```ignore
+    /// card.on_key_up(move |cx| {
+    ///     if let Event::Key { key: GridKey::Char('x'), .. } = cx.event() {
+    ///         delete(id);
+    ///         cx.stop_propagation();   // …or let it bubble to the container
+    ///     }
+    /// })
+    /// ```
+    fn on_key_down(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on_key_when(true, f)
+    }
+
+    /// A key came **up** on this widget. See [`on_key_down`](ComponentExt::on_key_down).
+    fn on_key_up(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on_key_when(false, f)
+    }
+
+    /// Shared by the two above: one registration on `EventKind::Key`, gated on the half it wants.
+    /// Private so there is no third spelling of "a key happened".
+    #[doc(hidden)]
+    fn on_key_when(
+        self,
+        want_pressed: bool,
+        mut f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
+    ) -> Self {
+        self.on(crate::event::EventKind::Key, move |cx| {
+            if matches!(cx.event(), crate::event::Event::Key { pressed, .. } if *pressed == want_pressed)
+            {
+                f(cx);
+            }
+        })
     }
 
     /// Text the user committed — typed, pasted, or composed by an IME.

@@ -850,7 +850,7 @@ overlay widgets across the boundary (§2.6); they submit a **spec** and receive 
 scrim + blocks everything below; a **dropdown/popover** entry is light-dismiss
 (click-outside or `Esc` pops it) with no scrim.
 
-> **Built on the surface compositor (the planner (F003/P019)).** `OverlayHost` is **not**
+> **Built on the surface compositor (`docs/surface-compositor.md`).** `OverlayHost` is **not**
 > a separate stack: it is the overlay-level API on top of the app's `LayerStack`/
 > `LayerRegistry` (the single layering mechanism that owns band z-order, occlusion, hint
 > visibility, and later paint + input). `open_modal` `realize`s the `ViewNode` body + actions
@@ -939,7 +939,7 @@ Ratified while building the surface compositor + `ViewNode`; drives `realize`
   (action reachability), targeting a specific overlay by id (not "the top").
 
 So `OverlayHost` is the overlay-level API built **on** the `LayerRegistry` (see §2.7.1 note +
-the planner (F003/P019) §9): `open_modal` realizes the `ViewNode` body + injected action
+`docs/surface-compositor.md` §9): `open_modal` realizes the `ViewNode` body + injected action
 buttons and pushes a `Modal`-band layer; its buttons dispatch overlay-control actions.
 
 ### 2.7.3 The command palette is a view of the catalog — decided 2026-07-30 (F003/P085/T358)

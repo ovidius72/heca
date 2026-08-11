@@ -23,7 +23,7 @@ use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::chrome;
 use crate::input::{FontZoomStep, SpawnKind, WmAction};
 use crate::{
-    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, move_pane_to_column,
+    collect_all_pane_candidates, find_pane_location, move_pane_to_column,
     move_pane_to_workspace_column, pane_name, switch_workspace_tracked, update_session_viewport,
 };
 use heca_core::layout::{Column, ColumnId, ColumnWidth, FocusDomain, Pane as LayoutPane, PaneId};
@@ -583,7 +583,9 @@ pub fn handle_resize(state: &mut AppState, action: &WmAction) {
                 let h = ws.scrolling.working_area.size.h;
                 let gaps = ws.scrolling.options.gaps;
                 if let Some(col) = ws.scrolling.active_column_mut() {
-                    col.resize_active_pane_height(*amount, h, gaps);
+                    // A boundary and a direction, not "grow me": positive is down, whichever pane
+                    // is active. `resize` is a *directional* verb — see `move_pane_boundary`.
+                    col.move_active_pane_boundary(*amount, h, gaps);
                 }
             }
             _ => {} // Column-Y and Pane-X are not yet implemented
@@ -769,27 +771,6 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     // this handler; so this runs only for direct handler-to-handler execution and must NOT
     // re-gate (that would double-confirm).
     handle_close_pane_by_id(state, &WmAction::ClosePaneById { pane_id });
-}
-
-/// Destroy the active workspace if it's empty and other workspaces exist.
-/// If it's the only workspace, leave it empty — the user can repopulate it
-/// via the normal split bindings: `prefix+Enter` (new pane in a new column)
-/// or `prefix+v` (new pane in the current column). In an empty workspace,
-/// either binding effectively creates the first pane again.
-fn close_workspace_if_empty(state: &mut AppState) {
-    let current_ws = state.session.active_workspace_idx;
-    let ws_is_empty = state
-        .session
-        .workspaces
-        .get(current_ws)
-        .map(|ws| !ws.has_panes())
-        .unwrap_or(true);
-    if ws_is_empty && state.session.workspaces.len() > 1 {
-        destroy_empty_workspace(state, current_ws);
-        let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-        state.session.switch_to_workspace(new_idx);
-    }
-    // If workspace is empty and it's the only one, leave it empty.
 }
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
@@ -1149,35 +1130,23 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
 /// split bindings: `prefix+Enter` (new pane in a new column) or `prefix+v`
 /// (new pane in the current column). In an empty workspace, either binding
 /// effectively creates the first pane again.
+/// Close the pane with this id — **wherever it is**, not only in the workspace you are standing in.
+///
+/// The whole point of a by-id action is that the caller names a pane the keyboard is not on: the
+/// sidebar, a context menu, the exposé and RPC all reach panes in other workspaces. This searched
+/// `active_workspace_mut()` alone, so every one of those silently did nothing off the current
+/// workspace — deleting from the exposé's first row worked and its second row did not (Antonio,
+/// driving, 2026-08-11).
+///
+/// It is the same act [`close_pane_by_id_anywhere`](crate::app::mutations::close_pane_by_id_anywhere)
+/// already performed for a shell that exits on its own, which had the search right and the tidying
+/// up (empty-workspace destruction, search state, backend teardown) with it. Two implementations of
+/// one act, and the user-facing one was the poorer: now there is one.
 pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
     let WmAction::ClosePaneById { pane_id } = action else {
         return;
     };
-    // Recorded here and cleared below: the workspace borrow is still live inside this
-    // block, so per-pane cleanup that goes through `&mut state` has to wait for it.
-    let mut closed: Option<PaneId> = None;
-    if let Some(ws) = state.session.active_workspace_mut() {
-        if let Some((ci, pi)) = crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id) {
-            if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
-                state.backends.remove_for_pane(removed.id);
-                closed = Some(removed.id);
-            }
-        } else if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == *pane_id)
-        {
-            let removed = ws.floating_panes.remove(float_idx);
-            state.backends.remove_for_pane(removed.pane.id);
-            closed = Some(removed.pane.id);
-            if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
-                ws.deactivate_floating_panes();
-                ws.focus_domain = FocusDomain::Tiled;
-            }
-        }
-    }
-    if let Some(id) = closed {
-        state.clear_search(id);
-    }
-    close_workspace_if_empty(state);
-    after_layout_change(state);
+    crate::app::mutations::close_pane_by_id_anywhere(state, *pane_id);
 }
 
 pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {

@@ -220,6 +220,16 @@ pub enum WmAction {
         b_ws: usize,
         b_col: usize,
     },
+    /// Move the boundary the focused target owns, by `amount` **along the axis**: `+x` is right,
+    /// `+y` is **down**. It is a *direction*, not a size — `pane_height_increase` /
+    /// `pane_height_decrease` are the size verbs.
+    ///
+    /// - `column`/`x` — the active column's own right-hand edge, so positive widens it.
+    /// - `pane`/`y` — the boundary **below** the active pane, or the one **above** it when it is
+    ///   last. For the last pane, moving that boundary down therefore **shrinks** it: the divider
+    ///   goes the way the key says, whichever pane is active (F004/P084/T414).
+    ///
+    /// `amount` is logical px for a pane and thousandths of the working width for a column.
     Resize {
         target: ResizeTarget,
         axis: ResizeAxis,
