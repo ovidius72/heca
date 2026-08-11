@@ -10,7 +10,7 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Runtime WASM per plugin, event bus, contributi alle regioni e action registration.",
-  "description": "⚠️ This phase has NO written description yet — the text below is a single cross-reference added\n2026-07-25, not a phase spec. It needs a real discovery pass before planning. Design intent lives in\ndocs/chrome-and-ui.md (the WasmProviderAdapter seam, §2.6.1 B/D/E) for now.\n\n═══ KNOWN OPEN QUESTION THIS PHASE MUST ANSWER ═══\nWhere the plugin-facing builder types live. A plugin gets NO editor completion today because the\ndeclarative model (`ViewNode`, `WidgetKind`, `PropValue`, `Intent`) sits inside the app at\nheca/src/chrome/view.rs, and a plugin cannot depend on the app. The workspace has six members and\nnone is a plugin kit (Cargo.toml:2); the plan never names one.\n\nFull write-up and the reasoning — including why this is NOT the thing AGENTS.md:744 forbids — is in\nF003/P017/T9, deferred there deliberately because this is the phase where it gets decided. It is\nalso attached to T1 of this phase (Design WASM host API facade), which is the task it actually\nblocks: do not design the facade around types a plugin cannot import.",
+  "description": "⚠️ This phase still has no real spec — it needs a discovery pass before planning. What is below is\nthe intent it must serve plus the state of its prerequisites, not a plan.\n\n═══ WHAT THIS PHASE IS FOR ═══\n\n**This is the phase where \"heca is extensible by other people\" stops being an internal claim.**\nEverything before it builds the authoring model and proves it by having the app and the showcase\nauthor against it. Nothing yet loads code written by someone else.\n\nThe target, from `AGENTS.md` ⭐⭐ RULE ZERO: a plugin author writes UI **the way they would in\nFlutter or SwiftUI** — a declarative tree of typed widgets, composed to any depth, behaviour\nattached to the widget itself — and gets **exactly what the app's own chrome gets**: the same\nwidgets, the same `prefix+/` picker, the same menus, focus and policy. No host-private type, no\nregistry to pre-register with, no second-class path. If a WASM plugin ends up with a poorer version\nof a shipped feature, this phase has failed regardless of what loads.\n\n═══ RESOLVED — do not carry this open question forward ═══\n\nThe old text here asked **where the plugin-facing builder types live**, because `ViewNode` /\n`WidgetKind` / `PropValue` / `Intent` sat inside the app at `heca/src/chrome/view.rs` and a plugin\ncannot depend on the app.\n\n**Answered and built, F003/P017/T009 (2026-07-27):**\n\n```\nheca-view              the MODEL — serde and NOTHING else. A plugin depends on this alone.\nheca-view/src/build.rs the TYPED SDK — one Rust type per kind, so the compiler refuses what the\n                       widget cannot do. This is what an author writes.\nheca-view-realize      the ONE bridge — realize(&ViewNode, theme, emit, forms). Owns the\n                       heca-grid-ui dependency, sits BELOW `heca`.\n```\n\n`heca-renderer`'s showcase already renders a described tree beside its hand-built twin, which is\nwhat proves the bridge does not need the app.\n\n═══ WHAT IS STILL MISSING BEFORE A THIRD PARTY IS SERVED ═══\n\n- **F003/P001/T006 — generated type definitions** for languages other than Rust, from the same\n  `WidgetKind::ALL` list (which is closed and already walked by a coverage guard). Today a Rust\n  author gets editor help and a JS or Python author gets nothing. That is the gap between \"a plugin\n  *can* do this\" and \"anyone can write a plugin\".\n- **F004/P084/T398 — no host-only exceptions in the vocabulary.** The rule is written and enforced\n  per builder (`#[prop]` / `#[host_only(\"why\")]`, compile-enforced), and a widget driven by a live\n  host signal is legitimately host-only. The audit proving the host-only list is *only* those has\n  not been done.\n- **The boundary itself**: the `WasmProviderAdapter` seam, the event bus, region contributions and\n  action registration across the boundary. Design intent in `docs/chrome-and-ui.md` §2.6.1 B/D/E.\n\n═══ TWO SHAPES ALREADY RULED OUT — both were tried and reverted ═══\n\n- **A registry parameter on the bridge.** `realize` took a `HintTargets` sink so the leader-key\n  picker could reach a described node, while the native side used a different, host-private registry\n  for the same feature. The plugin's rows could not say \"focus my container first\" and were refused\n  by `ActionPolicy::ContainerFocused`. Deleted 2026-08-11 (F004/P084/T399) — a node declares `peek`\n  and the framework collects it out of the laid-out tree. **If this phase reaches for a registry to\n  cross the boundary, that is the same mistake.**\n- **A host-private composite as the answer to \"…and do X first\".** `FocusPaneThenAction` /\n  `FocusContainerThenAction` are `pub(crate)`; a plugin cannot construct them. Behaviour that is\n  needed gets a **name** a plugin can name, as `focus_pane` and `unfocus_dock` have.\n\nDesign record: `docs/chrome-and-ui.md` (Part I §0 for the intent, §2.6.1 for the adapter seam) ·\n`docs/widget-architecture.md` · F003's own description.",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -157,36 +157,43 @@
       "checklist": [
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-001-blocked-settle-what-is-a-plugin-technically-with-t1-first-typescript-does-not-compile-to-wasm",
+          "number": 1,
           "title": "BLOCKED: settle \"what is a plugin, technically\" with T1 first — TypeScript does not compile to WASM",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-002-decide-the-artifact-with-the-user-json-schema-first-d-ts-when-the-plugin-model-is-settled",
+          "number": 2,
           "title": "Decide the artifact with the user: JSON Schema first, .d.ts when the plugin model is settled",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-003-prerequisite-f003-p017-t3-s-property-tables-exist-and-are-reusable-outside-the-app",
+          "number": 3,
           "title": "PREREQUISITE: F003/P017/T3's property tables exist and are reusable outside the app",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-004-generate-from-that-one-table-never-hand-maintain-the-type-file",
+          "number": 4,
           "title": "Generate from that one table — never hand-maintain the type file",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-005-build-time-check-that-fails-when-the-checked-in-output-is-stale",
+          "number": 5,
           "title": "Build-time check that fails when the checked-in output is stale",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-006-all-30-kinds-properties-and-events-per-kind-enum-properties-as-string-unions",
+          "number": 6,
           "title": "All 30 kinds, properties AND events, per-kind; enum properties as string unions",
           "checked": false
         },
         {
           "id": "f1f49b8b-9874-46dc-a097-75787222c520-check-007-document-it-for-authors-in-the-plugin-authoring-guide",
+          "number": 7,
           "title": "Document it for authors in the plugin authoring guide",
           "checked": false
         }
@@ -200,9 +207,10 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.498Z",
+  "updatedAt": "2026-08-11T06:57:28.433Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

@@ -169,7 +169,7 @@
       "priority": 4,
       "shortName": "collision-and-policy",
       "title": "Binding collisions + ActionPolicy at dispatch (NEEDS A DECISION)",
-      "status": "waiting",
+      "status": "planned",
       "description": "⛔ Originally: \"does a contributed default binding LOSE to an existing one, or WIN? Ask the user first.\" **Reconciliation pass 2026-08-04 — two thirds of this is already settled and shipped.**\n\n## 1. The collision decision: MADE, and implemented. Config wins.\n\n`Provider::keybindings()` (`heca/src/providers/mod.rs:196`) states the rule: \"Whatever the user's file says still wins: a registration never overwrites a combo the config already bound, and never adds a second key to an action the user has rebound.\"\n\nEnforced in `register_component_keybinding` (`heca/src/app/registry.rs`): it returns early when the `BindingIndex` already knows the action, and skips any combo the layer already resolves. So a contributed binding **loses**. Do not re-open this.\n\n## 2. `ActionPolicy` at dispatch: HONOURED, no bypass.\n\n`dispatch_action_ref` (`heca/src/app/interaction.rs:918`) sends `ActionRef::Dynamic(intent)` through `dispatch_intent(… InteractionIntent::View(intent) …)` — the same policy-routed door as a built-in. A contributed action is judged exactly like one of heca's own. P085/T358 went further and added `FocusContainerThenAction` so a `ContainerFocused` action is *satisfied* rather than refused.\n\n## 3. What is actually left: the user is never TOLD a binding was refused.\n\nThis is the whole remaining scope. A registration that loses a collision is dropped **silently**, which is the defect the task named (\"never silently dropped\").\n\nIt is a notification producer, so it belongs to **F009 🔔 Notification System**, which is entirely unstarted (0/60). Ordering: P061 model → P056 store → P060 toast rendering → P059 dispatch → P062/P055 producers. Do not build an ad-hoc message for this — it is the same mistake T381 is filed to avoid, and F010 (Improvements) was already noted as covering \"notify about blocked keybindings\".\n\n**When resuming:** the only code to write is the producer call at the point of refusal in `register_component_keybinding`, plus whatever F009 settles as the draft/severity API. Everything else here is done.",
       "notes": "",
       "statusLog": [
@@ -180,6 +180,14 @@
           "toStatus": "waiting",
           "title": "Reconciled 2026-08-04. Two of its three parts are already answered in code; the only part left is \"tell the user\", which is a notification producer and therefore waits on F009 — the same call Antonio made for P055(F009)/T381.",
           "description": "Reconciled 2026-08-04. Two of its three parts are already answered in code; the only part left is \"tell the user\", which is a notification producer and therefore waits on F009 — the same call Antonio made for P055(F009)/T381."
+        },
+        {
+          "id": "dfcecf3d-05fc-43f1-a08d-a827d0e8a337-check-002-waiting-planned",
+          "date": "2026-08-11T08:18:34.580Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "No longer waiting. Its only remaining scope — \"tell the user a contributed binding was refused\" — was filed as a notification producer waiting on F009 (60 unstarted tasks). Discussed with Antonio 2026-08-11: the audience for a refused binding is the plugin author, not the user, and the condition persists until the config changes, so it is not an event and not a toast. It is a producer into the new startup-diagnostics collector, P093(F006)/T410, which does not wait on F009. This task becomes: call the collector at the two early returns in `register_component_keybinding` (heca/src/app/registry.rs). Parts 1 and 2 of this task (config wins a collision; ActionPolicy is honoured at dispatch) remain settled and shipped.",
+          "description": "No longer waiting. Its only remaining scope — \"tell the user a contributed binding was refused\" — was filed as a notification producer waiting on F009 (60 unstarted tasks). Discussed with Antonio 2026-08-11: the audience for a refused binding is the plugin author, not the user, and the condition persists until the config changes, so it is not an event and not a toast. It is a producer into the new startup-diagnostics collector, P093(F006)/T410, which does not wait on F009. This task becomes: call the collector at the two early returns in `register_component_keybinding` (heca/src/app/registry.rs). Parts 1 and 2 of this task (config wins a collision; ActionPolicy is honoured at dispatch) remain settled and shipped."
         }
       ],
       "decisions": [],
@@ -215,7 +223,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-08-04T19:32:18.060Z"
+      "updatedAt": "2026-08-11T08:18:34.580Z"
     },
     {
       "id": "fcefde68-ac0e-425d-9ac8-53f3ffa17e49",
@@ -254,7 +262,7 @@
     }
   ],
   "createdAt": "2026-07-26T08:38:21.132Z",
-  "updatedAt": "2026-08-04T19:36:06.896Z",
+  "updatedAt": "2026-08-11T08:18:34.580Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
