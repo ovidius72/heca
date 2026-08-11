@@ -227,9 +227,31 @@ impl Column {
         self.resize_pane_height(self.active_pane_idx, delta, working_height, gaps);
     }
 
-    /// Resize pane `pane_idx`'s height by `delta` logical px. No-op for single-pane
-    /// columns or an out-of-range index. Used by the keyboard resize (active pane),
-    /// the mouse divider drag (any pane), and RPC.
+    /// Grow pane `pane_idx` by `delta` logical px, **taking the space from the pane on the other
+    /// side of the boundary being dragged** (the one below it, or the one above when it is last).
+    /// No-op for single-pane columns, an out-of-range index, or when the neighbour has no room left.
+    /// Used by the keyboard resize (active pane), the mouse divider drag (any pane), and RPC.
+    ///
+    /// # A boundary moves space between its OWN two panes
+    ///
+    /// This used to pin **one** pane and let [`compute_pane_sizes`](Self::compute_pane_sizes)
+    /// redistribute the remainder over every pane that was still auto-sized. With two panes the
+    /// only auto pane *was* the neighbour, so it looked right. With three it was plainly wrong:
+    /// dragging the top boundary took space from the bottom pane as well, which had nothing to do
+    /// with it —
+    ///
+    /// ```text
+    /// start                                 289 / 289 / 289
+    /// after dragging the TOP boundary down  668 / 100 / 100   ← the third pane was never touched
+    /// ```
+    ///
+    /// — and the third collapsed to [`MIN_PANE_HEIGHT`], jammed against the bottom of the column,
+    /// which reads as having disappeared (Antonio, driving, 2026-08-11; F004/P084/T413).
+    ///
+    /// So the transfer is explicit and local: **both** sides of the boundary are pinned, by equal
+    /// and opposite amounts, and every other pane keeps exactly the height it had — there is no
+    /// remainder left for anything else to absorb. A pane the user has never dragged stays auto, so
+    /// an untouched column still splits evenly and still reflows when the window changes.
     pub fn resize_pane_height(
         &mut self,
         pane_idx: usize,
@@ -240,25 +262,43 @@ impl Column {
         if self.panes.len() <= 1 || pane_idx >= self.panes.len() {
             return;
         }
-        // Base the new height on the pane's **actual current** height, not a fixed
-        // 200px default: a pane that was still auto-sized (even split) would jump to
-        // ~200px on the first drag delta otherwise. Falls back to 200px only when no
-        // layout has been computed yet (e.g. a pure unit test).
-        let current = self.panes[pane_idx].preferred_height.unwrap_or_else(|| {
-            self.pane_sizes
-                .get(pane_idx)
-                .map(|s| s.h)
-                .filter(|h| *h > 0.0)
-                .unwrap_or(200.0)
-        });
-        // Cap growth so every OTHER pane can still keep at least MIN_PANE_HEIGHT —
-        // otherwise growing one pane squeezes its neighbours toward nothing (#4).
-        let n = self.panes.len() as f64;
-        let total_gaps = gaps * (n + 1.0);
-        let reserved_for_others = (n - 1.0) * MIN_PANE_HEIGHT;
-        let max_h = (working_height - total_gaps - reserved_for_others).max(MIN_PANE_HEIGHT);
-        let new_h = (current + delta).clamp(MIN_PANE_HEIGHT, max_h);
-        self.panes[pane_idx].preferred_height = Some(new_h);
+        // The pane on the other side of the boundary. A divider is named by the pane **above** it
+        // (`mouse::resize::divider_at`), so that is normally the one below; the last pane has no
+        // boundary beneath it, and the keyboard can aim at it, so it trades with the one above
+        // instead. Either way "grow me" grows *me*.
+        let other = if pane_idx + 1 < self.panes.len() {
+            pane_idx + 1
+        } else {
+            pane_idx - 1
+        };
+        let height_of = |col: &Self, idx: usize| {
+            // The pane's **actual current** height, not a fixed 200px default: a pane that was
+            // still auto-sized (an even split) would jump to ~200px on the first drag delta
+            // otherwise. Falls back to 200px only when no layout has been computed yet (a pure
+            // unit test).
+            col.panes[idx].preferred_height.unwrap_or_else(|| {
+                col.pane_sizes
+                    .get(idx)
+                    .map(|s| s.h)
+                    .filter(|h| *h > 0.0)
+                    .unwrap_or(200.0)
+            })
+        };
+        let mine = height_of(self, pane_idx);
+        let theirs = height_of(self, other);
+        // How far the boundary may travel: I cannot shrink past the floor, and neither can they.
+        // When both are already at it there is no room at all — stop rather than reaching past the
+        // neighbour for space, which is the whole point of this function.
+        let (lo, hi) = (MIN_PANE_HEIGHT - mine, theirs - MIN_PANE_HEIGHT);
+        if hi < lo {
+            return;
+        }
+        let delta = delta.clamp(lo, hi);
+        if delta == 0.0 {
+            return;
+        }
+        self.panes[pane_idx].preferred_height = Some(mine + delta);
+        self.panes[other].preferred_height = Some(theirs - delta);
         self.compute_pane_sizes(working_height, gaps);
     }
 

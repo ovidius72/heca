@@ -1286,6 +1286,68 @@ mod tests {
         space.resize_pane_height(0, 9, 30.0);
     }
 
+    /// **A boundary moves space between its own two panes, and nothing else** (F004/P084/T413).
+    ///
+    /// It used to pin one pane and let `compute_pane_sizes` redistribute the remainder over every
+    /// pane still auto-sized. With two panes the only auto pane *was* the neighbour, so it looked
+    /// right; with three, dragging the TOP boundary took space from the BOTTOM pane too, which
+    /// collapsed to the floor and read as having disappeared.
+    #[test]
+    fn a_boundary_drag_leaves_the_pane_beyond_it_untouched() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+
+        let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+        assert_eq!(before.len(), 3, "three stacked panes");
+        let third = before[2];
+
+        // Drag the boundary between pane 0 and pane 1 downwards.
+        space.resize_pane_height(0, 0, 60.0);
+        let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+
+        assert!((after[0] - (before[0] + 60.0)).abs() < 0.5, "the pane above grew by the drag");
+        assert!((after[1] - (before[1] - 60.0)).abs() < 0.5, "…and its neighbour gave exactly that");
+        assert!(
+            (after[2] - third).abs() < 0.5,
+            "the third pane is not on this boundary and must not move: {third} -> {}",
+            after[2],
+        );
+        // The column stays exactly full, so nothing is pushed past its bottom edge.
+        let sum_before: f64 = before.iter().sum();
+        let sum_after: f64 = after.iter().sum();
+        assert!((sum_after - sum_before).abs() < 0.5, "the column is still exactly full");
+    }
+
+    /// The far side stops at its floor rather than the drag reaching past it for more space — which
+    /// is what let one boundary eat a pane two positions away.
+    #[test]
+    fn a_boundary_drag_stops_when_its_neighbour_hits_the_floor() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+        let third = space.columns[0].pane_sizes[2].h;
+
+        // Far more than the neighbour can give, repeatedly.
+        for _ in 0..20 {
+            space.resize_pane_height(0, 0, 500.0);
+        }
+        let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+
+        assert!(
+            after[1] >= crate::layout::column::MIN_PANE_HEIGHT - 0.5,
+            "the neighbour never goes below the floor: {}",
+            after[1],
+        );
+        assert!(
+            (after[2] - third).abs() < 0.5,
+            "and the pane beyond the boundary is still untouched: {third} -> {}",
+            after[2],
+        );
+    }
+
     #[test]
     fn columns_can_be_zoomed_independently() {
         let mut space = test_scrolling_space();
