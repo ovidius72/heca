@@ -41,7 +41,13 @@ use std::cell::Cell;
 
 /// Gap kept between an overlay panel and the window edge, so a maxed-out panel's
 /// border (and its glow) is never shaved off by the viewport boundary.
-const VIEWPORT_MARGIN: f32 = 24.0;
+///
+/// Public because a full-window overlay whose content has to **fit** must know how much of the
+/// window it does not get: the exposé sizes its cards to fit the room it has, and not knowing about
+/// this margin made it overshoot by `2 × 24` on both axes — a whole workspace row off the bottom,
+/// four failed corrections deep, because the missing term was outside the code doing the fitting
+/// (F003/P082/T420). Read it rather than repeating the number.
+pub const VIEWPORT_MARGIN: f32 = 24.0;
 /// Multiplier on the theme `shadow.blur` token — an overlay panel is large and
 /// wants a wider, softer halo than the small-surface base token. Raised from 4.0
 /// (2026-07-24): the panel read as barely lifted off the page.

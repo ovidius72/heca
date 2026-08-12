@@ -69,9 +69,18 @@ always_center_single_column = false
 #   "always"      — the focused column is always centered
 center_focused_column = "never"
 
-# How large the exposé (prefix+Tab) draws the session, as a fraction of life size.
-# 0.5 means a workspace row is half the screen. Clamped to 0.05..=0.75.
+# The LARGEST the exposé (prefix+Tab) draws the session, as a fraction of life size.
+# The exposé fits the WHOLE session on screen and uses this only as a ceiling, so a
+# session of two panes is not blown up to fill the window. 0.5 means a workspace row is
+# at most half the screen. Clamped to 0.05..=0.75.
 overview_zoom = 0.5
+
+# The narrowest a pane card may be drawn in the exposé, in logical pixels.
+# 0 (the default) means NO floor: the map always fits the whole session on screen, which
+# is what an exposé is for. Set a width if you would rather the map scrolled than drew
+# very small cards — below it the map stops shrinking and scrolls instead.
+# Clamped to 0..=1000.
+overview_min_card_width = 0
 
 # Gap between workspace rows in the exposé, as a fraction of a screen height.
 overview_gap = 0.1

@@ -316,6 +316,158 @@ fn delete_keys(
     }
 }
 
+/// **How far to zoom out so the whole session is on screen at once** (F003/P082/T419).
+///
+/// An exposé shows everything — that is what the name means — so the zoom is *computed* from the
+/// session's own extents rather than read from config. `overview_scale` becomes the **maximum**
+/// (so a single pane is not blown up to fill the screen) and `overview_min_card_width` the floor
+/// (so thirty panes stay legible and the map scrolls instead of shrinking to slivers).
+///
+/// **One zoom for the whole map, not one per row** — Antonio, 2026-08-12. It keeps the workspaces
+/// comparable in size so the map reads as one picture; fitting each row on its own makes a
+/// two-pane workspace's cards huge beside a ten-pane one.
+///
+/// Pure, and takes the model rather than an `AppState`, so the arithmetic is testable without a
+/// window (§ 0b).
+fn fit_zoom(
+    rows: &[ExposeWorkspace],
+    geometry: &heca_core::layout::LayoutOptions,
+    available: (f64, f64),
+    font_px: f64,
+) -> f64 {
+    let max_scale = geometry.overview_scale;
+    if rows.is_empty() {
+        return max_scale;
+    }
+    // **The room the MAP has, not the room a pane has.** The two are different and the difference
+    // is the whole of this bug: the exposé is a full-window overlay, drawn over the sidebars and
+    // the bars, while `viewport` is the session's content area with those taken out. Fitting
+    // against the latter drew the map at 0.17 where 0.26 fitted — `screen_w=664` on a 995px window
+    // (Antonio, driving, with the trace, 2026-08-12), which is the wide empty margin down both
+    // sides of every screenshot of it.
+    // **Take the chrome out of the room before dividing by the content.** The zoom scales the
+    // *panes*; it does not scale the panel's padding or the gaps between cards, which are `Spacing`
+    // tokens sized from the font. Dividing the whole window by the sum of the column widths
+    // therefore promises a fit that the gaps then break — the widest row ran off the right edge and
+    // the last row off the bottom the moment the fit stopped being conservative (Antonio, driving,
+    // 2026-08-12).
+    // **Every box between the window and the cards, measured.** Four corrections to this
+    // arithmetic in a row each left a row off the bottom, because the term that was missing sat
+    // *outside* this function: `Overlay` keeps `VIEWPORT_MARGIN` between its panel and the window
+    // edge, so a `Pct(1.0)` panel is the window minus 24 on every side. The laid-out chain says it
+    // plainly — `1280x800` root → `1232x752` panel → `1210x730` content — 70px of chrome on the
+    // vertical, of which this knew about 22 (Antonio, driving, with the geometry trace,
+    // 2026-08-12).
+    let margin = heca_grid_ui::widgets::overlay::VIEWPORT_MARGIN as f64;
+    let pad = Spacing::Md.scale() as f64 * font_px;
+    let chrome = 2.0 * (margin + pad);
+    let col_gap = Spacing::Sm.scale() as f64 * font_px;
+    // The widest row pays for a gap between each pair of its columns.
+    let gaps_w = rows
+        .iter()
+        .map(|ws| (ws.columns.len().saturating_sub(1)) as f64 * col_gap)
+        .fold(0.0_f64, f64::max);
+    let (avail_w, avail_h) = (
+        (available.0 - chrome - gaps_w).max(1.0),
+        (available.1 - chrome).max(1.0),
+    );
+
+    // **Horizontally: the widest row must fit.** `strip_width` is the sum of the columns, already
+    // resolved by the layout. A float can stick out past the end of the strip, and a card off the
+    // right edge is exactly what this exists to stop, so its own extent counts too.
+    let widest = rows
+        .iter()
+        .map(|ws| {
+            ws.floating
+                .iter()
+                .map(|f| f.x + f.w)
+                .fold(ws.strip_width, f64::max)
+        })
+        .fold(1.0_f64, f64::max);
+    let fit_w = avail_w / widest;
+
+    // **Vertically: every row's own height, summed — not one row's times N.**
+    //
+    // A row is `ws.viewport_h * zoom` tall, and `viewport_h` is **per workspace**: they are not all
+    // the same, which is the whole of why this kept clipping. Taking the first row's height and
+    // multiplying made the stack come out at exactly `avail_h` on paper while the real one was
+    // taller, so the last row fell off the bottom however the rest of the arithmetic was corrected
+    // (Antonio, driving, with the trace, 2026-08-12). The gap matches what `map` actually uses: the
+    // **tallest** row's, once between each pair.
+    let n = rows.len() as f64;
+    let sum_h: f64 = rows.iter().map(|ws| ws.viewport_h.max(1.0)).sum();
+    let tallest = rows.iter().map(|ws| ws.viewport_h).fold(1.0_f64, f64::max);
+    let stack = sum_h + (n - 1.0).max(0.0) * tallest * geometry.overview_gap;
+    let fit_h = avail_h / stack.max(1.0);
+
+    // **The floor is a card width, not a scale.** Columns differ in width, so one scale leaves this
+    // session legible and that one a set of slivers; the question actually being asked is "can I
+    // still tell what that pane is?".
+    let narrowest = rows
+        .iter()
+        .flat_map(|ws| ws.columns.iter().map(|c| c.width))
+        .filter(|w| *w > 0.0)
+        .fold(f64::INFINITY, f64::min);
+    let floor = match narrowest.is_finite() {
+        true => geometry.overview_min_card_width / narrowest,
+        // No columns anywhere — nothing to keep legible, so nothing to hold the zoom up.
+        false => 0.0,
+    };
+
+    // ⚠️ `min` then `max`, never `f64::clamp`: it **panics** when `min > max`, and a small
+    // `overview_zoom` beside a large `overview_min_card_width` is exactly that. Legibility wins
+    // there — a map you cannot read is worse than one that scrolls.
+    let zoom = fit_w.min(fit_h).min(max_scale).max(floor);
+    // **Which of the four bounds is binding, in the app's own words.** Read off screenshots this
+    // was mis-diagnosed three times running (2026-08-12); the numbers say it in one line.
+    #[cfg(debug_assertions)]
+    {
+        eprintln!(
+            "[heca] expose fit: zoom={zoom:.4} (fit_w={fit_w:.4} fit_h={fit_h:.4} \
+             ceiling={max_scale:.4} floor={floor:.4}) avail={avail_w:.0}x{avail_h:.0} \
+             widest={widest:.0} rows={n}",
+        );
+        // The model's own numbers. The fit divides by these, so when the drawn strip is a fifth of
+        // the room it has, the question is whether the arithmetic is wrong or whether the session
+        // really is that shape — and only these say which.
+        for ws in rows {
+            eprintln!(
+                "[heca]   ws{} strip={:.0} viewport={:.0}x{:.0} cols={:?} floats={}",
+                ws.ws_idx,
+                ws.strip_width,
+                ws.viewport.1,
+                ws.viewport_h,
+                ws.columns.iter().map(|c| c.width as i64).collect::<Vec<_>>(),
+                ws.floating.len(),
+            );
+        }
+    }
+    zoom
+}
+
+/// **Does the map still run past the room it has at `zoom`?**
+///
+/// Only ever true when the floor ([`overview_min_card_width`]) held the zoom above the fit — the
+/// deliberate "I would rather scroll than squint" case. Expressed as the same comparison
+/// [`fit_zoom`] makes, so the two can never disagree about whether it fitted: the fit is the
+/// largest zoom that does *not* overflow, so overflowing means the zoom in use is bigger than it.
+///
+/// [`overview_min_card_width`]: heca_core::layout::LayoutOptions::overview_min_card_width
+fn overflows(
+    rows: &[ExposeWorkspace],
+    geometry: &heca_core::layout::LayoutOptions,
+    available: (f64, f64),
+    font_px: f64,
+    zoom: f64,
+) -> bool {
+    // A floor of zero can never lift the zoom above the fit, so this is the ordinary answer.
+    let unfloored = heca_core::layout::LayoutOptions {
+        overview_min_card_width: 0.0,
+        ..geometry.clone()
+    };
+    zoom > fit_zoom(rows, &unfloored, available, font_px) + 1e-9
+}
+
 /// A share expressed as `flex_grow`, plus the two things that make it a share.
 ///
 /// `flex_grow` alone does **not** divide a region — it distributes only *positive* free space, so a
@@ -356,12 +508,15 @@ pub(crate) fn map(
     start: Option<PaneId>,
     geometry: &heca_core::layout::LayoutOptions,
     keys: &ExposeDeleteKeys,
+    // The room the map has to draw in — the window, since it is a full-window overlay. Passed in
+    // rather than read from `AppState`, which this composition must never take (§ 0b).
+    available: (f64, f64),
 ) -> Box<dyn Component> {
     // **The map's scale and spacing are the layout's, not this module's.** `overview_scale` and
     // `overview_gap` are `LayoutOptions` fields the user sets in config; hardcoding a zoom here
     // would be a second answer to a question the layout already answers, and an unreachable one.
-    let zoom = geometry.overview_scale;
     let gap_frac = geometry.overview_gap;
+    let zoom = fit_zoom(rows, geometry, available, theme.font_size as f64);
     // **One behaviour, two ways in.** Choosing a pane closes the map and focuses it, whether the
     // choice came from the cursor (`CardGrid::on_activate`) or a click on the card itself. Defined
     // once here so the mouse and the keyboard can never drift apart.
@@ -444,6 +599,25 @@ pub(crate) fn map(
         .map(|ws| ws.viewport_h * gap_frac * zoom)
         .fold(0.0_f64, f64::max) as f32;
     let mut grid = CardGrid::new().gap(gap).min_width(Length::Pct(1.0));
+    // **Nothing asks to be revealed while the whole session is on screen.**
+    //
+    // Two reasons, and the second is the one that cost a day. A reveal exists to bring into view
+    // something you cannot see, and when everything fits there is no such thing — so following the
+    // cursor can only move the picture for no gain. And the region's centring is *driven* by that
+    // request: given a target it puts **that** in the middle of the window, which with several rows
+    // shoves the others off the edges. The map fitted (727 in a 730 box) and was still pushed 277px
+    // up, hiding the first row, because the fourth row was asking to be centred (Antonio, driving,
+    // with the geometry trace, 2026-08-12). With no target the region centres the **content**,
+    // which is the whole picture, which is what an exposé is.
+    //
+    // Past the floor the map really does overflow, and then the cursor is worth following again —
+    // so the gate is exactly "did it fit", not a flag anyone has to remember.
+    let reveal = match overflows(rows, geometry, available, theme.font_size as f64, zoom) {
+        // Overflowing: follow the keyboard cursor, never the pointer (`CardGrid::reveal_state`).
+        true => grid.reveal_state(),
+        // Fitting: nothing is ever off screen, so nothing ever asks.
+        false => heca_grid_ui::reactive::signal(false),
+    };
     for ws in rows {
         // **Where the cursor goes when a card is deleted: the next one in this row.**
         //
@@ -476,9 +650,12 @@ pub(crate) fn map(
             // three. A token, so it tracks the font and the size setting like every other gap.
             let mut column = Flex::column().gap_spacing(Spacing::Sm);
             for pane in &col.panes {
-                let card = Row::new();
-                // The cursor follows the mouse: `CardGrid` reads this and moves onto the card you
-                // point at, so hovering centres it exactly as arrowing onto it does.
+                // **The cursor follows the mouse, but the scroll does not.** `CardGrid` reads the
+                // hover signal and moves the cursor onto the card you point at; `reveal_when` is
+                // what stops that move also scrolling the strip to centre it, which slid the card
+                // out from under the pointer and left the mouse in empty space (Antonio, driving,
+                // with screenshots, 2026-08-12).
+                let card = Row::new().reveal_when(reveal);
                 cells.push(
                     GridCell::new(pane.pane_id.0.to_string(), card.nav_state())
                         .hovered(card.hovered()),
@@ -574,7 +751,9 @@ pub(crate) fn map(
             // and stop in a row with one (Antonio, driving, 2026-08-11).
             let mut float_cells = Vec::new();
             for float in &ws.floating {
-                let card = Row::new();
+                // Same gate as the tiled cards: a float is a card, and hovering one must not
+                // scroll the strip either.
+                let card = Row::new().reveal_when(reveal);
                 float_cells.push(
                     GridCell::new(float.pane_id.0.to_string(), card.nav_state())
                         .hovered(card.hovered()),
@@ -809,7 +988,14 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
             .in_surface(&name, "delete_workspace")
             .to_vec(),
     };
-    let root = map(&rows, &theme, emit, here, &state.session.options, &keys);
+    // **The room the map has is the window**, not the session's content area: the overlay is drawn
+    // over the sidebars and the bars. Read here because `map` takes plain data and no `AppState`.
+    let available = {
+        let phys = state.window.inner_size();
+        let s = state.scale_factor;
+        (phys.width as f64 / s, phys.height as f64 / s)
+    };
+    let root = map(&rows, &theme, emit, here, &state.session.options, &keys, available);
     let was_visible = state.layers.is_visible_named(&name);
     let id = state.layers.add_named(
         id,
@@ -859,6 +1045,251 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
 mod tests {
     use super::*;
     use heca_core::layout::{LayoutOptions, Pane, Rectangle, SessionId, Size};
+
+    /// **The other half of the rule.** Once the strip is wider than the window there really is
+    /// something off-screen, and the map has to bring the cursor card to the middle — the case the
+    /// centring was written for. Guarded separately so "centre the content when it fits" can never
+    /// be satisfied by centring the content always.
+    #[test]
+    fn an_overflowing_strip_still_centres_the_cursor() {
+        let theme = heca_grid_ui::theme::Theme::default();
+        let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        // Wide enough that even at the floor the strip cannot fit: 40 columns of a quarter-screen.
+        let mut rows = fitting(40, 1900.0, 1200.0);
+        rows[0].columns = rows[0]
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, c)| ExposeColumn {
+                col_idx: i,
+                width: c.width,
+                panes: vec![ExposePane {
+                    pane_id: PaneId(i as u64 + 1),
+                    name: format!("p{i}"),
+                    active: i == 0,
+                    height: 1200.0,
+                }],
+            })
+            .collect();
+        let last = PaneId(rows[0].columns.len() as u64);
+
+        // A floor is what makes a strip overflow now that the fit always succeeds — which is
+        // exactly the setting's purpose: someone who would rather scroll than squint.
+        let opts = LayoutOptions { overview_min_card_width: 300.0, ..LayoutOptions::default() };
+        let mut root = map(&rows, &theme, emit, Some(last), &opts, &shipped_keys(), (1900.0, 1200.0));
+        let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
+        heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
+
+        let strip = strip_bounds(root.as_ref()).expect("the cards are laid out");
+        assert!(
+            strip.size.w > vp.w,
+            "the fixture must actually overflow, or this proves nothing: {strip:?}",
+        );
+        let card = card_of(root.as_ref(), &pane_nav_key(last)).expect("the cursor's card");
+        assert!(
+            (card.loc.x + card.size.w / 2.0 - vp.w / 2.0).abs() < 2.0,
+            "the last card is brought to the middle: {card:?} in {vp:?}",
+        );
+    }
+
+    /// The width the map really draws at `zoom` — the columns **plus** the gaps between them and
+    /// the panel's padding, which the zoom does not scale. Asserting against this rather than
+    /// against a bare ratio is what catches a fit that promises what the chrome then breaks.
+    fn drawn_w(rows: &[ExposeWorkspace], zoom: f64, font_px: f64) -> f64 {
+        let pad = Spacing::Md.scale() as f64 * font_px
+            + heca_grid_ui::widgets::overlay::VIEWPORT_MARGIN as f64;
+        let gap = Spacing::Sm.scale() as f64 * font_px;
+        rows.iter()
+            .map(|ws| {
+                ws.strip_width * zoom + (ws.columns.len().saturating_sub(1)) as f64 * gap
+            })
+            .fold(0.0_f64, f64::max)
+            + 2.0 * pad
+    }
+
+    /// The height the map really draws at `zoom`: the rows, their gaps, and the panel's padding.
+    fn drawn_h(rows: &[ExposeWorkspace], zoom: f64, gap_frac: f64, font_px: f64) -> f64 {
+        let pad = Spacing::Md.scale() as f64 * font_px
+            + heca_grid_ui::widgets::overlay::VIEWPORT_MARGIN as f64;
+        let n = rows.len() as f64;
+        let screen_h = rows[0].viewport_h;
+        zoom * screen_h * (n + (n - 1.0) * gap_frac) + 2.0 * pad
+    }
+
+    /// One workspace `screen_w` wide holding `cols` equal columns, on a `screen_w`×`screen_h`
+    /// screen. Four columns is exactly one screenful.
+    fn fitting(cols: usize, screen_w: f64, screen_h: f64) -> Vec<ExposeWorkspace> {
+        let width = screen_w / 4.0;
+        vec![ExposeWorkspace {
+            ws_idx: 0,
+            name: "w".into(),
+            active: true,
+            columns: (0..cols)
+                .map(|col_idx| ExposeColumn { col_idx, width, panes: Vec::new() })
+                .collect(),
+            floating: Vec::new(),
+            viewport: (0.0, screen_w),
+            viewport_h: screen_h,
+            strip_width: width * cols as f64,
+        }]
+    }
+
+    /// **An exposé shows everything at once** — that is what the name means. Four columns fill one
+    /// screen, so the ceiling decides; sixteen are four screens wide, and the map zooms out until
+    /// they are all on screen rather than running off the edge (Antonio, 2026-08-12, with
+    /// screenshots of cards outside the view).
+    #[test]
+    fn the_map_zooms_out_until_the_widest_row_fits() {
+        // The floor is measured on its own below; here it is lowered out of the way so this
+        // asserts the FIT and nothing else. At the shipped 140px it would bind first and the test
+        // would be green for the wrong reason.
+        let opts = LayoutOptions { overview_min_card_width: 1.0, ..LayoutOptions::default() };
+        let four = fit_zoom(&fitting(4, 1600.0, 1000.0), &opts, (1600.0, 1000.0), 14.0);
+        assert_eq!(four, opts.overview_scale, "one screen wide — the ceiling decides");
+
+        let wide = fitting(16, 1600.0, 1000.0);
+        let sixteen = fit_zoom(&wide, &opts, (1600.0, 1000.0), 14.0);
+        assert!(sixteen < opts.overview_scale, "four screens wide zooms out: {sixteen}");
+        assert!(
+            drawn_w(&wide, sixteen, 14.0) <= 1600.0 + 1e-6,
+            "and what is DRAWN fits the window, gaps and padding included: {}",
+            drawn_w(&wide, sixteen, 14.0),
+        );
+    }
+
+    /// The ceiling still holds: a nearly empty session is **not** blown up to fill the window.
+    #[test]
+    fn a_small_session_is_capped_rather_than_magnified() {
+        let opts = LayoutOptions::default();
+        let one = fit_zoom(&fitting(1, 1600.0, 1000.0), &opts, (1600.0, 1000.0), 14.0);
+        assert_eq!(
+            one, opts.overview_scale,
+            "a quarter-screen strip could fit at 4x; overview_zoom is the maximum",
+        );
+    }
+
+    /// **The default is no floor at all** — the map fits the whole session, which is what an
+    /// exposé is for. At 140px it bound on an ordinary three-workspace session and pushed two of
+    /// the three rows off the bottom (Antonio, with a screenshot, 2026-08-12), so the shipped
+    /// default is asserted here rather than left to whatever the constant happens to be.
+    #[test]
+    fn there_is_no_minimum_card_width_by_default() {
+        let opts = LayoutOptions::default();
+        assert_eq!(opts.overview_min_card_width, 0.0);
+        let rows = fitting(200, 1600.0, 1000.0);
+        let zoom = fit_zoom(&rows, &opts, (1600.0, 1000.0), 14.0);
+        assert!(zoom > 0.0, "still a usable zoom, however small");
+        assert!(
+            drawn_w(&rows, zoom, 14.0) <= 1600.0 + 1e-6,
+            "fitted however wide the strip is: {}",
+            drawn_w(&rows, zoom, 14.0),
+        );
+    }
+
+    /// And the floor, when a user asks for one: past it the cards stop shrinking and the map
+    /// scrolls instead, for someone who would rather scroll than squint.
+    #[test]
+    fn cards_stop_shrinking_at_the_minimum_width() {
+        let opts = LayoutOptions { overview_min_card_width: 140.0, ..LayoutOptions::default() };
+        let rows = fitting(200, 1600.0, 1000.0);
+        let column_w = rows[0].columns[0].width;
+        let zoom = fit_zoom(&rows, &opts, (1600.0, 1000.0), 14.0);
+        assert!(
+            (zoom * column_w - opts.overview_min_card_width).abs() < 1e-9,
+            "held at the floor ({column_w} × {zoom}), not fitted to the whole strip",
+        );
+    }
+
+    /// **`min` then `max`, never `f64::clamp`** — which panics when `min > max`. A small
+    /// `overview_zoom` beside a large `overview_min_card_width` is exactly that pair, and
+    /// legibility is the one that wins.
+    #[test]
+    fn a_floor_above_the_ceiling_does_not_panic() {
+        let opts = LayoutOptions {
+            overview_scale: 0.05,
+            overview_min_card_width: 900.0,
+            ..LayoutOptions::default()
+        };
+        let zoom = fit_zoom(&fitting(4, 1600.0, 1000.0), &opts, (1600.0, 1000.0), 14.0);
+        assert!(zoom > opts.overview_scale, "the floor wins: {zoom}");
+    }
+
+    /// Several workspaces share **one** zoom (Antonio's choice, 2026-08-12), and they have to fit
+    /// stacked with their gaps — so the vertical fit is what decides once there are a few.
+    #[test]
+    fn the_rows_fit_stacked_with_their_gaps() {
+        let opts = LayoutOptions { overview_min_card_width: 1.0, ..LayoutOptions::default() };
+        let mut rows = fitting(1, 1600.0, 1000.0);
+        for ws_idx in 1..4 {
+            let mut next = rows[0].clone();
+            next.ws_idx = ws_idx;
+            rows.push(next);
+        }
+        let zoom = fit_zoom(&rows, &opts, (1600.0, 1000.0), 14.0);
+        assert!(
+            drawn_h(&rows, zoom, opts.overview_gap, 14.0) <= 1000.0 + 1e-6,
+            "four rows and three gaps fit the height: {}",
+            drawn_h(&rows, zoom, opts.overview_gap, 14.0),
+        );
+    }
+
+    /// **Rows are not all the same height**, and taking the first one's and multiplying is what
+    /// made the stack come out at exactly the available height on paper while the real one was
+    /// taller — so the last row fell off the bottom however the rest of the arithmetic was
+    /// corrected (Antonio, driving, with the trace, 2026-08-12). Every fixture above uses equal
+    /// rows, which is why none of them could catch it.
+    #[test]
+    fn rows_of_different_heights_are_summed_not_multiplied() {
+        let opts = LayoutOptions::default();
+        let mut rows = fitting(1, 1600.0, 400.0);
+        for (ws_idx, h) in [800.0, 1200.0].into_iter().enumerate() {
+            let mut next = rows[0].clone();
+            next.ws_idx = ws_idx + 1;
+            next.viewport_h = h;
+            rows.push(next);
+        }
+        let zoom = fit_zoom(&rows, &opts, (1600.0, 1000.0), 14.0);
+
+        let pad = Spacing::Md.scale() as f64 * 14.0
+            + heca_grid_ui::widgets::overlay::VIEWPORT_MARGIN as f64;
+        let sum: f64 = rows.iter().map(|ws| ws.viewport_h).sum();
+        let tallest = rows.iter().map(|ws| ws.viewport_h).fold(0.0_f64, f64::max);
+        let drawn = zoom * (sum + 2.0 * tallest * opts.overview_gap) + 2.0 * pad;
+        assert!(
+            drawn <= 1000.0 + 1e-6,
+            "the three unequal rows and their gaps fit the height: {drawn}",
+        );
+        // And it is the sum that binds, not three times the first (which would be far smaller).
+        assert!(
+            zoom < 1000.0 / (3.0 * rows[0].viewport_h),
+            "a fit taken from the first row alone would have overshot: {zoom}",
+        );
+    }
+
+    /// A float can stick out past the end of the strip, and a card off the right edge is exactly
+    /// what this exists to stop — so its extent counts towards the fit too.
+    #[test]
+    fn a_float_past_the_end_of_the_strip_still_has_to_fit() {
+        let opts = LayoutOptions::default();
+        let mut rows = fitting(4, 1600.0, 1000.0);
+        let strip = rows[0].strip_width;
+        rows[0].floating.push(ExposeFloating {
+            pane_id: PaneId(9),
+            name: "f".into(),
+            active: false,
+            x: strip,
+            y: 0.0,
+            w: strip,
+            h: 100.0,
+        });
+        let zoom = fit_zoom(&rows, &opts, (1600.0, 1000.0), 14.0);
+        let without = fit_zoom(&fitting(4, 1600.0, 1000.0), &opts, (1600.0, 1000.0), 14.0);
+        assert!(
+            zoom < without,
+            "the float doubles the row's extent, so the map zooms out further than the strip \
+             alone would ({zoom} vs {without})",
+        );
+    }
 
     /// The delete letters **as the bundled defaults bind them**, so these tests exercise what a
     /// user actually gets. Held to the real file by
@@ -942,49 +1373,55 @@ mod tests {
         s
     }
 
-    /// **The card the cursor is on holds the middle of the window, on both axes.**
+    /// **A session that fits is centred as a whole; only an overflowing one follows the cursor.**
     ///
-    /// The one you are moving through the map — not the pane the session happens to have focused,
-    /// and not the workspace's visible rectangle, both of which were tried and both of which
-    /// centred somewhere you were not (Antonio, 2026-08-05).
+    /// Changed 2026-08-12 (F003/P082/T419). The rule used to be "the cursor card holds the middle,
+    /// always", which is right when there is something off-screen to follow — the case it was
+    /// written for, where the map centred the pane you had *left* rather than the one you were on
+    /// (Antonio, 2026-08-05) — and wrong when everything already fits: pulling one card to the
+    /// middle can then only push its neighbours off the edges. The map showed a screen of empty
+    /// space on the left with the last column clipped on the right (Antonio, with a screenshot,
+    /// 2026-08-12). The overflow half of the rule is asserted by
+    /// [`an_overflowing_strip_still_centres_the_cursor`].
     ///
     /// Measured off the real layout, because two faults hid behind green tests on the way here:
     /// the strip stretched to the region's full width so there was no slack to position into, and
     /// the strip carrying its wrapper's `grow` left the cards 7px tall.
     #[test]
-    fn the_card_under_the_cursor_is_centred_on_both_axes() {
+    fn a_session_that_fits_is_centred_as_a_whole() {
         let s = session();
         let rows = model(&s, |p| p.title.clone());
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
         // Open on the FIRST pane — the leftmost card of the top row, the case that has to travel
         // furthest and the one that sat in the corner.
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
         let mut scene = heca_grid_ui::Scene::new();
         root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme).with_viewport(vp));
 
-        fn cursor_card(n: &dyn Component) -> Option<heca_grid_ui::Rectangle> {
-            n.base()
-                .children
-                .iter()
-                .find_map(|c| cursor_card(c.as_ref()))
-                .or_else(|| n.wants_visible().then(|| n.base().bounds))
-        }
-        let card = cursor_card(root.as_ref()).expect("the cursor is on a card");
+        // Found by key, not by "who wants to be visible": **nothing** asks while the map fits,
+        // which is the point — a request to be revealed is what drags the picture off-centre.
+        let card = card_of(root.as_ref(), &pane_nav_key(PaneId(1)))
+            .expect("the cursor's card is laid out");
 
+        // The whole strip — not the cursor card — sits in the middle, so nothing is pushed off an
+        // edge. Read off the row that holds the cards rather than the card itself.
+        let strip = strip_bounds(root.as_ref()).expect("the cards are laid out");
         let mid = |start: f64, len: f64| start + len / 2.0;
         assert!(
-            (mid(card.loc.x, card.size.w) - vp.w / 2.0).abs() < 2.0,
-            "centred across the window: {card:?} in {vp:?}",
+            (mid(strip.loc.x, strip.size.w) - vp.w / 2.0).abs() < 2.0,
+            "the strip is centred across the window: {strip:?} in {vp:?}",
         );
         assert!(
-            (mid(card.loc.y, card.size.h) - vp.h / 2.0).abs() < 2.0,
-            "and down it: {card:?} in {vp:?}",
+            strip.loc.x >= -1.0 && strip.loc.x + strip.size.w <= vp.w + 1.0,
+            "and nothing hangs off either edge: {strip:?} in {vp:?}",
         );
-        // A card is a pane-shaped box, not a sliver: the row is the screen at the configured zoom.
-        let zoom = LayoutOptions::default().overview_scale;
+        // A card is a pane-shaped box, not a sliver: the row is the screen at the **resolved**
+        // zoom. Asked for rather than hardcoded to `overview_scale`, which is only the ceiling now
+        // — a test holding the old constant would keep passing while the map fitted nothing.
+        let zoom = fit_zoom(&rows, &LayoutOptions::default(), (1900.0, 1200.0), 14.0);
         assert!(
             (card.size.h - rows[0].viewport_h * zoom).abs() < 24.0,
             "the card fills its row's height ({} at zoom {zoom}): {card:?}",
@@ -1046,7 +1483,7 @@ mod tests {
         // …and the drawn cards keep that ratio.
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
 
@@ -1067,6 +1504,35 @@ mod tests {
             return Some(n.base().bounds);
         }
         n.base().children.iter().find_map(|c| card_of(c.as_ref(), key))
+    }
+
+    /// The rectangle every card in the map falls inside — what has to sit in the middle of the
+    /// window when the session fits, rather than any one card.
+    fn strip_bounds(root: &dyn Component) -> Option<heca_grid_ui::Rectangle> {
+        fn walk(n: &dyn Component, acc: &mut Option<heca_grid_ui::Rectangle>) {
+            if n.base().nav_key.is_some() {
+                let b = n.base().bounds;
+                *acc = Some(match acc.take() {
+                    None => b,
+                    Some(a) => {
+                        let x0 = a.loc.x.min(b.loc.x);
+                        let y0 = a.loc.y.min(b.loc.y);
+                        let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+                        let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+                        heca_grid_ui::Rectangle::new(
+                            heca_grid_ui::Point::new(x0, y0),
+                            heca_grid_ui::Size::new(x1 - x0, y1 - y0),
+                        )
+                    }
+                });
+            }
+            for c in &n.base().children {
+                walk(c.as_ref(), acc);
+            }
+        }
+        let mut acc = None;
+        walk(root, &mut acc);
+        acc
     }
 
     /// **A floating pane is placed in strip coordinates.** It is positioned against the viewport
@@ -1136,7 +1602,7 @@ mod tests {
         let f = rows[0].floating[0].clone();
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
 
@@ -1145,7 +1611,7 @@ mod tests {
         let tiled = card_of(root.as_ref(), &pane_nav_key(PaneId(1)))
             .expect("and the tiled panes still have theirs");
 
-        let zoom = LayoutOptions::default().overview_scale;
+        let zoom = fit_zoom(&rows, &LayoutOptions::default(), (1900.0, 1200.0), 14.0);
         assert!(
             (drawn.size.w - f.w * zoom).abs() < 1.0 && (drawn.size.h - f.h * zoom).abs() < 1.0,
             "the float is its real size at this zoom ({}×{} × {zoom}): {drawn:?}",
@@ -1172,7 +1638,7 @@ mod tests {
             let s2 = session();
             let rows2 = model(&s2, |p| p.title.clone());
             let emit2: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-            let mut root2 = map(&rows2, &theme, emit2, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+            let mut root2 = map(&rows2, &theme, emit2, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
             heca_grid_ui::LayoutEngine::new()
                 .compute(root2.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
             card_of(root2.as_ref(), &pane_nav_key(PaneId(1))).expect("its card")
@@ -1215,7 +1681,7 @@ mod tests {
             let seen = seen.clone();
             std::rc::Rc::new(move |intent| seen.borrow_mut().push(intent))
         };
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
 
@@ -1324,7 +1790,7 @@ mod tests {
         let rows = model(&s, |p| p.title.clone());
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
 
@@ -1376,7 +1842,7 @@ mod tests {
             std::rc::Rc::new(move |i| seen.borrow_mut().push(i))
         };
         // Open on the FIRST pane; the row also holds pane 2, which must take the cursor.
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
 
@@ -1430,7 +1896,7 @@ mod tests {
             std::rc::Rc::new(move |intent| chosen.borrow_mut().push(intent))
         };
         // Open on the LAST tiled pane, so one step right is the float.
-        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
 
@@ -1467,7 +1933,7 @@ mod tests {
         let rows = model(&s, |p| p.title.clone());
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
         // reaches the screen.
@@ -1517,7 +1983,7 @@ mod tests {
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
             sink.borrow_mut().push(format!("{intent:?}"));
         });
-        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
 
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Activate));
         let got = seen.borrow().join(" ");
@@ -1550,7 +2016,7 @@ mod tests {
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
             sink.borrow_mut().push(format!("{intent:?}"));
         });
-        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), (1900.0, 1200.0));
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
         let got = seen.borrow().join(" ");
         assert!(

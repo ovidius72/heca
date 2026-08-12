@@ -58,10 +58,10 @@ pub trait LayoutExt: Component + Sized {
     /// Outer margin split per axis: `x` left+right, `y` top+bottom.
     fn margin_xy(mut self, x: f32, y: f32) -> Self {
         let s = &mut self.base_mut().style.layout;
-        s.margin_left = Some(x);
-        s.margin_right = Some(x);
-        s.margin_top = Some(y);
-        s.margin_bottom = Some(y);
+        s.margin_left = Some(x.into());
+        s.margin_right = Some(x.into());
+        s.margin_top = Some(y.into());
+        s.margin_bottom = Some(y.into());
         self
     }
     /// Horizontal outer margin (left+right) only.
@@ -75,23 +75,23 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Left outer margin only.
-    fn margin_left(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_left = Some(v);
+    fn margin_left(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_left = Some(v.into());
         self
     }
     /// Right outer margin only.
-    fn margin_right(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_right = Some(v);
+    fn margin_right(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_right = Some(v.into());
         self
     }
     /// Top outer margin only.
-    fn margin_top(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_top = Some(v);
+    fn margin_top(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_top = Some(v.into());
         self
     }
     /// Bottom outer margin only.
-    fn margin_bottom(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_bottom = Some(v);
+    fn margin_bottom(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_bottom = Some(v.into());
         self
     }
     /// Main-axis distribution.

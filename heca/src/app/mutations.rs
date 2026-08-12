@@ -21,11 +21,17 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
     match kind {
         MutationKind::Layout | MutationKind::Focus | MutationKind::Config => {
             sync_focus(state);
-            // **Structure only.** A layer's content is structural, so what makes it stale is a
-            // pane, column or workspace appearing or going — not the focus moving, which happens
-            // constantly and would rebuild the whole map (and reset the cursor inside it) on every
-            // keystroke.
-            if matches!(kind, MutationKind::Layout) {
+            // **Structure and the frame it is drawn in — never focus.** What makes a layer stale is
+            // a pane, column or workspace appearing or going, or the window changing shape
+            // underneath it. Not the focus moving, which happens constantly and would rebuild the
+            // whole map (and reset the cursor inside it) on every keystroke.
+            //
+            // `Config` covers the window resize (`app/events.rs`, `WindowEvent::Resized`) and
+            // `prefix+Shift+r`. The exposé resolves its zoom from the room it has when it is
+            // **built**, so a layer that is not rebuilt keeps the zoom for the old window: resizing
+            // with the map up did nothing at all until the map was closed and reopened (Antonio,
+            // driving, 2026-08-12).
+            if matches!(kind, MutationKind::Layout | MutationKind::Config) {
                 refresh_visible_layers(state);
             }
             state.needs_redraw = true;

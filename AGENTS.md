@@ -39,10 +39,37 @@ a tree and it works, with **no host wiring**. A UI library also ships composed o
 `Select`, `ContextMenu`, `CommandPalette` — so the test is capability, not size:
 **if it can be built inside grid-ui, it belongs in grid-ui.**
 
-**Component** — `heca/src/components/`. A composition of widgets that **also binds an app concept**:
-an `Intent`, an action **name**, a drag id, a hint target id, a chrome signal, a `nav_key`. That
-binding is the *only* thing that justifies leaving the library. A composition that binds none of them
-is a widget in the wrong crate — move it down, don't keep it up here.
+**Component** — a composition of widgets that **also binds an app concept**: an `Intent`, an action
+**name**, a drag id, a hint target id, a chrome signal, a `nav_key`. That binding is the *only* thing
+that justifies leaving the library. A composition that binds none of them is a widget in the wrong
+crate — move it down, don't keep it up here.
+
+**Where a component lives — beside the surface that uses it** (Antonio, 2026-08-12):
+
+```
+heca/src/chrome/<surface>/          ← the surface's own components, one file each
+├── mod.rs                            host wiring (the part that needs `AppState`)
+├── model.rs                          the surface's data, reduced from the session
+└── <thing>_card.rs, <thing>_row.rs   the components
+```
+
+It moves up to **`heca/src/components/`** (F011, `P087/T373`) the day a **second** surface needs it —
+DRY applied when the duplication is real, not when it is predicted. Until something is shared, a
+global folder only puts distance between a component and its only caller.
+
+**A surface is components, never one function that draws a picture.** Each takes properties, events
+and callbacks and encapsulates its own logic — React's shape, Flutter/SwiftUI's spelling. **Never
+`&AppState`**: it needs a window, so a component that takes it is a component nobody can test.
+
+⚠️ **Sizes are SHARES, never computed pixels.** The moment a composition multiplies model numbers by
+a scale of its own it has taken over the layout engine's job — and then it owns every term: the
+window, the overlay margin, the panel padding, the gaps, the row count, each row's height, the scroll
+centring. Miss one and everything is wrong by exactly that term. The exposé did this and took **seven
+attempts, six of them wrong, each missing a different term** — and since nothing was a component,
+nothing had a headless test, so the only way to see any of it was to photograph the running app.
+Express it as `Length::Pct` of a shared denominator and `grow` weights, and taffy answers it exactly
+at every window size. (`grow` alone always fills its container — that is what flex-grow *means*, so
+"a share of the widest sibling" is a percentage, not a grow weight.)
 
 #### How composition works in each place — this is the part that gets guessed wrong
 
@@ -75,10 +102,13 @@ is a widget in the wrong crate — move it down, don't keep it up here.
 
 #### How to use one
 
-Import it from `crate::components`. **Never re-compose the same shape inline** in `chrome/`, a
-provider, the sidebar or a plugin — that is how one row shape became unreachable outside the file
-that drew it. Need a variation? Add a builder to the component. Copying it is the bug this rule
-exists to stop.
+Import it from its surface's module (`crate::chrome::<surface>`), or from `crate::components` once it
+is shared. **Never re-compose the same shape inline** in `chrome/`, a provider, the sidebar or a
+plugin — that is how one row shape became unreachable outside the file that drew it. Need a
+variation? Add a builder to the component. Copying it is the bug this rule exists to stop.
+
+**The second caller is the move.** When a shape is wanted by a surface that does not own it, that is
+the moment it goes to `heca/src/components/` — not a moment earlier, and never by copying it.
 
 ### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling.
 

@@ -548,6 +548,7 @@ pub trait Component {
         self.base().focused.get_untracked()
     }
 
+
     /// The rect this widget occupies **for input**, or `None` when it takes none at all.
     ///
     /// The default is [`bounds`](Base::bounds), which is right for every widget drawn where it is

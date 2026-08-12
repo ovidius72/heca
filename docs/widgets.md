@@ -458,6 +458,31 @@ It follows the selection **without fighting the wheel**: the region remembers th
 (unscrolled) position, which changes when the selection moves and stays put when you scroll by hand.
 So it comes to the cursor once, and then leaves you alone.
 
+#### The reveal follows the keyboard, never the pointer
+
+**Pointing at something never scrolls it.** A reveal exists to bring into view what the user cannot
+see — the keyboard's case, where the cursor can move off-screen. What the mouse is on is visible by
+definition, and scrolling it moves it out from under the mouse that asked.
+
+A list whose cursor only the keyboard moves needs nothing. One whose cursor **also follows the
+mouse** gates the request on a signal: [`CardGrid`](#cardgrid) publishes `reveal_state()` — true
+while the keyboard moved the cursor, false while the mouse did — and each card takes it:
+
+```rust
+let grid = CardGrid::new();
+let reveal = grid.reveal_state();
+let card = Row::new().reveal_when(reveal);   // one line per card
+```
+
+It is given to the **cards**, not read off the grid, because the `ScrollRegion` that scrolls is
+*inside* the grid: the walk that collects reveal requests starts at the region and never passes
+through its ancestors. (An earlier attempt put the rule on the parent as a `reveals_subtree`
+override; with that nesting the region never consults it, and it silently did nothing.)
+
+Without it the three correct behaviours compose into a wrong one: hover moves the cursor → the
+cursor card asks to be visible → the region centres it → the card slides out from under the pointer,
+possibly onto another card, which slides again.
+
 ### Builder traits
 
 Widgets opt into builder methods by implementing the marker trait (zero boilerplate). All
@@ -2478,8 +2503,10 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
   `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
   distinctly from the filled `active` pill; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
-  `.attention(Signal<bool>)` + `.attention_color(Color)`, plus `StyleExt` for a persistent
-  background under the selection overlay.
+  `.attention(Signal<bool>)` + `.attention_color(Color)`,
+  `.reveal_when(Signal<bool>)` (gate this row's request to be scrolled into view — see
+  [Following the cursor](#following-the-cursor); only needed when the cursor also follows the
+  mouse), plus `StyleExt` for a persistent background under the selection overlay.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
 

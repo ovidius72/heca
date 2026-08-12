@@ -87,9 +87,16 @@ impl LayoutEngine {
         // correctly-built overlay a whole pane away from its target: no error, no
         // warning, it simply drew somewhere else.
         let style = &root.base().style.layout;
+        // A **percentage** margin resolves against the parent box, and a root has none — so on the
+        // root it can only mean a fraction of the space the root was given.
+        let root_margin = |side: Option<crate::style::Length>, uniform: f32, space: f64| match side {
+            Some(crate::style::Length::Px(px)) => px as f64,
+            Some(crate::style::Length::Pct(f)) => f as f64 * space,
+            Some(crate::style::Length::Auto) | None => uniform as f64,
+        };
         let origin = Point::new(
-            style.margin_left.unwrap_or(style.margin) as f64,
-            style.margin_top.unwrap_or(style.margin) as f64,
+            root_margin(style.margin_left, style.margin, available.w),
+            root_margin(style.margin_top, style.margin, available.h),
         );
         self.assign(root, origin);
         // The first layout pass that sees a widget is the first moment it is both in a live tree

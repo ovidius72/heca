@@ -247,7 +247,7 @@ impl Component for Tabs {
         self.base.style.layout.gap = TAB_GAP * self.base.size_scale();
         let band = (UNDERLINE_H as f32 + UNDERLINE_GAP) * self.base.size_scale();
         for child in self.base.children.iter_mut() {
-            child.base_mut().style.layout.margin_bottom = Some(band);
+            child.base_mut().style.layout.margin_bottom = Some(band.into());
         }
     }
 

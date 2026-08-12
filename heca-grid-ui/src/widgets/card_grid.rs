@@ -14,7 +14,7 @@
 //! match marks.
 
 use crate::component::{Base, Component, Event, Handled, WidgetIntent};
-use crate::reactive::{Signal, SignalGet, SignalUpdate};
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 
 /// One selectable cell: the caller's key for it, and the signal that lights it.
 ///
@@ -80,6 +80,13 @@ pub struct CardGrid {
     /// Told the key the cursor moved onto, every time it moves. See [`on_move`](CardGrid::on_move).
     on_move: Option<OnActivate>,
     on_dismiss: Option<Box<dyn Fn()>>,
+    /// **True while the KEYBOARD last moved the cursor**, false while the pointer did — handed to
+    /// each card through [`Row::reveal_when`](crate::widgets::Row::reveal_when) so pointing at a
+    /// card never scrolls it. See [`reveal_state`](CardGrid::reveal_state).
+    ///
+    /// Starts `true` so the card a surface opens on is revealed — the map opens on the pane you
+    /// came from, which may be anywhere in a strip wider than the screen.
+    reveal: Signal<bool>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -106,7 +113,20 @@ impl CardGrid {
             on_activate: None,
             on_move: None,
             on_dismiss: None,
+            reveal: signal(true),
         }
+    }
+
+    /// **Whether a reveal is wanted right now** — `true` while the keyboard moved the cursor,
+    /// `false` while the mouse did.
+    ///
+    /// Pass it to every card the grid drives, with
+    /// [`Row::reveal_when`](crate::widgets::Row::reveal_when), so an enclosing `ScrollRegion`
+    /// follows the keyboard and never chases the pointer. It has to be given to the cards rather
+    /// than read off this widget, because the region that scrolls is *inside* the grid — the walk
+    /// that collects reveal requests starts at the region and never passes through here.
+    pub fn reveal_state(&self) -> Signal<bool> {
+        self.reveal
     }
 
     /// Add a row of cards, laid out left to right by `layout`.
@@ -296,6 +316,11 @@ impl CardGrid {
         });
         if let Some(at) = at.filter(|at| *at != self.cursor) {
             self.cursor = at;
+            // **The pointer moved it, so nothing is scrolled.** A card under the mouse is visible by
+            // definition; revealing it would slide it out from under the pointer that asked for it.
+            if self.reveal.get_untracked() {
+                self.reveal.set(false);
+            }
             self.sync();
         }
     }
@@ -303,6 +328,13 @@ impl CardGrid {
     pub fn step(&mut self, dcol: isize, dcell: isize, drow: isize) {
         if self.rows.is_empty() {
             return;
+        }
+        // **The keyboard moved it, so the region comes to it.** Set here rather than in each caller
+        // because `step_vertical` and the nav intents all arrive through this one door — and because
+        // it must be set even when the cursor ends up clamped at an end, where the card is still the
+        // one to look at.
+        if !self.reveal.get_untracked() {
+            self.reveal.set(true);
         }
         let (mut r, mut c, mut i) = self.cursor;
         // Leaving this row: remember where in it we were, so coming back lands there.
@@ -418,6 +450,64 @@ mod tests {
         CardGrid::new()
             .row(vec![vec![cell("a"), cell("b")]], crate::widgets::Flex::row())
             .row(vec![vec![cell("c")]], crate::widgets::Flex::row())
+    }
+
+    /// **Pointing at a card must not scroll it.** Hovering centred the card in the exposé's
+    /// `ScrollRegion`, which slid it out from under the pointer — far enough, with one workspace
+    /// filling the screen, to land on a *different* card and slide again. The card ran away from
+    /// the cursor and clicking it became a chase (Antonio, driving, 2026-08-12).
+    ///
+    /// A reveal exists to bring into view something the user cannot see; what the mouse is on is
+    /// visible by definition.
+    #[test]
+    fn hovering_a_card_does_not_ask_the_region_to_scroll() {
+        let hov = signal(false);
+        let mut g = CardGrid::new()
+            .row(
+                vec![
+                    vec![GridCell::new("a", signal(false))],
+                    vec![GridCell::new("b", signal(false)).hovered(hov)],
+                ],
+                crate::widgets::Flex::row(),
+            )
+            .selected("a");
+        let reveal = g.reveal_state();
+        assert!(reveal.get_untracked(), "an untouched grid reveals its cursor");
+
+        hov.set(true);
+        g.follow_hover();
+        assert_eq!(g.selected_key(), Some("b"), "the cursor still follows the mouse");
+        assert!(
+            !reveal.get_untracked(),
+            "but nothing asks to be scrolled to — that is what moved it away from the pointer",
+        );
+    }
+
+    /// The other half, so the rule above cannot be satisfied by never revealing anything: arrowing
+    /// onto a card **does** bring it into view, because the keyboard can move the cursor somewhere
+    /// off-screen. The keyboard also wins when it moves after a hover.
+    #[test]
+    fn arrowing_onto_a_card_does_ask_the_region_to_scroll() {
+        let hov = signal(false);
+        let mut g = CardGrid::new()
+            .row(
+                vec![
+                    vec![GridCell::new("a", signal(false))],
+                    vec![GridCell::new("b", signal(false)).hovered(hov)],
+                ],
+                crate::widgets::Flex::row(),
+            )
+            .selected("a");
+        let reveal = g.reveal_state();
+        hov.set(true);
+        g.follow_hover();
+        assert!(!reveal.get_untracked());
+
+        g.step(1, 0, 0);
+        assert!(
+            reveal.get_untracked(),
+            "the keyboard needs the reveal, and it moved last",
+        );
     }
 
     /// **The vertical axis is one gesture.** Walking the panes of a split column and walking the

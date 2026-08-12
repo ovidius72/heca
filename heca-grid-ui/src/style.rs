@@ -138,6 +138,14 @@ pub enum Length {
     Pct(f32),
 }
 
+impl From<f32> for Length {
+    /// A bare number is pixels, the way `width(12.0)` already reads — so every existing
+    /// `margin_left(8.0)` keeps its meaning now that a margin may also be a percentage.
+    fn from(v: f32) -> Self {
+        Length::Px(v)
+    }
+}
+
 impl Serialize for Length {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match *self {
@@ -379,13 +387,13 @@ pub struct Layout {
     /// Vertical (top+bottom) margin override; `None` ⇒ use [`margin`](Self::margin).
     pub margin_y: Option<f32>,
     /// Left margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
-    pub margin_left: Option<f32>,
+    pub margin_left: Option<Length>,
     /// Right margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
-    pub margin_right: Option<f32>,
+    pub margin_right: Option<Length>,
     /// Top margin override; `None` ⇒ [`margin_y`](Self::margin_y), then [`margin`](Self::margin).
-    pub margin_top: Option<f32>,
+    pub margin_top: Option<Length>,
     /// Bottom margin override; `None` ⇒ [`margin_y`](Self::margin_y), then [`margin`](Self::margin).
-    pub margin_bottom: Option<f32>,
+    pub margin_bottom: Option<Length>,
     /// Uniform inner padding (all sides), unless overridden per axis by
     /// [`padding_x`](Self::padding_x) / [`padding_y`](Self::padding_y).
     pub padding: f32,
@@ -587,11 +595,21 @@ impl Layout {
                 // cascade padding has.
                 let mx = self.margin_x.unwrap_or(self.margin);
                 let my = self.margin_y.unwrap_or(self.margin);
+                // A side may be a **percentage** of the parent, which is what lets a caller place
+                // a box at a proportional position — a floating pane in the exposé sits at
+                // `x / strip_width` of its row, with no pixel scale anywhere (F003/P082/T420).
+                let side = |v: Option<Length>, axis: f32| match v {
+                    Some(Length::Px(px)) => length(px),
+                    Some(Length::Pct(f)) => percent(f),
+                    // `Auto` is the CSS centring margin; taffy spells it on this type.
+                    Some(Length::Auto) => taffy::LengthPercentageAuto::Auto,
+                    None => length(axis),
+                };
                 Rect {
-                    left: length(self.margin_left.unwrap_or(mx)),
-                    right: length(self.margin_right.unwrap_or(mx)),
-                    top: length(self.margin_top.unwrap_or(my)),
-                    bottom: length(self.margin_bottom.unwrap_or(my)),
+                    left: side(self.margin_left, mx),
+                    right: side(self.margin_right, mx),
+                    top: side(self.margin_top, my),
+                    bottom: side(self.margin_bottom, my),
                 }
             },
             // Most specific wins: a side, else its axis, else the uniform value — the cascade

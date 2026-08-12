@@ -551,8 +551,8 @@ impl Component for Select {
         let gutter = self.gutter() as f32;
         for child in self.base.children.iter_mut() {
             let style = &mut child.base_mut().style.layout;
-            style.margin_left = Some(inset);
-            style.margin_right = Some(gutter);
+            style.margin_left = Some(inset.into());
+            style.margin_right = Some(gutter.into());
         }
     }
 

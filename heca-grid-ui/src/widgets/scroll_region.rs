@@ -301,6 +301,16 @@ pub struct ScrollRegion {
     /// Both coordinates, because a horizontal region's cursor moves **sideways**: remembering only
     /// the top, a strip of cards would decide nothing had changed and never follow at all.
     last_revealed: Option<(f64, f64)>,
+    /// The **natural rect** of whatever last asked to be revealed — what [`center_pad`] keeps
+    /// centring while nothing is asking.
+    ///
+    /// A subtree can stop asking without anything having moved: a cursor-following grid withholds
+    /// the reveal while the pointer is driving it (`Component::reveals_subtree`), because pointing
+    /// at a card must not scroll it. Without this the pad would read "nothing to follow" and fall
+    /// back to centring the *content as a whole* — so hovering would slide the map anyway, just to
+    /// a different place. Holding the last target means the picture simply stays where the keyboard
+    /// left it (F003/P082/T418).
+    last_reveal_rect: Option<Rectangle>,
     /// Seconds left before an idle wheel gesture is declared over, or `None` when nothing is
     /// waiting. A wheel has no release, so its end is a **silence**, not an event — see
     /// [`WHEEL_IDLE_END`].
@@ -363,6 +373,7 @@ impl ScrollRegion {
             on_scroll_end: None,
             scrolling: false,
             last_revealed: None,
+            last_reveal_rect: None,
             wheel_idle: None,
         }
     }
@@ -899,27 +910,56 @@ impl ScrollRegion {
         }
         let vp = self.base.bounds;
         let (content_w, content_h) = self.raw_extent();
-        // Natural (pre-shift) rect of whatever asked to be seen, if anything did.
-        let target = crate::component::reveal_target_in(&self.base.children).map(|r| {
-            Rectangle::new(
-                Point::new(r.loc.x + self.applied_offset_x, r.loc.y + self.applied_offset),
-                r.size,
-            )
-        });
+        // Natural (pre-shift) rect of whatever asked to be seen — or, while nothing is asking, the
+        // last thing that did. See `last_reveal_rect`: a grid stops asking while the pointer drives
+        // its cursor, and the pad must hold rather than re-centre on the whole strip.
+        let target = crate::component::reveal_target_in(&self.base.children)
+            .map(|r| {
+                Rectangle::new(
+                    Point::new(r.loc.x + self.applied_offset_x, r.loc.y + self.applied_offset),
+                    r.size,
+                )
+            })
+            .or(self.last_reveal_rect);
         let over = self.overscroll;
         let pad = |on: bool, vp_start: f64, vp_len: f64, content: f64, tgt: Option<(f64, f64)>| {
             if !on || (content > vp_len && !over) {
                 // Overflowing an axis with ends: the scroll offset does the centring, and it
                 // clamps — so the first and last of anything rest against the edge instead of
-                // floating in half a screen of nothing. With `overscroll` there are no ends to
-                // clamp to, and the pad centres whatever the cursor is on, always.
+                // floating in half a screen of nothing.
                 return 0.0;
             }
-            match tgt {
+            // **What is centred depends on whether there is anything you cannot see.**
+            //
+            // When the content **fits**, centre the *content*: everything is on screen, so pulling
+            // one card to the middle can only push its neighbours off the edges — which is exactly
+            // what an exposé must never do. The map showed a screen of empty space on the left with
+            // the last column clipped on the right, because the cursor card was being centred in a
+            // strip that already fitted twice over (Antonio, with a screenshot, 2026-08-12).
+            //
+            // When it **overflows** — only reachable here with `overscroll`, which has no ends to
+            // clamp against — centre the cursor, because then there really is something off-screen
+            // and following it is the whole point.
+            match tgt.filter(|_| content > vp_len) {
                 Some((start, len)) => vp_len / 2.0 - (start - vp_start) - len / 2.0,
                 None => (vp_len - content) / 2.0,
             }
         };
+        // Temporary instrumentation (F003/P082/T420): the exposé's content measured 727 in a 730
+        // viewport — fitting — while this pushed it 185px down, which is the "it overflows, follow
+        // the cursor" branch. Six analytic diagnoses in a row have been wrong; this prints what the
+        // decision is actually made on.
+        #[cfg(debug_assertions)]
+        if std::env::var_os("HECA_TRACE_PAD").is_some() {
+            eprintln!(
+                "[heca] center_pad: vp={:.0}x{:.0} content={content_w:.0}x{content_h:.0} \
+                 over={over} target={:?} align={:?}",
+                vp.size.w,
+                vp.size.h,
+                target.map(|r| (r.loc.y, r.size.h)),
+                self.reveal_align,
+            );
+        }
         (
             pad(
                 self.axes.is_horizontal(),
@@ -947,7 +987,11 @@ impl ScrollRegion {
     /// that the view cannot be flicked off into empty space.
     fn offset_bounds_y(&self) -> (f64, f64) {
         let max = self.max_offset();
-        match self.overscroll && self.axes.is_vertical() {
+        // **Overscroll is a cushion past the ends, and content that fits has no ends.** Applied
+        // unconditionally it handed a full viewport of travel in each direction to a map with
+        // nothing off screen, so the wheel carried the whole picture out of the window and there
+        // was no way back but the keyboard (Antonio, driving, 2026-08-12).
+        match self.overscroll && self.axes.is_vertical() && max > 0.0 {
             true => (-self.base.bounds.size.h, max + self.base.bounds.size.h),
             false => (0.0, max),
         }
@@ -956,7 +1000,7 @@ impl ScrollRegion {
     /// The horizontal counterpart of [`offset_bounds_y`](Self::offset_bounds_y).
     fn offset_bounds_x(&self) -> (f64, f64) {
         let max = self.max_offset_x();
-        match self.overscroll && self.axes.is_horizontal() {
+        match self.overscroll && self.axes.is_horizontal() && max > 0.0 {
             true => (-self.base.bounds.size.w, max + self.base.bounds.size.w),
             false => (0.0, max),
         }
@@ -1491,6 +1535,10 @@ impl ScrollRegion {
             rect.loc.x + self.applied_offset_x,
             rect.loc.y + self.applied_offset,
         );
+        self.last_reveal_rect = Some(Rectangle::new(
+            Point::new(natural.0, natural.1),
+            rect.size,
+        ));
         if self.last_revealed == Some(natural) {
             return;
         }
@@ -1671,6 +1719,32 @@ mod tests {
     /// decides whose wheel it is.
     fn wheel_at(pos: Point, delta_x: f32, delta_y: f32) -> Event {
         Event::wheel(pos, delta_x, delta_y)
+    }
+
+    /// **A wheel over content that fits does nothing.** `overscroll` exists so a map larger than
+    /// the window can be pushed past its ends; applied to content with no ends it gave a full
+    /// viewport of travel in each direction, and the wheel carried the whole exposé off screen
+    /// with no way back but the keyboard (Antonio, driving, 2026-08-12).
+    #[test]
+    fn overscroll_gives_no_travel_to_content_that_fits() {
+        let mut r = region_with_children(&[40.0, 40.0]); // content 80, viewport 100
+        r.overscroll = true;
+        assert_eq!(r.max_offset(), 0.0, "the fixture must actually fit");
+        assert_eq!(r.offset_bounds_y(), (0.0, 0.0), "so there is nowhere to scroll");
+
+        r.scroll_by(500.0, None);
+        assert_eq!(r.scroll_offset.get_untracked(), 0.0, "and the wheel moves nothing");
+    }
+
+    /// The counterpart: real overflow still gets its cushion, so the map can be pushed past its
+    /// last row rather than stopping dead against it.
+    #[test]
+    fn overscroll_still_cushions_content_that_overflows() {
+        let mut r = region_with_children(&[80.0, 80.0]); // content 160, viewport 100
+        r.overscroll = true;
+        assert!(r.max_offset() > 0.0, "the fixture must actually overflow");
+        let (min, max) = r.offset_bounds_y();
+        assert!(min < 0.0 && max > r.max_offset(), "a viewport of cushion each way: {min}..{max}");
     }
 
     fn region_with_children(child_heights: &[f64]) -> ScrollRegion {
@@ -2107,32 +2181,39 @@ mod tests {
         );
     }
 
-    /// **An overscrolling surface can still be wheeled.** Its position is carried by the centring
-    /// pad, so `max_offset` is `0` whenever the content fits — and with the range clamped to
-    /// `[0, 0]` every wheel notch was a no-op and the surface felt frozen under the mouse.
+    /// **REVERSED 2026-08-12.** This used to assert the opposite — that an overscrolling surface
+    /// can be wheeled even when its content fits — on the reasoning that its position is carried by
+    /// the centring pad, so `max_offset` is `0` whenever it fits, and clamping the range to
+    /// `[0, 0]` left it "frozen under the mouse".
+    ///
+    /// Antonio, driving, reversed it: *"mouse wheel can still scroll even if there's no need and
+    /// put card off the screen"*. Freedom to scroll what is entirely visible is not responsiveness,
+    /// it is a way to lose the picture — and in the exposé it did exactly that, wheeling the whole
+    /// map out of the window with no way back but the keyboard. Overscroll is a **cushion past the
+    /// ends**; content that fits has no ends to cushion.
     #[test]
-    fn a_wheel_moves_an_overscrolling_region_even_when_its_content_fits() {
+    fn a_wheel_does_not_move_an_overscrolling_region_whose_content_fits() {
         let mut r = region_with_children(&[40.0]).overscroll(true);
         r.reveal_align = RevealAlign::Center;
         assert_eq!(r.max_offset(), 0.0, "the content fits — there is nothing to scroll *into*");
-        let wheel = wheel(0.0, 3.0);
-        r.on_event(&wheel);
-        assert!(
-            r.scroll_offset.get_untracked() > 0.0,
-            "and yet the wheel moved it: {}",
+        r.on_event(&wheel(0.0, 3.0));
+        assert_eq!(
             r.scroll_offset.get_untracked(),
+            0.0,
+            "so the wheel leaves it exactly where it is",
         );
-        // Bounded, so it cannot be flicked away into nothing.
-        r.set_offset_y(100_000.0, None);
-        assert!(r.scroll_offset.get_untracked() <= r.base.bounds.size.h as f32);
     }
 
     /// **Shift+wheel reaches the horizontal axis** — the host maps the modifier to `delta_x`, and a
     /// horizontal region consumes it on the same terms.
     #[test]
     fn a_horizontal_delta_scrolls_a_horizontal_overscrolling_region() {
+        // Wide enough to actually overflow: a region whose content fits has nowhere to go
+        // (see `a_wheel_does_not_move_an_overscrolling_region_whose_content_fits`).
         let mut r = region_with_children(&[40.0]);
         r.axes = ScrollAxes::Horizontal;
+        r.base.children[0].base_mut().bounds =
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(600.0, 40.0));
         r = r.overscroll(true);
         r.on_event(&wheel(3.0, 0.0));
         assert!(
@@ -2146,7 +2227,8 @@ mod tests {
     /// centre every later selection at the same offset from the middle, for good.
     #[test]
     fn moving_the_cursor_cancels_a_wheel_on_an_overscrolling_region() {
-        let mut r = region_with_children(&[40.0]).overscroll(true);
+        // Tall enough to actually overflow, so there is a wheel position to cancel.
+        let mut r = region_with_children(&[160.0]).overscroll(true);
         r.reveal_align = RevealAlign::Center;
         r.on_event(&wheel(0.0, 3.0));
         assert!(r.scroll_offset.get_untracked() > 0.0);

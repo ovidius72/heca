@@ -175,12 +175,28 @@ pub struct LayoutOptions {
     pub always_center_single_column: bool,
     /// Default width for new columns.
     pub default_column_width: Option<ColumnWidth>,
-    /// How large the overview draws things, as a fraction of life size — niri's `overview { zoom }`.
+    /// **The largest** the overview draws things, as a fraction of life size — niri's
+    /// `overview { zoom }`.
     ///
-    /// **Everything is drawn at real size times this**, which is what makes the map a map: a
-    /// workspace row is the viewport's shape, a column keeps its real proportion of the screen, and
-    /// a strip scrolled past one screen really is wider than its row.
+    /// **Everything is drawn at real size times the resolved zoom**, which is what makes the map a
+    /// map: a workspace row is the viewport's shape, a column keeps its real proportion of the
+    /// screen, and a strip scrolled past one screen really is wider than its row.
+    ///
+    /// It is a **maximum**, not the zoom (changed 2026-08-12, F003/P082/T419). An exposé shows
+    /// everything at once — that is what the name means — so the map fits itself to the view and
+    /// uses this only to stop a small session being blown up to fill the screen. The floor is
+    /// [`overview_min_card_width`](Self::overview_min_card_width).
     pub overview_scale: f64,
+    /// **The narrowest a card may be drawn**, in logical pixels — the floor under the overview's
+    /// computed zoom.
+    ///
+    /// A *scale* floor would not say what it means: columns differ in width, so the same scale
+    /// leaves one session legible and another a set of slivers. A width does, and it is the
+    /// question actually being asked — "can I still tell what that pane is?".
+    ///
+    /// Below it the map stops shrinking and scrolls instead, which is the only honest answer for a
+    /// session of thirty panes.
+    pub overview_min_card_width: f64,
     /// The scale the overview **opens from**, relative to [`overview_scale`](Self::overview_scale)
     /// — it animates out of this and back into it on the way out. `1.0` means no animation.
     ///
@@ -207,6 +223,12 @@ impl Default for LayoutOptions {
             overview_scale: 0.5,
             overview_zoom_from: 0.8,
             overview_gap: 0.1,
+            // **Off by default: an exposé shows everything.** A floor sounds prudent and is not —
+            // set to 140px it bound on an ordinary session of three workspaces, holding the zoom a
+            // hair above the vertical fit so two of the three rows fell off the bottom (Antonio,
+            // with a screenshot, 2026-08-12). Small cards are an honest picture of a large session;
+            // hiding two thirds of it is not. A user who would rather scroll than squint sets one.
+            overview_min_card_width: 0.0,
         }
     }
 }

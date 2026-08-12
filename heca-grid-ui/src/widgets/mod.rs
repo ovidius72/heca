@@ -32,7 +32,7 @@ mod item_group;
 mod key_hint;
 mod label;
 mod marker_group;
-mod overlay;
+pub mod overlay;
 mod pane;
 mod progress;
 mod rail_cell;

@@ -47,6 +47,10 @@ pub struct Row {
     active: Signal<bool>,
     /// Sidebar-nav cursor state: a hollow outline, distinct from `active`.
     nav: Signal<bool>,
+    /// **May this row ask to be scrolled into view?** `None` (the default) means yes, always —
+    /// which is right for a list whose cursor only the keyboard moves. See
+    /// [`reveal_when`](Row::reveal_when).
+    reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
@@ -72,6 +76,7 @@ impl Row {
             base,
             active: signal(false),
             nav: signal(false),
+            reveal: None,
             marker: ActiveMarker::Bar,
             flash: Flash::new(),
             on_activate: None,
@@ -108,6 +113,26 @@ impl Row {
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn attention(mut self, req: Signal<bool>) -> Self {
         self.attention_req = Some(req);
+        self
+    }
+
+    /// Gate this row's request to be scrolled into view on a live signal.
+    ///
+    /// **A reveal exists to bring into view something the user cannot see.** That is the keyboard's
+    /// case — the cursor moves somewhere possibly off-screen, so the region follows it. It is never
+    /// the pointer's: what you are pointing at is visible by definition, and scrolling it moves it
+    /// out from under the mouse that asked for it.
+    ///
+    /// A list whose cursor **only the keyboard moves** needs none of this and should not call it.
+    /// One whose cursor also follows the mouse must, or three correct behaviours compose into a
+    /// wrong one: hover moves the cursor here → this row asks to be visible → the region centres it
+    /// → the card slides away from the pointer, possibly onto another card, which slides again
+    /// (Antonio, driving, 2026-08-12). [`CardGrid::reveal_state`](crate::widgets::CardGrid) is the
+    /// signal to pass: it is `true` while the keyboard moved the cursor and `false` while the mouse
+    /// did.
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
+    pub fn reveal_when(mut self, allowed: Signal<bool>) -> Self {
+        self.reveal = Some(allowed);
         self
     }
 
@@ -175,8 +200,11 @@ impl Row {
 impl Component for Row {
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    ///
+    /// **Unless the cursor was put here by the mouse** — see [`reveal_when`](Row::reveal_when).
     fn wants_visible(&self) -> bool {
-        self.nav.get_untracked() || self.base.focused.get_untracked()
+        let cursor = self.nav.get_untracked() || self.base.focused.get_untracked();
+        cursor && self.reveal.is_none_or(|r| r.get_untracked())
     }
 
     fn base(&self) -> &Base {

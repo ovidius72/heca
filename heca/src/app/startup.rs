@@ -72,6 +72,13 @@ pub(crate) fn layout_options_from(
             always_center_single_column: app_config.config.settings.always_center_single_column,
             // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
             overview_scale: app_config.config.settings.overview_zoom.clamp(0.05, 0.75),
+            // `0` disables the floor, which is the default — the map fits the whole session. The
+            // upper bound stops a typo demanding a floor no session could ever fit under.
+            overview_min_card_width: app_config
+                .config
+                .settings
+                .overview_min_card_width
+                .clamp(0.0, 1000.0),
             overview_zoom_from: app_config.config.settings.overview_zoom_from.clamp(0.2, 4.0),
             overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
             center_focused_column: match app_config.config.settings.center_focused_column {
