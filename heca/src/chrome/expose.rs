@@ -231,11 +231,36 @@ type DispatchAction = std::rc::Rc<dyn Fn(&str, &[(&str, i64)])>;
 /// way — it is a pane. `X` and `d` name the column and workspace the card sits in, which the card
 /// knows because it was built inside them; nothing is looked up and no cursor is consulted.
 ///
+/// **Which typed characters the map's cards answer to**, one list per thing that can be deleted.
+///
+/// Plain data, so [`map`] stays a composition that takes plain data and needs no `AppState` (§ 0b)
+/// — the lists are read from the built keymaps by [`register`] and handed in. Empty lists are a
+/// working state, not a bug: a user who unbinds them gets a map with no delete keys.
+#[derive(Clone, Default, Debug, PartialEq)]
+pub(crate) struct ExposeDeleteKeys {
+    /// `delete_pane` — the card the cursor is on.
+    pub(crate) pane: Vec<String>,
+    /// `delete_column` — the column that card sits in.
+    pub(crate) column: Vec<String>,
+    /// `delete_workspace` — the workspace that column sits in.
+    pub(crate) workspace: Vec<String>,
+}
+
+/// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
+/// constant so the layer, the config entry and the key lookup cannot drift apart.
+pub(crate) const SURFACE: &str = "expose";
+
 /// Written as a `fn` returning the closure so the two call sites share one definition rather than
-/// growing a second, drifting copy. The keys themselves are the only literals here: they are the
-/// *card's* own gesture, the way `Enter` is a button's, and the acts they name are the ordinary
-/// registry actions — so a rebind, the palette and RPC all still reach the same three.
+/// growing a second, drifting copy. The acts are the ordinary registry actions — so a rebind, the
+/// palette and RPC all still reach the same three.
+///
+/// **The letters come from `[[keys.surface]] heca.expose`**, not from this file (F003/P082/T416).
+/// They used to be literals here, which made them the one part of the map a user could not rebind
+/// while the workspaces dock's identical `x` sat in `keybindings.default.toml`. The *handler* stays
+/// on the card, because the card is what knows which pane, column and workspace it is — the host
+/// resolves which letters, the widget resolves what they act on.
 fn delete_keys(
+    keys: ExposeDeleteKeys,
     delete: DispatchAction,
     cursor_to: std::rc::Rc<dyn Fn(PaneId)>,
     pane_id: PaneId,
@@ -254,36 +279,35 @@ fn delete_keys(
         let Event::TextInput(typed) = cx.event() else {
             return;
         };
-        let dispatched = match typed.as_str() {
-            "x" => {
-                // **Hand the cursor on before the card goes.** The neighbour was resolved while
-                // this row still had both of them; after the delete there is nothing left to ask.
-                // Sent first so the rebuild the delete triggers already finds the cursor moved —
-                // the events are queued and processed in order.
-                if let Some(next) = next {
-                    cursor_to(next);
-                }
-                delete("close_pane_by_id", &[("pane_id", pane_id.0 as i64)]);
-                true
+        let typed = typed.as_str();
+        let matches = |bound: &[String]| bound.iter().any(|k| k == typed);
+        let dispatched = if matches(&keys.pane) {
+            // **Hand the cursor on before the card goes.** The neighbour was resolved while this
+            // row still had both of them; after the delete there is nothing left to ask. Sent
+            // first so the rebuild the delete triggers already finds the cursor moved — the events
+            // are queued and processed in order.
+            if let Some(next) = next {
+                cursor_to(next);
             }
+            delete("close_pane_by_id", &[("pane_id", pane_id.0 as i64)]);
+            true
+        } else if matches(&keys.column) {
             // A column is named by the workspace holding it, so both indices go in one intent.
             //
-            // `r`, not `X`: `x` and `X` are the same *key* and only differ as typed text, so the
-            // pair read as one gesture with a modifier that the key layer cannot see. Three plain
-            // letters, one per thing — pane, column, workspace — is what a user can actually keep
-            // in their head (Antonio, 2026-08-11).
-            "r" => {
-                delete(
-                    "delete_column",
-                    &[("ws_idx", ws_idx as i64), ("col_idx", col_idx as i64)],
-                );
-                true
-            }
-            "d" => {
-                delete("delete_workspace", &[("ws_idx", ws_idx as i64)]);
-                true
-            }
-            _ => false,
+            // The shipped default is `r`, not `X`: `x` and `X` are the same *key* and only differ
+            // as typed text, so the pair read as one gesture with a modifier that the key layer
+            // cannot see. Three plain letters, one per thing — pane, column, workspace — is what a
+            // user can actually keep in their head (Antonio, 2026-08-11).
+            delete(
+                "delete_column",
+                &[("ws_idx", ws_idx as i64), ("col_idx", col_idx as i64)],
+            );
+            true
+        } else if matches(&keys.workspace) {
+            delete("delete_workspace", &[("ws_idx", ws_idx as i64)]);
+            true
+        } else {
+            false
         };
         // Claim only what was acted on, so every other key still bubbles to the grid for the nav.
         if dispatched {
@@ -331,6 +355,7 @@ pub(crate) fn map(
     emit: super::ChromeIntentEmitter,
     start: Option<PaneId>,
     geometry: &heca_core::layout::LayoutOptions,
+    keys: &ExposeDeleteKeys,
 ) -> Box<dyn Component> {
     // **The map's scale and spacing are the layout's, not this module's.** `overview_scale` and
     // `overview_gap` are `LayoutOptions` fields the user sets in config; hardcoding a zoom here
@@ -474,6 +499,7 @@ pub(crate) fn map(
                 card.base_mut().focused = card.nav_state();
                 let card = card
                     .on_text_input(delete_keys(
+                        keys.clone(),
                         delete.clone(),
                         cursor_to.clone(),
                         pane.pane_id,
@@ -567,6 +593,7 @@ pub(crate) fn map(
                 // column the user is looking at. `x` and `d` mean exactly what they do elsewhere.
                 let card = card
                     .on_text_input(delete_keys(
+                        keys.clone(),
                         delete.clone(),
                         cursor_to.clone(),
                         float.pane_id,
@@ -735,13 +762,13 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
         .title
     });
     let theme = super::chrome_gui_theme(state);
-    let event_proxy = state.event_proxy.clone();
-    let emit: super::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
-        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-            source: crate::app::interaction::InteractionSource::Keyboard,
-            intent,
-        });
-    });
+    // **The map's own id, so its intents say the map made them.** Stamped `Keyboard` before, which
+    // was indistinguishable from `prefix+j` typed at the session behind the map — and once the
+    // active context started refusing the app's bindings, that sameness would have refused the
+    // map's own deletes with them (F003/P082/T416). A re-registration keeps the layer's id, so the
+    // one already registered under this name is the one to name.
+    let id = state.layers.slot_for_name(&name);
+    let emit = super::layer_emitter(&state.event_proxy, id);
     // **Open where the map was left, else on the pane you are standing in.** The remembered
     // highlight wins because it is the more specific answer: it is where *this surface* was when
     // you last used it. With nothing remembered — the first open of a session — the pane you came
@@ -770,9 +797,22 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
                 .and_then(|ws| ws.active_pane())
                 .map(|p| p.id)
         });
-    let root = map(&rows, &theme, emit, here, &state.session.options);
+    // **The cards' delete letters, from `[[keys.surface]] heca.expose`.** Read through
+    // `ActionShortcuts`, which is built from the *resolved* keymaps at load and at every
+    // `prefix+Shift+r` — so a rebind reaches the map without this path knowing anything about the
+    // config file, and without a second reader of it.
+    let keys = ExposeDeleteKeys {
+        pane: state.action_shortcuts.in_surface(&name, "delete_pane").to_vec(),
+        column: state.action_shortcuts.in_surface(&name, "delete_column").to_vec(),
+        workspace: state
+            .action_shortcuts
+            .in_surface(&name, "delete_workspace")
+            .to_vec(),
+    };
+    let root = map(&rows, &theme, emit, here, &state.session.options, &keys);
     let was_visible = state.layers.is_visible_named(&name);
     let id = state.layers.add_named(
+        id,
         name.clone(),
         super::LayerBand::Overlay,
         super::LayerKind::OnDemand,
@@ -820,6 +860,78 @@ mod tests {
     use super::*;
     use heca_core::layout::{LayoutOptions, Pane, Rectangle, SessionId, Size};
 
+    /// The delete letters **as the bundled defaults bind them**, so these tests exercise what a
+    /// user actually gets. Held to the real file by
+    /// [`the_shipped_defaults_bind_the_maps_delete_keys`], which fails if the two drift.
+    fn shipped_keys() -> ExposeDeleteKeys {
+        ExposeDeleteKeys {
+            pane: vec!["x".into()],
+            column: vec!["r".into()],
+            workspace: vec!["d".into()],
+        }
+    }
+
+    /// **The letters reach the cards** — the whole path, from the shipped file through the built
+    /// keymaps to the list [`register`] hands the cards.
+    ///
+    /// This is the test that was missing, and the gap was not academic: the entry parsed, the
+    /// keymap built, and the lookup still came back **empty**, because the index records the
+    /// qualified id (`heca.expose.delete_pane`) while the lookup asked for the short name. The
+    /// letters silently did nothing and `x` fell through to the host, which reported an action it
+    /// had never heard of (Antonio, driving, 2026-08-12). Asserting the entry alone — which the
+    /// test below does — could not see it: both ends were right and the join was wrong.
+    #[test]
+    fn the_shipped_delete_letters_reach_the_cards() {
+        let mut index = crate::keymap::BindingIndex::new();
+        crate::app::registry::build_component_keymaps(
+            &heca_config::theme::Config::default(),
+            &mut crate::app::conflicts::Conflicts::default(),
+            &mut index,
+        );
+        let shortcuts = super::super::ActionShortcuts::from_index(
+            &index,
+            crate::shortcut::KeyStyle::default(),
+        );
+        let name = super::super::layers::layer_name(super::super::layers::HOST_OWNER, SURFACE)
+            .expect("a valid layer name");
+        let found = ExposeDeleteKeys {
+            pane: shortcuts.in_surface(&name, "delete_pane").to_vec(),
+            column: shortcuts.in_surface(&name, "delete_column").to_vec(),
+            workspace: shortcuts.in_surface(&name, "delete_workspace").to_vec(),
+        };
+        assert_eq!(
+            found,
+            shipped_keys(),
+            "the map's cards must actually receive the letters the defaults bind",
+        );
+    }
+
+    /// **The letters are config, and this is the file they live in.** They were literals in this
+    /// module until F003/P082/T416; the tests above would happily keep passing with a default file
+    /// that bound nothing, and the map would then have no delete keys at all. So the shipped
+    /// `[[keys.surface]]` entry is asserted directly.
+    #[test]
+    fn the_shipped_defaults_bind_the_maps_delete_keys() {
+        let keys = heca_config::theme::KeysConfig::default();
+        let name = super::super::layers::layer_name(super::super::layers::HOST_OWNER, SURFACE)
+            .expect("a valid layer name");
+        let entry = keys
+            .surfaces()
+            .find(|e| e.name == name)
+            .unwrap_or_else(|| panic!("keybindings.default.toml must ship a surface layer for {name}"));
+        for (action, expected) in [
+            ("delete_pane", "x"),
+            ("delete_column", "r"),
+            ("delete_workspace", "d"),
+        ] {
+            let bound = entry
+                .bindings
+                .get(action)
+                .unwrap_or_else(|| panic!("{name} must bind {action}"));
+            assert_eq!(bound.keys(), vec![expected.to_string()], "{action}");
+        }
+    }
+
     fn session() -> Session {
         let viewport = Size::new(800.0, 600.0);
         let mut s = Session::new(SessionId(0), viewport, 1.0, LayoutOptions::default());
@@ -847,7 +959,7 @@ mod tests {
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
         // Open on the FIRST pane — the leftmost card of the top row, the case that has to travel
         // furthest and the one that sat in the corner.
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
         let mut scene = heca_grid_ui::Scene::new();
@@ -934,7 +1046,7 @@ mod tests {
         // …and the drawn cards keep that ratio.
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
 
@@ -1024,7 +1136,7 @@ mod tests {
         let f = rows[0].floating[0].clone();
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
 
@@ -1060,7 +1172,7 @@ mod tests {
             let s2 = session();
             let rows2 = model(&s2, |p| p.title.clone());
             let emit2: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-            let mut root2 = map(&rows2, &theme, emit2, Some(PaneId(1)), &LayoutOptions::default());
+            let mut root2 = map(&rows2, &theme, emit2, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
             heca_grid_ui::LayoutEngine::new()
                 .compute(root2.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
             card_of(root2.as_ref(), &pane_nav_key(PaneId(1))).expect("its card")
@@ -1103,7 +1215,7 @@ mod tests {
             let seen = seen.clone();
             std::rc::Rc::new(move |intent| seen.borrow_mut().push(intent))
         };
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
 
@@ -1212,7 +1324,7 @@ mod tests {
         let rows = model(&s, |p| p.title.clone());
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
 
@@ -1264,7 +1376,7 @@ mod tests {
             std::rc::Rc::new(move |i| seen.borrow_mut().push(i))
         };
         // Open on the FIRST pane; the row also holds pane 2, which must take the cursor.
-        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
 
@@ -1318,7 +1430,7 @@ mod tests {
             std::rc::Rc::new(move |intent| chosen.borrow_mut().push(intent))
         };
         // Open on the LAST tiled pane, so one step right is the float.
-        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default(), &shipped_keys());
         let vp = heca_grid_ui::Size::new(1900.0, 1200.0);
         heca_grid_ui::LayoutEngine::new().compute(root.as_mut(), vp);
 
@@ -1355,7 +1467,7 @@ mod tests {
         let rows = model(&s, |p| p.title.clone());
         let theme = heca_grid_ui::theme::Theme::default();
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys());
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
         // reaches the screen.
@@ -1405,7 +1517,7 @@ mod tests {
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
             sink.borrow_mut().push(format!("{intent:?}"));
         });
-        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, Some(PaneId(2)), &LayoutOptions::default(), &shipped_keys());
 
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Activate));
         let got = seen.borrow().join(" ");
@@ -1438,7 +1550,7 @@ mod tests {
         let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(move |intent| {
             sink.borrow_mut().push(format!("{intent:?}"));
         });
-        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default());
+        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys());
         heca_grid_ui::dispatch(root.as_mut(), &Event::Widget(W::Dismiss));
         let got = seen.borrow().join(" ");
         assert!(

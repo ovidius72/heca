@@ -491,6 +491,13 @@ pub(crate) struct RetainedPaneViewportWidgets {
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ActionShortcuts {
     by_action: std::collections::HashMap<String, Vec<String>>,
+    /// The same bindings kept **per layer** — `(layer label, action) → keys`.
+    ///
+    /// [`by_action`](Self#structfield.by_action) flattens every layer together, which is right for
+    /// a tooltip (*"what key runs this?"*) and wrong for a surface asking *"what key runs this **in
+    /// me**?"*. The exposé's cards need the second: their `x` is theirs, and a `close_pane_by_id`
+    /// bound somewhere else is not the card's gesture (F003/P082/T416).
+    by_layer: std::collections::HashMap<(String, String), Vec<String>>,
     /// How [`get`](ActionShortcuts::get) spells a binding for a **text** surface.
     style: crate::shortcut::KeyStyle,
 }
@@ -539,7 +546,47 @@ impl ActionShortcuts {
                 (!keys.is_empty()).then(|| (action.clone(), keys))
             })
             .collect();
-        Self { by_action, style }
+        // The same index again, kept by the layer each binding was written in, so a surface can ask
+        // for its own keys without a second reader of the config file.
+        let mut by_layer: std::collections::HashMap<(String, String), Vec<String>> =
+            std::collections::HashMap::new();
+        for (action, bound) in index {
+            for b in bound {
+                by_layer
+                    .entry((b.layer.clone(), action.clone()))
+                    .or_default()
+                    .push(b.key.clone());
+            }
+        }
+        Self { by_action, by_layer, style }
+    }
+
+    /// **The keys `action_name` answers to in one surface's own layer** — empty when that surface
+    /// binds it to nothing.
+    ///
+    /// `surface` is the surface's name (`heca.expose`, `workspaces`) and `action_name` is the
+    /// **short name as written in its entry** — `delete_pane`, not `heca.expose.delete_pane`. Both
+    /// halves of the stored key are rebuilt from the functions that wrote it: the layer label the
+    /// way [`build_component_keymaps`](crate::app::registry::build_component_keymaps) spells it,
+    /// and the action id through
+    /// [`surface_action_id`](crate::app::registry::surface_action_id) — so neither can drift into a
+    /// second spelling of one thing.
+    ///
+    /// This exists so a widget's own key handler can take its letters from config instead of
+    /// holding them as literals — the exposé's `x` / `r` / `d` were hardcoded in `chrome/expose.rs`
+    /// while the workspaces dock's identical `x` came from `keybindings.default.toml`.
+    ///
+    /// Args are empty here because this answers for the flat `action = "key"` form. The
+    /// arg-carrying `[[keys.surface.bind]]` form names its action in full, which
+    /// `surface_action_id` leaves alone either way.
+    pub(crate) fn in_surface(&self, surface: &str, action_name: &str) -> &[String] {
+        let label = format!("[[keys.surface]] {surface}");
+        let id = crate::app::registry::surface_action_id(
+            surface,
+            action_name,
+            &std::collections::HashMap::new(),
+        );
+        self.by_layer.get(&(label, id)).map_or(&[], Vec::as_slice)
     }
 
     /// Every binding of `action_name` as its **raw config key**, in the index's order — empty when
@@ -1427,6 +1474,34 @@ pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
 /// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
 pub(crate) type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
 
+/// **The intent sink for one layer's own retained tree** — the exposé's cards, a modal's buttons, a
+/// plugin panel's widgets (F003/P082/T416).
+///
+/// Every intent it posts is stamped [`InteractionSource::Surface`] with that layer's id, which is
+/// how [`domain_for`](crate::app::interaction::domain_for) tells "the surface holding the keyboard
+/// acted on itself" from "the user typed at the app behind it". The two arrive as the same event
+/// and only this stamp separates them.
+///
+/// One function rather than a closure per call site: there were three, and each had picked a
+/// *different* lie about where its intents came from — the exposé claimed `Keyboard`, the modal and
+/// the described-layer path claimed `MouseContent`. Three copies of one rule is a missing API
+/// (AGENTS ⭐⭐ Rule Zero), and here the copies had already drifted.
+///
+/// Take the id from [`LayerRegistry::reserve_id`](layers::LayerRegistry::reserve_id) when the tree
+/// has to be built before the layer is inserted, which is the usual case.
+pub(crate) fn layer_emitter(
+    event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    id: LayerId,
+) -> ChromeIntentEmitter {
+    let event_proxy = event_proxy.clone();
+    Rc::new(move |intent| {
+        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: crate::app::interaction::InteractionSource::Surface(id),
+            intent,
+        });
+    })
+}
+
 /// Transparent wrapper that marks only its own bounds dirty when the host bumps
 /// `request`. This lets retained chrome updates damage the specific card/marker/label
 /// instead of the entire chrome root.
@@ -2037,7 +2112,6 @@ pub(crate) fn paint_link_hints(
 /// the opaque region(s) it paints over lower layers (from real layout — never hardcoded),
 /// and whether it is `modal` (a blocking context that suppresses everything beneath it).
 struct HintLayer {
-    band: LayerBand,
     targets: Vec<(PeekTarget, Rectangle)>,
     occluders: Vec<Rectangle>,
     modal: bool,
@@ -2110,12 +2184,20 @@ fn collect_peek_targets(state: &crate::app_state::AppState) -> Vec<(PeekTarget, 
     out
 }
 
-/// The single visibility rule (`docs/surface-compositor.md` §3): walk the layers
-/// **front → back**; a target is eligible iff it lies in `viewport` and its **centre** is
-/// not covered by any higher layer's occluder; a **modal** layer cuts off everything
-/// beneath it. This one rule subsumes every case — off-screen, hidden behind the sidebar,
-/// a zoomed/floating pane drawn over another, a modal over the whole app — and extends to
-/// new surfaces for free.
+/// The single visibility rule (`docs/surface-compositor.md` §3), both halves of it, in the order
+/// §2 keeps them: **coarse first, then fine.**
+///
+/// - **Coarse — context activation.** Walking front → back, the first **modal** layer is the active
+///   context, and everything beneath it is dormant: the walk stops there. This is what makes
+///   `prefix+/` under the exposé offer the map's cards and nothing else.
+/// - **Fine — geometric occlusion.** *Within* what the coarse rule left eligible, a target survives
+///   iff it lies in `viewport` and its **centre** is not covered by a higher surface's occluder.
+///
+/// The fine rule subsumes every case — off-screen, hidden behind the sidebar, a zoomed/floating
+/// pane drawn over another — and extends to new surfaces for free. The caller must hand `layers`
+/// in true front → back order; there is no sort here, because a second ordering is a second answer
+/// to "what is in front", and the two drifted once already (2026-08-11: input and painting
+/// disagreed about which layer was frontmost).
 fn resolve_hint_layers(
     layers: Vec<HintLayer>,
     viewport: Rectangle,
@@ -2147,6 +2229,82 @@ fn resolve_hint_layers(
     kept
 }
 
+/// The coarse half of §3 — the half that was missing, and the whole of F003/P082/T416's picker
+/// defect. Held here rather than in a behaviour test because the rule is a pure function of the
+/// stack, and because the failure it guards was invisible on screen: the letters were painted
+/// *under* the exposé while the targets they named answered normally.
+#[cfg(test)]
+mod hint_visibility {
+    use super::*;
+
+    /// A target somewhere harmless, named by a path so two of them are never equal.
+    fn target(path: usize, x: f64) -> (PeekTarget, Rectangle) {
+        (
+            PeekTarget { surface: PeekSurface::Chrome, path: vec![path] },
+            Rectangle::new(Point::new(x, 10.0), Size::new(20.0, 20.0)),
+        )
+    }
+
+    fn viewport() -> Rectangle {
+        Rectangle::new(Point::new(0.0, 0.0), Size::new(1000.0, 800.0))
+    }
+
+    /// **The defect this task exists for.** With the exposé up, `prefix+/` offered the sidebar's
+    /// rows — the letters were invisible under the map, so a keystroke drove a surface the user
+    /// could not see (Antonio, 2026-08-12). A modal layer is the active context: everything
+    /// beneath it is dormant, and dormant surfaces are not pickable.
+    #[test]
+    fn a_modal_layer_is_the_active_context_and_nothing_beneath_it_is_pickable() {
+        let stack = vec![
+            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: true },
+            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
+        ];
+        let kept = resolve_hint_layers(stack, viewport());
+        assert_eq!(kept.len(), 1, "only the active context's own targets survive");
+        assert_eq!(kept[0].0.path, vec![0]);
+    }
+
+    /// The counterpart, so the rule above cannot be satisfied by suppressing everything: a layer
+    /// that does **not** take the keyboard leaves the surfaces beneath it live. This is what keeps
+    /// the sidebar hintable while a pane is zoomed or a toast is up.
+    #[test]
+    fn a_non_modal_layer_leaves_what_is_beneath_it_pickable() {
+        let stack = vec![
+            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: false },
+            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
+        ];
+        assert_eq!(resolve_hint_layers(stack, viewport()).len(), 2);
+    }
+
+    /// Coarse first, then fine — both, not one. Within the active context a target is still
+    /// dropped when a surface in front of it covers its centre.
+    #[test]
+    fn occlusion_still_applies_inside_the_active_context() {
+        let stack = vec![
+            HintLayer {
+                targets: vec![target(0, 0.0)],
+                occluders: vec![Rectangle::new(Point::new(90.0, 0.0), Size::new(200.0, 100.0))],
+                modal: false,
+            },
+            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: true },
+        ];
+        let kept = resolve_hint_layers(stack, viewport());
+        assert_eq!(kept.len(), 1, "the covered target is dropped, the covering one kept");
+        assert_eq!(kept[0].0.path, vec![0]);
+    }
+
+    /// A target scrolled off the window is not pickable however live its surface is.
+    #[test]
+    fn a_target_outside_the_viewport_is_dropped() {
+        let stack = vec![HintLayer {
+            targets: vec![target(0, 5_000.0)],
+            occluders: vec![],
+            modal: false,
+        }];
+        assert!(resolve_hint_layers(stack, viewport()).is_empty());
+    }
+}
+
 /// Build the current surface stack (front → back) and resolve the reachable hint targets
 /// for the universal picker. **The one place hint visibility is decided.** The stack
 /// mirrors the paint order so hints match what is visually on top; adding a new surface
@@ -2172,8 +2330,24 @@ pub(crate) fn active_peek_targets(
 
     let mut layers: Vec<HintLayer> = Vec::new();
 
-    // (Overlays — the context menu + the destructive-confirm dialog — are now
-    //  dynamically-registered overlay-band layers, collected in step 4.)
+    // The stack is assembled **front → back, in paint order reversed** — layers, then the chrome
+    // shell, then the panes. That is literally how the frame is drawn (`render.rs`: chrome scene,
+    // then `paint_layers` into a scene flushed after it), so building the stack this way makes the
+    // two agree by construction instead of by a second ordering rule that has to be kept in step.
+    //
+    // 1. Dynamically registered layers (the exposé, the context menu, the confirm dialog, a plugin
+    //    panel), front → back among themselves. Their targets and occluder come from their
+    //    laid-out tree, never a constant. The first **modal** one among them is the active context
+    //    and `resolve_hint_layers` stops there — which is what suppresses the chrome and the panes
+    //    beneath an exposé.
+    for layer in state.layers.visible_front_to_back() {
+        let bounds = layer.root().base().bounds;
+        layers.push(HintLayer {
+            targets: peeks_of(&PeekSurface::Layer(layer.id), layer.root()),
+            occluders: vec![bounds],
+            modal: layer.modal,
+        });
+    }
 
     // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
     //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
@@ -2182,7 +2356,6 @@ pub(crate) fn active_peek_targets(
         let (cl, ct) = (content.loc.x, content.loc.y);
         let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
         layers.push(HintLayer {
-            band: LayerBand::Overlay,
             targets: peeks_of(&PeekSurface::Chrome, &tree.root),
             occluders: vec![
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
@@ -2206,7 +2379,6 @@ pub(crate) fn active_peek_targets(
             continue;
         };
         layers.push(HintLayer {
-            band: LayerBand::Content,
             targets: peeks_of(&PeekSurface::PaneHeader(pane_id), &header.root),
             occluders: vec![Rectangle::new(
                 Point::new(x as f64, y as f64),
@@ -2215,23 +2387,6 @@ pub(crate) fn active_peek_targets(
             modal: false,
         });
     }
-
-    // 4. Dynamically registered layers (on-demand exposé, plugin panel). They join the
-    //    same stack by their band; their targets + occluder come from their laid-out tree.
-    for layer in state.layers.visible_front_to_back() {
-        let bounds = layer.root().base().bounds;
-        layers.push(HintLayer {
-            band: layer.band,
-            targets: peeks_of(&PeekSurface::Layer(layer.id), layer.root()),
-            occluders: vec![bounds],
-            modal: layer.modal,
-        });
-    }
-
-    // Order the whole stack front → back by band (Modal in front … Background at the back),
-    // stable so within-band order — built-ins before dynamics, and the draw order among
-    // panes (zoomed/float on top) — is preserved.
-    layers.sort_by_key(|l| std::cmp::Reverse(l.band.rank()));
 
     resolve_hint_layers(layers, viewport)
 }

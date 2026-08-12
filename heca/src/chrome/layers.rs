@@ -45,6 +45,15 @@ pub(crate) const HOST_OWNER: &str = "heca";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct LayerId(u64);
 
+impl LayerId {
+    /// A specific id, for tests that need two that differ. Runtime ids only ever come from
+    /// [`LayerRegistry::reserve_id`] — the counter is the registry's, not a caller's.
+    #[cfg(test)]
+    pub(crate) fn for_test(n: u64) -> Self {
+        Self(n)
+    }
+}
+
 /// Semantic z **band** — replaces raw z numbers (no magic values). Order within a band is
 /// insertion order. Higher bands paint/hint **in front of** lower ones.
 ///
@@ -285,8 +294,25 @@ impl LayerRegistry {
         covers_content: bool,
         root: Box<dyn Component>,
     ) -> LayerId {
-        let id = LayerId(self.next);
-        self.next += 1;
+        let id = self.reserve_id();
+        self.push_layer(id, band, kind, modal, covers_content, LayerContent::Native(root), None);
+        id
+    }
+
+    /// The one place a `DynamicLayer` is constructed. Every registration path — anonymous, named,
+    /// described — lands here under an id its caller already holds, so an id is never invented in
+    /// two places and a layer's fields can never be initialised two ways.
+    #[allow(clippy::too_many_arguments)] // every field is one of the layer's own declarations
+    fn push_layer(
+        &mut self,
+        id: LayerId,
+        band: LayerBand,
+        kind: LayerKind,
+        modal: bool,
+        covers_content: bool,
+        content: LayerContent,
+        realized: Option<Box<dyn Component>>,
+    ) {
         self.layers.push(DynamicLayer {
             id,
             band,
@@ -299,17 +325,23 @@ impl LayerRegistry {
             covers_content,
             visible: matches!(kind, LayerKind::Persistent),
             name: None,
-            content: LayerContent::Native(root),
-            realized: None,
+            content,
+            realized,
         });
-        id
     }
 
     /// Register a layer whose content is a **description**. `realized` must be the tree produced
     /// from `node` by the one bridge — the caller realizes, because realizing needs the theme, an
     /// intent emitter, the hint sink and the form bindings, none of which a registry holds.
+    ///
+    /// `id` comes from [`reserve_id`](Self::reserve_id): the realized tree's intent sink has to
+    /// name the layer it lives in (`chrome::layer_emitter`), so the id exists before the tree does.
+    // Every argument is one of the layer's own declarations, and grouping them into a spec struct
+    // is work T417 would throw away — it deletes `LayerBand` and rebuilds this as a surface tree.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn add_view(
         &mut self,
+        id: LayerId,
         band: LayerBand,
         kind: LayerKind,
         modal: bool,
@@ -317,23 +349,15 @@ impl LayerRegistry {
         node: ViewNode,
         realized: Box<dyn Component>,
     ) -> LayerId {
-        let id = LayerId(self.next);
-        self.next += 1;
-        self.layers.push(DynamicLayer {
+        self.push_layer(
             id,
             band,
-            backdrop: LayerBackdrop::default(),
-            doomed: false,
-            fade: Fade::new(0.0),
-            zoom: Zoom::new(0.0, 1.0),
             kind,
             modal,
             covers_content,
-            visible: matches!(kind, LayerKind::Persistent),
-            name: None,
-            content: LayerContent::View(node),
-            realized: Some(realized),
-        });
+            LayerContent::View(node),
+            Some(realized),
+        );
         id
     }
 
@@ -342,10 +366,19 @@ impl LayerRegistry {
     /// counter no keybinding, config line or RPC call could ever know.
     ///
     /// Build `name` with [`layer_name`] so the owner half is stamped rather than typed. Re-registering
-    /// an existing name **replaces** that layer, which is what a remount should do; it returns the
-    /// new id either way.
+    /// an existing name **replaces** that layer, which is what a remount should do.
+    ///
+    /// `id` comes from [`id_of_name`](Self::id_of_name) (a rebuild — the same layer, so the same
+    /// id) falling back to [`reserve_id`](Self::reserve_id) (the first registration). The caller
+    /// holds it first because the layer's tree carries an intent sink naming the layer it lives in
+    /// (`chrome::layer_emitter`), and a rebuild that changed the id would leave every widget in the
+    /// new tree naming a layer that no longer exists.
+    // Same as `add_view`: the arguments are the layer's declarations, and T417 replaces this
+    // signature wholesale.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn add_named(
         &mut self,
+        id: LayerId,
         name: String,
         band: LayerBand,
         kind: LayerKind,
@@ -379,7 +412,7 @@ impl LayerRegistry {
         if let Some(at) = previous {
             self.layers.remove(at);
         }
-        let id = self.add(band, kind, modal, covers_content, root);
+        self.push_layer(id, band, kind, modal, covers_content, LayerContent::Native(root), None);
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.name = Some(name);
             if let Some((visible, fade, zoom, doomed)) = carried {
@@ -503,6 +536,31 @@ impl LayerRegistry {
         self.layers
             .iter()
             .any(|l| l.visible && l.backdrop == LayerBackdrop::Frosted)
+    }
+
+    /// **The id [`add_named`](Self::add_named) will register `name` under** — the existing layer's
+    /// own id when this is a rebuild, a fresh one when it is the first registration.
+    ///
+    /// A caller needs this *before* it builds the tree, because the tree carries an intent sink
+    /// naming the layer it lives in (`chrome::layer_emitter`). The rule lives here rather than at
+    /// the call site so "which layer is this name" has one answer: matching `add_named`'s own
+    /// search, a **doomed** layer still counts — it is the one about to be replaced, and handing
+    /// back a new id for it would break the id continuity a plugin holding a `LayerId` relies on.
+    pub(crate) fn slot_for_name(&mut self, name: &str) -> LayerId {
+        match self.layers.iter().find(|l| l.name.as_deref() == Some(name)) {
+            Some(l) => l.id,
+            None => self.reserve_id(),
+        }
+    }
+
+    /// **What this layer is called** — the addressable, owner-prefixed name (`heca.expose`,
+    /// `docker.panel`), or `None` for an anonymous one.
+    ///
+    /// The reverse of [`by_name`](Self::by_name), and the same identity: it is what `show_layer`
+    /// and `hide_layer` take, and what a `[[keys.surface]]` entry names, so a layer has one name
+    /// wherever it is spoken about.
+    pub(crate) fn name_of(&self, id: LayerId) -> Option<String> {
+        self.get(id).and_then(|l| l.name.clone())
     }
 
     /// The layer registered under `name`, if any.
@@ -888,7 +946,9 @@ mod tests {
         let mut reg = LayerRegistry::default();
         let native = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
         let node = ViewNode::new(WidgetKind::Label);
+        let slot = reg.reserve_id();
         let described = reg.add_view(
+            slot,
             LayerBand::Overlay,
             LayerKind::Persistent,
             false,
@@ -944,8 +1004,9 @@ mod tests {
     fn re_showing_a_visible_layer_does_not_restart_its_zoom() {
         let mut reg = LayerRegistry::default();
         let name = layer_name(HOST_OWNER, "expose").expect("valid");
+        let slot = reg.slot_for_name(&name);
         let id = reg.add_named(
-            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.set_zoom(id, 0.2, 1.3);
         reg.show(id);
@@ -956,8 +1017,9 @@ mod tests {
         assert_eq!(reg.layers[0].scale(), 1.0, "settled at life size");
 
         // The session changes: the layer is rebuilt and re-shown.
+        let slot = reg.slot_for_name(&name);
         let rebuilt = reg.add_named(
-            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.set_zoom(rebuilt, 0.2, 1.3);
         reg.show(rebuilt);
@@ -1010,8 +1072,9 @@ mod tests {
     fn re_registering_a_layer_does_not_promote_it_above_a_newer_one() {
         let mut reg = LayerRegistry::default();
         let name = layer_name(HOST_OWNER, "expose").expect("valid");
+        let slot = reg.slot_for_name(&name);
         let map = reg.add_named(
-            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.show(map);
         // A confirm dialog opens ON TOP of it.
@@ -1020,8 +1083,9 @@ mod tests {
         assert_eq!(reg.top_modal_id(), Some(dialog), "the dialog is the input target");
 
         // The session changes under both, so the map is rebuilt.
+        let slot = reg.slot_for_name(&name);
         let rebuilt = reg.add_named(
-            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.show(rebuilt);
 
@@ -1041,8 +1105,9 @@ mod tests {
         let anonymous = reg.add(LayerBand::Overlay, LayerKind::OnDemand, false, false, empty_root());
         let name = layer_name(HOST_OWNER, "expose").expect("valid");
 
+        let slot = reg.slot_for_name(&name);
         let first = reg.add_named(
-            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
+            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
         );
         assert_eq!(reg.by_name(&name), Some(first));
         assert!(!reg.is_visible_named(&name), "OnDemand starts hidden");
@@ -1058,10 +1123,16 @@ mod tests {
         // again on every keystroke that changed the session behind it. A re-registration is the
         // same layer with fresh content, so it keeps its place, its visibility and any animation in
         // flight.
+        let slot = reg.slot_for_name(&name);
         let second = reg.add_named(
-            name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
+            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
         );
-        assert_ne!(second, first);
+        // **And it keeps its ID.** Changed 2026-08-12 (F003/P082/T416): a rebuild used to mint a
+        // new one, so anything holding a `LayerId` across a session change — a plugin's handle, and
+        // every intent sink inside the layer's own tree, which names the layer it lives in — was
+        // left pointing at a layer that no longer existed. "The same layer with fresh content" has
+        // to mean the same id, or the sentence is only about the stack position.
+        assert_eq!(second, first, "a rebuild is the same layer, so it is the same id");
         assert_eq!(reg.by_name(&name), Some(second), "the name follows the new registration");
         assert!(
             reg.is_visible_named(&name),

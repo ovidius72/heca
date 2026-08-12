@@ -1,6 +1,6 @@
 {
   "name": "Heca",
-  "goal": "Consolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.",
+  "goal": "Consolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.\nThe gates before any code\n- §0 pre-flight, three written answers, per thing touched: which existing widget does this → if none, which planner task covers it (quote the id) → if neither, it is a proposal, not a commit.\n- §0b widget vs component: if it can be built inside heca-grid-ui, it belongs there. A component only leaves the library because it binds an app concept.\n- §0c the event system is DOM-shaped — capture → target → bubble, keys do bubble, a widget never hit-tests and never forwards, nothing focused means nothing delivered, and a cursor inside a container is not focus. Reach for a handler before an intent, a policy arm or a registry.\n- ⭐⭐ Rule Zero: write the line a plugin author would type. A registry, an id or a crate-private type means the API is missing. HintTargetRegistry, HintTargets, HintTargetId, Base::hint_target, named_press are gone and must not come back.",
   "description": "Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.",
   "webPort": 63217,
   "scope": [],
@@ -63,5 +63,6 @@
   "acceptedDecisions": [],
   "nextFeatureNumber": 12,
   "nextPhaseNumber": 94,
-  "nextTaskNumber": 419
+  "nextTaskNumber": 419,
+  "workDeviations": []
 }

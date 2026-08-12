@@ -63,13 +63,43 @@ fn component_action(
     written: &str,
     args: &HashMap<String, String>,
 ) -> (String, ActionRef) {
-    let direct = action_ref_from_config(written, args);
-    if matches!(direct, ActionRef::Builtin(_)) || written.starts_with(&format!("{component}.")) {
-        return (written.to_string(), direct);
-    }
-    let id = format!("{component}.{written}");
+    let id = surface_action_id(component, written, args);
     let action = action_ref_from_config(&id, args);
     (id, action)
+}
+
+/// **The action id a name written in a surface's entry means** — the naming half of
+/// [`component_action`], on its own so nothing has to re-derive it.
+///
+/// A surface asking "what key runs this **in me**?" has to ask under the id the
+/// [`BindingIndex`](crate::keymap::BindingIndex) actually recorded, which is this one and not the
+/// short name the user wrote. Deriving it a second time is how the exposé's `x` / `r` / `d` stopped
+/// working the moment they moved into config: the cards looked up `delete_pane`, the index held
+/// `heca.expose.delete_pane`, the lookup came back empty, and the letters silently did nothing
+/// (Antonio, driving, 2026-08-12). One rule, both readers.
+pub(crate) fn surface_action_id(
+    surface: &str,
+    written: &str,
+    args: &HashMap<String, String>,
+) -> String {
+    if resolves_as_builtin(written, args) || written.starts_with(&format!("{surface}.")) {
+        return written.to_string();
+    }
+    format!("{surface}.{written}")
+}
+
+/// Would this name bind as a built-in, with these arguments? **Asked without reporting anything.**
+///
+/// The question [`surface_action_id`] needs, and the reason it is not
+/// [`action_ref_from_config`]: that one *reports* argument problems, which is right for the name a
+/// binding actually lands on and wrong for a name merely being considered. Probing with it made the
+/// exposé's `[[keys.surface]] delete_column = "r"` announce *"missing required argument 'ws_idx' …
+/// cannot be built and will do nothing when pressed"* at every startup — about `delete_column`,
+/// which was then **not** what got bound: the entry resolved to `heca.expose.delete_column`, whose
+/// arguments the map's own cards supply (Antonio, driving, 2026-08-12). A warning about a name the
+/// loader rejected is worse than no warning, because it sends the user to fix a line that is right.
+fn resolves_as_builtin(name: &str, args: &HashMap<String, String>) -> bool {
+    build_action(name, args).is_some() || action_from_name(name).is_some()
 }
 
 /// What a binding was written as: which action, in which layer, under which key.
@@ -488,8 +518,8 @@ fn bind_global_focus(
 /// Carried over verbatim from the `[keys.<kind>]` shape it replaces: only *where the entries come
 /// from* changed, never how two of them combine.
 fn layer_component_keys(
-    base: &mut heca_config::theme::ComponentKeysConfig,
-    over: heca_config::theme::ComponentKeysConfig,
+    base: &mut heca_config::theme::SurfaceKeysConfig,
+    over: heca_config::theme::SurfaceKeysConfig,
 ) {
     // Identity travels with the entries so the merged layer can still say which `[[keys.component]]`
     // a conflict came from. A base only ever takes id-less entries, so it keeps `id: None`; a
@@ -508,13 +538,18 @@ fn layer_component_keys(
     base.unbind.extend(over.unbind);
 }
 
-/// Build the component binding layers from `[[keys.component]]` (F003/P086/T362).
+/// Build the surface binding layers from `[[keys.surface]]` / `[[keys.component]]` (F003/P086/T362,
+/// generalised to any surface by F003/P082/T416).
 ///
-/// **Keyed by placement, falling back to the kind.** An entry with no `id` speaks for the component
+/// **Keyed by placement, falling back to the kind.** An entry with no `id` speaks for the surface
 /// *type*, so writing it once covers every seating; an entry with an `id` is layered on top of that
-/// base for one mount alone. The returned map therefore holds an entry under each component name and
+/// base for one mount alone. The returned map therefore holds an entry under each surface name and
 /// an entry under each placement id that config actually mentions — [`focus_layer_action`] asks for
 /// the focused mount first and falls back to its kind, so a placement nobody narrowed costs nothing.
+///
+/// A **layer** (the exposé, a plugin's panel) has no placement to narrow: its name is the layer's
+/// own name, and it lands in the same map beside the docks, because a dock and an overlay are the
+/// same thing to the keyboard.
 ///
 /// [`focus_layer_action`]: crate::app::input
 pub fn build_component_keymaps(
@@ -523,18 +558,19 @@ pub fn build_component_keymaps(
     index: &mut BindingIndex,
 ) -> (HashMap<String, KeymapRegistry>, Vec<GlobalFocus>) {
     let defaults = heca_config::theme::KeysConfig::default();
-    let entries = || defaults.component.iter().chain(config.keys.component.iter());
+    // `surfaces()` is the one reader of both spellings — see `KeysConfig::surfaces`.
+    let entries = || defaults.surfaces().chain(config.keys.surfaces());
 
     // Pass 1 — the per-component base: every entry with no `id`, defaults first so the user's file
     // layers over them. BTreeMap so the build order (and any conflict report) is deterministic.
-    let mut bases: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    let mut bases: BTreeMap<String, heca_config::theme::SurfaceKeysConfig> = BTreeMap::new();
     for entry in entries().filter(|e| e.id.is_none()) {
         layer_component_keys(bases.entry(entry.name.clone()).or_default(), entry.clone());
     }
 
     // Pass 2 — the placements, each seeded from its component's finished base. Run as a second pass
     // for exactly that reason: a narrowing entry must see the whole base, wherever it was written.
-    let mut placements: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    let mut placements: BTreeMap<String, heca_config::theme::SurfaceKeysConfig> = BTreeMap::new();
     for entry in entries() {
         let Some(id) = entry.id.clone() else { continue };
         let seeded = placements
@@ -557,11 +593,11 @@ pub fn build_component_keymaps(
         let mut keymap = KeymapRegistry::new();
         let no_args = HashMap::new();
         // The label a conflict is reported under: which entry the user has to go and edit.
-        // How this layer is named wherever it is reported: which `[[keys.component]]` entry the user
+        // How this layer is named wherever it is reported: which `[[keys.surface]]` entry the user
         // has to go and edit.
         let label = match layer.id.as_deref() {
-            Some(id) => format!("[[keys.component]] {}:{id}", layer.name),
-            None => format!("[[keys.component]] {}", layer.name),
+            Some(id) => format!("[[keys.surface]] {}:{id}", layer.name),
+            None => format!("[[keys.surface]] {}", layer.name),
         };
         let bind_label = format!("{label}.bind");
         for (name, value) in &layer.bindings {
@@ -1887,14 +1923,14 @@ mod tests {
 
     /// Build a config carrying these `[[keys.component]]` entries, as TOML would produce.
     fn with_layers(
-        layers: Vec<heca_config::theme::ComponentKeysConfig>,
+        layers: Vec<heca_config::theme::SurfaceKeysConfig>,
     ) -> heca_config::theme::Config {
         let mut config = heca_config::theme::Config::default();
         config.keys.component = layers;
         config
     }
 
-    fn with_layer(layer: heca_config::theme::ComponentKeysConfig) -> heca_config::theme::Config {
+    fn with_layer(layer: heca_config::theme::SurfaceKeysConfig) -> heca_config::theme::Config {
         with_layers(vec![layer])
     }
 
@@ -1903,8 +1939,8 @@ mod tests {
         name: &str,
         id: Option<&str>,
         entries: &[(&str, &str)],
-    ) -> heca_config::theme::ComponentKeysConfig {
-        heca_config::theme::ComponentKeysConfig {
+    ) -> heca_config::theme::SurfaceKeysConfig {
+        heca_config::theme::SurfaceKeysConfig {
             name: name.to_string(),
             id: id.map(str::to_string),
             bindings: entries
@@ -2161,11 +2197,40 @@ mod tests {
         let up = &index["workspaces.cursor_up"];
         assert_eq!(up.len(), 1);
         assert_eq!(up[0].key, "k");
-        assert_eq!(up[0].layer, "[[keys.component]] workspaces");
+        // Reported under the general spelling whichever way the entry was written: the label names
+        // where a *surface's* keys live, and `[[keys.component]]` is now one way to spell that
+        // (F003/P082/T416).
+        assert_eq!(up[0].layer, "[[keys.surface]] workspaces");
         assert!(
             !index.contains_key("workspaces.cursor_down"),
             "a retired key must not be reported as still running the action: {index:?}",
         );
+    }
+
+    /// **The shipped defaults must not make heca complain about themselves at startup.**
+    ///
+    /// Every id a `[[keys.surface]]` entry actually binds is checked for missing arguments here,
+    /// the way `log_arg_problems` checks it at load — which is silenced under `cfg!(test)`, so
+    /// nothing else in this suite can see it. The exposé's `delete_column = "r"` printed *"missing
+    /// required argument 'ws_idx' … cannot be built and will do nothing when pressed"* on every
+    /// launch while working perfectly, because the probe that decides whether to qualify a name was
+    /// reporting on the name it went on to reject (Antonio, driving, 2026-08-12).
+    #[test]
+    fn no_shipped_surface_binding_reports_an_argument_problem() {
+        let defaults = heca_config::theme::KeysConfig::default();
+        for entry in defaults.surfaces() {
+            for written in entry.bindings.keys() {
+                let no_args = HashMap::new();
+                let id = super::surface_action_id(&entry.name, written, &no_args);
+                let problems = binding_arg_problems(&id, &no_args);
+                assert!(
+                    problems.is_empty(),
+                    "[[keys.surface]] {} binds {written} → {id}, which the loader would then \
+                     report as unusable: {problems:?}",
+                    entry.name,
+                );
+            }
+        }
     }
 
     /// The reason the shape is an array: an `id` narrows an entry to one placement, and that
@@ -2244,7 +2309,7 @@ mod tests {
             keys: keys.to_string(),
             args: HashMap::from([("command".to_string(), cmd.to_string())]),
         };
-        let shipped = heca_config::theme::ComponentKeysConfig {
+        let shipped = heca_config::theme::SurfaceKeysConfig {
             name: "docker".to_string(),
             bind: vec![
                 bind("spawn_command", "t", "lazydocker"),
@@ -2253,7 +2318,7 @@ mod tests {
             ..Default::default()
         };
         // The user rebinds `t` only, in a second entry the builder layers over the first.
-        let user = heca_config::theme::ComponentKeysConfig {
+        let user = heca_config::theme::SurfaceKeysConfig {
             name: "docker".to_string(),
             bind: vec![bind("spawn_command", "t", "ctop")],
             ..Default::default()

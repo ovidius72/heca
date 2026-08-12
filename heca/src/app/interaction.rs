@@ -73,6 +73,19 @@ pub(crate) enum InteractionSource {
     /// device, and it is judged by the same policy as everyone else — a `TiledOnly` action called
     /// while a float owns the domain is blocked, exactly as the keypress would be.
     Rpc,
+    /// **A layer's own retained tree**, acting on itself — the exposé's `x` on a card, a plugin
+    /// panel's button (F003/P082/T416).
+    ///
+    /// Its own source because the surface that holds the keyboard is a different actor from the
+    /// user typing at the app *behind* it, and [`domain_for`] has to tell them apart. While the
+    /// exposé is up, `prefix+j` must not move the focused pane underneath the map — but the map's
+    /// own `x` must still delete the card the cursor is on. Both arrive as keys; only the surface
+    /// they were declared on separates them.
+    ///
+    /// The host stamps this when it builds a layer's emitter, so a plugin's layer is judged the
+    /// same way without constructing anything: it declares a handler on its widget and the
+    /// framework says where the intent came from.
+    Surface(crate::chrome::LayerId),
     // Future sources — not implemented yet:
     // MouseRightSidebar,
     // MouseTopMenu,
@@ -210,7 +223,11 @@ pub(crate) enum Domain {
 ///   closed had no key;
 /// - otherwise the session's own `Tiled | Floating`.
 pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain {
-    if crate::chrome::content_covered(state) {
+    if base_context_is_dormant(
+        state.layers.top_modal_id(),
+        crate::chrome::content_covered(state),
+        source,
+    ) {
         return Domain::Overlay;
     }
     let keyboard_driven = matches!(
@@ -236,6 +253,41 @@ pub(crate) fn domain_for(state: &AppState, source: InteractionSource) -> Domain 
         return Domain::Container;
     }
     session_domain(&state.session)
+}
+
+/// **Is the base context — panes, sidebar, floats — dormant?** The coarse half of
+/// `docs/surface-compositor.md` §2, and the whole of what F003/P082/T416 changed.
+///
+/// It used to be a single call to `chrome::content_covered` — a fact about **what is painted
+/// over** — used to decide **which context is live**. The two are orthogonal, and the exposé is
+/// exactly where they disagree: the map declares `covers_content: false` because you can still see
+/// the panes through it, and that geometric truth was also, accidentally, saying "the base context
+/// is still live". So `prefix+j` moved the focused pane behind the map, `prefix+p` opened the
+/// palette over it, and `prefix+/` picked sidebar rows the user could not see (Antonio,
+/// 2026-08-12). §6's invariant names the shape of that bug: if you are special-casing a surface,
+/// the surface is mis-modelled.
+///
+/// So the coarse question is asked coarsely. `modal` on a layer already answers it — it means
+/// "this layer takes the keyboard" (`layers.rs`) — and coverage goes back to meaning only what it
+/// says: with nothing holding the keyboard, something opaque over the tiled area still means the
+/// panes are not what the user is looking at.
+///
+/// **The one exception is the active surface acting on itself.** The map's `x`, `r` and `d` are its
+/// own declarations, dispatched by its own tree, and they arrive as keys exactly like `prefix+j`
+/// does — only [`InteractionSource::Surface`] separates them. They fall through and are judged like
+/// anyone else's, by the action's declared policy against the session's domain. That is not an
+/// allow-list: a plugin's layer is treated identically for whatever actions it declares, which is
+/// the point (Antonio: *"each overlay might use its own actions and keybindings so we risk blocking
+/// future actions"*).
+fn base_context_is_dormant(
+    active_context: Option<crate::chrome::LayerId>,
+    content_covered: bool,
+    source: InteractionSource,
+) -> bool {
+    match active_context {
+        Some(active) => source != InteractionSource::Surface(active),
+        None => content_covered,
+    }
 }
 
 /// The session's own half of the domain — what [`FocusDomain`] already says.
@@ -373,11 +425,6 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ResetPaneName
         | WmAction::ResetPaneNameById { .. }
         | WmAction::RenameTarget { .. }
-        // OpenContextMenu operates on the focused pane (mouse: the clicked one; keyboard:
-        // the focused one) and is allowed in both tiled and floating domains — a floating pane
-        // still has a context menu. Individual menu entries (Split/Zoom/etc.) keep their own
-        // policy when chosen; opening the menu is pane-local.
-        | WmAction::OpenContextMenu
         // Scrollback operates on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::ScrollbackPageUp
@@ -449,6 +496,14 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // Entering the universal hint picker is a harmless overlay; the chosen
         // target's intent is separately policy-checked when it dispatches.
         WmAction::HintPick => ActionPolicy::Global,
+        // **Asking a surface for its menu is surface-agnostic** — it acts on whichever context is
+        // live, so there is no domain in which it should be refused (F003/P082/T416). It was
+        // `FocusedPaneLocal`, which was true of it while a pane was the only thing that had a menu;
+        // once a context surface can own the keyboard, that classification would refuse the exposé
+        // its own menu while permitting the pane's behind it. Bubbling already decides *whose* menu
+        // opens: it stops at the nearest declaration and nothing declared means nothing opens
+        // (AGENTS, the menu model). The entries chosen from it keep their own policies.
+        WmAction::OpenContextMenu => ActionPolicy::Global,
         // App-wide terminal font zoom changes only font metrics/PTY reflow — no
         // tiled/floating layout impact, so it must work in any focus domain.
         WmAction::AppFontZoom { .. } => ActionPolicy::Global,
@@ -689,6 +744,9 @@ fn policy_allows(
                     InteractionSource::Provider => false,
                     // Nor does a script (F003/P086/T372).
                     InteractionSource::Rpc => false,
+                    // Nor a surface acting on itself: a layer is a place a declaration was made,
+                    // not a licence to reach past the floating domain (F003/P082/T416).
+                    InteractionSource::Surface(_) => false,
                 }
             } else {
                 true
@@ -765,8 +823,11 @@ pub(crate) fn can_focus_pane(
             InteractionSource::MouseContent => true,
             InteractionSource::MouseLeftSidebar => true,
             // A component asking to focus a pane is the sidebar's "activate this row" in another
-            // shape — allowed in the tiled domain like every other source, as is a script's.
-            InteractionSource::Provider | InteractionSource::Rpc => true,
+            // shape — allowed in the tiled domain like every other source, as is a script's. A
+            // layer's own tree is the same act again: choosing a card in the exposé.
+            InteractionSource::Provider
+            | InteractionSource::Rpc
+            | InteractionSource::Surface(_) => true,
         }
     }
 }
@@ -1391,6 +1452,55 @@ mod tests {
         ));
     }
 
+    /// A layer id for the tests. Ids are opaque and this module only needs two that differ.
+    fn layer(n: u64) -> crate::chrome::LayerId {
+        crate::chrome::LayerId::for_test(n)
+    }
+
+    /// **The exposé's defect, as a rule.** The map declares `covers_content: false` — you can see
+    /// the panes through it, and that is geometrically true — so the old gate said the base context
+    /// was still live and `prefix+j` drove the session behind it (Antonio, 2026-08-12). What makes
+    /// a context active is that it took the keyboard, not what it painted over.
+    #[test]
+    fn a_surface_that_took_the_keyboard_makes_the_base_context_dormant_even_if_it_covers_nothing() {
+        assert!(base_context_is_dormant(
+            Some(layer(1)),
+            false, // covers nothing — a map of the panes is not a lid over them
+            InteractionSource::Keyboard,
+        ));
+    }
+
+    /// The exception that keeps T327's deletes working, and the one a plugin's layer relies on:
+    /// the surface holding the keyboard is not "the app being driven behind it". `x` on a card is
+    /// the map's own declaration and is judged by the action's policy, like anyone else's.
+    #[test]
+    fn the_active_surface_acting_on_itself_is_not_refused() {
+        assert!(!base_context_is_dormant(
+            Some(layer(1)),
+            false,
+            InteractionSource::Surface(layer(1)),
+        ));
+    }
+
+    /// …and it is the *active* surface, not any surface. A layer that no longer holds the keyboard
+    /// — one beneath the dialog that opened over it — gets no reach past it.
+    #[test]
+    fn a_surface_underneath_the_active_one_gets_no_reach() {
+        assert!(base_context_is_dormant(
+            Some(layer(2)),
+            false,
+            InteractionSource::Surface(layer(1)),
+        ));
+    }
+
+    /// With nothing holding the keyboard, coverage still means what it says: something opaque over
+    /// the tiled area means the panes are not what the user is looking at.
+    #[test]
+    fn coverage_still_decides_when_no_surface_holds_the_keyboard() {
+        assert!(base_context_is_dormant(None, true, InteractionSource::Keyboard));
+        assert!(!base_context_is_dormant(None, false, InteractionSource::Keyboard));
+    }
+
     /// A component's cursor verb is reachable **only while its dock is being driven** — which is
     /// what closes the palette/RPC hole those actions had (F003/P086/T371).
     #[test]
@@ -1714,9 +1824,11 @@ mod tests {
             action_policy(&WmAction::ClosePane),
             ActionPolicy::FocusedPaneLocal
         );
+        // Surface-agnostic: it asks whatever owns the screen for its menu, and bubbling decides
+        // whose that is (F003/P082/T416).
         assert_eq!(
             action_policy(&WmAction::OpenContextMenu),
-            ActionPolicy::FocusedPaneLocal
+            ActionPolicy::Global
         );
         assert_eq!(
             action_policy(&WmAction::ScrollbackPageUp),

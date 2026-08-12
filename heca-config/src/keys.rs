@@ -31,32 +31,43 @@ impl BindingValue {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  ComponentKeysConfig
+//  SurfaceKeysConfig
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// One component's binding layer — `[[keys.component]]` (F003/P086/T362).
+/// One **surface's** binding layer — `[[keys.surface]]`, spelled `[[keys.component]]` before
+/// F003/P082/T416 and still accepted that way.
 ///
-/// The component is named by the **`name` field**, and an optional **`id`** narrows the entry to one
-/// placement. An entry with no `id` applies to every seating of that component; an entry with one is
+/// **A dock and an overlay are the same thing to the keyboard**: something that holds it for a
+/// while and answers keys of its own. The exposé's `x` / `r` / `d` were Rust literals in
+/// `chrome/expose.rs` while the workspaces dock's identical `x` came from this file — one rule
+/// written twice, and only one of the two rebindable. So the layer is named for what it is.
+///
+/// The surface is named by the **`name` field**, and an optional **`id`** narrows the entry to one
+/// placement. An entry with no `id` applies to every seating of that surface; an entry with one is
 /// layered on top for that placement alone, so two mounts of the same component can differ.
 ///
 /// ```toml
-/// [[keys.component]]
+/// [[keys.surface]]
+/// name         = "expose"       # a layer's name, a provider's kind — whatever holds the keyboard
+/// dismiss      = "q,Escape"
+/// delete_pane  = "x"
+///
+/// [[keys.surface]]
 /// name      = "docker"          # a FIELD, never the table name
-/// restart_selected = "r"        # the component's own declared action
+/// restart_selected = "r"        # the surface's own declared action
 /// next_pane        = "n"        # …or any EXISTING action id, simply bound here
 ///
-/// [[keys.component]]
+/// [[keys.surface]]
 /// name = "docker"
 /// id   = "docker.right"         # this placement only, layered over the entry above
 /// restart_selected = "R"
 ///
-/// [[keys.component.bind]]       # the arg-carrying form; merged by `keys`, because arrays are
+/// [[keys.surface.bind]]         # the arg-carrying form; merged by `keys`, because arrays are
 /// action = "spawn_command"      #   otherwise replaced wholesale and one entry would drop the rest
 /// keys   = "t"
 /// args   = { command = "lazydocker", float = "true" }
 ///
-/// [keys.component.unbind]       # explicit removal — never null/empty-string semantics
+/// [keys.surface.unbind]         # explicit removal — never null/empty-string semantics
 /// "s" = true
 /// ```
 ///
@@ -66,8 +77,8 @@ impl BindingValue {
 /// the day a component is called `unbind` or `widgets`. An array of tables removes the guess and
 /// reads like `[[keys.command]]` and `[[keys.mode]]`, which were already this shape.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct ComponentKeysConfig {
-    /// Which component — matched against the provider's `kind()`.
+pub struct SurfaceKeysConfig {
+    /// Which surface — matched against a visible layer's name, then a provider's `kind()`.
     pub name: String,
     /// Which placement, when the entry is meant for only one — matched against the mount id.
     /// Absent means every placement of `name`.
@@ -76,12 +87,12 @@ pub struct ComponentKeysConfig {
     /// `action = "key"` entries. Merged per key by the ordinary table rules.
     #[serde(flatten)]
     pub bindings: KeybindingMap,
-    /// `[[keys.component.bind]]` — bindings that carry `args`. Merged **by `keys`**: a user entry
+    /// `[[keys.surface.bind]]` — bindings that carry `args`. Merged **by `keys`**: a user entry
     /// with the same combo replaces that default and leaves the others alone. Without that rule the
     /// array would be replaced wholesale and binding one key would silently drop every other.
     #[serde(default)]
     pub bind: Vec<ModeBindingConfig>,
-    /// `[keys.component.unbind]` — combos to remove from this layer, keyed by the **combo**, so it
+    /// `[keys.surface.unbind]` — combos to remove from this layer, keyed by the **combo**, so it
     /// retires a binding whatever it points at.
     #[serde(default)]
     pub unbind: HashMap<String, bool>,
@@ -214,11 +225,32 @@ pub struct KeysConfig {
     /// Custom input modes.
     #[serde(default)]
     pub mode: Vec<KeyModeConfig>,
-    /// Per-component binding layers — `[[keys.component]]`, consulted only while that component
-    /// holds chrome focus (F003/P086/T362). An entry names its component in `name` and may narrow
-    /// itself to one placement with `id`.
+    /// Per-surface binding layers — `[[keys.surface]]`, consulted only while that surface holds the
+    /// keyboard (F003/P082/T416). An entry names its surface in `name` and may narrow itself to one
+    /// placement with `id`.
     #[serde(default)]
-    pub component: Vec<ComponentKeysConfig>,
+    pub surface: Vec<SurfaceKeysConfig>,
+    /// The former spelling of the field above, `[[keys.component]]` (F003/P086/T362) — accepted
+    /// unchanged so existing configs keep working.
+    ///
+    /// A separate field rather than a serde `alias`, because an alias makes the two spellings
+    /// *duplicates of one field*: a file using both — which the bundled defaults do while the
+    /// rename settles — would fail to parse. Nothing downstream sees two lists; they are joined by
+    /// [`surfaces`](KeysConfig::surfaces), which is the only way either is read.
+    #[serde(default)]
+    pub component: Vec<SurfaceKeysConfig>,
+}
+
+impl KeysConfig {
+    /// **Every surface binding layer, whichever way it was spelled.** The one reader of `surface`
+    /// and `component`, so a second spelling can never become a second code path — the failure that
+    /// AGENTS' ⭐⭐ Rule Zero calls out, and the one two spellings invite.
+    ///
+    /// `[[keys.surface]]` entries come first, so a `[[keys.component]]` entry for the same name
+    /// layers on top of them under the existing "later wins" merge.
+    pub fn surfaces(&self) -> impl Iterator<Item = &SurfaceKeysConfig> {
+        self.surface.iter().chain(self.component.iter())
+    }
 }
 
 fn default_prefix_key() -> String {

@@ -694,3 +694,26 @@ rename_selected   = "r"          # rename the pane or workspace under the cursor
 delete_selected   = "x"          # the pane or workspace under the cursor
 delete_selected_column = "Shift+x"  # its whole column — the cursor never lands on a column row
 zoom_selected     = "z"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Surface keys — [[keys.surface]]  (F003/P082/T416)
+# ═══════════════════════════════════════════════════════════════════════════════
+# A dock and an overlay are the same thing to the keyboard: something that holds it for a while and
+# answers keys of its own. `[[keys.surface]]` is the general spelling of the `[[keys.component]]`
+# block above — which still works, and still means exactly this. A surface's entry is consulted only
+# while that surface holds the keyboard.
+#
+# A layer names itself by its addressable, owner-prefixed name — the same one `show_layer` and
+# `hide_layer` take, so a layer has one name wherever it is spoken about.
+
+[[keys.surface]]
+name = "heca.expose"
+# The map's three deletes, one letter per thing: the pane under the cursor, the column it sits in,
+# and the workspace that column sits in. These were literals in `chrome/expose.rs` until T416, which
+# made them the one part of the map a user could not rebind.
+#
+# `r` rather than `Shift+x` for the column: `x` and `X` are the same *key* and differ only as typed
+# text, so the pair read as one gesture with a modifier the key layer cannot see.
+delete_pane      = "x"
+delete_column    = "r"
+delete_workspace = "d"

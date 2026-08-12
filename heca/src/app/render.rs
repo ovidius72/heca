@@ -1047,7 +1047,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,
     // painted into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
-    crate::chrome::paint_peek_letters(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     // Scrollback-search match highlights + query bar. terminal-task-19.
@@ -1116,6 +1115,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 None,
             );
         }
+    }
+    // The universal picker's keycaps (`prefix+/`), painted into the **layer** scene so they sit
+    // above every layer rather than beneath them. They used to go into the chrome scene, which is
+    // flushed before this pass: while the exposé was up the letters were drawn under the map and
+    // could not be seen, though the targets they named were live and answering (F003/P082/T416).
+    // A letter over a surface the user cannot see is not pickable in any useful sense.
+    //
+    // Which targets are eligible is `chrome::active_peek_targets`' answer, not this pass's — here
+    // the letters only have to end up on top of what they are labelling.
+    crate::chrome::paint_peek_letters(state, &mut layer_scene, w, h, &chrome_theme);
+    if !layer_scene.is_empty() {
         render_chrome(
             &mut state.grid_renderer,
             &mut state.text_renderer,

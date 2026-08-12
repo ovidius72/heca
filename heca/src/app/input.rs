@@ -91,7 +91,18 @@ pub(crate) fn handle_keyboard_input(
             // bound to `close_overlay`, and swallowing everything a layer ignored is exactly what
             // made `q` dead while the exposé was up. A global binding still runs; a container verb
             // does not, because the container is not what is being driven.
-            if crate::chrome::top_modal(state).is_some() {
+            //
+            // **But the layer's own `[[keys.surface]]` entry is consulted first** (F003/P082/T416).
+            // A dock and an overlay are the same thing to the keyboard, so an overlay declares its
+            // keys the way a dock does, and its intents are stamped with the surface that owns
+            // them — which is what lets the policy tell the map acting on itself from the app being
+            // driven behind it.
+            if let Some(id) = state.layers.top_modal_id() {
+                if let Some(name) = state.layers.name_of(id)
+                    && let Some(act) = surface_layer_action(component_keymaps, &name, ctx.event_combo)
+                {
+                    dispatch_action_ref(state, registry, InteractionSource::Surface(id), &act);
+                }
                 return;
             }
 
@@ -266,6 +277,23 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
 }
 
 
+/// The action a key resolves to in **one named surface's** binding layer — a dock's `kind()`, a
+/// placement id, or a layer's own name (F003/P082/T416).
+///
+/// Split out of [`focus_layer_action`] so a layer and a dock consult the same map by the same rule.
+/// Whichever surface holds the keyboard, its `[[keys.surface]]` entry is the more specific thing
+/// the key is aimed at, and there is exactly one lookup for both.
+fn surface_layer_action(
+    component_keymaps: &HashMap<String, KeymapRegistry>,
+    surface: &str,
+    combo: &KeyCombo,
+) -> Option<crate::keymap::ActionRef> {
+    component_keymaps
+        .get(surface)
+        .and_then(|map| map.resolve(surface, combo))
+        .cloned()
+}
+
 /// The action a key resolves to in the **focused container's layer** — `None` when no chrome
 /// container holds the keyboard, which is what makes this seam inert in the ordinary case.
 ///
@@ -290,11 +318,9 @@ fn focus_layer_action(
     let kind = state.chrome_host.provider(&mount).map(|p| p.kind());
     for layer in [Some(mount.as_str()), kind] {
         if let Some(layer) = layer
-            && let Some(action) = component_keymaps
-                .get(layer)
-                .and_then(|map| map.resolve(layer, combo))
+            && let Some(action) = surface_layer_action(component_keymaps, layer, combo)
         {
-            return Some(action.clone());
+            return Some(action);
         }
     }
     // Then what the **widgets** answer for every container alike — paging, edges, releasing focus.

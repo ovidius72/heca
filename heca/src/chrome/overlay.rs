@@ -185,15 +185,11 @@ pub(crate) fn open_modal(
     // is inserted).
     let id = OverlayId(state.layers.reserve_id());
 
-    // The chrome intent sink — same shape as the retained chrome tree's emitter (mod.rs): a
-    // button's `on_click` posts an `AppEvent::ChromeIntent`, dispatched by the event loop.
-    let event_proxy = state.event_proxy.clone();
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent {
-            source: InteractionSource::MouseContent,
-            intent,
-        });
-    });
+    // The chrome intent sink for this layer's own tree: a button's `on_click` posts an
+    // `AppEvent::ChromeIntent` stamped with the layer it was declared in, dispatched by the event
+    // loop. This used to claim `MouseContent`, which was untrue of a button reached by keyboard and
+    // said nothing about *which* surface acted (F003/P082/T416).
+    let emit = super::layer_emitter(&state.event_proxy, id.0);
 
     let mut forms = FormBindings::default();
     let root = build_modal_root(
@@ -243,13 +239,10 @@ pub(crate) fn open_view_layer(
     covers_content: bool,
     node: ViewNode,
 ) -> LayerId {
-    let event_proxy = state.event_proxy.clone();
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent {
-            source: InteractionSource::MouseContent,
-            intent,
-        });
-    });
+    // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
+    // — a plugin's panel is judged by *which* surface acted, exactly as the exposé is.
+    let id = state.layers.reserve_id();
+    let emit = super::layer_emitter(&state.event_proxy, id);
     // Same boundary as `build_modal_root`: `realize` speaks the model's own `Intent` and knows
     // nothing of `InteractionIntent`, so the carrier is put on here.
     let view_emit: super::IntentEmitter = {
@@ -261,7 +254,7 @@ pub(crate) fn open_view_layer(
     let realized = super::realize(&node, &theme, &view_emit, &mut forms);
     let id = state
         .layers
-        .add_view(band, kind, modal, covers_content, node, realized);
+        .add_view(id, band, kind, modal, covers_content, node, realized);
     state.needs_redraw = true;
     id
 }
