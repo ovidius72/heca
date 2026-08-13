@@ -423,6 +423,20 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 
 **Key rules:**
 
+- **A key acts on the surface in front of you** (F003/P082/T428). Three surfaces, front to back — a
+  **layer** (the exposé, a modal, a menu, a plugin's), a focused **dock**, and `heca.panes` (the
+  scrolling area) — and exactly one holds the keyboard. One resolution order, for every key:
+
+  > the focused surface's own `[[keys.surface]]` entry → the **floor** its kind is guaranteed → the
+  > global `[keys]` map → then swallowed (layer, dock) or sent to the pane (`heca.panes`).
+
+  Nearest declaration wins, so a surface key shadows a global one. The floors are `Escape` and they
+  are not removable: a layer closes itself, a dock hands the keyboard back, and **the panes have
+  none** so `Escape` reaches the program in the pane and vim still works. That is why `Escape` must
+  **never** be a global binding — a global one outranks all three at once, which is exactly how
+  `close_overlay` came to eat it while a dock was focused, closing nothing because no overlay was
+  up. The rule lives in `app/input.rs::surface_action` (pure, unit-tested) with `focused_surface`
+  reducing `AppState` to it; the floors are asserted in `registry::assert_escape_floor`.
 - Prefix mode is intentional (like tmux), NOT a bug. This avoids conflicts with hosted apps.
 - The prefix key is **configurable** via `prefix = "ctrl+b"` in config.toml.
 - All keybingings should be configurable in config.toml.

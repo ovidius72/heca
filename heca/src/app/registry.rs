@@ -447,7 +447,11 @@ pub fn build_keymap(
 
 /// The built-in mode keymaps that are **entered by focus rather than by a key**, so they never take
 /// a trigger — see the note at the trigger site in [`build_modes`].
-const UNTRIGGERED_MODES: &[&str] = &["sidebar", crate::app::input::FOCUS_LAYER];
+const UNTRIGGERED_MODES: &[&str] = &[
+    "sidebar",
+    crate::app::input::FOCUS_LAYER,
+    crate::app::input::LAYER_FLOOR,
+];
 
 /// Build **every** keymap layer, and the reverse index over all of them, from one config.
 ///
@@ -712,30 +716,7 @@ pub fn build_modes(
                 index,
             );
         }
-        // **`Esc` is a guarantee, not a default** (F003/P086/T363). Every focused container must
-        // have a way back to the main region, including one that declares nothing at all — so it is
-        // re-asserted here after the merge instead of being left to the file. `[[keys.mode]]` arrays
-        // are replaced wholesale by a user's config, so a `focus` block that simply forgot this line
-        // would otherwise strand the keyboard in a dock with only the mouse to get out.
-        //
-        // Bound through the same door as everything else: putting something *else* on `Escape` in
-        // this layer is a real collision and comes out in the report rather than silently losing.
-        // Binding `unfocus_dock` to further keys is untouched — this adds a floor, not a ceiling.
-        if mode_cfg.name == crate::app::input::FOCUS_LAYER {
-            bind_with_conflict_tracking(
-                &mut mode_map,
-                &mode_cfg.name,
-                KeyCombo::parse("Escape"),
-                ActionRef::Builtin(WmAction::UnfocusDock),
-                Written {
-                    action: "unfocus_dock",
-                    layer: "built-in (every container has a way out)",
-                    key: "Escape",
-                },
-                conflicts,
-                index,
-            );
-        }
+        assert_escape_floor(&mut mode_map, &mode_cfg.name, conflicts, index);
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
         // These two are **entered by focus, not by a key**: `sidebar` by `sidebar_focus` or a
         // click, `focus` by focusing a dock. A trigger would make them reachable as a plain
@@ -754,7 +735,71 @@ pub fn build_modes(
         }
     }
 
+    // The layer floor is not a `[[keys.mode]]` block anybody writes — a layer is entered by being
+    // shown, not by pressing something — so it is created here when no config declared it. A user
+    // who *does* write one gets extra keys for the front-most layer, with the floor re-asserted over
+    // them by the loop above.
+    if !mode_keymaps.contains_key(crate::app::input::LAYER_FLOOR) {
+        let mut floor = KeymapRegistry::new();
+        assert_escape_floor(
+            &mut floor,
+            crate::app::input::LAYER_FLOOR,
+            conflicts,
+            index,
+        );
+        mode_keymaps.insert(crate::app::input::LAYER_FLOOR.to_string(), floor);
+    }
+
     (mode_keymaps, mode_triggers)
+}
+
+/// **`Escape` is a guarantee, not a default** (F003/P086/T363; generalized by F003/P082/T428).
+///
+/// Escape acts on the surface in front of you and gives the keyboard back to what was under it —
+/// the way it does in every other application. What that means depends on the kind of surface, and
+/// neither spelling is a line a config can drop:
+///
+/// | floor | what `Escape` means there |
+/// |---|---|
+/// | [`FOCUS_LAYER`](crate::app::input::FOCUS_LAYER) | a focused dock hands the keyboard back to the panes |
+/// | [`LAYER_FLOOR`](crate::app::input::LAYER_FLOOR) | the front-most layer closes itself |
+///
+/// (The panes have no floor on purpose: a key nothing claims belongs to the program running in
+/// them, so `Escape` still means what it means inside vim.)
+///
+/// It is re-asserted **after** the merge rather than left to the file because `[[keys.mode]]` arrays
+/// are replaced wholesale by a user's config, so a block that simply forgot the line would strand
+/// the keyboard with only the mouse to get out. Bound through the same door as everything else:
+/// putting something *else* on `Escape` in one of these layers is a real collision and comes out in
+/// the report rather than silently losing. Binding the same action to further keys is untouched —
+/// this adds a floor, not a ceiling.
+fn assert_escape_floor(
+    map: &mut KeymapRegistry,
+    mode: &str,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) {
+    let (action, name) = match mode {
+        crate::app::input::FOCUS_LAYER => (ActionRef::Builtin(WmAction::UnfocusDock), "unfocus_dock"),
+        crate::app::input::LAYER_FLOOR => (
+            ActionRef::Builtin(WmAction::CloseOverlay { overlay: None }),
+            "close_overlay",
+        ),
+        _ => return,
+    };
+    bind_with_conflict_tracking(
+        map,
+        mode,
+        KeyCombo::parse("Escape"),
+        action,
+        Written {
+            action: name,
+            layer: "built-in (Escape acts on the focused surface)",
+            key: "Escape",
+        },
+        conflicts,
+        index,
+    );
 }
 
 /// Build the action registry and register individual handlers for all actions.
@@ -2182,6 +2227,55 @@ mod tests {
                 .any(|c| format_combo(&c.combo).eq_ignore_ascii_case("escape")),
             "and it is not silent: {:?}",
             conflicts.keys,
+        );
+    }
+
+    /// **The layer twin of the dock's floor** (F003/P082/T428). A layer that declares nothing —
+    /// which is every layer today, and every layer a plugin will ship before it thinks about keys —
+    /// still closes on `Escape`. Nothing in any config declares this mode, so it is built from
+    /// nothing, exactly as a plugin's layer will find it.
+    #[test]
+    fn escape_always_closes_the_front_most_layer() {
+        let config = heca_config::theme::Config::default();
+        let (modes, triggers) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+
+        assert_eq!(
+            modes[crate::app::input::LAYER_FLOOR]
+                .resolve_builtin(crate::app::input::LAYER_FLOOR, &KeyCombo::parse("Escape")),
+            Some(&WmAction::CloseOverlay { overlay: None }),
+            "a layer can always be closed, whatever it declared",
+        );
+        assert!(
+            !triggers.contains_key(crate::app::input::LAYER_FLOOR),
+            "a layer is entered by being shown, never by a key",
+        );
+    }
+
+    /// **`Escape` must not be a global binding** (F003/P082/T428). The global map is the fallback
+    /// for what no surface in front claimed, so an `Escape` in it outranks all three floors at once
+    /// — which is how `close_overlay` came to eat the key while a dock held the keyboard, closing
+    /// nothing because no overlay was up.
+    ///
+    /// The two keys that *are* global stay global: they close the front-most layer from anywhere.
+    #[test]
+    fn escape_is_never_a_global_binding() {
+        let keymaps = super::build_keymaps(
+            &heca_config::theme::Config::default(),
+            &mut Conflicts::default(),
+        );
+
+        assert_eq!(
+            keymaps.flat.resolve("global", &KeyCombo::parse("Escape")),
+            None,
+            "Escape belongs to the surface that holds the keyboard, never to the whole app",
+        );
+        assert_eq!(
+            keymaps
+                .flat
+                .resolve_builtin("global", &KeyCombo::parse("q")),
+            Some(&WmAction::CloseOverlay { overlay: None }),
+            "and the keys that are global keep working from anywhere",
         );
     }
 

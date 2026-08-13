@@ -144,7 +144,14 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 # here, listed in the palette and reachable over RPC. It takes no target: an overlay id is a runtime
 # counter nothing outside the process could name, so it closes whatever is in front, and does
 # nothing when there is none.
-close_overlay   = ["Escape", "q", "Ctrl+q"]
+#
+# NB: `Escape` is deliberately NOT in this list. Escape acts on the surface that holds the keyboard
+# (F003/P082/T428) — a layer closes itself, a focused dock hands the keyboard back, and in the
+# scrolling area it reaches the program running in the pane. A *global* Escape would beat all three,
+# which is exactly what it did: it closed nothing while a dock was focused, because no overlay was
+# up, and the keyboard stayed stranded in the dock. These two keys are global on purpose — they
+# close the front-most layer from anywhere, and nothing else claims them.
+close_overlay   = ["q", "Ctrl+q"]
 
 
 
@@ -705,6 +712,29 @@ zoom_selected     = "z"
 #
 # A layer names itself by its addressable, owner-prefixed name — the same one `show_layer` and
 # `hide_layer` take, so a layer has one name wherever it is spoken about.
+#
+# ── WHICH SURFACE ANSWERS A KEY (F003/P082/T428) ──
+# A key acts on the surface in front of you. There are three, front to back — a layer covers a dock,
+# a dock covers the panes — and exactly one of them holds the keyboard at a time:
+#
+#   layer        the exposé, a dialog, a menu, a plugin's surface   named by `show_layer`'s name
+#   dock         a focused chrome container                          named by its mount id, then its kind
+#   heca.panes   the scrolling area — what is in front the rest of the time
+#
+# The order for every key: the focused surface's own entry below → the floor its kind is guaranteed
+# → the global `[keys]` map → then it is swallowed (a layer or a dock) or sent to the pane
+# (`heca.panes`). Nearest declaration wins, so a surface key shadows a global one of the same combo.
+#
+# The floors are `Escape`, and they are why it is not bound globally:
+#   • a layer closes itself       (`close_overlay`)
+#   • a focused dock hands the keyboard back  (`unfocus_dock`)
+#   • `heca.panes` has none — Escape reaches the program in the pane, so vim still works.
+# Neither floor can be unbound; bind further keys to those actions here if you want more ways out.
+#
+# `heca.panes` ships with no bindings, and that absence is the feature: anything declared for it is
+# taken away from the program running in the pane. Declare it to give the scrolling area keys of its
+# own, e.g. a `heca.panes` entry binding `Escape` to something if you would rather Escape never
+# reached a shell.
 
 [[keys.surface]]
 name = "heca.expose"

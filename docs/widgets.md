@@ -340,9 +340,9 @@ on a right press is what lets the context menu open. `Yes` is not private: it te
 the input is spent.
 
 > **Claim what you act on, and nothing else.** An overlay once returned `Yes` for every key it was
-> offered, including ones it ignored. `q` — catalogued, and bound to `close_overlay` beside
-> `Escape` — did nothing at all while a layer was up, because the layer swallowed it before the host
-> could resolve it.
+> offered, including ones it ignored. `q` — catalogued, and bound globally to `close_overlay` —
+> did nothing at all while a layer was up, because the layer swallowed it before the host could
+> resolve it.
 
 **`Yes` on a `PointerDown` does three things at once:**
 
