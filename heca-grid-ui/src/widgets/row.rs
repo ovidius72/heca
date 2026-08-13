@@ -77,7 +77,12 @@ impl Row {
             active: signal(false),
             nav: signal(false),
             reveal: None,
-            marker: ActiveMarker::Bar,
+            // **No bar by default** — the same default `Item` has always had. Selected is now a
+            // filled panel, which says it on its own; a bar beside it is a second mark for one
+            // state, and where a container already draws its own (a `MarkerGroup` column in the
+            // sidebar) it came out as two lines side by side (Antonio, driving, 2026-08-13). A
+            // caller that genuinely wants one still asks: `.marker(ActiveMarker::Bar)`.
+            marker: ActiveMarker::None,
             flash: Flash::new(),
             on_activate: None,
             highlight: None,
@@ -220,9 +225,9 @@ impl Component for Row {
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia) = {
+        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia, selected_bg) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction)
+            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction, t.colors.effective_selected_background())
         };
         let b = self.base.bounds;
 
@@ -247,23 +252,23 @@ impl Component for Row {
         // lighter Item-style accent wash instead of a heavy same-hue tint.
         let highlight_base = self.highlight.or(self.base.style.visual.fill);
         if active {
-            let fill = if let Some(highlight) = self.highlight {
-                highlight.with_alpha(ia.row_active_fill)
-            } else {
-                highlight_base
-                    .map(|h| h.with_alpha(ia.row_active_tint))
-                    .unwrap_or(accent.with_alpha(ia.row_active_fill))
-            };
-            // A crisp same-hue border is the clearest "selected" cue — a tinted
-            // fill alone is hard to tell apart from the row's background.
-            let edge = highlight_base.unwrap_or(accent).with_alpha(ia.row_active_border);
-            cx.rect(
-                sel,
-                fill,
-                Some(Border { color: edge, width: sel_border_w }),
-                sel_radius,
-                None,
-            );
+            // **Selected is a FILLED PANEL, and it carries no border.**
+            //
+            // The selection and the nav cursor are drawn on the same rectangle, so as long as both
+            // were an accent fill plus an accent edge, the cursor arriving on the selected row
+            // erased the difference between them (Antonio, driving, 2026-08-13). Changing the
+            // cursor's *hue* did not fix it — every shipped theme's foreground, accent and glow
+            // are one family. So the two marks differ in **kind**: this is a panel, the cursor is a
+            // glowing ring, and one sits inside the other with both still readable.
+            //
+            // The colour is the theme's, not the row's: `selected_background`, explicit in a theme
+            // or derived from its surface and accent. A row that overrides `highlight` still gets
+            // its own hue, which is what that builder is for.
+            let fill = self
+                .highlight
+                .map(|h| h.with_alpha(ia.row_active_fill))
+                .unwrap_or(selected_bg);
+            cx.rect(sel, fill, None, sel_radius, None);
         } else if self.base.hovered() {
             let c = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_hover_fill)
@@ -275,11 +280,17 @@ impl Component for Row {
             cx.rect(sel, c, None, sel_radius, None);
         }
 
-        // Nav-cursor outline: a **distinct-colored** border (theme foreground, not the
-        // accent the `active` pill uses) marking the sidebar j/k/arrow cursor. Drawn
-        // ALWAYS when nav — even on the active row — so the cursor stays visible when
-        // it coincides with the active pill (a plain accent outline would vanish into
-        // the pill).
+        // Nav-cursor outline: a **distinct-colored** border marking the j/k/arrow cursor. Drawn
+        // ALWAYS when nav — even on the active row — so the cursor stays visible when it coincides
+        // with the active pill.
+        //
+        // **A glowing ring, and nothing else** — no fill, so whatever it is drawn over stays
+        // visible through it. That is the whole trick: the selected panel above is a *fill* and
+        // this is an *edge*, so the cursor sitting on the selected row shows both at once instead
+        // of one erasing the other. Trying to separate them by hue failed twice (accent, then
+        // foreground) because every shipped theme's foreground, accent and glow are one family.
+        //
+        // Drawn ALWAYS when nav — even on the active row — for the same reason.
         if self.nav.get_untracked() {
             cx.rect(
                 sel,

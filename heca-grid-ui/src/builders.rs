@@ -74,6 +74,51 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.layout.margin_y = Some(v);
         self
     }
+    /// **Place this widget at a rect of its parent**, instead of letting it flow with its siblings.
+    ///
+    /// The host often knows *where* something goes while the widget still owns *what it looks
+    /// like*: a floating pane drawn over the strip it belongs to, a chip pinned to a pane's corner,
+    /// a badge over a cell. The temptation is to measure it yourself and call `cx.rect` + `cx.text`
+    /// — don't. Name the rect and the engine places it.
+    ///
+    /// ```no_run
+    /// # use heca_grid_ui::prelude::*;
+    /// # use heca_grid_ui::style::Length::Pct;
+    /// # let (x, y, w, h, strip_w, screen_h) = (200.0, 100.0, 400.0, 300.0, 1600.0, 900.0);
+    /// # let card = Label::new("float");
+    /// // A floating pane at its own fraction of the workspace behind it.
+    /// let placed = card.at_rect(Pct(x / strip_w), Pct(y / screen_h), Pct(w / strip_w), Pct(h / screen_h));
+    /// ```
+    ///
+    /// Two things follow, and both are the point:
+    ///
+    /// - **It is out of the flow.** The box takes no space from its siblings and is not moved by
+    ///   them, so it draws *over* what it is placed on rather than pushing it aside. Later children
+    ///   paint above earlier ones, so declare it after what it covers.
+    /// - **A percentage resolves per axis** — `left`/`width` against the parent's width, `top`/
+    ///   `height` against its height. This is the difference from
+    ///   [`margin_left`](Self::margin_left) / [`margin_top`](Self::margin_top), where CSS resolves
+    ///   a percentage on **both** axes against the width; a fractional `top` written as a margin
+    ///   silently produces a number, just the wrong one, on any parent that is not square
+    ///   (`layout::tests::a_percentage_margin_resolves_against_the_parents_width_on_both_axes`).
+    ///
+    /// The rect **overrides** [`width`](Self::width) / [`height`](Self::height): it names both, and
+    /// a leftover size beside it would draw a different rect than the one asked for.
+    fn at_rect(
+        mut self,
+        left: impl Into<crate::style::Length>,
+        top: impl Into<crate::style::Length>,
+        width: impl Into<crate::style::Length>,
+        height: impl Into<crate::style::Length>,
+    ) -> Self {
+        self.base_mut().style.layout.placement = Some(crate::style::Placement {
+            left: left.into(),
+            top: top.into(),
+            width: width.into(),
+            height: height.into(),
+        });
+        self
+    }
     /// Left outer margin only.
     fn margin_left(mut self, v: impl Into<crate::style::Length>) -> Self {
         self.base_mut().style.layout.margin_left = Some(v.into());

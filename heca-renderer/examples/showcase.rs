@@ -1690,8 +1690,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 );
                 let row = Row::new()
                     .background(theme.colors.foreground.with_alpha(5))
-                    .highlight(theme.colors.accent)
-                    .radius(theme.colors.control_radius())
+                                        .radius(theme.colors.control_radius())
                     .padding(10.0)
                     .child({
                         let active_title = Visibility::new(

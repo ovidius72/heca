@@ -85,13 +85,14 @@ pub struct DockFrame {
     /// [`after_subtree`](crate::component::Component::after_subtree) can tell whether the subtree
     /// flipped it.
     was_expanded: bool,
-    /// Active (current) state: when `true` the frame paints a faint accent
-    /// **wash** (`theme.colors.active_wash_alpha`) over itself — e.g. the active
-    /// workspace in the sidebar. Signal-backed so a host can flip it in place via
+    /// Active (current) state: when `true` the frame paints a faint **wash** of the theme's
+    /// selected colour (`effective_selected_background` at `active_wash_alpha`) over itself — e.g.
+    /// the active workspace in the sidebar. A wash, not the panel a selected *row* gets: a
+    /// container hint must not cancel out the selection inside it. Signal-backed so a host can flip it in place via
     /// [`active_state`](DockFrame::active_state) without rebuilding the tree.
     active: Signal<bool>,
-    /// Sidebar-nav cursor state: paints a hollow accent border, distinct from the
-    /// active wash. Signal-backed so the host flips it in place.
+    /// Sidebar-nav cursor state: paints a hollow **accent ring**, which reads over the selected
+    /// panel rather than replacing it — an edge and a fill, never two fills. Signal-backed so the host flips it in place.
     nav: Signal<bool>,
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
@@ -232,8 +233,8 @@ impl DockFrame {
         self.expanded
     }
 
-    /// Mark the frame **active** (the current one). An active frame paints a faint
-    /// accent wash (`theme.colors.active_wash_alpha`) over itself. Defaults to inactive.
+    /// Mark the frame **active** (the current one). An active frame paints a faint wash of the
+    /// theme's selected colour over itself. Defaults to inactive.
     #[heca_grid_ui_macros::prop]
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
@@ -357,27 +358,38 @@ impl Component for DockFrame {
         // this is the active one (e.g. the active workspace). Theme-driven alpha
         // and signal-backed, so the host flips it in place (no tree rebuild).
         if self.active.get_untracked() {
-            let (accent, wash_alpha) = {
+            // **A faint WASH of the selected colour — never the panel itself.**
+            //
+            // One colour family with `Row`'s selection, two different levels of hierarchy: this
+            // says *the current workspace*, a container hint, while a row's opaque panel says
+            // *this item is selected*. Painting both at full strength made them cancel exactly —
+            // the selected row inside the active frame became the same colour as the frame, and
+            // only the column's marker bar still said which row it was (Antonio, driving, with
+            // three themes, 2026-08-13). `active_wash_alpha` is the theme's own answer to how
+            // faint a container hint should be.
+            let (selected_bg, wash_alpha) = {
                 let t = cx.theme();
-                (t.colors.accent, t.colors.active_wash_alpha)
+                (t.colors.effective_selected_background(), t.colors.active_wash_alpha)
             };
             if wash_alpha > 0.0 {
-                cx.rect(b, accent.with_alpha_f32(wash_alpha), None, radius, None);
+                cx.rect(b, selected_bg.with_alpha_f32(wash_alpha), None, radius, None);
             }
         }
 
-        // Nav-cursor outline — a hollow accent border marking the sidebar-nav
-        // cursor on this workspace frame, distinct from the filled active wash.
-        // Shown only when this isn't already the active frame.
+        // Nav-cursor outline — a thick border + faint fill marking the cursor on this frame.
+        // Drawn ALWAYS when nav, even on the active frame, so it stays visible where it coincides
+        // with the active wash.
+        //
+        // ⚠️ **The cursor is an EDGE; what is selected is a FILL** — the same rule, and the same
+        // reason, as `Row`'s nav outline. The two are drawn on the same box, so separating them by
+        // hue cannot work (and was tried twice): separating them by *kind* can, because a ring lets
+        // whatever is under it show through. So this draws the glowing accent border and only the
+        // faintest wash — the selected panel underneath stays visible inside it.
         if self.nav.get_untracked() {
             let (cursor_c, glow, border_w, nav_wash, nav_outline) = {
                 let t = cx.theme();
                 (t.colors.accent, t.colors.glow, t.focus_border_width, t.colors.interaction.nav_wash, t.colors.interaction.nav_outline)
             };
-            // A **distinct-colored** thick border + faint fill (theme foreground, not
-            // the accent the active wash uses) marking the sidebar cursor on a
-            // workspace header. Drawn ALWAYS when nav — even on the active workspace —
-            // so the cursor stays visible when it coincides with the active wash.
             cx.rect(
                 b,
                 cursor_c.with_alpha(nav_wash),

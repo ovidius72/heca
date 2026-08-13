@@ -6,6 +6,11 @@ muted = "#6c7086"
 border = "#313244"
 accent = "#89b4fa"
 glow = "#89b4fa"
+# The keyboard cursor: peach, far from the blue accent (Catppuccin Peach).
+# The selected panel: Catppuccin Mocha Surface2. Surface1 was one step too close — a selected
+# row inside the ACTIVE workspace frame (which carries a wash of this same colour) only reached
+# 1.34:1 against it, which is not a difference you see at a glance.
+selected_background = "#585b70"
 danger = "#f38ba8"
 success = "#a6e3a1"
 warning = "#fab387"

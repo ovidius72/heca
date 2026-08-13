@@ -57,6 +57,8 @@ It moves up to **`heca/src/components/`** (F011, `P087/T373`) the day a **second
 DRY applied when the duplication is real, not when it is predicted. Until something is shared, a
 global folder only puts distance between a component and its only caller.
 
+**How to actually build one is § 0b-bis below** — the recipe, with the exposé worked through it.
+
 **A surface is components, never one function that draws a picture.** Each takes properties, events
 and callbacks and encapsulates its own logic — React's shape, Flutter/SwiftUI's spelling. **Never
 `&AppState`**: it needs a window, so a component that takes it is a component nobody can test.
@@ -109,6 +111,108 @@ variation? Add a builder to the component. Copying it is the bug this rule exist
 
 **The second caller is the move.** When a shape is wanted by a surface that does not own it, that is
 the moment it goes to `heca/src/components/` — not a moment earlier, and never by copying it.
+
+### 0b-bis. HOW TO STRUCTURE AND BUILD A COMPONENT — the recipe, with a worked example
+
+§ 0b says *what* a component is and *where* it lives. This says **how to build one**. It is a
+recipe: follow it in order. The worked example throughout is the **exposé**
+(`heca/src/chrome/expose/`, F003/P082/T420) — the first surface built this way and the one to read
+if a rule below is unclear.
+
+**A surface is a folder, not a function.** One file per component, smallest first, exactly the way a
+React app splits a screen:
+
+```text
+heca/src/chrome/<surface>/
+├── mod.rs            host wiring — the ONLY file that may touch AppState
+├── model.rs          the session reduced to plain data
+├── <leaf>_card.rs    the smallest piece            (expose: pane_card.rs)
+├── <group>_card.rs   … composed of the leaf        (expose: column_card.rs)
+├── <row>.rs          … composed of the group       (expose: workspace_row.rs)
+├── <surface>_grid.rs … composed of the rows        (expose: expose_grid.rs)
+└── testing.rs        #[cfg(test)] shared fixtures
+```
+
+#### 1. Split by what each piece OWNS — never by size
+
+Give every question exactly one owner, and write the owner down. The exposé's split:
+
+| component | owns | owns **nothing** about |
+|---|---|---|
+| `PaneCard` | what a card *is*: name, cursor/focus state, delete letters, activate | where it goes, how big it is |
+| `ColumnCard` | the panes' **vertical** shares | its own width |
+| `WorkspaceRow` | the columns' **horizontal** shares, the floats' rects | its own height |
+| `ExposeGrid` | the rows' shares of the map, the cursor | anything inside a row |
+
+A wrong answer is then findable in one file. The failure this replaces is a 400-line `map()` that
+owned *every* term at once — and was wrong seven times, each time about a different one.
+
+#### 2. Properties are struct fields; the constructor is a struct literal
+
+```rust
+PaneCard { pane_id, name, active, ws_idx, col_idx, next, theme, cb }.build()
+```
+
+Flutter/SwiftUI named parameters, in Rust's spelling. **Not** a function of many positional
+arguments — `providers/workspaces/pane_card()` is the counter-example at eleven of them, where no
+call site can be read without counting.
+
+#### 3. The seams travel as ONE group
+
+Every app concept the surface binds — an `Intent`, an action **name**, a dismissal — goes in a
+single struct built once, and every component takes `&` it:
+
+```rust
+pub(crate) struct ExposeCallbacks { choose, delete, cursor_to, dismiss, keys }
+pub(super) fn callbacks(emit: ChromeIntentEmitter, keys: …) -> ExposeCallbacks
+```
+
+That function is what a **test** calls to get the app's edges and nothing else, which is why the
+seams must not be threaded one argument at a time.
+
+#### 4. Never `&AppState`, anywhere but `mod.rs`
+
+It needs a window, so a component that takes it is a component nobody can test. `mod.rs` gathers
+(`register`) and hands plain data down; everything below it is testable headless. This is the single
+rule that decides whether the surface can be checked without the maintainer photographing the app.
+
+#### 5. Return the concrete widget when the parent still has to size it
+
+```rust
+impl PaneCard  { fn build(self) -> (Row, GridCell) }      // the parent gives it a share or a rect
+impl ColumnCard{ fn build(self) -> (Flex, Vec<GridCell>) }
+```
+
+`Box<dyn Component>` has no builders left, so a boxed return forces the child to size itself — which
+is how a component starts computing geometry. Box only at the top, where nothing sizes it further.
+
+A component that produces **navigable cells** hands them back beside its widget (`Vec<GridCell>`)
+rather than reaching into a registry — see ⭐⭐ RULE ZERO.
+
+#### 6. Sizes are shares; the PARENT sizes the CHILD
+
+`Length::Pct` of one shared denominator, or a `grow` weight. Never a model number times a scale of
+your own (§ 0b). Two traps, both real:
+
+- **`grow` alone always fills.** That is what flex-grow *means*: it distributes free space. "A share
+  of the widest sibling" is a **percentage**, against one denominator chosen at the top.
+- **A gap is added OUTSIDE a percentage.** Siblings whose widths are percentages summing to 100%
+  overflow by exactly their gaps, so air between them belongs in their **padding** (inside the
+  border box). Between `grow` siblings a gap is exact, because grow divides what is left after it.
+- The share idiom is `grow(w) + height/width(Px(0.0)) + shrink(1.0)` — CSS `flex: 1 1 0`. Write it
+  once, in `mod.rs`, and let every component call it (`expose::share_v`).
+
+#### 7. One headless test per component — plus the box test
+
+Per component: it renders what it was given, and it answers what it binds. For anything sized by
+shares, add the test the shares exist for: **lay it out in a box and assert it never exceeds it**,
+at several sizes and child counts. In the exposé that is
+`the_whole_map_never_exceeds_the_box_it_is_given` — the one assertion that would have caught all
+seven failures. Fixtures live in `testing.rs` so each test reads as its assertion, not its setup.
+
+#### 8. It moves to `heca/src/components/` on the SECOND caller
+
+A move, never a copy. See § 0b.
 
 ### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling.
 

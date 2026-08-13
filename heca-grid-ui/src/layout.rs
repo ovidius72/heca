@@ -316,4 +316,78 @@ mod tests {
         LayoutEngine::new().compute(&mut root, Size::new(1000.0, 800.0));
         assert_eq!(root.base().bounds.loc, Point::new(0.0, 0.0));
     }
+
+    /// ⚠️ **A percentage margin resolves against the parent's WIDTH — on both axes.**
+    ///
+    /// This is CSS's rule and taffy implements it faithfully, but it is the opposite of
+    /// what "a fraction of the parent" reads as on the vertical, and it is silent: a
+    /// `margin_top(Pct(0.25))` produces a number, just the wrong one, on any parent that
+    /// is not square. So a caller placing a box at a **fractional rect** can express its
+    /// `x` this way and **not** its `y` — the vertical fraction has to be a share
+    /// (`grow` weights) or a wrapper the engine can measure against the right axis.
+    ///
+    /// Written down here because the exposé's float placement was designed around
+    /// percentage margins on both axes, and nothing in the API says which axis it means.
+    #[test]
+    fn a_percentage_margin_resolves_against_the_parents_width_on_both_axes() {
+        let mut root = Flex::row()
+            .width(Length::Px(800.0))
+            .height(Length::Px(400.0))
+            .child(
+                Flex::row()
+                    .width(Length::Px(10.0))
+                    .height(Length::Px(10.0))
+                    .margin_left(Length::Pct(0.25))
+                    .margin_top(Length::Pct(0.25)),
+            );
+        LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
+        // A quarter of the width on **both** — not (200, 100), which is what a
+        // per-axis reading would give.
+        assert_eq!(root.base().children[0].base().bounds.loc, Point::new(200.0, 200.0));
+    }
+
+    /// **`at_rect` is the answer the margin could not give**: a fractional rect where each
+    /// percentage resolves against its own axis, so a box lands where the caller said on a parent
+    /// of any shape. This is what places a floating pane over the workspace it belongs to.
+    #[test]
+    fn a_fractional_rect_resolves_each_percentage_against_its_own_axis() {
+        let mut root = Flex::row()
+            .width(Length::Px(800.0))
+            .height(Length::Px(400.0))
+            .child(
+                Flex::row().at_rect(
+                    Length::Pct(0.25),
+                    Length::Pct(0.25),
+                    Length::Pct(0.5),
+                    Length::Pct(0.5),
+                ),
+            );
+        LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
+        let placed = root.base().children[0].base().bounds;
+        assert_eq!(placed.loc, Point::new(200.0, 100.0));
+        assert_eq!(placed.size, Size::new(400.0, 200.0));
+    }
+
+    /// **A placed box is out of the flow** — it takes no space from its siblings and does not move
+    /// them, which is what makes it draw *over* the row rather than beside it. Without this a
+    /// floating pane would push the columns it floats above along the strip.
+    #[test]
+    fn a_placed_box_takes_no_space_from_its_siblings() {
+        let mut root = Flex::row()
+            .width(Length::Px(800.0))
+            .height(Length::Px(400.0))
+            .child(Flex::row().width(Length::Pct(1.0)).height(Length::Pct(1.0)))
+            .child(Flex::row().at_rect(
+                Length::Pct(0.5),
+                Length::Pct(0.5),
+                Length::Px(100.0),
+                Length::Px(100.0),
+            ));
+        LayoutEngine::new().compute(&mut root, Size::new(800.0, 400.0));
+        // The in-flow sibling still has the whole row…
+        assert_eq!(root.base().children[0].base().bounds.size, Size::new(800.0, 400.0));
+        // …and the placed box sits on top of it at its own rect.
+        assert_eq!(root.base().children[1].base().bounds.loc, Point::new(400.0, 200.0));
+    }
 }
+

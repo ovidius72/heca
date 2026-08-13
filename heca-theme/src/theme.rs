@@ -220,6 +220,24 @@ pub struct Theme {
     pub accent: Color,
     #[serde(default = "default_glow_color")]
     pub glow: Color,
+    /// **The panel a selected thing sits on** — what *is selected*, as opposed to the accent ring,
+    /// which says *where the cursor is*.
+    ///
+    /// The two used to be one colour, and they are drawn on the same rectangle, so the moment the
+    /// cursor arrived on the selected row the pair became indistinguishable — in the exposé,
+    /// moving onto the focused pane left no way to tell where the focus was (Antonio, driving,
+    /// 2026-08-13). Trying a second *hue* for the cursor did not fix it either: in every shipped
+    /// theme `foreground`, `accent` and `glow` are one family (mocha and grid_tron both set
+    /// `glow = accent`; each foreground is a pale tint of it), so the two marks stayed variations
+    /// on each other.
+    ///
+    /// So they differ in **kind**, not in hue: selection is a **filled panel**, the cursor is a
+    /// **glowing ring**. One can sit inside the other and both stay readable.
+    ///
+    /// `None` derives it — [`effective_selected_background`](Self::effective_selected_background)
+    /// — so a user's own theme gets a coherent selection without naming one.
+    #[serde(default)]
+    pub selected_background: Option<Color>,
     #[serde(default)]
     pub shadow: Shadow,
     #[serde(default = "default_danger")]
@@ -580,6 +598,10 @@ fn default_sidebar_label_font_size() -> f32 {
 fn default_sidebar_button_font_size() -> f32 {
     11.0
 }
+/// How far a derived [selected panel](Theme::effective_selected_background) is carried from the
+/// theme's `surface` toward its `accent`.
+const SELECTED_LIFT: f32 = 0.18;
+
 impl Default for Theme {
     fn default() -> Self {
         Self::grid_tron()
@@ -587,6 +609,18 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// **The panel a selected row/card sits on**, explicit or derived.
+    ///
+    /// Derived, it is the theme's own `surface` carried a fifth of the way toward its `accent`:
+    /// far enough from the surface to read as *lit*, far enough from the accent that the cursor's
+    /// ring still stands out on top of it, and — because it is built out of the theme's own two
+    /// colours — coherent in a palette nobody here has seen. A theme that art-directs its selection
+    /// sets the field and this returns that instead.
+    pub fn effective_selected_background(&self) -> Color {
+        self.selected_background
+            .unwrap_or_else(|| self.surface.lerp(self.accent, SELECTED_LIFT))
+    }
+
     /// Corner radius for small controls — a fraction of the base [`radius`](Theme::radius).
     pub fn control_radius(&self) -> f32 {
         self.border_radius * CONTROL_RADIUS_FRAC

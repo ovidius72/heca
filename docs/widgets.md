@@ -4708,6 +4708,55 @@ the rest. This is what `heca`'s scrollback-search bar does; it previously guesse
 width from a hardcoded glyph advance ratio (`chars × font × 0.62`), which broke for any
 font whose advance differed and had to be re-tuned by hand.
 
+#### `at_rect` — a rect **inside** a parent, in fractions of it
+
+The margin form above places a **root**. Inside a tree it is the wrong tool twice over: a
+margin still takes part in the flow, so the box pushes its siblings along; and a *percentage*
+margin resolves against the parent's **width on both axes** (CSS's rule, which taffy
+implements faithfully), so a fractional `top` silently produces a number — just the wrong one
+— on any parent that is not square.
+
+`LayoutExt::at_rect(left, top, width, height)` is the answer, on every widget:
+
+```rust
+// A floating pane drawn over the workspace strip behind it, at its own fraction of it.
+strip = strip.child(card.at_rect(
+    Length::Pct(f.x / strip_w),      // ← left and width resolve against the parent's WIDTH
+    Length::Pct(f.y / screen_h),     // ← top and height against its HEIGHT
+    Length::Pct(f.w / strip_w),
+    Length::Pct(f.h / screen_h),
+));
+```
+
+- **It is out of the flow.** The box takes no space from its siblings and is not moved by
+  them, so it draws *over* what it is placed on. Later children paint above earlier ones, so
+  declare it after what it covers.
+- **Each percentage resolves against its own axis** — the difference from a margin, and the
+  whole reason this exists.
+- **The rect overrides `width`/`height`**: it names both, and a leftover size beside it would
+  draw a different rect than the one asked for.
+- Units mix freely: a fixed `Px` chip at a proportional `Pct` position is as valid as a fully
+  fractional rect.
+
+Declarative form — a plugin authors the same thing as a grouped property, because a rect is
+four values and a scalar channel could not carry it:
+
+```rust
+ViewNode::new(WidgetKind::Card).prop(
+    "placement",
+    PropValue::Map([
+        ("left".into(),   PropValue::Text("25%".into())),
+        ("top".into(),    PropValue::Text("10%".into())),
+        ("width".into(),  PropValue::Text("50%".into())),
+        ("height".into(), PropValue::Int(120)),        // a bare number is pixels
+    ].into_iter().collect()),
+)
+```
+
+Held by `heca-grid-ui/src/layout.rs` (`a_fractional_rect_resolves_each_percentage_against_its_own_axis`,
+`a_placed_box_takes_no_space_from_its_siblings`, and the margin-axis guard that explains why)
+and by `heca-view-realize` (`a_description_can_place_a_node_at_a_fractional_rect`).
+
 **When a painted primitive is still correct:** content-area *effects* that track something
 other than the widget tree — a bell flash washing the pane, a highlight rect over terminal
 cells — stay `cx.rect` calls. A widget per terminal match would be absurd. The rule is about

@@ -86,13 +86,6 @@ fn default_overview_gap() -> f64 {
     0.1
 }
 
-/// Default narrowest exposé card: `0` — **no floor**, so the map always fits the whole session on
-/// screen, which is what an exposé is for. At `140` it bound on an ordinary three-workspace session
-/// and pushed two of the three rows off the bottom.
-fn default_overview_min_card_width() -> f64 {
-    0.0
-}
-
 /// Default scale the exposé **opens from**, relative to its own map size: `0.8`.
 ///
 /// Below 1.0 the map **grows in** from smaller and shrinks away when it closes — a zoom in on the
@@ -275,18 +268,13 @@ pub struct SettingsConfig {
     /// When focusing a column re-centres the view: `never` | `on_overflow` | `always`.
     #[serde(default)]
     pub center_focused_column: CenterFocusedColumn,
-    /// **The largest** the exposé draws the session, as a fraction of life size (niri's
+    /// Zoom of the workspace thumbnails in overview mode, as a fraction of life size (niri's
     /// `overview.zoom`). Clamped to `0.05..=0.75`.
     ///
-    /// A maximum rather than the zoom itself: the map fits the whole session on screen and uses
-    /// this only so a small session is not blown up to fill it. The floor is
-    /// [`overview_min_card_width`](Self::overview_min_card_width).
+    /// ⚠️ **The exposé does not read it** (F003/P082/T420): the map is built out of shares of the
+    /// window, so it fits by construction and has no scale to set.
     #[serde(default = "default_overview_zoom")]
     pub overview_zoom: f64,
-    /// The narrowest a pane card may be drawn in the exposé, in logical pixels. Below it the map
-    /// stops shrinking and scrolls instead, so a session of thirty panes stays readable.
-    #[serde(default = "default_overview_min_card_width")]
-    pub overview_min_card_width: f64,
     /// Gap between workspace rows in the exposé, as a fraction of a screen height.
     #[serde(default = "default_overview_gap")]
     pub overview_gap: f64,
@@ -399,7 +387,6 @@ impl Default for SettingsConfig {
             always_center_single_column: default_always_center_single_column(),
             center_focused_column: CenterFocusedColumn::default(),
             overview_zoom: default_overview_zoom(),
-            overview_min_card_width: default_overview_min_card_width(),
             overview_zoom_from: default_overview_zoom_from(),
             overview_gap: default_overview_gap(),
             shell_integration: default_shell_integration(),

@@ -182,21 +182,12 @@ pub struct LayoutOptions {
     /// map: a workspace row is the viewport's shape, a column keeps its real proportion of the
     /// screen, and a strip scrolled past one screen really is wider than its row.
     ///
-    /// It is a **maximum**, not the zoom (changed 2026-08-12, F003/P082/T419). An exposé shows
-    /// everything at once — that is what the name means — so the map fits itself to the view and
-    /// uses this only to stop a small session being blown up to fill the screen. The floor is
-    /// [`overview_min_card_width`](Self::overview_min_card_width).
+    /// ⚠️ **The exposé no longer reads it** (F003/P082/T420). The map is built out of *shares* of
+    /// the window — a column is a percentage of the widest row, a pane a `grow` weight — so there
+    /// is no scale to cap: it fits by construction, at every window size. What still reads this is
+    /// the core's own `Session::overview_zoom`, which drives `workspace_geometries` in overview
+    /// mode.
     pub overview_scale: f64,
-    /// **The narrowest a card may be drawn**, in logical pixels — the floor under the overview's
-    /// computed zoom.
-    ///
-    /// A *scale* floor would not say what it means: columns differ in width, so the same scale
-    /// leaves one session legible and another a set of slivers. A width does, and it is the
-    /// question actually being asked — "can I still tell what that pane is?".
-    ///
-    /// Below it the map stops shrinking and scrolls instead, which is the only honest answer for a
-    /// session of thirty panes.
-    pub overview_min_card_width: f64,
     /// The scale the overview **opens from**, relative to [`overview_scale`](Self::overview_scale)
     /// — it animates out of this and back into it on the way out. `1.0` means no animation.
     ///
@@ -228,7 +219,6 @@ impl Default for LayoutOptions {
             // hair above the vertical fit so two of the three rows fell off the bottom (Antonio,
             // with a screenshot, 2026-08-12). Small cards are an honest picture of a large session;
             // hiding two thirds of it is not. A user who would rather scroll than squint sets one.
-            overview_min_card_width: 0.0,
         }
     }
 }

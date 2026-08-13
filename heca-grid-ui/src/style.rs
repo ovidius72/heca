@@ -195,6 +195,41 @@ impl Length {
             Length::Pct(p) => percent(p),
         }
     }
+
+    /// The same value as a taffy **inset** — the type an edge offset takes, which admits `Auto`
+    /// (meaning "this edge is not pinned") where a size would not.
+    fn to_taffy_inset(self) -> taffy::LengthPercentageAuto {
+        use taffy::prelude::*;
+        match self {
+            Length::Auto => taffy::LengthPercentageAuto::Auto,
+            Length::Px(v) => length(v),
+            Length::Pct(p) => percent(p),
+        }
+    }
+}
+
+/// **A rect a node is placed at inside its parent**, taking it out of the flow — CSS
+/// `position: absolute` plus insets, which is what "put this box *there*" means in a layout
+/// engine.
+///
+/// Set through [`LayoutExt::at_rect`](crate::builders::LayoutExt::at_rect); see that method for
+/// what it is for and why a margin cannot do the job.
+///
+/// All four are [`Length`]s, so a caller may mix units: a chip at a fixed `Px` size over a
+/// proportional `Pct` position is as valid as a fully fractional rect. **A percentage resolves
+/// against the parent on its own axis** — `left`/`width` against the parent's width, `top`/`height`
+/// against its height — which is the difference from a percentage *margin*, where CSS resolves
+/// **both** axes against the width.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Placement {
+    /// Distance from the parent's left content edge.
+    pub left: Length,
+    /// Distance from the parent's top content edge.
+    pub top: Length,
+    /// The box's own width.
+    pub width: Length,
+    /// The box's own height.
+    pub height: Length,
 }
 
 /// One column/row track size for a [`Grid`](crate::widgets::Grid).
@@ -472,6 +507,13 @@ pub struct Layout {
     /// Placement when this component is a child of a [`Grid`](crate::widgets::Grid).
     /// `None` ⇒ grid auto-placement. Set by `Grid::cell`/`Grid::area`.
     pub grid_cell: Option<GridCell>,
+    /// **Placed at a rect of the parent instead of flowing** — `None` ⇒ an ordinary in-flow child.
+    ///
+    /// Set by [`LayoutExt::at_rect`](crate::builders::LayoutExt::at_rect). It overrides
+    /// [`width`](Self::width) / [`height`](Self::height), because a rect names both, and it takes
+    /// the node out of its parent's flow, so it neither takes space from its siblings nor is moved
+    /// by them.
+    pub placement: Option<Placement>,
 }
 
 impl Layout {
@@ -530,6 +572,7 @@ impl Default for Layout {
             size_explicit: false,
             hidden: false,
             grid_cell: None,
+            placement: None,
         }
     }
 }
@@ -621,9 +664,37 @@ impl Layout {
                 top: length(self.pad_top()),
                 bottom: length(self.pad_bottom()),
             },
-            size: Size {
-                width: self.width.to_taffy(),
-                height: self.height.to_taffy(),
+            // **A placement names the box's size as well as where it goes**, so it wins over the
+            // `width`/`height` fields — a caller who said "this rect" has already answered both,
+            // and honouring a stale `width` beside it would silently draw a different rect than
+            // the one asked for.
+            size: match self.placement {
+                Some(p) => Size { width: p.width.to_taffy(), height: p.height.to_taffy() },
+                None => Size { width: self.width.to_taffy(), height: self.height.to_taffy() },
+            },
+            // Out of the flow when placed: an absolutely positioned child takes no space from its
+            // siblings and is not moved by them, which is what "drawn *over* the row, where it
+            // actually sits" means. `inset` is per-axis — unlike a margin, a percentage `top` here
+            // resolves against the parent's **height**.
+            position: match self.placement {
+                Some(_) => taffy::Position::Absolute,
+                None => taffy::Position::Relative,
+            },
+            inset: match self.placement {
+                Some(p) => Rect {
+                    left: p.left.to_taffy_inset(),
+                    top: p.top.to_taffy_inset(),
+                    // The size is given, so the far edges must stay free: pinning all four would
+                    // make taffy stretch the box between them and ignore the width and height.
+                    right: taffy::LengthPercentageAuto::Auto,
+                    bottom: taffy::LengthPercentageAuto::Auto,
+                },
+                None => Rect {
+                    left: taffy::LengthPercentageAuto::Auto,
+                    right: taffy::LengthPercentageAuto::Auto,
+                    top: taffy::LengthPercentageAuto::Auto,
+                    bottom: taffy::LengthPercentageAuto::Auto,
+                },
             },
             // `None` leaves taffy's default (`auto`), which for a flex item is its
             // content size — the reason an unset region refuses to shrink.

@@ -2481,51 +2481,6 @@ pub(crate) fn layout_layers(state: &mut crate::app_state::AppState, w: f32, h: f
             .base_font(font)
             .compute(root.as_mut(), Size::new(w as f64, h as f64));
     }
-    #[cfg(debug_assertions)]
-    trace_layer_geometry(state, w, h);
-}
-
-/// **What the layout engine actually produced**, printed beside what the fit predicted.
-///
-/// Temporary instrumentation (F003/P082/T420). The exposé's zoom is computed analytically from the
-/// session's extents, and four corrections in a row each fixed the arithmetic and left the map
-/// still clipped — the last one changing nothing at all, because the term it corrected was not the
-/// one that was wrong. Predicting the drawn size has failed enough times; this prints the measured
-/// one so the missing constraint names itself instead of being inferred from a screenshot.
-#[cfg(debug_assertions)]
-fn trace_layer_geometry(state: &crate::app_state::AppState, w: f32, h: f32) {
-    /// The chain of boxes from the layer root down to the first node with several children — where
-    /// a height gets constrained on the way down.
-    fn spine(n: &dyn heca_grid_ui::Component, depth: usize, out: &mut String) {
-        if depth > 6 {
-            return;
-        }
-        let b = n.base().bounds;
-        out.push_str(&format!(
-            " | d{depth} {:.0}x{:.0}@{:.0},{:.0} ({}c)",
-            b.size.w,
-            b.size.h,
-            b.loc.x,
-            b.loc.y,
-            n.base().children.len(),
-        ));
-        if let Some(first) = n.base().children.first() {
-            spine(first.as_ref(), depth + 1, out);
-        }
-    }
-    // Off unless asked for: this runs every frame, and unconditional it buries everything else a
-    // debug build has to say. `HECA_TRACE_PAD=1` is the matching switch in `ScrollRegion`.
-    if std::env::var_os("HECA_TRACE_EXPOSE").is_none() {
-        return;
-    }
-    for layer in state.layers.visible_front_to_back() {
-        if layer.name.as_deref() != Some("heca.expose") {
-            continue;
-        }
-        let mut out = String::new();
-        spine(layer.root(), 0, &mut out);
-        eprintln!("[heca] expose laid out: viewport {w:.0}x{h:.0}{out}");
-    }
 }
 
 /// Paint every visible dynamically-registered layer, **back → front** by band (so a Modal

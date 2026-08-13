@@ -2,6 +2,7 @@ mod actions;
 mod app;
 mod app_state;
 mod chrome;
+mod components;
 mod handlers;
 mod host;
 mod input;

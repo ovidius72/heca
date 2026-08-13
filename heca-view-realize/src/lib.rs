@@ -2916,6 +2916,38 @@ mod tests {
         assert!(l.gap_spacing.is_some(), "theme spacing token survives");
     }
 
+    /// **A described node can place itself at a fractional rect** — the declarative half of
+    /// [`LayoutExt::at_rect`](heca_grid_ui::builders::LayoutExt::at_rect), which a plugin needs for
+    /// the same reason the exposé does: a box whose position its parent cannot express.
+    ///
+    /// ⚠️ Written because **adding serde to a type is not the same as being able to author it**
+    /// (AGENTS, F003/P011/T018). `Placement` groups four `Length`s, so it can only travel as a
+    /// [`PropValue::Map`] — a scalar channel would have carried nothing and nothing would have
+    /// failed. This is the check that the value channel is real.
+    #[test]
+    fn a_description_can_place_a_node_at_a_fractional_rect() {
+        let node = ViewNode::new(WidgetKind::VStack).prop(
+            "placement",
+            PropValue::Map(
+                [
+                    ("left".to_string(), PropValue::Text("25%".into())),
+                    ("top".to_string(), PropValue::Text("10%".into())),
+                    ("width".to_string(), PropValue::Text("50%".into())),
+                    ("height".to_string(), PropValue::Int(120)),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        );
+
+        let w = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        let placement = w.base().style.layout.placement.expect("the rect was authored");
+        assert_eq!(placement.left, Length::Pct(0.25));
+        assert_eq!(placement.top, Length::Pct(0.10));
+        assert_eq!(placement.width, Length::Pct(0.5));
+        assert_eq!(placement.height, Length::Px(120.0), "a bare number is pixels");
+    }
+
     /// A node with no properties leaves the widget exactly as its constructor built it.
     #[test]
     fn a_node_with_no_properties_changes_nothing() {

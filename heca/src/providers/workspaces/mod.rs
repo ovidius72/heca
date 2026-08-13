@@ -40,7 +40,7 @@ use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
+    Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
     Row, ScrollRegion, StatusDot, Tooltip, TooltipSide, Visibility,
 };
 
@@ -951,10 +951,10 @@ fn pane_card(
                 .foreground
                 .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
         )
-        .highlight(theme.colors.accent)
-        .radius(theme.colors.control_radius())
+                .radius(theme.colors.control_radius())
         .padding(6.0)
-        .marker(ActiveMarker::Bar)
+        // No bar: the column's `MarkerGroup` already draws one down the left of every row here,
+        // and the selected panel says which row is current. Two lines said it twice.
         .active(active)
         .nav_selected(false)
         // The row's ONE identity: the cursor and (later) drag read this single declaration

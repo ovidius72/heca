@@ -6,6 +6,11 @@ muted = "#608292"
 border = "#00427c"
 accent = "#29b4fa"
 glow = "#29b4fa"
+# The keyboard cursor: amber, the one hue far from this palette's cyan accent, so "where you
+# are" never reads as a brighter "what is selected".
+# A selected pane/row sits on a LIT PANEL rather than an accent tint, so the cursor's neon
+# ring stays readable on top of it. Teal, the surface carried toward the cyan accent.
+selected_background = "#14506d"
 danger = "#ff4654"
 success = "#50ffaa"
 warning = "#ffbe46"
