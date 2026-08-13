@@ -1,7 +1,7 @@
 {
   "id": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
   "number": 3,
-  "shortId": "QSMTX",
+  "shortId": "",
   "priority": 0,
   "name": "🧩 Pluggable Chrome Architecture",
   "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
@@ -38,16 +38,7 @@
     "2e5af5db-420b-45bb-8bde-7e763c69cbea"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "27da3cae-0449-4819-ae64-0040113c1398",
-      "date": "2026-08-12T21:44:53.425Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
   "updatedAt": "2026-07-13T15:29:44.427Z"
 }

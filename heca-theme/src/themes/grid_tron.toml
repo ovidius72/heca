@@ -14,7 +14,7 @@ selected_background = "#185677"
 
 # A selected row, the row back-and-forth returns to, and the two workspace frames —
 # four strengths of one idea, as colours rather than alphas so they can simply be seen.
-previous_background = "#13394e"
+previous_background = "#164965"
 workspace_active_background = "#102735"
 workspace_previous_background = "#0e1f2a"
 danger = "#ff4654"
