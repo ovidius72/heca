@@ -263,9 +263,15 @@
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
   "updatedAt": "2026-08-09T10:36:29.791Z",
-  "handoff": "# P055 — router di delivery, fallback System e dismiss globale conclusi\n\n## Risultato\n- `NotificationRuntime::notify(draft, now)` centralizza i canali `App`, `None` e `System`.\n- `AppState::notify` è il confine per i producer: sincronizza Toast/Hint e richiede redraw solo se cambia la proiezione visibile.\n- `None` restituisce `NotificationDelivery::Suppressed` prima di allocare o scrivere nello store; i log del producer restano esterni al router.\n- `System`, fino a P063, consegna nello store in-app e marca il warning di fallback una sola volta per runtime.\n- `DismissLastNotification` (`prefix+Shift+n`) seleziona la prima card visibile auto-dismissable nell'ordine stabile dello stack e delega a `DismissNotification { id }`.\n\n## Decisioni e contratti\n- Sticky, persistent e non-dismissible non sono eleggibili per `DismissLastNotification`; una card con `NotificationAction` resta eleggibile se auto-dismissable e dismissible.\n- Il no-op senza card eleggibili non muta store o ToastStack.\n- `notification.dismiss { id }` resta il percorso parametrico per click, KeyHint e RPC.\n- La nuova action è `Global`, quindi resta disponibile anche nel dominio floating.\n\n## File toccati\n- `heca/src/app_state.rs` — runtime/router e confine app.\n- `heca/src/notification.rs` — selettore store `first_auto_dismissible_visible_id` e test.\n- `heca/src/input.rs` — variant, parser e priorità.\n- `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app/interaction.rs` — action wiring completo.\n- `heca-config/src/settings.rs` — documentazione `notification_system = none`.\n- `keybindings.default.toml` — binding predefinito `prefix+Shift+n`.\n\n## Validazione\n- `cargo test -p heca`: 529 unit test + 3 integration test passati.\n- `cargo clippy --workspace --all-targets --all-features -- -D warnings`: passato.\n- `git diff --check`: passato.\n\n## Prossimo lavoro\n- P062 può diventare il primo producer reale del confine `AppState::notify` (reload config).\n- P063 sostituirà il fallback `System` con un backend OS, mantenendo l'outcome e il contratto di fallback documentato.",
+  "handoff": "",
   "handoffUpdatedAt": "2026-08-09T10:37:00.256Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/03b297bb-a915-4712-a6b4-dc688dc7ddc5-2026-08-13T18-12-24-490Z.md",
+      "clearedAt": "2026-08-13T18:12:24.490Z",
+      "reason": "phase-done"
+    }
+  ],
   "statusLog": []
 }

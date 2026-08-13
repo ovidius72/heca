@@ -419,8 +419,14 @@
   "createdAt": "2026-07-03T22:50:20.126Z",
   "updatedAt": "2026-08-08T22:48:44.196Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-09T14:23:35.734Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/e298f926-f6b3-4147-abcc-eea87171cd81-2026-08-13T18-12-24-502Z.md",
+      "clearedAt": "2026-08-13T18:12:24.502Z",
+      "reason": "phase-done"
+    }
+  ],
   "statusLog": []
 }

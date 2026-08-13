@@ -375,9 +375,15 @@
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
   "updatedAt": "2026-08-08T23:03:52.271Z",
-  "handoff": "# P059 — notification intents, dismiss action and global KeyHint bridge\n\n- Added `InteractionSource::ChromeOverlay`; it is explicitly non-privileged and is not keyboard-driven.\n- Added built-in contextual action `notification.dismiss { id }` / `WmAction::DismissNotification`, with descriptor, required arg, handler, registry registration and `Global` policy. It has no static keybinding.\n- Replaced the direct `NotificationDismiss` event path: toast dismiss now emits the same `ChromeIntent` / `Intent` route used by Hint and RPC.\n- `NotificationActionRequested { notification_id }` is the sole notification-specific transport event; it late-resolves the current visible action on the app thread.\n- `NotificationRuntime` owns stable `HintTargetId`s by notification id. Same-ID updates replace mapped intents without changing target identity; expiry/dismiss removes targets. ToastSpec receives only opaque ids.\n\n## Important behavior\n\n- Toast action dispatch calls `dispatch_view_intent(..., ChromeOverlay, ...)`.\n- `dismiss_after` runs only after `IntentOutcome::Ran`; dynamic `Unknown`, `Blocked`, `MissingArgs`, and `NotRunnable` retain the toast.\n- Current general-dispatch limitation is documented in `main.rs`: built-in intents report `Ran` after entry to `dispatch_action`, which is void and cannot report a downstream policy denial. Do not add a notification-specific parallel dispatcher; improve the universal dispatcher if that distinction becomes necessary.\n- P095 extends this single-action bridge to multi-action IDs/variants/icons; P059 intentionally keeps the existing one-action ToastSpec.\n\n## Files\n\n- `heca/src/{input.rs,actions.rs,handlers.rs,main.rs,notification.rs,app_state.rs}`\n- `heca/src/app/{events.rs,interaction.rs,lifecycle.rs,registry.rs}`\n- `heca/src/chrome/mod.rs`\n\n## Validation\n\n- `cargo test -p heca` — 526 unit + 3 integration passed.\n- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.\n\n## Next phase\n\nProceed with P055/T219: central `NotificationRuntime::notify(draft, now)` delivery router. It must call `sync_visible_toasts(&mut state.hint_targets)` after a visible projection change, preserving P059 target behavior.",
+  "handoff": "",
   "handoffUpdatedAt": "2026-08-08T23:04:11.529Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/ccefbac4-b29e-45d8-bd1d-e7199afa4907-2026-08-13T18-12-24-499Z.md",
+      "clearedAt": "2026-08-13T18:12:24.499Z",
+      "reason": "phase-done"
+    }
+  ],
   "statusLog": []
 }

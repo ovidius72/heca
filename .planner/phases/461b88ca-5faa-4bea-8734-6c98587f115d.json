@@ -66,7 +66,16 @@
       "status": "planned",
       "description": "Aggiungere unit test deterministici con clock iniettato per: push 1..N; quattro slot; pending senza expiry; promozione e timer completo; sticky; expiry simultanee; dismiss visible/pending; non-dismissible; archiviazione cause; history limit/trimming; next_expiry. Verificare invarianti dopo ogni transizione e nessun ID presente in più stati.",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "0b00bffd-412b-4557-8f78-efa680f56a3c-check-001-in-progress-planned",
+          "date": "2026-08-09T10:39:07.232Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "P062 ha priorità e dipendenza precedente: P057 dichiara P058-P062 come prerequisiti completati. Nessuna modifica di codice eseguita in T235.",
+          "description": "P062 ha priorità e dipendenza precedente: P057 dichiara P058-P062 come prerequisiti completati. Nessuna modifica di codice eseguita in T235."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -103,10 +112,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-08-09T10:38:11.444Z",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-08-06T14:20:46.286Z"
+      "updatedAt": "2026-08-09T10:39:07.232Z"
     },
     {
       "id": "107ae543-0959-4d93-a867-fcfa7293be3b",
@@ -481,9 +490,9 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:40.150Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-09T10:39:07.232Z",
+  "handoff": "# P057 — verifica reload notification dopo il merge delle API eventi DOM\n\n## Punto di ripresa\n\nLa sessione ha appena completato `F009/P062/T218` (preservare le diagnostiche stderr per gli outcome di reload). `P062 — Reload Config Producer` è conclusa: il producer crea una failure sticky deduplicata `config.reload.failed`, espone Retry con `Intent::new(\"reload_config\")`, risolve la failure su successo e applica prima la nuova config.\n\nQuesta fase `P057 — Verification + Documentation` è il prossimo punto pianificato in F009 e deve ospitare la verifica UAT e le regressioni seguenti.\n\n## Problemi osservati in UAT\n\n1. Cliccando Retry o × della notification, il click può arrivare alla sidebar/content sottostante e focalizzarla invece di attivare il controllo toast.\n2. Corretto `config.toml`, cliccando Retry la failure resta: prima ipotesi da verificare è che il button non riceva affatto il click; non assumere che il loader non rilegga il file prima della prova end-to-end.\n3. `prefix+/` mostra hint dei layer sottostanti, non Retry/× della toast.\n4. Retry è attualmente `Button::ghost`, senza il bordo richiesto; la leading icon della toast è troppo piccola.\n\n## Prerequisito bloccante deciso\n\nNon implementare questi fix contro l’API eventi transitoria del branch corrente. In `../heca`, `F003/P084/T400` è in corso e definisce il modello target già deciso:\n\n- un solo listener DOM-like con event object e `event.stop_propagation()`;\n- listener disponibili su ogni widget tramite `Base`;\n- consegna tastiera al focus owner + bubbling, senza `takes_raw_keys` / `takes_text_input`;\n- traversal sempre delle real `Base.children`, senza `routes_own_subtree`;\n- `bounds == ciò che è disegnato == ciò che è cliccabile`, senza `hit_bounds` / `damage_bounds`;\n- layer routing centrale/front-to-back: autore di widget o plugin non conosce modal, overlay, sidebar, terminal o `Handled`.\n\nServe completare, revisionare e mergiare la PR T400 verso `main`, poi aggiornare/ribasare il branch F009 su quel `main`. Non simulare o ricreare API transitorie nel lavoro notification.\n\n## Ripresa dopo il merge\n\n1. Leggere le API concrete mergeate e aggiornare il piano di P057 con i riferimenti reali.\n2. Offrire ogni pointer event al router layer globale, front-to-back; nessun ramo Toast-specifico. Un target nel layer davanti non deve essere riconsegnato a sidebar/content. Un click fuori da un layer non-modal passa sotto; il modal conserva la sua cattura/scrim come proprietà del layer.\n3. Rifattorizzare `ToastStack` internamente: cache/reconciliation/animazioni possono restare private, ma i Toast devono essere real `Base.children`; traversal generica deve quindi coprire paint, layout, hit-test, bubbling, focus e HintTarget.\n4. Aumentare semanticamente la leading icon in `Toast`. Non anticipare multi-action: le action fino a tre con varianti Primary/Secondary sono `P095/T402` + `T404`.\n5. Verificare Retry end-to-end: config invalida → failure; correggere file su disco → Retry; provare che il loader rilegge e applica un valore modificato; risolvere `config.reload.failed` solo dopo successo; config ancora invalida → nessun falso successo.\n\n## Regressioni richieste\n\n- Retry e × non causano focus leak verso sidebar/content;\n- pass-through click fuori da ToastStack non-modale;\n- blocco/scrim modal preservato;\n- `prefix+/` trova e mostra Retry/× della notification;\n- reconciliation conserva id/hint/runtime state;\n- reload riuscito rilegge file e rimuove failure; reload fallito mantiene/aggiorna failure.\n\n## Non fare\n\n- Non aggiungere API layer da invocare a widget/plugin.\n- Non usare `Handled` come contratto che uno sviluppatore deve conoscere.\n- Non mantenere una seconda tree di Toast invisibile a `Base.children`.\n- Non modificare o chiudere P095 prima di affrontare il suo scope dedicato.",
+  "handoffUpdatedAt": "2026-08-09T14:27:44.639Z",
   "handoffReadAt": "",
   "handoffHistory": [],
   "statusLog": []

@@ -1062,10 +1062,6 @@ impl AppState {
     ///
     /// Producers pass their draft and their clock explicitly. They never construct a
     /// `ToastSpec`, allocate hint ids, or inspect the configured delivery channel.
-    #[expect(
-        dead_code,
-        reason = "P062 is the first in-app producer and calls this P055 delivery boundary."
-    )]
     pub fn notify(
         &mut self,
         draft: NotificationDraft,
@@ -1078,6 +1074,27 @@ impl AppState {
             self.mark_full_redraw();
         }
         Ok(delivery)
+    }
+
+    /// Resolve the current notification identified by a producer-owned deduplication key.
+    ///
+    /// This is the only app-level path that couples store resolution to the retained
+    /// toast projection, so producers never manipulate the store directly.
+    pub fn resolve_notification_by_dedup_key(
+        &mut self,
+        key: &str,
+        now: std::time::Instant,
+    ) {
+        let Some(notification_id) = self.notifications.store.notification_id_for_dedup_key(key) else {
+            return;
+        };
+        if matches!(
+            self.notifications.store.resolve(notification_id, now),
+            crate::notification::NotificationDismissResult::Dismissed(_)
+        ) && self.notifications.sync_visible_toasts(&mut self.hint_targets)
+        {
+            self.mark_full_redraw();
+        }
     }
 
     /// The scrollback search for `pane`, if it has one.

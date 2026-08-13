@@ -61,10 +61,19 @@
       "priority": 1,
       "shortName": "reload-notification-mode",
       "title": "Apply notification settings during runtime reload",
-      "status": "planned",
-      "description": "Nel reload config di `heca/src/main.rs:157-191`, applicare atomicamente `notification_system` e `notification_history_limit` al NotificationRuntime insieme agli altri setting soltanto dopo parsing/validation riusciti. Un fallimento conserva valori correnti. Un limite history ridotto applica trimming deterministico; il cambio di canale influenza soltanto notifiche future, senza migrare o riemettere quelle soppresse. Il successo producer viene instradato con il nuovo modo.",
-      "notes": "",
-      "statusLog": [],
+      "status": "done",
+      "description": "Nel reload config di `heca/src/main.rs:157-191`, applicare atomicamente `notification_system` e `notification_history_limit` al NotificationRuntime insieme agli altri setting soltanto dopo parsing/validation riusciti. Un fallimento conserva valori correnti. Un limite history ridotto applica trimming deterministico; il cambio di canale influenza soltanto notifiche future, senza migrare o riemettere quelle soppresse. Il successo producer viene instradato con il nuovo modo.\n\n---\n**Completion summary:**\nAudit completato: `notification_history_limit` e `notification_system` sono già applicati esclusivamente dopo `AppConfig::try_load()` riuscito, quindi un errore conserva i valori runtime correnti; trimming resta store-owned e il canale influenza solo draft futuri. Test router e clippy strict passati.",
+      "notes": "## Pre-flight (AGENTS.md §0)\n\n1. **Esistente da riusare:** `HecaApp::reload_config`, `NotificationRuntime::set_notification_system` e `NotificationRuntime::set_history_limit`; nessun widget/UI o nuovo action path.\n2. **Copertura planner:** P062/T214 richiede precisamente l’applicazione atomica di `notification_system` e `notification_history_limit` dopo `try_load()` riuscito di T215.\n3. **Proposta?** No. Il contratto è già definito nella task; nessun comportamento nuovo o percorso parallelo.",
+      "statusLog": [
+        {
+          "id": "0ad2a1aa-f353-47ff-83e5-65fc45cd02c9-check-001-in-progress-planned",
+          "date": "2026-08-09T10:41:21.247Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "T215 è la prima task prioritaria di P062; nessuna modifica di codice è stata eseguita per T214.",
+          "description": "T215 è la prima task prioritaria di P062; nessuna modifica di codice è stata eseguita per T214."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -101,10 +110,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T10:39:27.055Z",
+      "completedAt": "2026-08-09T10:49:05.361Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-08-06T14:20:46.285Z"
+      "updatedAt": "2026-08-09T10:49:05.361Z"
     },
     {
       "id": "2578fea2-2f40-4c58-b39e-6efda6534a1f",
@@ -114,9 +123,9 @@
       "priority": 0,
       "shortName": "reload-result",
       "title": "Make reload_config return a structured Result",
-      "status": "planned",
-      "description": "Rifattorizzare `HecaApp::reload_config` in `heca/src/main.rs:157-191` affinché separi caricamento/validazione/applicazione e restituisca un risultato strutturato utile al producer. Non applicare parzialmente keymap/theme/settings in caso di errore. Il risultato di errore deve fornire un messaggio user-facing sanificato e mantenere la causa dettagliata per stderr. Tutte le entrate reload (keybinding, RPC, Retry notification) continuano a passare dall'azione registrata esistente.",
-      "notes": "",
+      "status": "done",
+      "description": "Rifattorizzare `HecaApp::reload_config` in `heca/src/main.rs:157-191` affinché separi caricamento/validazione/applicazione e restituisca un risultato strutturato utile al producer. Non applicare parzialmente keymap/theme/settings in caso di errore. Il risultato di errore deve fornire un messaggio user-facing sanificato e mantenere la causa dettagliata per stderr. Tutte le entrate reload (keybinding, RPC, Retry notification) continuano a passare dall'azione registrata esistente.\n\n---\n**Completion summary:**\n`HecaApp::reload_config` restituisce ora `Result<(), ReloadConfigError>`; carica/valida prima di mutare config, keymap, theme o state. `ReloadConfigError` separa testo user-safe da diagnostica stderr. Test di separazione e clippy strict passati.",
+      "notes": "## Pre-flight (AGENTS.md §0)\n\n1. **Esistente da riusare:** `HecaApp::reload_config` in `heca/src/main.rs`, `AppConfig::try_load()` in `heca-config/src/loader.rs` e l’azione esistente `WmAction::ReloadConfig` / `handle_reload_config`. Non è UI: non serve widget, component, paint, hit-test o event-forwarding nuovo.\n2. **Copertura planner:** P062/T215 copre la separazione load/validate/apply e l’esito strutturato; T214 applica il setting notification runtime, T216/T217 producono gli esiti notification, T218 conserva stderr.\n3. **Proposta?** No. Il comportamento e i punti di integrazione sono già specificati da P062/T215; non aggiungo nuove capability o percorsi paralleli.\n\nVincolo di implementazione: `try_load()` completa prima di qualsiasi assegnazione a `app_config`, `keymaps`, `theme` o `AppState`; l’esito strutturato deve separare messaggio user-facing da diagnostica stderr e tutte le entrate continuano attraverso la registrazione `ReloadConfig` esistente.",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
@@ -154,10 +163,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T10:41:23.823Z",
+      "completedAt": "2026-08-09T10:45:47.368Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-08-06T14:20:28.742Z"
+      "updatedAt": "2026-08-09T10:45:47.368Z"
     },
     {
       "id": "3d4fb332-e3f1-40a9-ab42-55b10cd53b14",
@@ -167,9 +176,9 @@
       "priority": 3,
       "shortName": "reload-success-toast",
       "title": "Emit reload success and resolve prior failure",
-      "status": "planned",
-      "description": "Dopo un reload riuscito e l'applicazione della nuova configurazione, rimuovere tramite API interna di risoluzione qualsiasi notifica con dedup key `config.reload.failed` da visible/pending, archiviandola come Resolved. Poi inviare tramite il delivery router una Success auto-dismiss con dedup `config.reload.success`. Se la nuova modalità è none non compare nulla ma l'errore precedente deve comunque essere risolto; se è system senza backend usa il fallback app. Evitare emissioni su startup normale.",
-      "notes": "",
+      "status": "done",
+      "description": "Dopo un reload riuscito e l'applicazione della nuova configurazione, rimuovere tramite API interna di risoluzione qualsiasi notifica con dedup key `config.reload.failed` da visible/pending, archiviandola come Resolved. Poi inviare tramite il delivery router una Success auto-dismiss con dedup `config.reload.success`. Se la nuova modalità è none non compare nulla ma l'errore precedente deve comunque essere risolto; se è system senza backend usa il fallback app. Evitare emissioni su startup normale.\n\n---\n**Completion summary:**\nIl reload riuscito risolve prima il dedup `config.reload.failed` tramite un unico AppState projection boundary, quindi produce `config.reload.success` dopo aver applicato la config. Il resolve sincronizza ToastStack e invalida il frame solo se la proiezione cambia. Clippy strict passa.",
+      "notes": "## Pre-flight (AGENTS.md §0)\n\n1. **Esistente da riusare:** `HecaApp::reload_config`, `AppState::notify`, `NotificationRuntime::resolve`, `NotificationDraft` e il routing P055; nessun widget, paint o percorso di dispatch nuovo.\n2. **Copertura planner:** P062/T216 stabilisce la risoluzione esplicita di `config.reload.failed` seguita dal producer deduplicato `config.reload.success`, esclusivamente dopo applicazione config riuscita.\n3. **Proposta?** No. Ordine e chiavi dedup sono già decisi dalla fase.",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
@@ -207,10 +216,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T11:49:13.790Z",
+      "completedAt": "2026-08-09T11:50:33.859Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-08-06T14:21:02.601Z"
+      "updatedAt": "2026-08-09T11:50:33.859Z"
     },
     {
       "id": "b0b0c8f3-452c-4247-9e7f-09f38260d8b7",
@@ -220,9 +229,9 @@
       "priority": 2,
       "shortName": "reload-failure-toast",
       "title": "Emit sticky reload failure with Retry Intent",
-      "status": "planned",
-      "description": "In caso di reload fallito, mantenere integralmente config/keymap/theme/settings correnti e inviare tramite il router corrente una notifica Danger sticky, dismissible, dedup `config.reload.failed`. Body contiene errore sanificato; action label Retry conserva un `heca_view::Intent` verso l'azione reload registrata con `dismiss_after=false`. Errori successivi aggiornano stesso ID/slot e testo, riavviando soltanto gli aspetti applicabili (sticky non ha expiry). Il Retry non chiude la notifica: soltanto un reload realmente riuscito la risolve in T216.",
-      "notes": "",
+      "status": "done",
+      "description": "In caso di reload fallito, mantenere integralmente config/keymap/theme/settings correnti e inviare tramite il router corrente una notifica Danger sticky, dismissible, dedup `config.reload.failed`. Body contiene errore sanificato; action label Retry conserva un `heca_view::Intent` verso l'azione reload registrata con `dismiss_after=false`. Errori successivi aggiornano stesso ID/slot e testo, riavviando soltanto gli aspetti applicabili (sticky non ha expiry). Il Retry non chiude la notifica: soltanto un reload realmente riuscito la risolve in T216.\n\n---\n**Completion summary:**\nIl ramo failure di reload crea una notifica `Error` sticky deduplicata come `config.reload.failed`, con `NotificationAction` Retry verso l’Intent già registrato `reload_config`; la delivery attraversa `AppState::notify` e preserva l’errore structured per T218. Rimossa l’aspettativa dead-code ormai obsoleta su quel boundary. Clippy strict e test intent/dedup passati.",
+      "notes": "## Pre-flight (AGENTS.md §0)\n\n1. **Esistente da riusare:** `HecaApp::reload_config` Result di T215, `AppState::notify`, `NotificationDraft`, `NotificationLifecycle::sticky`, `NotificationAction::new` e l’Intent/azione già registrata `reload_config`. Nessun nuovo widget, paint, hit-test o action path.\n2. **Copertura planner:** P062/T217 definisce il producer failure sticky deduplicato e Retry; T218 resta proprietaria della stampa stderr.\n3. **Proposta?** No. Chiave dedup, sticky lifecycle, Retry intent e `dismiss_after=false` sono decisioni già fissate dalla task/fase.",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
@@ -260,10 +269,10 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T10:49:08.912Z",
+      "completedAt": "2026-08-09T11:49:10.481Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-08-06T14:20:54.384Z"
+      "updatedAt": "2026-08-09T11:49:10.481Z"
     },
     {
       "id": "f024c6cc-af06-4908-97d8-acccd9c67c2b",
@@ -273,9 +282,9 @@
       "priority": 4,
       "shortName": "reload-stderr",
       "title": "Preserve stderr diagnostics for reload outcomes",
-      "status": "planned",
-      "description": "Mantenere i log stderr/debug esistenti durante il refactor: errore completo su failure anche con notification_system=none; messaggio conciso su successo secondo convenzione corrente; warning system-backend assente gestito una sola volta dal router, non dal producer. Non includere percorsi sensibili o contenuti non necessari nel testo visuale. Aggiungere test/capture dove praticabile o isolare la formattazione in helper puro.",
-      "notes": "",
+      "status": "done",
+      "description": "Mantenere i log stderr/debug esistenti durante il refactor: errore completo su failure anche con notification_system=none; messaggio conciso su successo secondo convenzione corrente; warning system-backend assente gestito una sola volta dal router, non dal producer. Non includere percorsi sensibili o contenuti non necessari nel testo visuale. Aggiungere test/capture dove praticabile o isolare la formattazione in helper puro.\n\n---\n**Completion summary:**\nIl ramo failure stampa la diagnostica completa di `ReloadConfigError` su stderr prima di creare la notifica user-safe; nessuna modalità notification può sopprimere il log. `cargo test -p heca` (530 unit + 3 integration) e clippy workspace strict passati.",
+      "notes": "## Pre-flight (AGENTS.md §0)\n\n1. **Esistente da riusare:** `ReloadConfigError` di T215, ramo failure in `HecaApp::about_to_wait` e stderr Rust (`eprintln!`); nessun widget o canale UI alternativo.\n2. **Copertura planner:** P062/T218 richiede la diagnostica completa su stderr senza sostituirla con la notifica UI.\n3. **Proposta?** No. È il canale diagnostico già deciso dalla fase.",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
@@ -313,14 +322,14 @@
       ],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-09T11:50:36.741Z",
+      "completedAt": "2026-08-09T11:51:03.573Z",
       "createdAt": "2026-07-03T22:52:28.341Z",
-      "updatedAt": "2026-08-06T14:21:14.216Z"
+      "updatedAt": "2026-08-09T11:51:03.573Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-06T14:21:14.216Z",
+  "updatedAt": "2026-08-09T11:51:03.573Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

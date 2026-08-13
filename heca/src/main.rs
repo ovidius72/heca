@@ -45,6 +45,22 @@ pub(crate) fn pane_name(_id: PaneId) -> String {
     String::new()
 }
 
+/// A reload failure separated into safe UI text and full stderr diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReloadConfigError {
+    user_message: String,
+    diagnostics: String,
+}
+
+impl ReloadConfigError {
+    fn from_config_error(error: heca_config::ConfigError) -> Self {
+        Self {
+            user_message: "Configuration reload failed; fix the configuration and retry.".to_string(),
+            diagnostics: error.to_string(),
+        }
+    }
+}
+
 struct HecaApp {
     state: Option<Box<AppState>>,
     app_config: AppConfig,
@@ -155,18 +171,14 @@ impl HecaApp {
         }
     }
 
-    fn reload_config(&mut self) {
+    fn reload_config(&mut self) -> Result<(), ReloadConfigError> {
         if let Some(ref mut state) = self.state {
             // Try to load the config file. On error, keep the current working
             // config and report the problem — a bad config must not silently
             // overwrite the user's working settings.
             let new_config = match heca_config::loader::AppConfig::try_load() {
                 Ok(cfg) => cfg,
-                Err(e) => {
-                    eprintln!("[heca] reload failed: {e}");
-                    eprintln!("[heca] fix config.toml and press prefix+Shift+r to retry");
-                    return;
-                }
+                Err(error) => return Err(ReloadConfigError::from_config_error(error)),
             };
             self.app_config = new_config;
             // A reload re-reads the **file**, so the key collisions it found are stale and are
@@ -289,10 +301,16 @@ impl HecaApp {
             // rebuilt when `chrome_signature` changes, which can miss config edits.
             state.chrome_tree = None;
             state.needs_redraw = true;
+            let now = std::time::Instant::now();
+            state.resolve_notification_by_dedup_key("config.reload.failed", now);
+            let success = crate::notification::NotificationDraft::new("Configuration reloaded")
+                .dedup_key("config.reload.success");
+            let _ = state.notify(success, now);
             // Reload runs in `about_to_wait`; request an explicit redraw so the
             // reloaded config takes effect immediately instead of on the next input.
             state.window.request_redraw();
         }
+        Ok(())
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
@@ -364,7 +382,20 @@ impl ApplicationHandler<AppEvent> for HecaApp {
             if let Some(state) = self.state.as_mut() {
                 state.pending_reload = false;
             }
-            self.reload_config();
+            if let Err(error) = self.reload_config()
+                && let Some(state) = self.state.as_mut() {
+                eprintln!("[heca] reload failed: {}", error.diagnostics);
+                let draft = crate::notification::NotificationDraft::new("Configuration reload failed")
+                    .body(error.user_message)
+                    .severity(crate::notification::NotificationSeverity::Error)
+                    .lifecycle(crate::notification::NotificationLifecycle::sticky())
+                    .dedup_key("config.reload.failed")
+                    .action(crate::notification::NotificationAction::new(
+                        "Retry",
+                        crate::chrome::Intent::new("reload_config"),
+                    ));
+                let _ = state.notify(draft, std::time::Instant::now());
+            }
         }
 
         if let Some(ref mut state) = self.state {
@@ -448,4 +479,20 @@ fn main() {
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");
+}
+
+#[cfg(test)]
+mod reload_config_tests {
+    use super::*;
+
+    #[test]
+    fn reload_error_keeps_safe_text_separate_from_diagnostics() {
+        let error = ReloadConfigError {
+            user_message: "Configuration reload failed; fix the configuration and retry.".to_string(),
+            diagnostics: "invalid config in /private/path: detailed parser error".to_string(),
+        };
+
+        assert!(!error.user_message.contains("/private/path"));
+        assert!(error.diagnostics.contains("/private/path"));
+    }
 }
