@@ -12,11 +12,11 @@ glow = "#52679f"
 # header colour itself came out at 1.14:1 against the sidebar, which is lighter than it is visible. The grey Catppuccin surface steps were all too dark for a light
 # theme (Antonio, driving, 2026-08-13) — on a light theme a selection is a tint toward the accent,
 # not a step toward black.
-selected_background = "#a8b2cd"
+selected_background = "#8d9abf"
 
 # A selected row, the row back-and-forth returns to, and the two workspace frames —
 # four strengths of one idea, as colours rather than alphas so they can simply be seen.
-previous_background = "#c2cadc"
+previous_background = "#a4afcc"
 workspace_active_background = "#d3d8e5"
 workspace_previous_background = "#dadfe9"
 danger = "#d20f39"

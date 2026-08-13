@@ -618,9 +618,13 @@ fn default_sidebar_button_font_size() -> f32 {
 /// theme's `surface` toward its `accent`.
 const SELECTED_LIFT: f32 = 0.42;
 /// How far a derived [previous row](Theme::effective_previous_background) sits between the surface
-/// and the selected panel. Tuned by measuring: it is the step that read as "findable but quiet" in
-/// all three shipped themes.
-const PREVIOUS_LIFT: f32 = 0.24;
+/// and the selected panel.
+///
+/// **Measured, not judged**: it puts the row at ~1.95:1 against the theme's own surface — a step
+/// you can find when you look for it, and a clear one below the selected panel's ~2.3:1. At the
+/// 0.24 it shipped with, the same row computed to 1.5:1, which reads as "not much noticeable"
+/// because it very nearly is not.
+const PREVIOUS_LIFT: f32 = 0.34;
 /// A derived **current-workspace frame**. Far below a row's, because a frame is a large area and
 /// the same strength would swallow every mark inside it.
 const WORKSPACE_ACTIVE_LIFT: f32 = 0.13;
