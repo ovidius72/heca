@@ -9,20 +9,22 @@
 //! that a workspace tree was a sidebar thing, and every reader of those names inherited the
 //! confusion (F003/P085/T356).
 
+mod column_group;
+mod dock_view;
 mod model;
+mod pane_row;
+mod seams;
+mod workspace_frame;
 
-pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceRow, WorkspaceTree};
-#[cfg(test)]
-pub(crate) use model::WorkspaceEntry;
+pub(crate) use model::{ColumnEntry, PaneEntry, WorkspaceEntry, WorkspaceRow, WorkspaceTree};
 
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod testing;
 
 use crate::chrome::{
-    alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
-    BuildCx, ChromeDragItem, ChromeIntentEmitter, ChromeSignals, ContainerContribution,
-    Contribution, DragItemRegistry, PaneInfoSignals, RegionId, RegionSet,
-    RepaintWatch, WidgetModel, WorkspacesContainerState, CARD_META_FONT_SCALE,
+    BuildCx, ChromeDragItem, ContainerContribution, Contribution, RegionId, RegionSet, WidgetModel,
 };
 use crate::actions::{ActionCategory, ActionMeta, ArgKind, ArgSpec};
 use crate::app::interaction::ActionPolicy;
@@ -31,18 +33,11 @@ use crate::chrome::{Intent, PropMap, PropValue};
 use crate::chrome::context_menu::{item, item_running, usize_arg};
 use crate::chrome::DropdownItem;
 use crate::providers::{ChromeCtx, Provider, ProviderCx};
+use dock_view::DockView;
+use seams::{DockRegistries, DockSeams};
 use heca_grid_ui::Handled;
-use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
-use heca_core::runtime::ProcessStatus;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use heca_grid_ui::style::{Align, Length};
-use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{
-    Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
-    Row, ScrollRegion, StatusDot, Tooltip, TooltipSide, Visibility,
-};
+use heca_grid_ui::widgets::{Flex, Glyph};
 
 /// The built-in workspace-tree sidebar container.
 ///
@@ -634,21 +629,42 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // …and whether this placement is the one the keyboard is aimed at (F003/P011/T020). Per mount for
     // the same reason: only one of two placements can hold focus.
     let focused = state.container_keyboard_target(bx.container_id());
-    Box::new(build_workspaces_container(
-        ctx,
-        &tree,
-        &programs,
-        theme,
-        emit,
-        state.workspaces(),
+    let ws_state = state.workspaces();
+    // Read the id out before the registries are taken: `container_id()` borrows `bx`, and the two
+    // registries below borrow it mutably.
+    let mount = bx.container_id().to_string();
+    // **The only file that touches `ChromeCtx`.** Everything below this line takes plain data plus
+    // the seams it binds, so every component of this dock can be built in a test without a window
+    // (AGENTS.md § 0b-bis step 4).
+    let seams = DockSeams {
         // This placement's id — the rows' cursor signals are keyed by it, so two seatings of one
         // container light different rows (F003/P085/T354).
-        bx.container_id().to_string(),
-        scroll,
-        focused,
-        bx.signals,
-        bx.drag,
-    ))
+        mount: &mount,
+        theme,
+        programs: &programs,
+        emit,
+        catalog: ctx.action_catalog().expect("a render pass has the catalog"),
+        ws_state,
+        // Read once here rather than by each row: a workspace, a column and a card all ask the
+        // same question of it, and asking the store three hundred times is three hundred chances
+        // to ask it differently.
+        active_pane: ws_state.active_pane(),
+    };
+    // The three registries are borrowed as *disjoint* fields, which is exactly why they
+    // are plain fields on `BuildCx` and not accessor methods: `bx.signals()` twice
+    // in one call would be two overlapping `&mut *bx` borrows.
+    let mut reg = DockRegistries {
+        signals: bx.signals,
+        drag: bx.drag,
+    };
+    Box::new(
+        DockView {
+            tree: &tree,
+            scroll,
+            focused,
+        }
+        .build(&seams, &mut reg),
+    )
 }
 
 // ── The workspaces container's row identities (F003/P085/T354) ──
@@ -727,625 +743,6 @@ pub(crate) fn selection_nav_key(selection: crate::chrome::SidebarSelection) -> S
         S::Column { ws_idx, col_idx } => column_nav_key(ws_idx, col_idx),
         S::Workspace { ws_idx } => workspace_nav_key(ws_idx),
     }
-}
-
-/// A single pane **card**, styled like the showcase PANES rows: a state-tinted
-/// background + radius, an active accent bar, a leading program icon, the display
-/// name, an optional exceptional-state indicator, and git metadata when present.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "pane-card projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
-)]
-fn pane_card(
-    ctx: &ChromeCtx<'_>,
-    pane: &PaneEntry,
-    // Which column this pane sits in, or `None` for a **floating** pane — which is in no column,
-    // so its menu simply lacks the entries that need one rather than aiming them at a guess.
-    column_of_pane: Option<(usize, usize)>,
-    // The placement whose cursor this card's outline follows.
-    mount: &str,
-    programs: &ProgramsConfig,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    active_pane: Option<PaneId>,
-    ws_state: &WorkspacesContainerState,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-) -> RepaintWatch {
-    let active = active_pane == Some(pane.pane_id);
-    let pane_id = pane.pane_id;
-    // Read off this row's own projection rather than back through the store: the projection
-    // was built from it, and the menu is about the row being drawn.
-    let has_custom_name = pane.custom_name.is_some();
-    let runtime = runtime_snapshot(ws_state, pane_id);
-    let info = pane_info_view(
-        programs,
-        &pane.name,
-        pane.custom_name.as_deref(),
-        runtime.as_ref(),
-        // A renamed pane shows a dimmed `(process)` suffix here when the setting is on,
-        // so the sidebar keeps surfacing what's actually running under a custom name.
-        ws_state.pane_renamed_add_process_name(),
-    );
-    // A constant theme-driven card; the *selected* look (accent pill + border + bar)
-    // is drawn by `Row` from its `active` signal, not baked into the background. This
-    // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
-    // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
-    // The card is both a drag source and a drop target (F4.5); its opaque DragItemId
-    // is assigned by the registry (which records that it's this pane) so the kind
-    // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
-    let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
-    // This row kind's declared click, by name — so a menu entry, a keybinding or RPC can fire the
-    // same one (F003/P086/T365). A **pick** is declared separately, on the wrapper below: it is a
-    // different gesture and this row answers it differently.
-    let press = crate::chrome::fires(mount, pane_row_press(pane_id), emit_intent);
-    let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
-    let icon_signal = icon_widget.glyph_signal();
-    let active_title_label = Label::new(info.title.clone())
-        .color(theme.colors.accent)
-        .bold(true);
-    let active_title_signal = active_title_label.text_signal();
-    let active_title = Visibility::new(active_title_label, active);
-    let active_title_visible = active_title.visible_signal();
-    let inactive_title_label = Label::new(info.title.clone())
-        .color(theme.colors.foreground)
-        .bold(true);
-    let inactive_title_signal = inactive_title_label.text_signal();
-    let inactive_title = Visibility::new(inactive_title_label, !active);
-    let inactive_title_visible = inactive_title.visible_signal();
-    let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);
-    let idle_dot_visible = idle_dot.visible_signal();
-    let running_dot = Visibility::new(StatusDot::online(), info.status == ProcessStatus::Running);
-    let running_dot_visible = running_dot.visible_signal();
-    let success_dot = Visibility::new(StatusDot::online(), info.status == ProcessStatus::Success);
-    let success_dot_visible = success_dot.visible_signal();
-    let error_dot = Visibility::new(StatusDot::error(), info.status == ProcessStatus::Error);
-    let error_dot_visible = error_dot.visible_signal();
-    let branch_label_widget = Label::new(truncate_sidebar_git_branch(
-        info.git_branch.as_deref().unwrap_or_default(),
-    ))
-    .color(theme.colors.foreground)
-    .font_scale(0.8);
-    let branch_display_signal = branch_label_widget.text_signal();
-    let branch_signal = signal(info.git_branch.clone().unwrap_or_default());
-    let add_label_widget = Label::new(info.git_added.clone().unwrap_or_default())
-        .color(theme.colors.success)
-        .font_scale(0.8);
-    let add_label = add_label_widget.text_signal();
-    let add_segment = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(4.0)
-            .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
-            .child(add_label_widget),
-        info.git_added.is_some(),
-    );
-    let add_text_visible_signal = add_segment.visible_signal();
-    let modified_label_widget = Label::new(info.git_modified.clone().unwrap_or_default())
-        .color(theme.colors.warning)
-        .font_scale(0.8);
-    let modified_label = modified_label_widget.text_signal();
-    let modified_segment = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(4.0)
-            .child(Icon::new(Glyph::Warning).size(12.0).color(theme.colors.warning))
-            .child(modified_label_widget),
-        info.git_modified.is_some(),
-    );
-    let modified_text_visible_signal = modified_segment.visible_signal();
-    let deleted_label_widget = Label::new(info.git_deleted.clone().unwrap_or_default())
-        .color(theme.colors.danger)
-        .font_scale(0.8);
-    let deleted_label = deleted_label_widget.text_signal();
-    let deleted_segment = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(4.0)
-            .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
-            .child(deleted_label_widget),
-        info.git_deleted.is_some(),
-    );
-    let deleted_text_visible_signal = deleted_segment.visible_signal();
-    let git_row = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(6.0)
-            .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.colors.warning))
-            .child(
-                Tooltip::new_signal(branch_label_widget, branch_signal)
-                    .side(TooltipSide::Bottom)
-                    .delay(0.25),
-            )
-            .child(add_segment)
-            .child(modified_segment)
-            .child(deleted_segment),
-        info.git_branch.is_some(),
-    );
-    let git_visible_signal = git_row.visible_signal();
-    // A renamed pane surfaces its running program as a dimmed `(process)` suffix after
-    // the name (config-gated). Appended to the shared title area so it renders the same
-    // in both the git and no-git card layouts. Like the title, it is **signal-driven**
-    // (text + visibility updated in `sync_chrome_signals`) so renaming toggles it live —
-    // a rename updates signals, it does not rebuild the sidebar card tree.
-    let process_hint_text = info
-        .process_hint
-        .as_ref()
-        .map(|program| format!("({program})"))
-        .unwrap_or_default();
-    // `foreground` (not `muted`) so it's readable on every theme; it still reads as
-    // secondary next to the accent + bold name (regular weight, smaller scale).
-    let process_hint_label = Label::new(process_hint_text)
-        .color(theme.colors.foreground)
-        .font_scale(CARD_META_FONT_SCALE);
-    let process_hint_signal = process_hint_label.text_signal();
-    let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
-    let process_hint_visible = process_hint.visible_signal();
-    let title_area = Flex::row()
-        .align(Align::Center)
-        .gap(4.0)
-        .child(Flex::column().child(active_title).child(inactive_title))
-        .child(process_hint);
-    // Optional cwd row (folder icon + home-relative path), stacked between the name and
-    // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
-    // row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd.
-    let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-    let show_cwd = ws_state.pane_show_cwd() && cwd_path.is_some();
-    let cwd_text = cwd_path
-        .as_deref()
-        .map(home_relative_path)
-        .unwrap_or_default();
-    // Readable, matching the sibling git-branch row (which colors its label
-    // `foreground`); `muted` was too dim for a primary info row.
-    let cwd_label = Label::new(cwd_text)
-        .color(theme.colors.foreground)
-        .font_scale(CARD_META_FONT_SCALE);
-    let cwd_signal = cwd_label.text_signal();
-    let cwd_row = Visibility::new(
-        Flex::row()
-            .align(Align::Center)
-            .gap(6.0)
-            .child(Icon::new(Glyph::Folder).size(12.0).color(theme.colors.foreground))
-            .child(cwd_label),
-        show_cwd,
-    );
-    let cwd_visible_signal = cwd_row.visible_signal();
-    // The pane's identity row (status dots + program icon + name) — shared by every card
-    // layout so the cwd and git rows just stack beneath it in one column.
-    let name_row = Flex::row()
-        .align(Align::Center)
-        .gap(8.0)
-        .child(
-            Flex::row()
-                .align(Align::Center)
-                .width(Length::Px(12.0))
-                .child(idle_dot)
-                .child(running_dot)
-                .child(success_dot)
-                .child(error_dot),
-        )
-        .child(Flex::row().align(Align::Center).child(icon_widget))
-        .child(title_area);
-    // One column: the name row, then the optional cwd and git rows (each 2px-indented and
-    // added only when shown, mirroring the git row). A card with only the name row lays
-    // out exactly like the former single-row layout — a one-child column adds no gap.
-    let mut content = Flex::column().gap(4.0).grow(1.0).child(name_row);
-    if show_cwd {
-        content = content.child(
-            Flex::row()
-                .child(Flex::row().width(Length::Px(2.0)))
-                .child(cwd_row),
-        );
-    }
-    if info.git_branch.is_some() {
-        content = content.child(
-            Flex::row()
-                .child(Flex::row().width(Length::Px(2.0)))
-                .child(git_row),
-        );
-    }
-    let card = Row::new()
-        .background(
-            theme
-                .colors
-                .foreground
-                .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
-        )
-                .radius(theme.colors.control_radius())
-        .padding(6.0)
-        // No bar: the column's `MarkerGroup` already draws one down the left of every row here,
-        // and the selected panel says which row is current. Two lines said it twice.
-        .active(active)
-        .nav_selected(false)
-        // The row's ONE identity: the cursor and (later) drag read this single declaration
-        // (F003/P085/T354). **The right-click no longer does** — the menu is declared below, on
-        // this widget, so a row that forgets `nav_key` still opens its menu (F004/P084/T395).
-        .nav_key(pane_nav_key(pane_id))
-        // **This row's menu, built where this row's data is.** No `context_path`, no registered
-        // builder, no menu-id string: the entries capture `pane_id` from the loop that is already
-        // drawing it. Built at trigger time, so "Use process name" appears exactly when there is a
-        // custom name to clear.
-        .context_menu({
-            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
-            let ctx_menu = crate::chrome::context_menu::menu_from_items(
-                "Pane",
-                "What you can do with this pane",
-                MENU_PANE,
-                pane_row_items(pane_id, column_of_pane, has_custom_name),
-                catalog,
-                emit_intent,
-            );
-            heca_grid_ui::widgets::ContextMenu::new(MENU_PANE).child(ctx_menu)
-        })
-        .draggable(drag_id)
-        .drop_target(drag_id)
-        // Click / Enter / Space run the row's declared click.
-        .on_activate(press)
-        .child(content);
-    // Bind the card's active signal so focus changes update it without a rebuild.
-    signals.pane_active.push((pane_id, card.state()));
-    signals.pane_previous.push((pane_id, card.previous_state()));
-    signals.row_nav
-        .push((mount.to_string(), pane_nav_key(pane_id), card.nav_state()));
-    // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
-    // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
-    // events/focus/drag straight through — so the card stays a drag source + target
-    // and clickable. The hint signal is driven each frame in `sync_chrome_signals`
-    // from the active `InputMode` candidates (keyboard logic stays the source of truth).
-    let hint = signal(None);
-    signals.pane_hint.push((pane_id, hint));
-    signals.pane_info.push((
-        pane_id,
-        PaneInfoSignals {
-            icon: icon_signal,
-            title_active: active_title_signal,
-            title_inactive: inactive_title_signal,
-            title_active_visible: active_title_visible,
-            title_inactive_visible: inactive_title_visible,
-            process_hint: process_hint_signal,
-            process_hint_visible,
-            cwd: cwd_signal,
-            cwd_visible: cwd_visible_signal,
-            status_idle_visible: idle_dot_visible,
-            status_running_visible: running_dot_visible,
-            status_success_visible: success_dot_visible,
-            status_error_visible: error_dot_visible,
-            git_visible: git_visible_signal,
-            git_branch: branch_signal,
-            git_branch_display: branch_display_signal,
-            git_added_visible: add_text_visible_signal,
-            git_added: add_label,
-            git_modified_visible: modified_text_visible_signal,
-            git_modified: modified_label,
-            git_deleted_visible: deleted_text_visible_signal,
-            git_deleted: deleted_label,
-        },
-    ));
-    let (watch, _repaint) = RepaintWatch::new(
-        KeyHint::new(card)
-            .hint(hint)
-            // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
-            // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
-            // registered and no id leaves this line — which is the only reason a plugin's row could
-            // ever have the same picker (RULE ZERO, F004/P084/T399).
-            .on_peek(crate::chrome::fires(
-                mount,
-                row_peek(pane_nav_key(pane_id)),
-                emit_intent,
-            ))
-            .placement(HintPlacement::CenterRight),
-    );
-    watch
-}
-
-/// One **column**: a generic [`MarkerGroup`] (left marker bar + grip gutter) holding
-/// the column's stacked pane cards — no per-column header row (columns are spatial
-/// groupings whose only user-facing job is to be a move/swap target + drag handle).
-/// The `MarkerGroup` bar brightens to the accent when the column holds the active
-/// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
-/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`ComponentExt`, not
-/// baked into the widget.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "column projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
-)]
-fn column_view(
-    ctx: &ChromeCtx<'_>,
-    c: &ColumnEntry,
-    ws_idx: usize,
-    mount: &str,
-    programs: &ProgramsConfig,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    active_pane: Option<PaneId>,
-    ws_state: &WorkspacesContainerState,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-) -> RepaintWatch {
-    let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
-    // The MarkerGroup is a column drag source + drop target (F4.5 step 2). Its grip
-    // gutter is the only surface not covered by a child pane card, so innermost-first
-    // hit-testing routes a grip press → column and a card press → pane, for free.
-    let drag_id = drag.register(ChromeDragItem::Column {
-        ws: ws_idx,
-        col: c.col_idx,
-    });
-    let mut col = MarkerGroup::new()
-        .active(active)
-        .gap(3.0)
-        .nav_key(column_nav_key(ws_idx, c.col_idx))
-        .context_menu({
-            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
-            let menu = crate::chrome::context_menu::menu_from_items(
-                "Column",
-                "What you can do with this column",
-                MENU_COLUMN,
-                column_row_items(ws_idx, c.col_idx),
-                catalog,
-                emit_intent,
-            );
-            heca_grid_ui::widgets::ContextMenu::new(MENU_COLUMN).child(menu)
-        })
-        .draggable(drag_id)
-        .drop_target(drag_id);
-    for pane in &c.panes {
-        col = col.child(pane_card(
-            ctx,
-            pane,
-            Some((ws_idx, c.col_idx)),
-            mount,
-            programs,
-            theme,
-            emit_intent,
-            active_pane,
-            ws_state,
-            signals,
-            drag,
-        ));
-    }
-    // Bind the column bar's active signal (lit iff it holds the active pane).
-    let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
-    signals.col_active.push((pane_ids, col.state()));
-    signals.row_nav.push((
-        mount.to_string(),
-        column_nav_key(ws_idx, c.col_idx),
-        col.nav_state(),
-    ));
-    // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can
-    // stamp this column's letter over it (tinted `success`, distinct from pane/workspace
-    // picks). Driven each frame in `sync_chrome_signals`.
-    let col_hint = signal::<Option<String>>(None);
-    signals.col_hint.push((ws_idx, c.col_idx, col_hint));
-    let hinted = KeyHint::new(col)
-        .hint(col_hint)
-        .color(theme.colors.success)
-        .placement(HintPlacement::CenterRight);
-    let (watch, _repaint) = RepaintWatch::new(hinted);
-    watch
-}
-
-/// Build the **WorkspacesContainer** content — the workspace tree mounted inside the
-/// sidebar shell (see `heca-sidebar-design-spec`). Each workspace is a `.frameless(true)`
-/// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
-/// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
-/// the sidebar for no user value). Pure projection of the [`WorkspaceTree`].
-///
-/// This is the **body of the `workspaces` container** — what [`build_body`], the
-/// provider's render seam, returns. It is reached only through that seam: the region
-/// asks its mounted provider for a contribution and calls the contribution's `build`.
-/// Nothing in `chrome` calls it any more.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "workspace-container projection threads host/runtime context + the drag and hint registries explicitly; phase-local before a larger ChromeCx refactor"
-)]
-fn build_workspaces_container(
-    // The build context, for the one thing a row cannot answer itself: what an action **looks
-    // like** (`ctx.action_icon`). Threaded to the rows because a row declares its own menu now
-    // (F004/P084/T395) instead of the host resolving one from a position.
-    ctx: &ChromeCtx<'_>,
-    tree: &WorkspaceTree,
-    programs: &ProgramsConfig,
-    theme: &GuiTheme,
-    emit_intent: &ChromeIntentEmitter,
-    ws_state: &WorkspacesContainerState,
-    // This placement's mount id: every row's cursor signal is registered under it.
-    mount: String,
-    // This placement's own scroll offset (see `build_body`): per mount, so the same container
-    // placed twice keeps two positions.
-    scroll: Signal<f32>,
-    // Whether this placement holds chrome keyboard focus (see `build_body`).
-    focused: Signal<bool>,
-    signals: &mut ChromeSignals,
-    drag: &mut DragItemRegistry,
-) -> ScrollRegion {
-    // Selection is sourced from the container's shared state (the Phase-2 boundary),
-    // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
-    // active pane.
-    let active_pane = ws_state.active_pane();
-    let mut col = Flex::column().gap(6.0).grow(1.0);
-    for ws in &tree.workspaces {
-        let pane_count =
-            ws.columns.iter().map(|c| c.panes.len()).sum::<usize>() + ws.floating_panes.len();
-        let active_ws = active_pane.is_some_and(|pid| {
-            ws.columns
-                .iter()
-                .flat_map(|c| &c.panes)
-                .chain(&ws.floating_panes)
-                .any(|p| p.pane_id == pid)
-        });
-        let badge = if active_ws {
-            Badge::accent(pane_count.to_string())
-        } else {
-            Badge::neutral(pane_count.to_string())
-        };
-        // The header toggle records the workspace in the toggle sink; the app flips
-        // its collapsed state (canonical, in `chrome_state.workspaces`) and the tree
-        // rebuilds (F4.3). Collapse is read back from that same shared state.
-        let ws_idx = ws.ws_idx;
-        let emit = emit_intent.clone();
-        let mut dock = DockFrame::new(ws.name.clone())
-            .frameless(true)
-            .gap(4.0) // tighten the workspace header → body spacing
-            .expanded(!ws_state.is_ws_collapsed(ws_idx))
-            .on_toggle(move |_| {
-                emit(
-                    crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
-                );
-            })
-            .header(
-                Flex::row()
-                    .align(Align::Center)
-                    .child(badge)
-                    .child(Flex::row().width(Length::Px(6.0))),
-            );
-        // Light accent wash over the whole active workspace area (+ the accent
-        // count badge) makes the active workspace clearly prominent. Signal-driven
-        // (like the pane/column highlights) so it flips in place via
-        // `sync_chrome_signals` instead of forcing a tree rebuild; the alpha is the
-        // theme's `active_wash_alpha` token, not a baked-in literal.
-        dock = dock.active(active_ws);
-        dock = dock.nav_selected(false);
-        // **The row's one identity, declared like every other row's.** A pane card and a column
-        // both call `nav_key`, and `nav_key_at` — which is how a right-click finds out what it
-        // landed on — reads exactly that. The workspace header pushed its key into the signal list
-        // and never told the widget, so the hit-test found nothing there: right-clicking a pane or
-        // a column opened its menu, a workspace opened none (Antonio, 2026-08-05).
-        dock = dock.nav_key(workspace_nav_key(ws_idx));
-        // The workspace row's own menu, declared like the other two. The bug in the comment above
-        // is the reason this phase exists: a menu resolved from a *position* needs a declaration
-        // nobody remembers to write, and this one is the declaration itself.
-        dock = dock.context_menu({
-            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
-            let menu = crate::chrome::context_menu::menu_from_items(
-                "Workspace",
-                "What you can do with this workspace",
-                MENU_WORKSPACE,
-                workspace_row_items(ws_idx, ws.custom_name.is_some()),
-                catalog,
-                emit_intent,
-            );
-            heca_grid_ui::widgets::ContextMenu::new(MENU_WORKSPACE).child(menu)
-        });
-        let ws_pane_ids = ws
-            .columns
-            .iter()
-            .flat_map(|c| &c.panes)
-            .chain(&ws.floating_panes)
-            .map(|p| p.pane_id)
-            .collect::<Vec<_>>();
-        signals.ws_active.push((ws_pane_ids, dock.active_state()));
-        signals.ws_previous.push((ws_idx, dock.previous_state()));
-        signals.row_nav
-            .push((mount.clone(), workspace_nav_key(ws_idx), dock.nav_state()));
-        // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
-        // column anywhere on it that isn't a deeper column/pane target moves the column
-        // into this workspace. Innermost-first hit-testing lets columns/panes override.
-        dock = dock.drop_target(drag.register(ChromeDragItem::Workspace { ws: ws_idx }));
-        // Columns stacked with a clear gap between them (the gap + bar mark each
-        // column); panes inside a column are tight. Floating panes have no column.
-        let mut cols = Flex::column().gap(8.0);
-        for c in &ws.columns {
-            cols = cols.child(column_view(
-                ctx,
-                c,
-                ws_idx,
-                &mount,
-                programs,
-                theme,
-                emit_intent,
-                active_pane,
-                ws_state,
-                signals,
-                drag,
-            ));
-        }
-        for float in &ws.floating_panes {
-            cols = cols.child(pane_card(
-                ctx,
-                float,
-                None,
-                &mount,
-                programs,
-                theme,
-                emit_intent,
-                active_pane,
-                ws_state,
-                signals,
-                drag,
-            ));
-        }
-        dock = dock.child(cols);
-        // Wrap the whole workspace dock in the universal `KeyHint` so a
-        // "move column/pane → workspace" pick can stamp this workspace's letter over
-        // it. The keycap is tinted `warning` (not accent) so a workspace target reads
-        // distinctly from a pane target. The hint signal is driven each frame in
-        // `sync_chrome_signals` from the active pick candidates.
-        let ws_hint = signal::<Option<String>>(None);
-        signals.ws_hint.push((ws_idx, ws_hint));
-        col = col.child(
-            KeyHint::new(dock)
-                .hint(ws_hint)
-                // **What `prefix+/` does to this row** — the cursor lands on the workspace header
-                // and the dock keeps the keyboard, exactly as it does on a pane row.
-                .on_peek(crate::chrome::fires(
-                    &mount,
-                    row_peek(workspace_nav_key(ws_idx)),
-                    emit_intent,
-                ))
-                .color(theme.colors.warning)
-                // Top-right (like the pane cards' right-aligned keycap), nudged down
-                // onto the workspace title row so it lines up with the name.
-                .placement(HintPlacement::TopRight)
-                .offset_y((theme.font_size * 0.45) as f64),
-        );
-    }
-    // The container nests its **own** scroll area, so its workspace list scrolls inside the slot
-    // the region gave it (F003/P011/T021). A scroll area is just a container, so this is
-    // composition rather than a capability the shell has to hand down: the shell scrolls its dock
-    // list, this scrolls its content, and nesting decides which one a wheel or a keyboard page
-    // reaches — the innermost that can move on that axis wins, and the outer one only sees what
-    // the inner declines.
-    //
-    // The offset is the CONTAINER's, so it survives the tree being rebuilt (a pane's git status
-    // changing is enough to do that) and is untouched by the dock list scrolling around it.
-    // Vertical only. A second axis was tried (2026-07-29) and reverted: a `Label` clips rather than
-    // overflowing, so nothing ever exceeds the width and the horizontal axis had nothing to scroll —
-    // while the extra scrollbar sat in front of the rows and took the press that starts a drag.
-    // Revisit when label truncation/wrapping is settled (AGENTS.md lists it as open).
-    let mut region = ScrollRegion::new().grow(1.0);
-    // Restore through `scroll_to`, which reports with `event: None`, so the listener below can tell
-    // a restore from the user actually scrolling and never writes one back as the other.
-    region.scroll_to(scroll.get_untracked());
-    region
-        // Keyboard scroll intents act on the area the keyboard is aimed at, and every other area
-        // declines them — which is what makes the semantic `WidgetIntent::Scroll*` a *broadcast* the
-        // focused container answers rather than something the host has to route by hand
-        // (F003/P011/T012 consumes this; the gate itself belongs here, per placement).
-        .keyboard_target(focused)
-        .on_scroll(move |s| {
-            if s.event.is_some() {
-                scroll.set(s.offset_y);
-            }
-        })
-        // **The container's own menu — what a right-click on empty space finds.**
-        //
-        // No empty-space hit test, and no "did I miss a row?" branch anywhere: a right-click that
-        // lands between rows, below the last one, or on the region's padding simply finds no menu
-        // on the way down and bubbles out to this one. A menu on a row still wins, because bubbling
-        // stops at the nearest declaration.
-        .context_menu({
-            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
-            let menu = crate::chrome::context_menu::menu_from_items(
-                "Workspaces",
-                "What you can do here",
-                MENU_CONTAINER,
-                container_items(),
-                catalog,
-                emit_intent,
-            );
-            heca_grid_ui::widgets::ContextMenu::new(MENU_CONTAINER).child(menu)
-        })
-        .child(col)
 }
 
 // ── This component's context menus (F003/P086/T365) ──
@@ -1506,41 +903,24 @@ mod tests {
     /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
     /// signals and declaring it on the widget are two different acts, and the projection tests
     /// only ever checked the first.
+    ///
+    /// Note what this test no longer needs: a `ChromeCtx`, and therefore a window. The dock is
+    /// components now, so it is built from its seams (F006/P032/T429).
     #[test]
     fn every_row_kind_carries_a_nav_key_the_hit_test_can_find() {
-        let tree = tree();
-        let state = store();
-        let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = Rc::new(|_| {});
-        let mut signals = ChromeSignals::default();
-        let mut drag = DragItemRegistry::default();
-        let catalog = crate::actions::ActionCatalog::with_builtins();
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&state), &theme, &emit, &catalog);
-        let root = build_workspaces_container(
-            &ctx,
-            &tree,
-            &ProgramsConfig::default(),
-            &theme,
-            &emit,
-            &state.workspaces,
-            "left".to_string(),
-            heca_grid_ui::reactive::signal(0.0),
-            heca_grid_ui::reactive::signal(false),
-            &mut signals,
-            &mut drag,
-        );
-
-        fn keys(n: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
-            if let Some(k) = n.base().nav_key.clone() {
-                out.push(k);
+        let tree = testing::tree();
+        let mut fx = testing::Fixture::default();
+        let root = {
+            let (seams, mut reg) = fx.split("left");
+            DockView {
+                tree: &tree,
+                scroll: heca_grid_ui::reactive::signal(0.0),
+                focused: heca_grid_ui::reactive::signal(false),
             }
-            for c in &n.base().children {
-                keys(c.as_ref(), out);
-            }
-        }
-        let mut declared = Vec::new();
-        keys(&root, &mut declared);
+            .build(&seams, &mut reg)
+        };
 
+        let declared = testing::declared_nav_keys(&root);
         for expected in [
             workspace_nav_key(0),
             column_nav_key(0, 0),

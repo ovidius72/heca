@@ -24,7 +24,8 @@
   "taskIds": [
     "9f33fdd8-eeda-415b-a3f1-64112774734d",
     "ac234827-5339-41e8-a9aa-c2669e58d665",
-    "8665a8a6-d811-4d81-b81f-fb13749bc0aa"
+    "8665a8a6-d811-4d81-b81f-fb13749bc0aa",
+    "01bba716-e54b-4c6f-93f1-936f2e541c27"
   ],
   "tasks": [
     {
@@ -92,12 +93,44 @@
       "completedAt": "",
       "createdAt": "2026-07-03T11:11:02.367Z",
       "updatedAt": "2026-07-03T11:11:02.367Z"
+    },
+    {
+      "id": "01bba716-e54b-4c6f-93f1-936f2e541c27",
+      "phaseId": "621e6f47-a0e2-4d0d-9012-e6feadb70097",
+      "number": 429,
+      "shortId": "HVM6D",
+      "priority": 4,
+      "shortName": "the-workspaces-dock-becomes-co",
+      "title": "The workspaces dock becomes components — DockView / WorkspaceFrame / ColumnGroup / PaneRow, beside its surface",
+      "status": "done",
+      "description": "**Antonio, 2026-08-13:** *\"for the sidebar check better but I guess F006/P032 is a good candidate for a refactoring task to align the component to the rules.\"*\n\nDo it the way the exposé was done (F003/P082/T420) and to the recipe that came out of it: **AGENTS.md § 0b-bis, \"How to structure and build a component\"**. That section was written from this exact shape of problem and names every step.\n\n# Why this one, and why now\n\nThree bugs in a row in this file during 2026-08-13 were **wiring** bugs, and the suite could not see any of them:\n\n1. `.previous(bool)` read at build time on a tree that deliberately never rebuilds on focus (`chrome_signature` excludes it) — frozen for the session.\n2. The mark published for the current workspace only, while the history is written solely for same-workspace moves — so a cross-workspace jump marked nothing.\n3. ⚠️ **Still unfixed at the time of writing** — the mark does not appear even after both. See T426; the next step there is a **trace**, not another fix.\n\nNone of the three could have survived a headless test of a component, and none of them was catchable by reading. That is the argument for this task, not tidiness.\n\n# The gap against § 0b-bis, measured\n\n`heca/src/providers/workspaces/mod.rs` — **2200 lines**, ~35 composition sites, and:\n\n- **`pane_card()` :739 takes ELEVEN positional arguments** and carries `#[expect(clippy::too_many_arguments)]` whose own note calls it *\"phase-local fix before a larger ChromeCx refactor\"*. § 0b-bis step 2: properties are struct fields, the constructor is a struct literal.\n- **`column_view()` :1051 is a separately written near-duplicate** of the same row shape. § 0b-bis step 1: split by what a piece *owns*, one owner per question.\n- **Functions, not components** — nothing in the file can be built in a test, so nothing has a headless test of its own. § 0b-bis steps 4 and 7.\n- **Seams threaded one argument at a time** (`emit_intent`, `signals`, `drag`, `ws_state`, `programs`, `theme`) instead of one group. § 0b-bis step 3.\n- `providers/workspaces/model.rs` is already the surface's `model.rs` and is **good** — it computes per-entry state (`SidebarItemState::{Active, Visited, None}` :226) from plain data. Keep it; the components read it.\n\n# The shape to build\n\n```\nheca/src/chrome/<dock>/            (or providers/workspaces/, if the provider seam must stay)\n├── mod.rs           host wiring — the ONLY file touching AppState / ChromeCtx\n├── model.rs         EXISTS, keep — the session reduced to entries with their state\n├── pane_row.rs      one pane: name, icon, badges, its states, its menu, its drag id\n├── column_group.rs  a column: its rows + the MarkerGroup bar\n├── workspace_frame.rs  a workspace: the DockFrame, its header, its collapse\n└── dock_view.rs     the whole dock: the frames, the cursor\n```\n\n⚠️ **The state model is the part to get right, and it is the part that has been wrong.** A row has four simultaneous states — selected, cursor, last-visited, hovered — each with a different update path (build-time vs bound signal). § 0b-bis's rule is that a component owns its own states; the extraction must make it impossible to set one at build time that changes on focus. `pane_active` / `pane_previous` in `ChromeSignals` show the working pattern.\n\n# Behaviours to preserve — every one is load-bearing\n\nDrag source + drop target ids, the `nav_key` as the row's one identity, the context menu declared on the widget, `KeyHint::on_peek` (`row_peek`), the info segments and badges, per-mount cursors, `Visibility`-swapped active/inactive titles, and the collapse set projected post-sync. **Pixel-identical output**: this is a surface Antonio verifies by hand.\n\n# Verification (Antonio drives)\n\nThe sidebar looks and behaves exactly as before — and the four row states can be reasoned about one file at a time, with a headless test each.\n\n---\n**Completion summary:**\n**CLOSED 2026-08-13** — Antonio drove the rebuilt sidebar: *\"works good\"*. Uncommitted on branch `refactor/workspaces-dock-components` (on top of `0855f37`).\n\n# What it is now\n\n```\nheca/src/providers/workspaces/\n├── mod.rs             the provider, its actions, cursor handling, nav keys, menu items\n│                      — the ONLY file that touches ChromeCtx\n├── model.rs           unchanged; it was already right\n├── seams.rs           the app edges as ONE group\n├── pane_row.rs        PaneRow      — one pane\n├── column_group.rs    ColumnGroup  — a column, composing PaneRow\n├── workspace_frame.rs WorkspaceFrame — a workspace, composing ColumnGroup + floats\n├── dock_view.rs       DockView     — the dock, composing WorkspaceFrame\n└── testing.rs         shared fixtures\n```\n\n| | before | after |\n|---|---|---|\n| `mod.rs` | 2202 lines | 1582 |\n| the row shape | `pane_card()`, **11 positional args** under `#[expect(too_many_arguments)]` | `PaneRow { pane, column_of_pane }` |\n| the near-duplicate | `column_view()` written separately beside it | gone — a float is `column_of_pane: None` |\n| headless tests on the rows | 0 | 7 |\n| `#[expect(clippy::too_many_arguments)]` | 3 | 0 |\n\n# The two decisions\n\n**It stayed in `providers/workspaces/`, not `heca/src/chrome/<dock>/`.** The provider seam is real — `build_contribution`, `actions`, `perform`, `cursor_moved` all implement the `Provider` trait — and § 0b says a component lives beside its surface. The provider *is* the surface. Moving it under `chrome/` would have broken the seam for nothing.\n\n**The seams are split in two by KIND, not size** (`seams.rs`):\n- `DockSeams` — what a component *reads*: `mount`, `theme`, `programs`, `emit`, `catalog`, `ws_state`, `active_pane`. Shared, so every component holds `&` it at once.\n- `DockRegistries` — what a component *registers into*: `signals`, `drag`. Exclusive by nature, so `&mut`, passed beside rather than inside.\n\n⚠️ They cannot be handed out by two separate accessors — the borrows overlap. `testing::Fixture::split()` returns both from one method as disjoint fields, which is the same reason `BuildCx` exposes plain fields instead of accessor methods. `build_body` also has to read `bx.container_id()` into a local **before** taking the registries.\n\n# The test that is the point of the whole task\n\n`pane_row::tests::a_pane_row_publishes_every_state_that_moves_with_focus` asserts that every state a row owns reaches `ChromeSignals` — `pane_active`, `pane_previous`, `row_nav`, `pane_hint`. That is exactly the class of bug that cost three rounds on 2026-08-13: a state read as a plain bool at build time freezes for the session, because `chrome_signature` deliberately excludes focus and the tree does not rebuild when focus moves. It looks perfectly correct in the source, and no test could see it before this. **Add a fifth state without publishing it and this test fails.**\n\nThe rule is written at the top of `pane_row.rs`: the initial value goes to the widget and the widget's signal goes to `ChromeSignals` in the same breath, a line apart.\n\nEvery other component carries its own: a column declares its identity beside its panes' and lights its bar from a signal; a frame holds its columns then its floats and publishes both its states; the dock holds one frame per workspace.\n\n# Behaviours preserved, all verified by Antonio driving\n\nDrag sources and drop targets at all three levels, `nav_key` as each row's one identity, the four context menus (pane / column / workspace / empty space), `KeyHint::on_peek` for `prefix+/`, the info segments and badges, per-mount cursors and scroll, `Visibility`-swapped active/inactive titles, and the collapse toggle. Output is pixel-identical: widget calls were **moved**, not rewritten.\n\n# Gates\n\nWorkspace green (28 binaries, 535 tests in the app crate), clippy 0 warnings with `--all-targets --all-features`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T19:56:32.408Z",
+      "completedAt": "2026-08-13T20:16:54.448Z",
+      "createdAt": "2026-08-13T17:48:16.672Z",
+      "updatedAt": "2026-08-13T20:16:54.448Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.464Z",
+  "updatedAt": "2026-08-13T20:16:54.448Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "8e1694eb-4ca4-4ee3-8d3e-2cd80619d6a9",
+      "date": "2026-08-13T19:56:32.412Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }
