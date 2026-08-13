@@ -22,43 +22,22 @@
   "acceptedDecisions": [],
   "completionCriteria": [],
   "taskIds": [
-    "f9f20e5c-7908-4d26-aeec-fe50624870d5",
-    "027b9459-028a-4952-9f14-020631ca3257",
-    "620a7e40-98ec-4b60-a1c6-6815a7516cfb"
+    "479bf80c-6b3d-4e28-8df1-19f509eb3569",
+    "967a121b-9003-4abe-bc42-294f25b6fb90",
+    "c511a0ad-6883-4b81-a160-c1e6c97516ed",
+    "8174e5c6-8b47-4cd9-a11a-f00eb1bf141c"
   ],
   "tasks": [
     {
-      "id": "f9f20e5c-7908-4d26-aeec-fe50624870d5",
-      "phaseId": "c9038ab9-dcbc-4ec4-99fc-ecd161fc7eb3",
-      "number": 48,
-      "shortId": "BUURQ",
-      "priority": 2,
-      "shortName": "sixel-capture-render",
-      "title": "Sixel protocol capture and render",
-      "status": "done",
-      "description": "Parsing e render GPU del protocollo Sixel.",
-      "notes": "",
-      "statusLog": [],
-      "decisions": [],
-      "acceptedDecisions": [],
-      "checklist": [],
-      "subtasks": [],
-      "dependsOn": [],
-      "startedAt": "2026-07-01T18:11:57.226Z",
-      "completedAt": "2026-07-01T18:11:57.226Z",
-      "createdAt": "2026-07-01T18:11:57.226Z",
-      "updatedAt": "2026-07-01T18:11:57.226Z"
-    },
-    {
-      "id": "027b9459-028a-4952-9f14-020631ca3257",
-      "phaseId": "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
-      "number": 49,
-      "shortId": "AZCFZ",
+      "id": "479bf80c-6b3d-4e28-8df1-19f509eb3569",
+      "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 144,
+      "shortId": "G45MP",
       "priority": 3,
-      "shortName": "audit-geometry-types",
-      "title": "Audit geometry types in chrome code",
-      "status": "done",
-      "description": "Usare `Rectangle/Point/Size` nei nuovi contratti chrome.",
+      "shortName": "terminal-contextmenu",
+      "title": "Terminal pane right-click context menu",
+      "status": "planned",
+      "description": "Context menu per terminal pane.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -66,21 +45,83 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-03T11:11:34.091Z",
-      "completedAt": "2026-07-03T11:11:34.091Z",
-      "createdAt": "2026-07-01T18:12:25.303Z",
-      "updatedAt": "2026-07-03T11:11:34.091Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-01T18:14:56.477Z"
     },
     {
-      "id": "620a7e40-98ec-4b60-a1c6-6815a7516cfb",
-      "phaseId": "9ec31d60-7dfa-4dcc-9797-b265a4d30562",
-      "number": 50,
-      "shortId": "H2RKV",
-      "priority": 2,
-      "shortName": "provider-lifecycle",
-      "title": "Provider lifecycle model",
+      "id": "967a121b-9003-4abe-bc42-294f25b6fb90",
+      "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 153,
+      "shortId": "FUASM",
+      "priority": 1,
+      "shortName": "build-contextmenu",
+      "title": "Build ContextMenu grid-ui widget",
       "status": "done",
-      "description": "Definire `id()`, regioni supportate, default region e lifecycle.",
+      "description": "Widget ContextMenu keyboard-navigable.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "967a121b-9003-4abe-bc42-294f25b6fb90-check-001-planned-done",
+          "date": "2026-07-13T15:32:06.296Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-13T15:32:06.296Z",
+      "completedAt": "2026-07-13T15:32:06.296Z",
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-13T15:32:06.296Z"
+    },
+    {
+      "id": "c511a0ad-6883-4b81-a160-c1e6c97516ed",
+      "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 158,
+      "shortId": "JSJG3",
+      "priority": 2,
+      "shortName": "sidebar-contextmenu",
+      "title": "Sidebar right-click context menu",
+      "status": "done",
+      "description": "Context menu per tree/sidebar.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "c511a0ad-6883-4b81-a160-c1e6c97516ed-check-001-planned-done",
+          "date": "2026-07-13T15:32:06.296Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-13T15:32:06.296Z",
+      "completedAt": "2026-07-13T15:32:06.296Z",
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-13T15:32:06.296Z"
+    },
+    {
+      "id": "8174e5c6-8b47-4cd9-a11a-f00eb1bf141c",
+      "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 415,
+      "shortId": "BFWN9",
+      "priority": 4,
+      "shortName": "config-reload-is-a-hand-writte",
+      "title": "Config reload is a hand-written list, so every new setting is dead until someone remembers it",
+      "status": "planned",
+      "description": "**Antonio, 2026-08-11: *\"this is not the first time we need to change something to make reload working. WHY??? this api should work independent of where it is called from but always the same issue arise.\"*** He is right, and it has now happened at least three times.\n\n# The shape of the bug\n\nThere is **no config→state API**. There are two paths that each read the config independently:\n\n- **`heca/src/app/startup.rs`** builds `AppState` from `AppConfig` while constructing it (a struct\n  literal plus `layout_options_from`).\n- **`heca/src/main.rs::reload_config` (line ~157)** copies a **hand-written list of 13 fields** back\n  onto the live state: `theme`, `programs`, `appearance`, `command_palette_size`, `search_case`,\n  `search_history`, `font_config`, `prefix_combo`, `widget_keymap`, `action_shortcuts`,\n  `mouse_enabled`, `auto_scroll_edge`, `shell_integration_enabled`,\n  `pane_renamed_add_process_name`.\n\nA setting that is not on that list is **live in the file and dead in the app**: it takes effect at\nstartup and `prefix+Shift+r` silently does nothing. Nothing fails, nothing warns, and the author of\nthe new setting has no reason to look at `main.rs`.\n\n**Most recently (2026-08-11):** `overview_zoom`, `overview_gap` and the new `overview_zoom_from` are\nin `LayoutOptions` (`session.options`), which reload never touched — so Antonio edited them, pressed\nreload, and nothing changed. Fixed by adding *one more line to the list*, which is the same mistake\nagain. `center_focused_column` and the pane `gaps` were in the same hole.\n\n# What to build\n\n**One projection, called from both paths.** `apply_config(state: &mut AppState, cfg: &AppConfig)`\nsets **every** field derived from config, and:\n\n- `startup` calls it immediately after constructing the state shell (window/GPU/session/backends are\n  not config-derived and stay where they are);\n- `reload_config` calls it and does nothing else config-related;\n- `layout_options_from` (already extracted, `app/startup.rs`) is called from inside it.\n\nThen adding a setting is one edit in one place, and it reloads for free.\n\n# The part that makes it stay fixed\n\nA list can be forgotten again, so the guard has to be structural rather than a promise:\n\n- **Preferred:** make the config-derived fields their own struct on `AppState` (e.g.\n  `state.from_config: ConfigDerived`) built by one `From<&AppConfig>`. Then a new field cannot\n  compile without being constructed there, and reload is `state.from_config = (&cfg).into()`.\n  Exhaustiveness does the remembering.\n- **Otherwise:** a test that walks `SettingsConfig`'s fields (the same way\n  `every_declared_argument_is_read_by_the_action` walks the action args) and fails when one is not\n  read by `apply_config`. Weaker, because it cannot see a field read into a *derived* value.\n\n# Edge cases\n\n- **Some state must survive a reload** — `reload_config` already carries a comment about not\n  overwriting the user's working settings. Identify which of the 13 are \"reset to config\" vs \"keep\n  what the user changed at runtime\", and say which in the code rather than by omission.\n- `widget_keymap` / `action_shortcuts` / `prefix_combo` are *derived* (built by\n  `build_widget_keymap`, `ActionShortcuts::from_index`), not copied — the projection must rebuild\n  them, which is what reload already does and startup does separately.\n- `session.options` must be reassigned **and** anything cached from it recomputed; a layout change\n  needs `after_config_change`.\n\n# Verification\n\nChange `overview_zoom`, the pane gap, `command_palette_size` and a keybinding in\n`~/.config/heca/config.toml`, press `prefix+Shift+r`, and see all four take effect — then add a new\nsetting and confirm it reloads without touching `main.rs`.\n\n⚠️ Note for whoever picks this up: `config.default.toml` is **embedded at compile time**, so editing\n*it* and reloading proves nothing. The user file is `~/.config/heca/config.toml`.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -88,16 +129,33 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "2026-07-03T11:11:34.091Z",
-      "completedAt": "2026-07-03T11:11:34.091Z",
-      "createdAt": "2026-07-01T18:12:25.303Z",
-      "updatedAt": "2026-07-03T11:11:34.091Z"
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-11T22:09:22.071Z",
+      "updatedAt": "2026-08-11T22:09:22.071Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.467Z",
+  "updatedAt": "2026-08-11T22:09:22.071Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-13T12:12:25.512Z",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-23-39-509Z.md",
+      "clearedAt": "2026-08-13T12:23:39.509Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-12-25-510Z.md",
+      "clearedAt": "2026-08-13T12:12:25.510Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-09-07-135Z.md",
+      "clearedAt": "2026-08-13T12:09:07.135Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": []
 }

@@ -76,7 +76,7 @@ pub struct Tooltip {
     /// so the host can sleep through the delay and wake once, rather than ticking
     /// every frame — see [`next_redraw`](Component::next_redraw).
     hover_since: Option<Instant>,
-    /// Viewport cached at paint so `tick`/`damage_bounds` can place the bubble.
+    /// Viewport cached at paint so `tick` can place the bubble.
     viewport: Cell<Size>,
     /// Last-painted bubble visibility, to detect show/hide transitions in `tick`.
     last_shown: Cell<bool>,
@@ -184,7 +184,7 @@ impl Component for Tooltip {
         if !self.base.visible.get_untracked() {
             return;
         }
-        // Cache the viewport so `tick`/`damage_bounds` place the bubble identically.
+        // Cache the viewport so `tick` places the bubble identically.
         self.viewport.set(cx.viewport());
         // The wrapped child first (still fully interactive).
         for child in &self.base.children {
@@ -238,13 +238,16 @@ impl Component for Tooltip {
     /// everything through, so the wrapped widget stays fully interactive. Capture rather than
     /// bubble because the clock must start even when the child consumes the move.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if let Event::PointerMoved { pos } = ev {
-            let inside = self.base.bounds.contains(*pos);
-            if inside != self.hover_since.is_some() {
-                // Enter starts the reveal clock; leave clears it (the next `tick`
-                // detects the show/hide transition and damages the bubble).
-                self.hover_since = inside.then(Instant::now);
+        // Enter starts the reveal clock; leave clears it (the next `tick` detects the show/hide
+        // transition and damages the bubble). Two events instead of a position and a test — and
+        // the tooltip now hides when something is drawn over the widget it belongs to, which a
+        // `contains` could never notice.
+        match ev {
+            Event::PointerEnter(_) if self.hover_since.is_none() => {
+                self.hover_since = Some(Instant::now());
             }
+            Event::PointerLeave(_) => self.hover_since = None,
+            _ => {}
         }
         Handled::No
     }
@@ -278,6 +281,15 @@ impl Component for Tooltip {
         animating || pending_reveal
     }
 
+    fn damage_bounds(&self) -> Rectangle {
+        // The bubble draws on the overlay layer, offset from our own bounds, so a
+        // show/hide repaint must cover it (plus our bounds, harmlessly).
+        match self.current_bubble_rect() {
+            Some(bubble) => union(self.base.bounds, bubble),
+            None => self.base.bounds,
+        }
+    }
+
     fn next_redraw(&self) -> Option<f32> {
         // While hovering pre-reveal, wake the host exactly when the bubble appears.
         let mut soonest = self.hover_since.and_then(|since| {
@@ -290,14 +302,6 @@ impl Component for Tooltip {
         soonest
     }
 
-    fn damage_bounds(&self) -> Rectangle {
-        // The bubble draws on the overlay layer, offset from our own bounds, so a
-        // show/hide repaint must cover it (plus our bounds, harmlessly).
-        match self.current_bubble_rect() {
-            Some(bubble) => union(self.base.bounds, bubble),
-            None => self.base.bounds,
-        }
-    }
 }
 
 impl LayoutExt for Tooltip {}

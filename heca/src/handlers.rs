@@ -23,7 +23,7 @@ use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::chrome;
 use crate::input::{FontZoomStep, SpawnKind, WmAction};
 use crate::{
-    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, move_pane_to_column,
+    collect_all_pane_candidates, find_pane_location, move_pane_to_column,
     move_pane_to_workspace_column, pane_name, switch_workspace_tracked, update_session_viewport,
 };
 use heca_core::layout::{Column, ColumnId, ColumnWidth, FocusDomain, Pane as LayoutPane, PaneId};
@@ -232,6 +232,18 @@ pub fn handle_zoom_column_at_index(state: &mut AppState, action: &WmAction) {
 /// container had been driving. Chrome focus is not a mode and the transition does not touch it, so
 /// there is nothing left to carry across and the stash is gone.
 pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
+    // **The focused widget's own menu first** (F004/P084/T395). Generalised, not duplicated: this
+    // action stopped meaning "the focused pane's menu" and started meaning "the focused widget's,
+    // bubbling outwards" — so `prefix+>`, `Shift+F10` and the Menu key all reach a pane row, a
+    // column, a workspace or a plugin's row through one catalogued action, and the host knows what
+    // none of them are. Deliberately NOT a `[keys.widgets]` intent: `Escape` meaning both the WM's
+    // `close_overlay` and the widget's `dismiss` is the split that swallowed `q`.
+    if crate::chrome::open_declared_menu_for_focus(state) {
+        state.needs_redraw = true;
+        return;
+    }
+    // Nothing declared one: the content pane is the app's own domain and still resolves the old
+    // way, since a terminal surface is not a widget that can carry a declaration.
     let Some((path, target)) = crate::chrome::resolve_active_context(state) else {
         return;
     };
@@ -571,7 +583,9 @@ pub fn handle_resize(state: &mut AppState, action: &WmAction) {
                 let h = ws.scrolling.working_area.size.h;
                 let gaps = ws.scrolling.options.gaps;
                 if let Some(col) = ws.scrolling.active_column_mut() {
-                    col.resize_active_pane_height(*amount, h, gaps);
+                    // A boundary and a direction, not "grow me": positive is down, whichever pane
+                    // is active. `resize` is a *directional* verb — see `move_pane_boundary`.
+                    col.move_active_pane_boundary(*amount, h, gaps);
                 }
             }
             _ => {} // Column-Y and Pane-X are not yet implemented
@@ -759,27 +773,6 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     handle_close_pane_by_id(state, &WmAction::ClosePaneById { pane_id });
 }
 
-/// Destroy the active workspace if it's empty and other workspaces exist.
-/// If it's the only workspace, leave it empty — the user can repopulate it
-/// via the normal split bindings: `prefix+Enter` (new pane in a new column)
-/// or `prefix+v` (new pane in the current column). In an empty workspace,
-/// either binding effectively creates the first pane again.
-fn close_workspace_if_empty(state: &mut AppState) {
-    let current_ws = state.session.active_workspace_idx;
-    let ws_is_empty = state
-        .session
-        .workspaces
-        .get(current_ws)
-        .map(|ws| !ws.has_panes())
-        .unwrap_or(true);
-    if ws_is_empty && state.session.workspaces.len() > 1 {
-        destroy_empty_workspace(state, current_ws);
-        let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-        state.session.switch_to_workspace(new_idx);
-    }
-    // If workspace is empty and it's the only one, leave it empty.
-}
-
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
@@ -800,18 +793,19 @@ pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
     }
 }
 
-/// Enter the universal hint picker (`prefix+/`): assign a letter to every actionable
-/// chrome target in the retained tree (document order) and show a keycap over each;
-/// the next keypress fires that target's intent. No-ops if there are no targets or no
-/// chrome tree yet.
+/// Enter the universal picker (`prefix+/`): assign a letter to every region on screen that said
+/// what a pick does to it (document order) and show a keycap over each; the next keypress runs that
+/// region's declaration. No-ops if nothing on screen declares one.
 pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     // Which targets are reachable is decided by the layered surface compositor — one rule
     // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
-    // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
-    let candidates: Vec<(char, heca_grid_ui::HintTargetId)> = crate::chrome::active_hint_targets(state)
+    // See `chrome::active_peek_targets` and `docs/surface-compositor.md`.
+    let candidates: Vec<(char, crate::chrome::PeekTarget)> = crate::chrome::active_peek_targets(state)
         .into_iter()
         .enumerate()
-        .filter_map(|(i, (id, _))| crate::app::selection::candidate_letter(i).map(|ch| (ch, id)))
+        .filter_map(|(i, (target, _))| {
+            crate::app::selection::candidate_letter(i).map(|ch| (ch, target))
+        })
         .collect();
     if !candidates.is_empty() {
         state.input_mode = InputMode::HintPick { candidates };
@@ -1136,35 +1130,23 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
 /// split bindings: `prefix+Enter` (new pane in a new column) or `prefix+v`
 /// (new pane in the current column). In an empty workspace, either binding
 /// effectively creates the first pane again.
+/// Close the pane with this id — **wherever it is**, not only in the workspace you are standing in.
+///
+/// The whole point of a by-id action is that the caller names a pane the keyboard is not on: the
+/// sidebar, a context menu, the exposé and RPC all reach panes in other workspaces. This searched
+/// `active_workspace_mut()` alone, so every one of those silently did nothing off the current
+/// workspace — deleting from the exposé's first row worked and its second row did not (Antonio,
+/// driving, 2026-08-11).
+///
+/// It is the same act [`close_pane_by_id_anywhere`](crate::app::mutations::close_pane_by_id_anywhere)
+/// already performed for a shell that exits on its own, which had the search right and the tidying
+/// up (empty-workspace destruction, search state, backend teardown) with it. Two implementations of
+/// one act, and the user-facing one was the poorer: now there is one.
 pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
     let WmAction::ClosePaneById { pane_id } = action else {
         return;
     };
-    // Recorded here and cleared below: the workspace borrow is still live inside this
-    // block, so per-pane cleanup that goes through `&mut state` has to wait for it.
-    let mut closed: Option<PaneId> = None;
-    if let Some(ws) = state.session.active_workspace_mut() {
-        if let Some((ci, pi)) = crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id) {
-            if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
-                state.backends.remove_for_pane(removed.id);
-                closed = Some(removed.id);
-            }
-        } else if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == *pane_id)
-        {
-            let removed = ws.floating_panes.remove(float_idx);
-            state.backends.remove_for_pane(removed.pane.id);
-            closed = Some(removed.pane.id);
-            if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
-                ws.deactivate_floating_panes();
-                ws.focus_domain = FocusDomain::Tiled;
-            }
-        }
-    }
-    if let Some(id) = closed {
-        state.clear_search(id);
-    }
-    close_workspace_if_empty(state);
-    after_layout_change(state);
+    crate::app::mutations::close_pane_by_id_anywhere(state, *pane_id);
 }
 
 pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
@@ -1314,6 +1296,9 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
     }
     if target_ws < state.last_visited_pane_per_ws.len() {
         state.last_visited_pane_per_ws.remove(target_ws);
+    }
+    if target_ws < state.expose_cursor_per_ws.len() {
+        state.expose_cursor_per_ws.remove(target_ws);
     }
 
     after_layout_change(state);
@@ -1482,6 +1467,9 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     );
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
+    }
+    while state.expose_cursor_per_ws.len() <= new_idx {
+        state.expose_cursor_per_ws.push(None);
     }
     after_layout_change(state);
 }
@@ -1995,8 +1983,60 @@ pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &Wm
 /// The rows are read from the one [`ActionCatalog`](crate::actions::ActionCatalog) at open time, so
 /// this handler names nothing — a new plugin action, a rebind or a relabelled built-in is in the
 /// list without a change here. See [`crate::chrome::open_command_palette`].
-pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
-    crate::chrome::open_command_palette(state);
+/// Show / hide / toggle a layer **by name** (F003/P082/T327).
+///
+/// `dock` is accepted and currently unused: a layer name is type-level, so it only starts to matter
+/// when one component is seated twice and each seating registers its own layer. Parsed now so the
+/// argument does not change shape later — the same reason `focus_dock` takes an optional `dock`.
+///
+/// An unknown name is a **no-op, not a panic**: names come from config and RPC, so a typo must not
+/// take the app down. It is silent for now; saying so is a notification producer and belongs to
+/// F009, alongside T335 and T381.
+/// Close the front-most overlay from a **bound key** (F003/P082/T327).
+///
+/// The id-carrying form (`CloseOverlay { overlay: Some(..) }`) is intercepted in `dispatch_intent`
+/// instead, because resolving an overlay runs its completion and that needs the registry, which a
+/// handler is not given. A widget's own `Dismiss` emits that form, so a dialog still resolves
+/// properly; this is the path for a **host layer** with no completion to run — the exposé — and for
+/// a key pressed with nothing else claiming it.
+///
+/// No overlay up is a no-op, which is what makes binding Escape to it harmless.
+pub fn handle_close_overlay(state: &mut AppState, _action: &WmAction) {
+    let Some(id) = state.layers.top_modal_id() else { return };
+    state.layers.hide(id);
+    state.needs_redraw = true;
+}
+
+pub fn handle_layer_visibility(state: &mut AppState, action: &WmAction) {
+    let (name, show) = match action {
+        WmAction::ShowLayer { name, .. } => (name, Some(true)),
+        WmAction::HideLayer { name, .. } => (name, Some(false)),
+        WmAction::ToggleLayer { name, .. } => (name, None),
+        _ => return,
+    };
+    let Some(name) = name.as_deref() else { return };
+    // **Rebuild before showing.** A layer's content is structural — panes open, workspaces come and
+    // go — and a signal replaces a prop, never a child. So shape follows a re-registration, and the
+    // moment a layer is asked for is the moment its shape must be current. Without this the exposé
+    // showed the session as it was at startup, whatever had happened since.
+    if show != Some(false) {
+        crate::chrome::rebuild_named_layer(state, name);
+    }
+    let Some(id) = state.layers.by_name(name) else { return };
+    let show = show.unwrap_or(!state.layers.is_visible_named(name));
+    match show {
+        true => state.layers.show(id),
+        false => state.layers.hide(id),
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_command_palette(state: &mut AppState, action: &WmAction) {
+    let (mode, query) = match action {
+        WmAction::CommandPalette { mode, query } => (mode.as_deref(), query.as_deref()),
+        _ => (None, None),
+    };
+    crate::chrome::open_command_palette(state, mode, query);
 }
 
 // ── External commands ──

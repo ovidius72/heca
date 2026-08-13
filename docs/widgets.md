@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Search](#search--matching-ranking-by-use-and-query-history)**
+- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[`ComponentExt`](#componentext--what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -25,6 +25,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
 - [Declarative UI model (`ViewNode`)](#declarative-ui-model-viewnode) — props/events by kind, slots, options-as-children, and **[the action an `Intent` names](#the-other-half-of-an-intent--the-action-it-names)** + [registering a custom action](#registering-a-custom-name-keyed-action)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, [placing a widget at an app-chosen rect](#placing-a-widget-at-an-app-chosen-rect), custom widgets
@@ -125,15 +126,25 @@ The host maps platform keys onto the renderer-agnostic `GridKey`/`Modifiers` and
 the tree:
 
 ```rust
-// pointer
-ui.event(&Event::PointerMoved   { pos });
-focus.focus_at(&mut ui, pos);              // click focuses the hit widget
-ui.event(&Event::PointerPressed { pos });
+// Pointer: ONE kind of event, carrying the button and the modifiers. The framework hit-tests it,
+// pairs the press with the release, counts the run, and delivers what it meant — a `Click`, a
+// `RightClick`, an `Enter`/`Leave`, a drag. `FocusManager::dispatch` also focuses what was pressed.
+focus.dispatch(&mut ui, &Event::pointer_moved(pos));
+focus.dispatch(&mut ui, &Event::pointer_pressed(pos, PointerButton::Left));
+focus.dispatch(&mut ui, &Event::pointer_released(pos, PointerButton::Left));
+focus.dispatch(&mut ui, &Event::wheel(pos, delta_x, delta_y));
+
+// The pointer left the window: hover, capture and any drag end with it.
+heca_grid_ui::dispatch(&mut ui, &Event::pointer_cancelled());
 
 // modifiers (broadcast so text widgets can do word/line editing)
-ui.event(&Event::ModifiersChanged(mods));
+heca_grid_ui::dispatch(&mut ui, &Event::ModifiersChanged(mods));
 
-// keyboard
+// keyboard: the key for shortcuts and navigation, the TEXT for typing — a field types from
+// `TextInput` alone, so nothing has to reconstruct a character from a combo key.
+if let Some(text) = committed_text {
+    heca_grid_ui::dispatch(&mut ui, &Event::TextInput(text));
+}
 match key {
     GridKey::Tab    => focus.advance(&mut ui, !mods.shift),  // Shift+Tab = backward
     GridKey::Escape => focus.clear(&mut ui),
@@ -179,9 +190,10 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `overlay_occludes(&self, pos: Point) -> bool` | `false` | Whether the widget's **overlay surface geometrically covers** `pos`. Distinct from `overlay_active` (input grab): a non-grabbing toast card still occludes the points it covers; a **modal** ([`Dialog`](#dialog) scrim, open [`CommandPalette`](#commandpalette)) occludes the whole viewport; an open [`Select`](#select) occludes its panel rect. A host checks it (via the free fn `heca_grid_ui::overlay_occluded_at(root, pos)`, which scans a tree) before synthesizing a page-level action from raw input — e.g. right-click → context menu must not fire under an overlay. `ContextMenu` deliberately keeps the default so a second right-click re-anchors it. |
 | `text_summary(&self) -> Option<String>` | first child that has one | The **accessible name** of the widget's content: the plain text of a composed subtree. `Label` supplies it; a `Choice` holding an `Icon` + `Label("HIGH")` summarizes to `"HIGH"`. It exists because a control sometimes needs the *text* of content whose type it cannot see (children are `impl Component`) — it is how [`Select`](#select) reports its value as text (`selected_label()`). Override it in a widget that renders text it owns. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
-| `on_event_capture(&mut self, ev) -> Handled` | `No` | Handle an event **before** this widget's children see it. `Yes` stops the walk. See [the event model](#the-event-model--the-framework-walks-the-children). |
-| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. |
-| `routes_own_subtree(&self) -> bool` | `false` | `true` when this widget walks its own children because its subtree is not a plain tree walk. A declared exception, held to the same delivery test. |
+| `on_event_capture(&mut self, ev) -> Handled` | `No` | Handle an event **before** this widget's children see it. `Yes` stops the walk. See [the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree). |
+| `on_event(&mut self, ev) -> Handled` | `No` | Handle an event the children **declined**. Registered [`ComponentExt`](#componentext--what-every-widget-gets) handlers run just before it, so an author's handler can take the event from the widget's own behaviour. |
+| `hit_bounds(&self) -> Option<Rectangle>` | `Some(bounds)` | The rect this widget occupies **for input**, or `None` when it takes none at all. Overridden by a widget that draws a floating panel (a menu, a palette) or that is inert right now (a closed [`Overlay`](#overlay), whose subtree is still laid out). |
+| `after_subtree(&mut self, ev, handled)` | no-op | Called **after this widget's subtree has seen `ev`**, consumed or not — for a container that reports what its own rows did ([`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe)). Observation only: it cannot consume the event or revive a consumed one. |
 | `clips_children(&self) -> bool` | `false` | `true` when the widget clips its children, so a press or move **outside its bounds** must not reach them — content scrolled out of sight stops being clickable. |
 | `wants_visible(&self) -> bool` | `focused` | `true` when an enclosing [`ScrollRegion`](#scrollregion) should **keep this widget in view**. See [following the cursor](#following-the-cursor). |
 | `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
@@ -190,60 +202,239 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
 
-### The event model — the framework walks the children
+### The event model — the framework resolves the pointer and walks the tree
 
-**A widget never routes events to its children.** `heca_grid_ui::dispatch` does that, always:
+**A widget never routes events to its children, and never works out what an event meant.** Both are
+`heca_grid_ui`'s, once, for every widget:
 
 ```
-dispatch(node, ev):
-    node.on_event_capture(ev)   →  Yes stops here      (a modal swallowing, a thumb grab)
-    for child in children.rev() →  dispatch(child, ev)  ← the FRAMEWORK, not the widget
-    node.on_event(ev)                                   (what nobody below wanted)
+Event::Raw(RawPointer)                     ← the ONLY pointer event a host builds
+       │
+       ├─ hit_test ──────────► the target under the pointer, and the ancestors above it
+       ├─ hover diff ────────► PointerEnter / PointerLeave
+       ├─ press+release ─────► PointerDown / PointerUp / Click / DoubleClick / RightClick / …
+       ├─ drag threshold ────► DragStart / Drag / DragEnter / DragOver / DragLeave / Drop / DragEnd
+       └─ delivery:
+              on_event_capture   root → … → target      (Yes stops here)
+              handlers, on_event  target → … → root      (Yes stops here)
+
+Event::Key / TextInput / Widget            ← the keyboard, which has no position
+       │
+       └─ the target is THE FOCUS OWNER, and delivery is the same walk:
+              on_event_capture   root → … → focus owner
+              handlers, on_event  focus owner → … → root
 ```
 
-A widget takes part by implementing at most two methods, and neither mentions its children:
+Two halves of the vocabulary, and the line between them is the whole design:
+
+| | |
+|---|---|
+| **Raw** | `Event::Raw(RawPointer)` — a device fact: moved, pressed, released, wheel, cancelled. A host builds these and **a widget never sees one**. |
+| **Resolved** | `Click`, `RightClick`, `PointerEnter`, `Scroll`, `Drop`, `Focus`, `Mount`, … — what happened, already hit-tested and already paired. This is what a widget handles. |
+
+#### What a widget author has to know
+
+Nothing. Position a widget and the events arrive, hit-tested:
 
 ```rust
 impl Component for MyControl {
-    /// Capture: this control is one click target, so its composed content must not
-    /// take the press first.
+    /// The press is mine, and my composed content must not take it first.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         match ev {
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
-                self.activate();
-                Handled::Yes
-            }
+            Event::PointerDown(_) => Handled::Yes,   // …and this captures the pointer
+            _ => Handled::No,
+        }
+    }
+
+    /// What a click on me does. No `bounds.contains(pos)`: the router already asked that,
+    /// including which widget is on top and what is clipped away.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        match ev {
+            Event::Click(_) => { self.activate(); Handled::Yes }
             _ => Handled::No,
         }
     }
 }
 ```
 
-**Why it is not a method you override.** It used to be: `Component::event` defaulted to routing, and
-a container that overrode it owned the forwarding. So each container decided, one `match` arm at a
-time, which kinds of event its children were allowed to see — and one that only cared about presses
-silently stranded anything below it needing the wheel or a release. Nothing fails when that happens:
-the child lays out, paints and hit-tests perfectly, and is dead. A `ScrollRegion` was found that way
-three times, in three different surfaces. Now there is no list to fall behind.
+**Why it is the framework's.** It used to be every widget's: each one received every pointer event
+wherever the pointer was, and each re-derived the same four facts by hand. Six widgets carried a
+private copy of `bounds.contains(pos)` to know whether they were hovered; `Input` kept its own clock
+to count clicks; a scrollbar thumb tracked its own grab so a move outside its bounds still reached
+it; and **no widget could receive a right-click at all**, because a press carried no button — so the
+app rebuilt "what did you click" from a position and a registry of row identities, and the whole
+chain fell silent the day one row forgot to declare its key. N copies of a rule is a missing API.
 
-**Choosing a hook.** Capture for something you take *away* from your subtree — a swallow, a gesture
-that must beat whatever sits under the cursor, or state that must be current before anything below
-is hit-tested. Bubble for what you do with what nobody below wanted. Capture returning `Handled::No`
-is normal: it means "I looked, carry on".
+#### The vocabulary
 
-**The exceptions.** Six widgets declare `routes_own_subtree`, each with the reason on the method:
-[`Select`](#select) (option rows are *placed* children, collapsed to zero size while closed),
-[`Dialog`](#dialog) (routes through an overlay-aware focus scan), [`Overlay`](#overlay) (a closed
-layer's panel must be inert), [`CommandPalette`](#commandpalette) and [`ContextMenu`](#contextmenu)
-(rows drawn from data), and [`ItemGroup`](#itemgroup)/[`DockFrame`](#dockframe) (they report what
-their own subtree did, which must happen even when a child consumed the click).
+| Event | When |
+|---|---|
+| `PointerDown(PointerEvent)` | a button went down on this widget. **Consuming it captures the pointer** (below). |
+| `PointerUp(PointerEvent)` | the button came up, ending that gesture. |
+| `PointerMove(PointerEvent)` | the pointer moved over this widget — or anywhere, while it holds capture. |
+| `PointerEnter` / `PointerLeave` | the pointer came over / left this widget. Sent to the whole ancestor chain, like CSS `:hover`. Never consumable — leaving is not something a neighbour can veto. |
+| `Click` / `DoubleClick` / `TripleClick` | press and release on the same widget. **Every click is a `Click`**; a run *adds* `DoubleClick` (then `TripleClick`) on top, so a control that only understands single clicks still fires on the second. |
+| `RightClick` / `MiddleClick` | the same, with that button. A right-click **never** also fires a `Click`. |
+| `PointerDownOutside` | a press landed somewhere that is not this widget or a descendant — the whole of "click away to close", with no geometry of the popup's own. |
+| `Scroll(PointerEvent)` | the wheel turned over this widget; deltas are in `delta_x`/`delta_y`. A region that cannot scroll the axis asked for declines and it bubbles outward — which is what makes nested scroll areas work with nothing declared. |
+| `DragStart` / `Drag` / `DragEnd` | a drag from this widget: it declared a [`draggable`](#dragext) id and the pointer passed the 8 px threshold while held. `DragEnd` always arrives, dropped or not. |
+| `DragEnter` / `DragOver` / `DragLeave` / `Drop` | a drag over this **drop target**; `DragEvent::side` (`Before`/`Onto`/`After`) follows the pointer, so an insertion marker tracks it for free. |
+| `Key { key, pressed }` | a key, delivered to the **focus owner** and then up its ancestors (see [the keyboard](#the-keyboard--delivery-follows-focus)). |
+| `TextInput(String)` | text the user **committed** — typed, pasted, or composed by an IME. Distinct from `Key`: `Shift+2` is `Char('2')` there and `"@"` here. A field types from this and from nothing else. |
+| `ModifiersChanged` | broadcast; observers return `Handled::No`. |
+| `Widget(WidgetIntent)` | a semantic, configurable intent resolved from `[keys.widgets]`. |
+| `Focus` / `Blur` | this widget gained or lost keyboard focus — the moment to select-all, commit an edit, or close a popup. |
+| `Mount` / `Unmount` | it entered a live tree (first layout pass), or is being dropped (a rebuilt tree throwing the old one away). |
 
-It is an exception, not a loophole: `tests/pointer_delivery.rs` mounts a probe inside each one and
-fails if any pointer kind goes missing. Owning the walk costs you a proof, not just a comment.
+`PointerEvent` carries `pos`, `button`, `modifiers`, `click_count` and the wheel deltas — one
+payload for the whole vocabulary. **The position is already hit-tested**: a widget receiving one is
+the target or an ancestor of it.
 
-> **Hosts:** deliver the whole pointer set — move, press, release, wheel — to every tree you mount.
-> A release especially: it is what ends a gesture, and it must arrive *wherever the cursor drifted
-> to*. Gating one on position is how a scrollbar thumb ends up welded to the cursor.
+#### Hit-testing, in three rules
+
+- **children before the parent**, last-added first — what is drawn on top is what is hit;
+- **an overlay wins over child order**: a dropdown panel drawn above a row that comes *after* it in
+  the list still takes the click, because the panel says it occludes that point;
+- **a clipping widget's children are unreachable outside it** — content scrolled out of sight stops
+  being clickable, which is what `clips_children` means.
+
+A widget's own rect is tested **after** its children, and descent does not require the parent to
+contain the point: a [`Select`](#select)'s option list is a child placed outside the trigger it
+belongs to, and it is still the thing under the cursor.
+
+A widget whose input surface is not its layout box says so with **`hit_bounds() -> Option<Rectangle>`**
+— a [`ContextMenu`](#menus--menuitem-menu-contextmenu) or [`CommandPalette`](#commandpalette) reports the panel it draws;
+a closed [`Overlay`](#overlay) returns `None`, which takes its whole subtree out of the pointer's
+reach while leaving it laid out. It is the input twin of `damage_bounds`, for the same reason: what
+a widget draws, what it damages and where it can be clicked are three questions.
+
+> These two are still here, and T400 means to remove them: a floating widget should *place* itself
+> (bake its offset into its own bounds) rather than describe a second rect. The first attempt at
+> that overwrote `base.bounds` in `on_layout`, which fights every other reader of bounds — paint,
+> damage, placement — and produced ghosting and stray hit targets. Doing it properly means the
+> floating panels become **real placed children**, which is not built yet.
+
+#### Capture
+
+**A widget that consumes a `PointerDown` captures the pointer**: every move, and the release, come
+to it wherever the cursor goes, until the button is up. That is what a scrollbar thumb, a slider and
+a rubber-band selection need, and it is why gating a release on position welds a thumb to the
+cursor. The click that press turns into is delivered to the capture holder too, which is what makes
+"one control, one click target" a framework rule rather than something each control arranges by
+swallowing events from its own content.
+
+#### `Handled` — the answer every widget gives, and what it costs
+
+`Handled::Yes` is the only lever a widget has over the walk, and it does more than it looks like.
+
+**If you know the DOM:** `Yes` from `on_event_capture` is `stopPropagation()` in a capture listener
+(nothing below sees it); `Yes` from `on_event` is the same in a bubble listener (no ancestor sees
+it). But the DOM splits "nobody else handles this" from "and the built-in behaviour must not run";
+here there is **one** answer and `Yes` means both — closer to jQuery's `return false`. A `Base`
+handler says it by name: `cx.stop_propagation()`.
+
+**A third meaning the DOM has no equivalent for: the host reads it.** `dispatch` returns the
+accumulated answer, and heca uses it to decide whether the input *also* belongs to what sits behind
+the tree — the terminal. `No` on a wheel is what lets the pane scroll instead of the sidebar; `No`
+on a right press is what lets the context menu open. `Yes` is not private: it tells the application
+the input is spent.
+
+> **Claim what you act on, and nothing else.** An overlay once returned `Yes` for every key it was
+> offered, including ones it ignored. `q` — catalogued, and bound globally to `close_overlay` —
+> did nothing at all while a layer was up, because the layer swallowed it before the host could
+> resolve it.
+
+**`Yes` on a `PointerDown` does three things at once:**
+
+1. **stops the walk** — the control's composed content never sees the press;
+2. **captures the pointer** — every move and the release come back to it wherever the cursor goes
+   (the DOM's `setPointerCapture`, without asking for it);
+3. **claims the click** — the `Click` that press becomes is delivered to it, not to the deepest
+   widget under the cursor.
+
+Which is why a control does not write it by hand: it declares `Base::one_click_target` and the
+router does all three, **for the primary button only**. Nine widgets wrote the claim themselves once
+and all nine claimed *every* button — which is how a right-click on a list row reached nothing while
+the same click on empty space opened a menu.
+
+| Situation | Answer |
+|---|---|
+| I acted on this event | `Yes` |
+| I looked and it is not mine | `No` — including from capture, which just means "I looked, carry on" |
+| I observed it and others should still get it (a modifier broadcast, a hover cue) | `No` |
+| I am a container and my child should decide | `No` — you forward nothing; the framework already walked there |
+
+**Events whose answer is ignored:** `PointerEnter`/`PointerLeave` (leaving is an announcement — a
+widget must not be able to veto its neighbour's), `PointerDownOutside` (the press belongs to
+whatever it landed on), `Mount`/`Unmount`, and `after_subtree`.
+
+#### Choosing a hook
+
+**Capture** for something you take *away* from your subtree: a press that must not reach composed
+content, a swallow, or state that must be current before anything below is hit-tested. Capture
+returning `Handled::No` is normal — it means "I looked, carry on".
+
+**Bubble** (`on_event`) for what you do with what nobody below wanted. This is also where a widget's
+own behaviour belongs, so an [`ComponentExt`](#componentext--what-every-widget-gets) handler registered on
+it gets first refusal.
+
+**`after_subtree(ev, handled)`** for a container that **watches what its own subtree did**, whether
+or not something in there consumed the event: an [`ItemGroup`](#itemgroup) reports a toggle when the
+header row inside it flips `expanded`, and the header consuming that click is the normal case.
+Before it existed, those containers took over the whole child walk to get the same observation —
+which made every event kind depend on that container forwarding it correctly, forever.
+
+**There are no exceptions left.** `Select`, `Dialog`, `Overlay`, `CommandPalette`, `ContextMenu` and
+`FocusScope` each used to declare `routes_own_subtree` and walk their own children for the events
+that have no position to route by. That predicate is **gone** (F004/P084/T400): keys route by focus,
+which is the same statement said in the vocabulary the rest of the framework already used, so there
+is nothing left for those widgets to gate. **No container forwards any event any more.**
+`tests/pointer_delivery.rs` mounts a probe inside each container and fails if a pointer kind goes
+missing; `tests/pointer_routing.rs` holds the resolution itself to the rules above.
+
+### The keyboard — delivery follows focus
+
+`Event::Key`, `Event::TextInput` and `Event::Widget` carry no position, so the framework routes them
+by the only other thing that says where input is aimed: **`Base::focused`**.
+
+- **The target is the deepest focused widget.** Capture runs from the root down its ancestor chain,
+  then handlers and `on_event` run back up — the same target-and-bubble walk the pointer uses.
+- **A key or typed text stops at the owner.** It belongs to one widget. This is the rule that stops
+  the first row in a list eating an Enter meant for the row the cursor is on; seven widgets used to
+  patch that by hand, six of them by forgetting to.
+- **A `Widget` intent enters the focused region.** An intent is not a key — it is what a key
+  *resolved to*, a capability named out loud (`ScrollPageDown`, `Dismiss`). It is addressed to the
+  focused region, so that subtree is walked and whichever widget owns the capability answers, and a
+  host sends one intent without knowing where any of them sits.
+- **Nothing focused, nothing delivered.** A keyboard event with no owner belongs to no widget.
+
+A surface that wants keys must **hold focus**, which it already had to do to draw a focus ring:
+
+| widget | how it says the keyboard is here |
+|---|---|
+| `Input`, `Button`, `Row`, `Item`, `Choice`, `Tabs` | ordinary focus — a click or Tab, via `FocusManager` |
+| `Overlay`, `ContextMenu`, `CommandPalette` | `Base::focused` is bound to the **open** signal: open *is* focused |
+| `Select` | opening the list focuses it |
+| `Dialog` | its own `FocusManager` focuses a field or button, so text reaches the field and the dialog hears what the field declined on the way back up |
+| `FocusScope`, `ScrollRegion` | `Base::focused` is bound to the **host's** keyboard-target signal. A dock binds the **same** signal to both: the wrapper draws the ring, the region answers the keys |
+| `CardGrid` | focusable in its constructor — it moves a cursor with the keyboard |
+
+Three predicates paid for this before: `takes_raw_keys` ("I take keys without being focused"),
+`takes_text_input` ("I may claim typed text") and `routes_own_subtree`. All three were questions a
+widget had to answer *about itself* so the framework could route correctly — and each had a wrong
+answer that failed silently. `ContextMenu` answered "I take raw keys" and ended its match with
+`_ => Handled::Yes`, which ate `Event::TextInput`; because a host offers text before it resolves the
+key, **every quick-pick letter in every menu did nothing** while the suite stayed green.
+
+> **Surfaces:** build one kind of pointer event — `Event::Raw(RawPointer)` — with the **button**
+> and the **modifiers** on it, and send it to every tree you mount. Send
+> `Event::pointer_cancelled()` when the pointer leaves the window, or hover survives the cursor
+> going elsewhere. For the keyboard, hand the whole press to **`Keymap::deliver_press(&KeyPress, deliver)`**
+> and write none of the order yourself: it sends the committed text, then the key, then the intents
+> the key resolves to. heca's app and its showcase each wrote that sequence out privately, and the
+> showcase's copy had no text step at all — so the identical `CommandPalette` typed in one surface
+> and was deaf in the other, with nothing wrong to look at in either. **A component author never
+> meets any of this**: they mount a widget in a surface and type into it.
 
 ### Following the cursor
 
@@ -266,6 +457,31 @@ the app's keyboard-driven sidebar scroll to follow.
 It follows the selection **without fighting the wheel**: the region remembers the target's *natural*
 (unscrolled) position, which changes when the selection moves and stays put when you scroll by hand.
 So it comes to the cursor once, and then leaves you alone.
+
+#### The reveal follows the keyboard, never the pointer
+
+**Pointing at something never scrolls it.** A reveal exists to bring into view what the user cannot
+see — the keyboard's case, where the cursor can move off-screen. What the mouse is on is visible by
+definition, and scrolling it moves it out from under the mouse that asked.
+
+A list whose cursor only the keyboard moves needs nothing. One whose cursor **also follows the
+mouse** gates the request on a signal: [`CardGrid`](#cardgrid) publishes `reveal_state()` — true
+while the keyboard moved the cursor, false while the mouse did — and each card takes it:
+
+```rust
+let grid = CardGrid::new();
+let reveal = grid.reveal_state();
+let card = Row::new().reveal_when(reveal);   // one line per card
+```
+
+It is given to the **cards**, not read off the grid, because the `ScrollRegion` that scrolls is
+*inside* the grid: the walk that collects reveal requests starts at the region and never passes
+through its ancestors. (An earlier attempt put the rule on the parent as a `reveals_subtree`
+override; with that nesting the region never consults it, and it silently did nothing.)
+
+Without it the three correct behaviours compose into a wrong one: hover moves the cursor → the
+cursor card asks to be visible → the region centres it → the card slides out from under the pointer,
+possibly onto another card, which slides again.
 
 ### Builder traits
 
@@ -305,6 +521,64 @@ return `Self` for chaining.
 > Layout-only `Flex` deliberately does **not** implement `StyleExt` — wrap content in a
 > `Surface`/`Card` to give it a background.
 
+<a id="componentext--what-every-widget-gets"></a>
+**`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `nav_key`
+(who it is) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
+split by nothing but the order they were added in; all four were unconditional, so the split carried
+no rule. The two that remain separate do carry one, enforced by the type system: `StyleExt` is
+surfaces only, `Parent` is containers only.
+
+**One spelling, one argument, every kind.** A handler takes an `&mut EventCx` carrying the event
+**and** the one lever over the walk, and `.on(kind, f)` is that same function with the kind as a
+parameter — not a different API:
+
+```rust
+let row = Row::new()
+    .child(Label::new("pane-1"))
+    .on_click(|e| { e.stop_propagation(); select(); })  // mine
+    .on_right_click(|e| open_menu_at(e.pos()))          // watched, not claimed
+    .on_key(|e| { let _ = e.event(); });                // keys, same shape
+```
+
+`EventCx` answers `event()`, `pointer()`, `drag()`, `pos()`, `modifiers()` — and
+`stop_propagation()`.
+
+> **Nothing is consumed for you** (changed in F004/P084/T400 — the DOM's rule). The named builders
+> used to consume the event whether or not you wanted it, so anything that needed to *watch* a click
+> without claiming it had to drop to the differently-shaped `.on(kind, |cx| …)`, which was the only
+> form able to say `stop_propagation`. Two spellings over one input; now there is one. **A handler
+> that used to rely on the implicit claim must now say `e.stop_propagation()`.**
+
+| Method | Effect |
+|--------|--------|
+| `.on_click(f)` / `.on_double_click(f)` / `.on_triple_click(f)` | A left click on this widget (or a descendant that did not take it). |
+| `.on_right_click(f)` / `.on_middle_click(f)` | The same for those buttons. This is the whole of "a widget can have its own menu": it hears the click, on itself, with the position. |
+| `.on_pointer_down(f)` / `.on_pointer_up(f)` / `.on_pointer_move(f)` | The raw halves of a gesture. Stopping propagation on a `pointer_down` **captures the pointer** until the release. |
+| `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. Several widgets on one path enter together, so claiming one is almost always wrong. |
+| `.on_scroll(f)` | The wheel over this widget. Stop propagation to keep it from also scrolling whatever contains this widget. |
+| `.on_pointer_down_outside(f)` | A press landed somewhere else — how a popup closes itself. |
+| `.on_key(f)` / `.on_text_input(f)` | A key, or committed text, that reached this widget — it holds the keyboard, or contains what does. Intercepting a shortcut or a quick-pick letter is the same one line as intercepting a click. |
+| `.on_focus_gained(f)` / `.on_focus_lost(f)` | Keyboard focus arrived or left. (Named this way because `Component::on_focus` is the widget's own hook for the same moment.) |
+| `.on_mount(f)` / `.on_unmount(f)` | Entered a live tree (first layout pass) / is being dropped. `on_unmount` is where a widget releases what it registered with the host, at the moment the tree that registered it goes away. |
+| `.on_drag_start(f)` / `.on_drag(f)` / `.on_drag_end(f)` | The drag this widget is the source of. |
+| `.on_drag_enter(f)` / `.on_drag_over(f)` / `.on_drag_leave(f)` / `.on_drop(f)` | A drag over this drop target; `DragEvent::side` says where in it. |
+| `.on(kind, f)` | The general form the rest are sugar over. |
+
+**`Base::one_click_target`** — a control declares that the **primary press lands on it, not on the
+content it composes**, and the router applies it during capture. The pointer twin of
+`focus_barrier`: one thing to click, one thing to Tab to, whatever it holds. `Button`, `Row`,
+`Item`, `Choice`, `Checkbox`, `Toggle`, `IconButton`, `BadgeButton` and `RailCell` set it. It claims
+the **left** button only — every other button carries on to whatever answers it, which is what lets
+a right-click on a row reach a menu instead of dying on the row.
+
+**Handlers run in the bubble phase**, after this widget's descendants have had the event and
+**before** the widget's own `on_event` — so a handler sees what its children declined, and
+`stop_propagation()` takes the event from the widget itself (a `Button` will not fire).
+
+A widget's own inherent builder wins where it has one: `Button::on_click(|| …)` is the **button's
+action** — what a click *or* Enter *or* `activate()` runs — rather than an event listener, so it
+takes no argument and there is no event to carry.
+
 **`Parent`** (containers):
 
 | Method | Effect |
@@ -317,7 +591,7 @@ return `Self` for chaining.
 > inherent methods win over the trait one. `.child_boxed` is the plain "append it to my
 > children" case.
 
-**`NavExt`** (navigable rows — **every** component gets it, like `DragExt` and `HintExt`):
+**Identity** (part of `ComponentExt`):
 
 | Method | Effect |
 |--------|--------|
@@ -336,9 +610,9 @@ Row::new()
 closed enum of row kinds that only the app could extend, which is what made a plugin row impossible
 to point at.
 
-**Why a string, when `DragItemId` and `HintTargetId` are opaque integers.** Those two are *registry
-slots*: the widget takes a token and the app keeps the map, valid only for the tree that handed it
-out. A nav key is the opposite — it must **survive a tree rebuild**, because a retained tree is
+**Why a string, when `DragItemId` is an opaque integer.** That one is a *registry slot*: the widget
+takes a token and the app keeps the map, valid only for the tree that handed it out. A nav key is
+the opposite — it must **survive a tree rebuild**, because a retained tree is
 rebuilt for reasons that have nothing to do with navigation (in heca, a pane's git status changing
 is enough), and a cursor that resets every time is not a cursor. An index into a tree cannot do
 that; an identity the row asserts about itself can. It is also why a scoped `FocusManager` — a visit
@@ -385,10 +659,10 @@ Three properties earn it a field of its own rather than a convention on top of `
 Like `nav_key`, the string is opaque here and must survive a tree rebuild.
 
 **It is entirely optional.** It defaults to `None`, and a consumer that never calls `.scope_key(…)`
-never meets it — `scope_at` simply answers `None` everywhere. It is the fifth of five host-facing
-identity slots on `ComponentBase` (`drag_source`, `drop_target`, `hint_target`, `nav_key`,
-`scope_key`), all the same bargain: the library provides the slot and the resolver, the host gives
-it meaning.
+never meets it — `scope_at` simply answers `None` everywhere. It is the fourth of four host-facing
+identity slots on `ComponentBase` (`drag_source`, `drop_target`, `nav_key`, `scope_key`), all the
+same bargain: the library provides the slot and the resolver, the host gives it meaning. (`peek` is
+a fifth slot but not an *identity* one: it carries the behaviour itself, not a token to look up.)
 
 > **Declarative form:** none. A `nav_key` or `scope_key` is authored by the component that owns the
 > row or region, and a described tree carries it as an ordinary prop on the node — see
@@ -590,10 +864,16 @@ a run's vertex count.
   `Backspace`, `Delete`, `ArrowLeft/Right/Up/Down`, `Home`, `End`.
 - **`Modifiers`** `{ ctrl, alt, shift, meta }` — `meta` is Cmd/Super/Win. The host
   broadcasts changes via `Event::ModifiersChanged`.
-- **`Event`**: `PointerMoved{pos}`, `PointerPressed{pos}`, `PointerReleased{pos}`,
-  `Key{key, pressed}`, `ModifiersChanged(Modifiers)`, `Scroll{delta}` (wheel — routed to an
-  open overlay).
-- **`Handled`** `{Yes, No}` — returned by `event`; `Yes` stops propagation.
+- **`PointerButton`**: `Left`, `Right`, `Middle`, `Other(u16)` — on every press and release, which
+  is what lets a widget answer a right-click itself.
+- **`Event`**: see [the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)
+  for the whole vocabulary. In short: hosts build `Event::Raw(RawPointer)` and the framework
+  delivers the resolved events (`Click`, `RightClick`, `PointerEnter`, `Scroll`, `Drop`, `Focus`,
+  `Mount`, …) plus `Key`, `TextInput`, `ModifiersChanged` and `Widget(WidgetIntent)`.
+- **`Handled`** `{Yes, No}` — returned by `on_event`/`on_event_capture`; `Yes` stops propagation.
+- **`Base::hovered()`** — whether the pointer is over this widget **or a descendant** (the CSS
+  rule). Read it instead of testing `bounds.contains(pos)`: the router already resolved which
+  widget the pointer is over, including what is on top and what is clipped away.
 - **`FocusManager`**: `new()`, `focused() -> Option<usize>`, `advance(root, forward)`
   (Tab/Shift+Tab, wraps, honors `tab_index`), `deliver_key(root, key)` (→ focused widget),
   `focus_at(root, pos)` (click-focus; mouse focus shows no ring), `clear(root)`.
@@ -1240,15 +1520,15 @@ content shifted past the edge with no scrollbar to bring it back.
   `.scroll_to_child(index)` is the convenience for a flat list of direct children.
   The widget recovers natural positions via its baked shift, so the host never
   tracks the offset or does offset math. (Vertical axis.)
-- **Wheel** (built-in, hover-gated): plain wheel scrolls **vertically**,
-  **`Shift`+wheel horizontally**, and a trackpad's 2-D delta drives both — the
-  host maps modifiers→axis (`Event::Scroll` carries `delta_x`/`delta_y`). ~10% of
-  the viewport per notch (viewport-proportional). `Event::Scroll` has no position,
-  so the region tracks the cursor via `PointerMoved` and only swallows the wheel
-  when hovered (and that axis is scrollable); otherwise it propagates to the host.
-  **Nested regions compose**: the wheel is offered to **children first**, so the
-  *innermost* hovered scrollable consumes it (each region gates on its own hover)
-  and an outer whole-page region only scrolls when no descendant did.
+- **Wheel** (built-in): plain wheel scrolls **vertically**, **`Shift`+wheel
+  horizontally**, and a trackpad's 2-D delta drives both — the host maps
+  modifiers→axis (`Event::Scroll` carries `delta_x`/`delta_y`). ~10% of the
+  viewport per notch (viewport-proportional). **The wheel carries its position**,
+  so the router delivers it to the region under the cursor and this widget has no
+  hover gate of its own to keep in step; it simply declines an axis it cannot
+  scroll, and the event carries on outward. **Nested regions compose**: the
+  innermost region under the pointer gets it first, and an outer whole-page region
+  only scrolls when nothing inside it could.
 - **Scrollbar thumbs** (built-in): auto-shown per overflowing axis; **draggable**.
   A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
   grip bar), in a wider invisible **grab lane** (16px) so the thin 5px thumb is
@@ -1648,7 +1928,8 @@ spellings — never two paint paths.
   — scales font **and** padding, and **cascades into the content**) · `.font_size(f32)` (pin an
   explicit size) · `.glow(bool)` (hover glow, default on) · `.bordered(bool)` (default on).
 - **Behavior builders**: `.on_click(impl Fn() + 'static)`, plus the shared `LayoutExt`
-  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …) and `.hint_target(id)`.
+  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …). To make it pickable by `prefix+/`,
+  wrap it: `KeyHint::new(button).on_peek(…)`.
 - **Accessor**: `.hovered() -> Signal<bool>`.
 - **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
 
@@ -1990,7 +2271,7 @@ panel, while still looking like an open control. The rows stay *placed children*
   to the chosen `Choice`'s **value** for declarative authors).
 - **Keys** (`widget-keys-config`): a **closed** trigger opens on a raw `Enter` / `Space` / `↓`
   (activation, like a button). The **open** list is a **vertical** overlay driven by the semantic
-  `Event::Widget` intents — shared with [`ContextMenu`](#contextmenu) / [`CommandPalette`](#commandpalette):
+  `Event::Widget` intents — shared with [`ContextMenu`](#menus--menuitem-menu-contextmenu) / [`CommandPalette`](#commandpalette):
   `MenuUp`/`MenuDown` move the cursor (scroll into view), `Activate` commits, `Dismiss` closes. The
   host resolves the configurable `menu_up`/`menu_down`/`activate`/`dismiss` `[keys.widgets]` keys into
   it (defaults ↑/`Ctrl+k`, ↓/`Ctrl+j`, Enter, Esc). Click a row to choose, click outside to close;
@@ -2222,8 +2503,10 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
   `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
   distinctly from the filled `active` pill; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
-  `.attention(Signal<bool>)` + `.attention_color(Color)`, plus `StyleExt` for a persistent
-  background under the selection overlay.
+  `.attention(Signal<bool>)` + `.attention_color(Color)`,
+  `.reveal_when(Signal<bool>)` (gate this row's request to be scrolled into view — see
+  [Following the cursor](#following-the-cursor); only needed when the cursor also follows the
+  mouse), plus `StyleExt` for a persistent background under the selection overlay.
 - **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
   cursor) — bind either so the host flips it in place without a rebuild.
 
@@ -2264,16 +2547,19 @@ row that nothing can activate should not look like a control.
 > tempting for host code to write one that does the thing directly — and then that gesture is
 > reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
 > keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
-> exactly as a described node does**, and `heca`'s `named_press` wires both ends from the one
-> declaration — the mirror of `realize`'s `press_intent`:
+> exactly as a described node does**, and `heca`'s `chrome::fires` turns one into the closure a
+> builder wants — the mirror of `realize`'s `press_intent` / `peek_intent`:
 >
 > ```rust
 > // declarative (heca-view-realize)              native (heca/src/chrome)
-> if let Some((id, carrier)) =                    let (id, press) =
->     press_intent(node, hints) { … }                 named_press(intent, emit, hints);
-> row.hint_target(id)                             row.hint_target(id)
->    .on_activate(move || emit(carrier.clone()))     .on_activate(press);
+> node.on_press(intent)                           row.on_activate(fires(intent, emit))
+> node.on_peek(intent)                            KeyHint::new(row).on_peek(fires(intent, emit))
 > ```
+>
+> **The click and the pick are two declarations, not one** (F004/P084/T399). A click on a sidebar
+> row means *go there and leave*; a `prefix+/` pick means *look at that one* and stays in the dock.
+> Serving both from one intent is what made the picker walk out of the sidebar. A described node
+> that binds only `press` still gets a pick for free — `peek` falls back to it.
 >
 > **Each item kind declares its own**, and nothing is inherited or forced: in the workspaces
 > component a pane row declares `focus_pane { pane_id }`, a workspace row `focus_workspace { ws_idx }`,
@@ -2860,17 +3146,24 @@ ViewNode::new(WidgetKind::RailCell)
 
 ### KeyHint
 
-> **From a plugin:** the leader/pick overlay is **host-owned and universal** — a plugin
-> never creates a `KeyHint`; any plugin widget that exposes an `on_press` intent is
-> auto-hintable ("intent ⇒ hintable"). Likewise a **context menu** is a host-owned
-> dropdown the plugin *requests* (or declares via `.on_context`), not a nested widget.
-> See **[chrome-and-ui.md](chrome-and-ui.md)** → "Context menus & KeyHint".
+> **From a plugin:** the leader/pick overlay is **host-owned and universal**. A described node with
+> a `press` intent is reachable by `prefix+/` with nothing written, and a node that wants a pick to
+> mean something *else* binds `peek` (see the declarative example below). Likewise a **context
+> menu** is a host-owned dropdown the plugin declares with `.context_menu(…)`, not a nested widget.
+> See **[chrome-and-ui.md](chrome-and-ui.md)** → §0 and "Menus and keyboard hints".
 
-A **generic** transparent wrapper that overlays a glowing accent **keycap letter** on any
-actionable child while a host-owned `Signal<Option<String>>` is `Some` — the keyboard pick /
-jump prefix (move/swap/select, command palettes, content panes). It is transparent to focus and
-events (the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so
-mouse, keyboard, and RPC all light it up identically.
+A **generic** transparent wrapper that does two things for the region it wraps: it overlays a
+glowing **keycap letter** while a host-owned `Signal<Option<String>>` is `Some`, and it declares
+**what a leader-key pick does** to that region (`on_peek`). It is transparent to focus and events
+(the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so mouse,
+keyboard, and RPC all light it up identically.
+
+**Why the pick declaration lives here and not on every widget.** Being pickable is something you opt
+a *region* into — and you were already wrapping it to show the letter — so `Label::on_peek` is a
+method that never has to exist and you can read off the tree what is reachable. (A context menu is
+the opposite shape on purpose: a menu is *about* a widget, so it is a slot any widget carries; a
+peek is *aimed at* a region you chose to make reachable.) The slot itself is universal —
+`Base::peek` — so the framework's collector is one uniform walk with no downcasting.
 
 - **Construct**: `KeyHint::new(child)`, or `KeyHint::new_boxed(Box<dyn Component>)` for a subtree built
   dynamically — a `realize`d `ViewNode` tree, or a chrome provider's render seam — where the concrete
@@ -2885,14 +3178,45 @@ mouse, keyboard, and RPC all light it up identically.
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
   tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
   child row fills its column instead of shrinking to content width.
+  `.on_peek(impl Fn() + 'static)` — **what a `prefix+/` pick does to this region.** Host-only
+  (behaviour crosses a description boundary as an `Intent`, never a closure); the declarative
+  spelling is the node's `peek` event. Unset ⇒ the region is not a pick target.
 - **Accessors**: `.hint_signal() -> Signal<Option<String>>`.
+
+**Native:**
 
 ```rust
 let pick = signal(None);
 let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
-    .hint(pick).placement(HintPlacement::Center);
+    .hint(pick)
+    .placement(HintPlacement::Center)
+    // A pick is not a click: this row activates and leaves on a click, and stays put on a peek.
+    .on_peek(move || emit(peek_intent.clone()));
 // during a pick the host sets pick.set(Some("a".into())); clears it on exit
 ```
+
+**Declarative** — there is no `KeyHint` node, because a description does not draw the letter: the
+host does. A described node says only *what a pick does*, and `realize` writes it into the same
+`Base::peek` slot:
+
+```rust
+use heca_view::build::*;
+
+Row::new()
+    .on_press(Intent::new("docker.select").arg("id", id))   // click: go there
+    .on_peek(Intent::new("docker.reveal").arg("id", id))    // pick: look at it, stay
+    .child(Label::new(name))
+```
+
+Bind neither and the node is not a pick target; bind only `press` and a pick does what a click does.
+
+**How the framework uses it** (`heca_grid_ui::hint`): `collect_peeks(root)` walks the laid-out tree
+and returns every declaration in document order with the rect its letter goes over; `fire_peek(root,
+&path)` runs one, answering `false` when the tree was rebuilt under the letters. **Nothing is
+registered** — a target is addressed by its path for exactly as long as the letters are up, so there
+is no allocator to keep in step with three rebuild cadences and nothing to un-register. This
+replaced an opaque `HintTargetId` the host mapped back to a `pub(crate)` enum, which a plugin could
+not construct (F004/P084/T399).
 
 #### Standalone keycap — `paint_keycap` / `keycap_size` / `KeycapVariant`
 
@@ -2912,7 +3236,7 @@ overlay pass) or reused by other overlays (the **context-menu** quick-pick). Thi
     **full-strength accent border** (the `color`/`accent` at full alpha, so it reads as the theme
     accent, not a washed tint), **no glow**, accent glyph. Matches the showcase KeyHint (which has
     no background). For keycaps on an already-dark, host-owned surface (e.g. the
-    [ContextMenu](#contextmenu) quick-pick inside the menu panel). The [ContextMenu](#contextmenu)
+    [ContextMenu](#menus--menuitem-menu-contextmenu) quick-pick inside the menu panel). The [ContextMenu](#menus--menuitem-menu-contextmenu)
     draws its letter at a **sub-font scale** so the chip stays compact.
 
 ```rust
@@ -2921,8 +3245,8 @@ paint_keycap(cx, cap, "a", font, None, KeycapVariant::Filled);   // over content
 paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a panel
 ```
 
-**Plugins** never call this directly — a plugin widget with an `on_press` intent is
-auto-hintable and the host stamps the keycap for it.
+**Plugins** never call this directly — a described node with a `press` (or `peek`) intent is a pick
+target and the host stamps the keycap for it.
 
 ### FocusScope
 
@@ -2964,9 +3288,10 @@ elsewhere is worse than no ring.
     the accent shifted toward `foreground`). Override to mark a *kind* of focus distinctly, the way
     `KeyHint::color` distinguishes kinds of pick target.
 - **Accessors**: `.focus_signal() -> Signal<bool>`.
-- **Routing**: it claims `routes_own_subtree` — the gate is per event *kind*, which the routing hooks
-  cannot express otherwise (swallowing would stop the walk at this node and strand the focused
-  sibling). That puts it on the hook for delivering the whole pointer set to its child, which it does.
+- **Routing**: none of its own. `.focus(sig)` binds that signal to `Base::focused`, and the
+  framework delivers keyboard events to the focus owner's chain — so an unfocused scope is simply
+  not on the path, and the focused one is, with nothing gated, declined or forwarded. It used to
+  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone (T400).
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -3037,17 +3362,16 @@ Any chrome button that triggers a `WmAction` gets its **tooltip** and its `prefi
 **KeyHint** from that action, automatically — the caller names the action, never a
 shortcut string, the leader symbol, or a hand-built tip. This keeps every button
 uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
-**`Tooltip`**, and **`hint_target`** ([`KeyHint`](#keyhint) framework); the resolution
-seam is app-side.
+**`Tooltip`**, and **`KeyHint::on_peek`** ([`KeyHint`](#keyhint) framework); the
+resolution seam is app-side.
 
 ```rust
 // heca/src/chrome/mod.rs — one call composes label + the live keybind(s):
-let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
-let button = IconButton::new(icon)
-    .hint_target(hint_id)                       // prefix+/ can pick it (same intent as click)
-    .on_click(move || emit(InteractionIntent::ActivateAction(action.clone())));
-row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
-//                               ▲ action config name  ▲ label
+let fire = move || emit(InteractionIntent::ActivateAction(action.clone()));
+let peek = fire.clone();                        // this button's pick IS its click
+let button = IconButton::new(icon).on_click(fire);
+row.child(action_tooltip(KeyHint::new(button).on_peek(peek), "close", "Close", &state.action_shortcuts));
+//                                                            ▲ action config name  ▲ label
 ```
 
 - **Tooltip text is resolved by action name.** `ActionShortcuts` (on `AppState`, rebuilt
@@ -3058,11 +3382,11 @@ row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
   `λ`, never `⌃⌥⇧⌘`. So a rebind in `config.toml` updates the tip with no code change.
 - **The name is the canonical key**, because the emitted `WmAction` may be a button-only
   variant that isn't itself bound (`ClosePaneById`, `AddPaneToColumn`).
-- **KeyHint** = register the click's intent in the **shared** `HintTargetRegistry` (on
-  `AppState`, a monotonic id allocator spanning the chrome tree **and** every per-pane
-  header tree) and `.hint_target` it. Active-targeted buttons (zoom/float) register a
-  `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
-  Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
+- **KeyHint** = declare on the wrapper what a pick does. Nothing is registered: the
+  framework collects the declarations out of the laid-out tree (`collect_peeks`) and runs
+  one (`fire_peek`), so a plugin's button is as pickable as the app's. Active-targeted
+  buttons (zoom/float) emit a `FocusPane` first, exactly like the click. Full app-side
+  rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
 ### Overlay
 
@@ -3110,7 +3434,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   `place_anchored_on(..., side: AnchorSide)` is the full form of the former: `AnchorSide::Auto`
   (default — flip by available room), or `Below`/`Above` to **force** a side the caller already
   chose (still clamped into the viewport, never flipped away). Both
-  [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#contextmenu)
+  [`Select`](#select) (rect-anchored, forced side) and [`ContextMenu`](#menus--menuitem-menu-contextmenu)
   (point-anchored) delegate their placement here, so the flip/clamp rule exists once.
 - **Sizing**: `.panel_size(width: Length, height: Length)` gives the panel an explicit size instead
   of letting it hug its content. Default = unset (hug). `Length::Auto` on an axis keeps the hug
@@ -3127,7 +3451,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
 - **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow, elevation })` is the single
   authority for what an overlay panel *looks like* — drop shadow (lifting it off the page), the theme
   surface fill, the per-widget accents, and the panel's **edge**. The base `Overlay` passes
-  `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#contextmenu), and
+  `PanelChrome::default()`; [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), and
   [`CommandPalette`](#commandpalette) call the same painter with their own accent border + glow,
   because each owns content that cannot be handed to an `Overlay` as a single panel child (`Select`'s
   option rows are *placed children*; the menu/palette draw their rows from data). Call it inside a
@@ -3156,7 +3480,7 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
 
   | `PanelElevation` | Used by | Shadow |
   |---|---|---|
-  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette) | full depth |
+  | `Panel` (default) | `Dialog`/`Overlay`, [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), [`CommandPalette`](#commandpalette) | full depth |
   | `Hover` | [`Tooltip`](#tooltip) | 25% of it (blur *and* drop scale together) |
 
   Why it exists: the panel shadow is tuned for surfaces hundreds of pixels across. Applied unscaled
@@ -3281,9 +3605,9 @@ impl Component for MySelect {
 | You have | Call | Used by |
 |---|---|---|
 | A trigger **rect** (dropdown/popover) | `place_anchored_on(anchor, panel, vp, gap, side)` — or `place_anchored(..)` for `AnchorSide::Auto` | [`Select`](#select), `Overlay`'s `Anchored` mode |
-| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#contextmenu) |
+| A cursor **point** (context menu) | `place_at_point(anchor, panel, vp, inset, centered)` | [`ContextMenu`](#menus--menuitem-menu-contextmenu) |
 | A target rect, **centered on any of 4 sides** (hover bubble) | `place_beside(anchor, panel, vp, gap, side)` with `BesideSide::{Top,Bottom,Left,Right}` | [`Tooltip`](#tooltip) |
-| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
+| A panel to **decorate** | `paint_panel_chrome(cx, rect, PanelChrome { border, glow })` | `Overlay`, [`Select`](#select), [`ContextMenu`](#menus--menuitem-menu-contextmenu), [`CommandPalette`](#commandpalette), [`Tooltip`](#tooltip) |
 
 The three placement authorities differ in **alignment**, which is why they are three functions and
 not one with flags:
@@ -3391,8 +3715,8 @@ the dialog) and `Activate` commits its row.
 ```rust
 let dialog = Dialog::new("Delete pane?")
     .body(Label::new("This action cannot be undone."))
-    .action(Button::secondary("Cancel").hint_target(cancel_id).on_click(move || emit(submit_cancel)))
-    .action(Button::destructive("Delete").hint_target(del_id).on_click(move || emit(submit_delete)))
+    .action(KeyHint::new(Button::secondary("Cancel").on_click(cancel)).on_peek(cancel_peek))
+    .action(KeyHint::new(Button::destructive("Delete").on_click(delete)).on_peek(delete_peek))
     .on_dismiss(move || emit(close))
     .open(true);
 ```
@@ -3538,123 +3862,174 @@ let open = palette.open_signal();
 > Needs the same host wiring as `Dialog` (route keys to the overlay). Because it tracks `Ctrl` for
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
 
-### ContextMenu
+### Menus — `MenuItem`, `Menu`, `ContextMenu`
 
-A **cursor-anchored action menu** overlay — the pointer counterpart to the keyboard pick flows
-(same input-capturing contract as `CommandPalette`). A floating list of entries, each with
-an optional **icon**, an optional **quick-pick keycap** (the shared
-[`paint_keycap`](#standalone-keycap--paint_keycap--keycap_size--keycapvariant) primitive in its
-`Bordered` variant — press the letter to run; never hand-drawn), an optional textual shortcut hint,
-a `danger` flag (destructive entries render red), and an
-`enabled` flag. Open/close **and the anchor point** are host-owned signals — right-click detection
-lives at the app level (grid-ui pointer events carry no button), so the host sets the anchor to the
-cursor and flips `open`. The panel sizes to its content and flips/clamps to stay on-screen.
+**Menus, split by what each part actually knows.**
 
-- **Construct**: `ContextMenu::new()`; add entries with `.entry(MenuEntry::new(label, on_select)
-  .icon(Glyph)?.key('x')?.shortcut("prefix+x")?.danger(bool)?.enabled(bool)?)`; `.open(bool)`, `.anchor(Point)`.
-- **Accessors**: `.open_signal() -> Signal<bool>`, `.anchor_signal() -> Signal<Point>`.
-- **Dismiss callback**: `.on_dismiss(impl Fn())` — fired on **Esc / outside-click** (a *dismissal*,
-  not a selection; selecting an entry runs its `on_select` instead). The host points this at its
-  overlay-close path (in `heca`, emit `CloseOverlay`), mirroring [`Dialog::on_dismiss`](#dialog).
-- **Occlusion**: deliberately keeps the default `overlay_occludes` = `false` even while open — a
-  second right-click **re-anchors** the menu at the new point (the standard menu affordance), so its
-  panel must not block the host's right-click gate (see [`Component` trait](#component-trait)).
+| type | what it is |
+|---|---|
+| `MenuItem` | one row: either sugar (a label and an icon) or **any widget subtree** |
+| `Menu` | a titled list of items. **Content only** — it knows nothing about triggers, anchors or keys |
+| `ContextMenu` | a named presenter: contains one `Menu` and shows it on right-click or the host's `open_context_menu` action |
+| `MenuBar` | *not built yet*: contains `Menu`s and shows them as a strip, on a click of a title or its own keybinding |
 
-**Host right-click gate (native).** Right-click detection is app-level, and the host must not open
-the menu on a point an overlay above the page owns — an open `Dialog`/`CommandPalette`, a toast
-card, an open `Select` panel. Gate it with `overlay_occluded_at` (scans a tree for
-`Component::overlay_occludes` hits); page content (buttons, inputs, panes) never occludes, so
-right-click there opens the menu as usual:
+There is no fourth type, and **the panel is not one** — a `ContextMenu` *is* the panel it shows: it
+holds the rows, lays them out, paints them and hit-tests them. The split above is at the joint a
+menu bar proves is real: a `MenuBar` will show the **same `Menu` value** as a strip, with its own
+trigger and keyboard convention. The trigger, the anchor and the shortcut belong to whatever
+*contains* the menu; the menu is content, and stays reusable across every surface that shows one.
+
+#### What you write
 
 ```rust
-// On the host's right-click event (winit/etc.):
-let occluded = heca_grid_ui::overlay_occluded_at(&overlay_layer_tree, cursor)
-    || heca_grid_ui::overlay_occluded_at(&page_tree, cursor); // open Select panels live here
-if !occluded {
-    menu_anchor.set(cursor); // ContextMenu re-anchors even while already open
-    menu_open.set(true);
-}
+let ctx = ContextMenu::new("pane-menu").child(
+    Menu::new("Pane", "What you can do with this pane")
+        // sugar form — a label and an optional icon
+        .child(MenuItem::new().label("Rename").icon(Glyph::Pencil).on_click(move || rename(id)))
+        // composed form — any widget subtree, with props
+        .child(MenuItem::new().child(|| {
+            Grid::new().prop("gap", 10)
+                .child(Icon::new(Glyph::Trash))
+                .child(Label::new("Close"))
+        })),
+);
+
+Row::new().child(Label::new(&pane.name)).context_menu(ctx);
 ```
 
-(Host-side only — occlusion is a `Component` method, not a `ViewNode` prop; a declarative tree gets
-this behavior from the host that realizes and mounts it.)
+**There is no row identity to declare, no path string, no menu id to register and no builder
+registry**: the closure captured `id` in the loop that was already drawing that row. That is the
+whole point of declaring the menu on the widget.
+
+Getting a menu onto a row used to take **four** things, three of them invisible: a `context_path`
+mapping a row key to a menu-id string, a builder registered for that id, the items, and — the one
+nobody would think of — a `.nav_key(..)` on the row, because the host resolved *what did you
+right-click* from a **position** and read the answer off `Base::nav_key`. A workspace header had the
+first three and not the fourth: right-clicking it opened **nothing**, with no error and no failing
+test. The design was the bug.
+
+#### The two forms of a row, and why `child` takes a closure
+
+`MenuItem::label` / `MenuItem::icon` are **sugar** for the row nearly every menu wants.
+`MenuItem::child` takes any widget subtree instead, and **children win when both are given** — the
+same precedence `Button` has.
+
+`child` takes a `Fn() -> impl Component` rather than a widget **value** because a menu can be shown
+more than once, and a widget subtree is owned (`Box<dyn Component>`): handed over once, it is gone.
+A *builder* can run again, which is what makes the whole chain — `MenuItem`, `Menu`, `ContextMenu` —
+`Clone`, so one menu value can be declared on several rows and captured by handlers. It also means
+the rows are built **at the moment the menu opens**, so `enabled(is_custom_name)` is an answer about
+the state you are opening it in rather than the state it was written in.
+
+The rows are **real children**, laid out by the same engine as everything else — `gap`, `grow`,
+padding and font inheritance all work inside a row, and this widget contains no layout code of its
+own beyond placing the finished panel at its anchor (the same `shift_subtree` trick `Overlay` and
+`Select` use).
+
+A row's colour is decided at **paint**, from the theme and the row's state, and published to the
+subtree with `PaintCx::with_content_color` — which is what lets a composed row (an `Icon` and a
+`Label` an author wrote) read as `danger`, or dim when disabled, without knowing anything about
+menus. The quick-pick keycap and the textual shortcut are the *menu's* affordances rather than the
+row's content, so the panel paints them into space the row reserved, and a composed row never has to
+lay them out.
+
+#### Declaring it: a value or a closure
+
+`ComponentExt::context_menu` accepts either, via `IntoContextMenu`:
+
+```rust
+Row::new().context_menu(ctx.clone());            // a value — `ContextMenu` is `Clone`
+Row::new().context_menu(move || build_menu(id)); // a closure — rows read state at open time
+```
+
+Universal, like `nav_key`: an `Icon`, a `Label` and a plugin's own widget carry one on the same
+terms as a `Row`, because the declaration lives on `Base`.
+
+#### Two roads to show a menu
+
+```rust
+// 1. Declared on the widget — covers the two standard triggers.
+Row::new().context_menu(ctx);
+
+// 2. Shown from a handler — for a trigger you invent.
+Button::new("More").on_click(move |ev| ctx.show(ev));
+```
+
+The declaration exists **because the keyboard needs it**: with the menu only inside a closure,
+`prefix+>` / `Shift+F10` has nothing to find. Both roads run the same code — the declaration is
+implemented in terms of `ContextMenu::show`.
+
+#### Triggers, anchors, bubbling
+
+| Trigger | Target | Anchor |
+|---|---|---|
+| `Event::RightClick` | the widget under the pointer | the pointer |
+| the host's `open_context_menu` action (`prefix+>`) | the focused widget | under the widget |
+
+**The anchor is read out of the event**, never chosen by an author: `Event::position()` gives the
+cursor, `Event::target_bounds()` gives the widget the event was delivered to (the router stamps it
+once, at delivery). An event with neither shows nothing rather than guessing a corner of the screen.
+
+Both triggers **bubble to the nearest ancestor that declares a menu**: you right-click the `Label`
+inside a row, not the row; focus sits on a cell, and the menu belongs to the row. Bubbling stops at
+the first declaring ancestor — **menus are never merged**, because a menu is a statement about one
+thing. Nothing in the chain declares one ⇒ nothing opens, with no hidden fallback.
+
+A host that wants **"right-click empty space"** puts a menu on the **root**, which needs no
+empty-space hit-test: a click that lands between rows or below the last one simply finds nothing on
+the way down and bubbles out to it.
+
+> ⚠️ **A right-click needs a press *and* a release.** `RightClick` is synthesised from the pair on
+> the same widget, so a host that delivers only presses produces no clicks at all and **no declared
+> menu ever opens**. heca lints this in `heca/tests/pointer_funnel.rs`; it is not visible to
+> behaviour tests, which dispatch both halves themselves.
+
+#### The one host dependency
+
+A menu opens above everything, which is a *layer*, and a widget cannot reach one. So the host
+installs a sink once at startup — the same shape as `install_frame_request` — and every show posts
+to it:
+
+```rust
+heca_grid_ui::install_menu_sink(move |menu, anchor| {
+    // The menu arrives with its anchor; mount it as a layer.
+    queue.borrow_mut().push((menu, anchor));
+});
+```
+
+No `AppState`, no host type, in any closure a widget holds. `ContextMenu::after_select` lets the
+host take the layer down after an entry ran, so an item stays a plain closure that knows nothing
+about layers — requiring every author to close the menu they opened is a rule that gets forgotten
+exactly once per menu.
+
+#### Contributions — the plugin surface
+
+`Menu::name("workspaces.pane")` is **optional**, and it is the only thing left of the contribution
+design: a named menu is one a host can offer to everything mounted before it is shown, so a plugin's
+"Open in container" can appear on a row it does not own. A menu without a name is closed and needs
+nothing.
+
+A contributed row has **no per-row payload**, so it acts on app state (the focused pane, the selected
+row) rather than on the row the menu was opened for.
+
+**A plugin never writes a closure.** It registers an action and contributes a row that names it; the
+host turns those into `MenuItem`s whose behaviour is an `Intent` dispatched through the central gate,
+so a menu entry gets exactly the policy and destructive-confirm a keypress or an RPC call gets. An
+entry's **icon comes from the action** (`ActionCatalog::icon`), which is why the sidebar's "Close
+pane" and the command palette's `close` cannot drift apart.
+
+#### Behaviour and nav
+
 - **Nav (host-driven, configurable)**: **no hardcoded nav keys** — as a vertical list the menu
   responds to `Event::Widget(WidgetIntent::{MenuUp,MenuDown,Activate,Dismiss})`, which the host
   resolves from the configurable `menu_up` / `menu_down` / `activate` / `dismiss` `[keys.widgets]`
   bindings (defaults ↑/Ctrl+k, ↓/Ctrl+j, Enter, Esc). Raw `Event::Key` is only a **quick-pick
-  letter** that runs its entry directly.
-  Hover highlights; click runs; outside-click dismisses.
+  letter** that runs its entry directly. Hover highlights; click runs; outside-click dismisses.
+- **`on_dismiss`** fires on **Esc / outside-click** — a *dismissal*, not a selection. Selecting an
+  entry runs its `on_click` and then `after_select`.
+- **Occlusion**: deliberately keeps the default `overlay_occludes` = `false` even while open, so a
+  second right-click **re-anchors** the menu at the new point (the standard menu affordance).
 
-```rust
-let menu = ContextMenu::new()
-    .entry(MenuEntry::new("Rename", || wm.rename()).icon(Glyph::FileCode).key('r'))
-    .entry(MenuEntry::new("Close", || wm.close()).icon(Glyph::XSquare).key('x').danger(true));
-let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
-// host: on right-click → anchor.set(cursor); open.set(true); add `menu` to the tree
-```
-
-> Same host wiring as `CommandPalette` (route keys to the overlay). The app decides *when*
-> (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
-
-> **Declaring from data — host + plugins (shipped, `context-menu` phase).** The preferred path is a
-> **data spec** the host owns, not hand-built closures: `OverlayHost::open_dropdown(DropdownSpec {
-> anchor, entries, centered })`, where each `MenuEntrySpec { id, label, action, danger, enabled }`
-> carries an **`Intent`/`WmAction`** (not a closure) and its **icon resolves from the action
-> registry** (`ActionCatalog::icon`). The host realizes the entries into this widget, injects the
-> `SubmitOverlay{overlay,id}` intent + a KeyHint target + the host-assigned quick-pick letter, pushes
-> it as an Overlay-band **modal layer**, and on select dispatches the action **through the central
-> confirm gate**. `centered = true` centers the panel on the anchor (keyboard-opened menus). Dismiss →
-> `CloseOverlay` (the `on_dismiss` hook above).
-
-> **Context-aware content (`ContextMenuRegistry`).** Which entries appear is resolved from **where**
-> the menu is opened: a dotted **`ContextPath`** (`"pane"` — the host's own — plus whatever a
-> component names its rows, e.g. `"workspaces.pane"`, `"docker.container"`) + a **`ContextTarget`**.
-> The host resolves the path from the click / keyboard focus (`resolve_active_context`), looks up all
-> providers registered for it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a
-> plugin inserts entries between built-ins. Same menu widget; different content per context.
->
-> **A target names a row; it does not describe it (F003/P086/T365).** `ContextTarget` has two arms:
-> `Pane { pane_id, hyperlink }` for a content pane — the app's own domain — and
-> **`Row { container, key }`** for a row of any mounted container, where `container` is the *mount
-> id* and `key` is the `nav_key` that row declared. That is everything the host knows, and it never
-> parses a key. It used to carry three workspace-shaped variants pre-filled with facts the host had
-> looked up (a pane's column, a workspace's custom name), which is precisely why a Docker row could
-> not be right-clicked at all: there was no variant for it, and adding one meant the host learning
-> what Docker is.
->
-> Two calls make it work, and both belong to the component:
->
-> ```rust
-> // 1. "Which of my menus describes this row?" — matched against its own rows, never parsed.
-> fn context_path(&self, key: &str, ctx: &ChromeCtx<'_>) -> Option<String>;
->
-> // 2. …and its builder resolves the same key against its own model for the facts it needs.
-> ContextMenuContribution { context_path, weight, build: Rc<dyn Fn(&ChromeCtx, &ContextTarget)> }
-> ```
->
-> A component seated **twice** is asked for every menu twice, so a builder must answer for its own
-> placement (`Row { container, .. } if container == self.id()`) and return `vec![]` otherwise —
-> without that guard every entry appears twice in the merged menu.
->
-> **The general hazard (worth reading before you write the next one).** Anything that walks
-> `ChromeHost::mounted_providers()` and *merges* what it gets back is asking a **type** a question
-> and receiving one answer per **seating**. With one placement on screen the duplication is
-> invisible, which is exactly how this shipped. Either key the answer by mount id (as the menus,
-> the cursor, the scroll offset and the keyboard target all do) or de-duplicate by `kind()`; and
-> when in doubt, seat the component twice — it is the cheapest way to find the next one.
->
-> **From a plugin.** A plugin never draws the menu — it either attaches entries declaratively on a
-> `ViewNode` (`.on_context([ item("restart","Restart"), … ])`), or registers a
-> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }` plus a
-> `context_path` for its row keys. On right-click / keyboard-open the host opens the (merged) menu,
-> owns z-order / focus / Esc / click-outside, and returns the chosen entry as an **intent**. See
-> **[chrome-and-ui.md](chrome-and-ui.md) → "Context menus & KeyHint"**.
-
-> **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
-> `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
-> `heca::shortcut::format_shortcut(keys, with_prefix)` — e.g. `format_shortcut("prefix+x", true)` →
-> `"λ x"`. Feed that into `.shortcut(...)` so the symbol/formatting live in one place (the showcase
-> mirrors this with its own `display_shortcut`).
 
 ### ToastStack
 
@@ -4333,6 +4708,55 @@ the rest. This is what `heca`'s scrollback-search bar does; it previously guesse
 width from a hardcoded glyph advance ratio (`chars × font × 0.62`), which broke for any
 font whose advance differed and had to be re-tuned by hand.
 
+#### `at_rect` — a rect **inside** a parent, in fractions of it
+
+The margin form above places a **root**. Inside a tree it is the wrong tool twice over: a
+margin still takes part in the flow, so the box pushes its siblings along; and a *percentage*
+margin resolves against the parent's **width on both axes** (CSS's rule, which taffy
+implements faithfully), so a fractional `top` silently produces a number — just the wrong one
+— on any parent that is not square.
+
+`LayoutExt::at_rect(left, top, width, height)` is the answer, on every widget:
+
+```rust
+// A floating pane drawn over the workspace strip behind it, at its own fraction of it.
+strip = strip.child(card.at_rect(
+    Length::Pct(f.x / strip_w),      // ← left and width resolve against the parent's WIDTH
+    Length::Pct(f.y / screen_h),     // ← top and height against its HEIGHT
+    Length::Pct(f.w / strip_w),
+    Length::Pct(f.h / screen_h),
+));
+```
+
+- **It is out of the flow.** The box takes no space from its siblings and is not moved by
+  them, so it draws *over* what it is placed on. Later children paint above earlier ones, so
+  declare it after what it covers.
+- **Each percentage resolves against its own axis** — the difference from a margin, and the
+  whole reason this exists.
+- **The rect overrides `width`/`height`**: it names both, and a leftover size beside it would
+  draw a different rect than the one asked for.
+- Units mix freely: a fixed `Px` chip at a proportional `Pct` position is as valid as a fully
+  fractional rect.
+
+Declarative form — a plugin authors the same thing as a grouped property, because a rect is
+four values and a scalar channel could not carry it:
+
+```rust
+ViewNode::new(WidgetKind::Card).prop(
+    "placement",
+    PropValue::Map([
+        ("left".into(),   PropValue::Text("25%".into())),
+        ("top".into(),    PropValue::Text("10%".into())),
+        ("width".into(),  PropValue::Text("50%".into())),
+        ("height".into(), PropValue::Int(120)),        // a bare number is pixels
+    ].into_iter().collect()),
+)
+```
+
+Held by `heca-grid-ui/src/layout.rs` (`a_fractional_rect_resolves_each_percentage_against_its_own_axis`,
+`a_placed_box_takes_no_space_from_its_siblings`, and the margin-axis guard that explains why)
+and by `heca-view-realize` (`a_description_can_place_a_node_at_a_fractional_rect`).
+
 **When a painted primitive is still correct:** content-area *effects* that track something
 other than the widget tree — a bell flash washing the pane, a highlight rect over terminal
 cells — stay `cx.rect` calls. A widget per terminal match would be absurd. The rule is about
@@ -4361,7 +4785,7 @@ impl LayoutExt for Reticle {}   // opt into .width/.height/.padding/… for free
 ```
 
 Embed `Base`, implement `Component` (override `paint` and, for input,
-[`on_event_capture`/`on_event`](#the-event-model--the-framework-walks-the-children) — **never a
+[`on_event_capture`/`on_event`](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree) — **never a
 child walk**, `dispatch` does that — plus `tick` for animation and `remeasure` if the widget's size
 depends on the font, read from `self.base.font`), and opt into builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.

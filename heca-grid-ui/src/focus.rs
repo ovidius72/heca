@@ -117,17 +117,17 @@ impl FocusManager {
     /// [`Event::Widget`](crate::component::Event::Widget) intent forwarded to the
     /// focused text field inside a `Dialog`).
     pub fn deliver_event(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
-        let Some(target) = self.focused else {
-            return Handled::No;
-        };
-        let mut handled = Handled::No;
-        let mut idx = 0;
-        for_each_focusable(root, &mut idx, &mut |i, c| {
-            if i == target {
-                handled = crate::component::dispatch(c, ev);
-            }
-        });
-        handled
+        // **One router.** This used to find the focused widget by *visit index* and dispatch to it
+        // as if it were a root, which is a second way of answering "where does a key go" beside the
+        // framework's own — and the two disagree the moment the tab order changes under them. A
+        // `CommandPalette` is focusable only while open, so opening one renumbers every index after
+        // it: the host went on delivering to the widget that used to hold that number, and typing
+        // in the palette did nothing at all while the same palette worked in an app that dispatched
+        // from the root (Antonio, 2026-08-10).
+        //
+        // `dispatch` routes a keyboard event to the focus owner and bubbles it, so this is the same
+        // question asked once, and ancestors see the event on the way past as they should.
+        crate::component::dispatch(root, ev)
     }
 
     /// Index of the first focusable with an open overlay, if any.
@@ -248,8 +248,7 @@ impl FocusManager {
     }
 
     /// Trapped-focus variant of [`dispatch`](Self::dispatch): identical routing, but
-    /// a [`PointerPressed`](crate::component::Event::PointerPressed) that misses every
-    /// focusable **keeps** the current focus instead of clearing it (see
+    /// a press that misses every focusable **keeps** the current focus instead of clearing it (see
     /// [`focus_at_trapped`](Self::focus_at_trapped)). For modal/overlay panels that
     /// trap focus — clicking the panel body must not blur the focused control.
     pub fn dispatch_trapped(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
@@ -260,12 +259,14 @@ impl FocusManager {
         if self.offer_to_overlay(root, ev) == Handled::Yes {
             return Handled::Yes;
         }
+        // Click-to-focus reads the **raw** press: focus is decided before the tree is told
+        // anything, so a widget that consumes the press is still the widget that has the keyboard.
         match ev {
-            Event::PointerPressed { pos } => {
+            Event::Raw(raw) if raw.kind == crate::event::RawPointerKind::Pressed => {
                 if trapped {
-                    self.focus_at_trapped(root, *pos);
+                    self.focus_at_trapped(root, raw.pos);
                 } else {
-                    self.focus_at(root, *pos);
+                    self.focus_at(root, raw.pos);
                 }
                 crate::component::dispatch(root, ev)
             }
@@ -276,6 +277,11 @@ impl FocusManager {
     /// Apply a target focus index across the tree. Fires `on_blur`/`on_focus`
     /// only on the components that actually change — those events add/remove the
     /// focus effect. `visible` = keyboard focus (ring shown) vs mouse.
+    /// The widget's hook runs first, then the **event** ([`Event::Focus`]/[`Event::Blur`]) reaches
+    /// the widget and its registered handlers. There was a `focused` signal and no event, so
+    /// nothing could act on the moment focus arrived or left — select the text on focus, commit an
+    /// edit on blur, close a dropdown when focus goes elsewhere. Delivered to the widget alone:
+    /// focus did not happen *at* a place, so there is nothing for it to bubble through.
     fn apply(&mut self, root: &mut dyn Component, target: Option<usize>, visible: bool) {
         let mut idx = 0;
         for_each_focusable(root, &mut idx, &mut |i, c| {
@@ -283,10 +289,18 @@ impl FocusManager {
             let has = c.base().focused.get_untracked();
             if want && !has {
                 c.on_focus(visible);
+                fire(c, &Event::Focus);
             } else if !want && has {
                 c.on_blur();
+                fire(c, &Event::Blur);
             }
         });
         self.focused = target;
     }
+}
+
+/// Deliver a focus/blur event to one widget: its handlers, then the widget itself.
+fn fire(c: &mut dyn Component, ev: &Event) {
+    let _ = c.base_mut().run_handlers(ev);
+    let _ = c.on_event(ev);
 }

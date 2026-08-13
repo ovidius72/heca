@@ -6,6 +6,21 @@
 mod contribution;
 pub(crate) mod context_menu;
 mod events;
+mod expose;
+pub(crate) use expose::register as register_expose;
+
+/// Re-register a **host-owned** named layer, so what it shows is current.
+///
+/// The one place a layer name maps to the code that rebuilds it. A layer whose content is derived
+/// from app state cannot be kept fresh by signals alone — those replace a prop, never a child — so
+/// it is rebuilt, and `add_named` replacing under the same name is what makes that safe.
+///
+/// An unknown name is a no-op: a plugin's layer is rebuilt by the plugin, not from here.
+pub(crate) fn rebuild_named_layer(state: &mut crate::app_state::AppState, name: &str) {
+    if Some(name) == layers::layer_name(layers::HOST_OWNER, "expose").as_deref() {
+        expose::register(state);
+    }
+}
 mod focus;
 mod host;
 mod layers;
@@ -15,7 +30,10 @@ mod state;
 // Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
 // confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
 #[allow(unused_imports)]
-pub(crate) use layers::{DynamicLayer, LayerBand, LayerId, LayerKind, LayerRegistry};
+pub(crate) use expose::record_expose_cursor;
+pub(crate) use layers::{
+    LayerBackdrop, LayerBand, LayerId, LayerKind, LayerRegistry,
+};
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
 // cannot depend on this binary. Re-exported here so the app keeps one path to the vocabulary.
@@ -28,7 +46,7 @@ pub(crate) use heca_view::{
 // can render a described tree, the showcase included. The app supplies the two seams it takes:
 // `ViewHintTargets` for pick registration, a wrapping closure for the click sink.
 #[allow(unused_imports)]
-pub(crate) use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
+pub(crate) use heca_view_realize::{realize, FormBindings, IntentEmitter};
 // Host-owned overlay stack (plugin-task-ui-4, §2.7.1/§2.7.2), built on `LayerRegistry`.
 // `OverlayId` is pub (carried by `WmAction`); the rest is crate-internal.
 pub use overlay::OverlayId;
@@ -160,7 +178,7 @@ use crate::providers::workspaces::{PaneEntry, WorkspaceTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{HintExt, LayoutExt, NavExt, Parent, StyleExt};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
@@ -445,11 +463,6 @@ pub(crate) struct RetainedPaneHeader {
     pub(crate) root: Flex,
     /// Content key (see [`pane_header_key`]) the tree was built from.
     pub(crate) key: String,
-    /// The contiguous [`HintTargetId`](heca_grid_ui::HintTargetId) range this header's
-    /// action buttons registered into the shared [`HintTargetRegistry`]. Removed from
-    /// the shared map when the header is rebuilt or its pane is pruned, so the universal
-    /// KeyHint picker (`prefix+/`) can target pane-header buttons without stale ids.
-    pub(crate) hint_range: std::ops::Range<usize>,
 }
 
 /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge).
@@ -478,6 +491,13 @@ pub(crate) struct RetainedPaneViewportWidgets {
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ActionShortcuts {
     by_action: std::collections::HashMap<String, Vec<String>>,
+    /// The same bindings kept **per layer** — `(layer label, action) → keys`.
+    ///
+    /// [`by_action`](Self#structfield.by_action) flattens every layer together, which is right for
+    /// a tooltip (*"what key runs this?"*) and wrong for a surface asking *"what key runs this **in
+    /// me**?"*. The exposé's cards need the second: their `x` is theirs, and a `close_pane_by_id`
+    /// bound somewhere else is not the card's gesture (F003/P082/T416).
+    by_layer: std::collections::HashMap<(String, String), Vec<String>>,
     /// How [`get`](ActionShortcuts::get) spells a binding for a **text** surface.
     style: crate::shortcut::KeyStyle,
 }
@@ -526,7 +546,47 @@ impl ActionShortcuts {
                 (!keys.is_empty()).then(|| (action.clone(), keys))
             })
             .collect();
-        Self { by_action, style }
+        // The same index again, kept by the layer each binding was written in, so a surface can ask
+        // for its own keys without a second reader of the config file.
+        let mut by_layer: std::collections::HashMap<(String, String), Vec<String>> =
+            std::collections::HashMap::new();
+        for (action, bound) in index {
+            for b in bound {
+                by_layer
+                    .entry((b.layer.clone(), action.clone()))
+                    .or_default()
+                    .push(b.key.clone());
+            }
+        }
+        Self { by_action, by_layer, style }
+    }
+
+    /// **The keys `action_name` answers to in one surface's own layer** — empty when that surface
+    /// binds it to nothing.
+    ///
+    /// `surface` is the surface's name (`heca.expose`, `workspaces`) and `action_name` is the
+    /// **short name as written in its entry** — `delete_pane`, not `heca.expose.delete_pane`. Both
+    /// halves of the stored key are rebuilt from the functions that wrote it: the layer label the
+    /// way [`build_component_keymaps`](crate::app::registry::build_component_keymaps) spells it,
+    /// and the action id through
+    /// [`surface_action_id`](crate::app::registry::surface_action_id) — so neither can drift into a
+    /// second spelling of one thing.
+    ///
+    /// This exists so a widget's own key handler can take its letters from config instead of
+    /// holding them as literals — the exposé's `x` / `r` / `d` were hardcoded in `chrome/expose.rs`
+    /// while the workspaces dock's identical `x` came from `keybindings.default.toml`.
+    ///
+    /// Args are empty here because this answers for the flat `action = "key"` form. The
+    /// arg-carrying `[[keys.surface.bind]]` form names its action in full, which
+    /// `surface_action_id` leaves alone either way.
+    pub(crate) fn in_surface(&self, surface: &str, action_name: &str) -> &[String] {
+        let label = format!("[[keys.surface]] {surface}");
+        let id = crate::app::registry::surface_action_id(
+            surface,
+            action_name,
+            &std::collections::HashMap::new(),
+        );
+        self.by_layer.get(&(label, id)).map_or(&[], Vec::as_slice)
     }
 
     /// Every binding of `action_name` as its **raw config key**, in the index's order — empty when
@@ -803,7 +863,6 @@ pub(crate) fn build_pane_header(
     font: f32,
     avail_w: f32,
     ctx: PaneHeaderCtx,
-    hints: &mut HintTargetRegistry,
 ) -> Option<Flex> {
     // The button set is a dynamic vector of descriptors (config-driven today,
     // plugin-extensible later) — the loop below never matches on a concrete action.
@@ -825,45 +884,37 @@ pub(crate) fn build_pane_header(
             } else {
                 (theme.colors.foreground, theme.colors.accent)
             };
-            // Register this button as a universal KeyHint target (prefix+/). The intent
-            // mirrors the click exactly: active-targeted buttons (zoom/float) focus this
-            // pane first via the composite intent, the rest carry their pane in the
-            // action. Registered per-button in the loop, so config-added / plugin-added
-            // buttons are hinted automatically — nothing hardcoded.
-            let hint_intent = if spec.needs_focus {
-                crate::app::interaction::InteractionIntent::FocusPaneThenAction {
-                    pane_id: ctx.pane_id,
-                    action: Box::new(spec.wm_action.clone()),
-                }
-            } else {
-                crate::app::interaction::InteractionIntent::ActivateAction(spec.wm_action.clone())
-            };
-            let hint_id = hints.register(hint_intent);
             let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
             let wm_action = spec.wm_action.clone();
             let needs_focus = spec.needs_focus;
+            // **One gesture, written once**: the click and the `prefix+/` pick both run this.
+            // Active-targeted actions (zoom/float) act on the focused pane, so it focuses this pane
+            // first — the events are queued and processed in order on the UI thread, so the action
+            // lands on this pane.
+            let fire = move || {
+                use crate::app::interaction::{InteractionIntent, InteractionSource};
+                if needs_focus {
+                    let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                        source: InteractionSource::MouseContent,
+                        intent: InteractionIntent::FocusPane { pane_id },
+                    });
+                }
+                let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                    source: InteractionSource::MouseContent,
+                    intent: InteractionIntent::ActivateAction(wm_action.clone()),
+                });
+            };
+            let peek = fire.clone();
             let button = IconButton::new(Icon::new(spec.glyph).color(icon_color))
                 .size(WidgetSize::Header)
                 .tone(tone)
                 .active(spec.is_active)
-                .hint_target(hint_id)
-                .on_click(move || {
-                    use crate::app::interaction::{InteractionIntent, InteractionSource};
-                    // Active-targeted actions (zoom/float) act on the focused pane, so
-                    // focus this pane first — the events are queued and processed in
-                    // order on the UI thread, so the action lands on this pane.
-                    if needs_focus {
-                        let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                            source: InteractionSource::MouseContent,
-                            intent: InteractionIntent::FocusPane { pane_id },
-                        });
-                    }
-                    let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                        source: InteractionSource::MouseContent,
-                        intent: InteractionIntent::ActivateAction(wm_action.clone()),
-                    });
-                });
+                .on_click(fire);
+            // **What a pick does to this button**, declared on the button itself: no id, no
+            // registry, and nothing for a config-added or plugin-added button to forget — the
+            // picker collects the declaration out of the laid-out tree.
+            let button = KeyHint::new(button).on_peek(peek);
             // Tooltip = label + the action's current keybind(s), resolved centrally
             // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL.
             row = row.child(action_tooltip(button, spec.action_name, spec.label, content.shortcuts));
@@ -1063,21 +1114,14 @@ pub(crate) fn sync_pane_viewport_widgets(
     state.pane_viewport_widgets.retain(|id, _| seen.contains(id));
 }
 
-/// Drop every retained pane header, first releasing the hint-target ids each one
-/// registered (so the shared [`HintTargetRegistry`] doesn't leak ranges). Used
-/// when headers are globally invalidated: the info-bar is turned off, or a config
-/// reload changes the theme/font baked into the trees (see `reload_config`, which
-/// mirrors this alongside `terminal_layers.clear()`). `sync_pane_headers` rebuilds
-/// them from scratch next frame.
+/// Drop every retained pane header. Used when headers are globally invalidated: the info-bar is
+/// turned off, or a config reload changes the theme/font baked into the trees (see `reload_config`,
+/// which mirrors this alongside `terminal_layers.clear()`). `sync_pane_headers` rebuilds them from
+/// scratch next frame.
+///
+/// Nothing has to be released with them: a header's pickable buttons declare what a pick does
+/// **on themselves** ([`PeekTarget`]), so a tree that is gone simply has no declarations left.
 pub(crate) fn clear_pane_headers(state: &mut crate::app_state::AppState) {
-    let ranges: Vec<_> = state
-        .pane_headers
-        .values()
-        .map(|h| h.hint_range.clone())
-        .collect();
-    for r in ranges {
-        state.hint_targets.remove_range(r);
-    }
     state.pane_headers.clear();
 }
 
@@ -1162,10 +1206,6 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
     }
 
     // Phase 2: build (if changed) + position each header (mutates `state.pane_headers`).
-    // The shared hint registry is taken out for the loop so headers can register their
-    // KeyHint targets into it (borrow-disjoint from the `&state` reads in `content`);
-    // it's restored at the end.
-    let mut hints = std::mem::take(&mut state.hint_targets);
     let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
     for input in &inputs {
         seen.insert(input.pane_id);
@@ -1190,25 +1230,17 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             .map(|h| h.key != key)
             .unwrap_or(true);
         if needs_build {
-            // Drop the hint ids the previous version of this header registered, then
-            // build the new one and record the fresh contiguous id range it registers.
-            if let Some(old) = state.pane_headers.get(&input.pane_id) {
-                hints.remove_range(old.hint_range.clone());
-            }
             let ctx = PaneHeaderCtx {
                 pane_id: input.pane_id,
                 ws_idx: input.ws_idx,
                 col_idx: input.col_idx,
                 event_proxy: state.event_proxy.clone(),
             };
-            let start = hints.checkpoint();
-            match build_pane_header(&content, &theme, font, input.avail_w, ctx, &mut hints) {
+            match build_pane_header(&content, &theme, font, input.avail_w, ctx) {
                 Some(root) => {
-                    let hint_range = start..hints.checkpoint();
-                    state.pane_headers.insert(
-                        input.pane_id,
-                        RetainedPaneHeader { root, key, hint_range },
-                    );
+                    state
+                        .pane_headers
+                        .insert(input.pane_id, RetainedPaneHeader { root, key });
                 }
                 None => {
                     state.pane_headers.remove(&input.pane_id);
@@ -1230,16 +1262,8 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             );
         }
     }
-    // Prune vanished panes, dropping the hint targets they had registered.
-    state.pane_headers.retain(|id, h| {
-        if seen.contains(id) {
-            true
-        } else {
-            hints.remove_range(h.hint_range.clone());
-            false
-        }
-    });
-    state.hint_targets = hints;
+    // Prune vanished panes.
+    state.pane_headers.retain(|id, _| seen.contains(id));
 }
 
 /// Translate a freshly-laid-out widget subtree (positioned from the origin by
@@ -1260,12 +1284,15 @@ fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
 /// the input this tree needs is not a per-caller choice.
 ///
 /// That choice is what kept breaking. A widget with a *gesture* needs the whole set or it fails in
-/// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives
-/// `PointerReleased` leaves its thumb welded to the cursor, and one that never receives `Scroll`
-/// simply does not scroll. Both are silent: it lays out, paints and hit-tests perfectly. The modal
-/// path used to forward `PointerMoved` and `PointerPressed` only, so both happened, and the fix
-/// had already been written twice elsewhere (`Dialog::event`, `dispatch_pane_viewport_release`)
-/// without the hole here being visible from either.
+/// a way nothing catches — a [`ScrollRegion`](heca_grid_ui::ScrollRegion) that never receives the
+/// release leaves its thumb welded to the cursor, and one that never receives the wheel simply
+/// does not scroll. Both are silent: it lays out, paints and hit-tests perfectly. The modal path
+/// used to forward the move and the press only, so both happened, and the fix had already been
+/// written twice elsewhere without the hole here being visible from either.
+///
+/// Since F004/P084/T394 there is only one pointer event to forward — [`Event::Raw`] — and the
+/// framework resolves it into whatever it meant. The set cannot go missing a kind because there
+/// are no longer kinds to choose between.
 ///
 /// So: a caller says *a pointer event happened*, not *which kinds this surface deigns to forward*.
 pub(crate) fn dispatch_modal_pointer(
@@ -1273,13 +1300,7 @@ pub(crate) fn dispatch_modal_pointer(
     ev: &Event,
 ) -> bool {
     debug_assert!(
-        matches!(
-            ev,
-            Event::PointerMoved { .. }
-                | Event::PointerPressed { .. }
-                | Event::PointerReleased { .. }
-                | Event::Scroll { .. }
-        ),
+        matches!(ev, Event::Raw(_)),
         "dispatch_modal_pointer is the pointer path; keys go through the keymap",
     );
     if top_modal(state).is_none() {
@@ -1310,7 +1331,7 @@ pub(crate) fn dispatch_pane_header_press(
         .map(|(id, _)| *id)?;
     let header = state.pane_headers.get_mut(&hit)?;
     let consumed =
-        heca_grid_ui::dispatch(&mut header.root, &Event::PointerPressed { pos: point })
+        heca_grid_ui::dispatch(&mut header.root, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes;
     Some((hit, consumed))
 }
@@ -1326,7 +1347,7 @@ pub(crate) fn dispatch_pane_header_move(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut over = false;
     for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerMoved { pos: point });
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_moved(point));
         if rect_contains(header.root.base().bounds, point) {
             over = true;
         }
@@ -1347,7 +1368,7 @@ pub(crate) fn dispatch_pane_header_release(
 ) {
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     for header in state.pane_headers.values_mut() {
-        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::PointerReleased { pos: point });
+        let _ = heca_grid_ui::dispatch(&mut header.root, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left));
     }
 }
 
@@ -1374,9 +1395,9 @@ pub(crate) fn dispatch_pane_viewport_press(
 ) -> bool {
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     for widgets in state.pane_viewport_widgets.values_mut() {
-        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerPressed { pos: point })
+        if heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes
-            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerPressed { pos: point })
+            || heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_pressed(point, heca_grid_ui::PointerButton::Left))
                 == heca_grid_ui::Handled::Yes
         {
             return true;
@@ -1394,9 +1415,9 @@ pub(crate) fn dispatch_pane_viewport_move(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut over = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerMoved { pos: point })
+        let badge_handled = heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_moved(point))
             == heca_grid_ui::Handled::Yes;
-        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerMoved { pos: point })
+        let scrollbar_handled = heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_moved(point))
             == heca_grid_ui::Handled::Yes;
         if badge_handled || scrollbar_handled {
             over = true;
@@ -1421,9 +1442,9 @@ pub(crate) fn dispatch_pane_viewport_release(
     let point = Point::new(pos.0 as f64, pos.1 as f64);
     let mut handled = false;
     for widgets in state.pane_viewport_widgets.values_mut() {
-        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::PointerReleased { pos: point })
+        handled |= heca_grid_ui::dispatch(&mut widgets.badge, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes;
-        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::PointerReleased { pos: point })
+        handled |= heca_grid_ui::dispatch(&mut widgets.scrollbar, &Event::pointer_released(point, heca_grid_ui::PointerButton::Left))
             == heca_grid_ui::Handled::Yes;
     }
     handled
@@ -1452,6 +1473,34 @@ pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
 /// state mutation. Handed to container providers through
 /// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
 pub(crate) type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
+
+/// **The intent sink for one layer's own retained tree** — the exposé's cards, a modal's buttons, a
+/// plugin panel's widgets (F003/P082/T416).
+///
+/// Every intent it posts is stamped [`InteractionSource::Surface`] with that layer's id, which is
+/// how [`domain_for`](crate::app::interaction::domain_for) tells "the surface holding the keyboard
+/// acted on itself" from "the user typed at the app behind it". The two arrive as the same event
+/// and only this stamp separates them.
+///
+/// One function rather than a closure per call site: there were three, and each had picked a
+/// *different* lie about where its intents came from — the exposé claimed `Keyboard`, the modal and
+/// the described-layer path claimed `MouseContent`. Three copies of one rule is a missing API
+/// (AGENTS ⭐⭐ Rule Zero), and here the copies had already drifted.
+///
+/// Take the id from [`LayerRegistry::reserve_id`](layers::LayerRegistry::reserve_id) when the tree
+/// has to be built before the layer is inserted, which is the usual case.
+pub(crate) fn layer_emitter(
+    event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    id: LayerId,
+) -> ChromeIntentEmitter {
+    let event_proxy = event_proxy.clone();
+    Rc::new(move |intent| {
+        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: crate::app::interaction::InteractionSource::Surface(id),
+            intent,
+        });
+    })
+}
 
 /// Transparent wrapper that marks only its own bounds dirty when the host bumps
 /// `request`. This lets retained chrome updates damage the specific card/marker/label
@@ -1644,14 +1693,13 @@ fn build_region_content(
     ctx: &crate::providers::ChromeCtx<'_>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
 ) -> Option<WidgetModel> {
     let mut bodies = host
         .contributions(region)
         .iter()
         .filter_map(|mounted| match mounted.provider().build_contribution(ctx) {
             Contribution::Container(c) => {
-                let mut bx = BuildCx::new(&c.id, signals, drag, hints);
+                let mut bx = BuildCx::new(&c.id, signals, drag);
                 let body = (c.build)(ctx, &mut bx);
                 // The share goes on the OUTERMOST node, so it has to be applied after the wrappers:
                 // a share set on the body would leave the wrapper content-sized and divide nothing
@@ -1789,26 +1837,26 @@ fn sidebar_toggle_button(
     action_name: &str,
     shortcuts: &ActionShortcuts,
     catalog: &crate::actions::ActionCatalog,
-    hints: &mut HintTargetRegistry,
     emit: ChromeIntentEmitter,
     color: Color,
 ) -> Tooltip {
     use crate::app::interaction::InteractionIntent;
     // Label from the action descriptor (catalog-owned), never re-spelled here.
     let label = catalog.label(action_name).unwrap_or(action_name);
-    // A hint target firing the *same* intent as a click, so `prefix+/` can pick this
-    // button by letter — every action button is both clickable and hintable.
-    let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
+    // One gesture: a click and a `prefix+/` pick both fire the button's action.
+    let fire = {
+        let emit = emit.clone();
+        let action = action.clone();
+        move || emit(InteractionIntent::ActivateAction(action.clone()))
+    };
+    let peek = fire.clone();
     // Just pick the size variant — the widget derives icon px + padding from the
     // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
     // `IconButton` scales its padding). No caller-side size math.
     let button = IconButton::new(Icon::new(glyph).color(color))
         .size(WidgetSize::Small)
-        .hint_target(hint_id)
-        .on_click(move || {
-            emit(InteractionIntent::ActivateAction(action.clone()));
-        });
-    action_tooltip(button, action_name, label, shortcuts)
+        .on_click(fire);
+    action_tooltip(KeyHint::new(button).on_peek(peek), action_name, label, shortcuts)
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
@@ -2064,22 +2112,96 @@ pub(crate) fn paint_link_hints(
 /// the opaque region(s) it paints over lower layers (from real layout — never hardcoded),
 /// and whether it is `modal` (a blocking context that suppresses everything beneath it).
 struct HintLayer {
-    band: LayerBand,
-    targets: Vec<(heca_grid_ui::HintTargetId, Rectangle)>,
+    targets: Vec<(PeekTarget, Rectangle)>,
     occluders: Vec<Rectangle>,
     modal: bool,
 }
 
-/// The single visibility rule (`docs/surface-compositor.md` §3): walk the layers
-/// **front → back**; a target is eligible iff it lies in `viewport` and its **centre** is
-/// not covered by any higher layer's occluder; a **modal** layer cuts off everything
-/// beneath it. This one rule subsumes every case — off-screen, hidden behind the sidebar,
-/// a zoomed/floating pane drawn over another, a modal over the whole app — and extends to
-/// new surfaces for free.
+/// **Which retained tree a peek declaration was collected from.** The app keeps several trees that
+/// rebuild on independent cadences — the chrome, one per pane header, one per registered layer —
+/// so a path alone does not say where to run it.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum PeekSurface {
+    /// The chrome tree (top bar, sidebars and everything a container contributed).
+    Chrome,
+    /// One pane's header tree.
+    PaneHeader(PaneId),
+    /// A dynamically registered layer (an exposé, a modal, a plugin panel).
+    Layer(super::chrome::layers::LayerId),
+}
+
+/// **One pickable region**: the tree it lives in and its path from that tree's root.
+///
+/// This is the whole of what a `prefix+/` candidate carries. It is deliberately *not* an id from a
+/// registry: nothing is registered, so nothing has to be un-registered when a tree is rebuilt or
+/// pruned, and there is no allocator whose ranges have to be kept in step with three rebuild
+/// cadences. A path is only meaningful for the tree it was read from, which is exactly the lifetime
+/// a pick has — the letters go up and one is chosen in the same breath. A tree rebuilt in between
+/// simply answers "nothing there" (`heca_grid_ui::fire_peek` returns `false`), which is not an
+/// error.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) struct PeekTarget {
+    pub(crate) surface: PeekSurface,
+    /// Child indices from the surface's root down to the declaring widget.
+    pub(crate) path: Vec<usize>,
+}
+
+impl PeekTarget {
+    fn new(surface: &PeekSurface, path: Vec<usize>) -> Self {
+        Self { surface: surface.clone(), path }
+    }
+}
+
+/// Run what the widget behind `target` said a pick does to it. `false` when its tree is gone or was
+/// rebuilt under the letters.
+pub(crate) fn fire_peek(state: &crate::app_state::AppState, target: &PeekTarget) -> bool {
+    let root: Option<&dyn heca_grid_ui::Component> = match &target.surface {
+        PeekSurface::Chrome => state.chrome_tree.as_ref().map(|t| &t.root as &dyn heca_grid_ui::Component),
+        PeekSurface::PaneHeader(pane_id) => state
+            .pane_headers
+            .get(pane_id)
+            .map(|h| &h.root as &dyn heca_grid_ui::Component),
+        PeekSurface::Layer(id) => state.layers.get(*id).map(|l| l.root()),
+    };
+    root.is_some_and(|root| heca_grid_ui::fire_peek(root, &target.path))
+}
+
+/// **Every peek declaration on screen, with its live bounds** — across all three kinds of retained
+/// tree, with no eligibility filter. What [`paint_peek_letters`] re-reads each frame so the keycaps
+/// track live layout; which targets are *eligible* was decided once, at pick time, by
+/// [`active_peek_targets`].
+fn collect_peek_targets(state: &crate::app_state::AppState) -> Vec<(PeekTarget, Rectangle)> {
+    let mut out = Vec::new();
+    if let Some(tree) = state.chrome_tree.as_ref() {
+        out.extend(peeks_of(&PeekSurface::Chrome, &tree.root));
+    }
+    for (&pane_id, header) in state.pane_headers.iter() {
+        out.extend(peeks_of(&PeekSurface::PaneHeader(pane_id), &header.root));
+    }
+    for layer in state.layers.visible_front_to_back() {
+        out.extend(peeks_of(&PeekSurface::Layer(layer.id), layer.root()));
+    }
+    out
+}
+
+/// The single visibility rule (`docs/surface-compositor.md` §3), both halves of it, in the order
+/// §2 keeps them: **coarse first, then fine.**
+///
+/// - **Coarse — context activation.** Walking front → back, the first **modal** layer is the active
+///   context, and everything beneath it is dormant: the walk stops there. This is what makes
+///   `prefix+/` under the exposé offer the map's cards and nothing else.
+/// - **Fine — geometric occlusion.** *Within* what the coarse rule left eligible, a target survives
+///   iff it lies in `viewport` and its **centre** is not covered by a higher surface's occluder.
+///
+/// The fine rule subsumes every case — off-screen, hidden behind the sidebar, a zoomed/floating
+/// pane drawn over another — and extends to new surfaces for free. The caller must hand `layers`
+/// in true front → back order; there is no sort here, because a second ordering is a second answer
+/// to "what is in front", and the two drifted once already (2026-08-11: input and painting
+/// disagreed about which layer was frontmost).
 fn resolve_hint_layers(
-    layers: &[HintLayer],
+    layers: Vec<HintLayer>,
     viewport: Rectangle,
-) -> Vec<(heca_grid_ui::HintTargetId, Rectangle)> {
+) -> Vec<(PeekTarget, Rectangle)> {
     let covers = |r: &Rectangle, x: f64, y: f64| {
         x >= r.loc.x && x < r.loc.x + r.size.w && y >= r.loc.y && y < r.loc.y + r.size.h
     };
@@ -2088,7 +2210,7 @@ fn resolve_hint_layers(
     let mut kept = Vec::new();
     let mut occluders: Vec<Rectangle> = Vec::new();
     for layer in layers {
-        for &(id, b) in &layer.targets {
+        for (target, b) in layer.targets {
             let in_view = b.loc.x < vr
                 && b.loc.x + b.size.w > viewport.loc.x
                 && b.loc.y < vb
@@ -2096,7 +2218,7 @@ fn resolve_hint_layers(
             let cx = b.loc.x + b.size.w / 2.0;
             let cy = b.loc.y + b.size.h / 2.0;
             if in_view && !occluders.iter().any(|o| covers(o, cx, cy)) {
-                kept.push((id, b));
+                kept.push((target, b));
             }
         }
         occluders.extend(layer.occluders.iter().copied());
@@ -2107,14 +2229,90 @@ fn resolve_hint_layers(
     kept
 }
 
+/// The coarse half of §3 — the half that was missing, and the whole of F003/P082/T416's picker
+/// defect. Held here rather than in a behaviour test because the rule is a pure function of the
+/// stack, and because the failure it guards was invisible on screen: the letters were painted
+/// *under* the exposé while the targets they named answered normally.
+#[cfg(test)]
+mod hint_visibility {
+    use super::*;
+
+    /// A target somewhere harmless, named by a path so two of them are never equal.
+    fn target(path: usize, x: f64) -> (PeekTarget, Rectangle) {
+        (
+            PeekTarget { surface: PeekSurface::Chrome, path: vec![path] },
+            Rectangle::new(Point::new(x, 10.0), Size::new(20.0, 20.0)),
+        )
+    }
+
+    fn viewport() -> Rectangle {
+        Rectangle::new(Point::new(0.0, 0.0), Size::new(1000.0, 800.0))
+    }
+
+    /// **The defect this task exists for.** With the exposé up, `prefix+/` offered the sidebar's
+    /// rows — the letters were invisible under the map, so a keystroke drove a surface the user
+    /// could not see (Antonio, 2026-08-12). A modal layer is the active context: everything
+    /// beneath it is dormant, and dormant surfaces are not pickable.
+    #[test]
+    fn a_modal_layer_is_the_active_context_and_nothing_beneath_it_is_pickable() {
+        let stack = vec![
+            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: true },
+            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
+        ];
+        let kept = resolve_hint_layers(stack, viewport());
+        assert_eq!(kept.len(), 1, "only the active context's own targets survive");
+        assert_eq!(kept[0].0.path, vec![0]);
+    }
+
+    /// The counterpart, so the rule above cannot be satisfied by suppressing everything: a layer
+    /// that does **not** take the keyboard leaves the surfaces beneath it live. This is what keeps
+    /// the sidebar hintable while a pane is zoomed or a toast is up.
+    #[test]
+    fn a_non_modal_layer_leaves_what_is_beneath_it_pickable() {
+        let stack = vec![
+            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: false },
+            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
+        ];
+        assert_eq!(resolve_hint_layers(stack, viewport()).len(), 2);
+    }
+
+    /// Coarse first, then fine — both, not one. Within the active context a target is still
+    /// dropped when a surface in front of it covers its centre.
+    #[test]
+    fn occlusion_still_applies_inside_the_active_context() {
+        let stack = vec![
+            HintLayer {
+                targets: vec![target(0, 0.0)],
+                occluders: vec![Rectangle::new(Point::new(90.0, 0.0), Size::new(200.0, 100.0))],
+                modal: false,
+            },
+            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: true },
+        ];
+        let kept = resolve_hint_layers(stack, viewport());
+        assert_eq!(kept.len(), 1, "the covered target is dropped, the covering one kept");
+        assert_eq!(kept[0].0.path, vec![0]);
+    }
+
+    /// A target scrolled off the window is not pickable however live its surface is.
+    #[test]
+    fn a_target_outside_the_viewport_is_dropped() {
+        let stack = vec![HintLayer {
+            targets: vec![target(0, 5_000.0)],
+            occluders: vec![],
+            modal: false,
+        }];
+        assert!(resolve_hint_layers(stack, viewport()).is_empty());
+    }
+}
+
 /// Build the current surface stack (front → back) and resolve the reachable hint targets
 /// for the universal picker. **The one place hint visibility is decided.** The stack
 /// mirrors the paint order so hints match what is visually on top; adding a new surface
 /// (overlay / exposé / …) means adding a layer here, never a bespoke filter. See
 /// `docs/surface-compositor.md`.
-pub(crate) fn active_hint_targets(
+pub(crate) fn active_peek_targets(
     state: &crate::app_state::AppState,
-) -> Vec<(heca_grid_ui::HintTargetId, Rectangle)> {
+) -> Vec<(PeekTarget, Rectangle)> {
     let (vw, vh) = {
         let phys = state.window.inner_size();
         let s = state.scale_factor;
@@ -2132,8 +2330,24 @@ pub(crate) fn active_hint_targets(
 
     let mut layers: Vec<HintLayer> = Vec::new();
 
-    // (Overlays — the context menu + the destructive-confirm dialog — are now
-    //  dynamically-registered overlay-band layers, collected in step 4.)
+    // The stack is assembled **front → back, in paint order reversed** — layers, then the chrome
+    // shell, then the panes. That is literally how the frame is drawn (`render.rs`: chrome scene,
+    // then `paint_layers` into a scene flushed after it), so building the stack this way makes the
+    // two agree by construction instead of by a second ordering rule that has to be kept in step.
+    //
+    // 1. Dynamically registered layers (the exposé, the context menu, the confirm dialog, a plugin
+    //    panel), front → back among themselves. Their targets and occluder come from their
+    //    laid-out tree, never a constant. The first **modal** one among them is the active context
+    //    and `resolve_hint_layers` stops there — which is what suppresses the chrome and the panes
+    //    beneath an exposé.
+    for layer in state.layers.visible_front_to_back() {
+        let bounds = layer.root().base().bounds;
+        layers.push(HintLayer {
+            targets: peeks_of(&PeekSurface::Layer(layer.id), layer.root()),
+            occluders: vec![bounds],
+            modal: layer.modal,
+        });
+    }
 
     // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
     //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
@@ -2142,8 +2356,7 @@ pub(crate) fn active_hint_targets(
         let (cl, ct) = (content.loc.x, content.loc.y);
         let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
         layers.push(HintLayer {
-            band: LayerBand::Overlay,
-            targets: heca_grid_ui::collect_hint_targets(&tree.root),
+            targets: peeks_of(&PeekSurface::Chrome, &tree.root),
             occluders: vec![
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(cl, vh)), // left sidebar
@@ -2166,8 +2379,7 @@ pub(crate) fn active_hint_targets(
             continue;
         };
         layers.push(HintLayer {
-            band: LayerBand::Content,
-            targets: heca_grid_ui::collect_hint_targets(&header.root),
+            targets: peeks_of(&PeekSurface::PaneHeader(pane_id), &header.root),
             occluders: vec![Rectangle::new(
                 Point::new(x as f64, y as f64),
                 Size::new(w as f64, h as f64),
@@ -2176,32 +2388,25 @@ pub(crate) fn active_hint_targets(
         });
     }
 
-    // 4. Dynamically registered layers (on-demand exposé, plugin panel). They join the
-    //    same stack by their band; their targets + occluder come from their laid-out tree.
-    for layer in state.layers.visible_front_to_back() {
-        let bounds = layer.root.base().bounds;
-        layers.push(HintLayer {
-            band: layer.band,
-            targets: heca_grid_ui::collect_hint_targets(layer.root.as_ref()),
-            occluders: vec![bounds],
-            modal: layer.modal,
-        });
-    }
-
-    // Order the whole stack front → back by band (Modal in front … Background at the back),
-    // stable so within-band order — built-ins before dynamics, and the draw order among
-    // panes (zoomed/float on top) — is preserved.
-    layers.sort_by_key(|l| std::cmp::Reverse(l.band.rank()));
-
-    resolve_hint_layers(&layers, viewport)
+    resolve_hint_layers(layers, viewport)
 }
 
-/// Paint the universal hint-picker overlay (`prefix+/`): a glowing keycap over every
-/// actionable chrome target, driven by `InputMode::HintPick`. Target bounds are
-/// re-collected from the retained tree each frame and matched to the mode's candidates
-/// by opaque id, so the keycaps track layout. Mirrors [`paint_link_hints`]. No-op when
-/// the picker isn't active.
-pub(crate) fn paint_hint_targets(
+/// One surface's peek declarations, addressed by [`PeekTarget`].
+fn peeks_of(
+    surface: &PeekSurface,
+    root: &dyn heca_grid_ui::Component,
+) -> Vec<(PeekTarget, Rectangle)> {
+    heca_grid_ui::collect_peeks(root)
+        .into_iter()
+        .map(|(path, bounds)| (PeekTarget::new(surface, path), bounds))
+        .collect()
+}
+
+/// Paint the universal picker overlay (`prefix+/`): a glowing keycap over every pickable region,
+/// driven by `InputMode::HintPick`. Bounds are re-collected from the retained trees each frame and
+/// matched to the mode's candidates by [`PeekTarget`], so the keycaps track layout. Mirrors
+/// [`paint_link_hints`]. No-op when the picker isn't active.
+pub(crate) fn paint_peek_letters(
     state: &crate::app_state::AppState,
     scene: &mut Scene,
     w: f32,
@@ -2211,31 +2416,18 @@ pub(crate) fn paint_hint_targets(
     let crate::app_state::InputMode::HintPick { candidates } = &state.input_mode else {
         return;
     };
-    // Look up the current bounds of every candidate id. Collect from the SAME surfaces the
-    // picker resolves over (`active_hint_targets`) — chrome, per-pane headers, and any open
-    // overlay — keyed by the shared globally-unique id, re-collected each frame so keycaps
-    // track live layout. Which ids are *eligible* was already decided at pick time; here we
-    // only need their live bounds.
-    let mut bounds_by_id: std::collections::HashMap<heca_grid_ui::HintTargetId, Rectangle> =
-        std::collections::HashMap::new();
-    if let Some(tree) = state.chrome_tree.as_ref() {
-        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(&tree.root));
-    }
-    for header in state.pane_headers.values() {
-        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(&header.root));
-    }
-    // Dynamically-registered layers (overlay dialogs incl. the confirm prompt, plugin panels):
-    // collect their targets
-    // too, so an overlay's buttons show keycaps like any other surface.
-    for layer in state.layers.visible_front_to_back() {
-        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(layer.root.as_ref()));
-    }
-    if bounds_by_id.is_empty() {
+    // Look up the current bounds of every candidate. Collected from the SAME surfaces the picker
+    // resolves over (`collect_peek_targets`) — chrome, per-pane headers and every visible layer —
+    // and re-read each frame so the keycaps track live layout. Which targets are *eligible* was
+    // already decided at pick time; here we only need where they are now.
+    let bounds_by_target: std::collections::HashMap<PeekTarget, Rectangle> =
+        collect_peek_targets(state).into_iter().collect();
+    if bounds_by_target.is_empty() {
         return;
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    for (label, id) in candidates {
-        let Some(bounds) = bounds_by_id.get(id) else {
+    for (label, target) in candidates {
+        let Some(bounds) = bounds_by_target.get(target) else {
             continue;
         };
         let text = label.to_string();
@@ -2308,7 +2500,17 @@ pub(crate) fn paint_layers(
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     for layer in layers {
-        layer.root.paint(&mut cx);
+        // A layer on its way out paints at falling opacity rather than vanishing between two
+        // frames, and a layer that declared a zoom paints at its current scale. `PaintCx` applies
+        // both to every command it emits, so the layer's own widgets know nothing about either —
+        // they are things done *to* a surface.
+        //
+        // The zoom's fixed point is the middle of the window: an overview belongs to the whole
+        // screen, so it grows from and shrinks toward the centre rather than a corner.
+        let centre = Point::new(w as f64 / 2.0, h as f64 / 2.0);
+        cx.with_opacity(layer.opacity(), |cx| {
+            cx.with_scale(layer.scale(), centre, |cx| layer.root().paint(cx))
+        });
     }
 }
 
@@ -2715,11 +2917,6 @@ pub(crate) struct RetainedChrome {
     /// is* (pane / column / workspace). Populated during [`build_chrome_root`] and
     /// queried by [`sidebar_drag_source`]/[`sidebar_drop_target`].
     pub(crate) drag_items: DragItemRegistry,
-    /// The contiguous [`HintTargetId`](heca_grid_ui::HintTargetId) range this tree
-    /// registered into the shared [`HintTargetRegistry`] on
-    /// [`AppState`](crate::app_state::AppState). Removed from the shared map when the
-    /// tree is rebuilt (see the chrome-rebuild path in `render.rs`).
-    pub(crate) hint_range: std::ops::Range<usize>,
 }
 
 /// What a sidebar [`DragItemId`] refers to. The drag framework is domain-neutral
@@ -2764,110 +2961,52 @@ impl DragItemRegistry {
     }
 }
 
-/// **Shared** allocator + map from each hint target's opaque [`HintTargetId`] to the
-/// [`InteractionIntent`](crate::app::interaction::InteractionIntent) the host fires when
-/// its picker letter is chosen. Lives on [`AppState`](crate::app_state::AppState) so it
-/// spans **every** retained tree that carries hint targets — the chrome tree AND each
-/// per-pane header tree — which rebuild on independent cadences.
+/// **Fire a named gesture**: the closure that emits `intent` through this surface's chrome sink.
 ///
-/// Ids come from a **monotonic** counter (never reused), so ids from different trees can
-/// never collide even though the trees rebuild at different times. Each tree records the
-/// contiguous [`Range`](std::ops::Range) of ids it registered and calls
-/// [`remove_range`](HintTargetRegistry::remove_range) when it is rebuilt or pruned, so the
-/// map only ever holds live targets. Parallel to [`DragItemRegistry`]; the grid-ui hint
-/// framework is domain-neutral (ids are opaque) and this app-side map gives them meaning.
-#[derive(Default, Clone)]
-pub(crate) struct HintTargetRegistry {
-    /// Next id to hand out (monotonic; never reset, so ids are globally unique).
-    next: usize,
-    /// Live targets only — stale ids are removed on their tree's rebuild/prune.
-    intents:
-        std::collections::HashMap<heca_grid_ui::HintTargetId, crate::app::interaction::InteractionIntent>,
-}
-
-impl HintTargetRegistry {
-    /// Register an actionable target's intent and return its freshly-allocated id.
-    pub(crate) fn register(
-        &mut self,
-        intent: crate::app::interaction::InteractionIntent,
-    ) -> heca_grid_ui::HintTargetId {
-        let id = heca_grid_ui::HintTargetId::new(self.next);
-        self.next += 1;
-        self.intents.insert(id, intent);
-        id
-    }
-
-    /// The id the next [`register`](HintTargetRegistry::register) will hand out — take a
-    /// checkpoint before and after building a tree to capture the contiguous id range it
-    /// registered.
-    pub(crate) fn checkpoint(&self) -> usize {
-        self.next
-    }
-
-    /// Drop every id in `range` (a tree's previously-registered block) — called when that
-    /// tree is rebuilt or pruned so the map never accumulates stale targets.
-    pub(crate) fn remove_range(&mut self, range: std::ops::Range<usize>) {
-        for i in range {
-            self.intents.remove(&heca_grid_ui::HintTargetId::new(i));
-        }
-    }
-
-    /// The intent for `id` (`None` if it is not a live target).
-    pub(crate) fn get(
-        &self,
-        id: heca_grid_ui::HintTargetId,
-    ) -> Option<&crate::app::interaction::InteractionIntent> {
-        self.intents.get(&id)
-    }
-}
-
-/// The app's side of `realize`'s [`HintTargets`] seam: it hands over a view [`Intent`], and the
-/// carrier is added here.
-///
-/// The registry itself is untouched and keeps storing [`InteractionIntent`](crate::app::interaction::InteractionIntent) —
-/// it is **shared**, and `overlay` registers modal buttons carrying `ActivateAction`, which is not
-/// a view intent at all. Only this adapter knows both sides (F003/P017/T009).
-pub(crate) struct ViewHintTargets<'a>(pub(crate) &'a mut HintTargetRegistry);
-
-impl HintTargets for ViewHintTargets<'_> {
-    fn register(&mut self, intent: Intent) -> heca_grid_ui::HintTargetId {
-        self.0
-            .register(crate::app::interaction::InteractionIntent::View(intent))
-    }
-}
-
-/// Wire a row's **named** gesture: the hint-target id to attach and the closure to hand
-/// `on_activate`, both carrying the one [`Intent`] (F003/P086/T365).
-///
-/// This is `realize`'s `press_intent` for native code — deliberately the same two lines, so the two
+/// This is `realize`'s `emit(intent)` for native code — deliberately the same one line, so the two
 /// authoring paths produce the same wiring:
 ///
 /// ```ignore
-/// // declarative (heca-view-realize):        native (here):
-/// if let Some((id, carrier)) =               let (id, press) =
-///     press_intent(node, hints) { … }            named_press(intent, emit, hints);
-/// row.hint_target(id)                        row.hint_target(id)
-///    .on_activate(move || emit(carrier))        .on_activate(press)
+/// // declarative (heca-view-realize):     native (here):
+/// row.on_press(intent)                    row.on_activate(fires(mount, intent, emit))
+/// row.on_peek(intent)                     KeyHint::new(row).on_peek(fires(mount, intent, emit))
 /// ```
 ///
-/// **Why a name and not a closure.** A closure is reachable from exactly one place: the click that
-/// captured it. An `Intent` is an action id plus arguments, so the same gesture answers a click, a
-/// `prefix+/` pick, a menu entry, a keybinding and an RPC call, is routed by the action's own
-/// policy, and passes the destructive-confirm gate — none of which a closure can be. It is also the
-/// only form that crosses a plugin boundary, so a native row and a WASM row declare their clicks
-/// the same way.
-pub(crate) fn named_press(
-    intent: Intent,
+/// **Why a name and not a closure.** A closure is reachable from exactly one place: the gesture
+/// that captured it. An [`Intent`] is an action id plus arguments, so the same declaration answers
+/// a click, a menu entry, a keybinding and an RPC call, is routed by the action's own policy, and
+/// passes the destructive-confirm gate — none of which a closure can be. It is also the only form
+/// that crosses a plugin boundary, so a native row and a WASM row declare their gestures the same
+/// way.
+///
+/// **`mount` is not ceremony — it is which element this is.** A widget is built inside one mounted
+/// container and the gesture it declares carries that seating
+/// ([`SEAT_ARG`](crate::providers::SEAT_ARG)), so the same container seated twice has two rows that
+/// each answer for themselves. It is a parameter rather than something a caller may add, because a
+/// rule a caller has to remember is a rule that gets forgotten: without it the host had to resolve
+/// the call back to an instance by guessing (focused seat, else last focused, else the first one
+/// that declares the name), and a right-sidebar row was performed by the left-sidebar copy. Every
+/// call site already holds its mount — it is what `BuildCx::container_id` hands a component.
+///
+/// It replaced `named_press`, which handed back **one** intent for both the click and the
+/// `prefix+/` pick. Those are different gestures — a click on a sidebar row means *go there and
+/// leave*, a pick means *look at that one* — and serving both from one declaration is what made
+/// `prefix+/` walk out of the sidebar (F004/P084/T399).
+pub(crate) fn fires(
+    mount: &str,
+    mut intent: Intent,
     emit: &ChromeIntentEmitter,
-    hints: &mut HintTargetRegistry,
-) -> (heca_grid_ui::HintTargetId, impl Fn() + 'static) {
-    let id = ViewHintTargets(hints).register(intent.clone());
+) -> impl Fn() + 'static {
+    intent.args.insert(
+        crate::providers::SEAT_ARG.to_string(),
+        heca_view::PropValue::Text(mount.to_string()),
+    );
     let emit = emit.clone();
-    (id, move || {
+    move || {
         emit(crate::app::interaction::InteractionIntent::View(
             intent.clone(),
         ))
-    })
+    }
 }
 
 /// Handles to the retained chrome tree's **value** signals — the state that changes
@@ -2879,6 +3018,11 @@ pub(crate) fn named_press(
 pub(crate) struct ChromeSignals {
     /// Each pane card's `active` signal, keyed by pane id.
     pub(crate) pane_active: Vec<(PaneId, Signal<bool>)>,
+    /// **"You were just here"** per pane — the mark back-and-forth would return to. Bound like
+    /// [`pane_active`](Self::pane_active) because it changes on *focus*, which deliberately does
+    /// not rebuild the tree (`chrome_signature` excludes it): read as a plain bool at build time it
+    /// would freeze at whatever it was when the sidebar was last rebuilt.
+    pub(crate) pane_previous: Vec<(PaneId, Signal<bool>)>,
     /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
     /// iff it contains the active pane).
     pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
@@ -2886,6 +3030,9 @@ pub(crate) struct ChromeSignals {
     /// iff it contains the active pane). Drives the active-workspace accent wash in
     /// place, mirroring [`col_active`](ChromeSignals::col_active).
     pub(crate) ws_active: Vec<(Vec<PaneId>, Signal<bool>)>,
+    /// **The workspace `prefix+Shift+i` would return to**, by index. Bound like
+    /// [`ws_active`](Self::ws_active) because it changes on focus, which does not rebuild the tree.
+    pub(crate) ws_previous: Vec<(usize, Signal<bool>)>,
     /// Every navigable row's cursor-outline signal, as `(mount, nav_key, signal)` — driven from
     /// that **mount's** cursor (`container_cursor`), which is why the mount is part of the key.
     ///
@@ -3133,6 +3280,24 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             changed = true;
         }
     }
+    // The same sync for the back-and-forth mark, from the field `prefix+i` itself reads.
+    for (pid, sig) in &retained.signals.pane_previous {
+        let v = state.chrome_state.workspaces.is_previous_pane(*pid) && active != Some(*pid);
+        if sig.get_untracked() != v {
+            sig.set(v);
+            changed = true;
+        }
+    }
+    // The workspace back-and-forth would take you to — the frame says *which* workspace, the pane
+    // mark inside it says which pane. Two levels of one answer.
+    let previous_ws = state.chrome_state.workspaces.previous_ws();
+    for (idx, sig) in &retained.signals.ws_previous {
+        let v = Some(*idx) == previous_ws;
+        if sig.get_untracked() != v {
+            sig.set(v);
+            changed = true;
+        }
+    }
     for (pids, sig) in &retained.signals.col_active {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
@@ -3354,7 +3519,6 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
 pub(crate) fn build_chrome_root(
     state: &crate::app_state::AppState,
     chrome: ChromeConfig,
-    hint_targets: &mut HintTargetRegistry,
 ) -> (Flex, ChromeSignals, DragItemRegistry) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
@@ -3396,6 +3560,7 @@ pub(crate) fn build_chrome_root(
         crate::host::App::new(&state.chrome_state),
         &theme,
         &emit_intent,
+        &state.action_catalog,
     );
 
     let left_w = chrome.left_sidebar_width;
@@ -3406,7 +3571,6 @@ pub(crate) fn build_chrome_root(
             &ctx,
             &mut signals,
             &mut drag_items,
-            hint_targets,
         );
         build_sidebar_shell(
             left_w,
@@ -3427,7 +3591,6 @@ pub(crate) fn build_chrome_root(
             &ctx,
             &mut signals,
             &mut drag_items,
-            hint_targets,
         );
         build_sidebar_shell(
             right_w,
@@ -3457,7 +3620,6 @@ pub(crate) fn build_chrome_root(
             "sidebar_left",
             &state.action_shortcuts,
             &state.action_catalog,
-            hint_targets,
             emit_intent.clone(),
             theme.colors.muted,
         )
@@ -3474,7 +3636,6 @@ pub(crate) fn build_chrome_root(
             "sidebar_right",
             &state.action_shortcuts,
             &state.action_catalog,
-            hint_targets,
             emit_intent.clone(),
             theme.colors.muted,
         )
@@ -3520,16 +3681,102 @@ pub(crate) fn chrome_dispatch_press(
     state: &mut crate::app_state::AppState,
     pos: (f32, f32),
 ) -> bool {
+    chrome_dispatch_button_press(state, pos, heca_grid_ui::PointerButton::Left)
+}
+
+/// The same, for a **named button** — so a right-press reaches the tree instead of being read off
+/// it from the outside.
+///
+/// A press carries its button now, which is what makes a widget able to answer a right-click at
+/// all. The app still has its own menu path behind this (F004/P084/T395 is what removes it); this
+/// is the door that lets a widget claim the press before any of that runs.
+pub(crate) fn chrome_dispatch_button_press(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+    button: heca_grid_ui::PointerButton,
+) -> bool {
     state
         .chrome_tree
         .as_mut()
         .map(|tree| {
             heca_grid_ui::dispatch(
                 &mut tree.root,
-                &Event::PointerPressed { pos: Point::new(pos.0 as f64, pos.1 as f64) },
+                &Event::pointer_pressed(Point::new(pos.0 as f64, pos.1 as f64), button),
             ) == heca_grid_ui::Handled::Yes
         })
         .unwrap_or(false)
+}
+
+/// Deliver a **button release** to the chrome tree.
+///
+/// The other half of [`chrome_dispatch_button_press`], and not optional: the framework synthesises
+/// `Click` / `RightClick` from a press **and** a release on the same widget, so a host that
+/// delivers only presses produces no clicks at all — a declared context menu would never open, and
+/// a widget that captured the press would never learn the gesture ended.
+pub(crate) fn chrome_dispatch_button_release(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+    button: heca_grid_ui::PointerButton,
+) -> bool {
+    state
+        .chrome_tree
+        .as_mut()
+        .map(|tree| {
+            heca_grid_ui::dispatch(
+                &mut tree.root,
+                &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), button),
+            ) == heca_grid_ui::Handled::Yes
+        })
+        .unwrap_or(false)
+}
+
+/// **Open the menu declared nearest the focused widget**, bubbling outwards — the keyboard
+/// counterpart of an unclaimed right-click (F004/P084/T395).
+///
+/// Returns whether anything declared one. The action that calls this used to mean "the focused
+/// pane's menu"; it now means "the focused widget's", which is what makes one binding work for a
+/// pane, a column, a workspace and a plugin's own row without the host knowing any of them exist.
+pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppState) -> bool {
+    // **Where the keyboard is, in a chrome surface, is the focused container's cursor** — the
+    // `nav_key` of the row it sits on. That is the half only the host knows, so it is the half the
+    // host passes; `open_for_keyboard` owns the rest, including falling back to a genuinely focused
+    // widget (a plugin's input) when the cursor names nothing.
+    let cursor = {
+        use heca_grid_ui::reactive::SignalGet as _;
+        state
+            .chrome_state
+            .focused_container()
+            .and_then(|mount| state.chrome_state.container_cursor(&mount).get())
+    };
+    let Some(tree) = state.chrome_tree.as_ref() else {
+        return false;
+    };
+    heca_grid_ui::open_for_keyboard(&tree.root, cursor.as_deref())
+}
+
+/// Mount every menu a widget declared and asked to open since the last frame.
+///
+/// The other half of the sink installed at startup: the widget layer cannot reach a layer, so it
+/// queues, and the host drains. One place, called once a frame, so a menu opened from a click, from
+/// a key, or from a widget's own timer all arrive the same way.
+pub(crate) fn drain_pending_menus(state: &mut crate::app_state::AppState) {
+    let queued: Vec<_> = state.pending_menus.borrow_mut().drain(..).collect();
+    for (menu, anchor) in queued {
+        overlay::present_menu(state, menu, anchor);
+    }
+}
+
+/// Tell every retained tree the pointer is gone: hover clears, any capture or drag ends.
+///
+/// One call per tree the host mounts, because each keeps its own hover — that is the point of the
+/// state living on the widgets rather than in one router the host would have to own.
+pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, ev: &Event) {
+    if let Some(tree) = state.chrome_tree.as_mut() {
+        let _ = heca_grid_ui::dispatch(&mut tree.root, ev);
+    }
+    for header in state.pane_headers.values_mut() {
+        let _ = heca_grid_ui::dispatch(&mut header.root, ev);
+    }
 }
 
 /// Which container a point is inside, or `None` when it is outside every one (F003/P086/T365).
@@ -3559,9 +3806,7 @@ pub(crate) fn nav_key_at(state: &crate::app_state::AppState, pos: (f32, f32)) ->
 /// release ends the gesture wherever the cursor drifted to.
 pub(crate) fn chrome_dispatch_release(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::PointerReleased {
-            pos: Point::new(pos.0 as f64, pos.1 as f64),
-        });
+        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_released(Point::new(pos.0 as f64, pos.1 as f64), heca_grid_ui::PointerButton::Left));
     }
 }
 
@@ -3610,9 +3855,7 @@ pub(crate) fn chrome_dispatch_widget(
 /// and must persist across moves; the caller already requests a repaint.
 pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
-        heca_grid_ui::dispatch(&mut tree.root, &Event::PointerMoved {
-            pos: Point::new(pos.0 as f64, pos.1 as f64),
-        });
+        heca_grid_ui::dispatch(&mut tree.root, &Event::pointer_moved(Point::new(pos.0 as f64, pos.1 as f64)));
     }
 }
 
@@ -4284,7 +4527,6 @@ mod tests {
         chrome: &SharedChromeState,
         signals: &mut super::ChromeSignals,
         drag: &mut super::DragItemRegistry,
-        hints: &mut super::HintTargetRegistry,
     ) -> Option<super::WidgetModel> {
         let mut host = super::ChromeHost::new(chrome.events());
         host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
@@ -4292,12 +4534,14 @@ mod tests {
         // The component reads its model from its own state, so the fixture puts it there rather
         // than handing it to the context (F003/P086/T367).
         *chrome.workspaces.tree_mut() = tree.clone();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
         let ctx = crate::providers::ChromeCtx::for_build(
             crate::host::App::new(chrome),
             theme,
             &emit,
+            &catalog,
         );
-        super::build_region_content(&host, super::RegionId::LeftSidebar, &ctx, signals, drag, hints)
+        super::build_region_content(&host, super::RegionId::LeftSidebar, &ctx, signals, drag)
     }
 
     #[test]
@@ -4319,7 +4563,6 @@ mod tests {
             &chrome,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
-            &mut super::HintTargetRegistry::default(),
         );
         assert!(
             content.is_some(),
@@ -4382,7 +4625,6 @@ mod tests {
             &chrome,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
-            &mut super::HintTargetRegistry::default(),
         );
         let mut shell = super::build_sidebar_shell(
             280.0,
@@ -4429,7 +4671,6 @@ mod tests {
             &chrome,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
-            &mut super::HintTargetRegistry::default(),
         );
         let mut shell = super::build_sidebar_shell(
             280.0,
@@ -4485,7 +4726,6 @@ mod tests {
             &chrome,
             &mut signals,
             &mut super::DragItemRegistry::default(),
-            &mut super::HintTargetRegistry::default(),
         );
         let mut shell = super::build_sidebar_shell(
             280.0,
@@ -4533,7 +4773,6 @@ mod tests {
             &chrome,
             &mut super::ChromeSignals::default(),
             &mut drag,
-            &mut super::HintTargetRegistry::default(),
         );
 
         let items = drag.items();

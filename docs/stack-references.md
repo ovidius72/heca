@@ -9,3 +9,4 @@
 - <https://github.com/p4ymak/egui_code_editor>
 - <https://areweguiyet.com/>
 - <https://uianatomy.dev/>
+- <https://github.com/zenbu-labs/terminal-browser>

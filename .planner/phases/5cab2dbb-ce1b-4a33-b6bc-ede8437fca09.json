@@ -24,7 +24,8 @@
   "taskIds": [
     "479bf80c-6b3d-4e28-8df1-19f509eb3569",
     "967a121b-9003-4abe-bc42-294f25b6fb90",
-    "c511a0ad-6883-4b81-a160-c1e6c97516ed"
+    "c511a0ad-6883-4b81-a160-c1e6c97516ed",
+    "8174e5c6-8b47-4cd9-a11a-f00eb1bf141c"
   ],
   "tasks": [
     {
@@ -110,12 +111,51 @@
       "completedAt": "2026-07-13T15:32:06.296Z",
       "createdAt": "2026-07-01T18:14:56.477Z",
       "updatedAt": "2026-07-13T15:32:06.296Z"
+    },
+    {
+      "id": "8174e5c6-8b47-4cd9-a11a-f00eb1bf141c",
+      "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 415,
+      "shortId": "BFWN9",
+      "priority": 4,
+      "shortName": "config-reload-is-a-hand-writte",
+      "title": "Config reload is a hand-written list, so every new setting is dead until someone remembers it",
+      "status": "planned",
+      "description": "**Antonio, 2026-08-11: *\"this is not the first time we need to change something to make reload working. WHY??? this api should work independent of where it is called from but always the same issue arise.\"*** He is right, and it has now happened at least three times.\n\n# The shape of the bug\n\nThere is **no config→state API**. There are two paths that each read the config independently:\n\n- **`heca/src/app/startup.rs`** builds `AppState` from `AppConfig` while constructing it (a struct\n  literal plus `layout_options_from`).\n- **`heca/src/main.rs::reload_config` (line ~157)** copies a **hand-written list of 13 fields** back\n  onto the live state: `theme`, `programs`, `appearance`, `command_palette_size`, `search_case`,\n  `search_history`, `font_config`, `prefix_combo`, `widget_keymap`, `action_shortcuts`,\n  `mouse_enabled`, `auto_scroll_edge`, `shell_integration_enabled`,\n  `pane_renamed_add_process_name`.\n\nA setting that is not on that list is **live in the file and dead in the app**: it takes effect at\nstartup and `prefix+Shift+r` silently does nothing. Nothing fails, nothing warns, and the author of\nthe new setting has no reason to look at `main.rs`.\n\n**Most recently (2026-08-11):** `overview_zoom`, `overview_gap` and the new `overview_zoom_from` are\nin `LayoutOptions` (`session.options`), which reload never touched — so Antonio edited them, pressed\nreload, and nothing changed. Fixed by adding *one more line to the list*, which is the same mistake\nagain. `center_focused_column` and the pane `gaps` were in the same hole.\n\n# What to build\n\n**One projection, called from both paths.** `apply_config(state: &mut AppState, cfg: &AppConfig)`\nsets **every** field derived from config, and:\n\n- `startup` calls it immediately after constructing the state shell (window/GPU/session/backends are\n  not config-derived and stay where they are);\n- `reload_config` calls it and does nothing else config-related;\n- `layout_options_from` (already extracted, `app/startup.rs`) is called from inside it.\n\nThen adding a setting is one edit in one place, and it reloads for free.\n\n# The part that makes it stay fixed\n\nA list can be forgotten again, so the guard has to be structural rather than a promise:\n\n- **Preferred:** make the config-derived fields their own struct on `AppState` (e.g.\n  `state.from_config: ConfigDerived`) built by one `From<&AppConfig>`. Then a new field cannot\n  compile without being constructed there, and reload is `state.from_config = (&cfg).into()`.\n  Exhaustiveness does the remembering.\n- **Otherwise:** a test that walks `SettingsConfig`'s fields (the same way\n  `every_declared_argument_is_read_by_the_action` walks the action args) and fails when one is not\n  read by `apply_config`. Weaker, because it cannot see a field read into a *derived* value.\n\n# Edge cases\n\n- **Some state must survive a reload** — `reload_config` already carries a comment about not\n  overwriting the user's working settings. Identify which of the 13 are \"reset to config\" vs \"keep\n  what the user changed at runtime\", and say which in the code rather than by omission.\n- `widget_keymap` / `action_shortcuts` / `prefix_combo` are *derived* (built by\n  `build_widget_keymap`, `ActionShortcuts::from_index`), not copied — the projection must rebuild\n  them, which is what reload already does and startup does separately.\n- `session.options` must be reassigned **and** anything cached from it recomputed; a layout change\n  needs `after_config_change`.\n\n# Verification\n\nChange `overview_zoom`, the pane gap, `command_palette_size` and a keybinding in\n`~/.config/heca/config.toml`, press `prefix+Shift+r`, and see all four take effect — then add a new\nsetting and confirm it reloads without touching `main.rs`.\n\n⚠️ Note for whoever picks this up: `config.default.toml` is **embedded at compile time**, so editing\n*it* and reloading proves nothing. The user file is `~/.config/heca/config.toml`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-11T22:09:22.071Z",
+      "updatedAt": "2026-08-11T22:09:22.071Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.467Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-11T22:09:22.071Z",
+  "handoff": "# Handoff — session shutdown (quit)\n\nCreated at: 2026-08-13T12:23:39.507Z\nUpdated at: 2026-08-13T12:23:39.507Z\nReason: session shutdown (quit)\n\n## Progress snapshot\n- Features: 3/11 done, 4 active\n- Phases: 32/91 done, 8 active/discovery\n- Tasks: 183/423 done, 4 active\n\n## Current focus\n- Feature: `2809a7a4-6d53-4a58-b776-bac164bb5d03` — 🛠️ App / Chrome Features (in-progress)\n- Phase: `5cab2dbb-ce1b-4a33-b6bc-ede8437fca09` — app-11: Right-click context menu (in-progress)\n- Task: `8174e5c6-8b47-4cd9-a11a-f00eb1bf141c` — Config reload is a hand-written list, so every new setting is dead until someone remembers it (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 5cab2dbb-ce1b-4a33-b6bc-ede8437fca09)\n- 📋 `479bf80c-6b3d-4e28-8df1-19f509eb3569` — Terminal pane right-click context menu (planned)\n- ✅ `967a121b-9003-4abe-bc42-294f25b6fb90` — Build ContextMenu grid-ui widget (done)\n- ✅ `c511a0ad-6883-4b81-a160-c1e6c97516ed` — Sidebar right-click context menu (done)\n- 📋 `8174e5c6-8b47-4cd9-a11a-f00eb1bf141c` — Config reload is a hand-written list, so every new setting is dead until someone remembers it (planned)\n\n## How to resume\n1. Open task 8174e5c6-8b47-4cd9-a11a-f00eb1bf141c (Config reload is a hand-written list, so every new setting is dead until someone remembers it).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 8174e5c6-8b47-4cd9-a11a-f00eb1bf141c (or call task_start).\n4. Continue with the next activity: F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09.json\n- .planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- F003/P017 is CLOSED — all nine tasks done 2026-07-27. T009 finished it: the model is now the `heca-view` crate (serde only) and `realize` is `heca-view-realize`, both below the app, and the showcase renders a described tree beside its hand-built twin. The user looked at it in the running app and approved it. Nothing in P017 is open.\n- Branch `feat/action-arg-declaration` is PUSHED and **PR #249 is open** (https://github.com/ovidius72/heca/pull/249) — 20 commits, 241 files, +6384/-1702, closing F003/P010 and F003/P017. Whole workspace green (961 tests, 24 suites), clippy 0 warnings at every commit. Awaiting review/merge.\n- F003/P011/T012 (126d0855) is still `blocked`, and its reason needs RE-CHECKING rather than planning around: the 'no chrome surface mounts a ScrollRegion' claim was verified 2026-07-17, and the 2026-07-26 sidebar scroll work may already have discharged it. Its horizontal trigger was settled 2026-07-27 as prefix+Shift+Home/End/PageUp/PageDown — the same four keys as vertical, Shift for the other axis.\n- Unblocked by T009, neither started: F003/P001/T006 (generate widget definitions for JS/Python from `WidgetKind::ALL`, which is a closed list with a coverage guard already walking it) and F003/P011/T006 (the typed builder SDK can now genuinely re-export the model). Also worth checking whether F003/P017/T003's generated property tables are reusable outside the app — they are the natural source for those generated definitions.\n\n## Recent activity\n- 2026-07-29T17:49:33.150Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:32.498Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:31.702Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:21.833Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:21.032Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-29T17:49:20.270Z [task_updated] 2086fbfc-1d37-4e4a-af69-536692ca12cf: Task updated: The mouse: clicking a container focuses it, and each item kind declares its own click\n- 2026-07-25T20:04:17.668Z [phase_updated] 4d4aa26b-6245-4c0f-8bdf-64573a7afbf5: Phase updated: plugin-ui-gaps: Close the declarative model's capability gaps + make the translator self-maintaining (planned)\n\n## Reminder\n- This handoff is KEPT until a task in this phase starts (then auto-archived to .planner/.local/handoff-archive/) or the phase completes. No need to clear it manually.",
+  "handoffUpdatedAt": "2026-08-13T12:23:39.514Z",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-23-39-509Z.md",
+      "clearedAt": "2026-08-13T12:23:39.509Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-12-25-510Z.md",
+      "clearedAt": "2026-08-13T12:12:25.510Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-09-07-135Z.md",
+      "clearedAt": "2026-08-13T12:09:07.135Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": []
 }

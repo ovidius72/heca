@@ -221,13 +221,16 @@ impl Session {
     fn overview_workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
         let zoom = self.overview_zoom();
         let ws_size = Size::new(self.viewport_size.w * zoom, self.viewport_size.h * zoom);
-        let gap = self.options.overview_gap * zoom;
+        // The gap is a fraction of a screen height (times the zoom) — niri's `workspace_gap`.
+        let gap = self.viewport_size.h * self.options.overview_gap * zoom;
         let ws_height = ws_size.h + gap;
 
-        // Center the active workspace vertically.
+        // **Centre the ACTIVE workspace, not the stack** (niri `monitor.rs::workspaces_render_geo`:
+        // `static_offset = (view_size - ws_size) / 2`). Centring the whole stack and then offsetting
+        // by the active index puts the active row off-centre by half the difference between the
+        // stack and one workspace — it only looks right when there is exactly one workspace.
         let active_y_offset = self.active_workspace_idx as f64 * ws_height;
-        let total_height = self.workspaces.len() as f64 * ws_height - gap;
-        let start_y = (self.viewport_size.h - total_height) / 2.0 - active_y_offset;
+        let start_y = (self.viewport_size.h - ws_size.h) / 2.0 - active_y_offset;
         let center_x = (self.viewport_size.w - ws_size.w) / 2.0;
 
         self.workspaces

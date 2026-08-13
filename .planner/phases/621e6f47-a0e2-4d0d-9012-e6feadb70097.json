@@ -24,7 +24,8 @@
   "taskIds": [
     "9f33fdd8-eeda-415b-a3f1-64112774734d",
     "ac234827-5339-41e8-a9aa-c2669e58d665",
-    "8665a8a6-d811-4d81-b81f-fb13749bc0aa"
+    "8665a8a6-d811-4d81-b81f-fb13749bc0aa",
+    "01bba716-e54b-4c6f-93f1-936f2e541c27"
   ],
   "tasks": [
     {
@@ -92,12 +93,35 @@
       "completedAt": "",
       "createdAt": "2026-07-03T11:11:02.367Z",
       "updatedAt": "2026-07-03T11:11:02.367Z"
+    },
+    {
+      "id": "01bba716-e54b-4c6f-93f1-936f2e541c27",
+      "phaseId": "621e6f47-a0e2-4d0d-9012-e6feadb70097",
+      "number": 429,
+      "shortId": "HVM6D",
+      "priority": 4,
+      "shortName": "the-workspaces-dock-becomes-co",
+      "title": "The workspaces dock becomes components — DockView / WorkspaceFrame / ColumnGroup / PaneRow, beside its surface",
+      "status": "planned",
+      "description": "**Antonio, 2026-08-13:** *\"for the sidebar check better but I guess F006/P032 is a good candidate for a refactoring task to align the component to the rules.\"*\n\nDo it the way the exposé was done (F003/P082/T420) and to the recipe that came out of it: **AGENTS.md § 0b-bis, \"How to structure and build a component\"**. That section was written from this exact shape of problem and names every step.\n\n# Why this one, and why now\n\nThree bugs in a row in this file during 2026-08-13 were **wiring** bugs, and the suite could not see any of them:\n\n1. `.previous(bool)` read at build time on a tree that deliberately never rebuilds on focus (`chrome_signature` excludes it) — frozen for the session.\n2. The mark published for the current workspace only, while the history is written solely for same-workspace moves — so a cross-workspace jump marked nothing.\n3. ⚠️ **Still unfixed at the time of writing** — the mark does not appear even after both. See T426; the next step there is a **trace**, not another fix.\n\nNone of the three could have survived a headless test of a component, and none of them was catchable by reading. That is the argument for this task, not tidiness.\n\n# The gap against § 0b-bis, measured\n\n`heca/src/providers/workspaces/mod.rs` — **2200 lines**, ~35 composition sites, and:\n\n- **`pane_card()` :739 takes ELEVEN positional arguments** and carries `#[expect(clippy::too_many_arguments)]` whose own note calls it *\"phase-local fix before a larger ChromeCx refactor\"*. § 0b-bis step 2: properties are struct fields, the constructor is a struct literal.\n- **`column_view()` :1051 is a separately written near-duplicate** of the same row shape. § 0b-bis step 1: split by what a piece *owns*, one owner per question.\n- **Functions, not components** — nothing in the file can be built in a test, so nothing has a headless test of its own. § 0b-bis steps 4 and 7.\n- **Seams threaded one argument at a time** (`emit_intent`, `signals`, `drag`, `ws_state`, `programs`, `theme`) instead of one group. § 0b-bis step 3.\n- `providers/workspaces/model.rs` is already the surface's `model.rs` and is **good** — it computes per-entry state (`SidebarItemState::{Active, Visited, None}` :226) from plain data. Keep it; the components read it.\n\n# The shape to build\n\n```\nheca/src/chrome/<dock>/            (or providers/workspaces/, if the provider seam must stay)\n├── mod.rs           host wiring — the ONLY file touching AppState / ChromeCtx\n├── model.rs         EXISTS, keep — the session reduced to entries with their state\n├── pane_row.rs      one pane: name, icon, badges, its states, its menu, its drag id\n├── column_group.rs  a column: its rows + the MarkerGroup bar\n├── workspace_frame.rs  a workspace: the DockFrame, its header, its collapse\n└── dock_view.rs     the whole dock: the frames, the cursor\n```\n\n⚠️ **The state model is the part to get right, and it is the part that has been wrong.** A row has four simultaneous states — selected, cursor, last-visited, hovered — each with a different update path (build-time vs bound signal). § 0b-bis's rule is that a component owns its own states; the extraction must make it impossible to set one at build time that changes on focus. `pane_active` / `pane_previous` in `ChromeSignals` show the working pattern.\n\n# Behaviours to preserve — every one is load-bearing\n\nDrag source + drop target ids, the `nav_key` as the row's one identity, the context menu declared on the widget, `KeyHint::on_peek` (`row_peek`), the info segments and badges, per-mount cursors, `Visibility`-swapped active/inactive titles, and the collapse set projected post-sync. **Pixel-identical output**: this is a surface Antonio verifies by hand.\n\n# Verification (Antonio drives)\n\nThe sidebar looks and behaves exactly as before — and the four row states can be reasoned about one file at a time, with a headless test each.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-13T17:48:16.672Z",
+      "updatedAt": "2026-08-13T17:48:16.672Z"
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.464Z",
+  "updatedAt": "2026-08-13T17:48:16.672Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

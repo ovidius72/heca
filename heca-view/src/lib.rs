@@ -13,8 +13,9 @@
 //!
 //! Behaviour is expressed **only** through [`Intent`]s (an action id + args), never Rust
 //! closures — so the model stays serializable and uniform for native and plugin UI alike.
-//! A node that carries an `on_press`/`on_change` intent is *actionable*; `realize` gives
-//! every actionable node a KeyHint target automatically, so `prefix+/` reaches it for free.
+//! A node that carries an `on_press`/`on_change` intent is *actionable*; `realize` makes every
+//! actionable node pickable by `prefix+/` for free, and `on_peek` says what a pick does when that
+//! differs from a click.
 //!
 //! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
 //! layout or paint logic — this is pure description.
@@ -241,6 +242,16 @@ pub enum ViewScrollAxes {
     Both,
 }
 
+/// Where a scroll region puts the descendant it follows — mirrors grid-ui `RevealAlign`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewRevealAlign {
+    /// Scroll the least that makes it visible.
+    Minimal,
+    /// Keep it at the centre of the viewport.
+    Center,
+}
+
 /// How serious a message is — mirrors both grid-ui `ToastSeverity` **and** `AlertVariant`, which
 /// carry the same four values. One mirror, because two would be the same list written twice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,6 +356,7 @@ macro_rules! value_set {
 value_set! {
     ViewOrientation { Horizontal => "horizontal", Vertical => "vertical" }
     ViewScrollAxes { Vertical => "vertical", Horizontal => "horizontal", Both => "both" }
+    ViewRevealAlign { Minimal => "minimal", Center => "center" }
     ViewSeverity { Info => "info", Success => "success", Warning => "warning", Danger => "danger" }
     ViewLabelSide { Right => "right", Left => "left" }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
@@ -894,6 +906,16 @@ impl ViewNode {
         self.on("press", intent)
     }
 
+    /// Convenience: bind the `"peek"` event — **what a leader-key pick (`prefix+/`) does to this
+    /// node**, when that is not simply what a click does.
+    ///
+    /// Unbound, a pick falls back to [`press`](Self::on_press), so every actionable node is
+    /// reachable by letter for free. Bind it when the two genuinely differ: heca's sidebar row
+    /// activates the pane and leaves the sidebar on a click, and stays in the sidebar on a peek.
+    pub fn on_peek(self, intent: Intent) -> Self {
+        self.on("peek", intent)
+    }
+
     /// Append a child node to the [`children`](Self::children) vec. The child is a full `ViewNode`
     /// with its own props/events — style it by putting props on *it*, not on the parent.
     pub fn child(mut self, child: ViewNode) -> Self {
@@ -907,8 +929,8 @@ impl ViewNode {
         self
     }
 
-    /// Whether this node emits an activation intent — an actionable target. `realize` uses
-    /// this to attach a KeyHint target so `prefix+/` can reach it.
+    /// Whether this node emits an activation intent — an actionable target. `realize` makes such a
+    /// node pickable by `prefix+/` even when it binds no `peek` of its own.
     pub fn is_actionable(&self) -> bool {
         self.events.contains_key("press")
     }
@@ -1050,6 +1072,7 @@ mod tests {
         }
         check(ViewOrientation::ALL, ViewOrientation::name);
         check(ViewScrollAxes::ALL, ViewScrollAxes::name);
+        check(ViewRevealAlign::ALL, ViewRevealAlign::name);
         check(ViewSeverity::ALL, ViewSeverity::name);
         check(ViewLabelSide::ALL, ViewLabelSide::name);
         check(ViewMarker::ALL, ViewMarker::name);

@@ -32,6 +32,42 @@ use winit::keyboard::{Key, NamedKey, PhysicalKey};
 /// layer (`[keys.<kind>]`, F003/P085/T355) resolved through this same seam.
 pub(crate) const FOCUS_LAYER: &str = "focus";
 
+/// The keymap consulted while a **layer** holds the keyboard — the exposé, a modal, a plugin's
+/// surface (F003/P082/T428).
+///
+/// The layer twin of [`FOCUS_LAYER`], and it exists for the same reason: what every layer answers
+/// alike does not belong in each layer's own declaration. Today that is `Escape` — the front-most
+/// layer closes itself — asserted as a floor in `registry::build_mode_keymaps` so a layer that
+/// declares nothing is still closable from the keyboard.
+pub(crate) const LAYER_FLOOR: &str = "layer";
+
+/// The surface name of the **scrolling area** — the panes, and what is in front when no layer and
+/// no dock hold the keyboard (F003/P082/T428).
+///
+/// It is a surface like any other, so it can be spoken about in `[[keys.surface]]` the way a dock
+/// and an overlay already are. It ships with **no bindings of its own**, and that absence is
+/// deliberate: a key nothing here claims reaches the program running in the pane, which is why
+/// `Escape` gets to mean what it means inside vim.
+pub(crate) const PANES_SURFACE: &str = "heca.panes";
+
+/// Which surface holds the keyboard — the one question the key-resolution rule is asked
+/// (F003/P082/T428).
+///
+/// Reduced from [`AppState`] by [`focused_surface`] so the rule itself is a pure function of plain
+/// data and can be tested without a window. Ordered from the front backwards: a layer covers a
+/// dock, a dock covers the panes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FocusedSurface {
+    /// A layer is in front. `name` is its addressable, owner-prefixed name — the one `show_layer`
+    /// takes — and is `None` for a layer nothing named.
+    Layer { name: Option<String> },
+    /// A chrome container holds the keyboard: its mount id, and the `kind()` of the provider
+    /// mounted there.
+    Dock { mount: String, kind: Option<String> },
+    /// Nothing is in front of the panes.
+    Panes,
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct KeyInputContext<'a> {
     pub logical_key: &'a Key,
@@ -69,25 +105,48 @@ pub(crate) fn handle_keyboard_input(
                 return;
             }
 
+            // **A key acts on the surface in front of you** (F003/P082/T428). The focused surface
+            // resolves it first — its own `[[keys.surface]]` declaration, then the floor its kind
+            // is guaranteed — and the global map is the fallback for what nobody in front claimed.
+            // That is the ordinary nearest-declaration-wins rule, and it is what makes `Escape`
+            // mean *close the thing I am in* everywhere: a layer closes itself, a dock hands the
+            // keyboard back, the panes let it reach the program running in them.
+            //
+            // It was the other way round until now, and a global `Escape` bound to `close_overlay`
+            // therefore ate the key before a focused dock could see it — closing nothing, because
+            // no overlay was up, and stranding the keyboard in the dock.
+            let surface = focused_surface(state);
+            if let Some(act) =
+                surface_action(&surface, mode_keymaps, component_keymaps, ctx.event_combo)
+            {
+                // A layer's intents are stamped with the surface that owns them, which is what lets
+                // the policy tell the map acting on itself from the app being driven behind it.
+                let source = match state.layers.top_modal_id() {
+                    Some(id) if matches!(surface, FocusedSurface::Layer { .. }) => {
+                        InteractionSource::Surface(id)
+                    }
+                    _ => InteractionSource::Keyboard,
+                };
+                dispatch_action_ref(state, registry, source, &act);
+                return;
+            }
+
             let global_action = keymap.resolve("global", ctx.event_combo).cloned();
             if let Some(act) = global_action {
                 dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
                 return;
             }
 
-            // **Focus is the mode.** A dock holding chrome focus redirects the keyboard: the key
-            // resolves in its layer, and an unbound one is **swallowed** rather than forwarded. A
-            // `j` leaking into a shell while the user is driving a sidebar is the worse failure —
-            // and the focus ring plus the status bar are what stop the swallowing being silent.
+            // **Focus is the mode.** A layer or a dock holding the keyboard **swallows** what it did
+            // not claim rather than forwarding it. A `j` leaking into a shell while the user is
+            // driving a sidebar is the worse failure — and the focus ring plus the status bar are
+            // what stop the swallowing being silent. Forwarding to the dock instead is how `j`/`k`
+            // went on moving the sidebar cursor underneath an open context menu (Antonio,
+            // 2026-08-10).
             //
             // `state.focused_pane` is deliberately untouched: only the keyboard is redirected, so
             // `prefix+Enter` still splits the pane you last worked in.
-            if state.chrome_state.focused_container().is_some() {
-                if let Some(act) =
-                    focus_layer_action(state, mode_keymaps, component_keymaps, ctx.event_combo)
-                {
-                    dispatch_action_ref(state, registry, InteractionSource::Keyboard, &act);
-                }
+            if !matches!(surface, FocusedSurface::Panes) {
                 return;
             }
 
@@ -219,19 +278,23 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     let Some((combo_key, mods)) = crate::app::registry::combo_to_grid(ctx.event_combo) else {
         return;
     };
-    // Deliver the real character for plain typing so case and shifted symbols survive;
-    // the combo key stays lowercased for chord matching only. Mirrors the overlay path.
-    let key = {
-        let mut cs = ctx.key_text.chars();
-        match (cs.next(), cs.next()) {
-            (Some(c), None) if !mods.ctrl && !mods.meta && !c.is_control() && c != ' ' => {
-                heca_grid_ui::GridKey::Char(c)
-            }
-            _ => combo_key,
-        }
-    };
-    let keymap = state.widget_keymap.clone();
+    // Typed text goes in as text, before the chord is resolved: `Event::TextInput` carries what
+    // the platform says the key produced, so case and shifted symbols survive without the host
+    // patching the key it sends. Mirrors the overlay path.
     let mut edited = false;
+    if let Some(text) = heca_grid_ui::typed_text(Some(ctx.key_text), mods)
+        && let Some(search) = state.active_search_mut()
+    {
+        let ev = heca_grid_ui::Event::TextInput(text);
+        let handled = heca_grid_ui::dispatch(&mut *search.input.borrow_mut(), &ev);
+        if handled == heca_grid_ui::Handled::Yes {
+            crate::app::terminal_host::run_scrollback_search(state);
+            state.needs_redraw = true;
+            return;
+        }
+    }
+    let key = combo_key;
+    let keymap = state.widget_keymap.clone();
     keymap.dispatch(key, mods, |ev| {
         match state.active_search_mut() {
             Some(search) => {
@@ -249,42 +312,96 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
 }
 
 
-/// The action a key resolves to in the **focused container's layer** — `None` when no chrome
-/// container holds the keyboard, which is what makes this seam inert in the ordinary case.
+/// The action a key resolves to in **one named surface's** binding layer — a dock's `kind()`, a
+/// placement id, or a layer's own name (F003/P082/T416).
+///
+/// Split out of [`focus_layer_action`] so a layer and a dock consult the same map by the same rule.
+/// Whichever surface holds the keyboard, its `[[keys.surface]]` entry is the more specific thing
+/// the key is aimed at, and there is exactly one lookup for both.
+fn surface_layer_action(
+    component_keymaps: &HashMap<String, KeymapRegistry>,
+    surface: &str,
+    combo: &KeyCombo,
+) -> Option<crate::keymap::ActionRef> {
+    component_keymaps
+        .get(surface)
+        .and_then(|map| map.resolve(surface, combo))
+        .cloned()
+}
+
+/// The action a key resolves to in one **floor** — the keys a whole kind of surface answers alike
+/// (`focus` for docks, `layer` for layers), which no individual surface should have to declare.
+fn floor_action(
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
+    floor: &str,
+    combo: &KeyCombo,
+) -> Option<crate::keymap::ActionRef> {
+    mode_keymaps
+        .get(floor)
+        .and_then(|map| map.resolve(floor, combo))
+        .cloned()
+}
+
+/// Which surface holds the keyboard, read off the session — the whole of [`AppState`] this rule
+/// needs, so [`surface_action`] can stay a pure function of plain data.
+pub(crate) fn focused_surface(state: &AppState) -> FocusedSurface {
+    if let Some(id) = state.layers.top_modal_id() {
+        return FocusedSurface::Layer {
+            name: state.layers.name_of(id),
+        };
+    }
+    match state.chrome_state.focused_container() {
+        Some(mount) => {
+            let kind = state
+                .chrome_host
+                .provider(&mount)
+                .map(|p| p.kind().to_string());
+            FocusedSurface::Dock { mount, kind }
+        }
+        None => FocusedSurface::Panes,
+    }
+}
+
+/// The action a key resolves to **in the surface that holds the keyboard** (F003/P082/T428).
+///
+/// One order, whatever kind of surface it is: the surface's **own** `[[keys.surface]]` declaration
+/// first — a dock's rows are the more specific thing a key is aimed at than anything host-wide —
+/// then the **floor** its kind is guaranteed. `None` means nobody in front claimed the key, and the
+/// caller falls back to the global map.
+///
+/// A dock is consulted at two names, placement before component: an entry that named an `id` was
+/// built into a layer under that mount id, already carrying the id-less base merged underneath it,
+/// so finding the mount means the user narrowed this seating and missing it means they spoke about
+/// the component as a whole. Two lookups, no merging at press time (F003/P086/T362).
 ///
 /// Both key routes come through here, deliberately: the direct one (an unprefixed key while a dock
 /// is focused) and the prefix fall-through (the global `normal` map missed). One declaration, both
 /// doors — so a container's `r` works whether the user typed `r` or `prefix+r`.
-fn focus_layer_action(
-    state: &AppState,
+pub(crate) fn surface_action(
+    surface: &FocusedSurface,
     mode_keymaps: &HashMap<String, KeymapRegistry>,
     component_keymaps: &HashMap<String, KeymapRegistry>,
     combo: &KeyCombo,
 ) -> Option<crate::keymap::ActionRef> {
-    let mount = state.chrome_state.focused_container()?;
-    // **The component's own layer first** (`[[keys.component]]`, F003/P086/T362), so a component can
-    // bind a key the host layer also uses and win — its rows are the more specific thing the key is
-    // aimed at.
-    //
-    // **This placement, then the component.** An entry that named an `id` was built into a layer
-    // under that mount id, already carrying the id-less base merged underneath it; so finding the
-    // mount means the user narrowed this seating, and missing it means they spoke about the
-    // component as a whole. Two lookups, no merging at press time.
-    let kind = state.chrome_host.provider(&mount).map(|p| p.kind());
-    for layer in [Some(mount.as_str()), kind] {
-        if let Some(layer) = layer
-            && let Some(action) = component_keymaps
-                .get(layer)
-                .and_then(|map| map.resolve(layer, combo))
-        {
-            return Some(action.clone());
+    let (names, floor): (Vec<&str>, Option<&str>) = match surface {
+        FocusedSurface::Layer { name } => {
+            (name.as_deref().into_iter().collect(), Some(LAYER_FLOOR))
         }
-    }
-    // Then what the **widgets** answer for every container alike — paging, edges, releasing focus.
-    mode_keymaps
-        .get(FOCUS_LAYER)
-        .and_then(|map| map.resolve(FOCUS_LAYER, combo))
-        .cloned()
+        FocusedSurface::Dock { mount, kind } => (
+            [Some(mount.as_str()), kind.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect(),
+            Some(FOCUS_LAYER),
+        ),
+        // The panes declare nothing by default, and have no floor: a key nothing claims belongs to
+        // the program running in the pane.
+        FocusedSurface::Panes => (vec![PANES_SURFACE], None),
+    };
+    names
+        .into_iter()
+        .find_map(|name| surface_layer_action(component_keymaps, name, combo))
+        .or_else(|| floor.and_then(|floor| floor_action(mode_keymaps, floor, combo)))
 }
 
 fn handle_prefix_mode(
@@ -347,14 +464,18 @@ fn handle_prefix_mode(
         return;
     }
 
-    // The prefix (`normal`) map first, then — when it misses — the focused container's layer,
+    // The prefix (`normal`) map first, then — when it misses — the focused surface's own layer,
     // before the key is dropped. That fall-through is what lets a component bind `r` without having
     // to know whether the user reaches it directly or through the prefix (user decision,
     // 2026-07-29).
-    let action = keymap
-        .resolve("normal", &combo)
-        .cloned()
-        .or_else(|| focus_layer_action(state, mode_keymaps, component_keymaps, &combo));
+    let action = keymap.resolve("normal", &combo).cloned().or_else(|| {
+        surface_action(
+            &focused_surface(state),
+            mode_keymaps,
+            component_keymaps,
+            &combo,
+        )
+    });
     if let Some(ref act) = action {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -483,34 +604,27 @@ fn handle_follow_link_mode(
     state.needs_redraw = true;
 }
 
-/// Universal hint picker (`InputMode::HintPick`): a matching letter fires that
-/// target's intent (resolved from the retained tree's hint-target registry and routed
-/// through the interaction policy layer, exactly like a mouse click); any other key /
-/// Esc just exits. Mirrors [`handle_follow_link_mode`].
+/// Universal picker (`InputMode::HintPick`): a matching letter runs what the picked region said a
+/// pick does to it; any other key / Esc just exits. Mirrors [`handle_follow_link_mode`].
+///
+/// **The host resolves nothing.** There is no registry to look an id up in and no intent to route
+/// here: the region declared the behaviour itself (`KeyHint::on_peek`, or a described node's `peek`
+/// event), and running it emits whatever that region emits — which is how a plugin's row gets the
+/// same picker the app's own rows have. A target whose tree was rebuilt under the letters simply
+/// answers `false`.
 fn handle_hint_pick_mode(
-    registry: &ActionRegistry,
+    _registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, heca_grid_ui::HintTargetId)],
+    candidates: &[(char, crate::chrome::PeekTarget)],
     ctx: KeyInputContext<'_>,
 ) {
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
     if let Some(ch) = typed
-        && let Some((_, id)) = candidates.iter().find(|(c, _)| *c == ch)
+        && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        // Resolve the picked target's intent from the shared registry (spans the chrome
-        // + pane-header trees), then dispatch it (owned clone drops the borrow before the
-        // mutable dispatch call).
-        let intent = state.hint_targets.get(*id).cloned();
-        if let Some(intent) = intent {
-            crate::app::interaction::dispatch_intent(
-                state,
-                registry,
-                InteractionSource::Keyboard,
-                intent,
-            );
-        }
+        crate::chrome::fire_peek(state, target);
     }
     state.needs_redraw = true;
 }
@@ -776,3 +890,106 @@ fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::conflicts::Conflicts;
+    use crate::app::registry::{build_component_keymaps, build_modes};
+    use crate::keymap::BindingIndex;
+
+    /// The shipped defaults, built the way the app builds them — no config of a test's own, so what
+    /// these assert is what a user gets.
+    fn defaults() -> (
+        HashMap<String, KeymapRegistry>,
+        HashMap<String, KeymapRegistry>,
+    ) {
+        let config = heca_config::theme::Config::default();
+        let (modes, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        let (components, _) =
+            build_component_keymaps(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+        (modes, components)
+    }
+
+    fn escape(surface: &FocusedSurface) -> Option<crate::keymap::ActionRef> {
+        let (modes, components) = defaults();
+        surface_action(surface, &modes, &components, &KeyCombo::parse("Escape"))
+    }
+
+    fn dock(mount: &str, kind: &str) -> FocusedSurface {
+        FocusedSurface::Dock {
+            mount: mount.to_string(),
+            kind: Some(kind.to_string()),
+        }
+    }
+
+    /// **THE REGRESSION** (F003/P082/T428). Antonio, driving 2026-08-13: entering a sidebar pane
+    /// list with `prefix+/` or `prefix+e`, *"I'm not able to exit without selecting anything. I
+    /// should be able to do Esc and go back to normal in the scrolling area."*
+    ///
+    /// The keymap and the floor were both correct the whole time; a **global** `Escape` bound to
+    /// `close_overlay` resolved first and consumed the key, closing nothing because no overlay was
+    /// up. This asserts the rule that replaced it, at the level the bug lived: with a dock holding
+    /// the keyboard and no layer in front, `Escape` reaches `unfocus_dock`.
+    #[test]
+    fn escape_releases_a_focused_dock_back_to_the_panes() {
+        assert_eq!(
+            escape(&dock("workspaces", "workspaces")),
+            Some(crate::keymap::ActionRef::Builtin(WmAction::UnfocusDock)),
+        );
+    }
+
+    /// A layer in front closes itself — the same press, one surface further forward.
+    #[test]
+    fn escape_closes_the_layer_in_front() {
+        let surface = FocusedSurface::Layer {
+            name: Some("heca.expose".to_string()),
+        };
+        assert_eq!(
+            escape(&surface),
+            Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay {
+                overlay: None
+            })),
+        );
+    }
+
+    /// **And in the scrolling area it is nobody's.** `None` here is what sends the key on to the
+    /// global map and then to the pane, so `Escape` still means what it means inside vim. This is
+    /// the assertion that fails if anyone gives the panes a floor "for symmetry".
+    #[test]
+    fn escape_in_the_scrolling_area_belongs_to_the_pane() {
+        assert_eq!(escape(&FocusedSurface::Panes), None);
+    }
+
+    /// Nearest declaration wins: what a surface declares for itself beats the floor its kind gets,
+    /// and beats the global map by resolving here at all. The exposé's `x` is the live case.
+    #[test]
+    fn a_surfaces_own_keys_come_before_its_floor() {
+        let (modes, components) = defaults();
+        let surface = FocusedSurface::Layer {
+            name: Some("heca.expose".to_string()),
+        };
+        assert!(
+            surface_action(&surface, &modes, &components, &KeyCombo::parse("x")).is_some(),
+            "the map's own delete key resolves in its own layer",
+        );
+        assert_eq!(
+            surface_action(&surface, &modes, &components, &KeyCombo::parse("Q")),
+            None,
+            "and a key it does not claim falls through to the global map",
+        );
+    }
+
+    /// A dock is consulted at two names, **placement before component**, so narrowing one seating
+    /// of a provider does not have to restate the rest (F003/P086/T362).
+    #[test]
+    fn a_dock_is_consulted_at_its_placement_then_its_kind() {
+        let (modes, components) = defaults();
+        let combo = KeyCombo::parse("x");
+        let by_kind = surface_action(&dock("nowhere-in-particular", "workspaces"), &modes, &components, &combo);
+        assert!(
+            by_kind.is_some(),
+            "an unknown mount still resolves through the provider's kind",
+        );
+    }
+}

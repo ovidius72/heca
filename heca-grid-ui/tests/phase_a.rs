@@ -10,6 +10,33 @@ fn fixed_box(w: f32, h: f32) -> Flex {
     Flex::column().width(Length::Px(w)).height(Length::Px(h))
 }
 
+
+/// A click: a press **and** the release that completes it, on the same spot.
+///
+/// Since F004/P084/T394 a control fires on the click, not on the press — so pressing and dragging
+/// off cancels, the way every other control on the machine behaves. A test that only presses is
+/// testing half a gesture.
+fn click_at(root: &mut dyn Component, pos: Point) {
+    let _ = heca_grid_ui::dispatch(root, &Event::pointer_pressed(pos, PointerButton::Left));
+    let _ = heca_grid_ui::dispatch(root, &Event::pointer_released(pos, PointerButton::Left));
+}
+
+/// Type `text` into whatever holds the keyboard. Text is not a key: it arrives as
+/// [`Event::TextInput`], which is what an IME commit and a paste look like too.
+fn type_text(root: &mut dyn Component, text: &str) -> Handled {
+    heca_grid_ui::dispatch(root, &Event::TextInput(text.to_string()))
+}
+
+/// **Hand this widget the keyboard**, the way a host does when you click a field or Tab to it.
+///
+/// Keys and typed text are delivered to the focus owner and nowhere else (F004/P084/T400), so a
+/// test that types has to say who is typing — exactly as a real surface has to. It replaces
+/// nothing: a widget used to be offered every key in the tree and decide for itself, which is why
+/// an unfocused row could answer an Enter meant for the cursor.
+fn give_keyboard(c: &mut dyn Component) {
+    c.base_mut().focused.set(true);
+}
+
 #[test]
 fn row_lays_children_left_to_right_with_gap() {
     let mut root = Flex::row()
@@ -640,9 +667,9 @@ fn button_click_fires_within_bounds() {
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let outside = Point::new(b.loc.x + b.size.w + 100.0, b.loc.y);
 
-    heca_grid_ui::dispatch(&mut button, &Event::PointerPressed { pos: outside });
+    click_at(&mut button, outside);
     assert!(!clicked.get(), "click outside bounds must not fire");
-    heca_grid_ui::dispatch(&mut button, &Event::PointerPressed { pos: center });
+    click_at(&mut button, center);
     assert!(clicked.get(), "click inside bounds must fire");
 }
 
@@ -694,13 +721,9 @@ fn button_hover_tracks_pointer() {
     let hovered = button.hovered();
     let b = button.base().bounds;
 
-    heca_grid_ui::dispatch(&mut button, &Event::PointerMoved {
-        pos: Point::new(b.loc.x + 2.0, b.loc.y + 2.0),
-    });
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(b.loc.x + 2.0, b.loc.y + 2.0)));
     assert!(hovered.get_untracked(), "entering bounds sets hover");
-    heca_grid_ui::dispatch(&mut button, &Event::PointerMoved {
-        pos: Point::new(b.loc.x + b.size.w + 50.0, b.loc.y),
-    });
+    heca_grid_ui::dispatch(&mut button, &Event::pointer_moved(Point::new(b.loc.x + b.size.w + 50.0, b.loc.y)));
     assert!(!hovered.get_untracked(), "leaving bounds clears hover");
 }
 
@@ -806,24 +829,22 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
     let mut focus = FocusManager::new();
     // No overlay open → nothing to offer.
     assert_eq!(
-        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }),
+        focus.offer_to_overlay(&mut ui, &Event::wheel(center, 0.0, 1.0)),
         Handled::No,
         "no open overlay → nothing consumes the offer"
     );
 
     // A press dispatches with focus-on-press semantics: the clicked widget focuses.
-    focus.dispatch(&mut ui, &Event::PointerPressed { pos: center });
+    focus.dispatch(&mut ui, &Event::pointer_pressed(center, PointerButton::Left));
     assert_eq!(focus.focused(), Some(1), "dispatch focuses the pressed widget");
 
     // A press that misses every focusable clears focus.
-    focus.dispatch(&mut ui, &Event::PointerPressed {
-        pos: Point::new(9999.0, 9999.0),
-    });
+    focus.dispatch(&mut ui, &Event::pointer_pressed(Point::new(9999.0, 9999.0), PointerButton::Left));
     assert_eq!(focus.focused(), None, "dispatch clears focus on a miss");
 
     // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
     assert_eq!(
-        focus.dispatch(&mut ui, &Event::Scroll { delta_x: 0.0, delta_y: 1.0 }),
+        focus.dispatch(&mut ui, &Event::wheel(center, 0.0, 1.0)),
         Handled::No,
         "unconsumed scroll falls through to the host"
     );
@@ -843,9 +864,7 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     let sb = ui.base().children[1].base().bounds;
 
     // Press on the Select trigger opens its dropdown (no overlay yet → normal route).
-    focus.dispatch(&mut ui, &Event::PointerPressed {
-        pos: Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0),
-    });
+    focus.dispatch(&mut ui, &Event::pointer_pressed(Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0), PointerButton::Left));
     assert!(
         focus.overlay_active(&mut ui),
         "pressing the trigger opens the dropdown overlay"
@@ -856,9 +875,7 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     // than being treated as a fresh focus/click on the tree behind it. The row is
     // found by its **bounds**: the options are real children, placed in the panel.
     let row2 = ui.base().children[1].base().children[2].base().bounds;
-    let handled = focus.dispatch(&mut ui, &Event::PointerPressed {
-        pos: Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
-    });
+    let handled = focus.dispatch(&mut ui, &Event::pointer_pressed(Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0), PointerButton::Left));
     assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
     assert!(
         !focus.overlay_active(&mut ui),
@@ -954,12 +971,12 @@ fn toggle_flip_emits_change_action_with_new_value() {
     let outside = Point::new(b.loc.x + b.size.w + 100.0, b.loc.y);
 
     // A press outside the track does nothing.
-    heca_grid_ui::dispatch(&mut toggle, &Event::PointerPressed { pos: outside });
+    click_at(&mut toggle, outside);
     assert!(!toggle.is_on());
     assert!(log.borrow().is_empty(), "missed press emits no action");
 
     // A press inside flips it on and reports the new value.
-    heca_grid_ui::dispatch(&mut toggle, &Event::PointerPressed { pos: center });
+    click_at(&mut toggle, center);
     assert!(toggle.is_on(), "press flips the toggle on");
     assert_eq!(
         log.borrow().last(),
@@ -967,7 +984,7 @@ fn toggle_flip_emits_change_action_with_new_value() {
     );
 
     // Pressing again flips it back off.
-    heca_grid_ui::dispatch(&mut toggle, &Event::PointerPressed { pos: center });
+    click_at(&mut toggle, center);
     assert!(!toggle.is_on());
     assert_eq!(
         log.borrow().last(),
@@ -1020,7 +1037,7 @@ fn toggle_knob_slides_toward_target_on_tick() {
         toggle.base().bounds.loc.x + 1.0,
         toggle.base().bounds.loc.y + 1.0,
     );
-    heca_grid_ui::dispatch(&mut toggle, &Event::PointerPressed { pos: press });
+    click_at(&mut toggle, press);
     // Advance enough frames to complete the slide.
     for _ in 0..30 {
         toggle.tick(0.016);
@@ -1040,7 +1057,7 @@ fn disabled_toggle_is_inert_and_unfocusable() {
 
     let b = toggle.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut toggle, &Event::PointerPressed { pos: center });
+    click_at(&mut toggle, center);
     assert!(!toggle.is_on(), "disabled toggle ignores presses");
 }
 
@@ -1058,7 +1075,7 @@ fn disabled_button_ignores_clicks_and_focus() {
 
     let b = button.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut button, &Event::PointerPressed { pos: center });
+    click_at(&mut button, center);
     assert!(!clicked.get(), "disabled button ignores clicks");
     assert!(!button.focusable(), "disabled button is unfocusable");
 }
@@ -1155,14 +1172,14 @@ fn checkbox_toggle_emits_change_action_with_new_value() {
     let b = cb.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
 
-    heca_grid_ui::dispatch(&mut cb, &Event::PointerPressed { pos: center });
+    click_at(&mut cb, center);
     assert!(cb.is_checked(), "press checks the box");
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("checkbox-change", SignalData::Bool(true))),
     );
 
-    heca_grid_ui::dispatch(&mut cb, &Event::PointerPressed { pos: center });
+    click_at(&mut cb, center);
     assert!(!cb.is_checked(), "press again unchecks");
     assert_eq!(
         log.borrow().last(),
@@ -1179,7 +1196,7 @@ fn checkbox_label_is_clickable_and_side_positions_the_box() {
     LayoutEngine::new().compute(&mut cb, Size::new(400.0, 40.0));
     let b = cb.base().bounds;
     let far_right = Point::new(b.loc.x + b.size.w - 4.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut cb, &Event::PointerPressed { pos: far_right });
+    click_at(&mut cb, far_right);
     assert!(
         cb.is_checked(),
         "clicking the (right) label toggles the box"
@@ -1282,19 +1299,13 @@ fn input_typing_emits_change_and_builds_text() {
     let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = log.clone();
     let mut input = Input::new().on_change(move |a| sink.borrow_mut().push(a));
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
-    for key in [GridKey::Char('H'), GridKey::Char('i')] {
-        heca_grid_ui::dispatch(&mut input, &Event::Key { key, pressed: true });
-    }
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Space,
-        pressed: true,
-    });
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Char('5'),
-        pressed: true,
-    });
+    type_text(&mut input, "H");
+    type_text(&mut input, "i");
+    type_text(&mut input, " ");
+    type_text(&mut input, "5");
 
     assert_eq!(input.value_str(), "Hi 5");
     assert_eq!(
@@ -1309,6 +1320,7 @@ fn input_typing_emits_change_and_builds_text() {
 #[test]
 fn input_backspace_and_midword_insert_respect_cursor() {
     let mut input = Input::new().value("abc");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     // Caret starts at end (after 'c'). Move left → between 'b' and 'c'.
@@ -1326,10 +1338,7 @@ fn input_backspace_and_midword_insert_respect_cursor() {
         "backspace removes char before caret"
     );
 
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Char('X'),
-        pressed: true,
-    });
+    type_text(&mut input, "X");
     assert_eq!(input.value_str(), "aXc", "insert lands at the caret");
 }
 
@@ -1367,12 +1376,9 @@ fn input_click_cycle_selects_word_then_all_then_clears() {
     let y = input.base().bounds.loc.y + 5.0;
     // x inside the word "beta" (chars 6..10) — ~char 7 at advance 8.4, PAD 10.
     let x = input.base().bounds.loc.x + 10.0 + 60.0;
-    // Consecutive presses with no tick share the clock → counted as multi-click.
-    let press = |i: &mut Input| {
-        heca_grid_ui::dispatch(&mut *i, &Event::PointerPressed {
-            pos: Point::new(x, y),
-        })
-    };
+    // Consecutive clicks with no tick share the clock → counted as one run. Full clicks: the run
+    // is press-and-release pairs, which is what the framework counts.
+    let press = |i: &mut Input| click_at(i, Point::new(x, y));
 
     press(&mut input); // 1: caret
     assert_eq!(input.selection(), None, "single click places a caret");
@@ -1395,20 +1401,18 @@ fn input_click_cycle_selects_word_then_all_then_clears() {
 #[test]
 fn input_typing_replaces_selection() {
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     let pos = Point::new(
         input.base().bounds.loc.x + 14.0,
         input.base().bounds.loc.y + 5.0,
     );
 
-    heca_grid_ui::dispatch(&mut input, &Event::PointerPressed { pos }); // caret
-    heca_grid_ui::dispatch(&mut input, &Event::PointerPressed { pos }); // word = whole "hello"
+    click_at(&mut input, pos); // caret
+    click_at(&mut input, pos); // word = whole "hello"
     assert_eq!(input.selected_text().as_deref(), Some("hello"));
 
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Char('X'),
-        pressed: true,
-    });
+    type_text(&mut input, "X");
     assert_eq!(input.value_str(), "X", "typing replaces the selection");
     assert_eq!(input.selection(), None, "selection cleared after replace");
 }
@@ -1417,6 +1421,7 @@ fn input_typing_replaces_selection() {
 fn input_ctrl_backspace_deletes_previous_word() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1443,6 +1448,7 @@ fn input_ctrl_backspace_deletes_previous_word() {
 fn input_alt_delete_removes_next_word() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     for _ in 0..20 {
         heca_grid_ui::dispatch(&mut input, &Event::Key {
@@ -1478,6 +1484,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
 
     // Meta+Backspace deletes from the caret to the start.
     let mut a = Input::new().value("alpha beta");
+    give_keyboard(&mut a);
     LayoutEngine::new().compute(&mut a, Size::new(400.0, 60.0));
     for _ in 0..4 {
         arrow_left(&mut a); // caret 10 → 6 (start of "beta")
@@ -1494,6 +1501,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
 
     // Meta+Delete deletes from the caret to the end.
     let mut b = Input::new().value("alpha beta");
+    give_keyboard(&mut b);
     LayoutEngine::new().compute(&mut b, Size::new(400.0, 60.0));
     for _ in 0..5 {
         arrow_left(&mut b); // caret 10 → 5 (after "alpha")
@@ -1513,6 +1521,7 @@ fn meta_backspace_and_delete_clear_to_boundary() {
 fn shift_arrow_extends_and_shrinks_char_selection() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
     let left = |i: &mut Input| {
         heca_grid_ui::dispatch(&mut *i, &Event::Key {
@@ -1549,6 +1558,7 @@ fn shift_arrow_extends_and_shrinks_char_selection() {
 fn shift_ctrl_arrow_selects_to_boundary() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1580,6 +1590,7 @@ fn shift_ctrl_arrow_selects_to_boundary() {
 fn shift_alt_arrow_selects_by_word() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("alpha beta gamma");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1613,6 +1624,7 @@ fn input_edit_select_all_selects_without_typing() {
     // Select-all is host-configured (`edit_select_all`, default Ctrl+a / Cmd+a) and arrives as
     // the semantic `WidgetIntent::EditSelectAll`; a raw modified 'a' is never typed (separately).
     let mut input = Input::new().value("hello world");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::Widget(WidgetIntent::EditSelectAll));
@@ -1627,16 +1639,14 @@ fn input_edit_select_all_selects_without_typing() {
 #[test]
 fn home_end_move_caret_to_bounds() {
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::Key {
         key: GridKey::Home,
         pressed: true,
     });
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Char('X'),
-        pressed: true,
-    });
+    type_text(&mut input, "X");
     assert_eq!(
         input.value_str(),
         "Xhello",
@@ -1647,10 +1657,7 @@ fn home_end_move_caret_to_bounds() {
         key: GridKey::End,
         pressed: true,
     });
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Char('Y'),
-        pressed: true,
-    });
+    type_text(&mut input, "Y");
     assert_eq!(
         input.value_str(),
         "XhelloY",
@@ -1662,6 +1669,7 @@ fn home_end_move_caret_to_bounds() {
 fn shift_home_end_select_to_bounds() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("hello");
+    give_keyboard(&mut input);
     LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
 
     heca_grid_ui::dispatch(&mut input, &Event::ModifiersChanged(Modifiers {
@@ -1692,10 +1700,7 @@ fn shift_home_end_select_to_bounds() {
 fn disabled_input_ignores_typing() {
     let mut input = Input::new().disabled(true);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
-    heca_grid_ui::dispatch(&mut input, &Event::Key {
-        key: GridKey::Char('x'),
-        pressed: true,
-    });
+    type_text(&mut input, "x");
     assert!(input.value_str().is_empty(), "disabled input ignores keys");
     assert!(!input.focusable(), "disabled input is unfocusable");
 }
@@ -1808,9 +1813,7 @@ fn select_opens_and_paints_options_in_overlay_layer() {
 
     // Open via click on the trigger.
     let b = sel.base().bounds;
-    heca_grid_ui::dispatch(&mut sel, &Event::PointerPressed {
-        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
-    });
+    click_at(&mut sel, Point::new(b.loc.x + 5.0, b.loc.y + 5.0));
     assert!(
         sel.overlay_active(),
         "clicking the trigger opens + grabs input"
@@ -1832,9 +1835,7 @@ fn select_click_row_commits_and_closes() {
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
 
     let b = sel.base().bounds;
-    heca_grid_ui::dispatch(&mut sel, &Event::PointerPressed {
-        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
-    }); // open
+    click_at(&mut sel, Point::new(b.loc.x + 5.0, b.loc.y + 5.0)); // open
 
     // Click the third row (HIGH) **where it actually is**: the options are child components, and
     // opening the list placed them in the panel, so their bounds are the rows on screen. No row
@@ -1844,9 +1845,7 @@ fn select_click_row_commits_and_closes() {
         row2.loc.y > b.loc.y + b.size.h,
         "the rows are placed in the panel, below the trigger"
     );
-    heca_grid_ui::dispatch(&mut sel, &Event::PointerPressed {
-        pos: Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0),
-    });
+    click_at(&mut sel, Point::new(row2.loc.x + 10.0, row2.loc.y + row2.size.h / 2.0));
     assert_eq!(sel.index(), 2, "clicking a row selects it");
     assert!(!sel.overlay_active(), "selection closes the dropdown");
     assert_eq!(
@@ -1922,7 +1921,7 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
     // Opening draws the options' own content — including the icon, which no `Vec<String>` of
     // options could ever have carried.
     let press = Point::new(sel.base().bounds.loc.x + 5.0, sel.base().bounds.loc.y + 5.0);
-    heca_grid_ui::dispatch(&mut sel, &Event::PointerPressed { pos: press });
+    click_at(&mut sel, press);
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
@@ -1988,12 +1987,11 @@ fn select_sugar_builds_choice_children_and_composed_options_carry_their_content(
 fn select_rows_outside_the_visible_window_are_not_clickable() {
     let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
     let mut sel = Select::new(opts);
+    give_keyboard(&mut sel);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
 
     let b = sel.base().bounds;
-    heca_grid_ui::dispatch(&mut sel, &Event::PointerPressed {
-        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
-    }); // open — 6 rows visible of 20
+    click_at(&mut sel, Point::new(b.loc.x + 5.0, b.loc.y + 5.0)); // open — 6 rows visible of 20
 
     // A row past the window is collapsed: it is not drawn, so it cannot be hit either. (Were its
     // stale bounds left behind, they would sit under the trigger and swallow clicks.)
@@ -2046,9 +2044,7 @@ fn select_flips_above_the_trigger_when_there_is_no_room_below() {
     }
 
     let trigger = ui.base().children[0].base().bounds;
-    heca_grid_ui::dispatch(ui.base_mut().children[0].as_mut(), &Event::PointerPressed {
-        pos: Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0),
-    });
+    heca_grid_ui::dispatch(ui.base_mut().children[0].as_mut(), &Event::pointer_pressed(Point::new(trigger.loc.x + 5.0, trigger.loc.y + 5.0), PointerButton::Left));
 
     let first_row = ui.base().children[0].base().children[0].base().bounds;
     assert!(
@@ -2080,9 +2076,7 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
     };
 
     let b = sel.base().bounds;
-    heca_grid_ui::dispatch(&mut sel, &Event::PointerPressed {
-        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
-    }); // open
+    click_at(&mut sel, Point::new(b.loc.x + 5.0, b.loc.y + 5.0)); // open
 
     // Trigger label (1) + at most MAX_VISIBLE (6) rows are painted.
     let texts = row_texts(&sel);
@@ -2090,11 +2084,12 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
     assert_eq!(texts[1], "OPT0", "starts at the top");
 
     // Wheel-scroll moves the visible window down.
-    heca_grid_ui::dispatch(&mut sel, &Event::Scroll { delta_x: 0.0, delta_y: 5.0 });
+    let over_list = Point::new(b.loc.x + 5.0, b.loc.y + b.size.h + 5.0);
+    heca_grid_ui::dispatch(&mut sel, &Event::wheel(over_list, 0.0, 5.0));
     assert_eq!(row_texts(&sel)[1], "OPT5", "scroll reveals later options");
 
     // Scrolling past the end clamps to the last full window.
-    heca_grid_ui::dispatch(&mut sel, &Event::Scroll { delta_x: 0.0, delta_y: 999.0 });
+    heca_grid_ui::dispatch(&mut sel, &Event::wheel(over_list, 0.0, 999.0));
     assert_eq!(row_texts(&sel)[1], "OPT14", "scroll clamps at max (20 - 6)");
 }
 
@@ -2102,6 +2097,7 @@ fn select_long_list_caps_visible_rows_and_scrolls() {
 fn select_keyboard_navigates_and_escape_closes() {
     use heca_grid_ui::WidgetIntent;
     let mut sel = Select::new(["A", "B", "C"]);
+    give_keyboard(&mut sel);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
     let raw = |s: &mut Select, k: GridKey| heca_grid_ui::dispatch(&mut *s, &Event::Key { key: k, pressed: true });
     let nav = |s: &mut Select, i: WidgetIntent| heca_grid_ui::dispatch(&mut *s, &Event::Widget(i));
@@ -2136,6 +2132,7 @@ fn tabs_menu_nav_and_click_change_selection() {
     let sink = log.clone();
     let mut tabs =
         Tabs::new(["ALPHA", "BETA", "GAMMA"]).on_change(move |a| sink.borrow_mut().push(a));
+    give_keyboard(&mut tabs);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
     use heca_grid_ui::WidgetIntent;
@@ -2162,9 +2159,7 @@ fn tabs_menu_nav_and_click_change_selection() {
 
     // A click near the left edge selects the first tab again.
     let b = tabs.base().bounds;
-    heca_grid_ui::dispatch(&mut tabs, &Event::PointerPressed {
-        pos: Point::new(b.loc.x + 2.0, b.loc.y + b.size.h / 2.0),
-    });
+    click_at(&mut tabs, Point::new(b.loc.x + 2.0, b.loc.y + b.size.h / 2.0));
     assert_eq!(tabs.index(), 0, "click selects the hit tab");
 }
 
@@ -2188,6 +2183,7 @@ fn tabs_underline_slides_toward_the_selected_tabs_bounds() {
             .expect("the underline is painted")
     };
     let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
+    give_keyboard(&mut tabs);
     LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
 
     // It starts on the selected tab — snapped to that child's real bounds, not slid in from the
@@ -2544,16 +2540,14 @@ fn item_activates_on_click_when_interactive() {
 
     assert!(item.focusable(), "interactive item is focusable");
     let b = item.base().bounds;
-    heca_grid_ui::dispatch(&mut item, &Event::PointerPressed {
-        pos: Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
-    });
+    click_at(&mut item, Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0));
     assert_eq!(hits.get(), 1, "click activates the row");
 
     // Space activates too (keyboard).
-    heca_grid_ui::dispatch(&mut item, &Event::Key {
-        key: GridKey::Space,
-        pressed: true,
-    });
+    // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
+    // would before sending one.
+    item.base_mut().focused.set(true);
+    heca_grid_ui::dispatch(&mut item, &Event::Key { key: GridKey::Space, pressed: true });
     assert_eq!(hits.get(), 2);
 }
 
@@ -2568,9 +2562,7 @@ fn display_only_item_is_inert_and_unfocusable() {
     let b = item.base().bounds;
     // No panic / no effect; just confirms it ignores the press.
     assert_eq!(
-        heca_grid_ui::dispatch(&mut item, &Event::PointerPressed {
-            pos: Point::new(b.loc.x + 1.0, b.loc.y + 1.0),
-        }),
+        heca_grid_ui::dispatch(&mut item, &Event::pointer_pressed(Point::new(b.loc.x + 1.0, b.loc.y + 1.0), PointerButton::Left)),
         Handled::No,
     );
 }
@@ -2926,7 +2918,7 @@ fn dock_frame_header_click_toggles_and_emits_dock_toggle() {
     // Click the toggle area of the title bar (header child 0): collapses + reports.
     let toggle = dock.base().children[0].base().children[0].base().bounds;
     let center = Point::new(toggle.loc.x + toggle.size.w / 2.0, toggle.loc.y + toggle.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut dock, &Event::PointerPressed { pos: center });
+    click_at(&mut dock, center);
 
     assert!(!dock.state().get_untracked(), "header click collapses the frame");
     assert_eq!(
@@ -2951,7 +2943,7 @@ fn dock_frame_header_control_receives_events_before_toggle() {
     // Click the control (header child 1): it consumes the event; frame must NOT toggle.
     let ctrl = dock.base().children[0].base().children[1].base().bounds;
     let center = Point::new(ctrl.loc.x + ctrl.size.w / 2.0, ctrl.loc.y + ctrl.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut dock, &Event::PointerPressed { pos: center });
+    click_at(&mut dock, center);
 
     assert_eq!(control_clicks.get(), 1, "header control received the click");
     assert!(dock.state().get_untracked(), "clicking the control did not toggle the frame");
@@ -3153,10 +3145,15 @@ fn row_activates_on_click_and_key_when_interactive() {
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     let outside = Point::new(b.loc.x + b.size.w + 50.0, b.loc.y);
 
-    heca_grid_ui::dispatch(&mut row, &Event::PointerPressed { pos: outside });
+    click_at(&mut row, outside);
     assert_eq!(clicks.get(), 0, "a click outside the row does nothing");
-    heca_grid_ui::dispatch(&mut row, &Event::PointerPressed { pos: center });
+    click_at(&mut row, center);
     assert_eq!(clicks.get(), 1, "a click inside the row activates it");
+    // **A raw key reaches the widget that owns the keyboard.** Unfocused, the row no longer
+    // takes Enter — which is what stopped it eating keys meant for the list it sits in.
+    heca_grid_ui::dispatch(&mut row, &Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(clicks.get(), 1, "an unfocused row ignores Enter");
+    row.base_mut().focused.set(true);
     heca_grid_ui::dispatch(&mut row, &Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "Enter activates the focused row");
 }
@@ -3308,7 +3305,10 @@ fn rail_cell_activates_on_click_and_enter() {
 
     let b = cell.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut cell, &Event::PointerPressed { pos: center });
+    // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
+    // would before sending one.
+    cell.base_mut().focused.set(true);
+    click_at(&mut cell, center);
     heca_grid_ui::dispatch(&mut cell, &Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "click + Enter both activate the cell");
 }
@@ -3458,7 +3458,10 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
 
     let b = btn.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut btn, &Event::PointerPressed { pos: center });
+    click_at(&mut btn, center);
+    // A raw key reaches only the widget that owns the keyboard — focus it, as a real surface
+    // would before sending one.
+    btn.base_mut().focused.set(true);
     heca_grid_ui::dispatch(&mut btn, &Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "click + Enter both fire on_click");
 }
@@ -3490,7 +3493,7 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     LayoutEngine::new().compute(&mut tip, Size::new(300.0, 200.0));
     let b = tip.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut tip, &Event::PointerMoved { pos: center });
+    heca_grid_ui::dispatch(&mut tip, &Event::pointer_moved(center));
     assert!(!shows_help(&mut tip), "still hidden before the delay elapses");
 
     // Past the delay: the bubble shows.
@@ -3498,7 +3501,7 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     assert!(shows_help(&mut tip), "bubble reveals after the hover delay");
 
     // Pointer leaves: hidden again immediately.
-    heca_grid_ui::dispatch(&mut tip, &Event::PointerMoved { pos: Point::new(-50.0, -50.0) });
+    heca_grid_ui::dispatch(&mut tip, &Event::pointer_moved(Point::new(-50.0, -50.0)));
     assert!(!shows_help(&mut tip), "hidden once the pointer leaves");
 }
 
@@ -3541,7 +3544,7 @@ fn tooltip_flips_to_fit_the_viewport() {
 
     let b = tip.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
-    heca_grid_ui::dispatch(&mut tip, &Event::PointerMoved { pos: center });
+    heca_grid_ui::dispatch(&mut tip, &Event::pointer_moved(center));
 
     let theme = Theme::default();
     let mut scene = Scene::new();
@@ -3588,13 +3591,13 @@ fn command_palette_is_overlay_active_only_while_open() {
 
 #[test]
 fn command_palette_typing_filters_then_activate_runs_top_result() {
-    use heca_grid_ui::{Component, GridKey, WidgetIntent};
+    use heca_grid_ui::{Component, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
     // Type "tog" → "Toggle sidebar" is the top (only) match.
     for c in "tog".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     // Nav is host-resolved: `activate` arrives as WidgetIntent::Activate.
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
@@ -3854,7 +3857,7 @@ fn command_palette_reflows_the_selected_description_and_cuts_the_rest() {
 /// them was why typing in the palette had none of the editing every other field has.
 #[test]
 fn command_palette_query_takes_the_edit_intents() {
-    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
     let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
     let (r1, r2) = (ran.clone(), ran.clone());
     let mut p = CommandPalette::new()
@@ -3865,11 +3868,11 @@ fn command_palette_query_takes_the_edit_intents() {
     // Type a query that matches only "Close pane", then select-all + type over it: the field must
     // replace the selection, leaving "tog" → "Toggle sidebar".
     for c in "close".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::EditSelectAll));
     for c in "tog".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), 2, "Ctrl+a selected the whole query so typing replaced it");
@@ -3881,7 +3884,7 @@ fn command_palette_query_takes_the_edit_intents() {
         .command(Command::new("Close pane", move || r.set(1)))
         .open(true);
     for c in "zzz".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::EditDeleteToLineStart));
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
@@ -4042,7 +4045,7 @@ fn the_palette_never_runs_off_a_short_window() {
 #[test]
 fn command_palette_recalls_past_queries_from_its_history() {
     use heca_grid_ui::search::{SearchModel, SearchStore};
-    use heca_grid_ui::{Command, CommandPalette, Component, GridKey, WidgetIntent};
+    use heca_grid_ui::{Command, CommandPalette, Component, WidgetIntent};
     let theme = Theme::default();
     let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
 
@@ -4075,7 +4078,7 @@ fn command_palette_recalls_past_queries_from_its_history() {
         let mut p = open();
         LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
         for c in query.chars() {
-            heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+            type_text(&mut p, &c.to_string());
         }
         heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     }
@@ -4084,7 +4087,7 @@ fn command_palette_recalls_past_queries_from_its_history() {
     LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     // Type a draft, then walk back through the history.
     for c in "dra".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     assert_eq!(query_text(&p), "dra");
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
@@ -4102,7 +4105,7 @@ fn command_palette_recalls_past_queries_from_its_history() {
 #[test]
 fn command_palette_ranks_by_past_use_until_something_is_typed() {
     use heca_grid_ui::search::{SearchModel, SearchStore};
-    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
     let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
     let ran = std::rc::Rc::new(std::cell::Cell::new(""));
 
@@ -4129,7 +4132,7 @@ fn command_palette_ranks_by_past_use_until_something_is_typed() {
     // Typed: the query spells the other command, and it wins despite the other's history.
     let mut p = open();
     for c in "close".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), "close", "typing overrules the boost");
@@ -4140,7 +4143,7 @@ fn command_palette_ranks_by_past_use_until_something_is_typed() {
 /// and once a query exists it is better context than the block.
 #[test]
 fn a_group_leads_an_empty_query_and_dissolves_once_typing_starts() {
-    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
     let ran = std::rc::Rc::new(std::cell::Cell::new(""));
     let open = || {
         let (a, b) = (ran.clone(), ran.clone());
@@ -4157,7 +4160,7 @@ fn a_group_leads_an_empty_query_and_dissolves_once_typing_starts() {
 
     let mut p = open();
     for c in "zoom".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(ran.get(), "zoom", "a typed query dissolves the block");
@@ -4167,7 +4170,7 @@ fn a_group_leads_an_empty_query_and_dissolves_once_typing_starts() {
 #[test]
 fn command_palette_remembers_only_what_was_run() {
     use heca_grid_ui::search::{SearchModel, SearchStore};
-    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
     let theme = Theme::default();
     let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
     let open = || {
@@ -4179,7 +4182,7 @@ fn command_palette_remembers_only_what_was_run() {
 
     let mut p = open();
     for c in "abandoned".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Dismiss));
 
@@ -4204,7 +4207,7 @@ fn command_palette_remembers_only_what_was_run() {
 /// ranking on it would surface a command whose label the query never mentioned.
 #[test]
 fn command_palette_filters_on_the_label_not_the_description() {
-    use heca_grid_ui::{Command, CommandPalette, GridKey, WidgetIntent};
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
     let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
     let (r1, r2) = (ran.clone(), ran.clone());
     let mut p = CommandPalette::new()
@@ -4213,7 +4216,7 @@ fn command_palette_filters_on_the_label_not_the_description() {
         .open(true);
 
     for c in "split".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
     assert_eq!(
@@ -4223,15 +4226,258 @@ fn command_palette_filters_on_the_label_not_the_description() {
     );
 }
 
+/// A sigil switches which commands the palette lists, and **is not itself matched**: typing `@`
+/// shows every pane, not the panes whose names contain an `@`.
+#[test]
+fn a_sigil_switches_the_mode_without_filtering_by_itself() {
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(""));
+    let open = || {
+        let (a, b, c) = (ran.clone(), ran.clone(), ran.clone());
+        CommandPalette::new()
+            .mode(':', "command")
+            .mode('@', "pane")
+            .command(Command::new("Close pane", move || a.set("close")).id("close"))
+            .command(Command::new("nvim", move || b.set("nvim")).id("nvim").mode("pane"))
+            .command(Command::new("zsh", move || c.set("zsh")).id("zsh").mode("pane"))
+            .open(true)
+    };
+
+    // No sigil: the default mode, exactly as before modes existed.
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "close", "an unsigiled query is in the default mode");
+
+    // A lone sigil lists that mode unfiltered — the first pane runs, and `@` matched nothing.
+    let mut p = open();
+    type_text(&mut p, "@");
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "nvim", "a lone sigil lists its mode whole");
+
+    // And it filters on the rest of the query, not the sigil.
+    let mut p = open();
+    for c in "@zs".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "zsh", "the effective query is what matched, the sigil is not");
+
+    // A leading character that is not a sigil is the first letter of a search, not a mode.
+    let mut p = open();
+    for c in "clo".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "close", "an unknown leading char is matched literally");
+}
+
+/// **Each mode remembers separately.** A pane searched for is recalled under `@` and is invisible
+/// to the command history — that separation is the whole reason a mode names a search scope.
+#[test]
+fn every_mode_keeps_its_own_history_and_ranking() {
+    use heca_grid_ui::search::{SearchModel, SearchStore};
+    use heca_grid_ui::{Command, CommandPalette, Component, WidgetIntent};
+    let theme = Theme::default();
+    let store = std::rc::Rc::new(std::cell::RefCell::new(SearchStore::new()));
+
+    let open = || {
+        CommandPalette::new()
+            .search(SearchModel::new("command", store.clone()))
+            .mode(':', "command")
+            .mode('@', "pane")
+            .command(Command::new("Close pane", || {}).id("close"))
+            .command(Command::new("nvim", || {}).id("nvim").mode("pane"))
+            .open(true)
+    };
+    let query_text = |p: &CommandPalette| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+            p.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .expect("the query line paints")
+    };
+
+    // Search for a pane and run it, so the `pane` scope has a history.
+    let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
+    for c in "@nvi".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+
+    // The default mode's history never saw it.
+    let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    assert_eq!(
+        query_text(&p),
+        "Type a command…",
+        "nothing was recalled, so the field is still empty and paints its placeholder — a pane \
+         search is not in the command history",
+    );
+
+    // Under the sigil it comes back — and comes back **with the sigil**, so the recall does not
+    // drop the mode the user is standing in.
+    let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
+    type_text(&mut p, "@");
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    assert_eq!(query_text(&p), "@nvi", "the mode's own history, sigil restored");
+
+    // The stored query itself carries no sigil: it is filed *inside* the pane memory, and a sigil
+    // kept there would come back doubled on every recall.
+    let recalled = store
+        .borrow()
+        .scope("pane")
+        .expect("the pane scope exists")
+        .history
+        .entries()
+        .to_vec();
+    assert_eq!(recalled, vec!["nvi".to_string()], "the history stores the effective query");
+}
+
+/// **The marks follow the effective query.** Under `@zs` the `z` and `s` of `zsh` are highlighted;
+/// the sigil marks nothing, because it was never part of what matched.
+#[test]
+fn the_marks_land_on_the_effective_query_not_the_sigil() {
+    use heca_grid_ui::{Command, CommandPalette, Component};
+    let theme = Theme::default();
+    let open = || {
+        CommandPalette::new()
+            .mode(':', "command")
+            .mode('@', "pane")
+            .command(Command::new("Close pane", || {}).id("close"))
+            .command(Command::new("zsh", || {}).id("zsh").mode("pane"))
+            .open(true)
+    };
+    // Marks are **over-drawn per character**, so a marked label leaves single-character runs on top
+    // of the whole line (see `a_label_marks_the_characters_it_was_given`).
+    let marked_chars = |p: &CommandPalette| -> Vec<String> {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(1200.0, 800.0));
+            p.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) if t.text.chars().count() == 1 => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let mut p = open();
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
+    for c in "@zs".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    let marks = marked_chars(&p);
+    assert!(marks.contains(&"z".to_string()), "the effective query marked 'z': {marks:?}");
+    assert!(marks.contains(&"s".to_string()), "the effective query marked 's': {marks:?}");
+    assert!(
+        !marks.contains(&"@".to_string()),
+        "the sigil is not part of the match, so it marks nothing: {marks:?}",
+    );
+}
+
+/// **A row renamed while the palette is open follows in place** — and is then found by its new
+/// name, because the widget ranks the text it shows rather than the label it was built with.
+#[test]
+fn a_live_label_is_both_redrawn_and_matched_by_its_new_name() {
+    use heca_grid_ui::reactive::SignalUpdate;
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(""));
+    let (a, b) = (ran.clone(), ran.clone());
+    let mut p = CommandPalette::new()
+        .command(Command::new("zsh", move || a.set("first")).id("one"))
+        .command(Command::new("bash", move || b.set("second")).id("two"))
+        .open(true);
+
+    // The host renames the first row — a pane's process changed, or it was renamed.
+    p.label_signals()[0].set("nvim".to_string());
+
+    for c in "nvi".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(
+        ran.get(),
+        "first",
+        "the row was matched by the name it now shows, not the one it was built with",
+    );
+}
+
+/// **The selection starts where the caller asked** — the pane you were last in, so Enter takes you
+/// back. It is an untyped-list rule only: the first keystroke hands the lead back to the best match.
+#[test]
+fn the_selection_starts_on_the_preselected_row_until_something_is_typed() {
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(""));
+    let open = || {
+        let (a, b, c) = (ran.clone(), ran.clone(), ran.clone());
+        CommandPalette::new()
+            .command(Command::new("alpha", move || a.set("alpha")).id("a"))
+            // Declared second, and the row the caller wants Enter to land on.
+            .command(Command::new("beta", move || b.set("beta")).id("b").preselect(true))
+            .command(Command::new("gamma", move || c.set("gamma")).id("c"))
+            .open(true)
+    };
+
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "beta", "an untyped list opens on the preselected row");
+
+    // Navigation still moves from there, rather than from the top.
+    let mut p = open();
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::MenuDown));
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "gamma", "the selection moved from the preselected row, not from row 0");
+
+    // Typing overrules it: the best match leads, exactly as `group` is dissolved by a query.
+    let mut p = open();
+    for c in "alp".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "alpha", "a query hands the lead back to the match");
+}
+
+/// A palette that declares no modes is the palette that existed before modes did: one scope, no
+/// sigil, and a `:` in the query is just a character to match.
+#[test]
+fn a_palette_without_modes_is_unchanged() {
+    use heca_grid_ui::{Command, CommandPalette, WidgetIntent};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(""));
+    let (a, b) = (ran.clone(), ran.clone());
+    let mut p = CommandPalette::new()
+        .command(Command::new("Close pane", move || a.set("close")).id("close"))
+        .command(Command::new(":wq", move || b.set("wq")).id("wq"))
+        .open(true);
+
+    for c in ":w".chars() {
+        type_text(&mut p, &c.to_string());
+    }
+    heca_grid_ui::dispatch(&mut p, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(ran.get(), "wq", "with no modes declared, a leading ':' is ordinary text");
+}
+
 #[test]
 fn command_palette_query_reuses_input_word_delete() {
-    use heca_grid_ui::{GridKey, Modifiers, WidgetIntent};
+    use heca_grid_ui::{Modifiers, WidgetIntent};
     let (mut p, ran) = palette_with_markers();
     p = p.open(true);
 
     // "Toggle xyz" matches nothing (no command contains "...xyz").
     for c in "Toggle xyz".chars() {
-        heca_grid_ui::dispatch(&mut p, &Event::Key { key: GridKey::Char(c), pressed: true });
+        type_text(&mut p, &c.to_string());
     }
     // Ctrl+Backspace word-deletes the whole "xyz" (not one char), leaving
     // "Toggle " — which now matches "Toggle sidebar". A char-delete would leave
@@ -4249,6 +4495,7 @@ fn input_edit_deletes_char_and_deletes_to_line_start() {
     // The readline shortcuts are host-configured (`edit_delete_back` / `edit_delete_to_line_start`,
     // default Ctrl+h / Ctrl+u) and arrive as semantic `Edit*` intents, not a raw key.
     let mut inp = Input::new().value("hello world");
+    give_keyboard(&mut inp);
 
     heca_grid_ui::dispatch(&mut inp, &Event::Widget(WidgetIntent::EditDeleteBack));
     assert_eq!(inp.value_str(), "hello worl", "EditDeleteBack removes one char back");
@@ -4257,18 +4504,25 @@ fn input_edit_deletes_char_and_deletes_to_line_start() {
 }
 
 #[test]
-fn input_raw_ctrl_char_is_ignored_not_typed() {
+fn a_raw_char_key_is_a_shortcut_not_text() {
     use heca_grid_ui::{Input, Modifiers};
-    // A modified char is never typed as text — it is left for the host to resolve into an
-    // `Edit*` shortcut (Ctrl+h, Ctrl+u, Ctrl/Cmd+A). The widget ignores the raw key.
+    // **Text is not a key.** A field types from `Event::TextInput` — the character the user
+    // actually committed, whatever produced it — so a raw `Char` key is only ever a shortcut and
+    // the field leaves it alone, modified or not. That is what the host's "deliver the real
+    // character, not the lowercased combo key" fixup used to work around.
     let mut inp = Input::new().value("hi");
+    inp.base_mut().focused.set(true);
     heca_grid_ui::dispatch(&mut inp, &Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
     assert_eq!(
-        heca_grid_ui::dispatch(&mut inp, &Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true }),
+        heca_grid_ui::dispatch(&mut inp, &Event::Key { key: GridKey::Char('h'), pressed: true }),
         heca_grid_ui::Handled::No,
-        "a raw Ctrl+char is not consumed by the input",
+        "a raw char key is left for whoever resolves shortcuts",
     );
-    assert_eq!(inp.value_str(), "hi", "the modified char is not typed");
+    assert_eq!(inp.value_str(), "hi", "and nothing was typed");
+
+    // The text channel is what types.
+    type_text(&mut inp, "!");
+    assert_eq!(inp.value_str(), "hi!");
 }
 
 // --- Toast ------------------------------------------------------------------
@@ -4303,7 +4557,7 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
     layout_toast(&mut t);
 
     // The × lives in the top-right gutter (width 320, ~21px square inset by 13).
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(296.0, 23.0) });
+    let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(Point::new(296.0, 23.0), PointerButton::Left));
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
     assert!(matches!(hit, Handled::Yes), "the × consumes the click");
 }
@@ -4320,7 +4574,7 @@ fn toast_action_button_fires_on_action() {
     layout_toast(&mut t);
 
     // Action row sits below the title, left-aligned in the text column.
-    heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+    click_at(&mut t, Point::new(60.0, 50.0));
     assert_eq!(acted.get(), 1, "clicking the action button fires on_action");
 }
 
@@ -4333,7 +4587,7 @@ fn toast_body_click_fires_on_click_only_when_set() {
     // Without on_click, a body click is not consumed (it can fall through).
     let mut inert = Toast::info("Build finished").dismissible(false);
     layout_toast(&mut inert);
-    let hit = heca_grid_ui::dispatch(&mut inert, &Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    let hit = heca_grid_ui::dispatch(&mut inert, &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left));
     assert!(matches!(hit, Handled::No), "a non-clickable toast doesn't eat body clicks");
 
     // With on_click, the same click activates + consumes.
@@ -4343,14 +4597,14 @@ fn toast_body_click_fires_on_click_only_when_set() {
         .dismissible(false)
         .on_click(move || c.set(c.get() + 1));
     layout_toast(&mut t);
-    let hit = heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    let hit = heca_grid_ui::dispatch(&mut t, &Event::pointer_pressed(Point::new(160.0, 20.0), PointerButton::Left));
     assert_eq!(clicked.get(), 1, "body click fires on_click");
     assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
 }
 
 #[test]
 fn toast_focusable_only_when_clickable_and_enter_activates() {
-    use heca_grid_ui::{Component, GridKey, Toast};
+    use heca_grid_ui::{Component, Toast};
     use std::cell::Cell;
     use std::rc::Rc;
 
@@ -4361,6 +4615,9 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     let c = clicked.clone();
     let mut t = Toast::info("Open log?").on_click(move || c.set(c.get() + 1));
     assert!(t.focusable(), "a clickable toast is focusable");
+    // A raw key reaches only the widget that owns the keyboard — the assertion below already
+    // says "focused", so make it so rather than relying on an unfocused widget taking Enter.
+    t.base_mut().focused.set(true);
     heca_grid_ui::dispatch(&mut t, &Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
 }
@@ -4664,7 +4921,7 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
     let mut t = Toast::info("File deleted").action("Retry", || {});
     layout_toast(&mut t);
     let card_w = t.base().bounds.size.w;
-    heca_grid_ui::dispatch(&mut t, &Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+    click_at(&mut t, Point::new(60.0, 50.0));
 
     let mut scene = Scene::new();
     {
@@ -4724,7 +4981,7 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
     }
 
     // Top-left toast sits at (16,16), width 320; its × is in the top-right gutter.
-    let hit = heca_grid_ui::dispatch(&mut stack, &Event::PointerPressed { pos: Point::new(310.0, 38.0) });
+    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(Point::new(310.0, 38.0), PointerButton::Left));
     assert!(matches!(hit, Handled::Yes), "a click on a toast's × is consumed");
     assert_eq!(dismissed.get(), 7, "the dismissed toast's id is reported to the host");
 }
@@ -4743,7 +5000,7 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
         stack.paint(&mut cx);
     }
     // Far from the top-left toast → not consumed, so the UI behind still gets it.
-    let hit = heca_grid_ui::dispatch(&mut stack, &Event::PointerPressed { pos: Point::new(700.0, 500.0) });
+    let hit = heca_grid_ui::dispatch(&mut stack, &Event::pointer_pressed(Point::new(700.0, 500.0), PointerButton::Left));
     assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
 }
 
@@ -5144,7 +5401,7 @@ fn focus_ring_shows_on_keyboard_focus_not_on_mouse_click() {
 
     let mut focus = FocusManager::new();
     // Click-focus: focused (activation works) but the ring must NOT draw.
-    focus.dispatch(&mut ui, &Event::PointerPressed { pos: center });
+    focus.dispatch(&mut ui, &Event::pointer_pressed(center, PointerButton::Left));
     let a = &ui.base().children[0];
     assert!(a.base().focused.get_untracked(), "click focuses the widget");
     assert!(
@@ -5180,9 +5437,7 @@ fn a_state_highlight_never_crops_the_content_it_covers() {
         let b = row.base().bounds;
         heca_grid_ui::dispatch(
             &mut row,
-            &Event::PointerMoved {
-                pos: Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
-            },
+            &Event::pointer_moved(Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0)),
         );
         let mut scene = Scene::new();
         {
@@ -5263,4 +5518,172 @@ fn a_margin_can_be_set_per_axis() {
         2.0,
         "margin_top overrides margin_y",
     );
+}
+
+/// **`CardGrid` walks three axes.** Columns on `item_*`, the cell within a column on `menu_*`, and
+/// the outer row on `menu_history_*` — all on the shared vocabulary, so the widget owns no keys.
+#[test]
+fn a_card_grid_walks_three_axes_and_returns_the_callers_key() {
+    use heca_grid_ui::reactive::{signal, SignalGet};
+    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label};
+    use heca_grid_ui::WidgetIntent;
+
+    let lit: Vec<Signal<bool>> = (0..5).map(|_| signal(false)).collect();
+    let chosen = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+    let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let (c, d) = (chosen.clone(), dismissed.clone());
+
+    // Row 0: two columns, the first holding two stacked cells. Row 1: one column, one cell.
+    let mut grid = CardGrid::new()
+        .row(
+            vec![
+                vec![GridCell::new("a", lit[0]), GridCell::new("b", lit[1])],
+                vec![GridCell::new("c", lit[2])],
+            ],
+            Flex::row().child(Label::new("row0")),
+        )
+        .row(
+            vec![vec![GridCell::new("d", lit[3])]],
+            Flex::row().child(Label::new("row1")),
+        )
+        .on_activate(move |key| *c.borrow_mut() = key.to_string())
+        .on_dismiss(move || d.set(true))
+        .selected("a");
+    give_keyboard(&mut grid);
+
+    assert_eq!(grid.selected_key(), Some("a"));
+
+    // A column with depth: menu_down walks WITHIN it — the case that used to switch workspace.
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
+    assert_eq!(grid.selected_key(), Some("b"), "j moves to the next pane in the split column");
+    assert!(lit[1].get_untracked() && !lit[0].get_untracked(), "exactly one cell is lit");
+
+    // item_next crosses to the next COLUMN, clamping the cell index into the shorter column.
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::ItemNext));
+    assert_eq!(grid.selected_key(), Some("c"), "l moves a column right");
+
+    // menu_history_* is the OUTER axis here — the workspace.
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
+    assert_eq!(grid.selected_key(), Some("d"), "n moves to the next workspace");
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryDown));
+    assert_eq!(grid.selected_key(), Some("d"), "and stops at the last one");
+
+    // **A row remembers where you were in it.** Coming back lands on the card you left, not on the
+    // row's first — the position used to be destroyed by the trip (the cursor carried its column
+    // index across, clamped it into the shorter row, and clamped it again on the way back).
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuHistoryUp));
+    assert_eq!(grid.selected_key(), Some("c"), "back to the column we left row 0 on");
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::MenuDown));
+    assert_eq!(grid.selected_key(), Some("d"), "no depth here, so j moved to the next row");
+
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Activate));
+    assert_eq!(chosen.borrow().as_str(), "d");
+    heca_grid_ui::dispatch(&mut grid, &Event::Widget(WidgetIntent::Dismiss));
+    assert!(dismissed.get());
+}
+
+/// **An overlay must not eat a key its panel did not want.** `Keymap::dispatch` offers the raw key
+/// first and the semantic intent second, so claiming the key stops the walk before the intent
+/// arrives — which is how Esc stopped closing an overlay and `Ctrl+h` never reached `item_previous`.
+#[test]
+fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
+    use heca_grid_ui::widgets::{CardGrid, Flex, GridCell, Label, Overlay};
+    use heca_grid_ui::reactive::signal;
+    use heca_grid_ui::{WidgetIntent};
+
+    let dismissed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let d = dismissed.clone();
+    let lit = signal(false);
+    let grid = CardGrid::new()
+        .row(vec![vec![GridCell::new("a", lit)]], Flex::row().child(Label::new("a")))
+        .on_dismiss(move || d.set(true));
+    let mut overlay = Overlay::new().blocking(true).panel(grid).open(true);
+
+    // A raw key the panel has no use for: the overlay must NOT claim it, or the keymap stops here.
+    let handled = heca_grid_ui::dispatch(
+        &mut overlay,
+        &Event::Key { key: GridKey::Escape, pressed: true },
+    );
+    assert_eq!(handled, Handled::No, "an unwanted key is not swallowed");
+
+    // …so the intent the same chord resolves to still arrives, and closes the layer.
+    heca_grid_ui::dispatch(&mut overlay, &Event::Widget(WidgetIntent::Dismiss));
+    assert!(dismissed.get(), "Dismiss reached the panel");
+}
+
+
+/// **A zoom scales the picture, not just the box** (F003/P082/T327 item 1).
+///
+/// An overview opens by zooming out from life size, which a fade cannot express. The trap is
+/// scaling geometry alone: a half-size card whose text is still 14px, whose radius is still 6px and
+/// whose 1px border is still 1px is not the same picture further away. So every pixel-measured
+/// value rides the same transform.
+#[test]
+fn a_scaled_subtree_shrinks_its_text_radius_and_border_with_its_box() {
+    use heca_grid_ui::component::PaintCx;
+    use heca_grid_ui::scene::{DrawCommand, Scene};
+    use heca_grid_ui::{Color, Point, Rectangle, Size, Theme};
+
+    let theme = Theme::default();
+    let draw = |scale: f32| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            let paint = |cx: &mut PaintCx<'_>| {
+                cx.rect(
+                    Rectangle::new(Point::new(100.0, 100.0), Size::new(200.0, 80.0)),
+                    Color::rgb(10, 20, 30),
+                    Some(heca_grid_ui::scene::Border { color: Color::rgb(1, 2, 3), width: 2.0 }),
+                    8.0,
+                    None,
+                );
+                cx.text(
+                    Rectangle::new(Point::new(100.0, 100.0), Size::new(200.0, 80.0)),
+                    "zsh",
+                    Color::rgb(200, 200, 200),
+                    16.0,
+                    heca_grid_ui::scene::TextAlign::Start,
+                    heca_grid_ui::scene::TextStyle::default(),
+                );
+            };
+            match scale {
+                1.0 => paint(&mut cx),
+                s => cx.with_scale(s, Point::new(0.0, 0.0), paint),
+            }
+        }
+        scene
+    };
+
+    let life = draw(1.0);
+    let half = draw(0.5);
+
+    let rect_of = |s: &Scene| {
+        s.iter().find_map(|c| match c {
+            DrawCommand::Rect(r) => Some(*r),
+            _ => None,
+        }).expect("a rect")
+    };
+    let text_of = |s: &Scene| {
+        s.iter().find_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.clone()),
+            _ => None,
+        }).expect("a text run")
+    };
+
+    let (a, b) = (rect_of(&life), rect_of(&half));
+    assert_eq!(b.rect.size.w, a.rect.size.w / 2.0, "the box halves");
+    assert_eq!(b.rect.loc.x, a.rect.loc.x / 2.0, "and moves toward the origin");
+    assert_eq!(b.radius, a.radius / 2.0, "the corner radius halves with it");
+    assert_eq!(
+        b.border.expect("border").width,
+        a.border.expect("border").width / 2.0,
+        "and so does the border, or a hairline becomes a slab",
+    );
+
+    let (ta, tb) = (text_of(&life), text_of(&half));
+    assert_eq!(tb.size, ta.size / 2.0, "the text shrinks with its box");
+    assert_eq!(tb.rect.loc.y, ta.rect.loc.y / 2.0);
+
+    // Life size must be byte-for-byte what it always was: a zoom nobody asked for costs nothing.
+    assert_eq!(life.len(), half.len());
 }

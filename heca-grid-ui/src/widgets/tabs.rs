@@ -214,6 +214,18 @@ impl Tabs {
     }
 }
 
+impl Tabs {
+    /// Light exactly one tab (or none).
+    fn set_hover(&self, hit: Option<usize>) {
+        for (i, hovered) in self.hover_states.iter().enumerate() {
+            let want = hit == Some(i);
+            if hovered.get_untracked() != want {
+                hovered.set(want);
+            }
+        }
+    }
+}
+
 impl Component for Tabs {
     fn base(&self) -> &Base {
         &self.base
@@ -235,7 +247,7 @@ impl Component for Tabs {
         self.base.style.layout.gap = TAB_GAP * self.base.size_scale();
         let band = (UNDERLINE_H as f32 + UNDERLINE_GAP) * self.base.size_scale();
         for child in self.base.children.iter_mut() {
-            child.base_mut().style.layout.margin_bottom = Some(band);
+            child.base_mut().style.layout.margin_bottom = Some(band.into());
         }
     }
 
@@ -295,18 +307,20 @@ impl Component for Tabs {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let hit = self.tab_at(*pos);
-                for (i, hovered) in self.hover_states.iter().enumerate() {
-                    let want = hit == Some(i);
-                    if hovered.get_untracked() != want {
-                        hovered.set(want);
-                    }
-                }
+            // Per-**tab** hover: the tabs are rects this widget draws, not children, so
+            // `Base::hovered` (true anywhere over the strip) cannot say which one. The move only
+            // arrives when the pointer is over the strip, and a leave clears every tab.
+            Event::PointerMove(p) => {
+                self.set_hover(self.tab_at(p.pos));
                 Handled::No
             }
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
-                if let Some(i) = self.tab_at(*pos) {
+            Event::PointerLeave(_) => {
+                self.set_hover(None);
+                Handled::No
+            }
+            Event::PointerDown(_) => Handled::Yes,
+            Event::Click(p) => {
+                if let Some(i) = self.tab_at(p.pos) {
                     self.select(i);
                 }
                 Handled::Yes

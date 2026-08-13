@@ -72,9 +72,19 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.491Z",
+  "updatedAt": "2026-08-10T19:20:34.059Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "264dac34-cc22-40c6-9f35-4c6ab1aba046",
+      "date": "2026-08-10T19:20:34.061Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ]
 }

@@ -3,7 +3,7 @@
 //! These are the geometry layer of the drag framework: pure bounds walks over the
 //! **retained widget tree** (whose `Base.bounds` are filled in by layout each
 //! frame). They replace hand-computed, per-surface hit-testing — any widget marked
-//! via [`DragExt`](crate::builders::DragExt) participates automatically.
+//! via [`ComponentExt`](crate::builders::ComponentExt) participates automatically.
 //!
 //! Domain-neutral: results are opaque [`DragItemId`]s the app maps back to its own
 //! model. No app types, no GPU, no per-surface special-casing.
@@ -28,14 +28,10 @@ pub enum DropSide {
 /// A resolved drop position: which target, its laid-out bounds, and the side the
 /// cursor is over (for an insertion indicator).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct DropHit {
-    /// The opaque id the app registered via [`DragExt::drop_target`](crate::builders::DragExt::drop_target).
-    pub id: DragItemId,
-    /// The target's laid-out bounds (logical px) — paint the indicator against these.
-    pub bounds: Rectangle,
-    /// Which side of the target the cursor is over.
-    pub side: DropSide,
-}
+pub struct DropHit {/// The opaque id the app registered via [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target).
+    pub id: DragItemId, /// The target's laid-out bounds (logical px) — paint the indicator against these.
+    pub bounds: Rectangle, /// Which side of the target the cursor is over.
+    pub side: DropSide}
 
 /// Classify `point` against `bounds` into a [`DropSide`] by vertical thirds
 /// (the common vertically-stacked list case).
@@ -118,7 +114,7 @@ pub fn source_at(root: &dyn Component, point: Point) -> Option<DragItemId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::DragExt;
+    use crate::builders::ComponentExt;
     use crate::widgets::{Flex, Surface};
     use heca_core::layout::{Point, Rectangle, Size};
 

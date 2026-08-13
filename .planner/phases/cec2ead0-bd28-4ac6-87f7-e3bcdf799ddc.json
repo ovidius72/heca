@@ -10,7 +10,7 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Plugin semplici definiti in `config.toml` con rendering testuale nelle regioni chrome.",
-  "description": "",
+  "description": "Simple plugins defined in `config.toml`, rendered into the chrome regions.\n\n═══ THE POINT, AND THE CONSTRAINT IT INHERITS ═══\n\nThis is the **lowest rung of the extensibility ladder**: no code, no WASM, just TOML. It matters\nbecause it is the first thing an outsider will try, and because it is the cheapest possible test of\nwhether the declarative model really is complete — a config plugin can only use what a description\ncan express.\n\nSo the constraint from `AGENTS.md` ⭐⭐ RULE ZERO applies here in its sharpest form: whatever a\nconfig plugin renders must go through the **same** path the app's own chrome uses. Concretely:\n\n- Its content is a **`ViewNode`** (`heca-view`), realized by the **one** bridge\n  (`heca-view-realize`) — never a second, simpler renderer written \"just for config plugins\".\n  A parallel path cannot stay identical, and nothing fails when it drifts.\n- Its behaviour is **`Intent`s** (action id + args), so a click, a `prefix+/` pick, a menu entry, a\n  keybinding and RPC are one path, routed by the action's own policy and confirm gate.\n- It gets the same picker, menus and focus the native rows get, with nothing declared per plugin.\n\n**The old \"textual rendering\" phrasing in the original summary is the thing to avoid**, not the\nplan: if a config plugin can only produce text while a native container produces widgets, that is\nexactly the second-class path this feature exists to prevent.\n\n═══ WHAT IT CAN BUILD ON TODAY ═══\n\n`ViewNode` covers the whole widget vocabulary (guarded by a coverage test), styling is a prop that\nresolves against the theme, and the typed SDK (`heca-view/src/build.rs`) exists for a Rust author.\nThe gap a config plugin exposes first will be **which properties a description still cannot set** —\nsee `docs/chrome-and-ui.md` Part I §4, which is counted from the reasons on the builders themselves,\nnot written by hand.\n\nDesign record: `docs/chrome-and-ui.md` Part I (§0 for the intent, §5 for worked screens) ·\n`docs/widget-architecture.md` · F003's description.",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -95,9 +95,10 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.862Z",
-  "updatedAt": "2026-07-27T11:40:15.505Z",
+  "updatedAt": "2026-08-11T06:57:44.269Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

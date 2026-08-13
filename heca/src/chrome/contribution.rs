@@ -18,7 +18,7 @@
 
 use heca_core::layout::Rectangle;
 
-use super::{ChromeSignals, DragItemRegistry, HintTargetRegistry, RegionId};
+use super::{ChromeSignals, DragItemRegistry, RegionId};
 use crate::providers::ChromeCtx;
 
 /// Stable string identity of a mounted container (equals its provider's `id()`).
@@ -39,10 +39,11 @@ pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel
 /// [`ChromeCtx`](crate::providers::ChromeCtx).
 ///
 /// A container body is not just widgets — building it *allocates host ids*: a drag
-/// item id per draggable/droppable row, a hint target id per pickable row, and a
-/// signal per value that changes without a structural rebuild. Those registries are
-/// owned by the host (the hint registry is shared across every retained tree, per
-/// `HintTargetRegistry`), so the build has to borrow them mutably.
+/// item id per draggable/droppable row, and a signal per value that changes without a
+/// structural rebuild. Those registries are owned by the host, so the build has to borrow them
+/// mutably. (A **pickable** row needs nothing here: it declares what a `prefix+/` pick does on
+/// itself with `KeyHint::on_peek`, and the framework collects the declaration out of the laid-out
+/// tree — which is what a plugin row could never do through a host-private registry.)
 ///
 /// They are passed as an explicit `&mut` parameter rather than hidden behind interior
 /// mutability in `ChromeCtx`: it keeps the plugin-facing context a pure read/observe
@@ -61,15 +62,12 @@ pub struct BuildCx<'a> {
     pub(crate) signals: &'a mut ChromeSignals,
     /// Drag sources / drop targets registered by this build.
     pub(crate) drag: &'a mut DragItemRegistry,
-    /// KeyHint pick targets registered by this build (shared across all trees).
-    pub(crate) hints: &'a mut HintTargetRegistry,
 }
 
 // **Checked against "is this true for ANY component?" on 2026-07-30 (F003/P086/T367), and two of
 // the four are not yet.** Recorded here rather than assumed:
 //
-// - `container_id` and `hints` are generic. A mount id is a mount id, and a hint target is an
-//   opaque id mapped to an `InteractionIntent`.
+// - `container_id` is generic. A mount id is a mount id.
 // - **`signals` (`ChromeSignals`) is workspace-shaped.** Every family but `row_nav` is keyed by
 //   `PaneId` / `ws_idx` / `col_idx` (`pane_active`, `col_active`, `ws_active`, `pane_hint`,
 //   `ws_hint`, `col_hint`, `pane_info`), so a Docker dock has nowhere to register a value that
@@ -90,13 +88,11 @@ impl<'a> BuildCx<'a> {
         container_id: &'a str,
         signals: &'a mut ChromeSignals,
         drag: &'a mut DragItemRegistry,
-        hints: &'a mut HintTargetRegistry,
     ) -> Self {
         Self {
             container_id,
             signals,
             drag,
-            hints,
         }
     }
 

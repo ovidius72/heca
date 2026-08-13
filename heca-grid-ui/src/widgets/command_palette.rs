@@ -45,6 +45,16 @@ pub struct Command {
     /// per line — an action bound twice really is bound twice, and joining them into `"λ h / λ ←"`
     /// was both wider than the label and impossible to draw as chips.
     chords: Vec<Vec<KeyCap>>,
+    /// Is this the row the user is already on? Drawn in the accent so it can be found at a glance.
+    /// Distinct from the *selection*, which is where the keyboard is right now.
+    current: bool,
+    /// Should the selection **start** here when the palette opens with nothing typed?
+    preselect: bool,
+    /// Which mode lists this command, named by its **search scope** — the same vocabulary the
+    /// palette's sigil table and the host's `clear_search_history scope=…` already use, rather than
+    /// a second spelling of the same thing. `None` means the default mode, which is what every
+    /// command written before modes existed says.
+    mode: Option<String>,
     on_run: Box<dyn Fn()>,
 }
 
@@ -59,8 +69,52 @@ impl Command {
             description: None,
             icon: None,
             chords: Vec::new(),
+            current: false,
+            preselect: false,
+            mode: None,
             on_run: Box::new(on_run),
         }
+    }
+
+    /// Mark this row as **the one the user is already on** — the focused pane, the active
+    /// workspace. It is drawn in the accent, so you can see where you are in a list of near-identical
+    /// names before choosing where to go.
+    ///
+    /// Not the same thing as the selection: the selection is where the keyboard is and moves as you
+    /// type, while this does not move at all. A row can be both, and then it simply reads as
+    /// selected — you are on it *and* pointing at it, and there is nothing further to distinguish.
+    #[heca_grid_ui_macros::prop]
+    pub fn current(mut self, current: bool) -> Self {
+        self.current = current;
+        self
+    }
+
+    /// Start the selection on this row, when the palette opens with **nothing typed**.
+    ///
+    /// For a picker, that is the row that makes the default action worth pressing: the pane you
+    /// were last in, not the one you are in — landing on the latter would make Enter focus what is
+    /// already focused. Deliberately separate from [`current`](Self::current), which says where you
+    /// *are*; the two are different rows and each wants its own answer.
+    ///
+    /// It applies only to an untyped list, because a query is better context than any default: the
+    /// first keystroke hands the lead back to the best match. If several rows claim it the first in
+    /// the list wins, since a "default" there can be more than one of is not a default.
+    #[heca_grid_ui_macros::prop]
+    pub fn preselect(mut self, preselect: bool) -> Self {
+        self.preselect = preselect;
+        self
+    }
+
+    /// Which mode this command belongs to, named by the **scope** the palette declared for it
+    /// ([`CommandPalette::mode`]). Unset, it belongs to the default mode.
+    ///
+    /// The scope name and not the sigil: the sigil is how a *user* reaches a mode and lives in the
+    /// palette's table, while the scope is what the memory is filed under — one of them is an
+    /// input convention and the other is an identity, and a command declares the identity.
+    #[heca_grid_ui_macros::prop]
+    pub fn mode(mut self, scope: impl Into<String>) -> Self {
+        self.mode = Some(scope.into());
+        self
     }
 
     /// An optional second line, muted — what the command does.
@@ -170,6 +224,12 @@ const fn panel_metrics(size: WidgetSize) -> (f64, usize) {
 pub struct CommandPalette {
     base: Base,
     commands: Vec<Command>,
+    /// Sigil → scope, in declaration order; **the first declared is the default mode**, the one a
+    /// query with no sigil is in.
+    ///
+    /// Empty means the palette has one mode — [`search`](Self::search)'s own scope, reachable
+    /// without a sigil — which is exactly what a palette written before modes existed does.
+    modes: Vec<(char, String)>,
     /// The query field — a real [`Input`], so editing (selection, word/line
     /// delete, multi-click, caret) comes for free. Driven manually since the
     /// palette is overlay-drawn: its bounds/font/focus are set at paint time.
@@ -199,6 +259,10 @@ pub struct CommandPalette {
     /// The marks signal of each row's title label, so the match highlights can be moved on every
     /// keystroke without rebuilding a hundred labels.
     title_marks: Vec<Signal<Vec<usize>>>,
+    /// The text signal of each row's title, in `commands` order — handed to a host that wants a row
+    /// to follow something live (a pane's process, a rename). Writing one is a text swap on that
+    /// label alone; the palette reads them back when it ranks, so what is matched is what is shown.
+    title_text: Vec<Signal<String>>,
     /// The wrap signal of each row's description, where it has one. **Only the selected row's
     /// description reflows**; the rest are cut to one line, which is what keeps the list from
     /// exploding to three lines a row and is why this is per-row state rather than a build-time
@@ -209,21 +273,36 @@ pub struct CommandPalette {
 impl CommandPalette {
     /// A new, empty (closed) palette.
     pub fn new() -> Self {
+        let open = signal(false);
+        let mut base = Base::new();
+        // **Open is focused.** The palette's query field is its own (a `RefCell<Input>`, not a
+        // child), so the palette is the widget that types — and it types because it holds the
+        // keyboard, not because it declared that it takes raw keys and text.
+        base.focused = open;
         Self {
-            base: Base::new(),
+            base,
             commands: Vec::new(),
-            query: RefCell::new(Input::new()),
+            modes: Vec::new(),
+            // The query field is off-tree, so nothing else can focus it — and the palette hands it
+            // every key and every character it decides is typing. It holds the keyboard for exactly
+            // as long as the palette does.
+            query: RefCell::new({
+                let mut q = Input::new();
+                q.base_mut().focused = open;
+                q
+            }),
             selected: 0,
             scroll: 0,
             placeholder: "Type a command…".to_string(),
             panel_size: WidgetSize::Normal,
-            open: signal(false),
+            open,
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             search: SearchModel::detached("command"),
             natural_h: Vec::new(),
             title_marks: Vec::new(),
+            title_text: Vec::new(),
             desc_wrap: Vec::new(),
         }
     }
@@ -239,6 +318,10 @@ impl CommandPalette {
     pub fn command(mut self, c: Command) -> Self {
         let title = Label::new(c.label.clone()).truncate(Ellipsis::End);
         self.title_marks.push(title.marks_signal());
+        // The row's text signal, kept so a host can rename a row **in place**. The label is a
+        // `Signal<String>` already, so writing it re-marks that one label instead of rebuilding the
+        // palette — which is what keeps a live list from flashing.
+        self.title_text.push(title.text_signal());
         let mut column = Flex::column().child(title);
         self.desc_wrap.push(None);
         if let Some(desc) = &c.description {
@@ -253,6 +336,21 @@ impl CommandPalette {
         }
         self.base.children.push(Box::new(column));
         self.commands.push(c);
+        self
+    }
+
+    /// Declare a mode: typing `sigil` as the query's first character switches the list to the
+    /// commands of `scope`, and the palette's memory to that scope's.
+    ///
+    /// **The first mode declared is the default** — where an unsigiled query lands — so give it a
+    /// sigil too and it can be returned to explicitly. Declare none and the palette has exactly one
+    /// mode, [`search`](Self::search)'s scope, with no sigil to type.
+    ///
+    /// The commands of every mode stay in **one flat list**, filtered: their text is built as real
+    /// children indexed by position, so a list per mode would mean re-indexing them on each switch.
+    #[heca_grid_ui_macros::host_only("a sigil paired with a scope, not a scalar")]
+    pub fn mode(mut self, sigil: char, scope: impl Into<String>) -> Self {
+        self.modes.push((sigil, scope.into()));
         self
     }
 
@@ -281,12 +379,33 @@ impl CommandPalette {
         self
     }
 
+    /// Open with the query already filled in — including its sigil, which is how a caller opens the
+    /// palette **in a mode**: `"@"` is the pane list, `"@nvim"` is the pane list already narrowed.
+    ///
+    /// There is deliberately no separate "open in mode" API. The sigil is the mode selector, so a
+    /// prefilled query is the only mechanism needed, and a caller that wants a mode and a caller
+    /// that wants a search are doing the same thing.
+    #[heca_grid_ui_macros::prop]
+    pub fn query(mut self, text: impl Into<String>) -> Self {
+        self.query.borrow_mut().set_value(text.into());
+        // Mark, place the selection and reflow now, so this does not depend on being called before
+        // `open` — properties are order-independent, and a mode set after it would otherwise paint
+        // the wrong list once.
+        self.sync_marks();
+        self.sync_initial_selection();
+        self.sync_wrap();
+        self
+    }
+
     /// Set the initial open state.
     #[heca_grid_ui_macros::prop]
     pub fn open(mut self, open: bool) -> Self {
         self.open.set(open);
-        // Mark the matches for the (empty) query now, so the first paint is not a frame behind.
+        // Mark the matches for the (empty) query now, so the first paint is not a frame behind, and
+        // place the selection on whichever row asked to start there.
         self.sync_marks();
+        self.sync_initial_selection();
+        self.sync_wrap();
         self
     }
 
@@ -305,6 +424,16 @@ impl CommandPalette {
         self.open
     }
 
+    /// Each row's title signal, in the order the commands were added — for a host whose rows track
+    /// something that changes while the palette is open (a pane's running program, a rename).
+    ///
+    /// Writing one **renames that row in place**: the label re-marks itself and nothing else is
+    /// rebuilt, so the list never flashes. [`results`](Self::results) reads these back, so a row
+    /// renamed this way is also matched by its new name rather than the one it was built with.
+    pub fn label_signals(&self) -> &[Signal<String>] {
+        &self.title_text
+    }
+
     fn is_open(&self) -> bool {
         self.open.get_untracked()
     }
@@ -312,6 +441,55 @@ impl CommandPalette {
     /// The current query text (read from the [`Input`]).
     fn query_text(&self) -> String {
         self.query.borrow().value_str()
+    }
+
+    /// The scope of the default mode — the first declared, or the model's own when none are.
+    fn default_scope(&self) -> &str {
+        match self.modes.first() {
+            Some((_, scope)) => scope.as_str(),
+            None => self.search.scope(),
+        }
+    }
+
+    /// Every scope this palette can be in, default first.
+    fn scopes(&self) -> Vec<String> {
+        match self.modes.is_empty() {
+            true => vec![self.search.scope().to_string()],
+            false => self.modes.iter().map(|(_, s)| s.clone()).collect(),
+        }
+    }
+
+    /// Which mode the query is in: the **sigil actually typed** (`None` when the default mode was
+    /// reached without one), its scope, and the query with that sigil removed.
+    ///
+    /// The sigil is read off the first character and nothing else — a leading character that is not
+    /// in the table is not a sigil, it is the first letter of a search, and is matched as one.
+    fn active(&self) -> (Option<char>, String, String) {
+        let raw = self.query_text();
+        let mut rest = raw.chars();
+        if let Some(first) = rest.next()
+            && let Some((sigil, scope)) = self.modes.iter().find(|(s, _)| *s == first)
+        {
+            return (Some(*sigil), scope.clone(), rest.as_str().to_string());
+        }
+        (None, self.default_scope().to_string(), raw)
+    }
+
+    /// Does `cmd` belong to `scope`? A command that named no mode belongs to the default one.
+    fn in_mode(&self, cmd: &Command, scope: &str) -> bool {
+        match &cmd.mode {
+            Some(mode) => mode == scope,
+            None => scope == self.default_scope(),
+        }
+    }
+
+    /// Put the active sigil back in front of `text` — what a history recall produces, since the
+    /// history stores the **effective** query and the field shows the whole thing.
+    fn with_sigil(sigil: Option<char>, text: &str) -> String {
+        match sigil {
+            Some(s) => format!("{s}{text}"),
+            None => text.to_string(),
+        }
     }
 
     /// The current filtered + ranked results — **entirely the model's answer**.
@@ -322,10 +500,32 @@ impl CommandPalette {
     /// same and the caller's groups are the only context there is, but a typed query is better
     /// context than a group and dissolves it.
     fn results(&self) -> Vec<Ranked> {
-        let query = self.query_text();
+        let (_, scope, query) = self.active();
+        // Only the active mode's commands are ranked, and the ids that come back are mapped to
+        // indices into the **whole** list — the children, the marks and the measured heights are all
+        // keyed by position in `commands`, so the filter must not renumber them.
+        let of_mode: Vec<usize> = self
+            .commands
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| self.in_mode(c, &scope))
+            .map(|(i, _)| i)
+            .collect();
+        // Read each row's **live** text, not the label it was built with: a host may be following a
+        // pane's process or a rename, and a list that shows one name while matching another is
+        // worse than a stale one. The labels are short and there are a few hundred at most, so
+        // materialising them per keystroke costs nothing measurable.
+        let items: Vec<(Option<&str>, String)> = of_mode
+            .iter()
+            .map(|&i| (self.commands[i].id.as_deref(), self.title_text[i].get_untracked()))
+            .collect();
         let mut out = self
             .search
-            .rank(&self.commands, &query, |c| (c.id.as_deref(), c.label.as_str()));
+            .with_scope(scope)
+            .rank(&items, &query, |(id, text)| (*id, text.as_str()));
+        for r in &mut out {
+            r.index = of_mode[r.index];
+        }
         if query.is_empty() {
             // Stable, so the ranking inside each block survives.
             out.sort_by_key(|r| self.commands[r.index].group);
@@ -358,9 +558,12 @@ impl CommandPalette {
             let cmd = &self.commands[m.index];
             // The query as typed and the command's identity — remembered only on a **run**. An
             // abandoned search is not a search anyone wants back, so `close()` records nothing.
-            let (query, id) = (self.query_text(), cmd.id.clone());
+            // **Without the sigil, into the active mode's scope**: the sigil selected which memory
+            // this is, so storing it inside that memory would put it back in every recalled query.
+            let (_, scope, query) = self.active();
+            let id = cmd.id.clone();
             (cmd.on_run)();
-            self.search.record_run(&query, id.as_deref());
+            self.search.with_scope(scope).record_run(&query, id.as_deref());
         }
         self.close();
     }
@@ -418,8 +621,15 @@ impl CommandPalette {
     /// hover-select and the click hit-test all compute, and rows of differing heights would make
     /// that an index-dependent running sum in three places. A described list simply leaves the
     /// second line of an undescribed row empty.
+    ///
+    /// Asked of the **active mode only**: pane rows carry no description, so charging them a second
+    /// line because the action list has one would leave every row in `@` mode half empty.
     fn two_line_rows(&self) -> bool {
-        self.commands.iter().any(|c| c.description.is_some())
+        let (_, scope, _) = self.active();
+        self.commands
+            .iter()
+            .filter(|c| self.in_mode(c, &scope))
+            .any(|c| c.description.is_some())
     }
 
     /// How many lines **this** row needs: its text (label, plus a description if the list has any)
@@ -537,6 +747,31 @@ impl CommandPalette {
         }
     }
 
+    /// Put the selection on the row that asked for it — **only while nothing is typed**.
+    ///
+    /// A query is better context than any default, so the first keystroke hands the lead back to
+    /// the best match (`on_query_changed` resets to 0 and never calls this). Which makes it an
+    /// open-time rule, the same shape as [`Command::group`]'s ordering.
+    ///
+    /// It runs after the results are known rather than over `commands`, because the row's *position*
+    /// is what a selection is, and that position comes from the ranking.
+    fn sync_initial_selection(&mut self) {
+        let (_, _, query) = self.active();
+        if !query.is_empty() {
+            return;
+        }
+        let results = self.results();
+        let Some(at) = results
+            .iter()
+            .position(|m| self.commands[m.index].preselect)
+        else {
+            return;
+        };
+        self.selected = at;
+        // The preselected row can rank anywhere, so the list may have to open scrolled to reach it.
+        self.follow_selection();
+    }
+
     fn sync_marks(&mut self) {
         for signal in &self.title_marks {
             signal.set(Vec::new());
@@ -582,9 +817,15 @@ impl CommandPalette {
     /// The width **reserved on the right of every row** for bindings — the widest chord in the whole
     /// list, so the labels of all rows end at the same place and the chips line up in a column
     /// instead of tracking each label's length.
+    ///
+    /// The **active mode's** widest, for the same reason the row height is the active mode's: a
+    /// pane list binds nothing, and reserving the action list's keycap column across it would spend
+    /// that width on empty space.
     fn shortcut_col_w(&self) -> f64 {
+        let (_, scope, _) = self.active();
         self.commands
             .iter()
+            .filter(|c| self.in_mode(c, &scope))
             .flat_map(|c| c.chords.iter())
             .map(|chord| self.chord_w(chord))
             .fold(0.0, f64::max)
@@ -604,8 +845,14 @@ impl CommandPalette {
 
     /// The user typed: reset the filter/selection, move the marks with it, and **leave the history
     /// walk** — the field is theirs again.
+    ///
+    /// It ends the walk in **every** mode, not just the active one: there is a single field, and
+    /// typing a sigil switches mode with a keystroke — leaving the mode just left parked mid-walk
+    /// would make its next `Ctrl+p` resume from the middle of its history.
     fn on_query_changed(&mut self) {
-        self.search.query_changed();
+        for scope in self.scopes() {
+            self.search.with_scope(scope).query_changed();
+        }
         self.on_query_replaced();
     }
 
@@ -807,10 +1054,11 @@ impl Component for CommandPalette {
                         Point::new(icon_x, first_line.loc.y),
                         Size::new(isz as f64, first_line.size.h),
                     );
+                    // The accent says "here": the selected row, and the row you are already on.
                     cx.icon(
                         irect,
                         &ch.to_string(),
-                        if is_sel { accent } else { muted },
+                        if is_sel || cmd.current { accent } else { muted },
                         isz,
                     );
                 }
@@ -821,6 +1069,10 @@ impl Component for CommandPalette {
                 // the marks are the label's; this widget draws no text.
                 let content = if is_sel {
                     foreground
+                } else if cmd.current {
+                    // Where you already are, when the keyboard is somewhere else. Selection still
+                    // wins on the row it is on: two accents on one row would say nothing.
+                    accent
                 } else {
                     muted.lerp(foreground, 0.7)
                 };
@@ -854,10 +1106,12 @@ impl Component for CommandPalette {
         });
     }
 
-    /// Owns its walk. While open it grabs the viewport — typing, nav and outside-click dismissal —
-    /// and it paints its row children itself, in the overlay panel it positions them into.
-    fn routes_own_subtree(&self) -> bool {
-        true
+    /// **A layer is not scrolled into view.** `Base::focused` says this widget holds the keyboard
+    /// while it is open, and `wants_visible` defaults to exactly that — so an enclosing
+    /// `ScrollRegion` would scroll the page to wherever this widget's layout node happens to sit,
+    /// every frame it is open. A layer draws over the page; the page does not come to it.
+    fn wants_visible(&self) -> bool {
+        false
     }
 
     /// Lay the row text out at **the width it will be drawn at**, in a column.
@@ -904,6 +1158,24 @@ impl Component for CommandPalette {
         self.place_rows();
     }
 
+    /// The palette paints its panel on the overlay layer, not at its layout `bounds`.
+    fn damage_bounds(&self) -> Rectangle {
+        if self.is_open() {
+            self.panel.get()
+        } else {
+            self.base.bounds
+        }
+    }
+
+    /// Its **input** surface is the panel while open, and nothing while closed.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if self.is_open() {
+            Some(self.panel.get())
+        } else {
+            None
+        }
+    }
+
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even while closed; keep the query field's copy in sync
         // (it needs them for word/line delete). Observe, don't consume.
@@ -940,12 +1212,19 @@ impl Component for CommandPalette {
                 // **Handled before the `_` arm below**, which forwards anything unlisted to the
                 // query field — an `Input` would ignore these and the key would fall through.
                 // The walk itself is the model's; this only applies the answer.
+                // Walks the **active mode's** history: `Ctrl+p` under `@` offers panes searched
+                // for, never command queries. The stored entries carry no sigil, so the one
+                // currently typed is put back in front before the field is set — otherwise a
+                // recall would drop the mode the user is standing in.
                 WidgetIntent::MenuHistoryUp | WidgetIntent::MenuHistoryDown => {
-                    let query = self.query_text();
-                    if let SearchAction::SetQuery(text) = self.search.handle(*intent, &query)
+                    let (sigil, scope, query) = self.active();
+                    let recalled = self.search.with_scope(scope).handle(*intent, &query);
+                    if let SearchAction::SetQuery(text) = recalled
                         && text != query
                     {
-                        self.query.borrow_mut().set_value(&text);
+                        self.query
+                            .borrow_mut()
+                            .set_value(Self::with_sigil(sigil, &text));
                         self.on_query_replaced();
                     }
                     Handled::Yes
@@ -959,13 +1238,23 @@ impl Component for CommandPalette {
                 // lives off-tree, so it forwards by hand.
                 _ => {
                     let before = self.query_text();
-                    let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
+                    let handled = crate::component::deliver(&mut *self.query.borrow_mut(), ev);
                     if self.query_text() != before {
                         self.on_query_changed();
                     }
                     handled
                 }
             },
+            // Typed text goes to the query field, exactly as a key does — and for the same reason:
+            // the palette is a surface around a field, not a text widget of its own.
+            Event::TextInput(_) => {
+                let before = self.query_text();
+                let handled = crate::component::deliver(&mut *self.query.borrow_mut(), ev);
+                if self.query_text() != before {
+                    self.on_query_changed();
+                }
+                handled
+            }
             Event::Key { pressed: true, .. } => {
                 // The query field owns editing keys (typing, selection, char/word/line delete,
                 // caret moves). Return **what the field did**: a single-line `Input` ignores
@@ -973,19 +1262,21 @@ impl Component for CommandPalette {
                 // resolves them to a `WidgetIntent` (MenuUp/MenuDown/Activate). Modal capture is
                 // the host's job — do NOT hardcode `Handled::Yes` here.
                 let before = self.query_text();
-                let handled = crate::component::dispatch(&mut *self.query.borrow_mut(), ev);
+                let handled = crate::component::deliver(&mut *self.query.borrow_mut(), ev);
                 if self.query_text() != before {
                     self.on_query_changed();
                 }
                 handled
             }
-            Event::PointerMoved { pos } => {
+            // Rows drawn from data, hit-tested inside a panel the router already put the pointer
+            // over (its bounds are the panel) — a move anywhere else never reaches this widget.
+            Event::PointerMove(p) => {
                 // Hover-select a row.
                 let results = self.results();
                 let (panel, _q, list_top) = self.layout(&results);
                 let mut moved = false;
                 for (ri, row) in self.row_rects(&results, panel, list_top) {
-                    if row.contains(*pos) {
+                    if row.contains(p.pos) {
                         moved = self.selected != ri;
                         self.selected = ri;
                         break;
@@ -996,33 +1287,36 @@ impl Component for CommandPalette {
                 }
                 Handled::Yes
             }
-            Event::PointerPressed { pos } => {
+            Event::PointerDown(p) => {
                 let results = self.results();
                 let (panel, query_rect, list_top) = self.layout(&results);
                 // A click on the query line places the caret / selects (the Input
                 // needs its current bounds + font to hit-test the char position).
-                if query_rect.contains(*pos) {
+                // Delivered by hand, to a field the palette holds off-tree and places itself —
+                // the one case where a resolved event is handed to a widget the router could not
+                // have found, and the rect above is the guard that makes it honest.
+                if query_rect.contains(p.pos) {
                     let font = self.base.font;
                     let mut q = self.query.borrow_mut();
                     q.base_mut().bounds = query_rect;
                     q.base_mut().font = font;
-                    crate::component::dispatch(&mut *q, ev);
+                    crate::component::deliver(&mut *q, ev);
                     return Handled::Yes;
                 }
-                let mut ran = false;
                 for (ri, row) in self.row_rects(&results, panel, list_top) {
-                    if row.contains(*pos) {
+                    if row.contains(p.pos) {
                         self.selected = ri;
                         self.run_selected();
-                        ran = true;
                         break;
                     }
                 }
-                // A click outside the panel dismisses.
-                if !ran && !panel.contains(*pos) {
-                    self.close();
-                }
                 Handled::Yes
+            }
+            // The press that landed somewhere else closes the palette — no panel geometry of its
+            // own to keep in step with the placement.
+            Event::PointerDownOutside(_) => {
+                self.close();
+                Handled::No
             }
             // Swallow all other input while open.
             _ => Handled::Yes,
@@ -1043,7 +1337,7 @@ impl Component for CommandPalette {
             f
         };
         if open && flipped {
-            self.base.mark_needs_paint(); // collect_damage reads `damage_bounds` (the panel)
+            self.base.mark_needs_paint(); // collect_damage reads the bounds, which ARE the panel
         }
         false
     }
@@ -1058,15 +1352,6 @@ impl Component for CommandPalette {
         }
     }
 
-    /// The palette paints its panel on the overlay layer, not at its layout `bounds`,
-    /// so a caret-blink repaint must target the cached panel rect.
-    fn damage_bounds(&self) -> Rectangle {
-        if self.is_open() {
-            self.panel.get()
-        } else {
-            self.base.bounds
-        }
-    }
 }
 
 impl LayoutExt for CommandPalette {}

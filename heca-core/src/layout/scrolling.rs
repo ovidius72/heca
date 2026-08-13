@@ -1286,6 +1286,142 @@ mod tests {
         space.resize_pane_height(0, 9, 30.0);
     }
 
+    /// **A boundary moves space between its own two panes, and nothing else** (F004/P084/T413).
+    ///
+    /// It used to pin one pane and let `compute_pane_sizes` redistribute the remainder over every
+    /// pane still auto-sized. With two panes the only auto pane *was* the neighbour, so it looked
+    /// right; with three, dragging the TOP boundary took space from the BOTTOM pane too, which
+    /// collapsed to the floor and read as having disappeared.
+    #[test]
+    fn a_boundary_drag_leaves_the_pane_beyond_it_untouched() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+
+        let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+        assert_eq!(before.len(), 3, "three stacked panes");
+        let third = before[2];
+
+        // Drag the boundary between pane 0 and pane 1 downwards.
+        space.resize_pane_height(0, 0, 60.0);
+        let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+
+        assert!((after[0] - (before[0] + 60.0)).abs() < 0.5, "the pane above grew by the drag");
+        assert!((after[1] - (before[1] - 60.0)).abs() < 0.5, "…and its neighbour gave exactly that");
+        assert!(
+            (after[2] - third).abs() < 0.5,
+            "the third pane is not on this boundary and must not move: {third} -> {}",
+            after[2],
+        );
+        // The column stays exactly full, so nothing is pushed past its bottom edge.
+        let sum_before: f64 = before.iter().sum();
+        let sum_after: f64 = after.iter().sum();
+        assert!((sum_after - sum_before).abs() < 0.5, "the column is still exactly full");
+    }
+
+    /// The far side stops at its floor rather than the drag reaching past it for more space — which
+    /// is what let one boundary eat a pane two positions away.
+    #[test]
+    fn a_boundary_drag_stops_when_its_neighbour_hits_the_floor() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+        space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+        let third = space.columns[0].pane_sizes[2].h;
+
+        // Far more than the neighbour can give, repeatedly.
+        for _ in 0..20 {
+            space.resize_pane_height(0, 0, 500.0);
+        }
+        let after: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+
+        assert!(
+            after[1] >= crate::layout::column::MIN_PANE_HEIGHT - 0.5,
+            "the neighbour never goes below the floor: {}",
+            after[1],
+        );
+        assert!(
+            (after[2] - third).abs() < 0.5,
+            "and the pane beyond the boundary is still untouched: {third} -> {}",
+            after[2],
+        );
+    }
+
+    /// **The divider goes the way the key says, whichever pane is active** (F004/P084/T414).
+    ///
+    /// `j` is directional; "grow the active pane" is not. They disagree for the last pane, which
+    /// has no boundary beneath it and so grows *upwards* — which is why `prefix+r` felt inverted on
+    /// the top and middle panes and correct on the bottom one. Naming a boundary instead of a size
+    /// makes one statement of it: a positive amount moves that boundary **down**, always.
+    #[test]
+    fn the_keyboard_moves_a_divider_the_same_way_from_every_pane() {
+        // Each seat in a three-pane column, and the boundary each one owns.
+        for (active, boundary) in [(0usize, 0usize), (1, 1), (2, 1)] {
+            let mut space = test_scrolling_space();
+            space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+
+            let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+            let (h, gaps) = (
+                space.working_area.size.h,
+                space.options.gaps,
+            );
+            let col = &mut space.columns[0];
+            col.active_pane_idx = active;
+            col.move_active_pane_boundary(40.0, h, gaps);
+            let after: Vec<f64> = col.pane_sizes.iter().map(|s| s.h).collect();
+
+            // A boundary moving DOWN grows the pane above it and shrinks the pane below it — the
+            // same two panes, by the same amount, from whichever seat the key was pressed.
+            assert!(
+                (after[boundary] - (before[boundary] + 40.0)).abs() < 0.5,
+                "active {active}: the pane above the boundary grew, {} -> {}",
+                before[boundary],
+                after[boundary],
+            );
+            assert!(
+                (after[boundary + 1] - (before[boundary + 1] - 40.0)).abs() < 0.5,
+                "active {active}: the pane below it gave exactly that, {} -> {}",
+                before[boundary + 1],
+                after[boundary + 1],
+            );
+            // The third pane is not on this boundary (T413's rule still holds).
+            let untouched = if boundary == 0 { 2 } else { 0 };
+            assert!(
+                (after[untouched] - before[untouched]).abs() < 0.5,
+                "active {active}: pane {untouched} is not on this boundary and must not move",
+            );
+        }
+    }
+
+    /// The size verbs keep meaning size. `pane_height_increase` says "increase", so it grows the
+    /// active pane whichever edge has to move — the opposite reading to the directional one above,
+    /// and both are correct for the words they are spelled with.
+    #[test]
+    fn the_size_verb_still_grows_the_active_pane_from_every_seat() {
+        for active in [0usize, 1, 2] {
+            let mut space = test_scrolling_space();
+            space.add_column(None, test_column(1, ColumnWidth::Proportion(1.0)), true);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), false);
+            space.add_pane_to_column(0, None, Pane::new(PaneId(3), "p3".to_string()), false);
+
+            let before: Vec<f64> = space.columns[0].pane_sizes.iter().map(|s| s.h).collect();
+            let (h, gaps) = (space.working_area.size.h, space.options.gaps);
+            let col = &mut space.columns[0];
+            col.active_pane_idx = active;
+            col.resize_active_pane_height(40.0, h, gaps);
+
+            assert!(
+                (col.pane_sizes[active].h - (before[active] + 40.0)).abs() < 0.5,
+                "active {active}: the active pane grew, {} -> {}",
+                before[active],
+                col.pane_sizes[active].h,
+            );
+        }
+    }
+
     #[test]
     fn columns_can_be_zoomed_independently() {
         let mut space = test_scrolling_space();

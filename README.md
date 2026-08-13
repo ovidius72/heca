@@ -258,7 +258,7 @@ no separate mode to enter, because focus already answers where the keys go. Conc
 
 Two layers are consulted while a dock is focused, in this order:
 
-1. **the component's own** — `[[keys.component]]`, below (this placement first, then the
+1. **the surface's own** — `[[keys.surface]]`, below (this placement first, then the
    component as a whole);
 2. **the focus layer** — a built-in mode keymap, `[[keys.mode]] name = "focus"`, overridable in
    `keybindings.toml` like any other. It carries what the *widgets* answer — paging and edges for
@@ -266,41 +266,62 @@ Two layers are consulted while a dock is focused, in this order:
    scroll region behaves the same wherever it is mounted, so nothing has to declare it, and a
    container with nothing scrollable simply declines and the key does nothing.
 
-### A component's own keys — `[[keys.component]]`
+### A surface's own keys — `[[keys.surface]]`
 
-A component declares the actions only it can do; the keys for them live in a `[[keys.component]]`
-entry. `name` says which component — a **field**, not the table name, so a component may be called
+A surface declares the actions only it can do; the keys for them live in a `[[keys.surface]]`
+entry. `name` says which surface — a **field**, not the table name, so a surface may be called
 `unbind` or `widgets` without colliding with a config keyword. An optional `id` narrows the entry to
 one placement, layered over the id-less one, so two seatings can differ while cursor, scroll position
 and focus are per placement anyway.
+
+**A dock and an overlay are the same thing to the keyboard**: something that holds it for a while
+and answers keys of its own. So an overlay declares its keys the same way, naming itself by the
+addressable name `show_layer` and `hide_layer` use:
+
+```toml
+[[keys.surface]]
+name             = "heca.expose"   # the pane map
+delete_pane      = "x"             # the card the cursor is on
+delete_column    = "r"             # the column that card sits in
+delete_workspace = "d"             # the workspace that column sits in
+```
+
+While a surface holds the keyboard, the app's own bindings behind it are refused — `prefix+j` does
+not move the pane behind the map — except for actions that are app-level in every context
+(`reload_config`, `close_overlay`, the `prefix+/` picker, `prefix+>`). Which those are is a property
+of the **action**, not of the binding, because the same action is reached from a key, a menu entry,
+the palette, a button and RPC.
+
+> `[[keys.component]]` is the older spelling of this block and still works unchanged — the two are
+> read as one list. New entries should use `[[keys.surface]]`.
 
 Binding names are **short**: under `name = "docker"`, `restart_selected` means the action id
 `docker.restart_selected`. You never repeat the component on every line of its own block. An id heca
 already knows keeps its own name — a component *binds* existing actions rather than redeclaring them.
 
 ```toml
-[[keys.component]]
+[[keys.surface]]
 name             = "docker"
 restart_selected = "r"        # → docker.restart_selected
 next_pane        = "n"        # …an EXISTING action id, simply bound here — never redeclared
 
-[[keys.component]]            # the same component, one placement only
+[[keys.surface]]              # the same surface, one placement only
 name = "docker"
 id   = "docker.right"
 restart_selected = "R"        # everything else is inherited from the entry above
 
-[[keys.component.bind]]       # the arg-carrying form
+[[keys.surface.bind]]         # the arg-carrying form
 action = "spawn_command"
 keys   = "t"
 args   = { command = "lazydocker", float = "true" }
 
-[keys.component.unbind]       # explicit removal, keyed by the combo
+[keys.surface.unbind]         # explicit removal, keyed by the combo
 "s" = true
 ```
 
 **Merge rules, and why the two forms differ.** A TOML table already merges per key, so changing one
 `action = "key"` entry keeps every other default. An **array** is replaced wholesale, which for
-`[[keys.component.bind]]` would mean adding one binding silently drops every shipped default — so
+`[[keys.surface.bind]]` would mean adding one binding silently drops every shipped default — so
 those merge **by their `keys` field** instead: a keymap *is* a map from combo to action, so merging on
 the combo is the ordinary table rule applied to what the array is really keyed by. `unbind` is applied
 last and keyed by the **combo**, so it retires a binding whatever it points at.
@@ -340,7 +361,7 @@ keyboard is. Everything else here **binds an action that already exists** rather
 
 A container does not have to declare anything to be usable:
 
-- **`global_focus`** — written in its `[[keys.component]]` entry, but it applies while the container
+- **`global_focus`** — written in its `[[keys.surface]]` entry, but it applies while the container
   does *not* have focus, which is the only time it is useful. heca therefore binds it in the global
   map rather than the container's own layer. With an `id` it aims at that seating; without one it
   names the component and lands on the seating you were last in. Pressing it again while that
@@ -356,7 +377,7 @@ collision.
 ### Finding a key — `heca --keys-show`
 
 Keys are no longer all in one file, so reading config can no longer answer "what runs this action":
-a mode's keys are in `[[keys.mode]]`, a component's in `[[keys.component]]`, and a plugin's are in no
+a mode's keys are in `[[keys.mode]]`, a surface's in `[[keys.surface]]`, and a plugin's are in no
 file at all. `heca --keys-show` prints every binding name, the key it resolves to and the layer it
 came from — read out of the **built keymaps**, so it sees all of them alike. `--json` emits the same
 three facts per line for scripting.
@@ -365,7 +386,7 @@ three facts per line for scripting.
 $ heca --keys-show
 BINDING                       KEY              LAYER
 close                         prefix+x         [keys]
-workspaces.cursor_down        j                [[keys.component]] workspaces
+workspaces.cursor_down        j                [[keys.surface]] workspaces
 docker.restart                r                plugin
 ```
 
@@ -389,7 +410,7 @@ terminal viewport has a single axis.
 **There is no sidebar mode.** Which dock the keyboard is aimed at is a *container id* held in the
 chrome store, not an input mode, so nothing has to be entered or left: `prefix+e` (or a click) gives
 the keyboard to the workspaces dock, `Esc` gives it back, and while it is there the dock's own keys
-apply — [the table above](#the-workspaces-docks-own-keys), rebindable in `[[keys.component]]`.
+apply — [the table above](#the-workspaces-docks-own-keys), rebindable in `[[keys.surface]]`.
 
 `l` / `Right` / `Enter` focus the row **and hand the keyboard back**; `Space` focuses it **and keeps
 the keyboard on the dock**, so you can keep walking with `j`/`k` and preview each row. The mutation
@@ -1507,11 +1528,18 @@ Modes are groups of bindings that stay active until `Escape` or `Enter` is press
 
 ```toml
 # Default built-in: prefix+r enters resize mode
-# In resize mode:
-#   h / l  → resize column narrower / wider
-#   j / k  → resize pane shorter / taller
+# In resize mode the key points the way the DIVIDER travels, whichever
+# column or pane is active — `amount` moves the boundary along the axis,
+# and +x is right, +y is down:
+#   h / l  → move the column's right edge left / right (narrower / wider)
+#   j / k  → move the pane's divider down / up
 #   Arrow keys work too
 #   Escape / Enter → exit mode
+#
+# A pane's divider is the one below it, or the one above when it is the LAST
+# pane — so on the last pane `j` moves that divider down and the pane gets
+# shorter. `prefix+Shift+=` / `prefix+Shift+-` are the size verbs instead:
+# they grow / shrink the active pane whichever edge has to move.
 
 # Custom modes
 [[keys.mode]]

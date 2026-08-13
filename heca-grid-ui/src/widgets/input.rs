@@ -39,9 +39,6 @@ const BLINK_PERIOD: f32 = 1.0;
 /// Rest-glow spread radius (px) — the field's share of the theme rest halo
 /// (`interaction.control_rest_glow` carries the intensity).
 const GLOW_RADIUS: f32 = 12.0;
-/// Max gap (seconds) between clicks counted as part of one multi-click cycle.
-const MULTI_CLICK: f32 = 0.4;
-
 /// A single-line text input. Emits `input-change` with the full new text on each
 /// edit.
 pub struct Input {
@@ -60,13 +57,9 @@ pub struct Input {
     /// elapsed time (not the frame `dt`) so it blinks at a steady rate regardless of
     /// how sparsely the host redraws — see [`next_redraw`](Input::next_redraw).
     blink_origin: Instant,
-    /// Time of the last pointer press, for multi-click detection (`None` = never).
-    last_click: Option<Instant>,
     /// Caret visibility at the last paint, so `tick` damages the field only when the
     /// caret actually toggles (not every frame).
     last_caret: std::cell::Cell<bool>,
-    /// Consecutive-click counter driving the select cycle (word → all → clear).
-    clicks: u8,
     /// Latest modifier state (tracked via [`Event::ModifiersChanged`]).
     mods: Modifiers,
     on_change: Option<Box<dyn Fn(Action)>>,
@@ -87,9 +80,7 @@ impl Input {
             cursor: 0,
             anchor: None,
             blink_origin: Instant::now(),
-            last_click: None,
             last_caret: std::cell::Cell::new(false),
-            clicks: 0,
             mods: Modifiers::default(),
             on_change: None,
         }
@@ -175,9 +166,6 @@ impl Input {
         self.text.get_untracked().chars().count()
     }
 
-    fn contains(&self, p: Point) -> bool {
-        self.base.bounds.contains(p)
-    }
 
     fn caret_visible(&self) -> bool {
         let phase = self
@@ -236,12 +224,10 @@ impl Input {
         }
     }
 
-    /// Commit new text: store it, reset the blink, restart the click cycle, and
-    /// emit `input-change`.
+    /// Commit new text: store it, reset the blink, and emit `input-change`.
     fn commit(&mut self, text: String) {
         self.text.set(text.clone());
         self.blink_origin = Instant::now();
-        self.clicks = 0;
         if let Some(f) = &self.on_change {
             f(Action::value("input-change", SignalData::String(text)));
         }
@@ -314,9 +300,12 @@ impl Input {
     /// ignored so it is never typed as text (and so the host's shortcut resolution can act on it).
     fn handle_key(&mut self, key: GridKey) -> Handled {
         match key {
-            GridKey::Char(_) if self.mods.ctrl || self.mods.meta => return Handled::No,
-            GridKey::Char(c) => self.insert(c),
-            GridKey::Space => self.insert(' '),
+            // **Text is not a key.** Typing arrives as [`Event::TextInput`] — the character the
+            // user meant, including anything an IME composed and anything pasted — so a raw
+            // `Char` is only ever a shortcut here, and falls through unhandled to whoever resolves
+            // those. This is what the host's "deliver the real character, not the lowercased combo
+            // key" fixup existed to paper over.
+            GridKey::Char(_) | GridKey::Space => return Handled::No,
             GridKey::Backspace => self.backspace(self.delete_granularity()),
             GridKey::Delete => self.delete(self.delete_granularity()),
             GridKey::ArrowLeft => self.move_caret(true, self.granularity()),
@@ -334,7 +323,6 @@ impl Input {
         self.anchor = (n > 0).then_some(0);
         self.cursor = n;
         self.blink_origin = Instant::now();
-        self.clicks = 0;
     }
 
     /// Movement granularity from the current modifiers: Ctrl/Cmd → to start/end,
@@ -354,7 +342,6 @@ impl Input {
     /// without Shift it collapses any selection and moves the caret.
     fn move_caret(&mut self, left: bool, gran: Granularity) {
         self.blink_origin = Instant::now();
-        self.clicks = 0;
 
         if self.mods.shift {
             // Begin anchoring at the caret if no selection is active yet.
@@ -552,6 +539,12 @@ impl Component for Input {
 
     /// Capture, not bubble: this control owns the input that lands on it. Its content is composed
     /// children, and they must never take the press first — the control is one click target.
+    ///
+    /// **A field types because it is focused, and for no other reason.** It used to declare that it
+    /// took raw keys and typed text whether or not it held focus; both flags are gone, along with
+    /// the question they answered. Keys and typed text are delivered to the focus owner, so a
+    /// mounted-but-unfocused field is silent without saying so, and a focused one hears everything
+    /// without asking.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         // Track modifiers even when disabled is irrelevant; observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {
@@ -562,37 +555,45 @@ impl Component for Input {
             return Handled::No;
         }
         match ev {
-            Event::PointerPressed { pos } if self.contains(*pos) => {
-                // Multi-click cycle: 1 = caret, 2 = word, 3 = all, 4 = clear.
-                let multi = self
-                    .last_click
-                    .is_some_and(|t| t.elapsed().as_secs_f32() <= MULTI_CLICK);
-                self.last_click = Some(Instant::now());
-                self.clicks = if multi { self.clicks + 1 } else { 1 };
+            // The **click run comes with the event**. This widget kept its own clock and its own
+            // counter to work out that a press was the second one; both are gone, and with them
+            // the chance of a field that counts clicks differently from everything else.
+            //
+            // The caret lands on the press (so a drag-select would start from the right place),
+            // and the selection cycle reads `click_count`: 1 = caret, 2 = word, 3 = all,
+            // 4 = deselect and start again.
+            Event::PointerDown(p) => {
                 self.blink_origin = Instant::now();
-                match self.clicks {
-                    2 => {
-                        let chars = self.chars_vec();
-                        let idx = self.char_index_at_x(pos.x, chars.len());
-                        let (s, e) = word_bounds(&chars, idx);
-                        self.anchor = (e > s).then_some(s);
-                        self.cursor = e;
-                    }
-                    3 => {
-                        let n = self.char_count();
-                        self.anchor = (n > 0).then_some(0);
-                        self.cursor = n;
-                    }
-                    n if n >= 4 => {
-                        // Deselect and restart the cycle.
-                        self.anchor = None;
-                        self.cursor = self.caret_index_at_x(pos.x);
-                        self.clicks = 0;
-                    }
-                    _ => {
-                        self.anchor = None;
-                        self.cursor = self.caret_index_at_x(pos.x);
-                    }
+                self.anchor = None;
+                self.cursor = self.caret_index_at_x(p.pos.x);
+                Handled::Yes
+            }
+            Event::DoubleClick(p) => {
+                let chars = self.chars_vec();
+                let idx = self.char_index_at_x(p.pos.x, chars.len());
+                let (s, e) = word_bounds(&chars, idx);
+                self.anchor = (e > s).then_some(s);
+                self.cursor = e;
+                Handled::Yes
+            }
+            Event::TripleClick(p) if p.click_count == 3 => {
+                let n = self.char_count();
+                self.anchor = (n > 0).then_some(0);
+                self.cursor = n;
+                Handled::Yes
+            }
+            Event::TripleClick(p) => {
+                // The fourth click and beyond: deselect, caret where the pointer is.
+                self.anchor = None;
+                self.cursor = self.caret_index_at_x(p.pos.x);
+                Handled::Yes
+            }
+            // Typed text, IME commits and pastes: one event, whatever produced them. The field no
+            // longer reconstructs a character from a key combo, and the host no longer patches the
+            // key it sends so that reconstruction comes out right.
+            Event::TextInput(text) => {
+                for c in text.chars() {
+                    self.insert(c);
                 }
                 Handled::Yes
             }

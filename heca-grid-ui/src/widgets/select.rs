@@ -449,6 +449,13 @@ impl Select {
             return;
         }
         self.open = true;
+        // **Focus is not set here.** A list opens either from a click — which focused this widget
+        // through the host's `FocusManager`, clearing whoever held it — or from a key, which this
+        // widget only received because it was focused already. Setting the flag directly instead
+        // made a *second* widget claim focus without releasing the first, and `wants_visible`
+        // defaults to that flag: every enclosing `ScrollRegion` then kept scrolling to a select
+        // that had been opened once and never blurred, so a click anywhere on the page jumped it to
+        // the same spot (Antonio, 2026-08-10).
         self.highlight = self.selected.get_untracked();
 
         let vp = self.viewport.get().h;
@@ -544,8 +551,8 @@ impl Component for Select {
         let gutter = self.gutter() as f32;
         for child in self.base.children.iter_mut() {
             let style = &mut child.base_mut().style.layout;
-            style.margin_left = Some(inset);
-            style.margin_right = Some(gutter);
+            style.margin_left = Some(inset.into());
+            style.margin_right = Some(gutter.into());
         }
     }
 
@@ -721,12 +728,18 @@ impl Component for Select {
         }
     }
 
-    /// Owns its walk. The option rows are **placed children**: collapsed to zero size while the
-    /// list is closed (so they must not be clickable at all) and hit-tested from baked bounds via
-    /// `choice_at` while open — `bounds === drawn === clickable`, which a plain tree walk in
-    /// z-order would break. `tests/pointer_delivery.rs` holds it to delivering every pointer kind.
-    fn routes_own_subtree(&self) -> bool {
-        true
+    /// The select's **input** surface: the trigger, plus the list it is showing.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        let trigger = self.base.bounds;
+        if !self.open {
+            return Some(trigger);
+        }
+        let panel = self.panel_rect();
+        let x0 = trigger.loc.x.min(panel.loc.x);
+        let y0 = trigger.loc.y.min(panel.loc.y);
+        let x1 = (trigger.loc.x + trigger.size.w).max(panel.loc.x + panel.size.w);
+        let y1 = (trigger.loc.y + trigger.size.h).max(panel.loc.y + panel.size.h);
+        Some(Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0)))
     }
 
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
@@ -734,38 +747,38 @@ impl Component for Select {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                if self.open {
-                    if let Some(i) = self.row_at(*pos) {
-                        self.highlight = i;
-                    }
-                    // The panel is opaque: consume the move so the widgets it covers don't light up
-                    // as hovered *behind* it. The host offers the event to the open overlay first
-                    // and only falls through on `No` — so this is the whole fix.
-                    if self.panel_rect().contains(*pos) {
-                        return Handled::Yes;
-                    }
+            // The open panel is opaque by construction now: it is what the router hit-tested, so
+            // a move that reaches this widget is over the trigger or the list, and the widgets the
+            // panel covers are not on the path at all — they cannot light up behind it.
+            Event::PointerMove(p) => {
+                if self.open
+                    && let Some(i) = self.row_at(p.pos)
+                {
+                    self.highlight = i;
                 }
                 Handled::No
             }
-            Event::PointerPressed { pos } => {
+            Event::PointerDown(p) => {
                 if self.open {
-                    if let Some(i) = self.row_at(*pos) {
+                    if let Some(i) = self.row_at(p.pos) {
                         self.commit(i);
                     }
-                    // Any press while open closes it (option, trigger, or outside).
+                    // A press on the option or the trigger closes it; one outside arrives as
+                    // `PointerDownOutside` below.
                     self.close();
                     Handled::Yes
-                } else if self.base.bounds.contains(*pos) {
+                } else {
                     self.open_list();
                     Handled::Yes
-                } else {
-                    Handled::No
                 }
             }
-            Event::Scroll { delta_y, .. } if self.open => {
+            Event::PointerDownOutside(_) if self.open => {
+                self.close();
+                Handled::No
+            }
+            Event::Scroll(p) if self.open => {
                 let max = self.max_scroll() as f32;
-                self.scroll = (self.scroll as f32 + delta_y).clamp(0.0, max).round() as usize;
+                self.scroll = (self.scroll as f32 + p.delta_y).clamp(0.0, max).round() as usize;
                 self.place_options();
                 Handled::Yes
             }

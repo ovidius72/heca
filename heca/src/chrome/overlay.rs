@@ -18,14 +18,16 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
-use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
+use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerBand, LayerId, LayerKind};
+use crate::host::App;
+use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
-use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
+use crate::app::interaction::{InteractionIntent, InteractionSource};
 use heca_view::Intent;
 use crate::app_state::AppState;
 use crate::input::WmAction;
@@ -183,15 +185,11 @@ pub(crate) fn open_modal(
     // is inserted).
     let id = OverlayId(state.layers.reserve_id());
 
-    // The chrome intent sink — same shape as the retained chrome tree's emitter (mod.rs): a
-    // button's `on_click` posts an `AppEvent::ChromeIntent`, dispatched by the event loop.
-    let event_proxy = state.event_proxy.clone();
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent {
-            source: InteractionSource::MouseContent,
-            intent,
-        });
-    });
+    // The chrome intent sink for this layer's own tree: a button's `on_click` posts an
+    // `AppEvent::ChromeIntent` stamped with the layer it was declared in, dispatched by the event
+    // loop. This used to claim `MouseContent`, which was untrue of a button reached by keyboard and
+    // said nothing about *which* surface acted (F003/P082/T416).
+    let emit = super::layer_emitter(&state.event_proxy, id.0);
 
     let mut forms = FormBindings::default();
     let root = build_modal_root(
@@ -201,7 +199,6 @@ pub(crate) fn open_modal(
         // it now. A theme reload rebuilds every overlay, so the token follows (F003/P017/T7).
         &super::chrome_gui_theme(state),
         &emit,
-        &mut state.hint_targets,
         &state.action_shortcuts,
         &mut forms,
     );
@@ -218,6 +215,46 @@ pub(crate) fn open_modal(
     );
     state.overlays.completions.insert(id, Box::new(completion));
     state.overlays.forms.insert(id, forms);
+    state.needs_redraw = true;
+    id
+}
+
+/// Open a layer whose content is a **description** — the plugin / config / RPC path
+/// (F003/P082/T339).
+///
+/// The counterpart of [`open_modal`] for an author that cannot hand over a native tree. The
+/// `ViewNode` is realized through the **one** bridge, exactly as a modal's body is, and the layer
+/// keeps the node beside the realized tree so a theme reload or a plugin update can re-realize from
+/// the description rather than from whatever the tree has become.
+///
+/// `band`, `modal` and `covers_content` are the caller's: a plugin panel over the scrolling area is
+/// `Overlay` + `covers_content: true` + not modal, a rich dialog is `Modal` + both. **No occluder is
+/// passed** — `active_peek_targets` reads it from the realized tree's laid-out bounds, which is the
+/// invariant this path must not break.
+pub(crate) fn open_view_layer(
+    state: &mut AppState,
+    band: LayerBand,
+    kind: LayerKind,
+    modal: bool,
+    covers_content: bool,
+    node: ViewNode,
+) -> LayerId {
+    // Reserved before the tree is built, because the tree's intent sink names the layer it lives in
+    // — a plugin's panel is judged by *which* surface acted, exactly as the exposé is.
+    let id = state.layers.reserve_id();
+    let emit = super::layer_emitter(&state.event_proxy, id);
+    // Same boundary as `build_modal_root`: `realize` speaks the model's own `Intent` and knows
+    // nothing of `InteractionIntent`, so the carrier is put on here.
+    let view_emit: super::IntentEmitter = {
+        let emit = emit.clone();
+        Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+    };
+    let theme = super::chrome_gui_theme(state);
+    let mut forms = FormBindings::default();
+    let realized = super::realize(&node, &theme, &view_emit, &mut forms);
+    let id = state
+        .layers
+        .add_view(id, band, kind, modal, covers_content, node, realized);
     state.needs_redraw = true;
     id
 }
@@ -311,6 +348,108 @@ impl DropdownSpec {
     }
 }
 
+/// Put a built menu on screen as an Overlay-band **modal** layer.
+///
+/// The one place a menu becomes a layer, shared by both ways one is opened: the host building it
+/// from a registry ([`open_dropdown`]) and a **widget declaring its own** ([`present_menu`]). A
+/// second insert site is how two menus end up covering differently.
+///
+/// A menu **captures input and demands a choice**, so it covers for policy purposes even though its
+/// panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Without that, the prefix
+/// sequence that deliberately falls through the overlay key path (so `prefix+/` can still pick an
+/// entry) reaches the router and runs — `prefix+x` with a menu open raised the close-pane confirm
+/// (found by the user, 2026-07-30).
+fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
+    state.layers.insert(
+        id.0,
+        LayerBand::Overlay,
+        LayerKind::OnDemand,
+        true,
+        true,
+        Box::new(panel),
+    );
+}
+
+/// **Present a menu a widget declared** (F004/P084/T395).
+///
+/// The whole of the host's job in the declared path: the widget built the menu and the framework
+/// chose the anchor, so this only mounts it and wires the two things a widget cannot reach — the
+/// layer it lives in, and the close that follows a choice.
+///
+/// Plugin entries still merge: a menu that gave itself a [`name`](Menu::name) is offered to the
+/// mounted providers for that name, so "Open in Docker" can still appear on a row a different
+/// component declared. A menu that named itself nothing is simply itself.
+pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuAnchor) -> OverlayId {
+    let id = OverlayId(state.layers.reserve_id());
+    let event_proxy = state.event_proxy.clone();
+    let source = InteractionSource::MouseContent;
+    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
+        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
+    });
+
+    // Rows other components added to this menu — only if it named itself.
+    let mut ctx = ctx;
+    ctx.set_menu(merge_contributions(state, ctx.menu().clone(), id, &emit));
+
+    // Choosing an entry runs its own closure; taking the layer down afterwards is the host's, so an
+    // item stays a plain closure that knows nothing about overlays. The anchor was chosen by
+    // whatever triggered the menu — the cursor for a right-click, the widget for the keyboard.
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
+    let after = emit.clone();
+    let closing = close.clone();
+    let dismiss = emit.clone();
+    let panel = anchor
+        .open(ctx)
+        .after_select(move || after(closing.clone()))
+        .on_dismiss(move || dismiss(close.clone()));
+
+    insert_menu_layer(state, id, panel);
+    state.needs_redraw = true;
+    id
+}
+
+/// Append every mounted provider's rows for the menu's [`name`](Menu::name).
+///
+/// A menu without a name is closed: it built its own rows and nothing else may add to it.
+fn merge_contributions(
+    state: &mut AppState,
+    menu: Menu,
+    id: OverlayId,
+    emit: &ChromeIntentEmitter,
+) -> Menu {
+    let Some(path) = menu.declared_name().map(str::to_string) else {
+        return menu;
+    };
+    // A contributed row has no per-row payload (that was `about`, dropped 2026-08-07): it acts on
+    // app state, not on the row this menu was opened for.
+    // A contribution carries no row payload — see `ContextTarget::Contribution`. The menu's name
+    // is `path`, passed to `items_for` beside this.
+    let target = ContextTarget::Contribution;
+    let ctx = ChromeCtx::new(App::new(&state.chrome_state));
+    let plugin = super::context_menu::plugin_providers_for(&state.chrome_host, &ctx, &path);
+    let items = state
+        .context_menu_registry
+        .items_for(&ctx, &path, &target, plugin);
+    let mut menu = menu;
+    for item in items {
+        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
+            overlay: id,
+            action: item.id.clone(),
+        });
+        let emit_e = emit.clone();
+        let mut entry = MenuItem::new()
+            .label(item.label.clone())
+            .on_click(move || emit_e(carrier.clone()))
+            .danger(item.danger)
+            .enabled(item.enabled);
+        if let Some(glyph) = state.action_catalog.icon(&item.id) {
+            entry = entry.icon(glyph);
+        }
+        menu = menu.child(entry);
+    }
+    menu
+}
+
 /// Open a context menu: build a [`ContextMenu`] from the spec (entries emit `SubmitOverlay`, dismiss
 /// emits `CloseOverlay`, icons from the action registry, host-assigned quick-pick letters), push it
 /// as an Overlay-band **modal** layer (so `top_modal` routes input + `paint_layers` paints it), and
@@ -324,77 +463,53 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
     });
 
-    let mut menu = ContextMenu::new().anchor(spec.anchor).centered(spec.centered);
-    let mut letters = 'a'..='z';
-    for item in &spec.items {
-        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
-            overlay: id,
-            action: item.id.clone(),
-        });
-        let emit_e = emit.clone();
-        let mut entry = MenuEntry::new(item.label.clone(), move || emit_e(carrier.clone()))
-            .danger(item.danger)
-            .enabled(item.enabled);
-        if let Some(glyph) = state.action_catalog.icon(&item.id) {
-            entry = entry.icon(glyph);
-        }
-        // Host-assigned single-letter quick-pick (works while open), rendered as a bordered
-        // keycap — the only accelerator shown on the row (no separate global-binding label).
-        if item.enabled
-            && let Some(k) = letters.next()
-        {
-            entry = entry.key(k);
-        }
-        menu = menu.entry(entry);
-    }
+    // **The same builder every declared menu uses.** A dropdown has no declaring widget — the host
+    // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
+    // two drift: they already had, one with quick-pick keycaps and one without, which is how the
+    // same menu came to have two shapes on screen (Antonio, 2026-08-07).
+    let items = super::context_menu::menu_from_items(
+        "",
+        "",
+        "",
+        spec.items,
+        &state.action_catalog,
+        &emit,
+    );
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     let emit_dismiss = emit.clone();
-    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
-    let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
+    let dismiss_close = close.clone();
+    let emit_after = emit.clone();
+    let menu = ContextMenu::new("dropdown")
+        .child(items)
+        .anchor(spec.anchor)
+        .centered(spec.centered)
+        .on_dismiss(move || emit_dismiss(dismiss_close.clone()))
+        // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
+        // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
+        // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
+        // panel hid itself while the layer stayed registered: still modal, still holding the
+        // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
+        // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
+        .after_select(move || emit_after(close.clone()))
+        .open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
     // its panel is small: *a modal is an overlay with coverage* (F003/P086/T371). Its own entries
-    // are unaffected — they dispatch `SubmitOverlay`, which is intercepted before routing.
+    // are unaffected — they dispatch their `Intent` on `after_select`, after the layer is down.
     //
     // Without this, the prefix sequence that deliberately falls through the overlay key path
     // (`app/events.rs`, so `prefix+/` can still pick an entry) reaches the router and runs:
     // `prefix+x` with a menu open raised the close-pane confirm, which the blanket `top_modal` rule
     // this replaced had prevented (found by the user, 2026-07-30).
-    state.layers.insert(
-        id.0,
-        LayerBand::Overlay,
-        LayerKind::OnDemand,
-        true,
-        true,
-        Box::new(menu),
-    );
+    insert_menu_layer(state, id, menu);
 
-    let items = spec.items;
-    state.overlays.completions.insert(
-        id,
-        Box::new(move |state, registry, result| {
-            if let ModalResult::Action { id: chosen, .. } = result
-                && let Some(item) = items.iter().find(|i| i.id == chosen)
-            {
-                // The entry's Intent goes through the ONE dispatch door, so a built-in and a
-                // plugin's own action are dispatched identically — and the interaction policy and
-                // the confirm gate still apply (a "Delete workspace" entry prompts exactly as the
-                // keybinding does).
-                dispatch_intent(
-                    state,
-                    registry,
-                    source,
-                    InteractionIntent::View(item.intent.clone()),
-                );
-            }
-        }),
-    );
     state.needs_redraw = true;
     id
 }
 
 /// Build the realized `Dialog` tree for a modal. Each action becomes a real `Button` wired the
 /// SAME centralized way as every chrome button (AGENTS.md "Chrome buttons → action, tooltip,
-/// KeyHint — do NOT hand-roll"): a KeyHint target + `on_click` both carry `SubmitOverlay`, and
+/// KeyHint — do NOT hand-roll"): its click and its `prefix+/` pick both carry `SubmitOverlay`, and
 /// the button is wrapped in [`action_tooltip`](super::action_tooltip) so its tip + shortcut come
 /// from the action, never a hand-picked string. The `Dialog` itself owns focus/nav/activation.
 fn build_modal_root(
@@ -402,20 +517,18 @@ fn build_modal_root(
     id: OverlayId,
     theme: &heca_grid_ui::Theme,
     emit: &ChromeIntentEmitter,
-    hints: &mut super::HintTargetRegistry,
     shortcuts: &super::ActionShortcuts,
     forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    // `realize` speaks the model's own `Intent` and knows nothing of `InteractionIntent` or the
-    // registry (F003/P017/T009). The carrier is put on here, at the boundary — for the click sink
-    // by a wrapping closure, for the pick registry by `ViewHintTargets`.
+    // `realize` speaks the model's own `Intent` and knows nothing of `InteractionIntent`
+    // (F003/P017/T009). The carrier is put on here, at the boundary, by a wrapping closure — one
+    // sink now, for the click and the `prefix+/` pick alike.
     let body = {
         let view_emit: super::IntentEmitter = {
             let emit = emit.clone();
             Rc::new(move |intent| emit(InteractionIntent::View(intent)))
         };
-        let mut targets = super::ViewHintTargets(hints);
-        super::realize(&spec.body, theme, &view_emit, &mut targets, forms)
+        super::realize(&spec.body, theme, &view_emit, forms)
     };
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
@@ -428,12 +541,12 @@ fn build_modal_root(
             overlay: id,
             action: action.id.clone(),
         });
-        let hid = hints.register(carrier.clone());
         let emit = emit.clone();
+        let fire = move || emit(carrier.clone());
+        let peek = fire.clone();
         let button = Button::new(action.label.clone())
             .variant(variant)
-            .hint_target(hid)
-            .on_click(move || emit(carrier.clone()));
+            .on_click(fire);
         // Reactive validation: disable this button while a required form field is empty (blocks
         // blank submission). Binds the button's `disabled` signal to the field's live value.
         if let Some(field) = &action.disable_when_empty
@@ -442,13 +555,19 @@ fn build_modal_root(
             let disabled = button.base().disabled;
             create_effect(move |_| disabled.set(sig.get().trim().is_empty()));
         }
-        // Tooltip + live shortcut from the action id — the one centralized path.
-        dialog = dialog.action(super::action_tooltip(button, &action.id, &action.label, shortcuts));
+        // Tooltip + live shortcut from the action id — the one centralized path. The pick
+        // declaration goes on the wrapper around the button, where the letter is drawn.
+        dialog = dialog.action(super::action_tooltip(
+            heca_grid_ui::widgets::KeyHint::new(button).on_peek(peek),
+            &action.id,
+            &action.label,
+            shortcuts,
+        ));
     }
     // Esc / scrim dismissal flows through the same emitter as the buttons: a `CloseOverlay`
     // for this overlay, resolved to `ModalResult::Dismissed` in `dispatch_intent`.
     let emit_dismiss = emit.clone();
-    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     Box::new(
         dialog
             .dismissible(spec.dismissible)
@@ -528,27 +647,32 @@ mod tests {
         assert!(spec.dismissible && !spec.danger && spec.actions.is_empty());
     }
 
+    /// Every modal action button declares what a `prefix+/` pick does to it, and it is the same
+    /// `SubmitOverlay` its click carries — so the picker reaches a dialog's buttons with nothing
+    /// registered anywhere.
     #[test]
-    fn build_registers_one_submit_intent_per_action() {
+    fn each_action_button_declares_the_submit_its_click_would_fire() {
         let spec = ModalSpec::message("Delete pane?", "Gone forever.")
             .action(ModalAction::new("cancel", "Cancel"))
             .action(ModalAction::new("confirm", "Delete").danger(true))
             .dismissible(false);
         let id = OverlayId(super::super::LayerRegistry::default().reserve_id());
-        let mut hints = super::super::HintTargetRegistry::default();
         let shortcuts = super::super::ActionShortcuts::default();
-        let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
+        let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
+        let emit: ChromeIntentEmitter = {
+            let fired = fired.clone();
+            Rc::new(move |intent| fired.borrow_mut().push(intent))
+        };
+        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
 
-        // Two actions → two hint targets, each a SubmitOverlay for this overlay.
-        assert_eq!(hints.checkpoint() - before, 2);
+        let targets = heca_grid_ui::collect_peeks(root.as_ref());
+        assert_eq!(targets.len(), 2, "two actions → two pick targets");
         for (offset, action_id) in [(0, "cancel"), (1, "confirm")] {
-            let intent = hints
-                .get(heca_grid_ui::HintTargetId::new(before + offset))
-                .unwrap();
+            assert!(heca_grid_ui::fire_peek(root.as_ref(), &targets[offset].0));
+            let intent = fired.borrow().last().cloned().unwrap();
             assert!(
                 matches!(
-                    intent,
+                    &intent,
                     InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action })
                         if *overlay == id && action == action_id
                 ),

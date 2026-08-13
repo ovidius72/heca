@@ -10,7 +10,8 @@ use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
-    Border, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd, TextStyle,
+    Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, ScanlineCmd, Scene, Shadow, TextAlign,
+    TextCmd, TextStyle,
 };
 use crate::style::Style;
 use crate::theme::Theme;
@@ -150,6 +151,19 @@ pub struct Base {
     /// [`Style::hidden`](crate::style::Style::hidden), which removes a subtree from layout *and*
     /// focus; a barrier keeps the subtree visible and laid out, and only stops focus descent.
     pub focus_barrier: bool,
+    /// Whether this widget is **one click target**: the primary (left) press lands on *it*, not on
+    /// the content it composes, and the click that press turns into is its own.
+    ///
+    /// The pointer twin of [`focus_barrier`](Self::focus_barrier), and set by the same widgets for
+    /// the same reason — a control is one thing to click and one thing to Tab to, whatever it
+    /// holds. The router applies it during capture, so a control declares it instead of writing
+    /// the claim out: nine widgets had written `PointerDown => Handled::Yes` by hand, and every
+    /// one of them claimed **any** button, which is how a right-click died on a sidebar row
+    /// instead of reaching the menu behind it.
+    ///
+    /// Only the primary button, and only while enabled. Other buttons pass straight through to
+    /// whatever wants them.
+    pub one_click_target: bool,
     /// Explicit Tab-order index (like HTML `tabindex`). Focusables with an index
     /// are visited first in ascending order; those without (`None`) follow in
     /// tree position order. Set via [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
@@ -158,32 +172,26 @@ pub struct Base {
     pub children: Vec<Box<dyn Component>>,
     /// If set, this widget is a **drag source**: a press inside its bounds can
     /// begin a drag carrying this opaque id (the app maps it back to a pane /
-    /// column / etc.). Universal opt-in via [`DragExt::draggable`](crate::builders::DragExt::draggable);
+    /// column / etc.). Universal opt-in via [`ComponentExt::draggable`](crate::builders::ComponentExt::draggable);
     /// resolved generically by [`drag::source_at`](crate::drag::source_at).
     pub drag_source: Option<DragItemId>,
-    /// If set, this widget is a **drop target**: a drag released over its bounds
+    /// When set, this widget is a **drop target**: a drag released over its bounds
     /// drops onto this opaque id. Universal opt-in via
-    /// [`DragExt::drop_target`](crate::builders::DragExt::drop_target); resolved
+    /// [`ComponentExt::drop_target`](crate::builders::ComponentExt::drop_target); resolved
     /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
     pub drop_target: Option<DragItemId>,
-    /// If set, this widget is a **hint target**: the universal leader/vimium
-    /// picker assigns it a letter and, on the keypress, the host fires the intent
-    /// it mapped this opaque id to. Universal opt-in via
-    /// [`HintExt::hint_target`](crate::builders::HintExt::hint_target); enumerated
-    /// generically by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
-    pub hint_target: Option<crate::hint::HintTargetId>,
-    /// If set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
+    /// When set, this widget is a **navigable row** carrying its own identity: the keyboard cursor,
     /// the right-click target and (later) drag are three readers of this one declaration.
     ///
-    /// Unlike [`hint_target`](Self::hint_target) and [`drag_source`](Self::drag_source) — registry
-    /// slots the app hands out — this is a string the component chose about *itself*, so it
-    /// survives a tree rebuild. Universal opt-in via [`NavExt::nav_key`](crate::builders::NavExt::nav_key);
+    /// Unlike [`drag_source`](Self::drag_source) — a registry slot the app hands out — this is a
+    /// string the component chose about *itself*, so it
+    /// survives a tree rebuild. Universal opt-in via [`ComponentExt::nav_key`](crate::builders::ComponentExt::nav_key);
     /// enumerated by [`nav::collect_nav_keys`](crate::nav::collect_nav_keys) and hit-tested by
     /// [`nav::nav_key_at`](crate::nav::nav_key_at). Opaque here — nothing in this library parses it.
     pub nav_key: Option<String>,
     /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
     /// the host calls the thing that holds rows. Universal opt-in via
-    /// [`NavExt::scope_key`](crate::builders::NavExt::scope_key); hit-tested by
+    /// [`ComponentExt::scope_key`](crate::builders::ComponentExt::scope_key); hit-tested by
     /// [`nav::scope_at`](crate::nav::scope_at). Opaque here, exactly like `nav_key`.
     ///
     /// A *separate* field rather than a flavour of `nav_key` because the two answer different
@@ -195,12 +203,62 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// The **viewport the tree was laid out against**, written by the layout pass.
+    ///
+    /// A widget that draws a floating panel has to clamp it on screen, and it used to learn the
+    /// viewport from `PaintCx` — one pass *after* the layout that placed the panel. So the first
+    /// frame placed it against a stale size and the next one corrected it, and a context menu
+    /// visibly jumped after it appeared (Antonio, 2026-08-10). The engine already knows the size it
+    /// was told to compute against; this is that size, available at the moment placement happens.
+    pub viewport: Size,
+    /// Hover, capture, click-run and drag state, kept by the pointer router (see
+    /// [`crate::pointer`]). A widget reads `pointer.hovered`; nothing else here writes it.
+    ///
+    /// It lives on the widget rather than in a router the host owns, so several mounted trees
+    /// never share a hover or a capture, and a widget dropped mid-gesture takes its own state with
+    /// it instead of stranding a press somewhere.
+    pub pointer: crate::pointer::PointerState,
+    /// This widget's registered event handlers, keyed by [`EventKind`] — what
+    /// [`ComponentExt`](crate::builders::ComponentExt) writes and [`dispatch`] runs. `None` until the
+    /// first one is registered, which is the common case and costs a null pointer.
+    pub handlers: Option<Box<Handlers>>,
+    /// **The context menu this widget carries**, built fresh each time it is triggered.
+    ///
+    /// A universal slot like [`nav_key`](Self::nav_key) and [`drag_source`](Self::drag_source), so
+    /// an `Icon`, a `Label` and a plugin's own widget carry one on the same terms as a `Row`. A
+    /// right-click, or the host's `open_context_menu` action, walks **outwards** to the nearest
+    /// widget that has one — see [`crate::menu`] for the whole model. Written with
+    /// [`ComponentExt::context_menu`](crate::builders::ComponentExt::context_menu).
+    ///
+    /// Produces the [`ContextMenu`](crate::widgets::ContextMenu) to show. A factory, so a menu
+    /// whose rows depend on state the tree is not rebuilt on is current when it opens, and so a
+    /// composed row's subtree can be built again on the second right-click. A plain value is
+    /// wrapped in one — see
+    /// [`IntoContextMenu`](crate::builders::IntoContextMenu).
+    ///
+    /// The **menu inside it is content**: the same [`Menu`](crate::widgets::Menu) value could be
+    /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
+    /// widget, opened by a right-click or the keyboard action.
+    pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
+    /// **What a leader-key pick does to this region** — written with
+    /// [`KeyHint::on_peek`](crate::widgets::KeyHint::on_peek), the wrapper that draws the letter.
+    ///
+    /// The whole of the capability: a wrapped region carrying one is offered a letter by the
+    /// picker, and picking that letter runs it. There is no id to register, no registry to reach,
+    /// and no host type in the closure.
+    ///
+    /// The slot lives here so the collector stays one uniform walk, but **the builder is on the
+    /// wrapper, not on every widget**: being pickable is something you opt a region into, so
+    /// `Label::on_peek` is a method that never has to exist.
+    pub peek: Option<Box<dyn Fn()>>,
+    /// Whether [`Event::Mount`] has been delivered. Set by the first layout pass that sees this
+    /// widget — the first moment it is both in a live tree and laid out.
+    pub(crate) mounted: Cell<bool>,
     /// Repaint flag for the retained renderer: set when this widget's visuals
     /// changed and cleared once it's repainted. Starts `true` (everything paints
     /// on the first frame). The renderer repaints only widgets whose flag is set,
     /// and unions their bounds into the frame's damage region.
-    needs_paint: Cell<bool>,
-}
+    needs_paint: Cell<bool>}
 
 impl Base {
     /// A new base with default style and an empty child list.
@@ -215,16 +273,31 @@ impl Base {
             focus_visible: signal(false),
             focusable: false,
             focus_barrier: false,
+            one_click_target: false,
             tab_index: None,
             children: Vec::new(),
             drag_source: None,
             drop_target: None,
-            hint_target: None,
             nav_key: None,
             scope_key: None,
             font: 15.0,
+            viewport: Size::new(f64::MAX, f64::MAX),
+            pointer: crate::pointer::PointerState::new(),
+            handlers: None,
+            context_menu: None,
+            peek: None,
+            mounted: Cell::new(false),
             needs_paint: Cell::new(true),
         }
+    }
+
+    /// Whether the pointer is over this widget **or a descendant** — the CSS `:hover` rule.
+    ///
+    /// Read this instead of testing `bounds.contains(pos)`: the router already resolved which
+    /// widget the pointer is over, including which one is on top and what is clipped away, and a
+    /// private copy of the test cannot know either.
+    pub fn hovered(&self) -> bool {
+        self.pointer.is_hovered()
     }
 
     /// Mark this widget as needing a repaint and ask the host for a frame. Call on
@@ -304,149 +377,30 @@ impl Default for Base {
     }
 }
 
-/// Result of an event handler: whether the event was consumed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Handled {
-    Yes,
-    No,
-}
-
-/// A renderer-agnostic keyboard key. No `winit` types leak into this crate; the
-/// host maps its platform keys onto this enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum GridKey {
-    Char(char),
-    Enter,
-    Space,
-    Tab,
-    Escape,
-    Backspace,
-    Delete,
-    ArrowLeft,
-    ArrowRight,
-    ArrowUp,
-    ArrowDown,
-    Home,
-    End,
-}
-
-/// Keyboard modifier state, renderer-agnostic. The host maps its platform
-/// modifiers onto this and broadcasts changes via [`Event::ModifiersChanged`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
-pub struct Modifiers {
-    pub ctrl: bool,
-    pub alt: bool,
-    pub shift: bool,
-    /// The Cmd/Super/Windows key.
-    pub meta: bool,
-}
-
-/// An input event delivered to the component tree.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Event {
-    PointerMoved {
-        pos: Point,
-    },
-    PointerPressed {
-        pos: Point,
-    },
-    PointerReleased {
-        pos: Point,
-    },
-    /// Keyboard event — delivered to the focused component only.
-    Key {
-        key: GridKey,
-        pressed: bool,
-    },
-    /// Modifier keys changed — broadcast to the whole tree so widgets can track
-    /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
-    ModifiersChanged(Modifiers),
-    /// Wheel/scroll by `(delta_x, delta_y)` lines (positive `delta_y` = scroll the
-    /// content down, positive `delta_x` = scroll right). The **host** maps device
-    /// deltas and modifiers onto these (e.g. plain wheel → `delta_y`, `Shift`+wheel →
-    /// `delta_x`, a trackpad's 2-D delta → both), so widgets read the axis directly
-    /// and never track modifiers themselves. The host routes this to the open
-    /// overlay, or to the widget under the cursor.
-    Scroll {
-        delta_x: f32,
-        delta_y: f32,
-    },
-    /// A **semantic widget intent** — the host-owned, configurable counterpart to raw
-    /// keys, shared by every interactive widget. The host resolves the `[keys.widgets]`
-    /// bindings (via a [`Keymap`](crate::keymap::Keymap)) into these, so widgets carry no
-    /// hardcoded nav/edit keys. A focused text field still consumes its own raw keys first
-    /// (field-first), so typing is never stolen. See [`WidgetIntent`] and
-    /// `docs/widgets.md`.
-    Widget(WidgetIntent),
-}
-
-/// A **semantic widget intent** — one shared vocabulary every interactive widget speaks
-/// instead of hardcoding keys (the host maps `[keys.widgets]` → these via a
-/// [`Keymap`](crate::keymap::Keymap)). Split by **axis**: horizontal (`Item*`), vertical
-/// (`Menu*`), the shared `Activate`/`Dismiss`, and text-field edits (`Edit*`).
+/// [`Event::Unmount`] fires from here, because this is the only moment the library can be sure a
+/// widget is leaving: trees are values, and a rebuilt one drops the old one wholesale.
 ///
-/// A single key may resolve to **several** intents (e.g. `Ctrl+h` → `EditDeleteBack`
-/// *then* `ItemPrevious`); the host delivers them in order to the focused widget, which
-/// consumes the one it understands (an `Input` deletes, a `Tabs`/`Dialog` moves) — so the
-/// overload disambiguates by focus.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WidgetIntent {
-    /// Horizontal previous (left) — `Tabs`, a `Dialog`'s button row. `item_previous`.
-    ItemPrevious,
-    /// Horizontal next (right) — `Tabs`, a `Dialog`'s button row. `item_next`.
-    ItemNext,
-    /// Vertical up — menus, `Select` lists, the command palette. `menu_up`.
-    MenuUp,
-    /// Vertical down — menus, `Select` lists, the command palette. `menu_down`.
-    MenuDown,
-    /// An **older** past query — a search surface's history, walked backwards. `menu_history_up`.
-    ///
-    /// Vocabulary, not a palette feature: any surface that searches has a history worth recalling.
-    /// Up/down rather than previous/next because the table splits by axis (`item_*` is horizontal,
-    /// `menu_*` vertical) and because beside `item_previous`, a "history_prev" reads ambiguously —
-    /// an older entry, or one row up?
-    MenuHistoryUp,
-    /// A **newer** past query, and past the newest, the draft the walk interrupted.
-    /// `menu_history_down`.
-    MenuHistoryDown,
-    /// Activate / commit / submit the current entry or primary action. `activate`.
-    Activate,
-    /// Dismiss / cancel / close the overlay. `dismiss`.
-    Dismiss,
-    /// [`Input`](crate::widgets::Input): delete one char before the caret. `edit_delete_back`.
-    EditDeleteBack,
-    /// [`Input`](crate::widgets::Input): delete from the caret to line start. `edit_delete_to_line_start`.
-    EditDeleteToLineStart,
-    /// [`Input`](crate::widgets::Input): select the whole field. `edit_select_all`.
-    EditSelectAll,
-
-    // ── Scrolling a scroll area from the keyboard (F003/P011/T012) ──
-    //
-    // These are **semantic**, not keys: the host says "one page back", the widget decides what a
-    // page is and clamps the result, because it is the only thing that knows its viewport and its
-    // content. Delivering `PageUp` as a key instead would have needed `GridKey` to grow variants
-    // and would have put paging arithmetic in the app.
-    //
-    // Both axes, because a region can be horizontal or two-axis. A region that cannot scroll the
-    // axis asked for declines, so a nested one still gets its turn — the same rule the wheel
-    // follows.
-    /// Scroll a scroll area one page back, vertically.
-    ScrollPageUp,
-    /// Scroll a scroll area one page on, vertically.
-    ScrollPageDown,
-    /// Jump a scroll area to the top.
-    ScrollToTop,
-    /// Jump a scroll area to the bottom.
-    ScrollToBottom,
-    /// Scroll a scroll area one page back, horizontally.
-    ScrollPageLeft,
-    /// Scroll a scroll area one page on, horizontally.
-    ScrollPageRight,
-    /// Jump a scroll area to its left edge.
-    ScrollToLeftEdge,
-    /// Jump a scroll area to its right edge.
-    ScrollToRightEdge,
+/// Only [`Base`] handlers see it — the widget around this base is already coming apart, so there
+/// is nothing left to call `on_event` on. That is enough for what unmount is for: releasing what
+/// the widget registered with the host (a drag id, a hint slot) at the moment the tree that
+/// registered it goes away, instead of a range the host has to remember to prune.
+impl Drop for Base {
+    fn drop(&mut self) {
+        if let Some(h) = self.handlers.as_mut()
+            && h.has(EventKind::Unmount)
+        {
+            let _ = h.run(&Event::Unmount);
+        }
+    }
 }
+
+/// The event vocabulary lives in [`crate::event`]; it is re-exported here because every widget
+/// already imports its events from `component`, and moving a type is not a reason to touch fifty
+/// files.
+pub use crate::event::{
+    DragEvent, Event, EventCx, EventKind, GridKey, Handled, Handlers, Modifiers, PointerButton,
+    PointerEvent, RawPointer, RawPointerKind, WidgetIntent,
+};
 
 /// Behavior shared by all components. Implementors provide access to their
 /// [`Base`]; `paint`/`event` have sensible container defaults.
@@ -552,16 +506,21 @@ pub trait Component {
         Handled::No
     }
 
-    /// `true` when this widget walks its own children, because its subtree is not a plain tree
-    /// walk. Two widgets do: [`Select`](crate::widgets::Select), whose option rows are *placed*
-    /// children collapsed to zero size while the list is closed, and
-    /// [`Dialog`](crate::widgets::Dialog), which routes through an overlay-aware focus scan.
+    /// Called on this widget **after its subtree has seen `ev`**, whether or not something in
+    /// there consumed it, with `handled` reporting which.
     ///
-    /// It is an exception, not a loophole — `tests/pointer_delivery.rs` requires anything claiming
-    /// it to still deliver every pointer kind to its children. Override it with the reason on the
-    /// method, or leave it alone and let [`dispatch`] do the walk.
-    fn routes_own_subtree(&self) -> bool {
-        false
+    /// The hook for a container that **watches what its own subtree did** rather than acting on
+    /// the event itself: an [`ItemGroup`](crate::widgets::ItemGroup) reports a toggle when the
+    /// header row inside it flips `expanded`, and the header consuming the click is the normal
+    /// case, not the exception. [`on_event`](Self::on_event) cannot express that — it runs only
+    /// when nothing below wanted the event — and taking over the walk to get it (which is what
+    /// these containers used to do) means every event kind now depends on that container
+    /// forwarding it correctly forever.
+    ///
+    /// Observation only: it returns nothing, so it can neither consume the event nor let a
+    /// consumed one continue.
+    fn after_subtree(&mut self, ev: &Event, handled: Handled) {
+        let _ = (ev, handled);
     }
 
     /// `true` when this widget wants an enclosing scroll region to **keep it in view**.
@@ -571,8 +530,42 @@ pub trait Component {
     /// cursor, a search hit — overrides this to say so, and then every
     /// [`ScrollRegion`](crate::widgets::ScrollRegion) it is ever placed inside follows it, with
     /// nothing wired at the call site.
+    /// **Run this widget's primary action** — what a click or Enter on it would do — and report
+    /// whether it had one. `false` by default: most widgets do nothing on their own.
+    ///
+    /// The equivalent of `button.click()` in the DOM, and it exists because there was no way to say
+    /// "activate this child" through `dyn Component`. Without it a caller has only one lever: build
+    /// a fake `Event::Key { Enter }` and dispatch it, hoping the target claims raw keys — which is
+    /// what [`Dialog::submit`](crate::widgets::Dialog) did to fire its primary button. That worked
+    /// only because seven widgets claimed `Enter` without checking whether they owned the keyboard,
+    /// and it broke the moment they stopped. Synthesising input to reach behaviour is a symptom of
+    /// a missing call, not a technique.
+    fn activate(&mut self) -> bool {
+        false
+    }
+
     fn wants_visible(&self) -> bool {
         self.base().focused.get_untracked()
+    }
+
+
+    /// The rect this widget occupies **for input**, or `None` when it takes none at all.
+    ///
+    /// The default is [`bounds`](Base::bounds), which is right for every widget drawn where it is
+    /// laid out. Two kinds are not: one that paints a **floating panel** (a menu, a palette) reports
+    /// the panel, and one that is **inert right now** (a closed [`Overlay`](crate::widgets::Overlay))
+    /// reports `None`, which takes its whole subtree out of the pointer's reach while leaving it
+    /// laid out.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        Some(self.base().bounds)
+    }
+
+    /// The rect (logical px) to repaint when this widget is flagged
+    /// [`needs_paint`](Base::needs_paint) — used by [`collect_damage`] in place of `bounds`.
+    /// Overlay widgets that paint **outside** their own bounds (a tooltip bubble, a command-palette
+    /// panel) override it so a redraw covers what they actually drew.
+    fn damage_bounds(&self) -> Rectangle {
+        self.base().bounds
     }
 
     /// `true` when this widget **clips** its children to its own bounds, so a press or a move
@@ -667,16 +660,6 @@ pub trait Component {
         soonest
     }
 
-    /// The rect (logical px) to repaint when this widget is flagged
-    /// [`needs_paint`](Base::needs_paint) — used by [`collect_damage`] in place of
-    /// `bounds`. Overlay widgets that paint **outside** their own bounds (a tooltip
-    /// bubble, a command-palette panel) override this to report where they actually
-    /// draw, so a redraw covers the popover rather than the (often unrelated) layout
-    /// box. Default: the widget's own `bounds`.
-    fn damage_bounds(&self) -> Rectangle {
-        self.base().bounds
-    }
-
     /// The opaque drag-source id if this widget is draggable (see
     /// [`Base::drag_source`]). Default reads the base; widgets needing dynamic
     /// behavior may override. Walked by [`drag::source_at`](crate::drag::source_at).
@@ -689,13 +672,6 @@ pub trait Component {
     /// [`drag::resolve_at`](crate::drag::resolve_at).
     fn as_drop_target(&self) -> Option<DragItemId> {
         self.base().drop_target
-    }
-
-    /// The opaque hint-target id if this widget is a leader/vimium pick target (see
-    /// [`Base::hint_target`]). Default reads the base. Walked by
-    /// [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
-    fn as_hint_target(&self) -> Option<crate::hint::HintTargetId> {
-        self.base().hint_target
     }
 }
 
@@ -724,35 +700,154 @@ pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
 /// wheel or a release. That is not a mistake anyone makes on purpose; it is what a hand-written
 /// list does over time. Now there is no list.
 pub fn dispatch(node: &mut dyn Component, ev: &Event) -> Handled {
+    // The raw pointer stream is not delivered: it is resolved, once, and what it *means* is
+    // delivered instead — to the widget under the pointer and then up its ancestors.
+    if let Event::Raw(raw) = ev {
+        return crate::pointer::route(node, raw);
+    }
+    deliver(node, ev)
+}
+
+/// Deliver an event that carries no position: a key, typed text, a semantic intent, a modifier
+/// change, a mount.
+///
+/// **Keyboard events go to the focused widget and bubble**, exactly as they do in a browser: the
+/// walk goes down the ancestor chain of whatever holds focus (each ancestor may take it away in
+/// capture), reaches the focus owner, and comes back up through the same chain. Nothing is
+/// declared, nothing is forwarded, and a widget that does not hold focus — or contain the thing
+/// that does — is not offered the key at all.
+///
+/// That last clause used to be three separate flags. A container said `routes_own_subtree` to take
+/// over the walk, `takes_raw_keys` to be offered keys without focus, and `takes_text_input` to be
+/// offered typed text; each was a question about the widget asked so the framework could route,
+/// and each had to be answered right by every author. Focus already says all three: a
+/// [`FocusScope`](crate::widgets::FocusScope) that does not hold the keyboard is simply not on the
+/// path, so it neither hears the key nor has to decline it.
+///
+/// Everything else still broadcasts — a modifier change is an announcement to the whole tree, and
+/// a resolved pointer event a caller delivers by hand carries its own target.
+pub fn deliver(node: &mut dyn Component, ev: &Event) -> Handled {
+    if is_keyboard(ev) {
+        // **Nothing focused, nothing delivered.** A keyboard event with no owner belongs to no
+        // widget, and handing it to the tree anyway is the whole family of bugs this replaced: the
+        // first row in a list answering an Enter meant for the cursor, an unfocused dock answering
+        // an intent aimed at its neighbour. A host that wants a key to reach a surface focuses the
+        // surface — which it already does, because that is what the focus ring means.
+        let Some(path) = focus_path(node) else {
+            return Handled::No;
+        };
+        return deliver_to_path(node, &path, ev);
+    }
+    broadcast(node, ev)
+}
+
+/// Events that follow keyboard focus rather than the whole tree.
+///
+/// [`Event::Widget`] is one of them: a semantic intent is what a key **resolved to**, so it belongs
+/// to whoever the key would have gone to. Delivering it any wider is how one dock answered for
+/// another.
+fn is_keyboard(ev: &Event) -> bool {
+    matches!(
+        ev,
+        Event::Key { .. } | Event::TextInput(_) | Event::Widget(_)
+    )
+}
+
+/// The path from `node` to the **deepest** widget in it holding keyboard focus, or `None` when
+/// nothing in this tree does.
+///
+/// Deepest, because focus nests: a host marks a whole dock as the keyboard's target *and* the field
+/// inside it is focused, and the key belongs to the field. Hidden and invisible subtrees are
+/// skipped — a closed overlay still holds the focus flag its field had when it closed, and that
+/// must not pull the keyboard into something nobody can see.
+pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
+    // **Last-added first**, the same order hit-testing uses: what is drawn on top owns the input.
+    // Several things can carry the focus flag at once — an open layer says it holds the keyboard,
+    // and the button the user clicked before opening it still says so too — and the one on top is
+    // the one that means it. Walking in document order picked the button and left every keystroke
+    // falling through the palette to the page behind it.
+    for (i, child) in node.base().children.iter().enumerate().rev() {
+        if !child.base().visible.get_untracked() || child.base().style.layout.hidden {
+            continue;
+        }
+        if let Some(mut sub) = focus_path(child.as_ref()) {
+            sub.insert(0, i);
+            return Some(sub);
+        }
+    }
+    node.base().focused.get_untracked().then(Vec::new)
+}
+
+/// Capture down `path`, then handlers and [`on_event`](Component::on_event) back up — the same
+/// target-and-bubble walk the pointer uses, for an event whose target is the focus owner.
+///
+/// An empty path means `node` **is** the target, and the walk turns around there. **Its children
+/// are not visited**, for keys, for typed text and for intents alike: the target is the widget that
+/// answers, exactly as it is for the pointer. The difference is only in how each one is found —
+/// hit-testing walks to the deepest widget under the cursor, and focus is asserted by the deepest
+/// widget that holds it.
+///
+/// The alternative — letting an intent descend into the target's subtree — was tried and taken out.
+/// It made a whole region answer for a capability nobody in it had claimed, so two widgets that both
+/// handled one intent was not an error, and reading the tree could not tell you where a key landed.
+fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
     if node.on_event_capture(ev) == Handled::Yes {
         return Handled::Yes;
     }
-    if !node.routes_own_subtree() && !clipped_out(node, ev) {
+    if let Some((head, rest)) = path.split_first() {
+        let from_subtree = match node.base_mut().children.get_mut(*head) {
+            Some(child) => deliver_to_path(child.as_mut(), rest, ev),
+            None => Handled::No,
+        };
+        node.after_subtree(ev, from_subtree);
+        if from_subtree == Handled::Yes {
+            return Handled::Yes;
+        }
+    } else if matches!(ev, Event::Widget(_)) {
+        // **An intent enters the focused region.** It is not a key — it is what a key *resolved to*,
+        // a capability named out loud (`ScrollPageDown`, `Dismiss`), so it is addressed to the
+        // focused region and whichever widget in there owns that capability answers. A raw key
+        // stops at the owner, which is what keeps the first row in a list from eating an Enter
+        // meant for the cursor.
+        let mut from_subtree = Handled::No;
         for child in node.base_mut().children.iter_mut().rev() {
-            if dispatch(child.as_mut(), ev) == Handled::Yes {
-                return Handled::Yes;
+            if broadcast(child.as_mut(), ev) == Handled::Yes {
+                from_subtree = Handled::Yes;
+                break;
             }
         }
+        node.after_subtree(ev, from_subtree);
+        if from_subtree == Handled::Yes {
+            return Handled::Yes;
+        }
+    }
+    if node.base_mut().run_handlers(ev) == Handled::Yes {
+        return Handled::Yes;
     }
     node.on_event(ev)
 }
 
-/// Whether a clipping widget's children should be skipped for this event.
-///
-/// Only presses and moves are positional in the "is it over me" sense. A **release** is
-/// deliberately not gated: a child that grabbed the pointer has to be told the gesture ended,
-/// wherever the cursor drifted to — gating it there is how a drag gets stuck. The wheel is not
-/// gated either; it carries no position and each region decides on its own hover.
-fn clipped_out(node: &dyn Component, ev: &Event) -> bool {
-    if !node.clips_children() {
-        return false;
+/// Capture down, children last-first, bubble up — for the events that are addressed to everything
+/// rather than to one widget.
+fn broadcast(node: &mut dyn Component, ev: &Event) -> Handled {
+    if node.on_event_capture(ev) == Handled::Yes {
+        return Handled::Yes;
     }
-    match ev {
-        Event::PointerPressed { pos } | Event::PointerMoved { pos } => {
-            !node.base().bounds.contains(*pos)
+    let mut from_subtree = Handled::No;
+    for child in node.base_mut().children.iter_mut().rev() {
+        if broadcast(child.as_mut(), ev) == Handled::Yes {
+            from_subtree = Handled::Yes;
+            break;
         }
-        _ => false,
     }
+    node.after_subtree(ev, from_subtree);
+    if from_subtree == Handled::Yes {
+        return Handled::Yes;
+    }
+    if node.base_mut().run_handlers(ev) == Handled::Yes {
+        return Handled::Yes;
+    }
+    node.on_event(ev)
 }
 
 /// The bounds of the first descendant (or `node` itself) asking to be kept in view, in tree order.
@@ -771,18 +866,6 @@ pub(crate) fn reveal_target(node: &dyn Component) -> Option<Rectangle> {
 /// [`reveal_target`] over a child list — what a container scans, since it never reveals *itself*.
 pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectangle> {
     children.iter().find_map(|c| reveal_target(c.as_ref()))
-}
-
-/// Route `ev` to `children` last-added first — the walk [`dispatch`] performs, reachable only by
-/// the two widgets that declare [`routes_own_subtree`](Component::routes_own_subtree) and must
-/// therefore do it themselves.
-pub(crate) fn route_event(children: &mut [Box<dyn Component>], ev: &Event) -> Handled {
-    for child in children.iter_mut().rev() {
-        if dispatch(child.as_mut(), ev) == Handled::Yes {
-            return Handled::Yes;
-        }
-    }
-    Handled::No
 }
 
 /// Paint a child, unless it is hidden via `style.hidden` (taffy `display: none`).
@@ -857,6 +940,96 @@ pub struct PaintCx<'a> {
     /// Translation applied to every draw emitted through this context — see
     /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
     offset: (f64, f64),
+    /// Alpha multiplier applied to every draw emitted through this context — see
+    /// [`with_opacity`](Self::with_opacity). `1.0` normally: a widget paints at its own colours.
+    opacity: f32,
+    /// The active [scale](PaintCx::with_scale) — multiplicative, like `opacity`.
+    scale: f32,
+    /// The fixed point the scale shrinks toward, already in scene coordinates.
+    scale_origin: Point,
+}
+
+/// Scale every colour in a draw command by `a`, leaving its geometry alone.
+///
+/// Written out per command rather than as a blanket "multiply anything colour-shaped", because the
+/// commands carry colours in several roles — a fill, a border, the light of a glow, the dark of a
+/// shadow — and each has to be dimmed on its own or a fading panel loses its outline a frame before
+/// its body, or keeps a halo around nothing.
+/// Scale one command: its geometry through `place`, and **everything measured in pixels with it** —
+/// the font size, the corner radius, the border width, the glow and shadow falloff and offsets.
+///
+/// That second half is the whole difference between a zoom and a mistake. A rect that halves while
+/// its text stays 14px, its radius stays 6px and its 1px border stays 1px is not the same picture
+/// further away; it is a different, wronger picture. `fade_command` beside it is the same idea for
+/// colour.
+fn scale_command(cmd: DrawCommand, k: f32, place: impl Fn(Rectangle) -> Rectangle) -> DrawCommand {
+    let glow = |g: Glow| Glow { radius: g.radius * k, ..g };
+    let shadow = |s: Shadow| Shadow {
+        radius: s.radius * k,
+        dx: s.dx * k,
+        dy: s.dy * k,
+        ..s
+    };
+    match cmd {
+        DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
+            rect: place(r.rect),
+            radius: r.radius * k,
+            border: r.border.map(|b| Border { width: b.width * k, ..b }),
+            glow: r.glow.map(glow),
+            shadow: r.shadow.map(shadow),
+            ..r
+        }),
+        DrawCommand::Text(t) => DrawCommand::Text(TextCmd {
+            rect: place(t.rect),
+            size: t.size * k,
+            glow: t.glow.map(glow),
+            ..t
+        }),
+        DrawCommand::Brackets(b) => DrawCommand::Brackets(BracketCmd {
+            rect: place(b.rect),
+            len: b.len * k,
+            thickness: b.thickness * k,
+            glow: b.glow.map(glow),
+            ..b
+        }),
+        DrawCommand::Scanline(s) => DrawCommand::Scanline(ScanlineCmd {
+            rect: place(s.rect),
+            ..s
+        }),
+        // A clip is geometry too: it must follow the picture it clips, or a scaled subtree is cut
+        // to the rect it had at life size.
+        DrawCommand::PushClip(r) => DrawCommand::PushClip(place(r)),
+        DrawCommand::PopClip => DrawCommand::PopClip,
+    }
+}
+
+fn fade_command(cmd: DrawCommand, a: f32) -> DrawCommand {
+    let dim = |c: Color| c.with_alpha((c.a as f32 * a).round().clamp(0.0, 255.0) as u8);
+    match cmd {
+        DrawCommand::Rect(r) => DrawCommand::Rect(RectCmd {
+            fill: dim(r.fill),
+            border: r.border.map(|b| Border { color: dim(b.color), ..b }),
+            glow: r.glow.map(|g| Glow { color: dim(g.color), ..g }),
+            shadow: r.shadow.map(|s| Shadow { color: dim(s.color), ..s }),
+            ..r
+        }),
+        DrawCommand::Text(t) => DrawCommand::Text(TextCmd {
+            color: dim(t.color),
+            glow: t.glow.map(|g| Glow { color: dim(g.color), ..g }),
+            ..t
+        }),
+        DrawCommand::Brackets(b) => DrawCommand::Brackets(BracketCmd {
+            color: dim(b.color),
+            glow: b.glow.map(|g| Glow { color: dim(g.color), ..g }),
+            ..b
+        }),
+        DrawCommand::Scanline(s) => DrawCommand::Scanline(ScanlineCmd {
+            color: dim(s.color),
+            ..s
+        }),
+        // Clips carry no colour; they are geometry, and a fade must not move anything.
+        clip @ (DrawCommand::PushClip(_) | DrawCommand::PopClip) => clip,
+    }
 }
 
 impl<'a> PaintCx<'a> {
@@ -869,6 +1042,9 @@ impl<'a> PaintCx<'a> {
             content_color: None,
             content_glow: None,
             offset: (0.0, 0.0),
+            opacity: 1.0,
+            scale: 1.0,
+            scale_origin: Point::new(0.0, 0.0),
         }
     }
 
@@ -890,6 +1066,88 @@ impl<'a> PaintCx<'a> {
         self.offset = (previous.0 + dx, previous.1 + dy);
         f(self);
         self.offset = previous;
+    }
+
+    /// Paint `f`'s subtree at `alpha` (`0.0..=1.0`) — a whole surface fading, not a colour choice.
+    ///
+    /// Multiplicative and nesting: a half-faded panel holding a half-faded row draws it at a
+    /// quarter. Every command this context emits is scaled on its way out, so a widget needs to
+    /// know nothing about it — which is the point. A fade is something done **to** a surface, and a
+    /// surface that had to cooperate with its own fade would mean every widget carrying an alpha.
+    ///
+    /// It scales colour only, never geometry: the thing stays exactly where it is and stops being
+    /// visible, which is what "fade" means. Nor does it change hit-testing — a surface on its way
+    /// out is still there until whoever is fading it takes it away.
+    pub fn with_opacity(&mut self, alpha: f32, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.opacity;
+        self.opacity = previous * alpha.clamp(0.0, 1.0);
+        f(self);
+        self.opacity = previous;
+    }
+
+    /// Paint `f`'s subtree **scaled** by `factor` about `origin` — the whole surface smaller or
+    /// larger, not a different layout.
+    ///
+    /// This is what an overview/exposé opens and closes with, and what a fade cannot express: a map
+    /// that appears by *zooming out from life size* says "this is the same thing, further away",
+    /// where a fade says "a different picture". niri animates its overview exactly this way.
+    ///
+    /// **It scales the picture, not the layout.** Nothing is measured again, no widget is told, and
+    /// no bounds change — which is the point: the tree is laid out once, at life size, and a scale
+    /// is something done *to* it, exactly as [`with_opacity`](Self::with_opacity) is. It therefore
+    /// does not change hit-testing either; a surface mid-zoom is still where its bounds say.
+    ///
+    /// Multiplicative and nesting, like opacity, so a scaled panel inside a scaled layer draws at
+    /// the product. Every command is scaled on its way out through [`emit`](Self::emit) — position
+    /// **and** size, and with them the font size, the corner radius, the border width, the glow and
+    /// the shadow. Scaling geometry while leaving those alone is what makes a naive zoom look
+    /// wrong: text that stays huge in a shrinking box, hairlines that turn into slabs.
+    pub fn with_scale(&mut self, factor: f32, origin: Point, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = (self.scale, self.scale_origin);
+        // Compose about the outer transform's own frame, so nesting behaves.
+        self.scale_origin = self.scaled_point(origin);
+        self.scale = previous.0 * factor.max(0.0);
+        f(self);
+        (self.scale, self.scale_origin) = previous;
+    }
+
+    /// A point under the active scale.
+    fn scaled_point(&self, p: Point) -> Point {
+        if self.scale == 1.0 {
+            return p;
+        }
+        let o = self.scale_origin;
+        Point::new(
+            o.x + (p.x - o.x) * self.scale as f64,
+            o.y + (p.y - o.y) * self.scale as f64,
+        )
+    }
+
+    /// A rect under the active scale: its position moves toward the origin and its size shrinks.
+    fn scaled_rect(&self, r: Rectangle) -> Rectangle {
+        if self.scale == 1.0 {
+            return r;
+        }
+        Rectangle::new(
+            self.scaled_point(r.loc),
+            Size::new(
+                r.size.w * self.scale as f64,
+                r.size.h * self.scale as f64,
+            ),
+        )
+    }
+
+    /// Emit a command, scaled by the active [opacity](Self::with_opacity) and
+    /// [scale](Self::with_scale). The one door to the scene, so a new draw helper cannot forget to
+    /// honour either one — it never hears about them.
+    fn emit(&mut self, cmd: DrawCommand) {
+        let cmd = if self.scale == 1.0 {
+            cmd
+        } else {
+            scale_command(cmd, self.scale, |r| self.scaled_rect(r))
+        };
+        let a = self.opacity;
+        self.scene.push(if a >= 1.0 { cmd } else { fade_command(cmd, a) });
     }
 
     /// Apply the active [translation](Self::with_translate) to a rect on its way to the scene.
@@ -1030,7 +1288,7 @@ impl<'a> PaintCx<'a> {
         if self.culled(rect) {
             return;
         }
-        self.scene.push(DrawCommand::Rect(RectCmd {
+        self.emit(DrawCommand::Rect(RectCmd {
             rect: self.placed(rect),
             fill,
             border,
@@ -1051,7 +1309,7 @@ impl<'a> PaintCx<'a> {
         if shadow.color.a == 0 || shadow.radius <= 0.0 {
             return;
         }
-        self.scene.push(DrawCommand::Rect(RectCmd {
+        self.emit(DrawCommand::Rect(RectCmd {
             rect: self.placed(rect),
             fill: Color::TRANSPARENT,
             border: None,
@@ -1130,7 +1388,7 @@ impl<'a> PaintCx<'a> {
         if self.culled(rect) {
             return;
         }
-        self.scene.push(DrawCommand::Text(TextCmd {
+        self.emit(DrawCommand::Text(TextCmd {
             rect: self.placed(rect),
             text: text.to_string(),
             color,
@@ -1156,7 +1414,7 @@ impl<'a> PaintCx<'a> {
         if self.culled(rect) {
             return;
         }
-        self.scene.push(DrawCommand::Text(TextCmd {
+        self.emit(DrawCommand::Text(TextCmd {
             rect: self.placed(rect),
             text: glyph.to_string(),
             color,
@@ -1192,7 +1450,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let glow = self.scaled_glow(glow);
-        self.scene.push(DrawCommand::Text(TextCmd {
+        self.emit(DrawCommand::Text(TextCmd {
             rect: self.placed(rect),
             text: glyph.to_string(),
             color,

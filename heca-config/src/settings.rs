@@ -21,6 +21,24 @@ pub enum ModifierKey {
     Shift,
 }
 
+/// When the workspace view centres the focused column, mirroring
+/// `heca_core::layout::CenterFocusedColumn`.
+///
+/// Mirrored rather than shared because `heca-config` depends on nothing but the theme — the same
+/// arrangement every other layout value here uses, with `startup.rs` converting at the boundary.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CenterFocusedColumn {
+    /// Never centre: focusing an off-screen column scrolls it to the nearest edge. **The default**,
+    /// matching niri's, and the one that keeps the view where you put it.
+    #[default]
+    Never,
+    /// Centre a column only when it cannot fit on screen beside the previously focused one.
+    OnOverflow,
+    /// The focused column is always centred.
+    Always,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Default-value helpers (used by serde attributes on SettingsConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -55,6 +73,32 @@ fn default_window_height() -> u32 {
 
 fn default_auto_scroll_edge() -> bool {
     true
+}
+
+/// Default overview zoom: `0.5`, niri's — half life size, where a workspace row is half the
+/// screen and about one and a half rows are on screen at once.
+fn default_overview_zoom() -> f64 {
+    0.5
+}
+
+/// Default gap between overview rows: a tenth of a screen height, niri's.
+fn default_overview_gap() -> f64 {
+    0.1
+}
+
+/// Default scale the exposé **opens from**, relative to its own map size: `0.8`.
+///
+/// Below 1.0 the map **grows in** from smaller and shrinks away when it closes — a zoom in on the
+/// way in, out on the way out. Above 1.0 it does the opposite: it starts larger and pulls back, the
+/// way niri's overview does (the panes you were looking at shrinking into cards). `1.0` is no
+/// animation at all.
+///
+/// Both readings are defensible and this is the one Antonio chose after driving them (2026-08-11):
+/// pulling back read as falling in from somewhere, even softened to 1.3, while growing in reads as
+/// the map opening. `1 / overview_zoom` (2.0 at the default) is the literal niri reading — the cards
+/// start at exactly life size — and overshoots badly: the outer rows begin off-screen.
+fn default_overview_zoom_from() -> f64 {
+    0.8
 }
 
 fn default_always_center_single_column() -> bool {
@@ -221,6 +265,23 @@ pub struct SettingsConfig {
     /// Center a single column even when it fits within the viewport.
     #[serde(default = "default_always_center_single_column")]
     pub always_center_single_column: bool,
+    /// When focusing a column re-centres the view: `never` | `on_overflow` | `always`.
+    #[serde(default)]
+    pub center_focused_column: CenterFocusedColumn,
+    /// Zoom of the workspace thumbnails in overview mode, as a fraction of life size (niri's
+    /// `overview.zoom`). Clamped to `0.05..=0.75`.
+    ///
+    /// ⚠️ **The exposé does not read it** (F003/P082/T420): the map is built out of shares of the
+    /// window, so it fits by construction and has no scale to set.
+    #[serde(default = "default_overview_zoom")]
+    pub overview_zoom: f64,
+    /// Gap between workspace rows in the exposé, as a fraction of a screen height.
+    #[serde(default = "default_overview_gap")]
+    pub overview_gap: f64,
+    /// The scale the exposé **opens from**, relative to its map size — the zoom it animates out of
+    /// and back into. `1.0` disables the animation. Clamped to `0.2..=4.0`.
+    #[serde(default = "default_overview_zoom_from")]
+    pub overview_zoom_from: f64,
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
@@ -324,6 +385,10 @@ impl Default for SettingsConfig {
             auto_scroll_edge: default_auto_scroll_edge(),
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
+            center_focused_column: CenterFocusedColumn::default(),
+            overview_zoom: default_overview_zoom(),
+            overview_zoom_from: default_overview_zoom_from(),
+            overview_gap: default_overview_gap(),
             shell_integration: default_shell_integration(),
             pane_renamed_add_process_name: default_pane_renamed_add_process_name(),
             pane_show_cwd: default_pane_show_cwd(),

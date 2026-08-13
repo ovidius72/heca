@@ -138,6 +138,14 @@ pub enum Length {
     Pct(f32),
 }
 
+impl From<f32> for Length {
+    /// A bare number is pixels, the way `width(12.0)` already reads — so every existing
+    /// `margin_left(8.0)` keeps its meaning now that a margin may also be a percentage.
+    fn from(v: f32) -> Self {
+        Length::Px(v)
+    }
+}
+
 impl Serialize for Length {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match *self {
@@ -187,6 +195,41 @@ impl Length {
             Length::Pct(p) => percent(p),
         }
     }
+
+    /// The same value as a taffy **inset** — the type an edge offset takes, which admits `Auto`
+    /// (meaning "this edge is not pinned") where a size would not.
+    fn to_taffy_inset(self) -> taffy::LengthPercentageAuto {
+        use taffy::prelude::*;
+        match self {
+            Length::Auto => taffy::LengthPercentageAuto::Auto,
+            Length::Px(v) => length(v),
+            Length::Pct(p) => percent(p),
+        }
+    }
+}
+
+/// **A rect a node is placed at inside its parent**, taking it out of the flow — CSS
+/// `position: absolute` plus insets, which is what "put this box *there*" means in a layout
+/// engine.
+///
+/// Set through [`LayoutExt::at_rect`](crate::builders::LayoutExt::at_rect); see that method for
+/// what it is for and why a margin cannot do the job.
+///
+/// All four are [`Length`]s, so a caller may mix units: a chip at a fixed `Px` size over a
+/// proportional `Pct` position is as valid as a fully fractional rect. **A percentage resolves
+/// against the parent on its own axis** — `left`/`width` against the parent's width, `top`/`height`
+/// against its height — which is the difference from a percentage *margin*, where CSS resolves
+/// **both** axes against the width.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Placement {
+    /// Distance from the parent's left content edge.
+    pub left: Length,
+    /// Distance from the parent's top content edge.
+    pub top: Length,
+    /// The box's own width.
+    pub width: Length,
+    /// The box's own height.
+    pub height: Length,
 }
 
 /// One column/row track size for a [`Grid`](crate::widgets::Grid).
@@ -379,13 +422,13 @@ pub struct Layout {
     /// Vertical (top+bottom) margin override; `None` ⇒ use [`margin`](Self::margin).
     pub margin_y: Option<f32>,
     /// Left margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
-    pub margin_left: Option<f32>,
+    pub margin_left: Option<Length>,
     /// Right margin override; `None` ⇒ [`margin_x`](Self::margin_x), then [`margin`](Self::margin).
-    pub margin_right: Option<f32>,
+    pub margin_right: Option<Length>,
     /// Top margin override; `None` ⇒ [`margin_y`](Self::margin_y), then [`margin`](Self::margin).
-    pub margin_top: Option<f32>,
+    pub margin_top: Option<Length>,
     /// Bottom margin override; `None` ⇒ [`margin_y`](Self::margin_y), then [`margin`](Self::margin).
-    pub margin_bottom: Option<f32>,
+    pub margin_bottom: Option<Length>,
     /// Uniform inner padding (all sides), unless overridden per axis by
     /// [`padding_x`](Self::padding_x) / [`padding_y`](Self::padding_y).
     pub padding: f32,
@@ -464,6 +507,13 @@ pub struct Layout {
     /// Placement when this component is a child of a [`Grid`](crate::widgets::Grid).
     /// `None` ⇒ grid auto-placement. Set by `Grid::cell`/`Grid::area`.
     pub grid_cell: Option<GridCell>,
+    /// **Placed at a rect of the parent instead of flowing** — `None` ⇒ an ordinary in-flow child.
+    ///
+    /// Set by [`LayoutExt::at_rect`](crate::builders::LayoutExt::at_rect). It overrides
+    /// [`width`](Self::width) / [`height`](Self::height), because a rect names both, and it takes
+    /// the node out of its parent's flow, so it neither takes space from its siblings nor is moved
+    /// by them.
+    pub placement: Option<Placement>,
 }
 
 impl Layout {
@@ -522,6 +572,7 @@ impl Default for Layout {
             size_explicit: false,
             hidden: false,
             grid_cell: None,
+            placement: None,
         }
     }
 }
@@ -587,11 +638,21 @@ impl Layout {
                 // cascade padding has.
                 let mx = self.margin_x.unwrap_or(self.margin);
                 let my = self.margin_y.unwrap_or(self.margin);
+                // A side may be a **percentage** of the parent, which is what lets a caller place
+                // a box at a proportional position — a floating pane in the exposé sits at
+                // `x / strip_width` of its row, with no pixel scale anywhere (F003/P082/T420).
+                let side = |v: Option<Length>, axis: f32| match v {
+                    Some(Length::Px(px)) => length(px),
+                    Some(Length::Pct(f)) => percent(f),
+                    // `Auto` is the CSS centring margin; taffy spells it on this type.
+                    Some(Length::Auto) => taffy::LengthPercentageAuto::Auto,
+                    None => length(axis),
+                };
                 Rect {
-                    left: length(self.margin_left.unwrap_or(mx)),
-                    right: length(self.margin_right.unwrap_or(mx)),
-                    top: length(self.margin_top.unwrap_or(my)),
-                    bottom: length(self.margin_bottom.unwrap_or(my)),
+                    left: side(self.margin_left, mx),
+                    right: side(self.margin_right, mx),
+                    top: side(self.margin_top, my),
+                    bottom: side(self.margin_bottom, my),
                 }
             },
             // Most specific wins: a side, else its axis, else the uniform value — the cascade
@@ -603,9 +664,37 @@ impl Layout {
                 top: length(self.pad_top()),
                 bottom: length(self.pad_bottom()),
             },
-            size: Size {
-                width: self.width.to_taffy(),
-                height: self.height.to_taffy(),
+            // **A placement names the box's size as well as where it goes**, so it wins over the
+            // `width`/`height` fields — a caller who said "this rect" has already answered both,
+            // and honouring a stale `width` beside it would silently draw a different rect than
+            // the one asked for.
+            size: match self.placement {
+                Some(p) => Size { width: p.width.to_taffy(), height: p.height.to_taffy() },
+                None => Size { width: self.width.to_taffy(), height: self.height.to_taffy() },
+            },
+            // Out of the flow when placed: an absolutely positioned child takes no space from its
+            // siblings and is not moved by them, which is what "drawn *over* the row, where it
+            // actually sits" means. `inset` is per-axis — unlike a margin, a percentage `top` here
+            // resolves against the parent's **height**.
+            position: match self.placement {
+                Some(_) => taffy::Position::Absolute,
+                None => taffy::Position::Relative,
+            },
+            inset: match self.placement {
+                Some(p) => Rect {
+                    left: p.left.to_taffy_inset(),
+                    top: p.top.to_taffy_inset(),
+                    // The size is given, so the far edges must stay free: pinning all four would
+                    // make taffy stretch the box between them and ignore the width and height.
+                    right: taffy::LengthPercentageAuto::Auto,
+                    bottom: taffy::LengthPercentageAuto::Auto,
+                },
+                None => Rect {
+                    left: taffy::LengthPercentageAuto::Auto,
+                    right: taffy::LengthPercentageAuto::Auto,
+                    top: taffy::LengthPercentageAuto::Auto,
+                    bottom: taffy::LengthPercentageAuto::Auto,
+                },
             },
             // `None` leaves taffy's default (`auto`), which for a flex item is its
             // content size — the reason an unset region refuses to shrink.

@@ -6,6 +6,15 @@ If you are an agent starting a session on heca UI work: read this file **before*
 anything about widgets, `ViewNode`, plugins, or the declarative model. Every question in §5 has
 already been decided — repeatedly. Re-litigating them wastes the maintainer's time.
 
+> **Why this shape at all — the one sentence that explains every rule below.** heca is meant to be
+> extended by *other people*. The target is that someone writing a plugin, or contributing to the
+> project, authors UI the way they would in **Flutter or SwiftUI**: a declarative tree of typed
+> widgets, composed, with behaviour attached to the widget itself — and gets exactly what the app's
+> own chrome gets, with no host-private type, no registry, and no second-class path. That is
+> `AGENTS.md` → ⭐⭐ RULE ZERO, and it outranks everything in this file. When a rule below looks
+> like ceremony, check it against that sentence: if a plugin author would have to know it, the API
+> is the bug.
+
 ---
 
 ## 1. The two layers, and the one bridge
@@ -14,11 +23,15 @@ heca's UI is a declarative tree over a retained widget tree — the same shape S
 use (`Widget` → `Element`/`RenderObject`).
 
 ```
-   ViewNode                     the DESCRIPTION   (heca/src/chrome/view.rs — the APP crate)
+   build::VStack / build::Button …   the TYPED SDK   (heca-view/src/build.rs)
+   SwiftUI-shaped builders that lower to a ViewNode  — `Label::new(..).title(..)` will not compile
+        │
+        ▼
+   ViewNode                     the DESCRIPTION   (heca-view — its OWN crate, serde and nothing else)
    { kind, props, events, children }              pure data · serde · no closures · no signals
         │
-        │   realize(&ViewNode, theme, emit, hints, forms) -> Box<dyn Component>
-        │   the ONE bridge     (heca/src/chrome/realize.rs — the APP crate)
+        │   realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>
+        │   the ONE bridge     (heca-view-realize — its OWN crate, BELOW the app)
         ▼
    Component tree               the LIVE WIDGETS  (heca-grid-ui — the LIBRARY crate)
    Base + children: Vec<Box<dyn Component>>       builder API · closures · signals
@@ -27,21 +40,42 @@ use (`Widget` → `Element`/`RenderObject`).
    taffy layout → paint → Scene → heca-renderer → GPU
 ```
 
+> ⚠️ **Moved 2026-07-27 (F003/P017/T009).** `ViewNode` and `realize` used to live in the app
+> (`heca/src/chrome/view.rs` and `chrome/realize.rs`); older text everywhere still says so. They are
+> now two crates **below** `heca`: `heca-view` (the model, serde only, no widget library at all) and
+> `heca-view-realize` (the bridge, which owns the `heca-grid-ui` dependency). That is what lets a
+> plugin depend on the vocabulary without compiling the thing that draws it — and why
+> `heca-renderer`'s showcase, which sits below the app, can render a described tree beside its
+> hand-built twin.
+
+**Layer 0 — the typed SDK (`heca-view::build`).** The SwiftUI-shaped surface an author actually
+writes: `VStack::new().gap(8).child(Button::new("Restart").on_press(intent))`. Each kind is its own
+type, so the compiler refuses what the widget cannot do (`Label::new(..).title(..)` is an error;
+`Separator::new().orientation("horizonal")` will not take the typo). It lowers to a `ViewNode` and
+adds no capability — it is ergonomics and type-safety over the same data, exactly as Flutter's typed
+`Widget` classes lower to `Element`/`RenderObject`.
+
 **Layer 1 — `ViewNode` (description).** A serializable node: `kind` (the closed `WidgetKind`
 vocabulary), `props` (scalars, semantic enums, and appearance — a colour is a hex literal or a
 theme token **name**, resolved by `realize` against the theme the tree is built with), `events`
-(`press`/`change` → an `Intent` = action id + args, **never a closure**), and `children`
-(`Vec<ViewNode>`, recursive). This is what a WASM plugin ships over the boundary, what RPC can
-send, and what native code authors when it wants a declarative body (modals, menus, panels).
+(`press` / `peek` / `change` / `toggle` / `action` / `dismiss` → an `Intent` = action id + args,
+**never a closure**), and `children` (`Vec<ViewNode>`, recursive). This is what a WASM plugin ships
+over the boundary, what RPC can send, and what native code authors when it wants a declarative body
+(modals, menus, panels).
 
 **Layer 2 — the widgets (`heca-grid-ui`).** Real retained components: embed `Base`, hold
 `children: Vec<Box<dyn Component>>`, own paint/event/tick, expose a builder API with **closures**
 (`.on_click(move || …)`) and **signals** (`.state()`, `.text_signal()`). The native chrome
 (sidebar, pane headers) is built directly here.
 
-**The bridge — `realize`.** The single, host-side mapper. It owns the theme lookup, the intent
-emitter, and the hint registry, so neither layer has to. Both authoring paths converge on the
-**same retained tree**.
+**The bridge — `realize`.** The single mapper. It owns the theme lookup and the intent emitter, so
+neither layer has to. Both authoring paths converge on the **same retained tree**.
+
+It used to own a third thing — a **hint registry** — and that is gone (F004/P084/T399, 2026-08-11).
+A pickable node now writes its own `peek` behaviour into the widget's `Base::peek` slot, and the
+framework collects the declarations out of the laid-out tree. There is no sink to hand in, nothing
+to un-register, and nothing a plugin cannot reach. **When a bridge grows a registry parameter, that
+is the smell**: it means the capability behind it is host-private.
 
 ---
 
@@ -54,13 +88,15 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)
 **`heca-grid-ui` NEVER depends on `heca`.** Same boundary as `heca-core`: the library is
 headless, GPU-free, app-free, unit-testable.
 
-`ViewNode` lives in the **app**. Therefore:
+`ViewNode` lives **above** the library, in `heca-view`. (It lived in the app until F003/P017/T009;
+moving it into its own crate changed *who may depend on it*, not the direction of the arrow.)
+Therefore:
 
 > ### ❌ `Button::new(ViewNode)` is impossible. Never propose it.
 >
-> A widget constructor cannot take a `ViewNode`, because that would make the library depend on
-> the app's model — and then the library would also need `realize`, which needs the app's
-> `InteractionIntent` / `HintTargetRegistry` / theme wiring. It inverts the crate graph.
+> A widget constructor cannot take a `ViewNode`, because that would make the library depend on the
+> model — and then the library would also need `realize`, which needs the theme and intent wiring
+> above it. It inverts the crate graph.
 
 **And moving `ViewNode` down into `heca-grid-ui` is also rejected** — not just for layering, but
 because `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native
@@ -107,7 +143,20 @@ boxed setter — `Dialog::body_boxed(Box<dyn Component>)` is the precedent; new 
 
 ## 4. The two authoring paths (both legal, same result)
 
-**Declarative** (plugins, RPC, modal/menu bodies) — arbitrary tree, arbitrary depth:
+**Declarative — the typed SDK** (what a plugin author writes; `heca-view::build`):
+
+```rust
+use heca_view::build::*;
+
+Button::new("Delete")
+    .variant(ViewVariant::Destructive)
+    .on_press(Intent::new("confirm_ok"))
+    .child(HStack::new()
+        .child(Icon::new("trash"))
+        .child(Label::new("Delete")))
+```
+
+**Declarative — the raw node** (what that lowers to, and what crosses the wire):
 
 ```rust
 ViewNode::new(WidgetKind::Button)
@@ -140,7 +189,9 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 |---|---|---|
 | Should `heca-grid-ui` own `ViewNode`? | **No.** | Inverts the crate graph; and `ViewNode` can't carry the closures/signals native chrome needs. |
 | Can a widget constructor take a `ViewNode` (`Button::new(ViewNode)`)? | **No.** | Same reason. The library never sees the app's model. |
-| Is `realize` the only ViewNode→widget path? | **Yes.** | One bridge, app-side, owns theme + intent + hint wiring. |
+| Is `realize` the only ViewNode→widget path? | **Yes.** | One bridge, in `heca-view-realize`, owns theme + intent wiring. (It was app-side until F003/P017/T009 moved it below the app; it never owned a *second* path.) |
+| Does the bridge need a registry handed in (hints, ids, sinks)? | **No — and a new one is a bug.** | F004/P084/T399 deleted the last of them. A capability a described node cannot express without host plumbing is a capability a plugin only has a second-class version of. |
+| Does a plugin author write raw `ViewNode`? | **They may, but the typed SDK is the surface.** | `heca-view::build` — one type per kind, so the compiler refuses what the widget cannot do. Same relationship Flutter's typed `Widget`s have to `Element`. |
 | Do widgets hold children, or hand-draw content? | **Children.** | The rule in §3. Hand-drawn content is a refactor target. |
 | Can any component go inside a widget's slot? | **Yes.** | Slots are `impl Component`. Never narrow to a closed enum. |
 | How does a realized subtree get into a widget? | **`*_boxed` setter.** | `Dialog::body_boxed` is the precedent. |
@@ -153,8 +204,9 @@ Extending the vocabulary (a new `WidgetKind`) is **host-side** work — the widg
 
 | Concern | File |
 |---|---|
-| `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca/src/chrome/view.rs` |
-| `realize(&ViewNode) -> Box<dyn Component>` | `heca/src/chrome/realize.rs` |
+| `ViewNode` / `WidgetKind` / `PropValue` / `Intent` | `heca-view/src/lib.rs` |
+| The typed SDK a plugin author writes | `heca-view/src/build.rs` |
+| `realize(&ViewNode, theme, emit, forms) -> Box<dyn Component>` | `heca-view-realize/src/lib.rs` |
 | Overlay: `ModalSpec` → `Dialog` (the `*_boxed` seam in action) | `heca/src/chrome/overlay.rs` |
 | The widgets | `heca-grid-ui/src/widgets/` |
 | `Base` / `Component` / `PaintCx` | `heca-grid-ui/src/component.rs` |
@@ -170,6 +222,17 @@ These are *not* settled, and are the live design work — everything above is.
 
 ~~`realize` coverage~~ — **done.** Every kind maps to a live widget, guarded by a test.
 ~~Composing the leaf widgets~~ — **done** (F003/P015, F003/P016).
+~~Where the plugin-facing types live~~ — **done** (F003/P017/T009). `heca-view` is its own crate,
+depending on serde and nothing else, so a plugin can name the vocabulary without compiling the
+renderer.
+~~Typed builder SDK~~ — **done.** `heca-view/src/build.rs`; a drift guard in `heca-view-realize`
+fails the build when a widget grows a property the SDK cannot set.
 
-- **Typed builder SDK** over `ViewNode` (`VStack::new().gap(8).child(…)`) — **F003/P011/T006**,
-  waiting on **F003/P017**.
+- **Generated type definitions** for plugins in *other* languages, from the same widget list —
+  **F003/P001/T006**. The Rust author is served; a JS or Python author is not, and that is the gap
+  between "a plugin can do this" and "anyone can write a plugin".
+- **Every widget buildable from a description, with no host-only exceptions** — **F004/P084/T398**.
+  The rule is already written (a widget whose state is a live host signal is host-only, §5); the
+  audit that proves the list is *only* those is not done.
+- **The WASM boundary itself** — **F003/P022**. Everything above is the authoring model; nothing
+  yet loads a plugin.

@@ -129,3 +129,102 @@ fn the_button_branch_feeds_the_funnel_both_press_and_release() {
         );
     }
 }
+
+/// `heca/src/mouse.rs` is the **second** place a button reaches the chrome tree, and it had the same
+/// half-gesture defect the event loop was fixed for — found by the user in the running app, on the
+/// day it was introduced, with the whole suite green.
+///
+/// The right-button branch dispatched a **press** into the chrome tree and no release. That is not
+/// half a click, it is *no* click: the framework synthesises `Click` / `RightClick` from a press and
+/// a release on the same widget, so a host that sends only presses produces neither. Every context
+/// menu declared on a widget stopped opening, and nothing failed — the declaration tests dispatch
+/// both halves themselves, so they passed while the app sent one.
+///
+/// A lint, like its neighbours above: what it guards is *absence*, which no behaviour test can see.
+#[test]
+fn the_mouse_layer_sends_a_release_for_every_press_it_sends() {
+    let src = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/mouse.rs"),
+    )
+    .expect("read the mouse layer");
+
+    assert!(
+        src.contains("chrome_dispatch_button_press"),
+        "the mouse layer no longer presses into the chrome tree — if that moved, move this guard \
+         with it rather than deleting it",
+    );
+    assert!(
+        src.contains("chrome_dispatch_button_release"),
+        "the mouse layer dispatches a button PRESS to the chrome tree and never a RELEASE.\n\
+         A press with no release is not a click: `Click` and `RightClick` are synthesised from the \
+         pair, so nothing that depends on a click happens at all — a widget's declared context \
+         menu never opens, and a widget that captured the press never learns the gesture ended.\n\
+         This is not caught by any behaviour test: they dispatch both halves themselves.",
+    );
+}
+
+/// **A divider resize must end at the same level its press started it.**
+///
+/// The press starts the drag in the event loop (`mouse::resize::on_press`, before the general mouse
+/// path). The release used to end it two layers down, inside `mouse::on_mouse_input` — which sits
+/// *behind* an early return: if a pane's viewport scrollbar claimed the release (it answers one
+/// whenever it holds a thumb grab), the event loop returned and the resize was never told.
+///
+/// `state.mouse.resize` then stayed `Some`, and every later cursor move took the resize branch in
+/// `mouse::on_cursor_moved` **with no button held** — so the pane went on resizing itself, with the
+/// mouse just moving, until it was gone. Same family as the guards above: a gesture that outlives
+/// the release that ends it (F004/P084/T409).
+///
+/// A lint, because what it guards is *ordering*, and the failure is a state that persists rather
+/// than an event that is wrong.
+#[test]
+fn the_divider_resize_ends_before_anything_can_swallow_the_release() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::MouseInput")
+        .expect("the button branch is still a `WindowEvent::MouseInput` arm");
+
+    let ends = body
+        .find("resize::on_release")
+        .expect(
+            "the button branch no longer ends the divider resize. It must: the press starts the \
+             drag here, so the release has to end it here too, or the drag outlives the button.",
+        );
+    let swallows = body
+        .find("dispatch_pane_viewport_release")
+        .expect("the viewport release moved — move this guard with it rather than deleting it");
+
+    assert!(
+        ends < swallows,
+        "the divider resize is ended AFTER a branch that can return early and swallow the \
+         release.\nA resize that is never told the button came up keeps resizing on every cursor \
+         move, with nothing held down, until the pane is gone.",
+    );
+}
+
+/// **A key release reaches the tree, or `on_key_up` is a builder nothing can fire.**
+///
+/// The window loop returned at `event.state != ElementState::Pressed`, so `Event::Key { pressed:
+/// false }` did not exist in this app. A widget's release handler was therefore dead — the exposé's
+/// `x`/`X`/`d` did nothing on screen while a headless test that dispatched both halves passed
+/// (Antonio, driving, 2026-08-11).
+///
+/// Exactly the shape of the pointer guards above: the funnel delivering only one half of a gesture,
+/// invisible to every behaviour test, because a test hands the tree both halves itself.
+#[test]
+fn the_key_funnel_delivers_releases_and_not_only_presses() {
+    let src = std::fs::read_to_string(events_rs()).expect("read the event loop");
+    let body = branch_body(&src, "WindowEvent::KeyboardInput")
+        .expect("the key branch is still a `WindowEvent::KeyboardInput` arm");
+
+    assert!(
+        body.contains("deliver_press"),
+        "the key branch no longer delivers presses — if that moved, move this guard with it",
+    );
+    assert!(
+        body.contains("deliver_release"),
+        "the key branch delivers a key PRESS and never a RELEASE.\n\
+         `ComponentExt::on_key_up` then exists but can never fire, so a widget that declares one \
+         is silently dead in the real app.\n\
+         This is not caught by any behaviour test: they dispatch both halves themselves.",
+    );
+}

@@ -14,17 +14,16 @@ use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
-use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, Rectangle, Scene, Size};
-use heca_grid_ui::widgets::{KeyCap, NfGlyph, NfIcon};
+use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, RawPointer, RawPointerKind, Rectangle, Scene, Size};
+use heca_grid_ui::widgets::{ContextMenu, KeyCap, Menu, NfGlyph, NfIcon};
 use heca_view::build::{self, Parent as _, Style as _};
 use heca_view::{Intent, PropValue, ViewNode};
-use heca_view_realize::{realize, FormBindings, HintTargets, IntentEmitter};
+use heca_view_realize::{realize, FormBindings, IntentEmitter};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
-use winit::keyboard::{Key, NamedKey};
 
 /// Paired `(active, error)` state signals for a showcase pane-info card.
 type PaneTitleSignals = (Signal<bool>, Signal<bool>);
@@ -76,24 +75,6 @@ impl Component for IndicatorSwatch {
 impl LayoutExt for IndicatorSwatch {}
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
-fn to_grid_key(key: &Key) -> Option<GridKey> {
-    Some(match key {
-        Key::Named(NamedKey::Tab) => GridKey::Tab,
-        Key::Named(NamedKey::Enter) => GridKey::Enter,
-        Key::Named(NamedKey::Space) => GridKey::Space,
-        Key::Named(NamedKey::Escape) => GridKey::Escape,
-        Key::Named(NamedKey::Backspace) => GridKey::Backspace,
-        Key::Named(NamedKey::Delete) => GridKey::Delete,
-        Key::Named(NamedKey::ArrowLeft) => GridKey::ArrowLeft,
-        Key::Named(NamedKey::ArrowRight) => GridKey::ArrowRight,
-        Key::Named(NamedKey::ArrowUp) => GridKey::ArrowUp,
-        Key::Named(NamedKey::ArrowDown) => GridKey::ArrowDown,
-        Key::Named(NamedKey::Home) => GridKey::Home,
-        Key::Named(NamedKey::End) => GridKey::End,
-        Key::Character(s) => GridKey::Char(s.chars().next()?),
-        _ => return None,
-    })
-}
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
@@ -218,22 +199,6 @@ fn level_option(value: &str, glyph: Glyph, label: &str) -> Choice {
         .child(Label::new(label))
 }
 
-/// The showcase's pick registry for a described tree. `realize` registers every actionable node so
-/// a host's picker can reach it by letter; this example has no picker, so the ids are handed out in
-/// order and nothing further is done with them.
-#[derive(Default)]
-struct ShowcaseHints {
-    next: usize,
-}
-
-impl HintTargets for ShowcaseHints {
-    fn register(&mut self, _intent: Intent) -> HintTargetId {
-        let id = HintTargetId::new(self.next);
-        self.next += 1;
-        id
-    }
-}
-
 /// The tree the **described** column renders: a titled `Panel` holding a clickable `Row`, a rule,
 /// and a line whose colour is overridden by **token name** (not a hex literal, so it follows the
 /// theme — press `1`/`2`/`3` and watch it change with everything else).
@@ -294,9 +259,8 @@ fn described_vs_native(theme: &Theme) -> Flex {
             intent.action, intent.args
         );
     });
-    let mut hints = ShowcaseHints::default();
     let mut forms = FormBindings::default();
-    let described = realize(&described_tree(), theme, &emit, &mut hints, &mut forms);
+    let described = realize(&described_tree(), theme, &emit, &mut forms);
 
     // `Box<dyn Component>` is not `Component`, so it cannot go through `child()` — push it the way
     // the mapper itself does.
@@ -402,35 +366,57 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
     // The keycap is the shared `paint_keycap` primitive in its `Bordered` variant —
     // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
-    let menu = ContextMenu::new()
-        .entry(
-            MenuEntry::new("Rename", || println!("[showcase] rename"))
-                .icon(Glyph::NotePencil)
-                .key('r')
-                .shortcut(display_shortcut("prefix+$")),
-        )
-        .entry(
-            MenuEntry::new("Move to workspace", || println!("[showcase] → workspace"))
-                .icon(Glyph::ArrowRight)
-                .key('w'),
-        )
-        .entry(
-            MenuEntry::new("Move to column", || println!("[showcase] → column"))
-                .icon(Glyph::SquareSplitVertical)
-                .key('c'),
-        )
-        .entry(
-            MenuEntry::new("Duplicate", || println!("[showcase] duplicate"))
-                .icon(Glyph::Cards)
-                .key('d')
-                .enabled(false),
-        )
-        .entry(
-            MenuEntry::new("Close", || println!("[showcase] close"))
-                .icon(Glyph::FolderSimpleMinus)
-                .key('x')
-                .danger(true)
-                .shortcut(display_shortcut("prefix+x")),
+    // Both row forms are here on purpose: the first four are the **sugar** form (a label and an
+    // icon), and "Close" is **composed** out of widgets — the two are laid out by the same engine
+    // and read as the same list, which is the thing to check on screen.
+    let menu = ContextMenu::new("showcase.pane")
+        .child(
+            Menu::new("Pane", "What you can do with this pane")
+                .child(
+                    MenuItem::new()
+                        .label("Rename")
+                        .icon(Glyph::NotePencil)
+                        .on_click(|| println!("[showcase] rename"))
+                        .key('r')
+                        .shortcut(display_shortcut("prefix+$")),
+                )
+                .child(
+                    MenuItem::new()
+                        .label("Move to workspace")
+                        .icon(Glyph::ArrowRight)
+                        .on_click(|| println!("[showcase] → workspace"))
+                        .key('w'),
+                )
+                .child(
+                    MenuItem::new()
+                        .label("Move to column")
+                        .icon(Glyph::SquareSplitVertical)
+                        .on_click(|| println!("[showcase] → column"))
+                        .key('c'),
+                )
+                .child(
+                    MenuItem::new()
+                        .label("Duplicate")
+                        .icon(Glyph::Cards)
+                        .on_click(|| println!("[showcase] duplicate"))
+                        .key('d')
+                        .enabled(false),
+                )
+                .child(
+                    MenuItem::new()
+                        .child(|| {
+                            Flex::row()
+                                .gap(10.0)
+                                .align(Align::Center)
+                                .child(Icon::new(Glyph::FolderSimpleMinus))
+                                .child(Label::new("Close"))
+                                .child(Badge::new("⌫"))
+                        })
+                        .on_click(|| println!("[showcase] close"))
+                        .key('x')
+                        .danger(true)
+                        .shortcut(display_shortcut("prefix+x")),
+                ),
         )
         // Fired only on Esc / outside-click (a dismissal, not a selection) — the host wires this
         // to its overlay-close path (in `heca`, emit `CloseOverlay`).
@@ -1704,8 +1690,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 );
                 let row = Row::new()
                     .background(theme.colors.foreground.with_alpha(5))
-                    .highlight(theme.colors.accent)
-                    .radius(theme.colors.control_radius())
+                                        .radius(theme.colors.control_radius())
                     .padding(10.0)
                     .child({
                         let active_title = Visibility::new(
@@ -1753,7 +1738,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
                 let pane_titles = pane_titles.clone();
-                // DnD framework (universal `DragExt`): each card is a drag source
+                // DnD framework (universal `ComponentExt`): each card is a drag source
                 // carrying its index as the opaque id. The app resolves a drop via
                 // `drag::source_at`/`resolve_at` over the laid-out tree and paints
                 // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
@@ -1861,7 +1846,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // PANES: Phase 7 sidebar-style pane cards. Row 1 is a centered inline
             // `status dot + icon + name`; row 2 is a flat git metadata line that
             // hides outside repos.
-            // The dock is a DnD drop target (universal `DragExt`) — its cards drop here.
+            // The dock is a DnD drop target (universal `ComponentExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
                 .drop_target(DragItemId::new(usize::MAX))
                 .child(
@@ -1898,7 +1883,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 ));
             // MarkerGroup: a column-style grouping fronted by a left marker bar
             // that lights to the accent when the group is active (here: the first).
-            // Each group is also a DnD drag source + drop target (universal `DragExt`)
+            // Each group is also a DnD drag source + drop target (universal `ComponentExt`)
             // grabbed by its left grip gutter — this is how the app drags whole
             // *columns* (F4.5). A column drag accepts only column/workspace targets via
             // `drag::resolve_at_filtered`, so nested pane rows fall through to the group.
@@ -2471,6 +2456,24 @@ impl GpuState {
         }
     }
 
+    /// A raw pointer event at the current cursor, carrying the button and the live modifier
+    /// state.
+    ///
+    /// A host builds **one** kind of pointer event and the framework works out what it means —
+    /// which widget it is for, whether the pair of them was a click, whether the pointer just
+    /// left something. The modifiers ride on the event rather than being read from state later,
+    /// because an event that carries its own cannot be read against a state that has moved on.
+    fn raw(&self, kind: RawPointerKind, button: PointerButton) -> RawPointer {
+        RawPointer::new(kind, self.cursor)
+            .with_button(button)
+            .with_modifiers(Modifiers {
+                ctrl: self.ctrl,
+                alt: false,
+                shift: self.shift,
+                meta: self.meta,
+            })
+    }
+
     /// The logical→physical scale actually used: the window's HiDPI factor times the
     /// global UI zoom. Everything (layout viewport, glyph rasterization, scissor +
     /// cursor mapping) goes through this, so changing zoom scales the whole UI.
@@ -2531,10 +2534,9 @@ impl GpuState {
     /// letters, a Modal's own keys), then the semantic `WidgetIntent`(s) the chord resolves to.
     /// `offer_to_overlay` no-ops when no overlay is active, so this returns `false` and the key
     /// falls through to the host's global bindings.
-    fn route_overlay_key(&mut self, gk: GridKey) -> bool {
-        let mods = self.grid_mods();
+    fn route_overlay_key(&mut self, press: &heca_grid_ui::KeyPress) -> bool {
         let keymap = self.keymap.clone();
-        keymap.dispatch(gk, mods, |ev| {
+        keymap.deliver_press(press, |ev| {
             // The overlay layer first (Dialog / palette / menu live above the page);
             // when nothing there is open, an overlay INSIDE the page (an open Select
             // dropdown) still gets its keys via the page tree's own overlay scan.
@@ -2550,10 +2552,9 @@ impl GpuState {
     /// first (an `Input`'s typing / caret / Backspace), then the semantic `WidgetIntent`(s); the
     /// focused widget consumes whichever it understands — an `Input` takes the `Edit*` shortcut, a
     /// `Tabs` takes the horizontal `Item*` nav (so a shared `Ctrl+h` disambiguates by focus).
-    fn route_focused_key(&mut self, gk: GridKey) {
-        let mods = self.grid_mods();
+    fn route_focused_key(&mut self, press: &heca_grid_ui::KeyPress) {
         let keymap = self.keymap.clone();
-        keymap.dispatch(gk, mods, |ev| self.focus.deliver_event(&mut self.ui, ev));
+        keymap.deliver_press(press, |ev| self.focus.deliver_event(&mut self.ui, ev));
     }
 
     /// A key pressed while in zoom mode. The mode stays active (so you can keep
@@ -2876,7 +2877,7 @@ impl ApplicationHandler for App {
                 // buttons behind it still hover/animate while toasts show), otherwise
                 // it falls to the page tree (whose own overlay scan covers an open
                 // Select dropdown) and then the widget under the cursor.
-                let ev = Event::PointerMoved { pos: state.cursor };
+                let ev = Event::Raw(state.raw(RawPointerKind::Moved, PointerButton::Left));
                 if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                     state.focus.dispatch(&mut state.ui, &ev);
                 }
@@ -2892,7 +2893,7 @@ impl ApplicationHandler for App {
                 // overlay scan lets an open Select dropdown capture clicks on rows
                 // outside its layout bounds; otherwise dispatch focuses the clicked
                 // widget (clearing focus on a miss) and delivers the press.
-                let ev = Event::PointerPressed { pos: state.cursor };
+                let ev = Event::Raw(state.raw(RawPointerKind::Pressed, PointerButton::Left));
                 if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                     state.focus.dispatch(&mut state.ui, &ev);
                 }
@@ -2913,9 +2914,15 @@ impl ApplicationHandler for App {
                 // does NOT occlude — a second right-click re-anchors it (standard
                 // menu behavior). Both trees are scanned: the overlay layer and the
                 // page (whose open Select panels also occlude).
+                // The press goes into the trees first, with the button on it: a widget that
+                // declares `on_right_click` owns its own menu, and the host only falls back to
+                // its page-level one when nothing claimed the press.
+                let ev = Event::Raw(state.raw(RawPointerKind::Pressed, PointerButton::Right));
+                let claimed = state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::Yes
+                    || state.focus.dispatch(&mut state.ui, &ev) == Handled::Yes;
                 let occluded = heca_grid_ui::overlay_occluded_at(&state.overlays, state.cursor)
                     || heca_grid_ui::overlay_occluded_at(&state.ui, state.cursor);
-                if !occluded {
+                if !claimed && !occluded {
                     state.menu_anchor.set(state.cursor);
                     state.menu_open.set(true);
                     state.layout_dirty = true;
@@ -2931,7 +2938,7 @@ impl ApplicationHandler for App {
                 // thumb drag in the page, a pressed Dialog button in the overlay layer)
                 // always ends its grab — a release must never be swallowed by one tree
                 // away from the other.
-                let ev = Event::PointerReleased { pos: state.cursor };
+                let ev = Event::Raw(state.raw(RawPointerKind::Released, PointerButton::Left));
                 state.focus_ov.dispatch(&mut state.overlays, &ev);
                 state.focus.dispatch(&mut state.ui, &ev);
                 state.window.request_redraw();
@@ -2964,7 +2971,10 @@ impl ApplicationHandler for App {
                     // embedded ScrollRegion under the cursor consumes it, and otherwise
                     // the ROOT ScrollRegion scrolls the whole page (T009 — the manual
                     // `scroll_y` fallback is gone; the page is a real scroll viewport).
-                    let ev = Event::Scroll { delta_x: dx, delta_y: dy };
+                    let mut raw = state.raw(RawPointerKind::Wheel, PointerButton::Left);
+                    raw.delta_x = dx;
+                    raw.delta_y = dy;
+                    let ev = Event::Raw(raw);
                     if state.focus_ov.dispatch(&mut state.overlays, &ev) == Handled::No {
                         state.focus.dispatch(&mut state.ui, &ev);
                     }
@@ -2989,7 +2999,13 @@ impl ApplicationHandler for App {
                 heca_grid_ui::dispatch(&mut state.overlays, &ev);
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let Some(gk) = to_grid_key(&event.logical_key) {
+                // **Committed text goes in as text.** A field types from `Event::TextInput` and
+                // from nothing else (F004/P084/T394) — the character the platform actually produced,
+                // case and shifted symbols intact — while the key beside it is what a shortcut
+                // reads. This host was never taught to send it, so the palette and every `Input`
+                // here were unreachable from the keyboard while the identical widgets typed fine in
+                // the app, which sends both.
+                if let Some(gk) = heca_renderer::input::grid_key(&event.logical_key) {
                     match gk {
                         // ── tmux-style prefix + modes (checked FIRST) ──
                         // heca hosts other apps, so our chords go through a prefix
@@ -3004,7 +3020,11 @@ impl ApplicationHandler for App {
                         // ToastStack eats none — so global keys (`t`, `[`, …) still work
                         // while toasts show. `route_overlay_key` resolves the key via the widget
                         // `Keymap` (the demo host's stand-in for config-driven `[keys.widgets]`).
-                        gk if state.route_overlay_key(gk) => {}
+                        gk if state.route_overlay_key(&heca_grid_ui::KeyPress {
+                            key: gk,
+                            text: event.text.as_ref().map(|t| t.to_string()),
+                            mods: state.grid_mods(),
+                        }) => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
@@ -3061,11 +3081,16 @@ impl ApplicationHandler for App {
                             });
                             state.window.request_redraw();
                         }
-                        // Space/Enter/typing and nav go to the focused widget — via
-                        // `route_focused_key`, which dispatches via the widget `Keymap`: raw key
-                        // first, then the resolved `WidgetIntent`s (Input edits, Tabs item-nav).
+                        // Space/Enter/typing and nav go to the focused widget — through the one
+                        // funnel (`Keymap::deliver_press`): committed text, then the key, then the
+                        // resolved `WidgetIntent`s. This surface writes none of that order.
                         other => {
-                            state.route_focused_key(other);
+                            let press = heca_grid_ui::KeyPress {
+                                key: other,
+                                text: event.text.as_ref().map(|t| t.to_string()),
+                                mods: state.grid_mods(),
+                            };
+                            state.route_focused_key(&press);
                         }
                     }
                     state.layout_dirty = true; // a key can change content/size

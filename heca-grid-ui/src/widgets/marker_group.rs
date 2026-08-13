@@ -12,7 +12,7 @@
 //! A group's only *own* surface is its left **gutter** — the rows fill the rest.
 //! That gutter is the seam for the group's universal capabilities, applied by the
 //! host, **not** built in here:
-//! - **Drag**: mark the group `.draggable(payload)` ([`DragExt`](crate::builders::DragExt)).
+//! - **Drag**: mark the group `.draggable(payload)` ([`ComponentExt`](crate::builders::ComponentExt)).
 //!   A pointer press in the gutter resolves to the *group* (move the whole group);
 //!   a press on a child row resolves to the *row* — innermost-first hit-testing
 //!   makes the gutter the group's drag handle for free.
@@ -150,9 +150,16 @@ impl Component for MarkerGroup {
 
     /// Capture returning `No`: the grip's hover is tracked whatever the rows do with the move,
     /// and the rows still receive it — they own everything outside the gutter.
+    ///
+    /// This is a **sub-region** hover, not the widget's own: the grip is a gutter this widget
+    /// paints, not a child, so [`Base::hovered`](crate::component::Base::hovered) (which is true
+    /// anywhere over the group) cannot answer it. The move already arrives only when the pointer
+    /// is over this group.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
-        if let Event::PointerMoved { pos } = ev {
-            let in_grip = self.in_grip(*pos);
+        if let Some(p) = ev.pointer()
+            && matches!(ev, Event::PointerMove(_) | Event::PointerLeave(_))
+        {
+            let in_grip = matches!(ev, Event::PointerMove(_)) && self.in_grip(p.pos);
             if self.hovered.get_untracked() != in_grip {
                 self.hovered.set(in_grip);
             }
@@ -264,16 +271,12 @@ mod tests {
     #[test]
     fn hover_tracks_only_the_left_grip() {
         let mut g = sized(MarkerGroup::new(), 100.0, 40.0);
-        crate::component::dispatch(&mut g, &Event::PointerMoved {
-            pos: Point::new(5.0, 20.0),
-        }); // x < GRIP_W → gutter
+        crate::component::dispatch(&mut g, &Event::pointer_moved(Point::new(5.0, 20.0))); // x < GRIP_W → gutter
         assert!(
             g.hovered().get_untracked(),
             "pointer in the grip gutter hovers the bar"
         );
-        crate::component::dispatch(&mut g, &Event::PointerMoved {
-            pos: Point::new(60.0, 20.0),
-        }); // over content
+        crate::component::dispatch(&mut g, &Event::pointer_moved(Point::new(60.0, 20.0))); // over content
         assert!(
             !g.hovered().get_untracked(),
             "pointer over content does not hover the bar"

@@ -193,6 +193,9 @@ fn render_overlay_band(
 
 /// Render the full frame for the current app state.
 pub(crate) fn render_frame(state: &mut AppState) {
+    // Mount whatever a widget asked to open since the last frame: a declared context menu is a
+    // layer, and this is the one moment the host has `&mut AppState` and has not yet drawn.
+    crate::chrome::drain_pending_menus(state);
     if !state.needs_redraw {
         return;
     }
@@ -1005,25 +1008,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        // Drop the previous chrome tree's hint ids, then register the new tree's targets
-        // into the shared allocator (spans the chrome + pane-header trees), recording the
-        // contiguous id range this tree used so it can be removed on the next rebuild.
-        if let Some(old) = state.chrome_tree.as_ref() {
-            let old_range = old.hint_range.clone();
-            state.hint_targets.remove_range(old_range);
-        }
-        let mut hint_targets = std::mem::take(&mut state.hint_targets);
-        let start = hint_targets.checkpoint();
-        let (root, signals, drag_items) =
-            crate::chrome::build_chrome_root(state, chrome, &mut hint_targets);
-        let hint_range = start..hint_targets.checkpoint();
-        state.hint_targets = hint_targets;
+        let (root, signals, drag_items) = crate::chrome::build_chrome_root(state, chrome);
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
             root,
             sig: chrome_sig,
             signals,
             drag_items,
-            hint_range,
         });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
@@ -1057,10 +1047,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,
     // painted into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
-    crate::chrome::paint_hint_targets(state, &mut chrome_scene, w, h, &chrome_theme);
-    // Generic dynamic-layer paint (overlay dialogs incl. the confirm prompt + the right-click
-    // context menu, plugin panels), back→front by band, on top of everything.
-    crate::chrome::paint_layers(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     // Scrollback-search match highlights + query bar. terminal-task-19.
@@ -1086,6 +1072,71 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &mut encoder,
         &mut overlay_sink,
     );
+
+    // ── Dynamic layers (overlay dialogs, the context menu, plugin panels, the exposé) ──
+    //
+    // Painted into a scene of their own and flushed **after** the chrome shell, so a layer can ask
+    // for a backdrop that is "the frame so far" — the blur below stamps between the two passes.
+    // That is also why they are no longer part of `chrome_scene`: everything a frosted layer
+    // covers has to be on the scene texture before the blur reads it.
+    //
+    // Being last also settles a z-order that used to be the other way round by accident: the bell
+    // flash and the search highlights painted *over* an open dialog. A layer is above them now.
+    let mut layer_scene = heca_grid_ui::Scene::default();
+    crate::chrome::paint_layers(state, &mut layer_scene, w, h, &chrome_theme);
+    if state.layers.any_visible() {
+        // **The frost is one pass for the whole frame**, taken here because "here" is the only
+        // moment the scene holds everything under the layer and nothing of the layer itself. The
+        // strength is the theme's `overlay_frost_radius`, beside the scrim it is the counterpart
+        // of — nothing decided here, and `0.0` in a theme means flat.
+        let frost_radius = chrome_theme.colors.overlay_frost_radius;
+        let frost_alpha = state.layers.frost_opacity();
+        if state.layers.wants_frost() && frost_radius > 0.0 && frost_alpha > 0.0 {
+            let vp_w = phys_size.width as f32;
+            let vp_h = phys_size.height as f32;
+            let blurred =
+                state
+                    .blur
+                    .process(&state.device, &state.queue, &mut encoder, scene_view,
+                        frost_radius * state.scale_factor as f32);
+            state.backdrop.draw(
+                &state.device,
+                &state.queue,
+                &mut encoder,
+                scene_view,
+                blurred,
+                (vp_w, vp_h),
+                (0.0, 0.0, vp_w, vp_h),
+                Some([0.0, 0.0, 1.0, 1.0]),
+                // The frost fades with the layer that asked for it. Left at full strength it would
+                // hold the whole session out of focus for the length of the fade and then snap
+                // back sharp in one frame — the exact pop the fade exists to remove.
+                frost_alpha,
+                None,
+            );
+        }
+    }
+    // The universal picker's keycaps (`prefix+/`), painted into the **layer** scene so they sit
+    // above every layer rather than beneath them. They used to go into the chrome scene, which is
+    // flushed before this pass: while the exposé was up the letters were drawn under the map and
+    // could not be seen, though the targets they named were live and answering (F003/P082/T416).
+    // A letter over a surface the user cannot see is not pickable in any useful sense.
+    //
+    // Which targets are eligible is `chrome::active_peek_targets`' answer, not this pass's — here
+    // the letters only have to end up on top of what they are labelling.
+    crate::chrome::paint_peek_letters(state, &mut layer_scene, w, h, &chrome_theme);
+    if !layer_scene.is_empty() {
+        render_chrome(
+            &mut state.grid_renderer,
+            &mut state.text_renderer,
+            &state.queue,
+            &layer_scene,
+            ChromePassOpts { damage: None, glow_alpha_scale },
+            scene_view,
+            &mut encoder,
+            &mut overlay_sink,
+        );
+    }
 
     // Top band: every surface's overlay content (tooltips, popovers), above all bases.
     render_overlay_band(

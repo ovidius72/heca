@@ -37,7 +37,6 @@ pub struct RailCell {
     cell: f32,
     /// Active (current / selected) state — accent tint + border + glow.
     active: Signal<bool>,
-    hovered: Signal<bool>,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
 }
@@ -57,7 +56,6 @@ impl RailCell {
             base,
             cell: DEFAULT_CELL,
             active: signal(false),
-            hovered: signal(false),
             flash: Flash::new(),
             on_activate: None,
         };
@@ -91,6 +89,7 @@ impl RailCell {
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive cells are focusable (Component::focusable)
+        self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
     }
 
@@ -147,7 +146,7 @@ impl Component for RailCell {
                 cell_radius,
                 Some(Glow { color: glow_c, radius: ACTIVE_GLOW_RADIUS, intensity: ACTIVE_GLOW_INTENSITY }),
             );
-        } else if self.hovered.get_untracked() {
+        } else if self.base.hovered() {
             cx.rect(b, foreground.with_alpha(cx.theme().colors.interaction.row_hover_fill), None, cell_radius, None);
         }
 
@@ -157,7 +156,7 @@ impl Component for RailCell {
         // let the glyph pull it; the cell cannot style a child it holds as
         // `impl Component`. Hover and active already have their own lit chrome, so
         // they do not double it.
-        let rest_glow = (!active && !self.hovered.get_untracked() && !disabled)
+        let rest_glow = (!active && !self.base.hovered() && !disabled)
             .then(|| cx.rest_glow(ICON_HALO_RADIUS))
             .flatten();
         cx.with_content_glow(rest_glow, |cx| {
@@ -190,18 +189,28 @@ impl Component for RailCell {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.base.bounds.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.interactive() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.activate();
                 Handled::Yes
             }

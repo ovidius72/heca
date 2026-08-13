@@ -25,7 +25,21 @@
     "a838cc76-edf3-4cb6-8126-d2e5ce52217c",
     "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d",
     "d3be3b18-5bb2-4670-8468-adbb118988a9",
-    "57de8925-6015-4d79-8545-b32bb967f3cd"
+    "57de8925-6015-4d79-8545-b32bb967f3cd",
+    "6dfe4acd-c706-485c-91b1-8b13aa163652",
+    "62b176af-bd2a-4a62-abeb-44e0e7059596",
+    "5ef43ba4-d6c8-482f-a908-40b1426a19e3",
+    "8f13b870-62c4-4556-a33f-377073527b4f",
+    "787ba99d-c2e9-4dd0-bd28-323ec208c898",
+    "5d3bdfaa-9b33-47b1-94e7-35e315ad55a6",
+    "320728e2-821f-4b13-83a0-46fb7b544ec6",
+    "2649dacb-abda-4296-8316-beb28a977d5e",
+    "357de448-0532-49c4-9788-a266ba067a66",
+    "c83c9b34-35e5-46d7-9dc5-d79906619fda",
+    "fc620445-244f-494d-8ae8-60c88ad14ffa",
+    "4e627ced-c92e-49ec-89f7-e6c1fb7831ee",
+    "791ea225-2796-42ae-a534-5235203a9f50",
+    "d89b63d6-04f2-42f2-9acc-b947eed95306"
   ],
   "tasks": [
     {
@@ -45,36 +59,43 @@
       "checklist": [
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-001-dispatch-is-the-only-child-walk-in-the-crate",
+          "number": 1,
           "title": "dispatch() is the only child walk in the crate",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-002-routes-own-subtree-declared-on-select-and-dialog-with-a-stated-reason-code-otherwise-untouched",
+          "number": 2,
           "title": "routes_own_subtree() declared on Select and Dialog with a stated reason, code otherwise untouched",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-003-all-24-widgets-migrated-no-route-event-call-left-in-a-widget",
+          "number": 3,
           "title": "all 24 widgets migrated; no route_event call left in a widget",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-004-every-event-call-site-across-the-workspace-moved-to-dispatch",
+          "number": 4,
           "title": "every .event() call site across the workspace moved to dispatch()",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-005-capture-vs-bubble-decided-per-widget-gestures-swallows-capture-leftovers-bubble",
+          "number": 5,
           "title": "capture vs bubble decided per widget: gestures/swallows capture, leftovers bubble",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-006-pointer-delivery-rs-still-fails-when-a-container-drops-a-kind",
+          "number": 6,
           "title": "pointer_delivery.rs still fails when a container drops a kind",
           "checked": false
         },
         {
           "id": "a838cc76-edf3-4cb6-8126-d2e5ce52217c-check-007-user-drives-focus-dropdowns-menus-palette-drag-sidebar-pane-headers-in-the-app",
+          "number": 7,
           "title": "USER drives focus, dropdowns, menus, palette, drag, sidebar, pane headers in the app",
           "checked": false
         }
@@ -103,36 +124,43 @@
       "checklist": [
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-001-modal-layer-move-press-release-wheel-through-dispatch-modal-pointer-done",
+          "number": 1,
           "title": "modal layer: move + press + release + wheel through dispatch_modal_pointer (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-002-wheel-event-matches-the-showcase-s-delta-and-shift-to-x-convention-done",
+          "number": 2,
           "title": "wheel_event() matches the showcase's delta and Shift-to-X convention (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-003-pointer-funnel-rs-guard-verified-to-fail-against-the-pre-fix-file-done",
+          "number": 3,
           "title": "pointer_funnel.rs guard, verified to fail against the pre-fix file (done)",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-004-chrome-tree-pane-header-pane-viewport-seams-folded-into-the-same-funnel",
+          "number": 4,
           "title": "chrome tree / pane header / pane viewport seams folded into the same funnel",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-005-decide-whether-chrome-dispatch-press-may-keep-discarding-the-tree",
+          "number": 5,
           "title": "decide whether chrome_dispatch_press may keep discarding the tree",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-006-guard-extended-to-cover-every-seam",
+          "number": 6,
           "title": "guard extended to cover every seam",
           "checked": false
         },
         {
           "id": "efa9d4f8-7c3d-48dd-b6dd-6eea1d81248d-check-007-user-confirms-wheel-over-a-modal-does-not-reach-the-terminal-behind-it",
+          "number": 7,
           "title": "USER confirms wheel over a modal does not reach the terminal behind it",
           "checked": false
         }
@@ -161,41 +189,49 @@
       "checklist": [
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-001-scrollinfo-carries-offsets-maxima-content-viewport-and-option-event",
+          "number": 1,
           "title": "ScrollInfo carries offsets, maxima, content, viewport and Option<&Event>",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-002-scrollsource-enum-removed-in-favour-of-the-real-event",
+          "number": 2,
           "title": "ScrollSource enum removed in favour of the real event",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-003-every-offset-path-funnels-through-the-one-chokepoint",
+          "number": 3,
           "title": "every offset path funnels through the one chokepoint",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-004-fires-only-on-an-actual-change",
+          "number": 4,
           "title": "fires only on an actual change",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-005-scroll-start-scroll-end-for-thumb-and-track-from-existing-gesture-state",
+          "number": 5,
           "title": "scroll_start/scroll_end for thumb and track from existing gesture state",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-006-wheel-scroll-end-via-an-idle-timer-in-tick-keeping-frames-requested",
+          "number": 6,
           "title": "wheel scroll_end via an idle timer in tick, keeping frames requested",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-007-re-entrancy-rule-documented-or-the-fire-deferred",
+          "number": 7,
           "title": "re-entrancy rule documented or the fire deferred",
           "checked": false
         },
         {
           "id": "d3be3b18-5bb2-4670-8468-adbb118988a9-check-008-user-confirms-one-scroll-end-per-wheel-gesture-not-per-notch",
+          "number": 8,
           "title": "USER confirms one scroll_end per wheel gesture, not per notch",
           "checked": false
         }
@@ -233,31 +269,37 @@
       "checklist": [
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-001-settle-node-level-intent-vs-app-on-bus-with-the-identity-problem-answered",
+          "number": 1,
           "title": "settle node-level intent vs app.on bus, with the identity problem answered",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-002-scroll-start-scroll-scroll-end-reachable-from-a-description",
+          "number": 2,
           "title": "scroll_start / scroll / scroll_end reachable from a description",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-003-a-written-decision-on-the-rate-at-which-scroll-crosses-a-plugin-boundary",
+          "number": 3,
           "title": "a written decision on the rate at which scroll crosses a plugin boundary",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-004-event-vocabulary-docs-updated-in-both-docs-widgets-md-and-view-rs",
+          "number": 4,
           "title": "event-vocabulary docs updated in BOTH docs/widgets.md and view.rs",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-005-worked-example-in-docs-widgets-md-native-declarative-the-host-s-one-line",
+          "number": 5,
           "title": "worked example in docs/widgets.md: native + declarative + the host's one line",
           "checked": false
         },
         {
           "id": "57de8925-6015-4d79-8545-b32bb967f3cd-check-006-user-confirms-the-example-shows-what-they-asked-for",
+          "number": 6,
           "title": "USER confirms the example shows what they asked for",
           "checked": false
         }
@@ -268,12 +310,516 @@
       "completedAt": "",
       "createdAt": "2026-07-26T16:51:00.329Z",
       "updatedAt": "2026-07-26T21:17:49.064Z"
+    },
+    {
+      "id": "6dfe4acd-c706-485c-91b1-8b13aa163652",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 361,
+      "shortId": "3PN6N",
+      "priority": 5,
+      "shortName": "a-modal-freezes-hover-state-th",
+      "title": "A modal freezes hover state: the pane-header tooltip appears after the pointer has left",
+      "status": "planned",
+      "description": "# The bug\n\nClick an action button in a pane's top info bar that opens a modal. Move the mouse away. The\nbutton's **tooltip appears anyway**, over a button the pointer left, while a modal owns the screen.\n\nReported by the user 2026-07-29.\n\n# Why — the pointer stops being delivered, and hover is edge-triggered\n\n`Tooltip` decides it is hovered from `PointerMoved` **transitions**\n(`heca-grid-ui/src/widgets/tooltip.rs:239-250`): entering starts a wall-clock\n`hover_since`, leaving clears it, and `shown()` (`:141`) is true once `hover_since` is older than\n`delay` (default 0.5s). It never asks \"is the pointer over me *now*\" — it only reacts to a move that\ncrosses its bounds.\n\nSo it needs a leave event to un-hover, and while a modal is open it never gets one. In\n`heca/src/app/events.rs`, the `WindowEvent::CursorMoved` arm **returns early** as soon as a modal\ntakes the move:\n\n```rust\nif crate::chrome::dispatch_modal_pointer(state, &Event::PointerMoved { pos }) {\n    return;                       // ← the header trees never hear another move\n}\n…\ncrate::chrome::chrome_dispatch_move(state, pos);\ncrate::chrome::dispatch_pane_header_move(state, pos);   // ← unreached\n```\n\nThe header's `Tooltip` therefore keeps the `hover_since` it had at the moment of the click, the\ndelay elapses, `tick` crosses the show boundary, and the bubble appears over a button nobody is\npointing at.\n\n**It is not tooltip-specific.** Every hover affordance in every non-modal retained tree freezes the\nsame way: a `Row`'s hover highlight, a `Button`'s hover fill, the `MarkerGroup` grip cue. The\ntooltip is just the one that *appears* rather than merely persisting, so it is the one that got\nnoticed. The same staleness exists after the modal closes until the user happens to move the mouse.\n\n# The fix — tell the other trees the pointer left\n\nWhen a layer takes ownership of the pointer, every tree that no longer receives moves must be told\nthe pointer is gone, exactly as a real move out of bounds would tell it. One place, all affordances.\n\nCandidate shape (decide with the maintainer):\n\n- an explicit `Event::PointerLeft` in `heca-grid-ui/src/component.rs`'s `Event` enum, broadcast to\n  the non-modal trees when an overlay opens (and to the modal's tree when it closes), OR\n- reuse `PointerMoved` with a position outside every bound — cheaper, but \"a move to nowhere\" is a\n  lie the next reader has to decode, and a widget that tracks the last position would store garbage.\n\nPrefer the explicit event: hover is a real state, and \"the pointer is no longer yours\" is a real\ntransition that today has no vocabulary.\n\nDispatch sites to cover (all in `heca/src/chrome/mod.rs`): `chrome_dispatch_move` (:3479),\n`dispatch_pane_header_move` (:1261), `dispatch_pane_viewport_move`. The overlay open/close path is\n`heca/src/chrome/overlay.rs`.\n\n# Also worth checking while here\n\n- `Tooltip` has no `visible`/`disabled` gate on `shown()` — a tooltip on a widget that becomes\n  hidden between the hover and the reveal will still paint. Same class of bug.\n- The `Attention`/`Flash` and `Row` hover paths should be verified against the same scenario rather\n  than assumed correct.\n\n# Acceptance\n\n- Click a pane-header action button that opens a modal, move the mouse away: **no tooltip appears**,\n  and the button is not left in its hover state.\n- Close the modal without moving the mouse: nothing is stuck hovered anywhere.\n- A tooltip still appears normally on a plain hover with no modal open.\n- A unit test in `heca-grid-ui` holds the transition: a `Tooltip` told the pointer left does not\n  reveal, however long it waits.\n- Whole workspace green, clippy 0 warnings. **The USER drives it in the app** — this is hover\n  timing, which no unit test verifies.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-29T06:14:44.166Z",
+      "updatedAt": "2026-07-29T06:14:44.166Z"
+    },
+    {
+      "id": "62b176af-bd2a-4a62-abeb-44e0e7059596",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 394,
+      "shortId": "X7SSB",
+      "priority": 6,
+      "shortName": "a-real-pointer-event-vocabular",
+      "title": "A real pointer/event vocabulary, and framework-owned routing on Base",
+      "status": "done",
+      "description": "**Part 1 of 2. Part 2 is `P084(F004)/T395` (context menus declared on the widget), which builds on\nthis and must not start until Antonio has driven a build of this one.** Split decided 2026-08-06:\nthis change rewires how *all* input reaches *every* widget, in both hosts; green tests said nothing\nabout six input/layout regressions this session, and only Antonio driving the GPU app found them.\nStacking a new API on unverified routing makes the bisect surface \"the whole event system plus a new\nAPI\".\n\nAgreed with Antonio 2026-08-05/06, after a session in which every bug traced back to one root: the\nwidget event vocabulary is missing pieces, so hosts and widgets reconstruct what the event should\nhave carried — each in their own way, each silently.\n\n# Why (evidence, not theory)\n\n- `Event::PointerPressed { pos }` (heca-grid-ui/src/component.rs) **carries no button and no\n  modifiers**, so a right-click can never reach a widget. `mouse.rs:428` catches it and rebuilds\n  \"what did you click\" from a position: `container_at(pos)` → `nav_key_at(pos)` →\n  `provider.context_path(&key)` → a menu-id string → the `menu(id, builder)` registry\n  (`providers/workspaces/mod.rs:300,311`).\n- That chain broke on a missing declaration: the workspace `DockFrame` pushed its key into\n  `signals.row_nav` but never called `.nav_key(...)` (`providers/workspaces/mod.rs:~1147`).\n  `nav_key_at` (heca-grid-ui/src/nav.rs:70) reads `Base::nav_key` and nothing else, so right-click on\n  a workspace opened **no menu at all** while panes and columns worked. No error, no failing test.\n  Fixed 2026-08-06 by adding the `nav_key`; the trap is the design.\n- `Event::Scroll { delta_x, delta_y }` has **no position** — `ScrollRegion`'s own module doc admits\n  *\"`Event::Scroll` carries no position, so the router can't hit-test it\"*, so it tracks hover\n  manually to know whether a wheel is for it.\n- **Six** widgets privately re-derive hover from `bounds.contains(pos)`: `Row`, `Item`, `RailCell`,\n  `Toast`, `Button`, `ScrollRegion`. `Input` keeps its own click counter for double/triple click.\n- **Seven** widgets hand-rolled raw `Enter`/`Space` activation with no focus check — fixed 2026-08-06\n  by moving the rule into `dispatch` (`deaf_to_raw_key` + `Component::takes_raw_keys`, defaulting to\n  `routes_own_subtree`). That fix is the precedent for this task: same class, same cure.\n- `Dialog::submit` synthesised `Event::Key { Enter }` at its primary button because nothing could say\n  \"activate this child\" through `dyn Component` — fixed 2026-08-06 with `Component::activate`.\n\nAntonio: *\"I want a user that wants to build a widget to just position it and it works out of the\nbox. They should NEVER be worried of blocking things you invented.\"* / *\"we cannot ship hardcoded\nAPIs or missing ones.\"*\n\n# Decisions (settled — do not re-open)\n\n1. **Events say what happened, never what you should do about it.** `right_click`, not\n   `context_menu`. Naming an event after the intended response is the same coupling as `.action()`.\n   Shift+F10 / the Menu key can *emit* `right_click`; that needs no new event type.\n2. **Handlers live on `Base`**, like `bounds`, `children`, `focused`, `nav_key`, `style`. Every widget\n   embedding `Base` gets them with no code.\n3. **The builder side is an `EventExt` trait** — the established one-line opt-in pattern of\n   `LayoutExt` / `StyleExt` / `NavExt`.\n4. **The framework resolves the raw pointer stream once**: hit-test → target → bubble; press+release\n   on the same widget ⇒ `click`; click count ⇒ `double_click`; `contains(pos)` transitions ⇒\n   `enter`/`leave`; the button on the press ⇒ `right_click`/`middle_click`.\n5. **Target + bubbling**, with `stop_propagation()` as the opt-out and capture as a rare opt-in.\n   Today it is capture-first-wins with no way to stop or continue deliberately — exactly how a `Row`\n   swallowed an `Enter` meant for its list.\n6. **`heca-grid-ui` must not learn about the app.** Not `ViewNode`, not `AppState`, not `WmAction`.\n\n# The vocabulary\n\nPointer/buttons: `pointer_down`/`pointer_up` gain **button + modifiers**; `click`, `double_click`,\n`triple_click`, `right_click`, `middle_click`.\nPointer/movement: `pointer_enter` / `pointer_leave`.\nWheel: **position** on `Scroll`.\nKeyboard: `text_input` for typed text/IME, distinct from `Key` — `Input` reconstructs it from\n`GridKey::Char` today, which forces the host's \"deliver the actual character, not the lowercased\ncombo key\" fixup in `app/events.rs`.\nFocus: `focus` / `blur` **events** — there is a `focused` signal but no event, so nothing can act on\ngaining/losing focus (select-all on focus, commit on blur, close a dropdown when focus leaves).\nLifecycle: `mount` / `unmount`.\nDrag: `drag_start`/`drag`/`drag_end`, `drag_enter`/`drag_over`/`drag_leave`/`drop` — today drag is\nentirely app-side (`DragItemRegistry`, `mouse/drag.rs`), so a plugin widget cannot participate.\n\n**Order, by how much each removes:** button + modifiers → `right_click` → `enter`/`leave` → position\non `Scroll`. Those four delete four existing hacks; the rest completes the vocabulary.\n\n# What this deletes here\n\nSix private hover copies, `Input`'s private click counter, and the widget-side half of the\nright-click archaeology. The menu-side deletions (`context_path`, the `menu(id, builder)` registry,\nthe `MENU_*` constants, `open_row_context_menu`) belong to T395.\n\n# Edge cases\n\n- `stop_propagation()` on a click must not suppress `leave` on the widget being left.\n- Double-click must still deliver the first `click` — do not swallow it waiting for a second.\n- `right_click` must not also fire `click`.\n- A widget removed from the tree between press and release must not strand a `click`.\n- Bubbling must survive `routes_own_subtree` containers (`Overlay`, `Dialog`, `ContextMenu`,\n  `CommandPalette`, `Select`, `FocusScope`, `DockFrame`, `ItemGroup`) — they route their own\n  children and must pass a bubbling event up, not eat it.\n- The pointer is **never** focus-gated (unlike raw keys): a click on an unfocused dock is how you\n  focus it.\n\n# Verification\n\nWidget-level tests are cheap and were what actually found this session's bugs — a headless dispatch\ntest proved the exposé tree was fine and moved the hunt to the app. But input behaviour needs Antonio\ndriving the GPU app: green tests said nothing about any of the six regressions. **Do not claim it\nworks.** Hand him a build and wait before starting T395.\n\nDocumentation is part of this task: the full event vocabulary, the target/bubble model, `EventExt`,\nand what a widget author has to know (which should be: nothing).\n\n---\n**Completion summary:**\n**DONE 2026-08-06 — built, and driven by Antonio in the GPU app (\"its good\"). Uncommitted.**\n\n⚠️ **C7–C11 and C14 are `P084(F004)/T395`'s**, not this task's — the checklist was written before the\n2026-08-06 split and never re-cut. C1–C6, C12, C13, C15 are this one, and are done.\n\n# What shipped\n\n**One pointer event leaves a host** — `Event::Raw(RawPointer)` with the **button** and the\n**modifiers** on it. `heca-grid-ui/src/pointer.rs` (new) resolves it once: hit-test → hover diff →\npress/release pairing → click runs → drag threshold → delivery (capture down the path, bubble back\nup). No widget hit-tests a pointer event; no widget forwards one.\n\n- `heca-grid-ui/src/event.rs` (new): the vocabulary. `PointerDown/Up/Move`, `PointerEnter/Leave`,\n  `Click/DoubleClick/TripleClick`, `RightClick/MiddleClick`, `PointerDownOutside`, `Scroll` (with a\n  position), the seven drag events, `Focus`/`Blur`, `Mount`/`Unmount`, `TextInput` separate from\n  `Key`. `PointerButton`, `PointerEvent`, `DragEvent`, `EventKind`, `EventCx`, `Handlers`.\n  Re-exported from `component.rs`, so no import moved.\n- `builders.rs`: **`EventExt`** — `.on_click`, `.on_right_click`, `.on_pointer_enter`, `.on_drop`,\n  `.on(kind, |cx| cx.stop_propagation())`. Every widget, no opt-in.\n- **State lives on the widgets** (`Base::pointer: PointerState`), not in a router the host owns: the\n  ~8 trees heca mounts never share a hover or a capture, and a widget dropped mid-gesture takes its\n  own state with it.\n\n# Three `Component` hooks, each replacing a workaround\n\n- **`hit_bounds() -> Option<Rectangle>`** — input surface ≠ layout box (a menu/palette panel);\n  `None` = takes no input at all (a closed `Overlay`, still laid out). The input twin of\n  `damage_bounds`.\n- **`after_subtree(ev, handled)`** — a container observing what its own rows did, consumed or not.\n  `ItemGroup`/`DockFrame` gave back the whole child walk they had taken over to get it.\n- **Capture on press** — consuming a `PointerDown` captures the pointer. `ScrollBar`/`ScrollRegion`\n  no longer arrange to hear the rest of their own gesture.\n\n# Deleted\n\nSeven private `contains()` helpers and every private hover copy; `Input`'s click counter + clock and\n`MULTI_CLICK`; `ScrollRegion`'s manual wheel hover-gate; **both** host \"deliver the real character,\nnot the lowercased combo key\" fixups (`app/events.rs`, `app/input.rs`); pointer forwarding in\n`Overlay`/`Dialog`/`FocusScope`/`ItemGroup`/`DockFrame`; `clipped_out` in `component.rs`.\n\n# Found in his testing (2026-08-06) — both fixed and pinned\n\n1. **A right-click on a sidebar row opened no menu.** Nine widgets carried\n   `Event::PointerDown(_) => Handled::Yes` — an arm with no body that claimed **every** button, so a\n   `Row` spent the right press and `mouse.rs`'s `open_row_context_menu` was never reached (the pane\n   worked because no widget sits there). Fixed as a declaration, not nine copies:\n   **`Base::one_click_target`**, the pointer twin of `focus_barrier`, applied by the router in\n   capture, **left button only**. The nine arms are gone.\n2. **Clicking away from an open menu did not close it.** `broadcast_outside` called `on_event`\n   directly and `ContextMenu` answers in `on_event_capture`; it now goes through `deliver_self`\n   (capture → handlers → `on_event`), the same single-node delivery as enter/leave. Also: a press\n   *inside* the panel matching no row does nothing again (only an outside press dismisses).\n\n# Behaviour change he will feel\n\nControls **fire on the click, not the press** — press, drag off, release, and nothing fires. The\npress is still consumed (host \"did a widget take it\" answers unchanged) and the click goes to\nwhoever took the press, so composed content cannot steal it.\n\n# Verification\n\n1216 tests, clippy 0 warnings. `heca-grid-ui/tests/pointer_routing.rs` (new, 23 tests) holds the\nresolution to the spec, including every edge case the task named: a leave no neighbour can veto; the\nfirst click never held back (a run *adds* `DoubleClick` on top of `Click`); a right-click that never\nalso fires a click; a widget removed between press and release; bubbling through every container\nthat used to own its walk; a control taking the left press and letting every other button past.\n`tests/pointer_delivery.rs` reworked to the resolved vocabulary.\n\n# Documentation\n\nRustdoc throughout, including a long entry on **`Handled`** at his explicit request (\"must be well\ndocumented otherwise noone will know how to work\"): the DOM comparison (`stopPropagation` +\n`preventDefault` in one), the third meaning the DOM lacks (the *host* reads the accumulated answer\nto decide whether the terminal gets the input), the three jobs a `Yes` on a `PointerDown` does, a\nwhich-answer-to-give table, and the events whose answer is ignored. `docs/widgets.md`: the event\nmodel rewritten, `EventExt` + `one_click_target` in the builder tables, the `Component` table, the\nhost wiring recipe. `AGENTS.md`: a SETTLED block so none of it is re-derived.\n\n# Files\n\nNew: `heca-grid-ui/src/event.rs`, `src/pointer.rs`, `tests/pointer_routing.rs`. Touched: every\nwidget in `heca-grid-ui/src/widgets/`, `component.rs`, `builders.rs`, `focus.rs`, `layout.rs`,\n`keymap.rs`, `lib.rs`; `heca/src/app/events.rs`, `app/input.rs`, `chrome/mod.rs`, `mouse.rs`;\n`heca-view-realize/src/lib.rs`; `heca-renderer/examples/showcase.rs`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-001-event-carries-button-modifiers-on-pointer-down-up-right-click-and-middle-click-reach-widgets",
+          "number": 1,
+          "title": "Event carries button + modifiers on pointer down/up; right_click and middle_click reach widgets",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-002-click-double-click-triple-click-resolved-once-by-the-framework-from-the-raw-stream",
+          "number": 2,
+          "title": "click / double_click / triple_click resolved once by the framework from the raw stream",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-003-pointer-enter-pointer-leave-delivered-by-the-framework-remove-the-six-private-bounds-contains-copies",
+          "number": 3,
+          "title": "pointer_enter / pointer_leave delivered by the framework; remove the six private bounds.contains copies",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-004-scroll-carries-a-position-remove-scrollregion-s-manual-hover-gate",
+          "number": 4,
+          "title": "Scroll carries a position; remove ScrollRegion's manual hover gate",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-005-target-bubbling-with-stop-propagation-capture-becomes-an-explicit-opt-in",
+          "number": 5,
+          "title": "Target + bubbling with stop_propagation(); capture becomes an explicit opt-in",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-006-handler-slots-on-base-an-eventext-builder-trait-layoutext-styleext-navext-pattern",
+          "number": 6,
+          "title": "Handler slots on Base + an EventExt builder trait (LayoutExt/StyleExt/NavExt pattern)",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-007-contextmenu-menuitem-as-values-with-closure-handlers-no-dependency-on-wmaction",
+          "number": 7,
+          "title": "ContextMenu + MenuItem as values with closure handlers; no dependency on WmAction",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-008-host-installed-menu-sink-install-frame-request-pattern-show-at-show-under-public",
+          "number": 8,
+          "title": "Host-installed menu sink (install_frame_request pattern); show_at / show_under public",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-009-context-menu-closure-on-base-declaration-implemented-in-terms-of-show",
+          "number": 9,
+          "title": ".context_menu(closure) on Base; declaration implemented in terms of show()",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-010-open-context-menu-generalised-from-focused-pane-to-focused-widget-bubbling-shift-f10-and-menu-added-as-bindings-on-the-same-action",
+          "number": 10,
+          "title": "open_context_menu generalised from 'focused pane' to 'focused widget, bubbling'; Shift+F10 and Menu added as bindings on the same action",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-011-delete-context-path-the-menu-id-builder-registry-the-menu-constants-and-open-row-context-menu",
+          "number": 11,
+          "title": "Delete context_path, the menu(id, builder) registry, the MENU_* constants and open_row_context_menu",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-012-focus-blur-events-text-input-distinct-from-key-mount-unmount",
+          "number": 12,
+          "title": "focus / blur events; text_input distinct from Key; mount / unmount",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-013-drag-events-in-the-vocabulary-so-a-plugin-widget-can-participate",
+          "number": 13,
+          "title": "Drag events in the vocabulary so a plugin widget can participate",
+          "checked": true
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-014-full-documentation-vocabulary-target-bubble-model-eventext-context-menus-the-host-sink",
+          "number": 14,
+          "title": "Full documentation: vocabulary, target/bubble model, EventExt, context menus, the host sink",
+          "checked": false
+        },
+        {
+          "id": "62b176af-bd2a-4a62-abeb-44e0e7059596-check-015-hand-antonio-a-build-and-wait-green-tests-said-nothing-about-the-six-input-regressions-this-session-t395-does-not-start-until-he-has-driven-this-one",
+          "number": 15,
+          "title": "Hand Antonio a build and WAIT — green tests said nothing about the six input regressions this session; T395 does not start until he has driven this one",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T14:46:03.579Z",
+      "completedAt": "2026-08-06T16:04:16.587Z",
+      "createdAt": "2026-08-06T09:33:43.977Z",
+      "updatedAt": "2026-08-06T16:04:16.587Z"
+    },
+    {
+      "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 395,
+      "shortId": "BLRSH",
+      "priority": 7,
+      "shortName": "context-menus-declared-on-the",
+      "title": "Context menus declared on the widget — a ContextMenu value, a host sink, and one generalised action",
+      "status": "waiting",
+      "description": "**Part 2 of 2. `P084(F004)/T394` (the event vocabulary + framework-owned routing) is DONE and driven by Antonio in the app, 2026-08-06.**\n\n# ⚠️ THE API IS DECIDED — do not re-open, do not \"improve\"\n\nAntonio rejected three designs before this one. **Rejected, so nobody rebuilds them:** `path` / `target` / `about` on the menu; `alter_menus`; `MenuPath::declare`; `MenuRow::at`; `fn context_menus() -> Vec<…>` (*\"why a function that return vec?? still the same as before.. WHY?? i want simple APIs\"*); and a `MenuPanel` type that was invented rather than asked about (*\"YOU HAVE TO ASK AND NOT TO INVENT\"*).\n\nThe full model is now in **`AGENTS.md` → ⭐ SETTLED — the menu model** and **`docs/widgets.md` → Menus**. Read those, not this section, for the rules.\n\n**The type is named `ContextMenu`** — decided by Antonio 2026-08-07 when asked (the handoff had written `ContextualMenu`).\n\n**Composed content is a shared builder** (`Rc<dyn Fn() -> Box<dyn Component>>`), chosen by Antonio 2026-08-07 from three options put to him. It makes `MenuItem` / `Menu` / `ContextMenu` all `Clone` — so `.context_menu()` takes **a value or a closure** (`IntoContextMenu`) — while each opening still gets **owned** children that go through the normal layout path. The rejected alternative (`Rc<dyn Component>` shared *widgets*) would have forced a second layout implementation inside the menu widget.\n\n# BUILT AND GREEN (uncommitted; 1232 tests, clippy clean)\n\n## The library\n\n- `MenuItem::new()` (no args) + `.label()` / `.icon()` sugar + `.child(|| widget)` composed content, **children win**; `.key/.shortcut/.danger/.enabled/.on_click` apply to both forms.\n- `Menu` — title, description, optional `.name()`, items; `Clone`.\n- `ContextMenu::new(id).child(menu)` — the named presenter, **and the panel**. Rows are realized into `Base::children` at open, so **taffy lays them out**; the widget's only geometry is `place_panel()` shifting the finished panel to its anchor (the `shift_subtree` trick `Overlay`/`Select` use). The hand-rolled width/row-height maths is gone.\n- Row colour resolved at paint and published with `PaintCx::with_content_color`, so a composed row reads danger / dims when disabled without knowing about menus. Keycap + shortcut stay panel chrome, painted into space the row reserves via `MenuItem::trailing_width`.\n- `Event::position()` and `Event::target_bounds()`; the latter stamped **once** by `pointer::deliver_targeted`, so every routed pointer event carries the delivery target's bounds and no widget arranges its own. `MenuAnchor::from_event` reads the anchor; `ContextMenu::show(ev)` is the handler road.\n- `EventExt::context_menu(value | closure)`; `context_menu_built` removed. `Base::context_menu: Option<Box<dyn Fn() -> ContextMenu>>`.\n- `LayoutExt::max_width` / `max_height` — `Style::max_width` was already wired to taffy and had no builder.\n- Tests: `heca-grid-ui/tests/context_menu_declaration.rs`, **13** — the original 8 plus value-vs-closure, one value on every row of a list, a composed row surviving a second opening, composed-beats-sugar with both forms measured by the engine, and the anchor coming out of the event.\n\n## The app\n\n- The **three sidebar menus are declared on their rows** (`pane_card`, `column_view`, the workspace `DockFrame`), built where the row's data is.\n- **Root menu for empty space**: `MENU_CONTAINER` on the container's `ScrollRegion` — a click between rows / below the last / on padding bubbles out to \"New workspace\". No empty-space hit test.\n- `chrome::context_menu::menu_from_items` — the shared bridge from the `DropdownItem` vocabulary to a declared `Menu`. Icons from the action (`ctx.action_icon`), behaviour as `InteractionIntent::View(Intent)` through the **central gate**, `name` for contributions.\n- **`ChromeCtx::action_icon(name)`** + the catalog on `RenderInputs`. Needed because the nine ids those menus use (`close`, `delete_column`, `rename_pane`, …) are **built-ins**, not the provider's own actions — the provider declares `cursor_up` / `activate_row` / `rename_row`. A narrow accessor, not the whole catalog.\n- `open_context_menu` **generalised**: asks the focused *widget* first via `chrome::open_declared_menu_for_focus` → `heca_grid_ui::open_for_focused` (bubbling), falling back to the content-pane path, which stays because a terminal surface is not a widget that can carry a declaration.\n- **Deleted**: `Provider::context_menus` for workspaces, `context_path`, `build_pane_row_menu` / `build_column_row_menu` / `build_workspace_row_menu`, `open_row_context_menu` (mouse.rs) and its position archaeology. `Provider::context_menus` **stays on the trait** — it is the plugin contribution path (`plugin_providers_for`).\n- Showcase shows **both row forms in one menu** on purpose (four sugar rows + a composed \"Close\" of `Icon` + `Label` + `Badge`).\n- Docs: `docs/widgets.md` → a new **Menus** section replacing the old `ContextMenu` one (9 stale anchors re-pointed, ToC entry added); `AGENTS.md` ⭐ SETTLED block.\n\n# 🔴 THE BUG ANTONIO FOUND, AND ITS LESSON\n\n**Right-clicking a sidebar row opened nothing.** Found by him in the running app on the day the port landed, with the whole suite green.\n\n`Event::RightClick` is synthesised from a press **and** a release on the same widget. `heca/src/mouse.rs` had only ever dispatched the right-button **press** into the chrome tree. That never mattered before, because `open_row_context_menu` ran straight after the press and opened the menu from the cursor position — and this task **deleted** that function. So the declared menus that replaced it could never fire: not half a click, **no** click.\n\n**Why nothing failed:** `context_menu_declaration.rs` dispatches press *and* release itself. Every test passed while the app sent one half.\n\nFixed with a `(MouseButton::Right, ElementState::Released)` branch + `chrome::chrome_dispatch_button_release`. **Guard added**: `the_mouse_layer_sends_a_release_for_every_press_it_sends` in `heca/tests/pointer_funnel.rs` — that file already lints the event loop for exactly this class of absence, and none of its checks read `mouse.rs`, the *second* place a button reaches the chrome tree.\n\n# What is LEFT\n\n1. **`Shift+F10` and the `Menu` key — BLOCKED, and this is the only unfinished piece of the API.**\n   `GridKey` has no function keys and no Menu key (its variants: `ArrowUp/Down/Left/Right`, `Backspace`, `Char`, `Delete`, `End`, `Enter`, `Escape`, `Home`, `Space`, `Tab`, and the mouse buttons). Both bindings need the **key vocabulary** extended first: a `GridKey` variant, the winit mapping in `heca/src/app/events.rs`, and the config parser (`heca/src/input.rs::parse_key`) accepting `f10` / `menu`. Open design question for Antonio: `GridKey::F(u8)` vs `F1..F12` variants, and what the Menu key is spelled as in config.\n   `prefix+>` works and is unchanged; the action it fires is already the generalised one, so the two extra bindings are **config lines** once the keys exist.\n2. **Antonio drives a build.** Right-click a pane, a column, a workspace header, empty sidebar space; `prefix+>` with focus on a sidebar row; the showcase's composed row beside its sugar rows. **Do not claim it works** — the one thing that went wrong here was invisible to 1232 green tests.\n\n# Then, in his order\n\n- **`Button` composed content / ViewNode** — *\"we need to also rewrite that button to be a ViewNode at the end but first handle this\"*.\n- **DnD**: `P079(F004)/T318` (rewritten to **delete** `DragSurfaceId`, not extend it) and `T396`. `T330` is rejected.\n- Filed while working on this, both in P084: **T397** (the complete Phosphor iconset + a generated name↔`Glyph` mapping — ~1,500 icons already ship in the binary, 52 are reachable) and **T398** (plugins must be able to build EVERY widget — 32 `WidgetKind`s for ~70 exported types; `Menu`/`MenuItem` are its first slice).",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-001-in-progress-waiting",
+          "date": "2026-08-11T23:08:44.737Z",
+          "fromStatus": "in-progress",
+          "toStatus": "waiting",
+          "title": "Parked to free the active slot for P082/T416 (surface-scoped keybindings). COME BACK TO THIS. The menu model is SETTLED (AGENTS.md, F004/P084/T395 block) and `.context_menu()` shipped; what is left is confirming the remainder against that block before it can be closed. Not blocked by anything — parked by choice, 2026-08-12.",
+          "description": "Parked to free the active slot for P082/T416 (surface-scoped keybindings). COME BACK TO THIS. The menu model is SETTLED (AGENTS.md, F004/P084/T395 block) and `.context_menu()` shipped; what is left is confirming the remainder against that block before it can be closed. Not blocked by anything — parked by choice, 2026-08-12."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-001-contextmenu-menuitem-as-values-with-closure-handlers-no-dependency-on-wmaction",
+          "number": 1,
+          "title": "ContextMenu + MenuItem as values with closure handlers; no dependency on WmAction",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-002-host-installed-menu-sink-install-frame-request-pattern-show-at-point-show-under-bounds-public",
+          "number": 2,
+          "title": "Host-installed menu sink (install_frame_request pattern); show_at(point) / show_under(bounds) public",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-003-context-menu-closure-slot-on-base-implemented-in-terms-of-show",
+          "number": 3,
+          "title": ".context_menu(closure) slot on Base, implemented in terms of show()",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-004-right-click-trigger-target-widget-under-the-pointer-bubbling-to-the-nearest-declaring-ancestor",
+          "number": 4,
+          "title": "right_click trigger: target = widget under the pointer, bubbling to the nearest declaring ancestor",
+          "checked": true
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-005-open-context-menu-generalised-from-focused-pane-to-focused-widget-bubbling-anchored-to-the-widget-s-bounds",
+          "number": 5,
+          "title": "open_context_menu generalised from 'focused pane' to 'focused widget, bubbling'; anchored to the widget's bounds",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-006-shift-f10-and-menu-added-as-bindings-on-the-same-open-context-menu-action-not-a-keys-widgets-entry",
+          "number": 6,
+          "title": "Shift+F10 and Menu added as bindings on the same open_context_menu action (not a [keys.widgets] entry)",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-007-delete-context-path-the-menu-id-builder-registry-the-menu-constants-and-open-row-context-menu",
+          "number": 7,
+          "title": "Delete context_path, the menu(id, builder) registry, the MENU_* constants and open_row_context_menu",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-008-port-the-existing-pane-column-workspace-menus-to-the-declaration-form",
+          "number": 8,
+          "title": "Port the existing pane / column / workspace menus to the declaration form",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-009-root-level-menu-for-empty-sidebar-space-new-workspace-via-bubbling-no-special-hit-test",
+          "number": 9,
+          "title": "Root-level menu for empty sidebar space (New workspace) via bubbling, no special hit-test",
+          "checked": false
+        },
+        {
+          "id": "5ef43ba4-d6c8-482f-a908-40b1426a19e3-check-010-documentation-menu-api-triggers-bubbling-anchors-host-sink-plugin-author-example",
+          "number": 10,
+          "title": "Documentation: menu API, triggers, bubbling, anchors, host sink, plugin author example",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:38:27.771Z",
+      "completedAt": "",
+      "createdAt": "2026-08-06T11:00:40.920Z",
+      "updatedAt": "2026-08-11T23:08:44.737Z"
+    },
+    {
+      "id": "8f13b870-62c4-4556-a33f-377073527b4f",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 397,
+      "shortId": "2PVMF",
+      "priority": 8,
+      "shortName": "the-complete-phosphor-iconset",
+      "title": "The complete Phosphor iconset + a generated name↔Glyph mapping",
+      "status": "planned",
+      "description": "**Filed 2026-08-07 from `BACKLOG.md:1718` (`plugin-task-ui-8`), which was never in the planner.** It came up while deciding where a context-menu row's icon comes from (T395) and where a *plugin's* icon could come from. Transferred here in full; the backlog entry's two stale details are corrected below.\n\n# Why this is small, and why it unlocks a lot\n\n**~1,500 icons already ship in the binary and 52 are reachable.** The embedded face\n`heca-grid-ui/assets/Phosphor-Duotone.ttf` (family `Phosphor-Duotone`, MIT, loaded via\n`ICON_FONT_BYTES` at `heca-grid-ui/src/font.rs:56`) has **3025 codepoints** — measured with\n`fontTools`, not estimated. Phosphor Duotone pairs each icon consecutively\n(`PRIMARY_OFFSET = 1`, `heca-grid-ui/src/widgets/icon.rs:27`), so that is roughly **1,512 icons**.\nThe `Glyph` enum (`heca-grid-ui/src/widgets/icon.rs:33`) exposes **52** — about 3%.\n\nSo \"a plugin wants a Docker whale / a database / a cloud\" needs **no new font, no new asset, no\nlicensing question**: the glyph is already in the binary. The only thing missing is a way to *name*\nit. That is this task.\n\nThis is also why **Nerd Font is the wrong answer** for pictograms: `FontRole::NerdFont`\n(`heca-grid-ui/src/scene.rs:325`) exists for the keyboard glyphs Phosphor has none of (`⇧ ⌘ ⎋`),\nand routing plugin icons through it would put plugin UI in a different visual language from the app.\n\n# Current state\n\n- `Glyph` — a hand-transcribed curated enum, 52 variants, `heca-grid-ui/src/widgets/icon.rs:33`.\n  `secondary()` gives the `:before` codepoint; `primary_char()` adds `PRIMARY_OFFSET`.\n- `glyph_from_name` — the name→`Glyph` lookup the declarative path uses, at\n  **`heca-view-realize/src/lib.rs:1077`** (the backlog says `heca/src/chrome/realize.rs`; it moved\n  when the model became its own crate). Its own doc calls it \"a **curated stopgap of ~35 icons**\"\n  (the enum is now 52 — the two already disagree, which is the drift this task exists to end).\n- `heca-renderer/tests/font_coverage.rs` — reads the embedded faces' `cmap` and fails the build when\n  a named codepoint has no glyph. Hand-maintained today.\n- **The transcription has already been wrong once**: `Glyph::PlusSquare` was removed because its\n  codepoint drew something else, and `CaretLeft`/`CaretUp` still carry \"confirm visually\" comments —\n  because, per the P085 handoff, *\"the Phosphor codepoint table is not in the repo\"*.\n\n# What to build\n\n1. **Get Phosphor's name↔codepoint table into the repo.** It ships with the Phosphor release (the\n   CSS/JSON map). This single piece of data is the whole unlock — everything below is generated\n   from it.\n2. **Generate** the `Glyph` enum (or its codepoint table) **and** the name lookup from that one\n   source — build script, macro or generated table. The backlog's words: *\"a hand-maintained 1:1\n   match of hundreds of icons is a bug farm.\"* The enum and `glyph_from_name` must not be able to\n   diverge.\n3. **`Icon::new(\"name\")` in grid-ui.** Today `Icon::new` takes the `Glyph` enum\n   (`heca-grid-ui/src/widgets/icon.rs:224`) and the only name lookup lives in `heca-view-realize`,\n   **above** grid-ui, so grid-ui cannot reach it. With a generated table the lookup can live in\n   grid-ui and `heca-view-realize` can drop its stopgap and call it.\n   ⚠️ **Do not silently swap `Glyph` for a string.** A `Glyph` typo is a compile error; a name typo\n   resolves to `None` and draws nothing — the same invisible failure as the missing `.nav_key(..)`\n   that opened no menu with no error and no failing test. Decide with Antonio whether the string\n   form is additive (both) or a replacement.\n4. **Turn `font_coverage` into a check over the generated data** rather than a hand-written list, so\n   every generated name is proven present in the embedded `cmap`.\n5. **Document the names for authors** — `docs/widgets.md` icon table, `docs/chrome-and-ui.md` — and\n   update the showcase icon gallery.\n6. **Plugin registration validates at registration time.** A plugin naming an icon cannot be caught\n   by a build-time test, so the registration path must reject an unknown name rather than let the\n   renderer draw an empty box.\n\n# Ordering\n\nThe backlog's condition — *\"Run this last in the plugin arc, once the widget/`realize`/overlay\nsurface is settled, so the iconset is filled against the final set of consumers\"* — is met by T395,\nwhich settles the menu/overlay surface. It is filed here for that reason.\n\n# Not in scope, deliberately\n\nFonts a plugin ships itself (`FontRole` would stop being a closed enum and become a font registry:\nloading, ids, duplicate families, licensing, atlas lifetime) and arbitrary image/SVG icons (a\ntexture path, not a glyph — `heca-renderer/src/image.rs` exists for kitty graphics but nothing wires\nit to widgets). Both are real features, not extensions of this one.\n\n# Edge cases\n\n- Duotone means **two** codepoints per icon; a generated table must carry the secondary and derive\n  the primary via `PRIMARY_OFFSET`, not assume one codepoint per name.\n- The embedded face's range runs to `U+EE83` and includes non-icon codepoints (the count starts at\n  `U+0000`) — generate from Phosphor's own map, not by walking the `cmap`.\n- Expanding `Glyph` to ~1,500 variants makes any exhaustive `match` on it unmaintainable; check for\n  existing exhaustive matches (`Glyph::ALL`-style walks, the coverage guard, any icon picker) before\n  expanding, and prefer a table to enum variants where a match would otherwise explode.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-07T09:38:01.297Z",
+      "updatedAt": "2026-08-07T09:38:01.297Z"
+    },
+    {
+      "id": "787ba99d-c2e9-4dd0-bd28-323ec208c898",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 398,
+      "shortId": "JVM6F",
+      "priority": 9,
+      "shortName": "plugins-must-be-able-to-build",
+      "title": "Plugins must be able to build EVERY widget — no host-only exceptions",
+      "status": "planned",
+      "description": "**Decided by Antonio 2026-08-07**, twice and emphatically: *\"plugins cannot build everything? that's a problem. We need API for plugin to use all widgets.\"* then, on being shown the list: *\"Most of these are essentials for plugins. If they want a progressbar they cant, or a dialog, or flex... WE MUST SUPPORT ALL.\"*\n\n**There is no host-only list. Every widget gets a `WidgetKind`.**\n\n# What is NOT the problem — read this first\n\n**The authoring ergonomics already exist and are good.** `heca-view/src/build.rs` is the typed SwiftUI-style builder (plugin-task-ui-2, done): a type per kind, so `Label::new(\"x\").title(\"y\")` does not compile, children only on kinds that take them, and `every_widget_property_is_reachable_from_the_sdk` fails when a property is unreachable from it.\n\n**The `WidgetKind` enum being closed is also not the problem.** `realize` must turn a kind into a real Rust widget compiled into heca; a plugin cannot ship a Rust type over the wire, so the buildable set is whatever the host binary contains. An open string kind would only turn \"missing\" into \"renders nothing\".\n\n**The problem is coverage, and nothing else: 32 kinds for ~70 exported types.** A plugin writes lovely code and has no `Dialog`, no `ProgressBar`, no `Flex`, no `Menu` to write. Do not re-litigate the enum or the SDK — add the kinds.\n\n# The gap, measured\n\n`heca-grid-ui/src/widgets/mod.rs` exports **70** public types. `WidgetKind` (`heca-view/src/lib.rs:38`) has **32** variants.\n\nStripping the enums/config/aliases (`*Variant`, `Glyph`, `NfGlyph`, `ScrollInfo`, `ScrollAxes`, `MenuAnchor`, `MenuEntry`, `Orientation`, `RegionMode`, `RevealAlign`, `LabelSide`, `DotStatus`, `Ellipsis`, `ActiveMarker`, `GridCell`, `Command`, `Toast*`, `TooltipSide`, `Container` = alias of `Flex`), the **18 widgets with no kind** are:\n\n`Menu` · `MenuItem` · `ContextMenu` · `Dialog` · `Tooltip` · `ProgressBar` · `Spinner` · `CardGrid` · `FocusScope` · `Visibility` · `NfIcon` · `PaneFrame` · `Flex` · `CommandPalette` · `Pane` · `ChromeRegion` · `ScrollRegion` · `ToastStack`\n\n# Why the gap was invisible\n\n`every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones` walks `WidgetKind::ALL` and proves every declared kind maps to a live widget. **One direction only** — a widget with no kind is invisible to it. That is why AGENTS' \"realize coverage is COMPLETE\" is true and still leaves half the library unreachable: it means \"no kind is a dead end\", not \"every widget is reachable\".\n\n# ⚠️ The settled rule this task supersedes\n\nAGENTS says: *\"A widget whose state is a live host signal is HOST-ONLY — static serializable data cannot drive a signal, so a declarative one would be a dead control. `ScrollBar` is the case (plugins use `Scroll`).\"*\n\nCorrect **for a model that can only carry literals**. It stops being correct once a node can name a value key — **P085(F003)/T360** (`58SE7`), whose step 5 is exactly that. So a declarative `ProgressBar` is not a dead control: its `value` names a key, the plugin writes the key, the bound signal updates in place. **The host-only category was a missing mechanism, not a property of the widgets.**\n\n**T360's binding spelling is DECIDED (2026-08-04, Antonio) — do not re-ask, and do not repeat the old \"open question\" line:**\n\n```rust\nstruct ViewNode {\n    kind, props,\n    events:   Map<EventName, Intent>,   // already exists — a name → an indirection\n    bindings: Map<PropName, String>,    // prop name → value key. THE SAME SHAPE.\n    children,\n}\n```\n\nA `bindings` map beside `events`, because the node already expresses this indirection for behaviour. `PropValue` is left alone. The literal in `props` is the **fallback**, shown until the plugin's first write. `realize` reads the literal, then lets a binding override it via `container_value(mount, key)`. **Rejected:** `PropValue::Text(\"@key\")` (a sigil collides with a legitimate `@handle`) and `PropValue::Binding(String)` (grows the wire vocabulary; kept only as a fallback if two maps prove worse).\n\n**Consequence: T360 is a hard dependency for the signal-driven widgets** (`ProgressBar`, `ScrollBar`, `ScrollRegion`, `CommandPalette`, `ToastStack`, `Pane`, `ChromeRegion`). The rest need nothing and go first.\n\n**Update the AGENTS ⭐ block when this lands**, so the host-only rule is not re-applied by a later session reading a superseded line.\n\n# What to build\n\n1. **A `WidgetKind` + `realize` arm for every widget in the list**, following the settled process: *\"Extending the vocabulary is host-side work (widget + `realize` arm + showcase + `docs/widgets.md`); plugins only compose existing kinds.\"*\n2. **Guard the OTHER direction** — the reason this will not need redoing. A test that walks every widget `heca-grid-ui` exports and **fails if it has no `WidgetKind`**. Today a widget can be added with no kind and nothing notices. Mechanism open (an inventory the crate exposes, a macro-collected list, a source-walking test); the requirement is that it cannot be forgotten.\n3. **Showcase + `docs/widgets.md`** for every new kind. The SDK follows automatically.\n\n# Order of work\n\n**First — `Menu` / `MenuItem`**, the case that surfaced this and the one T395 is settling. `heca-view` has **no menu concept at all** (no kind, no `context_menu` prop; `heca-view-realize` never touches one), so a plugin's own row opens **nothing** on right-click: the same silence as the missing `.nav_key(..)` that motivated P084 — no error, no failing test.\n\nShape, using conventions that already exist — **no new mechanism**:\n- `WidgetKind::Menu` + `WidgetKind::MenuItem`.\n- Attach with the settled slot convention (*\"a widget with several places for children takes a `slot` prop on the CHILD\"*): `slot: \"context_menu\"`. **Not** a menus map, **not** a second children vector.\n- A composed row is just `children` on the `MenuItem` node; behaviour is `on_press → Intent`.\n- `realize` fills the existing `Base::context_menu` slot (`heca-grid-ui/src/component.rs:238`, `Fn() -> ContextMenu`) with a closure that re-realizes the described menu per opening. **One slot, both paths.**\n\n**Symmetry worth keeping:** `MenuItem::child` takes a builder closure only because native code must rebuild an owned subtree per opening. A `ViewNode` is data and re-realizable by construction, so the declarative path gets composed rows **with no closure at all**.\n\n**Then** the ones needing nothing new: `Dialog`, `Tooltip`, `Spinner`, `CardGrid`, `PaneFrame`, `Flex`, `Visibility`, `FocusScope`.\n\n**Last** the signal-driven ones, behind T360: `ProgressBar`, `ScrollRegion`, `CommandPalette`, `ToastStack`, `Pane`, `ChromeRegion`.\n\n# Constraints (settled — do not re-open)\n\n- `heca-grid-ui` never learns about `ViewNode`; the dependency runs app → library only.\n- Behaviour crosses as an `Intent` (action id + args), never a callback.\n- A slot/child is `impl Component` — never narrowed to a closed enum.\n- A realized subtree enters a widget via a `*_boxed` setter (`Dialog::body_boxed` is the precedent), because `Box<dyn Component>` is not itself `Component`.\n\n# Edge cases\n\n- `Flex`/`Container` may already be covered by `VStack`/`HStack` — check before adding a third spelling of the same box.\n- `Visibility` and `FocusScope` are wrappers, not visuals — decide whether they are kinds or **props** on the wrapped node (a prop is probably right and cheaper). Either way a plugin must be able to express them.\n- `NfIcon` needs glyph-by-name — see **T397** (the generated name↔`Glyph` mapping).\n- Adding a kind is not free: `WidgetKind::ALL`, the drift guard (`heca-grid-ui/tests/prop_drift.rs`), the SDK's reachability test and the showcase all walk the vocabulary.\n- `Pane` and `ChromeRegion` wrap app concepts (a terminal surface, a chrome region). Check what a described one would mean before forcing a kind on them — but the default is a kind, and \"it is awkward\" is not a reason to leave a hole.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-07T09:52:42.744Z",
+      "updatedAt": "2026-08-07T09:57:38.763Z"
+    },
+    {
+      "id": "5d3bdfaa-9b33-47b1-94e7-35e315ad55a6",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 399,
+      "shortId": "6P6HQ",
+      "priority": 10,
+      "shortName": "on-peek-a-capability-is-one-bu",
+      "title": "on_peek — a capability is one builder on the widget (kill hint_target + the host registry)",
+      "status": "done",
+      "description": "**Decided by Antonio 2026-08-07.** He sketched the shape he wants for every capability:\n\n```rust\nlet container = FocusableContainer::new().child(topBar).on_peek(|| decide here what to do)\n// \"FocusableContainer is just a name. an example. EVERYONE CAN use it with no effort.\"\n```\n\nand, on the rule being stated back: *\"this is how i want you to work.\"* It is written in **`AGENTS.md` → ⭐⭐ RULE ZERO** and outranks the architecture section: *\"I want everything we build to be available for whoever wants to build a plugin or contribute to the project. THIS IS THE FIRST MOST IMPORTANT RULE.\"*\n\n# The defect — a shipped feature plugins cannot have\n\n`prefix+/` (the universal hint picker) is registered like this today:\n\n```rust\nlet id = hints.register(InteractionIntent::FocusPaneThenAction { … });  // heca/src/chrome/mod.rs:851\nbutton.hint_target(id)                                                   // …and carry an id around\n```\n\nThree things a caller must know: a registry exists, they must pre-register, and `InteractionIntent` — which is **`pub(crate)`** (`heca/src/app/interaction.rs:99`).\n\n**There are two doors, and they are not equal:**\n\n| door | takes | who can use it |\n|---|---|---|\n| `HintTargetRegistry::register` (`heca/src/chrome/mod.rs:2808`) | `InteractionIntent` | **host only** (crate-private enum) |\n| `HintTargets::register` (`heca-view-realize/src/lib.rs:69`) | `Intent` (name + args) | anyone, incl. plugins |\n\nThe top bar (`chrome/mod.rs:1816`) and the pane header (`:851`) use the **first**. A plugin can construct **no** variant of `InteractionIntent`, so it can only register a plain `Intent` naming an action — and a component's selection-dependent actions declare `ActionPolicy::ContainerFocused`, which **refuses** them unless the container already holds the keyboard. `FocusContainerThenAction` exists precisely to satisfy that, and a plugin cannot say it. So a plugin's row hint is blocked with no way to express the fix: a second-class version of a shipped feature.\n\n# What to build\n\n**`on_peek` as a universal slot on `Base`**, written with `EventExt` like `on_click` / `nav_key` / `context_menu`:\n\n```rust\nRow::new().child(Label::new(&pane.name)).on_peek(move || cursor_to(row_id));\n```\n\nThe framework owns everything behind it: collecting targets from the tree (`collect_hint_targets` already walks `Base`), assigning the letter, drawing it, and firing the handler on a pick. No id, no registry, no host type at a call site.\n\n**Then the declarative half**, which is the point of the rule: `on_peek` is an event like `on_press`, so `ViewNode.events` maps it to an `Intent` and `realize` wires it. A plugin writes the same line in a described tree and gets identical behaviour. **One door — delete the other.**\n\n# What this replaces (delete, do not leave beside)\n\n- `Base::hint_target(id)` and `NavExt`/`HintExt`'s id-passing form.\n- `HintTargetRegistry` in the app (`heca/src/chrome/mod.rs:2800`-ish) and `ViewHintTargets` (`:2848`).\n- `crate::chrome::named_press` (`:2877`) — **the specific conflation that caused the bug below**.\n- `BuildCx.hints` threading through every builder that only exists to carry the registry.\n\n# The bug that exposed it (do not lose this)\n\n`prefix+/` on a sidebar row **activates the pane and leaves the sidebar**. Antonio: *\"it did not activate the pane just focus the cursor above the letter i peek. Currently it activates the pane.\"*\n\nCause: commit **`e712d70`** (2026-07-30, \"a row is named by its component, and its click is an action\") replaced `hints.register(InteractionIntent::FocusPane { pane_id })` with `named_press(pane_row_press(pane_id), …)` — pointing the hint target at the row's **click** intent. A click on a row means *go there and leave*; a hint pick means something else. One intent serving two gestures.\n\n**What he wants for the workspaces dock** (his words, 2026-08-07): keep the letters over every pane/workspace row, and *\"i want it to focus the cursor in the peeked letter and is good if the pane gets active\"* — i.e. **stay in the sidebar**. That is exactly `workspaces.peek_selected` (`providers/workspaces/mod.rs:218`, dispatched at `:307` as `activate(cx, Activate::AndStay)`), whose own tests already say *\"peek still brings the pane to the front\"* (`:1740`) and *\"peek leaves the container holding the keyboard\"* (`:1749`).\n\nTwo things are missing to aim it at a row:\n1. **A `key` argument on the peek action** — it acts on `tree().current_item()` (the cursor) and cannot be told which row. Declared in the component's own `actions()`, handled in its own `perform` (`cx.set_selected(key)` then the existing peek). Optional, defaulting to the cursor.\n2. **The rows registering peek instead of the click** — `providers/workspaces/mod.rs:726` and `:1187`.\n\n⚠️ **Do NOT do this with `FocusContainerThenAction`.** That was my proposal on 2026-08-07 and it is exactly what RULE ZERO forbids — a `pub(crate)` composite a plugin cannot construct. If \"focus my container, then run my action\" is needed, it must exist **as a named action** a plugin can name, like `focus_pane` and `unfocus_dock` do.\n\n# Where the letter is drawn\n\nAntonio first suggested one letter over the whole dock, then settled on keeping per-row letters and letting the component decide the reaction: *\"we can also leave as it is now, showing peek letters above all panes/ws and let the component decide how to react.\"* So placement is unchanged — this task is about **what a pick does** and **who can declare it**.\n\n# Verification\n\nHeadless tests for the slot and the declarative mapping, but the real check is Antonio: `prefix+/`, pick a sidebar row's letter → the cursor lands on that row, the pane goes active, **the keyboard stays in the sidebar**. Plus the top bar and pane-header buttons still pick. **Do not claim it works** — the whole class of bug here was invisible to a green suite.\n\n# Related\n\n- **T395** — `.context_menu()` is the precedent this copies: it replaced `context_path` + a builder registry + a `nav_key` nobody remembered.\n- **T398** — plugins must be able to build every widget; same rule, applied to the vocabulary.\n- The second lookup (`open_for_nav_key` beside `open_for_focused`) is the same defect in the keyboard path and should die with this: one notion of where the keyboard is.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-10T17:56:11.565Z",
+      "completedAt": "2026-08-11T08:07:22.770Z",
+      "createdAt": "2026-08-07T15:18:05.911Z",
+      "updatedAt": "2026-08-11T08:07:22.770Z"
+    },
+    {
+      "id": "320728e2-821f-4b13-83a0-46fb7b544ec6",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 400,
+      "shortId": "27GP6",
+      "priority": 11,
+      "shortName": "the-event-model-becomes-the-do",
+      "title": "The event model becomes the DOM's — delete the self-describing predicates",
+      "status": "waiting",
+      "description": "**Decided with Antonio 2026-08-07, point by point.** The trigger: he noticed `takes_raw_keys`, `routes_own_subtree` and `hit_bounds` and said *\"i didn't notice all of these and i don't like. I want transparent APIs that provide clear interface not forcing the developer to discover uncommon things. SO always prefer common and well known APIs… can be derived, and that is true for all the other names you pointed.\"*\n\nThis is **RULE ZERO** (`AGENTS.md`) applied to the event model: a widget author should not have to answer questions about themselves so the framework can route correctly.\n\n# The four decisions\n\n## 1. Delivery follows focus and bubbles — DELETE `takes_raw_keys` and `takes_text_input`\n\nThe DOM has no such flags: a key goes to the focused element and bubbles. heca already has focus and both phases (`on_event_capture` / `on_event`, F004/P084/T394). So delivery is: **the focus owner, then up the ancestor chain.** Nobody declares anything.\n\n`takes_text_input` was added on 2026-08-07 and is **already obsolete under this decision** — it was a flag working around the real defect: `ContextMenu` ended its match with\n\n```rust\n_ => Handled::Yes,   // \"swallow all other input while open\"\n```\n\nthree arms below its own comment saying *\"Modal capture is the HOST's job (the overlay branch swallows), not a `Handled::Yes` hardcoded here.\"* The widget contradicted itself, ate `Event::TextInput`, and the host returned before the key path — so **every context-menu quick-pick letter did nothing**. Remove the catch-all and the flag has no reason to exist.\n\nFiles: `heca-grid-ui/src/component.rs` (`takes_raw_keys` ~:558, `takes_text_input`, `deaf_to_raw_key` ~:799), `heca-grid-ui/src/widgets/input.rs:546`, `command_palette.rs`, `dialog.rs`, `context_menu.rs` (the catch-all).\n\n## 2. `bounds === what is drawn === what is clickable` — DELETE `hit_bounds` and `damage_bounds`\n\nBoth exist for one reason: a widget draws **outside its own bounds**, so its input surface and damage rect had to be described separately. That is the *exception* to an invariant this phase already states in its own description.\n\n**A floating widget places itself instead of describing itself.** `ContextMenu` is the worked example and the evidence: after T395 its rows are real children and `place_panel()` shifts the whole subtree to the anchor (the `shift_subtree` trick `Overlay` / `Select` / `ScrollRegion` already use), so its `bounds` **are** the panel — and its two overrides now just return `base.bounds`, i.e. they are already redundant.\n\nCost, accepted: every other overlay widget gets the same treatment — `Select` (open panel), `Tooltip`, `Dialog`, `ToastStack`, `CommandPalette`. Same refactor the menu already went through.\n\n## 3. `routes_own_subtree` — DELETE; always traverse\n\nAntonio: *\"maybe always traverse ma if no children are listening it does nothing?\"* — which is exactly the DOM. A child with no handler returns unhandled and nothing happens; the cost is walking nodes that do nothing.\n\nIts two users need the ordinary expression instead:\n- **`Select`** — closed option rows are placed children that must not take input. They are not \"unroutable\", they are **not interactive right now**: `disabled`, or not mounted while closed (`pointer-events: none` in DOM terms).\n- **`Dialog`** — routes through an overlay-aware focus scan. Under decision 1 that is the framework's job.\n\n## 4. One handler spelling, always carrying the event AND `stop_propagation`\n\nToday there are two, and only one can stop the walk:\n\n```rust\n.on_click(|e: &PointerEvent| { … })                 // has the event, CANNOT stop\n.on(EventKind::Click, |cx| cx.stop_propagation())   // can stop — the \"general form\"\n```\n\nThe named builders consume the event for you, so `on_click` cannot say \"don't consume\". The DOM has one spelling and it always carries both. Antonio: *\"would be great to have an event like in the dom to stop the propagation. `on_click(|e| { e.stop_propagation(); })` and have an event_listener in all widget… this could be used to intercept key press, hint letters etc.\"*\n\nTarget: **one handler argument carrying the event and the control**, for every kind, with `.on(kind, …)` being the same function with the kind as a parameter — not a different API.\n\n```rust\n.on_click(|e| { e.stop_propagation(); … })\n.on_key(|e| { … })\n```\n\nThis also removes the last reason a widget writes a swallow-everything catch-all — the thing that broke the quick-picks.\n\n# Already true (do not rebuild)\n\n- `EventCx::stop_propagation()` exists (`heca-grid-ui/src/event.rs:783`).\n- Handlers live on `Base` for **every** widget via `EventExt` — no opt-in, no trait to implement.\n- Capture and bubble phases exist (T394).\n\n# ⚠️ Supersedes documented behaviour\n\n`AGENTS.md` → the **SETTLED input model** block describes `takes_raw_keys` and \"handlers live on `Base`\" as the model. Update it when this lands, or a later session will re-apply the superseded rule — that already happened once today with the host-only rule.\n\n# Verification\n\nThe whole class of bug here is invisible to green tests: 1230 passed while every quick-pick letter did nothing, while declared menus laid out horizontally, and while a stuck overlay refused every key. Each decision needs driving in the app — typing in a field with a menu open, quick-pick letters, clicks through nested widgets, an overlay's hit area, a `Select` inside a `Dialog`.\n\n# Related\n\n- **T399** — `on_peek`: the same rule applied to hint targets.\n- **T398** — the same rule applied to the widget vocabulary.\n- **T395** — `.context_menu()`, the precedent all of this follows.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "320728e2-821f-4b13-83a0-46fb7b544ec6-check-001-in-progress-waiting",
+          "date": "2026-08-11T23:08:49.806Z",
+          "fromStatus": "in-progress",
+          "toStatus": "waiting",
+          "title": "Parked to free the active slot for P082/T416. COME BACK TO THIS. Three quarters built (AGENTS.md:985): delivery follows focus and bubbles, the self-describing predicates are deleted, one handler spelling. Still to build: `bounds === what is drawn === what is clickable` — `hit_bounds`/`damage_bounds` are still here, and the first attempt (overwriting `base.bounds` in `on_layout`) was reverted because bounds are read by paint, damage and placement too. Doing it properly means the floating panels become real placed children. Not blocked — parked by choice, 2026-08-12.",
+          "description": "Parked to free the active slot for P082/T416. COME BACK TO THIS. Three quarters built (AGENTS.md:985): delivery follows focus and bubbles, the self-describing predicates are deleted, one handler spelling. Still to build: `bounds === what is drawn === what is clickable` — `hit_bounds`/`damage_bounds` are still here, and the first attempt (overwriting `base.bounds` in `on_layout`) was reverted because bounds are read by paint, damage and placement too. Doing it properly means the floating panels become real placed children. Not blocked — parked by choice, 2026-08-12."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-07T17:55:20.873Z",
+      "completedAt": "",
+      "createdAt": "2026-08-07T17:29:15.224Z",
+      "updatedAt": "2026-08-11T23:08:49.806Z"
+    },
+    {
+      "id": "2649dacb-abda-4296-8316-beb28a977d5e",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 401,
+      "shortId": "4AXSN",
+      "priority": 12,
+      "shortName": "any-click-in-the-showcase-scro",
+      "title": "Any click in the showcase scrolls the page to the same spot — a stale focus claim drags the ScrollRegion",
+      "status": "planned",
+      "description": "**Reported by Antonio, driving the showcase, 2026-08-08 and again 2026-08-10** (three times across the session, so it is reproducible): clicking anywhere outside a widget scrolls the showcase page to the bottom, always landing at the same point.\n\n# Where it comes from\n\n`Component::wants_visible()` defaults to `self.base().focused.get_untracked()` (`heca-grid-ui/src/component.rs`), and `ScrollRegion` reveals the first descendant that reports it (`component::reveal_target` / `reveal_target_in`, used by `ScrollRegion`'s `ensure_visible` path). So **anything left holding `Base::focused` pulls every enclosing scroll region to itself on the next layout**, and a click anywhere triggers a layout.\n\n`Select::open_list` (`heca-grid-ui/src/widgets/select.rs:~455`) used to do `self.base.focused.set(true)` — claiming focus **without releasing the previous holder**, unlike `FocusManager`, which clears the old one. A select opened once and never blurred therefore reported `wants_visible` forever. **That line was removed on 2026-08-10** (F004/P084/T400) on the reasoning that a list opens either from a click, which focused it through the host's `FocusManager`, or from a key, which only reached it because it was already focused.\n\n**That fix is UNVERIFIED.** Antonio has not driven the showcase since it landed.\n\n# What to do\n\n1. **Drive it first.** `cargo run -p heca-renderer --example showcase`, click empty page background, see whether the page still jumps. If it does not, close this task — the cause was the stale claim.\n2. **If it persists, find the stuck claim rather than guessing.** The failure is a widget reporting `wants_visible` when it should not. A short `#[cfg(debug_assertions)]` walk printing every node with `focused == true` and its bounds, run on the click, names it in one shot. Do not fix speculatively — three speculative rounds on this class of bug cost a whole session already.\n3. Candidates besides `Select`, all of which bind `Base::focused` to something other than the focus manager: `Overlay`/`ContextMenu`/`CommandPalette` bind theirs to their **open** signal (they override `wants_visible() -> false` for exactly this reason — check any new layer widget does too), and `FocusScope`/`ScrollRegion::keyboard_target` bind a host signal.\n\n# The rule this is really about\n\nA widget that binds `Base::focused` to something the focus manager does not own must consider whether it also wants to be scrolled into view. Two answers exist and both are legitimate — a dock's `ScrollRegion` does want it, a layer does not — so the fix is per widget, not a change to the default.\n\n# Edge cases\n\n- The showcase page is one big `ScrollRegion`; the app's chrome has several nested ones, so a fix must not stop a **dock** following its own nav cursor (`Row`/`MarkerGroup`/`DockFrame` override `wants_visible` to include their nav state, and that behaviour is wanted).\n- Verify in the app too: `prefix+e` then `j`/`k` must still scroll the sidebar to follow the cursor.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-10T19:15:48.564Z",
+      "updatedAt": "2026-08-10T19:15:48.564Z"
+    },
+    {
+      "id": "357de448-0532-49c4-9788-a266ba067a66",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 406,
+      "shortId": "35AUH",
+      "priority": 13,
+      "shortName": "collapsing-an-itemgroup-piles",
+      "title": "Collapsing an ItemGroup piles its rows on top of each other above the group",
+      "status": "planned",
+      "description": "**Reported by Antonio, driving the showcase, 2026-08-08 and 2026-08-10, with screenshots.** Collapsing EXPLORER or SOURCE CONTROL in the showcase's sidebar leaves the group's row text drawn **overlapping itself**, stacked above the collapsed group — several file names rendered on top of one another at the top-left of the frame (\"chrome_region.rs\" over \"showcase.rs\" over \"old_sidebar.rs\") — while the group header itself draws correctly.\n\n**It predates the 2026-08 event-model work** (T394/T395/T400) — it survived a full revert of T400's decision 2 unchanged, so do not look for it there. Filed in this phase because it was found while driving this phase's work and is being cleared with it.\n\n# Where to look\n\n`ItemGroup` (`heca-grid-ui/src/widgets/item_group.rs`) collapses by setting `style.layout.hidden` on the rows (taffy `display: none`). Two consequences follow, and the bug is almost certainly one of them:\n\n- **A `display: none` subtree is collapsed to zero size at the top-left by taffy**, so its bounds are stale. `component::paint_child` skips hidden children for exactly this reason — its doc says *\"painting it would stamp its (stale, overlapping) contents there\"*. A container with a **bespoke paint loop** iterating `base.children` directly, rather than through `paint_child`, will draw them. `Pane` and `DockFrame` are named in that doc as the ones that must reuse it; check every paint loop on the path from the sidebar down to the rows, including any added since.\n- **Damage.** `collect_damage` (`heca-grid-ui/src/component.rs`) skips hidden subtrees, so the rows' *old* pixels are never invalidated when they become hidden. If the collapse never repaints the region the rows occupied, the pile is stale pixels rather than a live paint — which a screenshot cannot distinguish from the first cause.\n\n# Tell the two apart before fixing\n\nPaint the collapsed tree into a `Scene` headlessly and read the `DrawCommand::Text` entries with their rects (the pattern `heca-grid-ui/tests/phase_a.rs` uses throughout). Texts **in** the scene ⇒ a paint loop. Texts absent ⇒ damage, and the fix is in the host's repaint rect.\n\n# Verification\n\nAntonio drives the showcase: collapse and expand both groups repeatedly, and scroll while collapsed. A headless test asserting a collapsed group emits no text for its rows is the regression guard.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-10T19:20:49.701Z",
+      "updatedAt": "2026-08-10T19:20:49.701Z"
+    },
+    {
+      "id": "c83c9b34-35e5-46d7-9dc5-d79906619fda",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 407,
+      "shortId": "YP7XW",
+      "priority": 14,
+      "shortName": "a-row-s-hover-lights-its-label",
+      "title": "A row's hover lights its label but not its icon, and a toast's top margin lets the hover through to the widget behind",
+      "status": "planned",
+      "description": "Two hover defects Antonio reported driving the showcase (2026-08-08 and 2026-08-10). Filed together because both are the same question — **which rect does this hover belong to** — and the second is the one a `ToastStack` answers for its cards.\n\n# 1. Hover lights the label, not the icon\n\nHovering a row lights the text and leaves the leading `Icon` unlit. Expected: the whole row reads as hovered, icon included.\n\nHover is a **framework** fact since T394: `pointer::update_hover` sets `PointerState::hovered` on the target's **whole ancestor chain**, CSS `:hover`-style, so a `Row` is hovered when the `Label` inside it is. The row's hover state is therefore almost certainly right and the **paint** is not: a row publishes one content colour per frame via `PaintCx::with_content_color`, and an unstyled `Label`/`Icon` child pulls it — but a child given an **explicit** colour does not inherit, by design. `heca/src/providers/workspaces/mod.rs` builds pane rows with `Icon::new(info.icon).size(14.0).color(theme.colors.foreground)`, which is exactly that shape.\n\nIf that is it, the fix is at the call site — drop the explicit colour so the icon inherits the row's state colour — **not** in the widget. Confirm first: some icons are deliberately coloured (a git-status marker must keep its own colour whatever the row does).\n\n# 2. A toast's top margin passes hover through\n\nHovering near the **top edge** of a toast card lights the widget behind it instead of the card.\n\n`ToastStack` (`heca-grid-ui/src/widgets/toast_stack.rs`) reports `hit_bounds()` as the **union of its cards' rects** and routes the pointer to the card under the cursor by hand in `on_event_capture` — the toasts are not `base.children`, they live in `entries`, reconciled by id. A point inside the union but outside every card returns `Handled::No` and falls through, which puts the hover on the page behind.\n\nSo: is the hovered point inside the card's **drawn** area but outside its **bounds**? A card draws a glow and a shadow outside its rect, and `Toast`'s margin/gap sit between cards. Measure it — paint the stack and compare the card's `DrawCommand` rects against `e.toast.base().bounds`.\n\n**Worth doing at the same time:** the cards being outside `base.children` is the only reason that hand-delivery exists. Making them real children deletes the method and lets the framework route to them — the treatment `ContextMenu` got in T395, and the shape T400's notes name for the remaining overlay widgets.\n\n# Verification\n\nAntonio drives it: hover along a row including its icon, and along a toast's top edge with a widget behind it.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-10T19:21:03.758Z",
+      "updatedAt": "2026-08-10T19:21:03.758Z"
+    },
+    {
+      "id": "fc620445-244f-494d-8ae8-60c88ad14ffa",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 408,
+      "shortId": "2RGV4",
+      "priority": 15,
+      "shortName": "right-clicking-the-showcase-pa",
+      "title": "Right-clicking the showcase page opens an empty strip that dismisses itself",
+      "status": "planned",
+      "description": "**Reported by Antonio, driving the showcase, 2026-08-08, with a screenshot.** A right-click anywhere in the showcase page draws a thin empty bar where the menu should be — a panel with no rows — and the console prints `[showcase] menu dismissed`. The same declared menus work correctly in the app.\n\n# Why it is the showcase's hosting rather than the widget\n\nA `ContextMenu` mounted as a layer root is exercised headlessly and passes: `heca-grid-ui/tests/context_menu_declaration.rs` covers the declaration, the bubbling, the quick-pick letters, and (2026-08-10) `an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick` plus `a_menu_near_the_edge_is_clamped_on_the_first_layout_pass`.\n\nWhat a host must do, and what the app does (`heca/src/app/startup.rs:160` → `heca/src/chrome/overlay.rs::present_menu`):\n\n1. `install_menu_sink(...)` — take the menu **and its anchor**, queue them, request a redraw.\n2. Drain the queue and call `anchor.open(menu)` — **this is the step that realizes the rows into children**; a menu whose builders never ran has no rows, which is exactly a thin empty panel.\n3. Mount it as a layer and **lay it out** before painting — placement happens in `on_layout` and the rows are measured there.\n4. Wire `after_select` and `on_dismiss` so the layer comes down.\n\nCheck the showcase's sink against those four. `[showcase] menu dismissed` firing on the same gesture that opened it points at the press reaching the menu as a `PointerDownOutside` — mounted, then immediately told the press landed elsewhere.\n\n# Edge cases\n\n- A right-click is a **press and a release** on the same widget; a host delivering only presses produces no `RightClick` at all. `heca/tests/pointer_funnel.rs` lints the app for this; **the showcase has no equivalent** and should get one.\n- The showcase mounts two trees (`state.ui`, `state.overlays`), each with its own hover and capture, so the menu must be dispatched to consistently.\n\n# Verification\n\nAntonio drives the showcase: right-click the page background, a row, and a widget with its own menu. The panel must show its rows, stay up, answer quick-pick letters and Esc, and dismiss on an outside click.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-10T19:21:17.515Z",
+      "updatedAt": "2026-08-10T19:21:17.515Z"
+    },
+    {
+      "id": "4e627ced-c92e-49ec-89f7-e6c1fb7831ee",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 409,
+      "shortId": "ZPW3L",
+      "priority": 16,
+      "shortName": "resizing-a-pane-with-the-mouse",
+      "title": "Resizing a pane with the mouse makes it disappear as soon as it is resized",
+      "status": "done",
+      "description": "**Reported by Antonio, driving the app, 2026-08-10.** Dragging a pane's edge with the mouse resizes it and the pane then **disappears** as soon as the resize lands.\n\nFiled in this phase because it was found driving this phase's work and is being cleared with it — **but nothing about it is a widget**: `heca-grid-ui` never positions panes (its taffy layout is intra-component and never touches panes or columns). The rectangle comes from the NIRI scrolling engine in `heca-core`; the drag lives in `heca/src/mouse/`; the resize is a `WmAction` (`Resize { target, axis, amount }` / `ResizeTo { .. }`) executed through `ActionRegistry`.\n\n# Where to look, cheapest discriminator first\n\n1. **Does the keyboard path do the same?** `prefix+r` enters resize mode and dispatches the *same* `WmAction`s. If the keyboard resize is fine and only the mouse one breaks, the fault is the drag → action conversion (which value is being sent as `amount`), not the layout. One minute, and it halves the search.\n2. **Is the pane gone, or zero-sized?** Print the session's pane rects after the gesture. `heca-core`'s `Column::pane_sizes` and its height distribution are the only places that can drive a size to `0` — a pane that is still in the session with no area looks exactly like a missing one.\n3. **Or is the session right and the render wrong?** If `heca-core` reports a sane rect, the loss is in the tiled stencil / content pass in `heca/src/app/render.rs`.\n\n# Rules that apply\n\n- **Column widths are never normalized**, and a resize changes only the active column's width (AGENTS.md, the NIRI layout rules). A fix that renormalizes is wrong even if the symptom goes away.\n- The resize stays a **registry-dispatched action** — no direct layout mutation from the mouse code.\n\n# Verification\n\nAntonio drives it: resize a pane by dragging its edge, in a column with two panes and with three, and horizontally between columns; then the same with `prefix+r`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T08:28:21.942Z",
+      "completedAt": "2026-08-11T13:48:24.530Z",
+      "createdAt": "2026-08-10T19:21:30.898Z",
+      "updatedAt": "2026-08-11T13:48:24.530Z"
+    },
+    {
+      "id": "791ea225-2796-42ae-a534-5235203a9f50",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 413,
+      "shortId": "J9SF2",
+      "priority": 17,
+      "shortName": "a-pane-divider-must-move-space",
+      "title": "A pane divider must move space between its OWN two panes, not squeeze every pane below it",
+      "status": "done",
+      "description": "**Reported by Antonio, driving, 2026-08-11**, with three panes stacked in a column: *\"If i resize the pane at the middle to the bottom. It does not resize itself but the one at the top, causing the last one (the third at the bottom) to go off the screen.\"*\n\n# What is actually wrong (measured headlessly, 1600x900, three panes)\n\n```\nstart                                289 / 289 / 289\nafter dragging the TOP boundary down 668 / 100 / 100\n```\n\n**The bottom pane went from 289 to 100 without its own boundary ever being touched.** That is the bug. Dragging the boundary between pane 0 and pane 1 must move space between *those two* and leave pane 2 alone.\n\nTwo things it is **not**, both checked:\n\n- **Nothing goes off screen.** Every pane stays inside the column (`bottom = 892` against a 900 working height). The third pane collapses to `MIN_PANE_HEIGHT` and is jammed against the bottom edge, which reads as gone. So this is not a clamping or a viewport bug.\n- **The hit-test is not confused.** `divider_at` (`heca/src/mouse/resize.rs:81`) deliberately returns the pane **above** the divider (`pane: b.pane`), which is a coherent choice; the problem is what the resize then does with it.\n\n# The cause\n\n`Column::resize_pane_height` (`heca-core/src/layout/column.rs:233`) sets `preferred_height` on **one** pane and calls `compute_pane_sizes`, which then distributes *all* remaining height across every pane that is still `auto`:\n\n```rust\nlet auto_height = (height_left / auto_count as f64).max(min_h);\n```\n\nWith three panes and only the first pinned, panes 1 **and** 2 are auto and share what is left — so a boundary drag silently rescales a pane two positions away. With two panes it happened to look right, because the only auto pane *was* the neighbour. That is why this was never noticed until a third pane existed.\n\n# What to build\n\nA boundary drag is a **transfer between the two panes it separates**: pane `i` grows by `delta` and pane `i+1` shrinks by the same amount, both clamped to `MIN_PANE_HEIGHT`, and every other pane keeps the height it had. Concretely that means pinning **both** sides of the boundary (the neighbour gets a `preferred_height` too), so `compute_pane_sizes` has nothing left to redistribute.\n\nEdge cases to hold:\n\n- **The far side is at its floor.** If pane `i+1` is already at `MIN_PANE_HEIGHT`, the drag stops — it must not start eating pane `i+2` to keep going.\n- **Total must stay equal to the available height**, so the column is always exactly full: the transfer is symmetric, so this falls out, but a test should hold it rather than trusting it.\n- **A pane that was never resized stays auto.** Pinning every pane on the first drag would turn an even split into a frozen one; only the two either side of the dragged boundary get pinned.\n- **`compute_pane_sizes`' third pass** (scale up when the total is short) must not undo the transfer.\n- The keyboard path (`resize_active_pane_height`) goes through the same function and gets the same fix for free — check it does, and that `prefix+r` still behaves.\n\n# Verification\n\nAntonio drives it: three panes in a column, drag the top boundary and then the bottom one; only the two panes touching each boundary may change. Then the same with `prefix+r`. Headless numbers first (the reproduction above is a good starting fixture), since this one is fully answerable in `heca-core`.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T13:56:16.680Z",
+      "completedAt": "2026-08-11T14:02:17.447Z",
+      "createdAt": "2026-08-11T13:54:36.536Z",
+      "updatedAt": "2026-08-11T14:02:17.447Z"
+    },
+    {
+      "id": "d89b63d6-04f2-42f2-9acc-b947eed95306",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 414,
+      "shortId": "3JT9Y",
+      "priority": 18,
+      "shortName": "prefix-r-j-k-must-move-a-divid",
+      "title": "prefix+r: j/k must move a divider in one direction, whichever pane is active",
+      "status": "done",
+      "description": "**Reported by Antonio, driving, 2026-08-11**, immediately after T413 landed: *\"prefix+r work fine at the third one at the bottom. The center and the one at the top j and k act the opposite. why?\"*\n\n# Why it happens\n\n`j`/`k` are **directional** — the user expects them to move an edge one way. The action underneath is **size-based**: `WmAction::Resize { target: Pane, axis: Y, amount }` → `Column::resize_active_pane_height(delta)` → \"grow the active pane by `delta`\".\n\nThose two agree only when the edge that moves is on the same side of the pane:\n\n- A pane with a boundary **below** it (top, middle) grows by moving its **bottom** edge down.\n- The **last** pane has no boundary beneath it, so T413 made it trade with the pane **above**: it grows by moving its **top** edge up.\n\nSame key, same \"grow me\", opposite edge — so the divider travels the other way and it reads as inverted.\n\n**This is a consequence of T413, not a regression it introduced.** Before it, a resize pinned one pane and every other pane absorbed a share of the change, so no single divider visibly moved and the inconsistency did not read. The direction was always ambiguous; T413 made the motion crisp enough to see it.\n\n# What to build\n\nExpress the keyboard resize as **move a boundary in a direction**, not \"grow me\":\n\n- `j` moves the divider **down**, `k` moves it **up**, whichever pane is active.\n- For a pane with a boundary below, that is its own bottom boundary (grow on `j`).\n- For the **last** pane, the only boundary is above it, so `j` moving that divider down means the last pane **shrinks** — which is the correct and consistent reading: the divider went the way the key says.\n\n`Column::resize_pane_height` (`heca-core/src/layout/column.rs`) already performs a boundary transfer and is the right place; what changes is which boundary the keyboard names and the sign it passes, not the transfer itself. The mouse path is unaffected — a drag names its boundary by hit-test and already moves it under the cursor.\n\n# Behaviours to preserve\n\n- **The mouse must keep tracking the cursor.** `mouse::resize::on_drag_move` sends `ResizePaneHeightBy { pane_idx, delta: dy }` where `pane_idx` is the pane above the divider; dragging down must still move that divider down.\n- **T413's transfer stays**: only the two panes either side of a boundary change, the far side stops at `MIN_PANE_HEIGHT`, and the column stays exactly full. Its two tests must still pass.\n- **RPC and the config binding** go through the same `WmAction`, so whatever the sign convention becomes has to be stated in the action's own docs — `resize` is user-bindable and its `amount` is written by hand in `config.toml`.\n\n# Verification\n\nAntonio drives it: three panes in a column, `prefix+r`, then `j`/`k` with each of the three active in turn. The divider must move the same way every time. Then the mouse drag, to confirm it still follows the cursor.\n\n---\n**Completion summary:**\n**Done — built and driven by Antonio, 2026-08-11: \"works good\".** Not committed.\n\n## What it is now\n\nThe keyboard resize names **a boundary and a direction**, not a size. `amount` moves the boundary\n**along the axis**: `+x` is right, `+y` is **down**. That is the convention the mouse already used —\na divider is named by the pane above it (`mouse::resize::divider_at`) and a drag down moves it down —\nso there is one convention and one call, not two.\n\n- `Column::move_pane_boundary(pane_idx, delta, working_height, gaps)` and\n  `move_active_pane_boundary(..)` (heca-core/src/layout/column.rs, beside `resize_pane_height`):\n  the boundary a pane owns is the one **below** it, or the one **above** when it is last\n  (`pane_idx.min(len - 2)`), and the call delegates to T413's `resize_pane_height` on the pane above\n  that boundary. The transfer itself is unchanged.\n- `handle_resize`'s `(Pane, Y)` arm (heca/src/handlers.rs) calls it instead of\n  `resize_active_pane_height`.\n- **On the last pane the divider now moves down on `j` and the pane shrinks** — the correct and\n  consistent reading, and the behaviour Antonio confirmed.\n\n`resize_active_pane_height` stays and still means **size**: it serves `pane_height_increase` /\n`pane_height_decrease` (`prefix+Shift+=` / `prefix+Shift+-`), which are spelled as size verbs and\ngrow the active pane whichever edge has to move. Both readings are pinned by their own test.\n\n## The sign convention changed, so it is written wherever a user meets it\n\n`j`/`Down` were `amount = \"-40\"` and `k`/`Up` were `\"40\"`. Keeping those would have meant documenting\n\"negative means down\", which is indefensible; `h`/`l` were already `-50`/`+50` = left/right, so the\naxis reading was the one that made x and y agree. **Defaults flipped: `j`/`Down` = `\"40\"`,\n`k`/`Up` = `\"-40\"`** (keybindings.default.toml, with the rule in a comment above the mode block).\nAlso stated in: `WmAction::Resize`'s rustdoc (heca/src/input.rs), the `resize` action descriptor's\n`amount` arg (heca/src/actions.rs), the RPC header line (heca/src/rpc.rs), and README's Modes\nsection. `amount` is written by hand in `config.toml`, so a user who rebound it by copying the old\nnumbers gets an inverted key — that is the one migration cost, and it is documented in all five\nplaces.\n\n## Tests (heca-core/src/layout/scrolling.rs)\n\n- `the_keyboard_moves_a_divider_the_same_way_from_every_pane` — three panes, each seat in turn: a\n  positive amount grows the pane above the boundary by exactly that, shrinks the pane below it by\n  exactly that, and leaves the third pane alone (T413's rule still holds from every seat).\n- `the_size_verb_still_grows_the_active_pane_from_every_seat` — the other reading, so the two verbs\n  cannot silently converge.\n\n**Whole workspace: 1250 tests, clippy 0 warnings** (`--workspace --all-targets --all-features`; the\nonly line is `block v0.1.6`'s future-incompat note, from a dependency).\n\n## Verified by driving (Antonio, 2026-08-11)\n\nThree panes in a column, `prefix+r`, `j`/`k` with each of the three active in turn — the divider\nmoves the same way every time. The mouse drag path is untouched (`ResizePaneHeightBy` still carries\nthe pane above the divider and a positive-down delta).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T14:19:17.900Z",
+      "completedAt": "2026-08-11T14:36:40.984Z",
+      "createdAt": "2026-08-11T14:04:24.706Z",
+      "updatedAt": "2026-08-11T14:36:40.984Z"
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-07-27T11:40:15.497Z",
+  "updatedAt": "2026-08-11T23:08:49.806Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-11T14:05:35.021Z",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/0e4c21e5-1cf7-4c0a-a00e-76ffbef60703-2026-08-11T14-19-17-894Z.md",
+      "clearedAt": "2026-08-11T14:19:17.894Z",
+      "reason": "task-started"
+    },
+    {
+      "file": "handoff-archive/0e4c21e5-1cf7-4c0a-a00e-76ffbef60703-2026-08-10T19-24-31-645Z.md",
+      "clearedAt": "2026-08-10T19:24:31.645Z",
+      "reason": "task-started"
+    },
+    {
+      "file": "handoff-archive/0e4c21e5-1cf7-4c0a-a00e-76ffbef60703-2026-08-07T17-55-20-868Z.md",
+      "clearedAt": "2026-08-07T17:55:20.868Z",
+      "reason": "task-started"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "0056d3b9-bcce-4813-8102-c2fae8ebb2e6",
+      "date": "2026-08-06T10:59:59.433Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }

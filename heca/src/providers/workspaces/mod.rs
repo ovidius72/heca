@@ -21,26 +21,26 @@ mod model_tests;
 use crate::chrome::{
     alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
     BuildCx, ChromeDragItem, ChromeIntentEmitter, ChromeSignals, ContainerContribution,
-    Contribution, DragItemRegistry, HintTargetRegistry, PaneInfoSignals, RegionId, RegionSet,
+    Contribution, DragItemRegistry, PaneInfoSignals, RegionId, RegionSet,
     RepaintWatch, WidgetModel, WorkspacesContainerState, CARD_META_FONT_SCALE,
 };
-use crate::actions::{ActionCategory, ActionMeta};
+use crate::actions::{ActionCategory, ActionMeta, ArgKind, ArgSpec};
 use crate::app::interaction::ActionPolicy;
 use crate::chrome::{Intent, PropMap, PropValue};
 // The menu-entry vocabulary, shared with the host's own pane menu (F003/P086/T365).
 use crate::chrome::context_menu::{item, item_running, usize_arg};
-use crate::chrome::{ContextMenuContribution, ContextTarget, DropdownItem};
+use crate::chrome::DropdownItem;
 use crate::providers::{ChromeCtx, Provider, ProviderCx};
 use heca_grid_ui::Handled;
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
-use heca_grid_ui::builders::{DragExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
+    Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, KeyHint, Label, MarkerGroup,
     Row, ScrollRegion, StatusDot, Tooltip, TooltipSide, Visibility,
 };
 
@@ -214,13 +214,26 @@ impl Provider for WorkspacesContainerProvider {
                 Some(Glyph::CaretRight),
                 cursor,
             ),
-            act(
-                PEEK_SELECTED,
-                "Peek Row",
-                "Focus what the cursor points at without leaving the dock.",
-                Some(Glyph::Search),
-                cursor,
-            ),
+            // **A peek can be aimed.** It acts on the cursor by default; the universal picker
+            // passes the nav key of the row whose letter was chosen, so `prefix+/` lands on *that*
+            // row rather than wherever the cursor happened to be. Optional, because every other
+            // caller — the keybinding, the palette, RPC — means "the row I am on".
+            ActionMeta {
+                args: vec![ArgSpec {
+                    name: "key".to_string(),
+                    kind: ArgKind::Text,
+                    required: false,
+                    description: "The row to peek, by its nav key (default: the cursor).".to_string(),
+                    values: Vec::new(),
+                }],
+                ..act(
+                    PEEK_SELECTED,
+                    "Peek Row",
+                    "Focus what the cursor points at without leaving the dock.",
+                    Some(Glyph::Search),
+                    cursor,
+                )
+            },
             act(
                 TOGGLE_SELECTED,
                 "Expand / Collapse Row",
@@ -273,51 +286,6 @@ impl Provider for WorkspacesContainerProvider {
         ]
     }
 
-    /// The menus for this component's own row kinds.
-    ///
-    /// Each builder is **bound to this placement**: it answers for a target naming *this* mount and
-    /// returns nothing for any other. Both seatings are mounted, so both are asked for every menu;
-    /// without the guard each entry appeared twice in every row menu on screen (F003/P086/T365).
-    fn context_menus(&self, _ctx: &ChromeCtx<'_>) -> Vec<ContextMenuContribution> {
-        let menu = |path: &str, build: fn(&ChromeCtx, &str) -> Vec<DropdownItem>| {
-            let mount = self.id.clone();
-            ContextMenuContribution {
-                context_path: path.to_string(),
-                weight: vec![1],
-                build: std::rc::Rc::new(move |ctx: &ChromeCtx, target: &ContextTarget| {
-                    match target {
-                        ContextTarget::Row { container, key } if *container == mount => {
-                            build(ctx, key)
-                        }
-                        _ => Vec::new(),
-                    }
-                }),
-            }
-        };
-        vec![
-            menu(MENU_PANE, build_pane_row_menu),
-            menu(MENU_COLUMN, build_column_row_menu),
-            menu(MENU_WORKSPACE, build_workspace_row_menu),
-        ]
-    }
-
-    /// Which of this component's three row menus describes `key`.
-    ///
-    /// Matched against its own rows, never parsed — the same resolution [`cursor_moved`] uses, and
-    /// for the same reason: a tiled pane and a floating one are both `pane:<id>`, and only the row
-    /// knows which it is. A floating pane row is still a **pane row of this component**, so it gets
-    /// this component's pane menu (minus the entries that need a column) rather than the host's
-    /// content-pane menu.
-    fn context_path(&self, key: &str, ctx: &ChromeCtx<'_>) -> Option<String> {
-        let state = ctx.state();
-        let tree = state.workspaces().tree();
-        let path = match row_at_key(&tree, key)? {
-            WorkspaceRow::Pane { .. } | WorkspaceRow::FloatingPane { .. } => MENU_PANE,
-            WorkspaceRow::Column { .. } => MENU_COLUMN,
-            WorkspaceRow::Workspace { .. } => MENU_WORKSPACE,
-        };
-        Some(path.to_string())
-    }
 
     /// The host moved this placement's cursor — reconcile the tree's positional index with it.
     ///
@@ -342,14 +310,40 @@ impl Provider for WorkspacesContainerProvider {
         ws.set_nav_selection(Some(selection));
     }
 
-    fn perform(&self, action: &str, _args: &Intent, cx: &mut ProviderCx<'_>) -> Handled {
+    fn perform(&self, action: &str, args: &Intent, cx: &mut ProviderCx<'_>) -> Handled {
         match action {
             CURSOR_UP => self.step_cursor(cx, Step::Up),
             CURSOR_DOWN => self.step_cursor(cx, Step::Down),
             COLLAPSE_ROW => self.fold(cx, Fold::Collapse),
             TOGGLE_SELECTED => self.fold(cx, Fold::Toggle),
             ACTIVATE_SELECTED => self.activate(cx, Activate::AndLeave),
-            PEEK_SELECTED => self.activate(cx, Activate::AndStay),
+            PEEK_SELECTED => {
+                // Aimed, when the caller named a row (`prefix+/`): move the cursor onto it first,
+                // through this component's own key→row resolution, and the peek then acts on it
+                // like any other. A bad or stale key leaves the cursor alone rather than failing —
+                // the row it named is simply not there any more.
+                if let Some(PropValue::Text(key)) = args.args.get("key") {
+                    self.cursor_moved(key, cx);
+                }
+                // **A peek leaves you ON that row, in the dock** — so it has to *take* the keyboard,
+                // not merely refrain from releasing it. Written as one rule for every caller: from
+                // `Space` the dock already has it and this is a no-op; from `prefix+/`, the palette
+                // or RPC the keyboard was elsewhere, and without this the cursor moved somewhere the
+                // user could not then drive with `j`/`k`. Antonio, 2026-08-10, driving the picker:
+                // *"it activates the pane but the keyboard goes to the terminal"*.
+                //
+                // **Guarded, because `focus_dock` aimed at the dock that already holds the keyboard
+                // is the way back out** (`handle_focus_dock`) — dispatching it unconditionally would
+                // make every peek from inside the dock release the keyboard instead.
+                if cx.state().focused_container().as_deref() != Some(cx.mount()) {
+                    let mount = cx.mount().to_string();
+                    cx.dispatch(
+                        "focus_dock",
+                        PropMap::from([("dock".to_string(), PropValue::Text(mount))]),
+                    );
+                }
+                self.activate(cx, Activate::AndStay)
+            }
             CREATE_COLUMN => self.at_workspace(cx, "add_column_to_workspace"),
             CREATE_PANE => self.at_column(cx, "add_pane_to_column"),
             ZOOM_SELECTED => self.at_column(cx, "zoom_column_at_index"),
@@ -641,6 +635,7 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
     // the same reason: only one of two placements can hold focus.
     let focused = state.container_keyboard_target(bx.container_id());
     Box::new(build_workspaces_container(
+        ctx,
         &tree,
         &programs,
         theme,
@@ -653,7 +648,6 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
         focused,
         bx.signals,
         bx.drag,
-        bx.hints,
     ))
 }
 
@@ -699,9 +693,26 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
     Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id.0 as i64))
 }
 
-/// Pressing a **workspace row** makes that workspace active.
-fn workspace_row_press(ws_idx: usize) -> Intent {
-    Intent::new("focus_workspace").arg("ws_idx", PropValue::Int(ws_idx as i64))
+// A workspace row declares **no click**: a `DockFrame`'s own header owns its press (the disclosure
+// caret folds the section), and nothing forces a kind to declare a gesture it does not have. It
+// used to carry `focus_workspace` here purely so the `prefix+/` picker had an intent to register —
+// which is what pointing one declaration at two gestures looks like from the other side. Its peek
+// says the same thing and more (`peek_selected` also lands the cursor on the row), so the
+// stand-in is gone.
+
+/// **What a `prefix+/` pick does to a row of this component — and it is not what a click does.**
+///
+/// A click on a row means *go there and leave*: `focus_pane` + the dock releasing the keyboard. A
+/// pick means *look at that one*, so it moves the cursor onto the picked row and brings its pane to
+/// the front **without leaving the dock** — this component's own `peek_selected`, aimed at a row by
+/// its nav key instead of the cursor. Antonio, 2026-08-07: *"i want it to focus the cursor in the
+/// peeked letter and is good if the pane gets active"*.
+///
+/// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
+/// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
+/// started activating the pane and leaving the sidebar.
+fn row_peek(nav_key: String) -> Intent {
+    Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(nav_key))
 }
 
 /// The nav key naming the row a [`SidebarSelection`] points at.
@@ -726,7 +737,11 @@ pub(crate) fn selection_nav_key(selection: crate::chrome::SidebarSelection) -> S
     reason = "pane-card projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
 )]
 fn pane_card(
+    ctx: &ChromeCtx<'_>,
     pane: &PaneEntry,
+    // Which column this pane sits in, or `None` for a **floating** pane — which is in no column,
+    // so its menu simply lacks the entries that need one rather than aiming them at a guess.
+    column_of_pane: Option<(usize, usize)>,
     // The placement whose cursor this card's outline follows.
     mount: &str,
     programs: &ProgramsConfig,
@@ -736,10 +751,12 @@ fn pane_card(
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
 ) -> RepaintWatch {
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
+    // Read off this row's own projection rather than back through the store: the projection
+    // was built from it, and the menu is about the row being drawn.
+    let has_custom_name = pane.custom_name.is_some();
     let runtime = runtime_snapshot(ws_state, pane_id);
     let info = pane_info_view(
         programs,
@@ -758,9 +775,10 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
-    // This row kind's declared click, by name: the click below and the universal picker
-    // (`prefix+/`) fire the one intent, and so can a menu entry or RPC (F003/P086/T365).
-    let (hint_id, press) = crate::chrome::named_press(pane_row_press(pane_id), emit_intent, hints);
+    // This row kind's declared click, by name — so a menu entry, a keybinding or RPC can fire the
+    // same one (F003/P086/T365). A **pick** is declared separately, on the wrapper below: it is a
+    // different gesture and this row answers it differently.
+    let press = crate::chrome::fires(mount, pane_row_press(pane_id), emit_intent);
     let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
     let icon_signal = icon_widget.glyph_signal();
     let active_title_label = Label::new(info.title.clone())
@@ -933,23 +951,40 @@ fn pane_card(
                 .foreground
                 .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
         )
-        .highlight(theme.colors.accent)
-        .radius(theme.colors.control_radius())
+                .radius(theme.colors.control_radius())
         .padding(6.0)
-        .marker(ActiveMarker::Bar)
+        // No bar: the column's `MarkerGroup` already draws one down the left of every row here,
+        // and the selected panel says which row is current. Two lines said it twice.
         .active(active)
         .nav_selected(false)
-        // The row's ONE identity: the cursor, the right-click target and (later) drag are three
-        // readers of this single declaration (F003/P085/T354).
+        // The row's ONE identity: the cursor and (later) drag read this single declaration
+        // (F003/P085/T354). **The right-click no longer does** — the menu is declared below, on
+        // this widget, so a row that forgets `nav_key` still opens its menu (F004/P084/T395).
         .nav_key(pane_nav_key(pane_id))
+        // **This row's menu, built where this row's data is.** No `context_path`, no registered
+        // builder, no menu-id string: the entries capture `pane_id` from the loop that is already
+        // drawing it. Built at trigger time, so "Use process name" appears exactly when there is a
+        // custom name to clear.
+        .context_menu({
+            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
+            let ctx_menu = crate::chrome::context_menu::menu_from_items(
+                "Pane",
+                "What you can do with this pane",
+                MENU_PANE,
+                pane_row_items(pane_id, column_of_pane, has_custom_name),
+                catalog,
+                emit_intent,
+            );
+            heca_grid_ui::widgets::ContextMenu::new(MENU_PANE).child(ctx_menu)
+        })
         .draggable(drag_id)
         .drop_target(drag_id)
-        .hint_target(hint_id)
-        // Click / Enter / Space run the row's declared gesture — the same intent the picker fires.
+        // Click / Enter / Space run the row's declared click.
         .on_activate(press)
         .child(content);
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
+    signals.pane_previous.push((pane_id, card.previous_state()));
     signals.row_nav
         .push((mount.to_string(), pane_nav_key(pane_id), card.nav_state()));
     // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
@@ -989,6 +1024,15 @@ fn pane_card(
     let (watch, _repaint) = RepaintWatch::new(
         KeyHint::new(card)
             .hint(hint)
+            // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
+            // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
+            // registered and no id leaves this line — which is the only reason a plugin's row could
+            // ever have the same picker (RULE ZERO, F004/P084/T399).
+            .on_peek(crate::chrome::fires(
+                mount,
+                row_peek(pane_nav_key(pane_id)),
+                emit_intent,
+            ))
             .placement(HintPlacement::CenterRight),
     );
     watch
@@ -999,13 +1043,14 @@ fn pane_card(
 /// groupings whose only user-facing job is to be a move/swap target + drag handle).
 /// The `MarkerGroup` bar brightens to the accent when the column holds the active
 /// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
-/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`DragExt`, not
+/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`ComponentExt`, not
 /// baked into the widget.
 #[expect(
     clippy::too_many_arguments,
     reason = "column projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
 )]
 fn column_view(
+    ctx: &ChromeCtx<'_>,
     c: &ColumnEntry,
     ws_idx: usize,
     mount: &str,
@@ -1016,7 +1061,6 @@ fn column_view(
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
 ) -> RepaintWatch {
     let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
     // The MarkerGroup is a column drag source + drop target (F4.5 step 2). Its grip
@@ -1030,11 +1074,25 @@ fn column_view(
         .active(active)
         .gap(3.0)
         .nav_key(column_nav_key(ws_idx, c.col_idx))
+        .context_menu({
+            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
+            let menu = crate::chrome::context_menu::menu_from_items(
+                "Column",
+                "What you can do with this column",
+                MENU_COLUMN,
+                column_row_items(ws_idx, c.col_idx),
+                catalog,
+                emit_intent,
+            );
+            heca_grid_ui::widgets::ContextMenu::new(MENU_COLUMN).child(menu)
+        })
         .draggable(drag_id)
         .drop_target(drag_id);
     for pane in &c.panes {
         col = col.child(pane_card(
+            ctx,
             pane,
+            Some((ws_idx, c.col_idx)),
             mount,
             programs,
             theme,
@@ -1043,7 +1101,6 @@ fn column_view(
             ws_state,
             signals,
             drag,
-            hints,
         ));
     }
     // Bind the column bar's active signal (lit iff it holds the active pane).
@@ -1082,6 +1139,10 @@ fn column_view(
     reason = "workspace-container projection threads host/runtime context + the drag and hint registries explicitly; phase-local before a larger ChromeCx refactor"
 )]
 fn build_workspaces_container(
+    // The build context, for the one thing a row cannot answer itself: what an action **looks
+    // like** (`ctx.action_icon`). Threaded to the rows because a row declares its own menu now
+    // (F004/P084/T395) instead of the host resolving one from a position.
+    ctx: &ChromeCtx<'_>,
     tree: &WorkspaceTree,
     programs: &ProgramsConfig,
     theme: &GuiTheme,
@@ -1096,7 +1157,6 @@ fn build_workspaces_container(
     focused: Signal<bool>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-    hints: &mut HintTargetRegistry,
 ) -> ScrollRegion {
     // Selection is sourced from the container's shared state (the Phase-2 boundary),
     // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
@@ -1145,6 +1205,27 @@ fn build_workspaces_container(
         // theme's `active_wash_alpha` token, not a baked-in literal.
         dock = dock.active(active_ws);
         dock = dock.nav_selected(false);
+        // **The row's one identity, declared like every other row's.** A pane card and a column
+        // both call `nav_key`, and `nav_key_at` — which is how a right-click finds out what it
+        // landed on — reads exactly that. The workspace header pushed its key into the signal list
+        // and never told the widget, so the hit-test found nothing there: right-clicking a pane or
+        // a column opened its menu, a workspace opened none (Antonio, 2026-08-05).
+        dock = dock.nav_key(workspace_nav_key(ws_idx));
+        // The workspace row's own menu, declared like the other two. The bug in the comment above
+        // is the reason this phase exists: a menu resolved from a *position* needs a declaration
+        // nobody remembers to write, and this one is the declaration itself.
+        dock = dock.context_menu({
+            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
+            let menu = crate::chrome::context_menu::menu_from_items(
+                "Workspace",
+                "What you can do with this workspace",
+                MENU_WORKSPACE,
+                workspace_row_items(ws_idx, ws.custom_name.is_some()),
+                catalog,
+                emit_intent,
+            );
+            heca_grid_ui::widgets::ContextMenu::new(MENU_WORKSPACE).child(menu)
+        });
         let ws_pane_ids = ws
             .columns
             .iter()
@@ -1153,24 +1234,19 @@ fn build_workspaces_container(
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
         signals.ws_active.push((ws_pane_ids, dock.active_state()));
+        signals.ws_previous.push((ws_idx, dock.previous_state()));
         signals.row_nav
             .push((mount.clone(), workspace_nav_key(ws_idx), dock.nav_state()));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
         dock = dock.drop_target(drag.register(ChromeDragItem::Workspace { ws: ws_idx }));
-        // This row kind's declared gesture, by name — the universal picker (`prefix+/`) fires it
-        // and stamps the keycap over the dock's bounds (`paint_hint_targets`). The header's own
-        // disclosure caret keeps its `on_toggle` above: folding a section is the widget's control,
-        // not the row's gesture, and nothing forces a kind to declare one it does not have.
-        dock = dock.hint_target(
-            crate::chrome::named_press(workspace_row_press(ws_idx), emit_intent, hints).0,
-        );
         // Columns stacked with a clear gap between them (the gap + bar mark each
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
             cols = cols.child(column_view(
+                ctx,
                 c,
                 ws_idx,
                 &mount,
@@ -1181,12 +1257,13 @@ fn build_workspaces_container(
                 ws_state,
                 signals,
                 drag,
-                hints,
             ));
         }
         for float in &ws.floating_panes {
             cols = cols.child(pane_card(
+                ctx,
                 float,
+                None,
                 &mount,
                 programs,
                 theme,
@@ -1195,7 +1272,6 @@ fn build_workspaces_container(
                 ws_state,
                 signals,
                 drag,
-                hints,
             ));
         }
         dock = dock.child(cols);
@@ -1209,6 +1285,13 @@ fn build_workspaces_container(
         col = col.child(
             KeyHint::new(dock)
                 .hint(ws_hint)
+                // **What `prefix+/` does to this row** — the cursor lands on the workspace header
+                // and the dock keeps the keyboard, exactly as it does on a pane row.
+                .on_peek(crate::chrome::fires(
+                    &mount,
+                    row_peek(workspace_nav_key(ws_idx)),
+                    emit_intent,
+                ))
                 .color(theme.colors.warning)
                 // Top-right (like the pane cards' right-aligned keycap), nudged down
                 // onto the workspace title row so it lines up with the name.
@@ -1244,6 +1327,24 @@ fn build_workspaces_container(
                 scroll.set(s.offset_y);
             }
         })
+        // **The container's own menu — what a right-click on empty space finds.**
+        //
+        // No empty-space hit test, and no "did I miss a row?" branch anywhere: a right-click that
+        // lands between rows, below the last one, or on the region's padding simply finds no menu
+        // on the way down and bubbles out to this one. A menu on a row still wins, because bubbling
+        // stops at the nearest declaration.
+        .context_menu({
+            let catalog = ctx.action_catalog().expect("a render pass has the catalog");
+            let menu = crate::chrome::context_menu::menu_from_items(
+                "Workspaces",
+                "What you can do here",
+                MENU_CONTAINER,
+                container_items(),
+                catalog,
+                emit_intent,
+            );
+            heca_grid_ui::widgets::ContextMenu::new(MENU_CONTAINER).child(menu)
+        })
         .child(col)
 }
 
@@ -1261,6 +1362,14 @@ pub(crate) const MENU_PANE: &str = "workspaces.pane";
 pub(crate) const MENU_COLUMN: &str = "workspaces.column";
 /// A workspace row of this component.
 pub(crate) const MENU_WORKSPACE: &str = "workspaces.workspace";
+/// The container itself — the menu for empty space, found by bubbling when no row claims the click.
+pub(crate) const MENU_CONTAINER: &str = "workspaces.container";
+
+/// Menu items for the container's **empty space**: the verbs that are about the list rather than
+/// about any row in it. Facts-only, so it is unit-testable without a ctx, like its row siblings.
+pub(crate) fn container_items() -> Vec<DropdownItem> {
+    vec![item("create_workspace", "New workspace")]
+}
 
 /// The row this component's `key` names, or `None` for a key it did not write.
 ///
@@ -1271,29 +1380,6 @@ fn row_at_key(tree: &WorkspaceTree, key: &str) -> Option<WorkspaceRow> {
         .iter()
         .find(|row| selection_nav_key(row.selection()) == key)
         .cloned()
-}
-
-/// Provider for [`MENU_PANE`] — a pane row. Every entry acts on **that row's** pane, resolved from
-/// this component's own model: the pane's id from the row, its column from
-/// [`WorkspaceTree::locate_pane`]. A **floating** pane is in no column, so the entries that need one
-/// are absent rather than aimed at a guess.
-fn build_pane_row_menu(ctx: &ChromeCtx, key: &str) -> Vec<DropdownItem> {
-    let state = ctx.state();
-    // Read, then drop the borrow: `pane_custom_name` reaches back into the store.
-    let located = {
-        let tree = state.workspaces().tree();
-        match row_at_key(&tree, key) {
-            Some(WorkspaceRow::Pane { pane_id }) => Some((pane_id, tree.locate_pane(pane_id))),
-            Some(WorkspaceRow::FloatingPane { pane_id, .. }) => Some((pane_id, None)),
-            _ => None,
-        }
-    };
-    let Some((pane_id, column)) = located else {
-        return Vec::new();
-    };
-    // Read through the facade — the same selector a plugin would use.
-    let has_custom_name = state.pane_custom_name(pane_id).is_some();
-    pane_row_items(pane_id, column, has_custom_name)
 }
 
 /// Menu items for a **pane** row (facts-only, so unit-testable without a ctx). Every entry acts on
@@ -1333,17 +1419,6 @@ pub(crate) fn pane_row_items(
     items
 }
 
-/// Provider for [`MENU_COLUMN`] — a column row. "New pane" (in the column) +
-/// "New column" + "Delete column" (danger).
-fn build_column_row_menu(ctx: &ChromeCtx, key: &str) -> Vec<DropdownItem> {
-    let state = ctx.state();
-    let tree = state.workspaces().tree();
-    let Some(WorkspaceRow::Column { ws_idx, col_idx }) = row_at_key(&tree, key) else {
-        return Vec::new();
-    };
-    column_row_items(ws_idx, col_idx)
-}
-
 /// Menu items for a **column** row (facts-only, so unit-testable without a ctx).
 pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
     vec![
@@ -1370,23 +1445,6 @@ pub(crate) fn column_row_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownIte
         )
         .danger(true),
     ]
-}
-
-/// Provider for [`MENU_WORKSPACE`] — a workspace row. Whether the workspace has a name to clear is
-/// read off this component's own projection ([`WorkspaceEntry::custom_name`]), which is why the
-/// projection keeps it: the host used to resolve it from the session and put it on the target.
-fn build_workspace_row_menu(ctx: &ChromeCtx, key: &str) -> Vec<DropdownItem> {
-    let state = ctx.state();
-    let tree = state.workspaces().tree();
-    let Some(WorkspaceRow::Workspace { ws_idx }) = row_at_key(&tree, key) else {
-        return Vec::new();
-    };
-    let has_custom_name = tree
-        .workspaces
-        .iter()
-        .find(|ws| ws.ws_idx == ws_idx)
-        .is_some_and(|ws| ws.custom_name.is_some());
-    workspace_row_items(ws_idx, has_custom_name)
 }
 
 /// Menu items for a **workspace** row. `has_custom_name` gates the "Use default name"
@@ -1433,12 +1491,67 @@ mod tests {
     use crate::app_state::SidebarItemState;
     use crate::chrome::{
         ChromeEventBus, ChromeHost, ChromeIntentEmitter, ChromeSignals, DragItemRegistry,
-        HintTargetRegistry, SharedChromeState,
+        SharedChromeState,
     };
     use crate::providers::workspaces::{ColumnEntry, PaneEntry, WorkspaceTree, WorkspaceEntry};
     use heca_core::layout::PaneId;
     use heca_grid_ui::theme::Theme as GuiTheme;
     use std::rc::Rc;
+
+    /// **Every row kind declares its own `nav_key` on the widget.**
+    ///
+    /// `nav_key_at` — how a right-click finds out what it landed on — reads `Base::nav_key` and
+    /// nothing else. The workspace header pushed its key into the cursor-signal list and never told
+    /// the widget, so the hit-test found nothing at that row: right-clicking a pane or a column
+    /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
+    /// signals and declaring it on the widget are two different acts, and the projection tests
+    /// only ever checked the first.
+    #[test]
+    fn every_row_kind_carries_a_nav_key_the_hit_test_can_find() {
+        let tree = tree();
+        let state = store();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&state), &theme, &emit, &catalog);
+        let root = build_workspaces_container(
+            &ctx,
+            &tree,
+            &ProgramsConfig::default(),
+            &theme,
+            &emit,
+            &state.workspaces,
+            "left".to_string(),
+            heca_grid_ui::reactive::signal(0.0),
+            heca_grid_ui::reactive::signal(false),
+            &mut signals,
+            &mut drag,
+        );
+
+        fn keys(n: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
+            if let Some(k) = n.base().nav_key.clone() {
+                out.push(k);
+            }
+            for c in &n.base().children {
+                keys(c.as_ref(), out);
+            }
+        }
+        let mut declared = Vec::new();
+        keys(&root, &mut declared);
+
+        for expected in [
+            workspace_nav_key(0),
+            column_nav_key(0, 0),
+            pane_nav_key(PaneId(1)),
+        ] {
+            assert!(
+                declared.contains(&expected),
+                "no widget declares {expected:?}, so a right-click there finds nothing: {declared:?}",
+            );
+        }
+    }
 
     /// One workspace, one column, one (active) pane — the smallest tree that still
     /// exercises every level of the projection.
@@ -1703,6 +1816,95 @@ mod tests {
         );
     }
 
+    /// **An aimed peek lands on the row that was picked, not on the cursor** (F004/P084/T399).
+    ///
+    /// This is the half `prefix+/` needs: the picker knows which letter was chosen, so it names
+    /// that row by its nav key and the peek acts there. Without the argument the verb could only
+    /// ever mean "the row I am already on", which is why the picker used to be pointed at the
+    /// row's *click* instead — and that click leaves the sidebar.
+    #[test]
+    fn a_peek_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+
+        // The cursor starts on the workspace row; aim at the pane row instead.
+        let pane_id = match store.workspaces.tree().flat_items.iter().find_map(|row| match row {
+            WorkspaceRow::Pane { pane_id } => Some(*pane_id),
+            _ => None,
+        }) {
+            Some(id) => id,
+            None => panic!("the fixture has a pane row"),
+        };
+        let aimed = Intent::new(PEEK_SELECTED)
+            .arg("key", PropValue::Text(pane_nav_key(pane_id)));
+        p.perform(PEEK_SELECTED, &aimed, &mut cx);
+
+        assert!(
+            matches!(
+                store.workspaces.tree().current_item(),
+                Some(WorkspaceRow::Pane { pane_id: on }) if *on == pane_id,
+            ),
+            "the cursor moved onto the row that was named",
+        );
+        let fired: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        assert!(
+            fired.contains(&"focus_pane".to_string())
+                && !fired.contains(&"unfocus_dock".to_string()),
+            "…and it peeks it: the pane comes forward, the dock keeps the keyboard: {fired:?}",
+        );
+    }
+
+    /// **A peek from outside the dock takes the keyboard.** Landing the cursor on a row is only
+    /// worth anything if `j`/`k` then move it, so the verb asks for the dock — once, and only when
+    /// the dock does not already have it, because `focus_dock` aimed at the focused dock is the way
+    /// back out and would release instead. Antonio, driving `prefix+/` on 2026-08-10: *"it
+    /// activates the pane but the keyboard goes to the terminal"*.
+    #[test]
+    fn a_peek_from_outside_the_dock_asks_for_the_keyboard_and_from_inside_does_not() {
+        let p = WorkspacesContainerProvider::new();
+
+        // Nothing holds chrome focus (the keyboard is in a pane).
+        let away = store();
+        *away.workspaces.tree_mut() = tree();
+        away.workspaces.tree_mut().sync_flat_items();
+        let mut cx = ProviderCx::new("workspaces", away.clone());
+        p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
+        let asked: Vec<crate::chrome::Intent> = cx.drain();
+        let focus_dock = asked.iter().find(|i| i.action == "focus_dock");
+        assert_eq!(
+            focus_dock.map(|i| i.args.get("dock").cloned()),
+            Some(Some(PropValue::Text("workspaces".to_string()))),
+            "it asks for its own mount: {asked:?}",
+        );
+
+        // The dock already holds it: asking again would toggle it off.
+        let held = store_with_tree("workspaces");
+        let mut cx = ProviderCx::new("workspaces", held.clone());
+        p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
+        let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        assert!(
+            !asked.contains(&"focus_dock".to_string()),
+            "focus_dock aimed at the focused dock releases it: {asked:?}",
+        );
+    }
+
+    /// A key naming a row that is not there leaves the cursor alone rather than failing — a tree
+    /// rebuilt under the letters is not an error.
+    #[test]
+    fn an_aimed_peek_with_a_stale_key_leaves_the_cursor_where_it_was() {
+        let store = store_with_tree("workspaces");
+        let p = WorkspacesContainerProvider::new();
+        let mut cx = ProviderCx::new("workspaces", store.clone());
+        let before = store.workspaces.tree().cursor;
+
+        let stale = Intent::new(PEEK_SELECTED)
+            .arg("key", PropValue::Text("pane:9999".to_string()));
+        p.perform(PEEK_SELECTED, &stale, &mut cx);
+
+        assert_eq!(store.workspaces.tree().cursor, before, "no guess, no move");
+    }
+
     // ── This component's row menus (F003/P086/T365) ──
 
     /// A facade over a store — what a menu builder and `context_path` receive.
@@ -1710,74 +1912,17 @@ mod tests {
         ChromeCtx::new(crate::host::App::new(store))
     }
 
-    /// **The component names its own row kinds.** The host produces a container + a key and gets a
-    /// menu path back; it never learns that panes, columns and workspaces exist. A floating pane is
-    /// a pane row of this component, so it gets this component's pane menu.
-    #[test]
-    fn every_row_kind_names_its_own_menu() {
-        let store = store();
-        *store.workspaces.tree_mut() = tree_with_a_floating_pane();
-        let p = WorkspacesContainerProvider::new();
-        let ctx = ctx_over(&store);
-
-        for (key, expected) in [
-            (pane_nav_key(PaneId(1)), MENU_PANE),
-            (pane_nav_key(PaneId(9)), MENU_PANE),
-            (column_nav_key(0, 0), MENU_COLUMN),
-            (workspace_nav_key(0), MENU_WORKSPACE),
-        ] {
-            assert_eq!(p.context_path(&key, &ctx).as_deref(), Some(expected), "{key}");
-        }
-        assert_eq!(
-            p.context_path("docker:container:abc", &ctx),
-            None,
-            "a key this component did not write names no menu of its own — and no menu opens, \
-             rather than a wrong one",
-        );
-    }
-
-    /// **A builder answers for its own placement only.** Both seatings are mounted, so both are
-    /// asked for every menu; without the guard every entry appeared twice in every row menu.
-    #[test]
-    fn a_placements_menu_ignores_another_placements_row() {
-        let store = store();
-        *store.workspaces.tree_mut() = tree_with_a_floating_pane();
-        let left = WorkspacesContainerProvider::new();
-        let ctx = ctx_over(&store);
-        let menu = left
-            .context_menus(&ctx)
-            .into_iter()
-            .find(|c| c.context_path == MENU_PANE)
-            .expect("the component declares a pane-row menu");
-
-        let mine = ContextTarget::Row {
-            container: "workspaces".into(),
-            key: pane_nav_key(PaneId(1)),
-        };
-        let the_other_seatings = ContextTarget::Row {
-            container: "workspaces.right".into(),
-            key: pane_nav_key(PaneId(1)),
-        };
-        assert!(!(menu.build)(&ctx, &mine).is_empty());
-        assert!((menu.build)(&ctx, &the_other_seatings).is_empty());
-        // …and a content-pane target is not this component's business either.
-        assert!((menu.build)(
-            &ctx,
-            &ContextTarget::Pane { pane_id: PaneId(1), hyperlink: None },
-        )
-        .is_empty());
-    }
-
-    /// The facts the host used to resolve and hand over are read from this component's own model:
-    /// the pane's column (absent for a floating pane, which is in none) and whether the workspace
-    /// has a name to clear.
+    /// **A row's menu is built from this component's own model**, at the row: the pane's column
+    /// (absent for a floating pane, which is in none) and whether the workspace has a name to
+    /// clear. These are the facts the host used to resolve and hand over; now the row reads them
+    /// where it is drawn, which is why there is no key to map and no path to declare.
     #[test]
     fn a_row_menu_reads_the_components_own_model() {
         let store = store();
         *store.workspaces.tree_mut() = tree_with_a_floating_pane();
-        let ctx = ctx_over(&store);
+        let tree = store.workspaces.tree();
 
-        let tiled = build_pane_row_menu(&ctx, &pane_nav_key(PaneId(1)));
+        let tiled = pane_row_items(PaneId(1), tree.locate_pane(PaneId(1)), false);
         let new_pane = tiled
             .iter()
             .find(|i| i.id == "add_pane_to_column")
@@ -1785,7 +1930,8 @@ mod tests {
         assert_eq!(new_pane.intent.args.get("ws_idx"), Some(&PropValue::Int(0)));
         assert_eq!(new_pane.intent.args.get("col_idx"), Some(&PropValue::Int(0)));
 
-        let floating = build_pane_row_menu(&ctx, &pane_nav_key(PaneId(9)));
+        // A floating pane is in no column, so `pane_card` passes `None`.
+        let floating = pane_row_items(PaneId(9), None, false);
         assert!(
             !floating.iter().any(|i| i.id == "add_pane_to_column"),
             "a floating pane is in no column, so the entry that needs one is absent rather than \
@@ -1794,7 +1940,8 @@ mod tests {
         );
         assert!(floating.iter().any(|i| i.id == "close"), "it is still closable");
 
-        let ws = build_workspace_row_menu(&ctx, &workspace_nav_key(0));
+        let renamed = tree.workspaces.iter().find(|w| w.ws_idx == 0).expect("workspace 0");
+        let ws = workspace_row_items(0, renamed.custom_name.is_some());
         assert!(
             ws.iter().any(|i| i.id == "reset_workspace_name"),
             "the workspace was renamed, so there is a name to clear",
@@ -1894,13 +2041,13 @@ mod tests {
         // The model is the component's own, read off its state — not handed in by the host.
         *store.workspaces.tree_mut() = tree();
 
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
         let c = container(&p, &ctx);
 
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
-        let mut hints = HintTargetRegistry::default();
-        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag, &mut hints);
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
         let body = (c.build)(&ctx, &mut bx);
 
         assert_eq!(
@@ -1910,55 +2057,128 @@ mod tests {
         );
         // Drag ids: the workspace (drop target), its column, its pane.
         assert_eq!(drag.items().len(), 3);
-        // Hint targets: the pane card (focus pane) and the workspace dock (focus
-        // workspace). A column has no target of its own — it only carries a pick-letter
-        // signal, stamped when it is a *destination* for a move/swap.
-        assert_eq!(hints.checkpoint(), 2);
+        // Pick targets: the pane card and the workspace dock each declared what `prefix+/` does to
+        // it. A column declares none — it only carries a pick-letter signal, stamped when it is a
+        // *destination* for a move/swap.
+        assert_eq!(heca_grid_ui::collect_peeks(body.as_ref()).len(), 2);
         // The active pane's card bound its `active` signal for per-frame updates.
         assert_eq!(signals.pane_active.len(), 1);
     }
 
-    /// **A row's click is a NAME** (F003/P086/T365). Every gesture the built body registers is a
-    /// view intent — an action id plus arguments — so the click, the `prefix+/` pick, a menu entry
-    /// and RPC all reach the same thing. It used to be a closure emitting a host-side variant, which
-    /// only the click could ever run.
+    /// **A row's gesture is a NAME** (F003/P086/T365) — an action id plus arguments, so a menu
+    /// entry, a keybinding and RPC all reach the same thing a click does. It used to be a closure
+    /// emitting a host-side variant, which only the click could ever run.
+    ///
+    /// **And a pick is not a click** (F004/P084/T399): both rows aim `prefix+/` at this component's
+    /// own `peek_selected`, carrying the picked row's nav key — *look at that one*, staying in the
+    /// dock — where a click on the pane row means *go there and leave*.
+    ///
+    /// **Every gesture also names the seating it was declared in**, so nothing has to resolve the
+    /// call back to an instance: see
+    /// `a_gesture_names_the_seating_it_was_built_in_so_two_placements_answer_for_themselves`.
     #[test]
-    fn a_rows_gesture_is_a_named_intent_not_a_closure() {
+    fn a_rows_gesture_is_a_named_intent_and_a_pick_is_its_own_gesture() {
         use crate::app::interaction::InteractionIntent;
         let p = WorkspacesContainerProvider::new();
         let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
+        let emit: ChromeIntentEmitter = {
+            let fired = fired.clone();
+            Rc::new(move |intent| fired.borrow_mut().push(intent))
+        };
         let store = store();
         *store.workspaces.tree_mut() = tree();
-        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit);
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
         let c = container(&p, &ctx);
 
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
-        let mut hints = HintTargetRegistry::default();
-        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag, &mut hints);
-        let _body = (c.build)(&ctx, &mut bx);
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
 
-        let declared: Vec<(String, Option<PropValue>)> = (0..hints.checkpoint())
-            .filter_map(|i| hints.get(heca_grid_ui::HintTargetId::new(i)))
+        // Every pick declaration in the built body, run in document order.
+        for (path, _) in heca_grid_ui::collect_peeks(body.as_ref()) {
+            assert!(heca_grid_ui::fire_peek(body.as_ref(), &path));
+        }
+        let declared: Vec<(String, Option<PropValue>)> = fired
+            .borrow()
+            .iter()
             .map(|intent| match intent {
-                InteractionIntent::View(vi) => (
-                    vi.action.clone(),
-                    vi.args.values().next().cloned(),
-                ),
+                InteractionIntent::View(vi) => {
+                    (vi.action.clone(), vi.args.get("key").cloned())
+                }
                 other => panic!("a row's gesture must be a named intent, got {other:?}"),
             })
             .collect();
         assert_eq!(
             declared,
             vec![
-                // Registration order: the workspace row, then the pane rows inside it.
-                ("focus_workspace".to_string(), Some(PropValue::Int(0))),
-                ("focus_pane".to_string(), Some(PropValue::Int(1))),
+                // Document order: the workspace row, then the pane rows inside it.
+                (
+                    "workspaces.peek_selected".to_string(),
+                    Some(PropValue::Text("ws:0".to_string())),
+                ),
+                (
+                    "workspaces.peek_selected".to_string(),
+                    Some(PropValue::Text("pane:1".to_string())),
+                ),
             ],
-            "the pane row and the workspace row each declared their own click, by name, \
-             carrying that row's own target",
+            "each row aims the picker at its own row, by nav key",
         );
+    }
+
+    /// **A gesture names the seating it was built in** (F004/P084/T399), so the same container
+    /// mounted twice has two rows that each answer for themselves — the way two `<div>`s on a page
+    /// do, rather than one being resolved back to "whichever instance has focus".
+    ///
+    /// Without it the host guessed the owner (`owning_mount`: the focused seating, else the last
+    /// focused, else the first that declares the name), so a right-sidebar row's letter was
+    /// performed by the left-sidebar copy — with the wrong dock taking the keyboard.
+    #[test]
+    fn a_gesture_names_the_seating_it_was_built_in_so_two_placements_answer_for_themselves() {
+        use crate::app::interaction::InteractionIntent;
+        use crate::providers::SEAT_ARG;
+
+        let seats = |mount: &str| {
+            let p = WorkspacesContainerProvider::new();
+            let theme = GuiTheme::default();
+            let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
+            let emit: ChromeIntentEmitter = {
+                let fired = fired.clone();
+                Rc::new(move |intent| fired.borrow_mut().push(intent))
+            };
+            let store = store();
+            *store.workspaces.tree_mut() = tree();
+            let catalog = crate::actions::ActionCatalog::with_builtins();
+            let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+            let c = container(&p, &ctx);
+            let mut signals = ChromeSignals::default();
+            let mut drag = DragItemRegistry::default();
+            let mut bx = BuildCx::new(mount, &mut signals, &mut drag);
+            let body = (c.build)(&ctx, &mut bx);
+            for (path, _) in heca_grid_ui::collect_peeks(body.as_ref()) {
+                assert!(heca_grid_ui::fire_peek(body.as_ref(), &path));
+            }
+            let seats: Vec<PropValue> = fired
+                .borrow()
+                .iter()
+                .map(|intent| match intent {
+                    InteractionIntent::View(vi) => vi.args.get(SEAT_ARG).cloned().unwrap_or_else(
+                        || panic!("a gesture must name its seating, got {:?}", vi.args),
+                    ),
+                    other => panic!("a row's gesture must be a named intent, got {other:?}"),
+                })
+                .collect();
+            assert!(!seats.is_empty(), "the body declared at least one gesture");
+            seats
+        };
+
+        for (mount, expected) in [("dock.left", "dock.left"), ("dock.right", "dock.right")] {
+            for seat in seats(mount) {
+                assert_eq!(seat, PropValue::Text(expected.to_string()));
+            }
+        }
     }
 
     #[test]
@@ -1972,12 +2192,11 @@ mod tests {
 
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
-        let mut hints = HintTargetRegistry::default();
-        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag, &mut hints);
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
         let body = (c.build)(&ctx, &mut bx);
 
         assert!(body.base().children.is_empty());
         assert!(drag.items().is_empty());
-        assert_eq!(hints.checkpoint(), 0);
+        assert!(heca_grid_ui::collect_peeks(body.as_ref()).is_empty());
     }
 }

@@ -10,7 +10,7 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Host API per actions dispatch, overlay/modal/dropdown e region container management.",
-  "description": "",
+  "description": "The host API a provider or plugin reaches for: action dispatch, overlays/modals/dropdowns, and region/container management.\n\n═══ THE ONE RULE THIS PHASE IS JUDGED BY ═══\n\n`AGENTS.md` ⭐⭐ RULE ZERO: **a capability is one builder on the widget, or one named action.**\nEverything this phase exposes is, by definition, host API — so it is exactly where the wrong shape\ngets built. The test, before adding anything:\n\n> Write the line a **plugin author** would type. If it needs a registry, an id, a `pub(crate)` type,\n> or a rule they must remember, **the API is the bug** — not their code.\n\nTwo shapes already tried and reverted, both of which would naturally have landed here:\n\n- **A registry the caller pre-registers with, handing back an opaque id.** That was the KeyHint pick\n  target: `hints.register(intent)` + `.hint_target(id)`, with the registry app-side and the intent a\n  `pub(crate)` enum — so a plugin reached a *different*, poorer seam and its rows were refused by\n  `ActionPolicy::ContainerFocused`. Deleted 2026-08-11 (F004/P084/T399): the widget declares the\n  behaviour and the framework collects it out of the laid-out tree.\n- **A host-private composite for \"…and do X first\"** (`FocusPaneThenAction`,\n  `FocusContainerThenAction`). A plugin cannot construct a `pub(crate)` variant. If the behaviour is\n  needed it gets a **name** a plugin can name, the way `focus_pane` and `unfocus_dock` do.\n\n═══ WHAT ALREADY EXISTS — build on it, do not reinvent ═══\n\n- **Actions**: `ActionRegistry` + `ActionCatalog` with runtime registration\n  (`register_dynamic(registry, catalog, meta, handler)`); `ActionMeta` carries label, description,\n  category, icon, **declared `args`**, `policy` and an optional `confirm`, so a declared action is\n  argument-checked, policy-routed and confirm-gated identically to a built-in (F003/P039).\n- **Overlays**: host-owned. A caller *requests* one (`ModalSpec` → `open_modal` → `ModalResult`),\n  never mounts it; the body is a `ViewNode` realized through the one bridge, and named fields come\n  back as form data (F003/P068, F003/P082).\n- **Regions/containers**: `ChromeHost`, `Contribution`, `BuildCx` (drag ids and per-frame signals),\n  and per-mount state (`container_cursor`, `container_scroll`, `container_keyboard_target`).\n- **A gesture names its seating** (F004/P084/T399): a widget built inside a mounted container\n  carries that mount on the intent it emits, so a container mounted twice has rows that each answer\n  for themselves. `owning_mount` resolves only calls with no element behind them — a keybinding, a\n  palette entry, RPC without `--dock`. **Any new host API that acts \"on the current container\" must\n  take the seating, not guess it.**\n\nDesign record: `docs/chrome-and-ui.md` §2.7 (overlays), §3.1–3.5 (the formal contracts), Part I §0\n(the intent) · F003's description.",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -95,9 +95,10 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.504Z",
+  "updatedAt": "2026-08-11T06:58:02.033Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

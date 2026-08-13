@@ -2,6 +2,7 @@ mod actions;
 mod app;
 mod app_state;
 mod chrome;
+mod components;
 mod handlers;
 mod host;
 mod input;
@@ -201,6 +202,12 @@ impl HecaApp {
             state.command_palette_size = self.app_config.config.settings.command_palette_size;
             state.search_case = self.app_config.config.settings.search_case;
             state.search_history = self.app_config.config.settings.search_history;
+            // **The layout's own options too.** They were read once at startup and never again, so
+            // editing `overview_zoom`, `overview_gap`, `overview_zoom_from`, the pane gap or
+            // `center_focused_column` and pressing reload appeared to do nothing — the settings
+            // were live in the file and dead in the app (Antonio, 2026-08-11). One mapping,
+            // `startup::layout_options_from`, shared by both paths so they cannot drift.
+            state.session.options = crate::app::startup::layout_options_from(&self.app_config);
             // Font config (families + sizes) is decoupled from the color theme;
             // reload it so `prefix+Shift+r` picks up `[font]` changes live.
             state.font_config = self.app_config.config.font.clone();

@@ -220,6 +220,16 @@ pub enum WmAction {
         b_ws: usize,
         b_col: usize,
     },
+    /// Move the boundary the focused target owns, by `amount` **along the axis**: `+x` is right,
+    /// `+y` is **down**. It is a *direction*, not a size — `pane_height_increase` /
+    /// `pane_height_decrease` are the size verbs.
+    ///
+    /// - `column`/`x` — the active column's own right-hand edge, so positive widens it.
+    /// - `pane`/`y` — the boundary **below** the active pane, or the one **above** it when it is
+    ///   last. For the last pane, moving that boundary down therefore **shrinks** it: the divider
+    ///   goes the way the key says, whichever pane is active (F004/P084/T414).
+    ///
+    /// `amount` is logical px for a pane and thousandths of the working width for a column.
     Resize {
         target: ResizeTarget,
         axis: ResizeAxis,
@@ -358,7 +368,44 @@ pub enum WmAction {
     ToggleCurrentColumnCollapsed,
 
     // ── System ──
-    CommandPalette,
+    /// Show / hide / toggle an **addressable layer** by name (F003/P082/T327).
+    ///
+    /// `name` is `<owner>.<short>` — `heca.expose`, `docker.expose` — the stable handle a layer is
+    /// registered under. A `LayerId` could not serve: it is a runtime counter, so no keybinding,
+    /// config line or RPC call could ever know it.
+    ///
+    /// `dock` names **which seating** when a component is placed twice, and is optional for the
+    /// same reason `focus_dock`'s is: a keybinding cannot name a placement, so bare resolves the
+    /// way `owning_mount` does — the focused seating, else the last focused of that kind. Both
+    /// arguments optional keeps the action offerable in the palette, which lists only what it can
+    /// run with nothing supplied.
+    ShowLayer {
+        name: Option<String>,
+        dock: Option<String>,
+    },
+    HideLayer {
+        name: Option<String>,
+        dock: Option<String>,
+    },
+    /// Show it if hidden, hide it if shown — one key for a surface you flick in and out of.
+    ToggleLayer {
+        name: Option<String>,
+        dock: Option<String>,
+    },
+
+    /// Open the command palette (F004/P092/T393).
+    ///
+    /// Both arguments are **optional**, and bare is exactly what it always was: the actions list,
+    /// empty query. A *required* argument would have taken the action out of the palette's own
+    /// listing, which offers only what it can run with no arguments.
+    ///
+    /// `mode` and `query` are not two mechanisms — they **compose into one prefilled query**.
+    /// `mode=pane query=nvim` opens the palette with `"@nvim"` typed, because the sigil is the mode
+    /// selector; the widget therefore needs no "open in a mode" API at all.
+    CommandPalette {
+        mode: Option<String>,
+        query: Option<String>,
+    },
 
     // ── External commands ──
     SpawnCommand {
@@ -552,9 +599,14 @@ pub enum WmAction {
         overlay: crate::chrome::OverlayId,
         action: String,
     },
-    /// Dismiss overlay `overlay`, resolving its result to `ModalResult::Dismissed` and popping it.
+    /// Dismiss an overlay, resolving its result to `ModalResult::Dismissed` and popping it.
+    ///
+    /// `overlay` is **optional so the action can be bound to a key**: an `OverlayId` is a runtime
+    /// counter no config line could name. Bare, it closes the front-most visible modal layer —
+    /// which is what "close the overlay" means to someone pressing Escape — and does nothing when
+    /// none is up, so the key is harmless in normal use.
     CloseOverlay {
-        overlay: crate::chrome::OverlayId,
+        overlay: Option<crate::chrome::OverlayId>,
     },
 
     // ── Chrome region show/hide (sidebar-fu-6) ──
@@ -700,7 +752,11 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_column" => Some(WmAction::RenameColumn),
         "reset_pane_name" => Some(WmAction::ResetPaneName),
         "reset_workspace_name" => Some(WmAction::ResetWorkspaceName),
-        "command_palette" => Some(WmAction::CommandPalette),
+        "command_palette" => Some(WmAction::CommandPalette { mode: None, query: None }),
+        "close_overlay" => Some(WmAction::CloseOverlay { overlay: None }),
+        "show_layer" => Some(WmAction::ShowLayer { name: None, dock: None }),
+        "hide_layer" => Some(WmAction::HideLayer { name: None, dock: None }),
+        "toggle_layer" => Some(WmAction::ToggleLayer { name: None, dock: None }),
         "reload_config" => Some(WmAction::ReloadConfig),
         "clear_search_history" => Some(WmAction::ClearSearchHistory { scope: None }),
         "clear_search_ranking" => Some(WmAction::ClearSearchRanking { scope: None }),
@@ -986,6 +1042,25 @@ pub fn build_action(
             dock: get_string(args, "dock"),
         }),
 
+        "show_layer" => Some(WmAction::ShowLayer {
+            name: get_string(args, "name"),
+            dock: get_string(args, "dock"),
+        }),
+        "hide_layer" => Some(WmAction::HideLayer {
+            name: get_string(args, "name"),
+            dock: get_string(args, "dock"),
+        }),
+        "toggle_layer" => Some(WmAction::ToggleLayer {
+            name: get_string(args, "name"),
+            dock: get_string(args, "dock"),
+        }),
+
+        // Both OPTIONAL, and they compose into one prefilled query — see the variant.
+        "command_palette" => Some(WmAction::CommandPalette {
+            mode: get_string(args, "mode"),
+            query: get_string(args, "query"),
+        }),
+
         "clear_search_history" => Some(WmAction::ClearSearchHistory {
             scope: get_string(args, "scope"),
         }),
@@ -1090,7 +1165,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         // Sidebars
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
-        WmAction::CommandPalette => 5,
+        WmAction::CommandPalette { .. } => 5,
+        WmAction::ShowLayer { .. } | WmAction::HideLayer { .. } | WmAction::ToggleLayer { .. } => 5,
         // Selection (host capability). Treated as pane-management-class
         // actions so they share priority with close/rename-style actions.
         WmAction::EnterSelectionMode
@@ -1245,7 +1321,7 @@ mod tests {
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
         assert_eq!(
             action_from_name("command_palette"),
-            Some(WmAction::CommandPalette)
+            Some(WmAction::CommandPalette { mode: None, query: None })
         );
         // Font zoom — six names map to two variants with the right step + None pane.
         assert_eq!(
@@ -1368,7 +1444,7 @@ mod tests {
         assert!(action_priority(&WmAction::ResizeIncrease) > action_priority(&WmAction::ClosePane));
         // CommandPalette should have lowest priority
         assert!(
-            action_priority(&WmAction::CommandPalette) > action_priority(&WmAction::SidebarLeft)
+            action_priority(&WmAction::CommandPalette { mode: None, query: None }) > action_priority(&WmAction::SidebarLeft)
         );
     }
 
@@ -1434,7 +1510,7 @@ mod tests {
             WmAction::SidebarLeft,
             WmAction::SidebarRight,
             // System
-            WmAction::CommandPalette,
+            WmAction::CommandPalette { mode: None, query: None },
             // Scrollback
             WmAction::ScrollbackPageUp,
             WmAction::ScrollbackPageDown,

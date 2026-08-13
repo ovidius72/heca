@@ -9,11 +9,10 @@ use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{signal, Signal, SignalGet};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::Length;
 use crate::widgets::badge::BadgeVariant;
-use heca_core::layout::Point;
 
 /// Horizontal padding inside the pill.
 const PAD_H: f32 = 9.0;
@@ -36,7 +35,6 @@ pub struct BadgeButton {
     label: Signal<String>,
     seen_label: String,
     variant: BadgeVariant,
-    hovered: Signal<bool>,
     flash: Flash,
     on_click: Option<Box<dyn Fn()>>,
 }
@@ -47,13 +45,13 @@ impl BadgeButton {
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
+        base.one_click_target = true; // and one click target (Base::one_click_target)
         base.style.visual.font_scale = BADGE_FONT_SCALE;
         let mut button = Self {
             base,
             label: signal(label.into()),
             seen_label: String::new(),
             variant: BadgeVariant::Accent,
-            hovered: signal(false),
             flash: Flash::new(),
             on_click: None,
         };
@@ -103,12 +101,9 @@ impl BadgeButton {
 
     /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
-        self.hovered
+        self.base.pointer.hovered
     }
 
-    fn contains(&self, p: Point) -> bool {
-        self.base.bounds.contains(p)
-    }
 }
 
 impl Component for BadgeButton {
@@ -139,7 +134,7 @@ impl Component for BadgeButton {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let hovered = self.hovered.get_untracked() || self.base.focused.get_untracked();
+        let hovered = self.base.hovered() || self.base.focused.get_untracked();
         let pill = self.base.bounds;
         let radius = (cx.theme().colors.border_radius * 2.0).min((pill.size.h / 2.0) as f32);
         let (muted, foreground, danger) = {
@@ -223,24 +218,34 @@ impl Component for BadgeButton {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.contains(*pos) => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.flash.trigger();
                 if let Some(f) = &self.on_click {
                     f();
                 }
                 Handled::Yes
             }
-            Event::Key {
-                key: GridKey::Enter | GridKey::Space,
-                pressed: true,
-            } => {
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.base.visible.get_untracked() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.flash.trigger();
                 if let Some(f) = &self.on_click {
                     f();
@@ -266,6 +271,8 @@ impl LayoutExt for BadgeButton {}
 
 #[cfg(test)]
 mod tests {
+    use crate::event::PointerButton;
+    use crate::reactive::SignalUpdate;
     use super::*;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -279,10 +286,16 @@ mod tests {
             heca_core::layout::Point::new(0.0, 0.0),
             heca_core::layout::Size::new(80.0, 24.0),
         );
+        // A click is a press **and** a release on the same widget — pressing and dragging off
+        // cancels, exactly as it does everywhere else on the machine.
+        let pos = heca_core::layout::Point::new(10.0, 10.0);
         assert_eq!(
-            crate::component::dispatch(&mut b, &Event::PointerPressed {
-                pos: heca_core::layout::Point::new(10.0, 10.0),
-            }),
+            crate::component::dispatch(&mut b, &Event::pointer_pressed(pos, PointerButton::Left)),
+            Handled::Yes
+        );
+        assert_eq!(hit.get(), 0, "the press alone has not clicked anything yet");
+        assert_eq!(
+            crate::component::dispatch(&mut b, &Event::pointer_released(pos, PointerButton::Left)),
             Handled::Yes
         );
         assert_eq!(hit.get(), 1);

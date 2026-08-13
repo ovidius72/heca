@@ -39,10 +39,39 @@ a tree and it works, with **no host wiring**. A UI library also ships composed o
 `Select`, `ContextMenu`, `CommandPalette` — so the test is capability, not size:
 **if it can be built inside grid-ui, it belongs in grid-ui.**
 
-**Component** — `heca/src/components/`. A composition of widgets that **also binds an app concept**:
-an `Intent`, an action **name**, a drag id, a hint target id, a chrome signal, a `nav_key`. That
-binding is the *only* thing that justifies leaving the library. A composition that binds none of them
-is a widget in the wrong crate — move it down, don't keep it up here.
+**Component** — a composition of widgets that **also binds an app concept**: an `Intent`, an action
+**name**, a drag id, a hint target id, a chrome signal, a `nav_key`. That binding is the *only* thing
+that justifies leaving the library. A composition that binds none of them is a widget in the wrong
+crate — move it down, don't keep it up here.
+
+**Where a component lives — beside the surface that uses it** (Antonio, 2026-08-12):
+
+```
+heca/src/chrome/<surface>/          ← the surface's own components, one file each
+├── mod.rs                            host wiring (the part that needs `AppState`)
+├── model.rs                          the surface's data, reduced from the session
+└── <thing>_card.rs, <thing>_row.rs   the components
+```
+
+It moves up to **`heca/src/components/`** (F011, `P087/T373`) the day a **second** surface needs it —
+DRY applied when the duplication is real, not when it is predicted. Until something is shared, a
+global folder only puts distance between a component and its only caller.
+
+**How to actually build one is § 0b-bis below** — the recipe, with the exposé worked through it.
+
+**A surface is components, never one function that draws a picture.** Each takes properties, events
+and callbacks and encapsulates its own logic — React's shape, Flutter/SwiftUI's spelling. **Never
+`&AppState`**: it needs a window, so a component that takes it is a component nobody can test.
+
+⚠️ **Sizes are SHARES, never computed pixels.** The moment a composition multiplies model numbers by
+a scale of its own it has taken over the layout engine's job — and then it owns every term: the
+window, the overlay margin, the panel padding, the gaps, the row count, each row's height, the scroll
+centring. Miss one and everything is wrong by exactly that term. The exposé did this and took **seven
+attempts, six of them wrong, each missing a different term** — and since nothing was a component,
+nothing had a headless test, so the only way to see any of it was to photograph the running app.
+Express it as `Length::Pct` of a shared denominator and `grow` weights, and taffy answers it exactly
+at every window size. (`grow` alone always fills its container — that is what flex-grow *means*, so
+"a share of the widest sibling" is a percentage, not a grow weight.)
 
 #### How composition works in each place — this is the part that gets guessed wrong
 
@@ -75,15 +104,158 @@ is a widget in the wrong crate — move it down, don't keep it up here.
 
 #### How to use one
 
-Import it from `crate::components`. **Never re-compose the same shape inline** in `chrome/`, a
-provider, the sidebar or a plugin — that is how one row shape became unreachable outside the file
-that drew it. Need a variation? Add a builder to the component. Copying it is the bug this rule
-exists to stop.
+Import it from its surface's module (`crate::chrome::<surface>`), or from `crate::components` once it
+is shared. **Never re-compose the same shape inline** in `chrome/`, a provider, the sidebar or a
+plugin — that is how one row shape became unreachable outside the file that drew it. Need a
+variation? Add a builder to the component. Copying it is the bug this rule exists to stop.
+
+**The second caller is the move.** When a shape is wanted by a surface that does not own it, that is
+the moment it goes to `heca/src/components/` — not a moment earlier, and never by copying it.
+
+### 0b-bis. HOW TO STRUCTURE AND BUILD A COMPONENT — the recipe, with a worked example
+
+§ 0b says *what* a component is and *where* it lives. This says **how to build one**. It is a
+recipe: follow it in order. The worked example throughout is the **exposé**
+(`heca/src/chrome/expose/`, F003/P082/T420) — the first surface built this way and the one to read
+if a rule below is unclear.
+
+**A surface is a folder, not a function.** One file per component, smallest first, exactly the way a
+React app splits a screen:
+
+```text
+heca/src/chrome/<surface>/
+├── mod.rs            host wiring — the ONLY file that may touch AppState
+├── model.rs          the session reduced to plain data
+├── <leaf>_card.rs    the smallest piece            (expose: pane_card.rs)
+├── <group>_card.rs   … composed of the leaf        (expose: column_card.rs)
+├── <row>.rs          … composed of the group       (expose: workspace_row.rs)
+├── <surface>_grid.rs … composed of the rows        (expose: expose_grid.rs)
+└── testing.rs        #[cfg(test)] shared fixtures
+```
+
+#### 1. Split by what each piece OWNS — never by size
+
+Give every question exactly one owner, and write the owner down. The exposé's split:
+
+| component | owns | owns **nothing** about |
+|---|---|---|
+| `PaneCard` | what a card *is*: name, cursor/focus state, delete letters, activate | where it goes, how big it is |
+| `ColumnCard` | the panes' **vertical** shares | its own width |
+| `WorkspaceRow` | the columns' **horizontal** shares, the floats' rects | its own height |
+| `ExposeGrid` | the rows' shares of the map, the cursor | anything inside a row |
+
+A wrong answer is then findable in one file. The failure this replaces is a 400-line `map()` that
+owned *every* term at once — and was wrong seven times, each time about a different one.
+
+#### 2. Properties are struct fields; the constructor is a struct literal
+
+```rust
+PaneCard { pane_id, name, active, ws_idx, col_idx, next, theme, cb }.build()
+```
+
+Flutter/SwiftUI named parameters, in Rust's spelling. **Not** a function of many positional
+arguments — `providers/workspaces/pane_card()` is the counter-example at eleven of them, where no
+call site can be read without counting.
+
+#### 3. The seams travel as ONE group
+
+Every app concept the surface binds — an `Intent`, an action **name**, a dismissal — goes in a
+single struct built once, and every component takes `&` it:
+
+```rust
+pub(crate) struct ExposeCallbacks { choose, delete, cursor_to, dismiss, keys }
+pub(super) fn callbacks(emit: ChromeIntentEmitter, keys: …) -> ExposeCallbacks
+```
+
+That function is what a **test** calls to get the app's edges and nothing else, which is why the
+seams must not be threaded one argument at a time.
+
+#### 4. Never `&AppState`, anywhere but `mod.rs`
+
+It needs a window, so a component that takes it is a component nobody can test. `mod.rs` gathers
+(`register`) and hands plain data down; everything below it is testable headless. This is the single
+rule that decides whether the surface can be checked without the maintainer photographing the app.
+
+#### 5. Return the concrete widget when the parent still has to size it
+
+```rust
+impl PaneCard  { fn build(self) -> (Row, GridCell) }      // the parent gives it a share or a rect
+impl ColumnCard{ fn build(self) -> (Flex, Vec<GridCell>) }
+```
+
+`Box<dyn Component>` has no builders left, so a boxed return forces the child to size itself — which
+is how a component starts computing geometry. Box only at the top, where nothing sizes it further.
+
+A component that produces **navigable cells** hands them back beside its widget (`Vec<GridCell>`)
+rather than reaching into a registry — see ⭐⭐ RULE ZERO.
+
+#### 6. Sizes are shares; the PARENT sizes the CHILD
+
+`Length::Pct` of one shared denominator, or a `grow` weight. Never a model number times a scale of
+your own (§ 0b). Two traps, both real:
+
+- **`grow` alone always fills.** That is what flex-grow *means*: it distributes free space. "A share
+  of the widest sibling" is a **percentage**, against one denominator chosen at the top.
+- **A gap is added OUTSIDE a percentage.** Siblings whose widths are percentages summing to 100%
+  overflow by exactly their gaps, so air between them belongs in their **padding** (inside the
+  border box). Between `grow` siblings a gap is exact, because grow divides what is left after it.
+- The share idiom is `grow(w) + height/width(Px(0.0)) + shrink(1.0)` — CSS `flex: 1 1 0`. Write it
+  once, in `mod.rs`, and let every component call it (`expose::share_v`).
+
+#### 7. One headless test per component — plus the box test
+
+Per component: it renders what it was given, and it answers what it binds. For anything sized by
+shares, add the test the shares exist for: **lay it out in a box and assert it never exceeds it**,
+at several sizes and child counts. In the exposé that is
+`the_whole_map_never_exceeds_the_box_it_is_given` — the one assertion that would have caught all
+seven failures. Fixtures live in `testing.rs` so each test reads as its assertion, not its setup.
+
+#### 8. It moves to `heca/src/components/` on the SECOND caller
+
+A move, never a copy. See § 0b.
+
+### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling.
+
+**Every agent forgets this and re-invents it.** It is capture → target → bubble, exactly like a
+browser. `heca-grid-ui/src/component.rs` (`dispatch` / `deliver` / `deliver_to_path`) is the whole
+of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
+
+| | The browser | heca |
+|---|---|---|
+| what enters | a device event | `Event::Raw(RawPointer)` — the **only** pointer event a host builds |
+| what a widget sees | `click`, `contextmenu`, `wheel`, … | `Click`, `RightClick`, `Scroll`, `Drop`, … already resolved and hit-tested |
+| pointer target | the element under the cursor | the widget under the pointer |
+| **keyboard target** | `document.activeElement` | the **deepest widget holding `Base::focused`** |
+| the walk | capture down, target, bubble up | capture down, target, bubble up — **identical** |
+| stopping it | `e.stopPropagation()` | `cx.stop_propagation()` (or `Handled::Yes`) |
+| listeners | `el.addEventListener` | `.on_click` / `.on_right_click` / `.on_key_down` / `.on_key_up` / `.on_scroll` / `.on(kind, f)` — on **every** widget, via `ComponentExt`, one argument `&mut EventCx` carrying the event |
+
+**The four things agents get wrong, including in the same session they were told:**
+
+1. **Keys DO bubble.** They go to the focused widget and then up its ancestors. The only thing that
+   does *not* happen is descending **into** the target's children — the browser does not do that
+   either. Do not say or write "a key stops at the owner" as if there were no bubbling.
+2. **A widget never hit-tests and never forwards.** Writing `bounds.contains(pos)`, or a `match`
+   that hands an event to `self.children`, means you are rebuilding the router. There is no
+   container in the library that forwards events, and there must not be one.
+3. **Nothing focused ⇒ nothing delivered.** A surface that wants keys **holds focus**
+   (`Base::focused`, bound to its own open/keyboard-target signal). Do not add a predicate instead
+   — `routes_own_subtree`, `takes_raw_keys` and `takes_text_input` were exactly that and are
+   **deleted**. Never reintroduce them.
+4. **Per-element handlers need that element to be the target.** A cursor inside a container
+   (`CardGrid`, a list) is not focus by itself — same as a browser, where a listbox moves real
+   focus onto the option under the cursor so per-option handlers fire and what they ignore bubbles
+   to the container.
+
+**So: to make something respond to input, declare a handler on the widget and let it bubble.** Do
+not add an intent, a policy arm, a registry or a host-side key match until you have shown a handler
+cannot do it. Full model: `docs/widgets.md` → "The event model" and "The keyboard — delivery follows
+focus".
 
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
 - **Before building ANY UI**, look at what already exists:
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
-  - **Layering / overlays / KeyHint visibility:** the planner (F003/P019) — see the planner (F003/P019) — the surface-tree model that decides which layers/buttons are interactive. **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
+  - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive, and [`docs/overlay-design.md`](docs/overlay-design.md). **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
@@ -242,7 +414,7 @@ Ctrl+B → Shift+w  Rename workspace
 Ctrl+B → Shift+c  Rename active column
 Ctrl+B → $    Rename active pane/tab
 Ctrl+B → i    Toggle focus (local, same workspace)
-Ctrl+B → Shift+l  Toggle focus (global, cross-workspace)
+Ctrl+B → Shift+i  Toggle focus (global, cross-workspace)
 Ctrl+B → b    Toggle left sidebar
 Ctrl+B → r    Enter resize mode (sticky)
 Ctrl+B → Shift+r  Reload config at runtime
@@ -251,6 +423,20 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 
 **Key rules:**
 
+- **A key acts on the surface in front of you** (F003/P082/T428). Three surfaces, front to back — a
+  **layer** (the exposé, a modal, a menu, a plugin's), a focused **dock**, and `heca.panes` (the
+  scrolling area) — and exactly one holds the keyboard. One resolution order, for every key:
+
+  > the focused surface's own `[[keys.surface]]` entry → the **floor** its kind is guaranteed → the
+  > global `[keys]` map → then swallowed (layer, dock) or sent to the pane (`heca.panes`).
+
+  Nearest declaration wins, so a surface key shadows a global one. The floors are `Escape` and they
+  are not removable: a layer closes itself, a dock hands the keyboard back, and **the panes have
+  none** so `Escape` reaches the program in the pane and vim still works. That is why `Escape` must
+  **never** be a global binding — a global one outranks all three at once, which is exactly how
+  `close_overlay` came to eat it while a dock was focused, closing nothing because no overlay was
+  up. The rule lives in `app/input.rs::surface_action` (pure, unit-tested) with `focused_surface`
+  reducing `AppState` to it; the floors are asserted in `registry::assert_escape_floor`.
 - Prefix mode is intentional (like tmux), NOT a bug. This avoids conflicts with hosted apps.
 - The prefix key is **configurable** via `prefix = "ctrl+b"` in config.toml.
 - All keybingings should be configurable in config.toml.
@@ -552,7 +738,7 @@ tip. This is the one pattern; follow it for any new button.
 > **Which hints are actually shown** is decided by the layered **surface compositor**, not
 > per-feature: a button inherits its layer from the surface it lives in, and one uniform
 > rule (context activation + geometric occlusion, no hardcoded z) picks the visible set.
-> **Read the planner (F003/P019) — see the planner (F003/P019) before adding any new
+> **Read [`docs/surface-compositor.md`](docs/surface-compositor.md) before adding any new
 > layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
 > visibility filter — model the surface instead.
 
@@ -572,31 +758,38 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
   the macOS `⌃⌥⇧⌘` form. Rebinding in `config.toml` + reload updates every tooltip.
 - Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
 
-**2. KeyHint (vimium-style `prefix+/` pick)** — register the **same intent** the click
-sends and attach it to the widget so the picker can target it by letter:
+**2. KeyHint (vimium-style `prefix+/` pick)** — declare **what a pick does** on the
+wrapper that draws the letter. One line, no id, no registry (F004/P084/T399):
 ```rust
-let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
-let button = IconButton::new(icon).hint_target(hint_id).on_click(move || {
-    emit(InteractionIntent::ActivateAction(action.clone()));
-});
+let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
+let peek = crate::chrome::fires(row_peek(pane_nav_key(pane_id)), emit); // the pick
+let row = Row::new().on_activate(fire);
+KeyHint::new(row).on_peek(peek)
 ```
-`hints` is a `&mut HintTargetRegistry` — the **shared** allocator that lives on
-`AppState` and spans **every** retained tree that carries hint targets. It is threaded
-through `build_chrome_root` **and** `build_pane_header`. Ids are **monotonic** (never
-reused), so targets from trees that rebuild on different cadences (the chrome tree vs.
-each per-pane header tree) never collide; each tree records the contiguous id **range**
-it registered and calls `hint_targets.remove_range(range)` when it is rebuilt or pruned
-(see `render.rs` for the chrome tree, `sync_pane_headers` for the headers). The pick
-path (`handle_hint_pick` + `paint_hint_targets`) walks the chrome tree **and** all
-`state.pane_headers` trees; resolution reads the one shared map. See
-`sidebar_toggle_button` for a complete example (tooltip + hint together).
+The slot is `Base::peek`, universal; the **builder is on `KeyHint`**, because being
+pickable is something you opt a region into — so `Label::on_peek` is a method that never
+has to exist. The framework collects the declarations out of the laid-out tree
+(`heca_grid_ui::collect_peeks`) and runs one (`fire_peek`). Nothing is registered, so
+nothing has to be un-registered when a tree rebuilds; a candidate is a
+`chrome::PeekTarget` (which tree + the path in it), valid for exactly as long as the
+letters are up. The pick path is `handle_hint_pick` → `chrome::active_peek_targets`
+(eligibility, once) and `chrome::paint_peek_letters` (live bounds, every frame); both
+walk the chrome tree, every `state.pane_headers` tree and every visible layer. See
+`sidebar_toggle_button` for a complete example (tooltip + peek together).
 
+- **A pick is not a click.** They are different gestures and a region may answer them
+  differently: a sidebar row activates the pane and *leaves* on a click, and stays in the
+  dock on a peek (`workspaces.peek_selected`, aimed at a row by its `key` argument).
+  Pointing one intent at both is what made `prefix+/` walk out of the sidebar. Declare
+  the same closure for both only when they genuinely are the same act (a header button).
 - **Active-targeted buttons must focus first.** A pane button whose action acts on the
-  *focused* pane (zoom/float — no pane id in the `WmAction`) registers
-  `InteractionIntent::FocusPaneThenAction { pane_id, action }`, which `dispatch_intent`
-  expands into a `FocusPane` then the action — mirroring what the click does across two
-  events. Pane-parameterized actions (close/move/split carry the pane) just use
-  `ActivateAction`.
+  *focused* pane (zoom/float — no pane id in the `WmAction`) emits a `FocusPane` before
+  its action — the events are queued and processed in order, so it lands on this pane.
+  Pane-parameterized actions (close/move/split carry the pane) just use `ActivateAction`.
+- **The declarative half is the same declaration.** A described node binds a `peek`
+  event to an `Intent` (`ViewNode::on_peek`), defaulting to its `press` — so every
+  actionable described node is reachable by letter with nothing written, and a plugin's
+  row gets the identical picker.
 - **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
   come from `pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>` (config's
   `[pane] title_actions` today; the documented **plugin seam** appends there later). The
@@ -825,6 +1018,64 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 - The existing chrome becomes a **consumer** of `heca-grid-ui`; over time this should evolve toward a pluggable chrome host with left/right/top/bottom regions.
 - Important separation: the `Sidebar` in `heca-grid-ui` is a **shell/layout widget**, while the current workspace tree should evolve into a built-in `WorkspacesContainer` mounted inside that shell.
 
+### ⭐⭐ RULE ZERO — A CAPABILITY IS ONE BUILDER ON THE WIDGET
+
+**Antonio, 2026-08-07: *"I want everything we build to be available for whoever wants to build a
+plugin or contribute to the project. THIS IS THE FIRST MOST IMPORTANT RULE."*** It outranks
+everything below it, including the architecture section.
+
+**The test — apply it BEFORE writing any capability. Write the line a *plugin author* would type:**
+
+```rust
+Row::new().child(…).on_peek(move || cursor_to(row_id))     // ✅ one line, on the widget
+```
+
+> Can someone get this behaviour by writing **one line on their widget**, without touching anything
+> host-private?
+
+**If it needs a registry, an id, or a crate-private type, that IS the bug** — what exists is
+ceremony around a missing API. The framework owns everything behind the builder: collection, ids,
+dispatch, drawing. The declarative path then maps the same builder to an `Intent` (as `on_press`
+already is), so a plugin writes the identical line. **One door, never two.**
+
+**The worked example, live in this repo (`prefix+/`) — FIXED by F004/P084/T399:**
+
+```rust
+// ✅ now — one line, on the widget
+KeyHint::new(row).on_peek(move || emit(intent.clone()))
+
+// ❌ before — a host-only enum, a registry, and an id to carry around
+let id = hints.register(InteractionIntent::FocusPaneThenAction { … });
+button.hint_target(id)
+```
+
+The old form needed three things a caller had to know: that a registry existed, that they had to
+pre-register, and a `pub(crate)` enum (`InteractionIntent`, `heca/src/app/interaction.rs`). **A
+plugin could construct none of it** — it only reached the `HintTargets` seam, which took a plain
+`Intent`, so its rows could not say "focus my container first" and were refused by
+`ActionPolicy::ContainerFocused`. That was a second-class version of a shipped feature, which this
+rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Base::hint_target` and
+`named_press` are all gone; **do not reintroduce any of them.**
+
+**Corollaries:**
+- A host-private composite (`FocusPaneThenAction`, `FocusContainerThenAction`) means the behaviour
+  has **no name a plugin can say**. Give it one; do not reach for the private enum.
+- **Never add a second path beside one that exists.** Two paths over one input cannot stay
+  identical, and nothing fails when they drift — the tests exercise one, the user sees the other.
+  On 2026-08-07 this produced two row builders, two quick-pick loops, two menu shapes (a hand-written
+  `Clone` that dropped the panel's own style) and two keyboard lookups, all in one session, all
+  found by Antonio by eye against a green suite.
+- A rule a **caller** has to remember (assign the letters, pick an anchor, choose a lookup) belongs
+  in the widget. See the `⛔ SETTLED` note on `Base::one_click_target` and
+  `ContextMenu::assign_quick_picks`.
+- Tests must be written in the **agreed authoring API**, because a test is documentation of how the
+  thing is meant to be used.
+
+This is what made `.context_menu()` replace `context_path` + a builder registry + a `nav_key` nobody
+remembered (F004/P084/T395). When you touch a capability, check its neighbours for the same shape.
+
+---
+
 ### ⭐ THE WIDGET ARCHITECTURE — `ViewNode` + composition (READ FIRST; applies to EVERY widget change)
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
@@ -852,7 +1103,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 
 | Question | Answer — do NOT re-propose |
 |---|---|
-| Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / `HintTargetRegistry` / theme wiring). |
+| Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / theme wiring). |
 | Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in the **app** (`heca/src/chrome/view.rs`); the library cannot see it. |
 | Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_activate(move \|\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
 | Is `realize` the only `ViewNode`→widget path? | **YES.** One bridge, app-side (`heca/src/chrome/realize.rs`). |
@@ -878,6 +1129,84 @@ Button::destructive("Delete")
     .child(Icon::new(Glyph::Trash))
     .on_click(move || emit(intent))
 ```
+
+> ⚠️ **`P084(F004)/T400` — THREE QUARTERS BUILT (2026-08-10).** Antonio: *"I want transparent APIs… always prefer
+> common and well known APIs."* Delivery follows focus and bubbles (`takes_raw_keys` and
+> `takes_text_input` **deleted**); nobody routes their own subtree (`routes_own_subtree`
+> **deleted**); **one handler spelling** carrying the event *and* `stop_propagation()`, with nothing
+> consumed for you. **Still to build:** `bounds === what is drawn === what is clickable` —
+> `hit_bounds` / `damage_bounds` are still here. The first attempt overwrote `base.bounds` in
+> `on_layout` and was reverted: bounds are read by paint, damage and placement too, and moving them
+> ghosted the screen and stole hit targets. Doing it properly means the floating panels become
+> **real placed children**. **Do not add a new self-describing predicate.**
+
+**SETTLED — the input model (F004/P084/T394, 2026-08-06; keyboard half rebuilt by T400, 2026-08-10):**
+- **A host builds ONE pointer event**, `Event::Raw(RawPointer)`, carrying the **button** and the
+  **modifiers**. The framework resolves it once — hit-test, hover, press/release pairing, click
+  runs, drag threshold — and delivers what it meant: `Click`, `RightClick`, `PointerEnter`,
+  `Scroll`, `Drop`, `Focus`, `Mount`, … **A widget never hit-tests a pointer event, and never
+  forwards one to its children.** If you are writing `bounds.contains(pos)` in a widget, stop.
+- **The keyboard routes by focus, exactly as the pointer routes by position.** The target of a
+  `Key`, a `TextInput` or a `Widget` intent is the **deepest focused widget**: capture down its
+  ancestor chain, handlers and `on_event` back up. A **key or typed text stops at the owner** (one
+  key, one widget — the rule that stops the first row in a list eating an Enter meant for the
+  cursor); a **`Widget` intent enters the focused region's subtree**, because an intent is a
+  capability named out loud rather than a character aimed at whatever is typing. **Nothing focused,
+  nothing delivered.** The focus walk takes the **topmost** claim (children last-first, like
+  hit-testing), because an open layer and the button clicked before it both carry the flag.
+- **A surface that wants keys holds focus**, and a caller wires nothing:
+  `Overlay`/`ContextMenu`/`CommandPalette` bind `Base::focused` to their **open** signal;
+  `FocusScope` and `ScrollRegion` bind it to the host's keyboard-target signal — a dock binds the
+  same signal to both, so the wrapper draws the ring and the region answers the keys; `Select`
+  focuses itself when the list opens. **Do not add a predicate instead.**
+- **Typed text is `Event::TextInput`, not a key.** A field types from it and from nothing else; a
+  raw `GridKey::Char` is a shortcut. Do not re-introduce a host-side "deliver the real character"
+  fixup — that patch existed only because a field rebuilt text from keys.
+- **Handlers live on `Base`**, written with `ComponentExt` (`.on_click`, `.on_right_click`, `.on_key`,
+  `.on(kind, …)`) — one trait, blanket-implemented, holding everything every component gets:
+  handlers, `nav_key`, and the drag slots. Every widget has them; none opts in. **One spelling, one argument**: an `&mut EventCx` carrying the event *and*
+  `stop_propagation()`, and **nothing is consumed for you** — a handler that wants the event says so.
+- **Events say what happened, never what to do about it**: `right_click`, not `context_menu`.
+- Full model: [`docs/widgets.md` → the event model](docs/widgets.md); the rules are held by
+  `heca-grid-ui/tests/pointer_routing.rs` and `tests/pointer_delivery.rs`.
+
+**SETTLED — the menu model (F004/P084/T395, decided by Antonio 2026-08-07):**
+
+Four names, and there is no fifth. **The panel is `ContextMenu`'s own body, not a separate type** —
+inventing a `MenuPanel` for it was rejected outright.
+
+| type | what it is |
+|---|---|
+| `MenuItem` | one row: sugar (`.label()` / `.icon()`) **or** any widget subtree (`.child(\|\| …)`); children win |
+| `Menu` | a titled list of items. **Content only** — no triggers, no anchors, no keys |
+| `ContextMenu` | a **named** presenter holding **one** `Menu`; it *is* the panel |
+| `MenuBar` | not built — will show the **same `Menu` value** as a strip |
+
+- **One `Menu` per `ContextMenu`, several `MenuItem`s in it.** Asked directly whether a context menu
+  could hold several menus as sections: *"No. Only one menu that contains severl MenuItem"*.
+- **`ContextMenu::new("name")` — the name is an id**, not a title. `Menu` carries title + description.
+- **`MenuItem::child` takes a builder (`Fn() -> impl Component`), not a widget.** A menu can be shown
+  twice and an owned subtree can be handed over once; a builder makes the whole chain `Clone`, so one
+  menu value serves every row of a list. `.context_menu()` therefore accepts **a value or a closure**
+  (`IntoContextMenu`).
+- **Rows are real children** — taffy lays them out. This widget owns no layout beyond shifting the
+  finished panel to its anchor (the `shift_subtree` trick `Overlay`/`Select` use). Row colour is
+  published at paint with `with_content_color`, so composed rows read danger/disabled for free.
+- **The anchor comes out of the event** (`Event::position()` / `Event::target_bounds()`, stamped once
+  by the router) — never chosen by an author. His idea, and better than the ambient lookup proposed.
+- **Bubbling stops at the nearest declaration; menus are never merged.** Nothing declared ⇒ nothing
+  opens. "Right-click empty space" is a menu on the root, not an empty-space hit test.
+- **`Menu::name()` is the entire plugin surface**: a named menu can be contributed to. A plugin never
+  writes a closure — it names an action, and the entry dispatches an `Intent` through the central
+  gate. An entry's icon comes from `ActionCatalog::icon`, so surfaces cannot drift.
+- ⚠️ **A right-click is a press AND a release.** `RightClick` is synthesised from the pair; a host
+  delivering only presses produces no clicks and no menu opens. Lint:
+  `heca/tests/pointer_funnel.rs`. Behaviour tests cannot see this — they dispatch both halves.
+- **Rejected, so nobody rebuilds them:** `path` / `target` / `about` on the menu; `alter_menus`;
+  `MenuPath::declare`; `MenuRow::at`; `fn context_menus() -> Vec<…>` (*"why a function that return
+  vec?? still the same as before.. WHY?? i want simple APIs"*); and a `MenuPanel` type
+  (*"YOU HAVE TO ASK AND NOT TO INVENT"*).
+- Full model: [`docs/widgets.md` → Menus](docs/widgets.md).
 
 **Genuinely OPEN (the live design space):** a typed builder SDK over `ViewNode`; and `Label`
 truncation/ellipsis + wrapping (a long label overflows its box today).

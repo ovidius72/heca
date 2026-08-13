@@ -548,6 +548,19 @@ impl SearchModel {
         self
     }
 
+    /// The same store and the same preferences, over a **different scope**.
+    ///
+    /// What a surface with several modes uses: one palette listing actions, panes and workspaces
+    /// keeps three separate memories, and switching mode is switching which one it consults.
+    pub fn with_scope(&self, scope: impl Into<String>) -> Self {
+        Self { scope: scope.into(), store: self.store.clone(), case: self.case }
+    }
+
+    /// Which scope this model reads and writes.
+    pub fn scope(&self) -> &str {
+        &self.scope
+    }
+
     /// A model with a private store — for a surface that wants the behaviour without the memory,
     /// and for tests.
     pub fn detached(scope: impl Into<String>) -> Self {

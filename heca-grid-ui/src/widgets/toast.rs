@@ -407,15 +407,22 @@ impl Component for Toast {
         }
         let r = self.rects();
         match ev {
-            Event::PointerMoved { pos } => {
-                let region = self.region_at(&r, *pos);
+            // Which **region** of the card the pointer is in (dismiss cross, action, body) — a
+            // sub-region question `Base::hovered` cannot answer, asked only while the pointer is
+            // over this card.
+            Event::PointerMove(p) => {
+                let region = self.region_at(&r, p.pos);
                 if self.hovered != region {
                     self.hovered = region;
                 }
                 // Don't consume moves — siblings still need hover tracking.
                 Handled::No
             }
-            Event::PointerPressed { pos } => match self.region_at(&r, *pos) {
+            Event::PointerLeave(_) => {
+                self.hovered = Region::None;
+                Handled::No
+            }
+            Event::PointerDown(p) => match self.region_at(&r, p.pos) {
                 Region::Dismiss => {
                     self.flash_region = Region::Dismiss;
                     self.flash.trigger();

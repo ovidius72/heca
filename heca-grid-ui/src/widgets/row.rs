@@ -47,8 +47,14 @@ pub struct Row {
     active: Signal<bool>,
     /// Sidebar-nav cursor state: a hollow outline, distinct from `active`.
     nav: Signal<bool>,
+    /// **"You were just here"** — the row a back-and-forth binding would return to. A wash fainter
+    /// than any other state, under all of them. See [`previous`](Row::previous).
+    previous: Signal<bool>,
+    /// **May this row ask to be scrolled into view?** `None` (the default) means yes, always —
+    /// which is right for a list whose cursor only the keyboard moves. See
+    /// [`reveal_when`](Row::reveal_when).
+    reveal: Option<Signal<bool>>,
     marker: ActiveMarker,
-    hovered: Signal<bool>,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
     /// Override for the hover/active highlight color. Defaults to the row's own
@@ -73,8 +79,14 @@ impl Row {
             base,
             active: signal(false),
             nav: signal(false),
-            marker: ActiveMarker::Bar,
-            hovered: signal(false),
+            previous: signal(false),
+            reveal: None,
+            // **No bar by default** — the same default `Item` has always had. Selected is now a
+            // filled panel, which says it on its own; a bar beside it is a second mark for one
+            // state, and where a container already draws its own (a `MarkerGroup` column in the
+            // sidebar) it came out as two lines side by side (Antonio, driving, 2026-08-13). A
+            // caller that genuinely wants one still asks: `.marker(ActiveMarker::Bar)`.
+            marker: ActiveMarker::None,
             flash: Flash::new(),
             on_activate: None,
             highlight: None,
@@ -99,6 +111,7 @@ impl Row {
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
+        self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
     }
 
@@ -109,6 +122,26 @@ impl Row {
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn attention(mut self, req: Signal<bool>) -> Self {
         self.attention_req = Some(req);
+        self
+    }
+
+    /// Gate this row's request to be scrolled into view on a live signal.
+    ///
+    /// **A reveal exists to bring into view something the user cannot see.** That is the keyboard's
+    /// case — the cursor moves somewhere possibly off-screen, so the region follows it. It is never
+    /// the pointer's: what you are pointing at is visible by definition, and scrolling it moves it
+    /// out from under the mouse that asked for it.
+    ///
+    /// A list whose cursor **only the keyboard moves** needs none of this and should not call it.
+    /// One whose cursor also follows the mouse must, or three correct behaviours compose into a
+    /// wrong one: hover moves the cursor here → this row asks to be visible → the region centres it
+    /// → the card slides away from the pointer, possibly onto another card, which slides again
+    /// (Antonio, driving, 2026-08-12). [`CardGrid::reveal_state`](crate::widgets::CardGrid) is the
+    /// signal to pass: it is `true` while the keyboard moved the cursor and `false` while the mouse
+    /// did.
+    #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
+    pub fn reveal_when(mut self, allowed: Signal<bool>) -> Self {
+        self.reveal = Some(allowed);
         self
     }
 
@@ -138,6 +171,24 @@ impl Row {
         self.active
     }
 
+    /// Mark this row as the one a **back-and-forth** binding would return to — the pane
+    /// `prefix+i` toggles back to, the workspace `prefix+Shift+l` does.
+    ///
+    /// Drawn as the faintest wash of the selection colour, **under** every other state, so it can
+    /// be true at the same time as the cursor and the selection (which it very often is: the pane
+    /// you toggle back to is usually the one you just left) without taking anything from either.
+    /// You should be able to find it when you look for it and never notice it when you are not.
+    #[heca_grid_ui_macros::prop]
+    pub fn previous(self, on: bool) -> Self {
+        self.previous.set(on);
+        self
+    }
+
+    /// The previous-state signal — bind it so the host flips the mark in place, without a rebuild.
+    pub fn previous_state(&self) -> Signal<bool> {
+        self.previous
+    }
+
     /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
     /// from the filled `active` pill (e.g. the workspaces sidebar highlights the
     /// nav cursor while the real focused pane keeps its pill).
@@ -145,6 +196,15 @@ impl Row {
     pub fn nav_selected(self, on: bool) -> Self {
         self.nav.set(on);
         self
+    }
+
+    /// The row's **hover** signal — `true` while the pointer is over it.
+    ///
+    /// Read-only for the host: the row sets it from its own hit-testing, which is the one place
+    /// that knows where the row is. Wire it into a list's cursor (`GridCell::hovered`) so pointing
+    /// at a row is the same act as arrowing onto it, or bind a preview to it.
+    pub fn hovered(&self) -> Signal<bool> {
+        self.base.pointer.hovered
     }
 
     /// The nav-cursor signal — bind UI to it reactively.
@@ -167,8 +227,11 @@ impl Row {
 impl Component for Row {
     /// The navigation cursor is "the current one" for this list, so an enclosing scroll region
     /// keeps it in view — the keyboard half of scrolling, without the host wiring it per list.
+    ///
+    /// **Unless the cursor was put here by the mouse** — see [`reveal_when`](Row::reveal_when).
     fn wants_visible(&self) -> bool {
-        self.nav.get_untracked() || self.base.focused.get_untracked()
+        let cursor = self.nav.get_untracked() || self.base.focused.get_untracked();
+        cursor && self.reveal.is_none_or(|r| r.get_untracked())
     }
 
     fn base(&self) -> &Base {
@@ -184,9 +247,9 @@ impl Component for Row {
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia) = {
+        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia, selected_bg, previous_bg) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction)
+            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction, t.colors.effective_selected_background(), t.colors.effective_previous_background())
         };
         let b = self.base.bounds;
 
@@ -210,25 +273,30 @@ impl Component for Row {
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the
         // lighter Item-style accent wash instead of a heavy same-hue tint.
         let highlight_base = self.highlight.or(self.base.style.visual.fill);
+        // **"You were just here"** — painted first, so selection and cursor land on top of it and
+        // it only shows on a row that has neither.
+        if self.previous.get_untracked() {
+            cx.rect(sel, previous_bg, None, sel_radius, None);
+        }
         if active {
-            let fill = if let Some(highlight) = self.highlight {
-                highlight.with_alpha(ia.row_active_fill)
-            } else {
-                highlight_base
-                    .map(|h| h.with_alpha(ia.row_active_tint))
-                    .unwrap_or(accent.with_alpha(ia.row_active_fill))
-            };
-            // A crisp same-hue border is the clearest "selected" cue — a tinted
-            // fill alone is hard to tell apart from the row's background.
-            let edge = highlight_base.unwrap_or(accent).with_alpha(ia.row_active_border);
-            cx.rect(
-                sel,
-                fill,
-                Some(Border { color: edge, width: sel_border_w }),
-                sel_radius,
-                None,
-            );
-        } else if self.hovered.get_untracked() {
+            // **Selected is a FILLED PANEL, and it carries no border.**
+            //
+            // The selection and the nav cursor are drawn on the same rectangle, so as long as both
+            // were an accent fill plus an accent edge, the cursor arriving on the selected row
+            // erased the difference between them (Antonio, driving, 2026-08-13). Changing the
+            // cursor's *hue* did not fix it — every shipped theme's foreground, accent and glow
+            // are one family. So the two marks differ in **kind**: this is a panel, the cursor is a
+            // glowing ring, and one sits inside the other with both still readable.
+            //
+            // The colour is the theme's, not the row's: `selected_background`, explicit in a theme
+            // or derived from its surface and accent. A row that overrides `highlight` still gets
+            // its own hue, which is what that builder is for.
+            let fill = self
+                .highlight
+                .map(|h| h.with_alpha(ia.row_active_fill))
+                .unwrap_or(selected_bg);
+            cx.rect(sel, fill, None, sel_radius, None);
+        } else if self.base.hovered() {
             let c = if let Some(highlight) = self.highlight {
                 highlight.with_alpha(ia.row_hover_fill)
             } else {
@@ -239,11 +307,17 @@ impl Component for Row {
             cx.rect(sel, c, None, sel_radius, None);
         }
 
-        // Nav-cursor outline: a **distinct-colored** border (theme foreground, not the
-        // accent the `active` pill uses) marking the sidebar j/k/arrow cursor. Drawn
-        // ALWAYS when nav — even on the active row — so the cursor stays visible when
-        // it coincides with the active pill (a plain accent outline would vanish into
-        // the pill).
+        // Nav-cursor outline: a **distinct-colored** border marking the j/k/arrow cursor. Drawn
+        // ALWAYS when nav — even on the active row — so the cursor stays visible when it coincides
+        // with the active pill.
+        //
+        // **A glowing ring, and nothing else** — no fill, so whatever it is drawn over stays
+        // visible through it. That is the whole trick: the selected panel above is a *fill* and
+        // this is an *edge*, so the cursor sitting on the selected row shows both at once instead
+        // of one erasing the other. Trying to separate them by hue failed twice (accent, then
+        // foreground) because every shipped theme's foreground, accent and glow are one family.
+        //
+        // Drawn ALWAYS when nav — even on the active row — for the same reason.
         if self.nav.get_untracked() {
             cx.rect(
                 sel,
@@ -333,18 +407,32 @@ impl Component for Row {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.base.bounds.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+            // No focus check here, and none in any of the other six widgets that were doing this by
+            // hand: `dispatch` only offers a raw key to the widget that owns the keyboard. The rule
+            // is the framework's, made once, so a widget cannot take a key meant for something else
+            // — which is what made a row eat the Enter that belonged to the list it sits in.
+            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.interactive() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
                 self.activate();
                 Handled::Yes
             }

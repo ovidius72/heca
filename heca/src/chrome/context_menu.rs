@@ -17,6 +17,7 @@ use crate::chrome::{open_dropdown, DropdownItem, DropdownSpec, Intent, PropValue
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use heca_core::layout::{PaneId, Point};
+use heca_grid_ui::widgets::{Menu, MenuItem};
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Context model
@@ -51,12 +52,19 @@ pub enum ContextTarget {
         pane_id: PaneId,
         hyperlink: Option<String>,
     },
-    /// A **row of a mounted container**: which placement it is in, and the key that row declared
-    /// (`NavExt::nav_key`). Opaque to the host — it never parses one.
+    /// A **contribution to a named menu** — a row another component is adding to a menu it does
+    /// not own ([`Menu::name`](heca_grid_ui::widgets::Menu::name)).
     ///
-    /// `container` is the **mount id**, not the component type, so a component seated twice can
-    /// tell which of its seatings was clicked and answer for that one only.
-    Row { container: String, key: String },
+    /// It carries nothing, and that is the decision, not an omission: since a menu is declared on
+    /// the widget it belongs to (F004/P084/T395), the host never resolves *which row* was clicked,
+    /// so it has no row payload to hand on. A contributed entry acts on **app state** — the focused
+    /// pane, the selected row — rather than on the row the menu was opened for. The menu's name is
+    /// passed beside this, as the `path`.
+    ///
+    /// It used to be `Row { container, key }`, filled by the host from a hit-test. Both fields
+    /// became unreadable the moment rows started declaring their own menus, and were being passed
+    /// an empty string.
+    Contribution,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -207,7 +215,7 @@ pub(crate) fn open_context_menu_for(
 ///
 /// A provider declares *where* and *what*; the host decides *when*. This is the "when": one pass
 /// over what is mounted, at the moment the menu opens.
-fn plugin_providers_for(
+pub(crate) fn plugin_providers_for(
     host: &crate::chrome::ChromeHost,
     ctx: &ChromeCtx,
     path: &str,
@@ -222,68 +230,27 @@ fn plugin_providers_for(
         .collect()
 }
 
-/// Resolve the active context for a keyboard-opened context menu (`OpenContextMenu` /
-/// `prefix+>`): the focused container's cursor row, or the focused content pane.
+/// Resolve the active context for a keyboard-opened context menu (`OpenContextMenu` / `prefix+>`):
+/// **the focused content pane**, and nothing else.
 ///
-/// **A focused container decides the context**, not a mode (F003/P086/T365) — the menu follows the
-/// keyboard, and the keyboard is in a container or it is not. The row is named by
-/// `(container, nav_key)` and its **component** says which menu path describes it
-/// ([`Provider::context_path`](crate::providers::Provider::context_path)), so the host resolves a
-/// menu for a Docker row exactly as it does for a workspace row, knowing neither.
+/// It used to also resolve the focused container's cursor row, by asking the component which menu
+/// path described that key. That whole route is gone: a row **declares its own menu**
+/// (F004/P084/T395), so the keyboard trigger finds it by walking the tree from the container's
+/// cursor (`chrome::open_declared_menu_for_focus`) and never asks the host to name a menu. What is
+/// left here is the fallback for a content pane, which is not a widget and cannot carry a
+/// declaration.
 ///
-/// Returns `None` when there is nothing to target (no cursor in the focused container, or no
-/// focused pane outside one).
+/// Returns `None` when no pane is focused.
 pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, ContextTarget)> {
-    let container = state.chrome_state.focused_container();
-    let cursor = container
-        .as_deref()
-        .and_then(|mount| {
-            use heca_grid_ui::reactive::SignalGet as _;
-            state.chrome_state.container_cursor(mount).get()
-        });
-    resolve_context_for(
-        container.as_deref(),
-        cursor.as_deref(),
-        crate::app::interaction::focused_pane_id(state),
-        &|mount, key| {
-            let ctx = crate::providers::ChromeCtx::new(App::new(&state.chrome_state));
-            state
-                .chrome_host
-                .provider(mount)
-                .and_then(|p| p.context_path(key, &ctx))
+    Some((
+        ContextPath(ContextPath::PANE.to_string()),
+        ContextTarget::Pane {
+            pane_id: crate::app::interaction::focused_pane_id(state)?,
+            hyperlink: None,
         },
-    )
+    ))
 }
 
-/// Pure mapping behind [`resolve_active_context`]: the focused container + its cursor row + the
-/// focused pane → menu `(path, target)`. Split out from the `AppState` reads so the mapping is
-/// unit-testable without a full app.
-///
-/// `path_for` is the mounted component's answer for one of **its own** row keys; a component that
-/// names no menu for that row (or is not mounted) yields no menu rather than a guessed one.
-fn resolve_context_for(
-    container: Option<&str>,
-    cursor: Option<&str>,
-    focused_pane: Option<PaneId>,
-    path_for: &dyn Fn(&str, &str) -> Option<String>,
-) -> Option<(ContextPath, ContextTarget)> {
-    match container {
-        Some(container) => {
-            let key = cursor?;
-            Some((
-                ContextPath(path_for(container, key)?),
-                ContextTarget::Row {
-                    container: container.to_string(),
-                    key: key.to_string(),
-                },
-            ))
-        }
-        None => Some((
-            ContextPath(ContextPath::PANE.to_string()),
-            ContextTarget::Pane { pane_id: focused_pane?, hyperlink: None },
-        )),
-    }
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Built-in providers
@@ -313,6 +280,52 @@ pub(crate) fn item_running(
         intent = intent.arg(*k, v.clone());
     }
     DropdownItem::with_intent(id, label, intent)
+}
+
+/// **Turn a list of entries into a declared [`Menu`]** — the bridge from the `DropdownItem`
+/// vocabulary above to a menu a widget carries (F004/P084/T395).
+///
+/// This is what a component calls where it is drawing the row, so the menu's rows capture the row's
+/// own ids and nothing has to resolve "what did you right-click" from a position afterwards.
+///
+/// Three things cross here, and each is deliberate:
+///
+/// - **The icon comes from the action**, via [`ChromeCtx::action_icon`], because `ActionMeta.icon`
+///   is the single source of an action's `Glyph`. A component naming its own glyph would let the
+///   sidebar's "Close pane" drift from the palette's `close`.
+/// - **Behaviour crosses as an [`Intent`]**, wrapped in `InteractionIntent::View`, so a menu entry
+///   is dispatched by name through the **central gate** — the same policy and destructive-confirm a
+///   keypress or an RPC call gets. A menu row is not a back door.
+/// - **`name` names the menu**, so other components may contribute rows to it
+///   ([`Menu::name`](heca_grid_ui::widgets::Menu::name)). Pass `""` for a menu that is closed.
+pub(crate) fn menu_from_items(
+    title: &str,
+    description: &str,
+    name: &str,
+    items: Vec<DropdownItem>,
+    catalog: &crate::actions::ActionCatalog,
+    emit: &crate::chrome::ChromeIntentEmitter,
+) -> Menu {
+    let mut menu = Menu::new(title, description);
+    if !name.is_empty() {
+        menu = menu.name(name);
+    }
+    for it in items {
+        let intent = it.intent.clone();
+        let emit_e = emit.clone();
+        let mut row = MenuItem::new()
+            .label(it.label.clone())
+            .danger(it.danger)
+            .enabled(it.enabled)
+            .on_click(move || {
+                emit_e(crate::app::interaction::InteractionIntent::View(intent.clone()))
+            });
+        if let Some(glyph) = catalog.icon(&it.id) {
+            row = row.icon(glyph);
+        }
+        menu = menu.child(row);
+    }
+    menu
 }
 
 /// A `usize` argument as the `PropValue` an [`Intent`] carries — the form every `ws_idx` /
@@ -382,18 +395,6 @@ mod tests {
                 300.0, true, 300.0, false,
             )));
         ChromeCtx::new(App::new(store))
-    }
-
-    /// `resolve_context_for` with a stub component: it names `row:*` keys `stub.row` and knows
-    /// nothing else — which is all the host is allowed to know about a row (F003/P086/T365).
-    fn resolve(
-        container: Option<&str>,
-        cursor: Option<&str>,
-        focused: Option<PaneId>,
-    ) -> Option<(ContextPath, ContextTarget)> {
-        resolve_context_for(container, cursor, focused, &|_mount, key| {
-            key.starts_with("row:").then(|| "stub.row".to_string())
-        })
     }
 
     /// **A destructive entry uses the same verb as the action it names** (F003/P086/T370).
@@ -612,16 +613,16 @@ mod tests {
         let plugin = vec![ContextMenuProvider {
             weight: vec![1, 1, 1],
             build: std::rc::Rc::new(|_c: &ChromeCtx, t: &ContextTarget| {
-                let ContextTarget::Row { key, .. } = t else {
+                let ContextTarget::Contribution = t else {
                     return Vec::new();
                 };
                 vec![DropdownItem::with_intent(
                     "docker.restart",
                     "Restart",
-                    // A name-keyed action of the PLUGIN's — there is no WmAction for this, and the
-                    // row is named by the key the plugin itself wrote.
-                    Intent::new("plugin.docker.restart")
-                        .arg("container", PropValue::Text(key.clone())),
+                    // A name-keyed action of the PLUGIN's — there is no WmAction for this. It takes
+                    // no row argument: a contributed row has no per-row payload, so it acts on app
+                    // state (see `ContextTarget::Contribution`).
+                    Intent::new("plugin.docker.restart"),
                 )]
             }),
         }];
@@ -637,17 +638,9 @@ mod tests {
         );
 
         // And its entry dispatches the plugin's own action, with the target's data.
-        let target = ContextTarget::Row {
-            container: "docker".into(),
-            key: "container:nginx".into(),
-        };
-        let entry = (ordered[1].build)(&test_ctx(), &target).remove(0);
+        let entry = (ordered[1].build)(&test_ctx(), &ContextTarget::Contribution).remove(0);
         assert_eq!(entry.id, "docker.restart");
         assert_eq!(entry.intent.action, "plugin.docker.restart");
-        assert_eq!(
-            entry.intent.args.get("container"),
-            Some(&PropValue::Text("container:nginx".into())),
-        );
         assert!(
             crate::input::action_from_name(&entry.intent.action).is_none(),
             "the plugin's action has no WmAction variant — which is exactly why an \
@@ -665,40 +658,6 @@ mod tests {
     // tests assert on their content, so they reach for them there.
     use crate::providers::workspaces::{column_row_items, pane_row_items, workspace_row_items};
 
-    /// **The host names a row and asks its component what it is** (F003/P086/T365). It produces the
-    /// container + the key the row declared, and takes the path back — knowing neither that panes
-    /// exist nor that this component has three kinds of row.
-    #[test]
-    fn a_focused_container_targets_its_cursor_row() {
-        let (path, target) = resolve(Some("dock.left"), Some("row:7"), None).unwrap();
-        assert_eq!(path.0, "stub.row", "the component named the menu, not the host");
-        let ContextTarget::Row { container, key } = target else {
-            panic!("a container's row is a Row target");
-        };
-        assert_eq!((container.as_str(), key.as_str()), ("dock.left", "row:7"));
-    }
-
-    /// A key the component does not recognise — a stale cursor, another placement's row — yields no
-    /// menu rather than a wrong one.
-    #[test]
-    fn a_row_its_component_does_not_name_opens_nothing() {
-        assert!(resolve(Some("dock.left"), Some("who:knows"), Some(PaneId(4))).is_none());
-    }
-
-    #[test]
-    fn outside_every_container_the_focused_pane_is_the_target() {
-        let (path, target) = resolve(None, None, Some(PaneId(4))).unwrap();
-        assert_eq!(path.0, ContextPath::PANE);
-        assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(4), hyperlink: None }));
-    }
-
-    #[test]
-    fn resolve_context_none_when_no_target() {
-        // A focused container with no cursor, and no container with no focused pane: nothing to
-        // describe either way.
-        assert!(resolve(Some("dock.left"), None, Some(PaneId(1))).is_none());
-        assert!(resolve(None, None, None).is_none());
-    }
 
     #[test]
     fn context_menus_differ_by_where_opened() {

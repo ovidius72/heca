@@ -35,12 +35,15 @@ pub mod color;
 pub mod component;
 pub mod drag;
 pub mod effects;
+pub mod event;
 pub mod focus;
 pub mod font;
 pub mod hint;
 pub mod nav;
+pub mod pointer;
 pub mod keymap;
 pub mod layout;
+pub mod menu;
 pub mod reactive;
 pub mod scene;
 pub mod search;
@@ -53,18 +56,25 @@ pub mod widgets;
 pub use heca_core::layout::{Point, Rectangle, Size};
 
 pub use action::{Action, SignalData};
-pub use builders::{DragExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
+pub use builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
-    dispatch, overlay_occluded_at,
+    deliver, dispatch, overlay_occluded_at,
     install_frame_request, request_frame,
 };
-pub use keymap::{KeyChord, Keymap};
+pub use event::{
+    DragEvent, EventCx, EventKind, Handlers, PointerButton, PointerEvent, RawPointer,
+    RawPointerKind,
+};
+pub use event::typed_text;
+pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
+pub use pointer::{PointerState, clear_hover, hit_test};
+pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
-pub use hint::{HintTargetId, collect_hint_targets};
+pub use hint::{collect_peeks, fire_peek};
 pub use nav::{collect_nav_keys, nav_key_at};
-pub use effects::{Attention, Flash};
+pub use effects::{Attention, Eased, Fade, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
@@ -79,19 +89,20 @@ pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, MarkerGroup, NfGlyph, NfIcon, Orientation, Pane, PaneFrame, Panel, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
+    LabelSide, MarkerGroup, NfGlyph, NfIcon, Orientation, Pane, PaneFrame, Panel, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeyCap, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
 pub mod prelude {
     pub use crate::action::{Action, SignalData};
-    pub use crate::builders::{DragExt, HintExt, LayoutExt, NavExt, Parent, StyleExt};
+    pub use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};
+    pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
     pub use crate::keymap::{KeyChord, Keymap};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
-    pub use crate::hint::{HintTargetId, collect_hint_targets};
+    pub use crate::hint::{collect_peeks, fire_peek};
     pub use crate::nav::{collect_nav_keys, nav_key_at};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
@@ -102,7 +113,7 @@ pub mod prelude {
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
         ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, MarkerGroup, MenuEntry, NfGlyph, NfIcon, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
+        LabelSide, MarkerGroup, MenuEntry, MenuItem, NfGlyph, NfIcon, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     };
 }

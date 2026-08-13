@@ -28,7 +28,8 @@
     "750b8ef0-b707-4693-a58d-21511d60f882",
     "9fb188aa-1ff7-4963-aa66-1f6bc09888ee",
     "c0385fb4-5921-4161-8346-9af8ae1530ac",
-    "d90411b0-50c8-42cf-8d85-645686a17c44"
+    "d90411b0-50c8-42cf-8d85-645686a17c44",
+    "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c"
   ],
   "tasks": [
     {
@@ -184,12 +185,69 @@
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
       "updatedAt": "2026-07-03T22:52:52.635Z"
+    },
+    {
+      "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c",
+      "phaseId": "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
+      "number": 381,
+      "shortId": "C6R37",
+      "priority": 8,
+      "shortName": "a-declined-action-says-so-the",
+      "title": "A declined action says so — the producer for \"nothing happened, and here is why\"",
+      "status": "waiting",
+      "description": "An action that runs but **declines** currently vanishes. From a keypress that is tolerable; from the command palette, where the user deliberately picked the entry out of a list, it reads as a broken command.\n\n## The report that produced this task (2026-07-30)\n\nThe maintainer chose **Move Column Up** in the palette and nothing happened. The action is not dead: `handle_move_column_up` (`heca/src/handlers.rs:356`) moves the active column **to the workspace above** and returns early when `current_ws == 0`; `handle_move_column_down` :370 does the same at the last workspace. Correct behaviour, invisible outcome.\n\nIt is not one action. The same silent early return is everywhere a precondition can fail:\n- no workspace above/below (`move_column_up` / `move_column_down`, `move_pane_*`),\n- nothing under the cursor (a component's `perform` returns `Handled::No` — `heca/src/providers/mod.rs` documents \"a silent decline is a real answer, not an error\"),\n- no link under the caret (`open_link_at_caret`), no selection (`copy_selection`), no scrollback to page through,\n- a component action whose owner is not mounted (`IntentOutcome::NotRunnable`), one the domain refuses (`IntentOutcome::Blocked`), and one called without its required arguments (`IntentOutcome::MissingArgs`, added F003/P085/T358) — those three are already **named outcomes** on the dispatch path and today only reach a `#[cfg(debug_assertions)] eprintln!`.\n\n## What to build here\n\nA notification producer on the dispatch path: when an intent resolves to `Blocked`, `NotRunnable` or `MissingArgs`, or a handler declines, raise a low-severity notification saying which action and why. `dispatch_view_intent` (`heca/src/app/interaction.rs`) already computes exactly those outcomes and throws them away for every caller but RPC — that is the seam, and it needs no new plumbing.\n\nThe gap to close is the **handler** case: an early `return` inside `handle_move_column_up` is invisible to the dispatcher. Either handlers gain a way to report a decline (a return value, or a `cx`-style sink), or the well-known preconditions are checked before dispatch. That choice is this task's real content — do not paper over it by special-casing the two column actions.\n\n## The related, deliberately separate question\n\n**Prevention, not just reporting**: an optional `can_perform(&self, id) -> bool` would let the palette render an entry *disabled* rather than let it be chosen and then decline. `DropdownItem` already carries an `enabled` flag, so the menu half exists. That was deferred in F003/P085/T358 (\"Do not build it now\") and belongs with the palette work, not here — this task is about telling the user what happened, not about greying entries out.\n\n## Behaviors to preserve\n\nA decline is **not an error** and must not read as one: severity low, no modal, no sound. Silence stays correct for a keypress that repeats (holding `j` at the end of a list must not spray toasts) — rate-limit or suppress repeats of the same action, which is the store's job (`notification-02`), not a special case here.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c-check-001-planned-waiting",
+          "date": "2026-08-04T19:20:08.688Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Antonio, 2026-08-04: this is to be worked **in its place inside F009**, not pulled forward as a standalone bug fix. It lives in P055 — \"notification-06: Routing + Additional Producers\" — which is the sixth phase of the Notification System, and F009 is entirely unstarted (0/60 tasks). A producer that says \"the action was declined, and here is why\" has nothing to produce *into* until the model, the store, the toast rendering and the routing exist (P061 → P056 → P060 → P059 → P062 → P055).",
+          "description": "Antonio, 2026-08-04: this is to be worked **in its place inside F009**, not pulled forward as a standalone bug fix. It lives in P055 — \"notification-06: Routing + Additional Producers\" — which is the sixth phase of the Notification System, and F009 is entirely unstarted (0/60 tasks). A producer that says \"the action was declined, and here is why\" has nothing to produce *into* until the model, the store, the toast rendering and the routing exist (P061 → P056 → P060 → P059 → P062 → P055).\n\nThe underlying complaint stays valid and is the reason the task exists: `move_column_up` on the first workspace moves the column to the workspace above, returns early, and tells the user nothing — it reads as \"the key does nothing\". Do not fix that with an ad-hoc message; it is the first customer of the notification producer, which is the whole point of filing it here."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c-check-001-producer-on-the-dispatch-path-for-blocked-notrunnable-missingargs-outcomes-dispatch-view-intent-already-computes-and-drops",
+          "number": 1,
+          "title": "producer on the dispatch path for Blocked / NotRunnable / MissingArgs — outcomes dispatch_view_intent already computes and drops",
+          "checked": false
+        },
+        {
+          "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c-check-002-decide-how-a-handler-reports-a-decline-return-value-sink-pre-dispatch-precondition-the-real-content-not-a-special-case-for-two-actions",
+          "number": 2,
+          "title": "decide how a HANDLER reports a decline (return value / sink / pre-dispatch precondition) — the real content, not a special case for two actions",
+          "checked": false
+        },
+        {
+          "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c-check-003-low-severity-no-modal-repeats-of-the-same-action-suppressed-key-hold-must-not-spray",
+          "number": 3,
+          "title": "low severity, no modal; repeats of the same action suppressed (key-hold must not spray)",
+          "checked": false
+        },
+        {
+          "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c-check-004-note-in-the-task-not-built-here-can-perform-to-render-a-palette-entry-disabled-f003-p085-t358-deferred-it",
+          "number": 4,
+          "title": "note in the task, not built here: can_perform() to render a palette entry disabled — F003/P085/T358 deferred it",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-30T15:08:21.918Z",
+      "updatedAt": "2026-08-04T19:20:08.688Z"
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-07-27T11:40:15.529Z",
+  "updatedAt": "2026-08-04T19:20:08.688Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

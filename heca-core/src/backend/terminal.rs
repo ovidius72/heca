@@ -48,6 +48,9 @@ struct ShellLaunch<'a> {
 
 struct CommandLaunch<'a> {
     command: &'a str,
+    /// The shell to run it under, or `None` for the user's `$SHELL` — see
+    /// [`TerminalBackendOptions::shell_override`].
+    shell_override: Option<&'a str>,
 }
 
 enum LaunchTarget<'a> {
@@ -69,6 +72,17 @@ pub struct TerminalBackendOptions {
     pub scrollback_size: usize,
     /// Enable backend-side viewport easing for animated scroll APIs.
     pub scroll_animations: bool,
+    /// Run a spawned command under **this** shell instead of the user's `$SHELL`.
+    ///
+    /// A command is spawned as `<shell> -ic <command>` so terminal-first programs keep the
+    /// interactive shell's job control and rc — see `command_for_spawned_command`. That is right
+    /// for a pane the user opened and wrong for anything that must behave the same everywhere: an
+    /// interactive rc is the user's, and it may print, prompt, or block. heca's own tests set this
+    /// to `/bin/sh` for exactly that reason (an `oh-my-zsh` "Would you like to update? [Y/n]"
+    /// prompt made a spawn test hang for its full 30s timeout, on one machine and not another).
+    ///
+    /// `None` — the default — uses `$SHELL`, falling back to `/bin/sh`.
+    pub shell_override: Option<String>,
 }
 
 impl TerminalBackendOptions {
@@ -86,6 +100,7 @@ impl Default for TerminalBackendOptions {
             shell_integration: None,
             scrollback_size: Self::DEFAULT_SCROLLBACK_SIZE,
             scroll_animations: true,
+            shell_override: None,
         }
     }
 }
@@ -134,7 +149,26 @@ pub struct TerminalBackend {
     shell_reported_program_active: bool,
     /// Whether the pane should auto-close as soon as the PTY child exits.
     auto_close_on_exit: bool,
+    /// A grid size the **child** has not been told about yet. See [`PTY_RESIZE_MIN_INTERVAL`].
+    pending_pty_size: Option<(usize, usize)>,
+    /// When the child was last sent a `TIOCSWINSZ`.
+    last_pty_resize: Instant,
 }
+
+/// **How often the child may be told the terminal changed size.**
+///
+/// Every `TIOCSWINSZ` makes the kernel send `SIGWINCH` to the child's process group, and a shell's
+/// line editor redraws its prompt on each one. Dragging a pane divider changes the row count on
+/// **every frame**, so an un-paced resize signals the shell at frame rate — and zsh dies in that
+/// storm with `zsh: error on TTY read: no such process`, one of its own TTY reads having failed
+/// while it was busy redrawing. heca then closes the pane, because its child really did exit
+/// (F004/P084/T409).
+///
+/// The **terminal model** still resizes immediately, so the pane reflows as you drag; only the
+/// signal to the child is paced. The last size is always delivered once the gesture settles
+/// ([`flush_pending_pty_size`](TerminalBackend::flush_pending_pty_size) runs on every wake), so the
+/// child never ends up disagreeing with what is on screen.
+const PTY_RESIZE_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 
 const POST_COMMAND_FG_REFRESHES: u8 = 2;
 
@@ -189,6 +223,7 @@ impl TerminalBackend {
                 shell_integration: None,
                 scrollback_size: TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
                 scroll_animations: true,
+                shell_override: None,
             },
         )
     }
@@ -233,7 +268,10 @@ impl TerminalBackend {
             options.wake_on_output,
             options.scrollback_size,
             options.scroll_animations,
-            LaunchTarget::Command(CommandLaunch { command }),
+            LaunchTarget::Command(CommandLaunch {
+                command,
+                shell_override: options.shell_override.as_deref(),
+            }),
         )
     }
 
@@ -280,6 +318,7 @@ impl TerminalBackend {
                     cell_size,
                     wake_on_output,
                     command.command,
+                    command.shell_override,
                 )?,
                 false,
             ),
@@ -324,6 +363,8 @@ impl TerminalBackend {
             post_command_fg_refreshes: 0,
             shell_reported_program_active: false,
             auto_close_on_exit,
+            pending_pty_size: None,
+            last_pty_resize: Instant::now(),
         })
     }
 
@@ -457,7 +498,31 @@ impl TerminalBackend {
     fn push_pixel_metrics(&mut self) {
         let px = self.physical_cell_px();
         self.engine.set_cell_px(px);
-        let _ = self.pty.resize(self.cols, self.rows, px);
+        // Paced like the grid size beside it — this is the same `TIOCSWINSZ`, and the same
+        // `SIGWINCH` to the child (see `PTY_RESIZE_MIN_INTERVAL`).
+        self.pending_pty_size = Some((self.cols, self.rows));
+        self.flush_pending_pty_size();
+    }
+
+    /// Tell the child about a size change it has not been told about yet, if enough time has passed
+    /// since the last one. Called from [`set_size`] and from every `update`, so a size that was held
+    /// back mid-gesture is always delivered once the gesture settles.
+    fn flush_pending_pty_size(&mut self) {
+        let Some((cols, rows)) = self.pending_pty_size else {
+            return;
+        };
+        if self.last_pty_resize.elapsed() < PTY_RESIZE_MIN_INTERVAL {
+            return;
+        }
+        self.pending_pty_size = None;
+        self.last_pty_resize = Instant::now();
+        if self.pty.resize(cols, rows, self.physical_cell_px()).is_err() {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] warning: failed to resize PTY to {}x{}; terminal model resized anyway",
+                cols, rows
+            );
+        }
     }
 }
 
@@ -474,19 +539,14 @@ impl PaneBackend for TerminalBackend {
         if self.cols == cols && self.rows == rows {
             return;
         }
-
         self.cols = cols;
         self.rows = rows;
         self.engine.resize(cols, rows);
         self.force_full_damage = true;
 
-        if self.pty.resize(cols, rows, self.physical_cell_px()).is_err() {
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "[heca] warning: failed to resize PTY to {}x{}; terminal model resized anyway",
-                cols, rows
-            );
-        }
+        // The model is already the new size; the **child** is told at a paced rate.
+        self.pending_pty_size = Some((cols, rows));
+        self.flush_pending_pty_size();
     }
 
     fn process_input(&mut self, data: &[u8]) {
@@ -529,6 +589,20 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
+        // **Unchanged means do nothing** — the guard `set_size` has, which this was missing.
+        //
+        // `push_pixel_metrics` issues a `TIOCSWINSZ`, and the kernel answers every one of those
+        // with a `SIGWINCH` to the child's process group. The host calls this from
+        // `sync_terminal_backend_size` on **every frame, for every pane**, with a cell size it
+        // recomputes each time — so heca was signalling every shell it hosts at frame rate,
+        // forever, whether or not anything had changed (F004/P084/T409).
+        //
+        // The comparison is exact on purpose: these are recomputed from the same inputs each
+        // frame, so an unchanged layout produces bit-identical values, and a real change of any
+        // size still gets through.
+        if self.cell_w == cell_w && self.cell_h == cell_h {
+            return;
+        }
         self.cell_w = cell_w;
         self.cell_h = cell_h;
         self.push_pixel_metrics();
@@ -549,6 +623,9 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn update(&mut self) -> bool {
+        // Deliver a size the child has not been told about yet — a drag holds them back, and this
+        // is what makes sure the last one always lands (see `PTY_RESIZE_MIN_INTERVAL`).
+        self.flush_pending_pty_size();
         let mut had_data = false;
         let mut saw_program_event = false;
 
@@ -796,11 +873,32 @@ fn reconcile_exit_state(
 ) {
     if !*reaped {
         match reap_result {
-            Ok(true) | Err(_) => {
+            Ok(true) => {
                 *exited = true;
                 *reaped = true;
             }
-            Ok(false) => {}
+            // **A failed reap is "I do not know yet", never "it exited."**
+            //
+            // It used to mean exited, called "conservative" — but the two outcomes are not
+            // symmetric. Getting it wrong in this direction **destroys a live pane and everything
+            // running in it**; getting it wrong the other way leaves a pane open one wake longer,
+            // and the next wake reaps it properly. `try_wait` can fail transiently (a signal
+            // interrupting the wait is the ordinary case), so a single unlucky call was enough.
+            //
+            // That is not theoretical: dragging a pane divider with the mouse **resized the PTY on
+            // every frame**, hundreds of times a second, and a pane would vanish mid-drag after a
+            // few attempts — while the keyboard resize, which fires a handful of times, never did
+            // it. Nothing looked wrong in the layout: the pane was simply gone from the session
+            // (F004/P084/T409).
+            //
+            // The genuinely unreachable child is still caught, one line down and just below: when
+            // the reader has ALSO disconnected there is nothing left to read and nothing left to
+            // reap, so the pane closes rather than lingering forever.
+            Err(_) if reader_disconnected => {
+                *exited = true;
+                *reaped = true;
+            }
+            Err(_) | Ok(false) => {}
         }
     }
 
@@ -1078,8 +1176,18 @@ mod tests {
         assert!(reaped, "reaped child should stay marked as reaped");
     }
 
+    /// **A failed reap must not destroy a live pane** (F004/P084/T409).
+    ///
+    /// This asserted the opposite until 2026-08-11, on the grounds that closing was the
+    /// "conservative" reading. It is not: the two mistakes cost different things. Closing a pane
+    /// that is still running throws away everything in it; leaving one open for another wake costs
+    /// nothing, because the next wake reaps it properly.
+    ///
+    /// The bug it produced: a mouse divider drag resizes the PTY on every frame, and a pane would
+    /// vanish mid-drag after a few attempts — one unlucky `try_wait` was enough. The keyboard
+    /// resize, which fires a handful of times instead of hundreds, never did it.
     #[test]
-    fn reconcile_exit_state_marks_backend_closed_on_wait_error() {
+    fn reconcile_exit_state_keeps_a_live_pane_when_the_reap_fails() {
         let mut exited = false;
         let mut reaped = false;
 
@@ -1091,10 +1199,31 @@ mod tests {
         );
 
         assert!(
-            exited,
-            "failed wait should conservatively close the backend"
+            !exited,
+            "a failed reap means 'unknown', not 'exited' — closing here destroys a live pane",
         );
-        assert!(reaped, "failed wait should stop future reap polling");
+        assert!(
+            !reaped,
+            "…and it must stay reapable, or the real exit is never noticed",
+        );
+    }
+
+    /// The safety net the change above must not remove: a child that cannot be reaped **and** whose
+    /// reader is gone is genuinely unreachable, so the pane closes instead of lingering forever.
+    #[test]
+    fn reconcile_exit_state_closes_when_the_reap_fails_and_the_reader_is_gone() {
+        let mut exited = false;
+        let mut reaped = false;
+
+        reconcile_exit_state(
+            true,
+            &mut exited,
+            &mut reaped,
+            Err(io::Error::other("wait failed")),
+        );
+
+        assert!(exited, "nothing to read and nothing to reap — the child is gone");
+        assert!(reaped, "…so stop polling for it");
     }
 
     #[test]
@@ -1262,7 +1391,15 @@ mod tests {
             8.4,
             14.0,
             "printf 'phase6-ok\\n'; exit 7",
-            TerminalBackendOptions::default(),
+            TerminalBackendOptions {
+                // **A test may not run the developer's shell.** A command is spawned as
+                // `<shell> -ic`, so with `$SHELL` this ran the user's interactive rc: an
+                // `oh-my-zsh` "Would you like to update? [Y/n]" prompt sat waiting for input that
+                // never came, the command never reached `exit 7`, and this test hung for its full
+                // 30s timeout — on one machine, and not on another.
+                shell_override: Some("/bin/sh".to_string()),
+                ..TerminalBackendOptions::default()
+            },
         )
         .expect("command backend should initialize");
 

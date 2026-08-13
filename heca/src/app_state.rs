@@ -123,13 +123,13 @@ pub enum InputMode {
     DockPick {
         candidates: Vec<(char, crate::chrome::ContainerId)>,
     },
-    /// Universal leader/vimium **hint picker** (entered with `prefix+/`): every
-    /// actionable chrome target gets a letter (a keycap stamped over its bounds);
-    /// the next keypress fires that target's intent. Each candidate carries the
-    /// opaque [`HintTargetId`](heca_grid_ui::HintTargetId) the host maps back to an
-    /// intent via the retained tree's hint-target registry. Any other key / Esc exits.
+    /// Universal leader/vimium **picker** (entered with `prefix+/`): every region that said what a
+    /// pick does to it gets a letter (a keycap stamped over its bounds), and the next keypress runs
+    /// that region's own declaration. Each candidate carries a
+    /// [`PeekTarget`](crate::chrome::PeekTarget) — the tree it lives in and its path in it, valid
+    /// for exactly as long as the letters are up. Any other key / Esc exits.
     HintPick {
-        candidates: Vec<(char, heca_grid_ui::HintTargetId)>,
+        candidates: Vec<(char, crate::chrome::PeekTarget)>,
     },
 }
 
@@ -708,12 +708,6 @@ pub struct AppState {
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
     pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
-    /// Shared allocator + map for the universal KeyHint picker (`prefix+/`), spanning
-    /// EVERY retained tree that carries hint targets — the chrome tree and each pane's
-    /// header tree — which rebuild on independent cadences. Ids are monotonic (never
-    /// reused), so targets from different trees never collide; each tree removes its id
-    /// range on rebuild/prune. See [`crate::chrome::HintTargetRegistry`].
-    pub hint_targets: crate::chrome::HintTargetRegistry,
     /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
     /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
     /// trees; this holds runtime-added layers that join the same surface stack. See
@@ -783,6 +777,31 @@ pub struct AppState {
     pub last_visited_ws_idx: Option<usize>,
     /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
     pub last_visited_pane_per_ws: Vec<Option<PaneId>>,
+    /// **Where the exposé's highlight is, per workspace** — the map's own cursor, kept here rather
+    /// than inside the widget because the map is rebuilt from scratch every time it opens.
+    ///
+    /// Two things depend on it, and both are things a freshly built tree cannot know:
+    /// - the map opens on the pane you came from, not the first card in the session;
+    /// - moving to another workspace and back returns the highlight to where you left it, instead
+    ///   of restarting at that row's first pane.
+    ///
+    /// Deliberately **not** [`last_visited_pane_per_ws`](Self::last_visited_pane_per_ws), which is
+    /// where the *app's* focus has been. Moving a highlight around a map is looking, not going: it
+    /// must not rewrite the history that `prefix+i` and the sidebar's dim highlight read.
+    ///
+    /// Indexed by workspace, grown with the session like its neighbour above.
+    pub expose_cursor_per_ws: Vec<Option<PaneId>>,
+    /// **Which row the map's cursor is currently on** — the workspace, not the pane.
+    ///
+    /// The map is rebuilt whenever the session changes under it, and a rebuild has to put the
+    /// cursor back where it was. Its per-workspace memory above cannot answer that on its own: it
+    /// is read at the *active* workspace's index, so a rebuild while the cursor sat in another
+    /// row moved the highlight to the active row — which reads as the map jumping to a different
+    /// workspace the moment you delete a pane (Antonio, driving, 2026-08-11).
+    ///
+    /// Only consulted while the map is **already up**. Opening it fresh still starts at the
+    /// workspace you are standing in, which is what the memory above is for.
+    pub expose_cursor_ws: Option<usize>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.
@@ -850,6 +869,16 @@ pub struct AppState {
     /// only while such a widget/overlay is focused (never hijacks normal input). Rebuilt on config
     /// reload alongside the keymap.
     pub widget_keymap: heca_grid_ui::Keymap,
+    /// **Menus a widget declared and asked for**, waiting to become layers (F004/P084/T395).
+    ///
+    /// A widget builds its own menu and the framework picks the anchor, but only the host can put
+    /// one *above everything* — so `install_menu_sink` drops it here and the event loop drains it.
+    /// A queue rather than a direct call because the sink is a plain `Fn` installed once at
+    /// startup, and inserting a layer needs `&mut AppState`; and rather than an `AppEvent` because
+    /// a menu carries closures and a winit user event must be `Send`.
+    pub pending_menus: std::rc::Rc<
+        std::cell::RefCell<Vec<(heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor)>>,
+    >,
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,

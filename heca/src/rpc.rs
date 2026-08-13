@@ -6,7 +6,7 @@
 //!   split-h | split-v
 //!   close-pane | close-pane-id <pane_id>
 //!   float | float-at <pane_id> <x> <y> <w> <h>
-//!   resize <column|pane> <axis> <amount>
+//!   resize <column|pane> <axis> <amount>   (moves the boundary ALONG the axis: +x right, +y down)
 //!   resize-column <col_idx> <delta>
 //!   resize-pane-height <col_idx> <pane_idx> <delta>
 //!   move-pane <pane_id> <target_col>
@@ -24,7 +24,12 @@
 //!   collapse-current-workspace | expand-current-workspace | toggle-current-workspace-collapsed
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
-//!   command-palette
+//!   close-overlay
+//!   show-layer <name> [dock] | hide-layer <name> [dock] | toggle-layer <name> [dock]
+//!     (an addressable layer, named owner.short — e.g. heca.expose)
+//!   command-palette [mode] [query]
+//!     (both optional; `mode` is pane|workspace and composes with `query` into the prefilled
+//!      search — `command-palette pane nvim` opens the pane list narrowed to "nvim")
 //!   action <name> [--dock <container_id>] [key=value …]
 //!     (the generic verb: any action in the catalog by id, built-in or a component's own.
 //!      `--dock` names WHICH placement of a component the call is aimed at; without it the
@@ -622,7 +627,26 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "collapse-current-column" => Ok(WmAction::CollapseCurrentColumn),
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
-        "command-palette" => Ok(WmAction::CommandPalette),
+        "close-overlay" => Ok(WmAction::CloseOverlay { overlay: None }),
+        // `show-layer <name> [dock]` — the addressable-layer verbs (F003/P082/T327).
+        "show-layer" => Ok(WmAction::ShowLayer {
+            name: parts.next().map(|s| s.to_string()),
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+        "hide-layer" => Ok(WmAction::HideLayer {
+            name: parts.next().map(|s| s.to_string()),
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+        "toggle-layer" => Ok(WmAction::ToggleLayer {
+            name: parts.next().map(|s| s.to_string()),
+            dock: parts.next().map(|s| s.to_string()),
+        }),
+
+        // `command-palette [mode] [query]`, both optional — the same shape as `clear-search-*`.
+        "command-palette" => Ok(WmAction::CommandPalette {
+            mode: parts.next().map(|s| s.to_string()),
+            query: parts.next().map(|s| s.to_string()),
+        }),
         "spawn-command" => {
             let mut kind = SpawnKind::Terminal;
             let mut float = false;
@@ -1209,11 +1233,33 @@ mod tests {
         assert!(parse_rpc_command("sidebar-delete-selected").is_err());
     }
 
+    /// The addressable-layer verbs parse with both arguments optional — a bare `show-layer` is
+    /// still a valid action, which is what keeps it offerable in the palette.
+    #[test]
+    fn test_layer_visibility_verbs() {
+        assert_eq!(
+            parse_rpc_command("show-layer heca.expose"),
+            Ok(WmAction::ShowLayer { name: Some("heca.expose".into()), dock: None }),
+        );
+        assert_eq!(
+            parse_rpc_command("hide-layer docker.expose docker.right"),
+            Ok(WmAction::HideLayer {
+                name: Some("docker.expose".into()),
+                dock: Some("docker.right".into()),
+            }),
+        );
+        assert_eq!(
+            parse_rpc_command("toggle-layer"),
+            Ok(WmAction::ToggleLayer { name: None, dock: None }),
+            "bare is valid: both arguments are optional",
+        );
+    }
+
     #[test]
     fn test_command_palette() {
         assert_eq!(
             parse_rpc_command("command-palette"),
-            Ok(WmAction::CommandPalette)
+            Ok(WmAction::CommandPalette { mode: None, query: None })
         );
     }
 

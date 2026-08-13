@@ -130,6 +130,9 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     for root in state.layers.visible_roots_mut() {
         chrome_animating |= root.tick(dt);
     }
+    // A layer dissolving on its way out: the registry owns the fade, because the layer is being
+    // taken away *by* the registry and its own tree cannot outlive the decision to remove it.
+    chrome_animating |= state.layers.tick(dt);
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);

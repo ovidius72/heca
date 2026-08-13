@@ -10,7 +10,7 @@
   "contextReady": false,
   "contextReadyReason": "",
   "summary": "Secondo provider built-in, integrazione con keybinding/RPC e discovery delle actions.",
-  "description": "",
+  "description": "A second built-in provider, integrated with keybindings/RPC and action discovery — the multi-region proof.\n\n═══ WHAT THIS PHASE ACTUALLY PROVES ═══\n\nEverything in F003 is designed so that a component nobody special-cased behaves exactly like the\nworkspaces dock. **A second provider is the only way to find out.** Until one exists, every \"any\ncomponent can do this\" claim in the design is untested, and the shape of the first component leaks\ninto the host without anyone noticing — which has already happened repeatedly and each time was\nfound by building the general thing, not by reading.\n\nKnown, written-down places where the host is still workspaces-shaped (they are what this phase will\nhit first):\n\n- **`ChromeSignals` is workspace-keyed.** Every family but `row_nav` is keyed by `PaneId` / `ws_idx`\n  / `col_idx`, so a second dock has nowhere to register a value that updates without a rebuild.\n  `row_nav` shows the shape the rest wants: keyed by `(mount, nav_key)`, which any component can\n  name.\n- **`DragItemRegistry` is workspace-shaped** for the same reason: `ChromeDragItem` is a closed\n  `Pane | Column | Workspace`, so a second dock's row cannot be dragged or dropped at all.\n\nBoth are recorded in `heca/src/chrome/contribution.rs` beside `BuildCx`, checked against \"is this\ntrue for ANY component?\" on 2026-07-30 (F003/P086/T367).\n\n═══ WHAT THE SECOND PROVIDER MUST GET FOR FREE ═══\n\nIf any of these needs a line written for the new component specifically, the host is the bug:\n\n- rows with a keyboard cursor (`nav_key`), a right-click menu (`.context_menu`), and a `prefix+/`\n  pick (`KeyHint::on_peek`) — none of which involves a registry;\n- its own actions declared with `ActionMeta` (label, icon, declared `args`, policy, confirm), then\n  reachable from a keybinding, the command palette and RPC with nothing further;\n- **its own seating**: mounted twice, its two placements answer independently — the cursor, the\n  scroll offset, the keyboard target and the gesture a row emits are all per mount\n  (F004/P084/T399).\n\nThis is the same rule the whole feature rests on (`AGENTS.md` ⭐⭐ RULE ZERO): write the line a\nplugin author would type; if it needs a registry, an id or a `pub(crate)` type, the API is the bug.\n\nDesign record: `docs/chrome-and-ui.md` §2.8 (chrome-wide, not sidebar-only), §3.2 (region\ncontributions), §3.4 (the provider model) · F003's description.",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -95,9 +95,10 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-27T11:40:15.503Z",
+  "updatedAt": "2026-08-11T06:58:17.792Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": []
 }

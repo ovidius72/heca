@@ -44,7 +44,8 @@
 
 use crate::{
     Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
-    ViewNode, ViewOrientation, ViewScrollAxes, ViewSeverity, ViewSize, ViewTextAlign, ViewVariant,
+    ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity, ViewSize,
+    ViewTextAlign, ViewVariant,
     WidgetKind,
 };
 
@@ -540,13 +541,16 @@ with_text!(
 );
 
 with_event!(
-    Row { on_press => "press" }
-    Button { on_press => "press" }
-    IconButton { on_press => "press" }
-    BadgeButton { on_press => "press" }
-    Item { on_press => "press" }
-    RailCell { on_press => "press" }
-    Choice { on_press => "press" }
+    // `peek` beside `press` on every actionable kind: **a leader-key pick is its own gesture**, and
+    // a row that answers it differently has to be able to say so. Left unbound it falls back to
+    // `press`, so an actionable node stays reachable by letter with nothing written.
+    Row { on_press => "press", on_peek => "peek" }
+    Button { on_press => "press", on_peek => "peek" }
+    IconButton { on_press => "press", on_peek => "peek" }
+    BadgeButton { on_press => "press", on_peek => "peek" }
+    Item { on_press => "press", on_peek => "peek" }
+    RailCell { on_press => "press", on_peek => "peek" }
+    Choice { on_press => "press", on_peek => "peek" }
     Input { on_change => "change" }
     Toggle { on_change => "change" }
     Checkbox { on_change => "change" }
@@ -796,6 +800,11 @@ impl Row {
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)
     }
+    /// Mark as the one a **back-and-forth** binding would return to — the faintest of the
+    /// selection weights, under every other state.
+    pub fn previous(self, on: bool) -> Self {
+        self.prop("previous", on)
+    }
     /// How the active state is shown.
     pub fn marker(self, m: ViewMarker) -> Self {
         self.prop("marker", m)
@@ -845,6 +854,11 @@ impl ItemGroup {
 }
 
 impl DockFrame {
+    /// Mark as the one a **back-and-forth** binding would return to — the faintest of the
+    /// selection weights, under every other state.
+    pub fn previous(self, on: bool) -> Self {
+        self.prop("previous", on)
+    }
     /// Whether the frame is open.
     pub fn expanded(self, on: bool) -> Self {
         self.prop("expanded", on)
@@ -896,6 +910,23 @@ impl Scroll {
     /// Which way it scrolls.
     pub fn axes(self, axes: ViewScrollAxes) -> Self {
         self.prop("axes", axes)
+    }
+    /// Where it puts the descendant it follows — minimally in view, or centred.
+    pub fn reveal_align(self, align: ViewRevealAlign) -> Self {
+        self.prop("reveal_align", align)
+    }
+    /// Whether a scrollbar may appear (default `true`); off also gives back its gutter.
+    pub fn scrollbars(self, on: bool) -> Self {
+        self.prop("scrollbars", PropValue::Bool(on))
+    }
+    /// Let the view move past the ends of its content, so a centred target still reaches the
+    /// middle when there is nothing on one side of it.
+    pub fn overscroll(self, on: bool) -> Self {
+        self.prop("overscroll", PropValue::Bool(on))
+    }
+    /// Ease the view to where it is going over this many seconds; `0` jumps.
+    pub fn smooth_scroll(self, seconds: f32) -> Self {
+        self.prop("smooth_scroll", PropValue::Float(seconds as f64))
     }
 }
 

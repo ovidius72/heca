@@ -63,13 +63,43 @@ fn component_action(
     written: &str,
     args: &HashMap<String, String>,
 ) -> (String, ActionRef) {
-    let direct = action_ref_from_config(written, args);
-    if matches!(direct, ActionRef::Builtin(_)) || written.starts_with(&format!("{component}.")) {
-        return (written.to_string(), direct);
-    }
-    let id = format!("{component}.{written}");
+    let id = surface_action_id(component, written, args);
     let action = action_ref_from_config(&id, args);
     (id, action)
+}
+
+/// **The action id a name written in a surface's entry means** — the naming half of
+/// [`component_action`], on its own so nothing has to re-derive it.
+///
+/// A surface asking "what key runs this **in me**?" has to ask under the id the
+/// [`BindingIndex`](crate::keymap::BindingIndex) actually recorded, which is this one and not the
+/// short name the user wrote. Deriving it a second time is how the exposé's `x` / `r` / `d` stopped
+/// working the moment they moved into config: the cards looked up `delete_pane`, the index held
+/// `heca.expose.delete_pane`, the lookup came back empty, and the letters silently did nothing
+/// (Antonio, driving, 2026-08-12). One rule, both readers.
+pub(crate) fn surface_action_id(
+    surface: &str,
+    written: &str,
+    args: &HashMap<String, String>,
+) -> String {
+    if resolves_as_builtin(written, args) || written.starts_with(&format!("{surface}.")) {
+        return written.to_string();
+    }
+    format!("{surface}.{written}")
+}
+
+/// Would this name bind as a built-in, with these arguments? **Asked without reporting anything.**
+///
+/// The question [`surface_action_id`] needs, and the reason it is not
+/// [`action_ref_from_config`]: that one *reports* argument problems, which is right for the name a
+/// binding actually lands on and wrong for a name merely being considered. Probing with it made the
+/// exposé's `[[keys.surface]] delete_column = "r"` announce *"missing required argument 'ws_idx' …
+/// cannot be built and will do nothing when pressed"* at every startup — about `delete_column`,
+/// which was then **not** what got bound: the entry resolved to `heca.expose.delete_column`, whose
+/// arguments the map's own cards supply (Antonio, driving, 2026-08-12). A warning about a name the
+/// loader rejected is worse than no warning, because it sends the user to fix a line that is right.
+fn resolves_as_builtin(name: &str, args: &HashMap<String, String>) -> bool {
+    build_action(name, args).is_some() || action_from_name(name).is_some()
 }
 
 /// What a binding was written as: which action, in which layer, under which key.
@@ -221,29 +251,11 @@ fn log_arg_problems(name: &str, args: &HashMap<String, String>) {
 pub(crate) fn combo_to_grid(
     combo: &KeyCombo,
 ) -> Option<(heca_grid_ui::GridKey, heca_grid_ui::Modifiers)> {
-    use heca_grid_ui::GridKey;
-    let lowered = combo.key.to_lowercase();
-    let key = match lowered.as_str() {
-        "enter" | "return" => GridKey::Enter,
-        "space" => GridKey::Space,
-        "tab" => GridKey::Tab,
-        "escape" | "esc" => GridKey::Escape,
-        "backspace" => GridKey::Backspace,
-        "delete" | "del" => GridKey::Delete,
-        "arrowleft" | "left" => GridKey::ArrowLeft,
-        "arrowright" | "right" => GridKey::ArrowRight,
-        "arrowup" | "up" => GridKey::ArrowUp,
-        "arrowdown" | "down" => GridKey::ArrowDown,
-        "home" => GridKey::Home,
-        "end" => GridKey::End,
-        s => {
-            let mut chars = s.chars();
-            match (chars.next(), chars.next()) {
-                (Some(c), None) => GridKey::Char(c),
-                _ => return None,
-            }
-        }
-    };
+    // The **name** table is `GridKey::from_name`'s, not this function's: a config file, a platform
+    // event and an RPC string all name a key, and each surface used to keep its own list of which
+    // key a name meant. What is left here is the part that really is the app's — its normalised
+    // chord, which carries the macOS physical-key fallback for `Ctrl+letter`.
+    let key = heca_grid_ui::GridKey::from_name(&combo.key)?;
     let mods = heca_grid_ui::Modifiers {
         ctrl: combo.ctrl,
         alt: combo.alt,
@@ -310,6 +322,17 @@ pub fn build_keymap(
     for (k, v) in &config.keys.bindings {
         merged_bindings.insert(k.clone(), v.clone());
     }
+    // `[[keys.bind]]` — the same normal-mode keymap, for the bindings that carry `args`. Merged by
+    // **combo** rather than replaced wholesale: a user adding one parameterized binding must not
+    // silently drop the defaults, which is the trap an array of tables otherwise sets.
+    let mut merged_bind = default_keys.bind.clone();
+    for binding in &config.keys.bind {
+        match merged_bind.iter_mut().find(|b| b.keys == binding.keys) {
+            Some(existing) => *existing = binding.clone(),
+            None => merged_bind.push(binding.clone()),
+        }
+    }
+
     let no_args = HashMap::new();
     for (action_name, value) in &merged_bindings {
         // An unknown name is NOT skipped any more: it becomes a Dynamic ref resolved at press
@@ -343,6 +366,33 @@ pub fn build_keymap(
                     index,
                 );
             }
+        }
+    }
+
+    // The arg-carrying bindings, into the same keymap and through the same seam as the flat ones —
+    // `action_ref_from_config` is what turns a name plus an `args` table into a built action, so a
+    // parameterized global binding is not a second resolution path.
+    for binding in &merged_bind {
+        let action = action_ref_from_config(&binding.action, &binding.args);
+        for key_str in binding.keys.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            let written = Written {
+                action: &binding.action,
+                layer: "[[keys.bind]]",
+                key: key_str,
+            };
+            let (mode, combo) = match key_str.strip_prefix("prefix+") {
+                Some(rest) => ("normal", KeyCombo::parse(rest.trim())),
+                None => ("global", KeyCombo::parse(key_str)),
+            };
+            bind_with_conflict_tracking(
+                &mut keymap,
+                mode,
+                combo,
+                action.clone(),
+                written,
+                conflicts,
+                index,
+            );
         }
     }
 
@@ -397,7 +447,11 @@ pub fn build_keymap(
 
 /// The built-in mode keymaps that are **entered by focus rather than by a key**, so they never take
 /// a trigger — see the note at the trigger site in [`build_modes`].
-const UNTRIGGERED_MODES: &[&str] = &["sidebar", crate::app::input::FOCUS_LAYER];
+const UNTRIGGERED_MODES: &[&str] = &[
+    "sidebar",
+    crate::app::input::FOCUS_LAYER,
+    crate::app::input::LAYER_FLOOR,
+];
 
 /// Build **every** keymap layer, and the reverse index over all of them, from one config.
 ///
@@ -468,8 +522,8 @@ fn bind_global_focus(
 /// Carried over verbatim from the `[keys.<kind>]` shape it replaces: only *where the entries come
 /// from* changed, never how two of them combine.
 fn layer_component_keys(
-    base: &mut heca_config::theme::ComponentKeysConfig,
-    over: heca_config::theme::ComponentKeysConfig,
+    base: &mut heca_config::theme::SurfaceKeysConfig,
+    over: heca_config::theme::SurfaceKeysConfig,
 ) {
     // Identity travels with the entries so the merged layer can still say which `[[keys.component]]`
     // a conflict came from. A base only ever takes id-less entries, so it keeps `id: None`; a
@@ -488,13 +542,18 @@ fn layer_component_keys(
     base.unbind.extend(over.unbind);
 }
 
-/// Build the component binding layers from `[[keys.component]]` (F003/P086/T362).
+/// Build the surface binding layers from `[[keys.surface]]` / `[[keys.component]]` (F003/P086/T362,
+/// generalised to any surface by F003/P082/T416).
 ///
-/// **Keyed by placement, falling back to the kind.** An entry with no `id` speaks for the component
+/// **Keyed by placement, falling back to the kind.** An entry with no `id` speaks for the surface
 /// *type*, so writing it once covers every seating; an entry with an `id` is layered on top of that
-/// base for one mount alone. The returned map therefore holds an entry under each component name and
+/// base for one mount alone. The returned map therefore holds an entry under each surface name and
 /// an entry under each placement id that config actually mentions — [`focus_layer_action`] asks for
 /// the focused mount first and falls back to its kind, so a placement nobody narrowed costs nothing.
+///
+/// A **layer** (the exposé, a plugin's panel) has no placement to narrow: its name is the layer's
+/// own name, and it lands in the same map beside the docks, because a dock and an overlay are the
+/// same thing to the keyboard.
 ///
 /// [`focus_layer_action`]: crate::app::input
 pub fn build_component_keymaps(
@@ -503,18 +562,19 @@ pub fn build_component_keymaps(
     index: &mut BindingIndex,
 ) -> (HashMap<String, KeymapRegistry>, Vec<GlobalFocus>) {
     let defaults = heca_config::theme::KeysConfig::default();
-    let entries = || defaults.component.iter().chain(config.keys.component.iter());
+    // `surfaces()` is the one reader of both spellings — see `KeysConfig::surfaces`.
+    let entries = || defaults.surfaces().chain(config.keys.surfaces());
 
     // Pass 1 — the per-component base: every entry with no `id`, defaults first so the user's file
     // layers over them. BTreeMap so the build order (and any conflict report) is deterministic.
-    let mut bases: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    let mut bases: BTreeMap<String, heca_config::theme::SurfaceKeysConfig> = BTreeMap::new();
     for entry in entries().filter(|e| e.id.is_none()) {
         layer_component_keys(bases.entry(entry.name.clone()).or_default(), entry.clone());
     }
 
     // Pass 2 — the placements, each seeded from its component's finished base. Run as a second pass
     // for exactly that reason: a narrowing entry must see the whole base, wherever it was written.
-    let mut placements: BTreeMap<String, heca_config::theme::ComponentKeysConfig> = BTreeMap::new();
+    let mut placements: BTreeMap<String, heca_config::theme::SurfaceKeysConfig> = BTreeMap::new();
     for entry in entries() {
         let Some(id) = entry.id.clone() else { continue };
         let seeded = placements
@@ -537,11 +597,11 @@ pub fn build_component_keymaps(
         let mut keymap = KeymapRegistry::new();
         let no_args = HashMap::new();
         // The label a conflict is reported under: which entry the user has to go and edit.
-        // How this layer is named wherever it is reported: which `[[keys.component]]` entry the user
+        // How this layer is named wherever it is reported: which `[[keys.surface]]` entry the user
         // has to go and edit.
         let label = match layer.id.as_deref() {
-            Some(id) => format!("[[keys.component]] {}:{id}", layer.name),
-            None => format!("[[keys.component]] {}", layer.name),
+            Some(id) => format!("[[keys.surface]] {}:{id}", layer.name),
+            None => format!("[[keys.surface]] {}", layer.name),
         };
         let bind_label = format!("{label}.bind");
         for (name, value) in &layer.bindings {
@@ -656,30 +716,7 @@ pub fn build_modes(
                 index,
             );
         }
-        // **`Esc` is a guarantee, not a default** (F003/P086/T363). Every focused container must
-        // have a way back to the main region, including one that declares nothing at all — so it is
-        // re-asserted here after the merge instead of being left to the file. `[[keys.mode]]` arrays
-        // are replaced wholesale by a user's config, so a `focus` block that simply forgot this line
-        // would otherwise strand the keyboard in a dock with only the mouse to get out.
-        //
-        // Bound through the same door as everything else: putting something *else* on `Escape` in
-        // this layer is a real collision and comes out in the report rather than silently losing.
-        // Binding `unfocus_dock` to further keys is untouched — this adds a floor, not a ceiling.
-        if mode_cfg.name == crate::app::input::FOCUS_LAYER {
-            bind_with_conflict_tracking(
-                &mut mode_map,
-                &mode_cfg.name,
-                KeyCombo::parse("Escape"),
-                ActionRef::Builtin(WmAction::UnfocusDock),
-                Written {
-                    action: "unfocus_dock",
-                    layer: "built-in (every container has a way out)",
-                    key: "Escape",
-                },
-                conflicts,
-                index,
-            );
-        }
+        assert_escape_floor(&mut mode_map, &mode_cfg.name, conflicts, index);
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
         // These two are **entered by focus, not by a key**: `sidebar` by `sidebar_focus` or a
         // click, `focus` by focusing a dock. A trigger would make them reachable as a plain
@@ -698,7 +735,71 @@ pub fn build_modes(
         }
     }
 
+    // The layer floor is not a `[[keys.mode]]` block anybody writes — a layer is entered by being
+    // shown, not by pressing something — so it is created here when no config declared it. A user
+    // who *does* write one gets extra keys for the front-most layer, with the floor re-asserted over
+    // them by the loop above.
+    if !mode_keymaps.contains_key(crate::app::input::LAYER_FLOOR) {
+        let mut floor = KeymapRegistry::new();
+        assert_escape_floor(
+            &mut floor,
+            crate::app::input::LAYER_FLOOR,
+            conflicts,
+            index,
+        );
+        mode_keymaps.insert(crate::app::input::LAYER_FLOOR.to_string(), floor);
+    }
+
     (mode_keymaps, mode_triggers)
+}
+
+/// **`Escape` is a guarantee, not a default** (F003/P086/T363; generalized by F003/P082/T428).
+///
+/// Escape acts on the surface in front of you and gives the keyboard back to what was under it —
+/// the way it does in every other application. What that means depends on the kind of surface, and
+/// neither spelling is a line a config can drop:
+///
+/// | floor | what `Escape` means there |
+/// |---|---|
+/// | [`FOCUS_LAYER`](crate::app::input::FOCUS_LAYER) | a focused dock hands the keyboard back to the panes |
+/// | [`LAYER_FLOOR`](crate::app::input::LAYER_FLOOR) | the front-most layer closes itself |
+///
+/// (The panes have no floor on purpose: a key nothing claims belongs to the program running in
+/// them, so `Escape` still means what it means inside vim.)
+///
+/// It is re-asserted **after** the merge rather than left to the file because `[[keys.mode]]` arrays
+/// are replaced wholesale by a user's config, so a block that simply forgot the line would strand
+/// the keyboard with only the mouse to get out. Bound through the same door as everything else:
+/// putting something *else* on `Escape` in one of these layers is a real collision and comes out in
+/// the report rather than silently losing. Binding the same action to further keys is untouched —
+/// this adds a floor, not a ceiling.
+fn assert_escape_floor(
+    map: &mut KeymapRegistry,
+    mode: &str,
+    conflicts: &mut Conflicts,
+    index: &mut BindingIndex,
+) {
+    let (action, name) = match mode {
+        crate::app::input::FOCUS_LAYER => (ActionRef::Builtin(WmAction::UnfocusDock), "unfocus_dock"),
+        crate::app::input::LAYER_FLOOR => (
+            ActionRef::Builtin(WmAction::CloseOverlay { overlay: None }),
+            "close_overlay",
+        ),
+        _ => return,
+    };
+    bind_with_conflict_tracking(
+        map,
+        mode,
+        KeyCombo::parse("Escape"),
+        action,
+        Written {
+            action: name,
+            layer: "built-in (Escape acts on the focused surface)",
+            key: "Escape",
+        },
+        conflicts,
+        index,
+    );
 }
 
 /// Build the action registry and register individual handlers for all actions.
@@ -1006,7 +1107,21 @@ pub fn build_registry() -> ActionRegistry {
     );
 
     // ── System ──
-    registry.register(&WmAction::CommandPalette, handle_command_palette);
+    registry.register(
+        &WmAction::CommandPalette { mode: None, query: None },
+        handle_command_palette,
+    );
+    registry.register(
+        &WmAction::CloseOverlay { overlay: None },
+        crate::handlers::handle_close_overlay,
+    );
+    for act in [
+        WmAction::ShowLayer { name: None, dock: None },
+        WmAction::HideLayer { name: None, dock: None },
+        WmAction::ToggleLayer { name: None, dock: None },
+    ] {
+        registry.register(&act, crate::handlers::handle_layer_visibility);
+    }
     registry.register(
         &WmAction::SpawnCommand {
             command: String::new(),
@@ -1761,7 +1876,7 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
-            Some(&WmAction::CommandPalette)
+            Some(&WmAction::CommandPalette { mode: None, query: None })
         );
     }
 
@@ -1786,7 +1901,7 @@ mod tests {
         // to avoid colliding with established keys; users bind it in config.
         assert_eq!(
             keymap.resolve_builtin("normal", &KeyCombo::parse("p")),
-            Some(&WmAction::CommandPalette)
+            Some(&WmAction::CommandPalette { mode: None, query: None })
         );
     }
 
@@ -1853,14 +1968,14 @@ mod tests {
 
     /// Build a config carrying these `[[keys.component]]` entries, as TOML would produce.
     fn with_layers(
-        layers: Vec<heca_config::theme::ComponentKeysConfig>,
+        layers: Vec<heca_config::theme::SurfaceKeysConfig>,
     ) -> heca_config::theme::Config {
         let mut config = heca_config::theme::Config::default();
         config.keys.component = layers;
         config
     }
 
-    fn with_layer(layer: heca_config::theme::ComponentKeysConfig) -> heca_config::theme::Config {
+    fn with_layer(layer: heca_config::theme::SurfaceKeysConfig) -> heca_config::theme::Config {
         with_layers(vec![layer])
     }
 
@@ -1869,8 +1984,8 @@ mod tests {
         name: &str,
         id: Option<&str>,
         entries: &[(&str, &str)],
-    ) -> heca_config::theme::ComponentKeysConfig {
-        heca_config::theme::ComponentKeysConfig {
+    ) -> heca_config::theme::SurfaceKeysConfig {
+        heca_config::theme::SurfaceKeysConfig {
             name: name.to_string(),
             id: id.map(str::to_string),
             bindings: entries
@@ -2115,6 +2230,55 @@ mod tests {
         );
     }
 
+    /// **The layer twin of the dock's floor** (F003/P082/T428). A layer that declares nothing —
+    /// which is every layer today, and every layer a plugin will ship before it thinks about keys —
+    /// still closes on `Escape`. Nothing in any config declares this mode, so it is built from
+    /// nothing, exactly as a plugin's layer will find it.
+    #[test]
+    fn escape_always_closes_the_front_most_layer() {
+        let config = heca_config::theme::Config::default();
+        let (modes, triggers) =
+            build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+
+        assert_eq!(
+            modes[crate::app::input::LAYER_FLOOR]
+                .resolve_builtin(crate::app::input::LAYER_FLOOR, &KeyCombo::parse("Escape")),
+            Some(&WmAction::CloseOverlay { overlay: None }),
+            "a layer can always be closed, whatever it declared",
+        );
+        assert!(
+            !triggers.contains_key(crate::app::input::LAYER_FLOOR),
+            "a layer is entered by being shown, never by a key",
+        );
+    }
+
+    /// **`Escape` must not be a global binding** (F003/P082/T428). The global map is the fallback
+    /// for what no surface in front claimed, so an `Escape` in it outranks all three floors at once
+    /// — which is how `close_overlay` came to eat the key while a dock held the keyboard, closing
+    /// nothing because no overlay was up.
+    ///
+    /// The two keys that *are* global stay global: they close the front-most layer from anywhere.
+    #[test]
+    fn escape_is_never_a_global_binding() {
+        let keymaps = super::build_keymaps(
+            &heca_config::theme::Config::default(),
+            &mut Conflicts::default(),
+        );
+
+        assert_eq!(
+            keymaps.flat.resolve("global", &KeyCombo::parse("Escape")),
+            None,
+            "Escape belongs to the surface that holds the keyboard, never to the whole app",
+        );
+        assert_eq!(
+            keymaps
+                .flat
+                .resolve_builtin("global", &KeyCombo::parse("q")),
+            Some(&WmAction::CloseOverlay { overlay: None }),
+            "and the keys that are global keep working from anywhere",
+        );
+    }
+
     /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
     /// and the layer — and an `unbind` must take its entry out with it (F003/P086/T366).
     #[test]
@@ -2127,11 +2291,40 @@ mod tests {
         let up = &index["workspaces.cursor_up"];
         assert_eq!(up.len(), 1);
         assert_eq!(up[0].key, "k");
-        assert_eq!(up[0].layer, "[[keys.component]] workspaces");
+        // Reported under the general spelling whichever way the entry was written: the label names
+        // where a *surface's* keys live, and `[[keys.component]]` is now one way to spell that
+        // (F003/P082/T416).
+        assert_eq!(up[0].layer, "[[keys.surface]] workspaces");
         assert!(
             !index.contains_key("workspaces.cursor_down"),
             "a retired key must not be reported as still running the action: {index:?}",
         );
+    }
+
+    /// **The shipped defaults must not make heca complain about themselves at startup.**
+    ///
+    /// Every id a `[[keys.surface]]` entry actually binds is checked for missing arguments here,
+    /// the way `log_arg_problems` checks it at load — which is silenced under `cfg!(test)`, so
+    /// nothing else in this suite can see it. The exposé's `delete_column = "r"` printed *"missing
+    /// required argument 'ws_idx' … cannot be built and will do nothing when pressed"* on every
+    /// launch while working perfectly, because the probe that decides whether to qualify a name was
+    /// reporting on the name it went on to reject (Antonio, driving, 2026-08-12).
+    #[test]
+    fn no_shipped_surface_binding_reports_an_argument_problem() {
+        let defaults = heca_config::theme::KeysConfig::default();
+        for entry in defaults.surfaces() {
+            for written in entry.bindings.keys() {
+                let no_args = HashMap::new();
+                let id = super::surface_action_id(&entry.name, written, &no_args);
+                let problems = binding_arg_problems(&id, &no_args);
+                assert!(
+                    problems.is_empty(),
+                    "[[keys.surface]] {} binds {written} → {id}, which the loader would then \
+                     report as unusable: {problems:?}",
+                    entry.name,
+                );
+            }
+        }
     }
 
     /// The reason the shape is an array: an `id` narrows an entry to one placement, and that
@@ -2210,7 +2403,7 @@ mod tests {
             keys: keys.to_string(),
             args: HashMap::from([("command".to_string(), cmd.to_string())]),
         };
-        let shipped = heca_config::theme::ComponentKeysConfig {
+        let shipped = heca_config::theme::SurfaceKeysConfig {
             name: "docker".to_string(),
             bind: vec![
                 bind("spawn_command", "t", "lazydocker"),
@@ -2219,7 +2412,7 @@ mod tests {
             ..Default::default()
         };
         // The user rebinds `t` only, in a second entry the builder layers over the first.
-        let user = heca_config::theme::ComponentKeysConfig {
+        let user = heca_config::theme::SurfaceKeysConfig {
             name: "docker".to_string(),
             bind: vec![bind("spawn_command", "t", "ctop")],
             ..Default::default()

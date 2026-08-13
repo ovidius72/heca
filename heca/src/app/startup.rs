@@ -54,6 +54,35 @@ fn choose_alpha_mode(
 /// Apply OS backdrop blur / vibrancy once after window creation, when enabled.
 /// macOS = `NSVisualEffectView`; Windows = acrylic; Linux/other = no-op (the
 /// effect is not portably available). Needs a transparent window (F2b) to show.
+/// The layout's options, read from config — **the one place that mapping lives**.
+///
+/// Called at startup *and* on every `prefix+Shift+r`, because a setting the user can edit and only
+/// the startup path reads is a setting that silently does not reload: `overview_zoom`,
+/// `overview_gap` and `overview_zoom_from` were all read once and never again, so changing them and
+/// reloading appeared to do nothing at all (Antonio, 2026-08-11).
+pub(crate) fn layout_options_from(
+    app_config: &AppConfig,
+) -> heca_core::layout::types::LayoutOptions {
+    use heca_core::layout::types::CenterFocusedColumn as C;
+    heca_core::layout::types::LayoutOptions {
+            gaps: app_config
+                .config
+                .appearance
+                .effective_pane_gap(&app_config.theme) as f64,
+            always_center_single_column: app_config.config.settings.always_center_single_column,
+            // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
+            overview_scale: app_config.config.settings.overview_zoom.clamp(0.05, 0.75),
+            overview_zoom_from: app_config.config.settings.overview_zoom_from.clamp(0.2, 4.0),
+            overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
+            center_focused_column: match app_config.config.settings.center_focused_column {
+                heca_config::settings::CenterFocusedColumn::Never => C::Never,
+                heca_config::settings::CenterFocusedColumn::OnOverflow => C::OnOverflow,
+                heca_config::settings::CenterFocusedColumn::Always => C::Always,
+            },
+            ..Default::default()
+        }
+}
+
 pub(crate) fn apply_window_vibrancy(
     window: &Window,
     appearance: &heca_config::appearance::AppearanceConfig,
@@ -147,6 +176,19 @@ pub(crate) async fn init_state(
     let redraw_proxy = event_proxy.clone();
     install_frame_request(move || {
         let _ = redraw_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
+    // **The host's one job in a declared context menu** (F004/P084/T395): put it on screen. The
+    // widget built it and the framework anchored it; only the host can reach a layer. Queued
+    // rather than mounted here because this closure has no `&mut AppState` — the event loop drains
+    // it before the next frame.
+    type PendingMenu = (heca_grid_ui::widgets::ContextMenu, heca_grid_ui::widgets::MenuAnchor);
+    let pending_menus: std::rc::Rc<std::cell::RefCell<Vec<PendingMenu>>> = Default::default();
+    let queue = pending_menus.clone();
+    let menu_proxy = event_proxy.clone();
+    heca_grid_ui::install_menu_sink(move |menu, anchor| {
+        queue.borrow_mut().push((menu, anchor));
+        let _ = menu_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
     });
 
     let appearance = app_config.config.appearance.clone();
@@ -269,14 +311,7 @@ pub(crate) async fn init_state(
     let pane_area = chrome.content_rect(log_w, log_h);
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
-    let layout_options = heca_core::layout::types::LayoutOptions {
-        gaps: app_config
-            .config
-            .appearance
-            .effective_pane_gap(&app_config.theme) as f64,
-        always_center_single_column: app_config.config.settings.always_center_single_column,
-        ..Default::default()
-    };
+    let layout_options = layout_options_from(app_config);
     let mut session = Session::new(
         heca_core::layout::types::SessionId(1),
         viewport_size,
@@ -361,7 +396,7 @@ pub(crate) async fn init_state(
         }
     };
 
-    Box::new(AppState {
+    let mut state = Box::new(AppState {
         window,
         event_proxy,
         surface,
@@ -405,7 +440,6 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
-        hint_targets: crate::chrome::HintTargetRegistry::default(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
@@ -425,6 +459,8 @@ pub(crate) async fn init_state(
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],
+        expose_cursor_per_ws: vec![None; ws_count],
+        expose_cursor_ws: None,
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,
@@ -445,10 +481,16 @@ pub(crate) async fn init_state(
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         widget_keymap: crate::app::registry::build_widget_keymap(&app_config.config),
+        pending_menus: pending_menus.clone(),
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
-    })
+    });
+    // Register the exposé under `heca.expose`, hidden, so `toggle_layer` has something to reach
+    // from the very first frame. Re-registering is the rebuild path when the session's shape
+    // changes; see `chrome::expose::register`.
+    crate::chrome::register_expose(&mut state);
+    state
 }
 
 #[cfg(test)]

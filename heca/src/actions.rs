@@ -1302,7 +1302,94 @@ impl ActionRegistry {
             description: "Search every action — the app's and every mounted component's — and run one.",
             category: ActionCategory::System,
             icon: Some(Glyph::Search),
+            // Both OPTIONAL: bare is the actions list with an empty query, which is what a plain
+            // binding means. A *required* argument would take this action out of the palette's own
+            // listing, which offers only what it can run with nothing supplied.
+            args: &[
+                ArgDescriptor::optional(
+                    "mode",
+                    ArgKind::Text,
+                    "Which list to open in: pane or workspace; omit for actions.",
+                ),
+                ArgDescriptor::optional(
+                    "query",
+                    ArgKind::Text,
+                    "Text to start the search with; omit to open empty.",
+                ),
+            ],
+        },
+        ActionDescriptor {
+            name: "close_overlay",
+            label: "Close Overlay",
+            description: "Dismiss the front-most overlay — the exposé, a dialog, a menu.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // No arguments at all: the overlay it closes is the one in front, because an OverlayId
+            // is a runtime counter nothing outside the process could name.
             args: &[],
+        },
+        ActionDescriptor {
+            name: "show_layer",
+            label: "Show Layer",
+            description: "Bring an addressable layer into the stack — an expose, a plugin panel.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // Both OPTIONAL: a `LayerId` is a runtime counter nothing outside the process could
+            // name, and a *required* argument would keep this out of the palette entirely.
+            args: &[
+                ArgDescriptor::optional(
+                    "name",
+                    ArgKind::Text,
+                    "Layer to show, as owner.short (e.g. heca.expose).",
+                ),
+                ArgDescriptor::optional(
+                    "dock",
+                    ArgKind::Text,
+                    "Which placement, when a component is seated twice; omit to use the focused one.",
+                ),
+            ],
+        },
+        ActionDescriptor {
+            name: "hide_layer",
+            label: "Hide Layer",
+            description: "Take an addressable layer back out of the stack.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // Both OPTIONAL: a `LayerId` is a runtime counter nothing outside the process could
+            // name, and a *required* argument would keep this out of the palette entirely.
+            args: &[
+                ArgDescriptor::optional(
+                    "name",
+                    ArgKind::Text,
+                    "Layer to hide, as owner.short (e.g. heca.expose).",
+                ),
+                ArgDescriptor::optional(
+                    "dock",
+                    ArgKind::Text,
+                    "Which placement, when a component is seated twice; omit to use the focused one.",
+                ),
+            ],
+        },
+        ActionDescriptor {
+            name: "toggle_layer",
+            label: "Toggle Layer",
+            description: "Show an addressable layer if hidden, hide it if shown.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // Both OPTIONAL: a `LayerId` is a runtime counter nothing outside the process could
+            // name, and a *required* argument would keep this out of the palette entirely.
+            args: &[
+                ArgDescriptor::optional(
+                    "name",
+                    ArgKind::Text,
+                    "Layer to toggle, as owner.short (e.g. heca.expose).",
+                ),
+                ArgDescriptor::optional(
+                    "dock",
+                    ArgKind::Text,
+                    "Which placement, when a component is seated twice; omit to use the focused one.",
+                ),
+            ],
         },
         ActionDescriptor {
             name: "reload_config",
@@ -1693,13 +1780,13 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "resize",
             label: "Resize",
-            description: "Resize the focused column or pane along one axis by a relative amount.",
+            description: "Move the boundary the focused column or pane owns, along one axis.",
             category: ActionCategory::Layout,
             icon: None,
             args: &[
                 ArgDescriptor::required_enum("target", <crate::input::ResizeTarget as crate::input::EnumArg>::VALUES, "What to resize."),
                 ArgDescriptor::required_enum("axis", <crate::input::ResizeAxis as crate::input::EnumArg>::VALUES, "Which axis to resize along."),
-                ArgDescriptor::required("amount", ArgKind::Float, "How much to grow by; negative shrinks."),
+                ArgDescriptor::required("amount", ArgKind::Float, "How far to move the boundary, along the axis: +x is right, +y is DOWN. A pane's boundary is the one below it, or the one above when it is last — so the divider moves the same way whichever pane is active."),
             ],
         },
         ActionDescriptor {

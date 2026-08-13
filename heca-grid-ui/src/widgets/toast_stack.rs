@@ -373,29 +373,49 @@ impl Component for ToastStack {
         });
     }
 
+    /// The stack's **input** surface: the cards it is showing, wherever they were placed. Its own
+    /// layout box is not where they are, and while there are none it takes nothing at all.
+    fn hit_bounds(&self) -> Option<Rectangle> {
+        if self.entries.borrow().is_empty() {
+            return None;
+        }
+        self.layout();
+        let entries = self.entries.borrow();
+        let mut it = entries.iter().map(|e| e.toast.base().bounds);
+        let first = it.next()?;
+        Some(it.fold(first, union))
+    }
+
     /// Capture: the toasts are not `base.children` — they live in `entries`, reconciled by id — so
-    /// there is no framework walk that could reach them. This is the walk.
+    /// there is no framework walk that could reach them. This is the walk, and the one place in
+    /// the library that delivers a **resolved** event by hand: the router found this widget, and
+    /// this widget knows which card it means.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.entries.borrow().is_empty() {
             return Handled::No;
         }
         self.layout();
-        // Route to the toast under the pointer (press), or all (move, for hover).
+        // Route to the toast under the pointer; hover moves with it, so a card the pointer left
+        // hears a leave rather than staying lit.
         match ev {
-            Event::PointerPressed { pos } | Event::PointerReleased { pos } => {
+            Event::PointerDown(p) | Event::PointerUp(p) | Event::Click(p) => {
+                let pos = p.pos;
                 let mut entries = self.entries.borrow_mut();
                 for e in entries.iter_mut() {
-                    if e.toast.base().bounds.contains(*pos) {
-                        return crate::component::dispatch(&mut e.toast, ev);
+                    if e.toast.base().bounds.contains(pos) {
+                        return crate::component::deliver(&mut e.toast, ev);
                     }
                 }
                 // Missed every toast — let it fall through to the UI behind.
                 Handled::No
             }
-            Event::PointerMoved { .. } => {
+            Event::PointerMove(p) => {
+                let pos = p.pos;
+                let leave = Event::PointerLeave(*p);
                 let mut entries = self.entries.borrow_mut();
                 for e in entries.iter_mut() {
-                    crate::component::dispatch(&mut e.toast, ev);
+                    let over = e.toast.base().bounds.contains(pos);
+                    let _ = crate::component::deliver(&mut e.toast, if over { ev } else { &leave });
                 }
                 Handled::No
             }

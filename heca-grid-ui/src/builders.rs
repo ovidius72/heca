@@ -58,10 +58,10 @@ pub trait LayoutExt: Component + Sized {
     /// Outer margin split per axis: `x` left+right, `y` top+bottom.
     fn margin_xy(mut self, x: f32, y: f32) -> Self {
         let s = &mut self.base_mut().style.layout;
-        s.margin_left = Some(x);
-        s.margin_right = Some(x);
-        s.margin_top = Some(y);
-        s.margin_bottom = Some(y);
+        s.margin_left = Some(x.into());
+        s.margin_right = Some(x.into());
+        s.margin_top = Some(y.into());
+        s.margin_bottom = Some(y.into());
         self
     }
     /// Horizontal outer margin (left+right) only.
@@ -74,24 +74,69 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.layout.margin_y = Some(v);
         self
     }
+    /// **Place this widget at a rect of its parent**, instead of letting it flow with its siblings.
+    ///
+    /// The host often knows *where* something goes while the widget still owns *what it looks
+    /// like*: a floating pane drawn over the strip it belongs to, a chip pinned to a pane's corner,
+    /// a badge over a cell. The temptation is to measure it yourself and call `cx.rect` + `cx.text`
+    /// — don't. Name the rect and the engine places it.
+    ///
+    /// ```no_run
+    /// # use heca_grid_ui::prelude::*;
+    /// # use heca_grid_ui::style::Length::Pct;
+    /// # let (x, y, w, h, strip_w, screen_h) = (200.0, 100.0, 400.0, 300.0, 1600.0, 900.0);
+    /// # let card = Label::new("float");
+    /// // A floating pane at its own fraction of the workspace behind it.
+    /// let placed = card.at_rect(Pct(x / strip_w), Pct(y / screen_h), Pct(w / strip_w), Pct(h / screen_h));
+    /// ```
+    ///
+    /// Two things follow, and both are the point:
+    ///
+    /// - **It is out of the flow.** The box takes no space from its siblings and is not moved by
+    ///   them, so it draws *over* what it is placed on rather than pushing it aside. Later children
+    ///   paint above earlier ones, so declare it after what it covers.
+    /// - **A percentage resolves per axis** — `left`/`width` against the parent's width, `top`/
+    ///   `height` against its height. This is the difference from
+    ///   [`margin_left`](Self::margin_left) / [`margin_top`](Self::margin_top), where CSS resolves
+    ///   a percentage on **both** axes against the width; a fractional `top` written as a margin
+    ///   silently produces a number, just the wrong one, on any parent that is not square
+    ///   (`layout::tests::a_percentage_margin_resolves_against_the_parents_width_on_both_axes`).
+    ///
+    /// The rect **overrides** [`width`](Self::width) / [`height`](Self::height): it names both, and
+    /// a leftover size beside it would draw a different rect than the one asked for.
+    fn at_rect(
+        mut self,
+        left: impl Into<crate::style::Length>,
+        top: impl Into<crate::style::Length>,
+        width: impl Into<crate::style::Length>,
+        height: impl Into<crate::style::Length>,
+    ) -> Self {
+        self.base_mut().style.layout.placement = Some(crate::style::Placement {
+            left: left.into(),
+            top: top.into(),
+            width: width.into(),
+            height: height.into(),
+        });
+        self
+    }
     /// Left outer margin only.
-    fn margin_left(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_left = Some(v);
+    fn margin_left(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_left = Some(v.into());
         self
     }
     /// Right outer margin only.
-    fn margin_right(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_right = Some(v);
+    fn margin_right(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_right = Some(v.into());
         self
     }
     /// Top outer margin only.
-    fn margin_top(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_top = Some(v);
+    fn margin_top(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_top = Some(v.into());
         self
     }
     /// Bottom outer margin only.
-    fn margin_bottom(mut self, v: f32) -> Self {
-        self.base_mut().style.layout.margin_bottom = Some(v);
+    fn margin_bottom(mut self, v: impl Into<crate::style::Length>) -> Self {
+        self.base_mut().style.layout.margin_bottom = Some(v.into());
         self
     }
     /// Main-axis distribution.
@@ -193,6 +238,45 @@ pub trait LayoutExt: Component + Sized {
         self
     }
     /// Flex grow factor (share of remaining space).
+    /// Permission to **shrink** below the natural size, the other half of a share.
+    ///
+    /// `flex_grow` distributes only *positive* free space, so growing alone never divides a region:
+    /// a child keeps its content size and the row overflows. A true share is grow + a zero base
+    /// size + this (CSS `flex: 1 1 0`).
+    fn shrink(mut self, s: f32) -> Self {
+        self.base_mut().style.layout.flex_shrink = Some(s);
+        self
+    }
+
+    /// Floor for the height — a row that must stay legible however many share the space.
+    fn min_height(mut self, h: Length) -> Self {
+        self.base_mut().style.layout.min_height = Some(h);
+        self
+    }
+
+    /// Floor for the width.
+    fn min_width(mut self, w: Length) -> Self {
+        self.base_mut().style.layout.min_width = Some(w);
+        self
+    }
+
+    /// Ceiling for the height — a box that may not grow past it however tall its content is.
+    fn max_height(mut self, h: Length) -> Self {
+        self.base_mut().style.layout.max_height = Some(h);
+        self
+    }
+
+    /// Ceiling for the width, the counterpart to [`min_width`](LayoutExt::min_width).
+    ///
+    /// A panel sized to its content wants both: a floor so a one-word menu is not a sliver, and a
+    /// ceiling so one long row does not stretch it across the screen. Past the ceiling the content
+    /// is the child's problem — a [`Label`](crate::widgets::Label) with
+    /// [`truncate`](crate::widgets::Label::truncate) cuts, anything else overflows.
+    fn max_width(mut self, w: Length) -> Self {
+        self.base_mut().style.layout.max_width = Some(w);
+        self
+    }
+
     fn grow(mut self, g: f32) -> Self {
         self.base_mut().style.layout.flex_grow = g;
         self
@@ -254,77 +338,6 @@ pub trait StyleExt: Component + Sized {
     }
 }
 
-/// Drag-and-drop opt-in — **universal**, available on every widget via a blanket
-/// impl (like the base-level `visible`/`disabled` properties). Marks a widget as a
-/// drag source and/or a drop target by storing an opaque [`DragItemId`] the app
-/// interprets. The framework resolves these generically from the retained tree's
-/// laid-out bounds ([`drag::source_at`](crate::drag::source_at) /
-/// [`drag::resolve_at`](crate::drag::resolve_at)) — no per-surface geometry.
-///
-/// Domain-neutral by construction: the id is opaque and the payload (what the drag
-/// *carries*) lives in the app's `DragContext<P>`, never in the widget.
-pub trait DragExt: Component + Sized {
-    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
-    /// can begin a drag; the app maps `id` back to the dragged thing.
-    fn draggable(mut self, id: DragItemId) -> Self {
-        self.base_mut().drag_source = Some(id);
-        self
-    }
-    /// Make this widget a **drop target** identified by `id`. A drag released over
-    /// its bounds drops onto `id`.
-    fn drop_target(mut self, id: DragItemId) -> Self {
-        self.base_mut().drop_target = Some(id);
-        self
-    }
-}
-
-/// Every component gets the drag/drop builders for free.
-impl<T: Component + Sized> DragExt for T {}
-
-/// Opt a widget into the universal leader/vimium **hint picker**: it gets assigned
-/// a letter and, on the keypress, the host fires the intent it mapped `id` to.
-///
-/// Domain-neutral like [`DragExt`]: the id is opaque and the app owns the id→intent
-/// map. Enumerated by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
-pub trait HintExt: Component + Sized {
-    /// Make this widget a **hint target** carrying opaque `id`.
-    fn hint_target(mut self, id: crate::hint::HintTargetId) -> Self {
-        self.base_mut().hint_target = Some(id);
-        self
-    }
-}
-
-/// Every component gets the hint builder for free.
-impl<T: Component + Sized> HintExt for T {}
-
-/// Declaring a widget to be a **navigable row** with an identity of its own.
-pub trait NavExt: Component + Sized {
-    /// Label this row with the identity its component knows it by (`"pane:7"`, `"ws:0"`).
-    ///
-    /// One declaration, three readers: the keyboard cursor, the right-click target, and later the
-    /// drag identity. The string is **opaque to the library** — only the component that wrote it
-    /// and the host routing back to that component ever interpret it — and it must be stable across
-    /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
-    fn nav_key(mut self, key: impl Into<String>) -> Self {
-        self.base_mut().nav_key = Some(key.into());
-        self
-    }
-
-    /// Name this subtree as an enclosing **scope** — a panel, a dock, a tab group.
-    ///
-    /// Stamp it on the wrapper around a region and a press anywhere inside it resolves back to that
-    /// region, including a press a widget consumes (a scrollbar thumb is still *inside* the panel
-    /// holding it). That is what lets "click a panel to focus it" work for every panel with nothing
-    /// declared per panel. See [`crate::nav::scope_at`].
-    fn scope_key(mut self, id: impl Into<String>) -> Self {
-        self.base_mut().scope_key = Some(id.into());
-        self
-    }
-}
-
-/// Every component gets the nav-key builder for free: any widget can be a row.
-impl<T: Component + Sized> NavExt for T {}
-
 /// Components that contain children.
 pub trait Parent: Component + Sized {
     /// Append a child component.
@@ -354,3 +367,352 @@ pub trait Parent: Component + Sized {
         self
     }
 }
+
+/// **Event handlers, on any widget.** The one-line opt-in every widget already has for layout
+/// ([`LayoutExt`]), style ([`StyleExt`]), drag ([`ComponentExt`]) and navigation ([`ComponentExt`]) —
+/// the same shape, for what happens to it.
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+///
+/// let row = Row::new()
+///     .child(Label::new("pane-1"))
+///     .on_click(|_| println!("selected"))
+///     .on_right_click(|e| println!("menu at {:?}", e.pos()))
+///     .on_pointer_enter(|_| println!("hovered"));
+/// ```
+///
+/// **Handlers run in the bubble phase**, after the widget's descendants have had the event and
+/// before the widget's own [`on_event`](Component::on_event) — so a handler sees what its children
+/// declined, and can stop the widget's built-in behaviour by taking the event itself:
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+/// use heca_grid_ui::EventKind;
+///
+/// // The general form: full control over the walk.
+/// let button = Button::primary("Delete").on(EventKind::Click, |cx| {
+///     cx.stop_propagation();   // the button will not fire
+/// });
+/// ```
+///
+/// The named builders below consume the event (an `on_click` that let the click carry on to the
+/// row behind it would be a surprise). Use [`on`](ComponentExt::on) with
+/// [`EventCx`](crate::event::EventCx) when you want to observe without consuming.
+/// **What [`ComponentExt::context_menu`] accepts: a menu, or a way to make one.**
+///
+/// One method, two spellings, because both are honest ways to say the same thing:
+///
+/// ```
+/// use heca_grid_ui::prelude::*;
+/// use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
+///
+/// # fn build_menu(_: u64) -> ContextMenu { ContextMenu::new("m") }
+/// let ctx = ContextMenu::new("pane").child(Menu::new("Pane", "…"));
+/// Row::new().context_menu(ctx.clone());               // a value
+/// Row::new().context_menu(move || build_menu(7));     // a closure
+/// ```
+///
+/// A [`ContextMenu`](crate::widgets::ContextMenu) is `Clone` — its content is plain data and `Rc`
+/// closures — so the value form is a clone per opening, not a shared panel. Reach for the closure
+/// when the menu's rows depend on state this widget's tree is not rebuilt on, or when building it
+/// eagerly would be wasted work.
+pub trait IntoContextMenu {
+    /// Produce the menu to show. Called **each time** the menu is triggered.
+    fn build(&self) -> crate::widgets::ContextMenu;
+}
+
+impl IntoContextMenu for crate::widgets::ContextMenu {
+    fn build(&self) -> crate::widgets::ContextMenu {
+        self.clone()
+    }
+}
+
+impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
+    fn build(&self) -> crate::widgets::ContextMenu {
+        self()
+    }
+}
+
+/// **Everything every component gets.**
+///
+/// One trait, blanket-implemented for every [`Component`], holding the builders that are true of
+/// all of them: what happens to a widget ([`on_click`](ComponentExt::on_click),
+/// [`on_key`](ComponentExt::on_key), [`context_menu`](ComponentExt::context_menu)), who it is
+/// ([`nav_key`](ComponentExt::nav_key)), and what it does in a drag
+/// ([`draggable`](ComponentExt::draggable), [`drop_target`](ComponentExt::drop_target)).
+///
+/// It was four traits — `ComponentExt`, `ComponentExt`, `ComponentExt`, `ComponentExt` — split by nothing but the order
+/// they were added in. All four were unconditional (`impl<T: Component> … for T {}`), so the split
+/// carried no rule: four names to learn and four imports for one fact. The two splits that *do*
+/// carry a rule are still separate, because the type system enforces them: [`StyleExt`] is
+/// surfaces only (a layout-only `Flex` cannot be given a background), and [`Parent`] is containers
+/// only (a `Label` has no `.child()`).
+pub trait ComponentExt: Component + Sized {
+
+    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
+    /// can begin a drag; the app maps `id` back to the dragged thing.
+    fn draggable(mut self, id: DragItemId) -> Self {
+        self.base_mut().drag_source = Some(id);
+        self
+    }
+    /// Make this widget a **drop target** identified by `id`. A drag released over
+    /// its bounds drops onto `id`.
+    fn drop_target(mut self, id: DragItemId) -> Self {
+        self.base_mut().drop_target = Some(id);
+        self
+    }
+
+    /// Label this row with the identity its component knows it by (`"pane:7"`, `"ws:0"`).
+    ///
+    /// One declaration, three readers: the keyboard cursor, the right-click target, and later the
+    /// drag identity. The string is **opaque to the library** — only the component that wrote it
+    /// and the host routing back to that component ever interpret it — and it must be stable across
+    /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
+    fn nav_key(mut self, key: impl Into<String>) -> Self {
+        self.base_mut().nav_key = Some(key.into());
+        self
+    }
+
+    /// Name this subtree as an enclosing **scope** — a panel, a dock, a tab group.
+    ///
+    /// Stamp it on the wrapper around a region and a press anywhere inside it resolves back to that
+    /// region, including a press a widget consumes (a scrollbar thumb is still *inside* the panel
+    /// holding it). That is what lets "click a panel to focus it" work for every panel with nothing
+    /// declared per panel. See [`crate::nav::scope_at`].
+    fn scope_key(mut self, id: impl Into<String>) -> Self {
+        self.base_mut().scope_key = Some(id.into());
+        self
+    }
+
+    /// Register `f` for `kind`. It receives an [`EventCx`](crate::event::EventCx) and consumes the
+    /// event only if it calls [`stop_propagation`](crate::event::EventCx::stop_propagation).
+    fn on(mut self, kind: crate::event::EventKind, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.base_mut()
+            .handlers
+            .get_or_insert_with(Default::default)
+            .add(kind, f);
+        self
+    }
+
+    /// A left click landed on this widget (or a descendant that did not take it).
+    fn on_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Click, f)
+    }
+
+    /// A second click in the same run. The first still arrived as a
+    /// [`click`](ComponentExt::on_click).
+    fn on_double_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DoubleClick, f)
+    }
+
+    /// A third click, and any beyond it (`click_count` says which).
+    fn on_triple_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::TripleClick, f)
+    }
+
+    /// A right click landed on this widget.
+    ///
+    /// This is the whole of "a widget can have its own menu": the widget hears the click, on
+    /// itself, with the position — no registry of row identities, no hit-test at the host, and
+    /// nothing to forget to declare.
+    fn on_right_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::RightClick, f)
+    }
+
+    /// A middle click landed on this widget.
+    fn on_middle_click(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::MiddleClick, f)
+    }
+
+    /// A button went down on this widget. Stopping propagation here **captures the pointer**: the
+    /// moves and the release that end the gesture come here wherever the cursor goes.
+    fn on_pointer_down(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerDown, f)
+    }
+
+    /// The button came up.
+    fn on_pointer_up(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerUp, f)
+    }
+
+    /// The pointer moved over this widget, or anywhere while this widget holds capture.
+    fn on_pointer_move(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerMove, f)
+    }
+
+    /// The pointer came over this widget. Several widgets on one path enter together, so stopping
+    /// propagation here is almost always wrong.
+    fn on_pointer_enter(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerEnter, f)
+    }
+
+    /// The pointer left this widget.
+    fn on_pointer_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::PointerLeave, f)
+    }
+
+    /// The wheel turned over this widget. Stop propagation to keep it from also scrolling whatever
+    /// contains this widget.
+    fn on_scroll(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Scroll, f)
+    }
+
+    /// A press landed somewhere that is **not** this widget or a descendant — how a popup closes
+    /// itself. The press belongs to whatever it landed on, so do not claim it.
+    fn on_pointer_down_outside(
+        self,
+        f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
+    ) -> Self {
+        self.on(crate::event::EventKind::PointerDownOutside, f)
+    }
+
+    /// A key went **down** on this widget — it holds the keyboard, or it contains what does.
+    ///
+    /// The other half of "an event listener in every widget": intercepting a key, a quick-pick
+    /// letter or a shortcut is the same one line as intercepting a click, on the same argument,
+    /// with the same way to say the event is yours.
+    ///
+    /// Down and up are separate builders because they are separate events everywhere else — the
+    /// DOM's `keydown` / `keyup`, and every toolkit that copies it. One handler with a `pressed`
+    /// flag inside makes every caller write the same `if`, which is a rule in N call sites rather
+    /// than in the API.
+    ///
+    /// ```ignore
+    /// card.on_key_up(move |cx| {
+    ///     if let Event::Key { key: GridKey::Char('x'), .. } = cx.event() {
+    ///         delete(id);
+    ///         cx.stop_propagation();   // …or let it bubble to the container
+    ///     }
+    /// })
+    /// ```
+    fn on_key_down(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on_key_when(true, f)
+    }
+
+    /// A key came **up** on this widget. See [`on_key_down`](ComponentExt::on_key_down).
+    fn on_key_up(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on_key_when(false, f)
+    }
+
+    /// Shared by the two above: one registration on `EventKind::Key`, gated on the half it wants.
+    /// Private so there is no third spelling of "a key happened".
+    #[doc(hidden)]
+    fn on_key_when(
+        self,
+        want_pressed: bool,
+        mut f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static,
+    ) -> Self {
+        self.on(crate::event::EventKind::Key, move |cx| {
+            if matches!(cx.event(), crate::event::Event::Key { pressed, .. } if *pressed == want_pressed)
+            {
+                f(cx);
+            }
+        })
+    }
+
+    /// Text the user committed — typed, pasted, or composed by an IME.
+    fn on_text_input(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::TextInput, f)
+    }
+
+    /// This widget gained keyboard focus.
+    ///
+    /// Named `on_focus_gained`, not `on_focus`, because [`Component::on_focus`] is the widget's
+    /// own hook for the same moment and two same-named methods on one type is a puzzle nobody
+    /// should have to solve at a call site.
+    fn on_focus_gained(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Focus, f)
+    }
+
+    /// This widget lost keyboard focus — the moment to commit an edit or close a popup. Named
+    /// `on_focus_lost` for the same reason as [`on_focus_gained`](ComponentExt::on_focus_gained).
+    fn on_focus_lost(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Blur, f)
+    }
+
+    /// This widget entered a live tree (fired on its first layout pass).
+    fn on_mount(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Mount, f)
+    }
+
+    /// This widget is being dropped — the tree that held it was rebuilt or thrown away. Use it to
+    /// release what the widget registered with the host.
+    fn on_unmount(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Unmount, f)
+    }
+
+    /// A drag began on this widget (it declared a [`draggable`](ComponentExt::draggable) id and the
+    /// pointer travelled past the threshold).
+    fn on_drag_start(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragStart, f)
+    }
+
+    /// The drag this widget started moved.
+    fn on_drag(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Drag, f)
+    }
+
+    /// The drag this widget started ended, dropped or not.
+    fn on_drag_end(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragEnd, f)
+    }
+
+    /// A drag came over this drop target.
+    fn on_drag_enter(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragEnter, f)
+    }
+
+    /// A drag moved within this drop target — `side` follows the pointer.
+    fn on_drag_over(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragOver, f)
+    }
+
+    /// A drag left this drop target.
+    fn on_drag_leave(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::DragLeave, f)
+    }
+
+    /// A drag was released over this drop target.
+    fn on_drop(self, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        self.on(crate::event::EventKind::Drop, f)
+    }
+
+    /// **Give this widget a context menu.** Right-click it — or anything inside it — and the menu
+    /// opens at the cursor; trigger the host's `open_context_menu` while focus is here and it
+    /// opens under the widget.
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
+    ///
+    /// let id = 7u64;
+    /// let ctx = ContextMenu::new("pane-menu").child(
+    ///     Menu::new("Pane", "What you can do with this pane")
+    ///         .child(MenuItem::new().label("Rename").on_click(move || { let _ = id; }))
+    ///         .child(MenuItem::new().label("Close").danger(true).on_click(move || { let _ = id; })),
+    /// );
+    ///
+    /// // A value — and the same value again on the next row, because a menu is `Clone`.
+    /// let row = Row::new().child(Label::new("nvim")).context_menu(ctx.clone());
+    /// // …or a closure, when the rows must read state at the moment it opens.
+    /// let other = Row::new().context_menu(move || ctx.clone());
+    /// ```
+    ///
+    /// Nothing else is needed: no row identity, no path string, no registered builder, no
+    /// host-side hit test, no `Shift+F10` handling, and no anchor — the framework picks that from
+    /// what triggered the menu. Universal, like `nav_key`, so an `Icon` and a plugin's own widget
+    /// carry one on the same terms as a `Row`. See [`crate::menu`] for bubbling and the host sink.
+    ///
+    /// **A value or a closure** — see [`IntoContextMenu`]. Either way the menu is realized when it
+    /// is triggered, so a composed row's subtree is built fresh for each opening.
+    fn context_menu(mut self, menu: impl IntoContextMenu + 'static) -> Self {
+        self.base_mut().context_menu = Some(Box::new(move || menu.build()));
+        self
+    }
+
+}
+
+/// Every component gets them — the point of the design: put a widget in a tree and it works, with
+/// nothing to opt into.
+impl<T: Component + Sized> ComponentExt for T {}

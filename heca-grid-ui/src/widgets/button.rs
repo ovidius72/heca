@@ -32,7 +32,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::MONO_ADVANCE_RATIO;
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{Signal, SignalGet};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::{Glyph, Icon, Label};
@@ -147,11 +147,12 @@ pub struct Button {
     variant: ButtonVariant,
     show_glow: bool,
     show_border: bool,
-    /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
+    /// Animated hover amount, 0.0 (rest) → 1.0 (hovered). The *state* is
+    /// [`Base::hovered`](crate::component::Base::hovered), kept by the pointer router; this is
+    /// only how far the visual has eased toward it.
     progress: f32,
     /// Press flash effect (brightens on press, fades out).
     flash: Flash,
-    hovered: Signal<bool>,
     on_click: Option<Box<dyn Fn()>>,
 }
 
@@ -165,6 +166,7 @@ impl Button {
     pub fn empty() -> Self {
         let mut base = Base::new();
         base.focusable = true; // keyboard-focusable when enabled (Component::focusable)
+        base.one_click_target = true; // and one click target (Base::one_click_target)
         // One control = one Tab stop: focus never descends into composed content.
         base.focus_barrier = true;
         // Content is laid out as a centered row; padding/gap derive from the size variant in
@@ -179,7 +181,6 @@ impl Button {
             show_border: true,
             progress: 0.0,
             flash: Flash::new(),
-            hovered: signal(false),
             on_click: None,
         };
         button.remeasure();
@@ -269,12 +270,9 @@ impl Button {
 
     /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
-        self.hovered
+        self.base.pointer.hovered
     }
 
-    fn contains(&self, p: Point) -> bool {
-        self.base.bounds.contains(p)
-    }
 
     /// Border that eases from semi-opaque (rest) to solid (hover) by `p`. The
     /// stroke `width` is the theme's `border_width` (so `border_width == 0` means
@@ -362,7 +360,26 @@ impl Button {
     }
 }
 
+impl Button {
+    /// The button's one action: flash, then run `on_click`. Every way of pressing it — pointer,
+    /// keyboard, or a caller invoking [`Component::activate`] — goes through here, so they cannot
+    /// drift apart and none of them has to know how the others work.
+    fn fire(&mut self) {
+        self.flash.trigger();
+        if let Some(f) = &self.on_click {
+            f();
+        }
+    }
+}
+
 impl Component for Button {
+    /// A caller with only a `dyn Component` can press this button — no synthetic keypress, no
+    /// focus required, because an addressed call is not an event competing for a target.
+    fn activate(&mut self) -> bool {
+        self.fire();
+        true
+    }
+
     fn base(&self) -> &Base {
         &self.base
     }
@@ -575,34 +592,46 @@ impl Component for Button {
     /// Capture, not bubble: this control is **one click target and one Tab stop**
     /// (`Base::focus_barrier`), so its composed content — an `Icon`, a `Label`, anything — must
     /// never see the press first. Handling it before the children is what keeps that true.
+    ///
+    /// It takes the press and **fires on the click**: the press captures the pointer (so the
+    /// release comes here wherever the cursor went) and the click is what a press and a release on
+    /// this button *mean*. Dragging off the button before letting go therefore cancels it, which
+    /// is what every other control on the machine does — and it costs nothing here, because the
+    /// pairing is the framework's.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }
         match ev {
-            Event::PointerMoved { pos } => {
-                let inside = self.contains(*pos);
-                if self.hovered.get_untracked() != inside {
-                    self.hovered.set(inside);
-                }
-                Handled::No
-            }
-            Event::PointerPressed { pos } if self.contains(*pos) => {
-                self.flash.trigger();
-                if let Some(f) = &self.on_click {
-                    f();
-                }
-                Handled::Yes
-            }
-            // Keyboard activation: Space/Enter on the focused button == a click.
+            // Keyboard activation: Space/Enter on the focused button == a click. `dispatch` only
+            // offers a raw key to the widget that owns the keyboard, so there is no focus check
+            // here to forget — and no way for this button to take a key meant for something else.
             Event::Key {
                 key: GridKey::Enter | GridKey::Space,
                 pressed: true,
             } => {
-                self.flash.trigger();
-                if let Some(f) = &self.on_click {
-                    f();
-                }
+                self.fire();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    /// **The click, after its children have declined it.**
+    ///
+    /// The press is taken in capture (so composed content can never take it first) and the click
+    /// it turns into is delivered to whoever took that press — this control — which is what makes
+    /// "one control, one click target" a framework rule rather than something each control
+    /// arranges by swallowing events. Bubble, not capture, so an
+    /// [`ComponentExt`](crate::builders::ComponentExt) handler registered on this widget gets first
+    /// refusal and can take the click with `stop_propagation`.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::Click(_) => {
+                self.fire();
                 Handled::Yes
             }
             _ => Handled::No,
@@ -613,7 +642,7 @@ impl Component for Button {
         let mut animating = false;
 
         // Hover progress eases toward the hovered target.
-        let target = if self.hovered.get_untracked() {
+        let target = if self.base.hovered() && !self.base.disabled.get_untracked() {
             1.0
         } else {
             0.0

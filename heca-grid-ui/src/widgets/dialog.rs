@@ -281,7 +281,10 @@ impl Dialog {
         if let Some(row) = panel.children.last_mut()
             && let Some(primary) = row.base_mut().children.first_mut()
         {
-            let _ = crate::component::dispatch(primary.as_mut(), &Event::Key { key: GridKey::Enter, pressed: true });
+            // **Ask it to act; do not pretend to be a keyboard.** This used to dispatch a
+            // synthetic `Event::Key { Enter }` and relied on the button claiming raw keys whether
+            // or not it was focused.
+            primary.activate();
         }
     }
 
@@ -344,151 +347,100 @@ impl Component for Dialog {
     // which owns the whole layer presentation (scrim, shadow, panel fill, bracket
     // reticle, and the panel's children) inside `with_overlay`.
 
-    /// Owns its walk. A modal routes through an **overlay-aware focus scan**
-    /// (`dispatch_trapped` / `offer_to_overlay`), not a child walk: a nested open overlay — a
-    /// `Select` dropdown in the body — gets input first even when the pointer is outside the
-    /// panel, because its list can extend past the panel edge. Focus is also trapped, so a press
-    /// on empty panel space must keep the focused button's ring rather than clear it.
+    /// Capture is now only about the **pointer**: focus trapping, and the modal swallow.
     ///
-    /// The per-kind arms below are the reason this widget is held to
-    /// `tests/pointer_delivery.rs`: the release and the wheel arms exist because a `ScrollRegion`
-    /// in a dialog body was found stuck and unscrollable, and nothing but that test stops the next
-    /// kind going missing the same way.
-    fn routes_own_subtree(&self) -> bool {
-        true
-    }
-
+    /// A dialog used to forward every key, every intent and all typed text to its focused field by
+    /// hand — an overlay-aware focus scan running beside the framework's own. It no longer needs
+    /// to. Keyboard events are delivered to the focus owner and bubble, and the focus owner inside
+    /// an open dialog *is* the field or button this widget's own [`FocusManager`] focused, so the
+    /// field gets its text first and the dialog hears what the field declined on the way back up
+    /// (in [`on_event`](Component::on_event)). A nested open overlay — a `Select` in the body — is
+    /// focused for the same reason, so it answers `Dismiss` before the dialog does, with nothing
+    /// declared.
     fn on_event_capture(&mut self, ev: &Event) -> Handled {
         if !self.is_open() {
             return Handled::No;
         }
         let panel_bounds = self.panel_bounds();
         match ev {
-            Event::PointerPressed { pos } => {
-                // A nested open overlay (a Select dropdown in the body) gets first dibs
-                // even OUTSIDE the panel — its list can extend past the panel edge.
-                // `dispatch_trapped` scans overlay-active descendants first, so route
-                // through it whenever the press is in the panel OR a nested overlay is
-                // occluding the point.
+            // **Focus, then let the press through.** Capture runs before the target, so the
+            // click-to-focus decision is made here and the router still carries the press to
+            // whatever is under the cursor — this method no longer delivers anything itself.
+            // Trapped focus: a press on the panel *body* keeps the focused button's ring rather
+            // than clearing it, because focus is trapped inside a modal.
+            Event::PointerDown(p) => {
                 let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if panel_bounds.contains(*pos)
-                    || crate::component::overlay_occluded_at(panel, *pos)
+                if panel_bounds.contains(p.pos)
+                    || crate::component::overlay_occluded_at(panel, p.pos)
                 {
-                    // Focus + deliver the press to the widget under the cursor (its on_click
-                    // carries the overlay-control action). Trapped dispatch: a press on the
-                    // panel *body* (no button under the cursor) keeps the focused button's
-                    // ring instead of clearing it — focus is trapped inside the modal;
-                    // overlay-active descendants (an open Select) are offered it first.
-                    self.focus.dispatch_trapped(panel, ev);
+                    self.focus.focus_at_trapped(panel, p.pos);
+                    Handled::No
                 } else if self.dismissible {
                     // Scrim / outside click dismisses only when dismissible.
                     self.fire_dismiss();
+                    Handled::Yes
+                } else {
+                    // Always swallow while open (modal).
+                    Handled::Yes
                 }
-                // Always swallow while open (modal).
-                Handled::Yes
             }
-            Event::PointerMoved { .. } => {
-                // Nested overlay FIRST (BUG A hover fall-through): an open overlay inside
-                // the panel (a Select dropdown) captures the move — it consumes moves
-                // within its own panel rect — so a button underneath must not hover.
-                // Only an unconsumed move reaches the ordinary children.
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if self.focus.offer_to_overlay(panel, ev) == Handled::No {
-                    let _ = crate::component::dispatch(panel, ev); // button hover
-                }
-                Handled::Yes
-            }
-            // Track modifiers (for Shift+Tab) and forward the broadcast to the panel so a focused
-            // field's own modifier-aware editing (word/line motion) sees it. Not consumed.
+            // Every other pointer kind is routed, not forwarded: the widget under the cursor gets
+            // it, and the blocking `Overlay` inside this dialog swallows whatever nothing took —
+            // which is what keeps the page behind a modal still.
+            _ if ev.pointer().is_some() => Handled::No,
+            // Track modifiers (for Shift+Tab); the broadcast reaches the panel on its own.
             Event::ModifiersChanged(m) => {
                 self.mods = *m;
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                let _ = crate::component::dispatch(panel, ev);
                 Handled::No
             }
-            // Host-resolved intents (`[keys.widgets]` → `WidgetIntent`). A dialog's focus is a
-            // **horizontal** button row, so it navigates on `ItemPrevious`/`ItemNext`; `Activate`
-            // submits the primary action and `Dismiss` cancels. Every other intent (the `Edit*`
-            // shortcuts, and any vertical `Menu*`) is forwarded **field-first** to the focused
-            // widget — so a focused `Input` gets its `Ctrl+h` delete while a focused button lets
-            // the nav overload through. The host delivers `Edit*` before `Item*`, so a focused
-            // field consumes its edit before the dialog would navigate.
-            Event::Widget(intent) => {
-                // A NESTED open overlay (a Select dropdown in the body) owns the semantic
-                // intents first: `Dismiss` closes IT (not the dialog), `Activate` commits
-                // ITS row, `Menu*` move its cursor. Only unconsumed intents fall through
-                // to the dialog's own handling.
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if self.focus.offer_to_overlay(panel, ev) == Handled::Yes {
-                    return Handled::Yes;
+            _ => Handled::No,
+        }
+    }
+
+    /// **What the focused thing inside the dialog did not want.**
+    ///
+    /// The bubble phase is where a container's own behaviour belongs, and for a modal it is also
+    /// what makes field-first delivery automatic: the walk has already been to the focused field or
+    /// button and come back, so an `Input` has had its `Ctrl+h`, a nested `Select` has had its
+    /// `Dismiss`, and what arrives here is genuinely the dialog's.
+    fn on_event(&mut self, ev: &Event) -> Handled {
+        if !self.is_open() {
+            return Handled::No;
+        }
+        match ev {
+            // A dialog's focus is a **horizontal** button row, so it navigates on
+            // `ItemPrevious`/`ItemNext`; `Activate` submits the primary action, `Dismiss` cancels.
+            Event::Widget(intent) => match intent {
+                WidgetIntent::ItemNext => {
+                    self.focus_next();
+                    Handled::Yes
                 }
-                match intent {
-                    WidgetIntent::ItemNext => {
-                        self.focus_next();
-                        Handled::Yes
-                    }
-                    WidgetIntent::ItemPrevious => {
-                        self.focus_prev();
-                        Handled::Yes
-                    }
-                    WidgetIntent::Activate => {
-                        self.activate_primary();
-                        Handled::Yes
-                    }
-                    WidgetIntent::Dismiss => {
-                        self.fire_dismiss();
-                        Handled::Yes
-                    }
-                    _ => {
-                        let panel = self.base.children[0].base_mut().children[0].as_mut();
-                        self.focus.deliver_event(panel, ev)
-                    }
+                WidgetIntent::ItemPrevious => {
+                    self.focus_prev();
+                    Handled::Yes
                 }
-            }
-            // **Field-first**: hand the raw key to the focused widget so it keeps ALL its native
-            // behaviour — an `Input`'s typing, caret motion, Backspace/Delete/Home/End. (A nested
-            // open overlay is usually the focused widget too — clicking its trigger focused it —
-            // so its keys arrive through the same field-first delivery.)
-            Event::Key { key, pressed: true } => {
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if self.focus.deliver_key(panel, *key) == Handled::Yes {
-                    return Handled::Yes;
+                WidgetIntent::Activate => {
+                    self.activate_primary();
+                    Handled::Yes
                 }
-                // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
-                // This is universal widget behaviour, not a rebindable `[keys.widgets]` binding.
-                if matches!(key, GridKey::Tab) {
-                    if self.mods.shift {
-                        self.focus_prev();
-                    } else {
-                        self.focus_next();
-                    }
-                    return Handled::Yes;
+                WidgetIntent::Dismiss => {
+                    self.fire_dismiss();
+                    Handled::Yes
                 }
-                // Any other unconsumed key: report `Handled::No` so the host can resolve it against
-                // the configurable `[keys.widgets]` bindings (→ `WidgetIntent`).
-                Handled::No
-            }
-            // A press inside the panel must be matched by its RELEASE, or a widget
-            // that grabbed the pointer never lets go: a `ScrollRegion` thumb drag
-            // stayed stuck to the cursor because the release fell through to the
-            // catch-all below and never reached the region.
-            Event::PointerReleased { .. } => {
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                let _ = crate::component::dispatch(panel, ev);
-                Handled::Yes
-            }
-            // Scroll: a nested open overlay (a Select's list) scrolls first; then the
-            // panel itself, so a scrollable BODY works inside a modal — the overlay
-            // scan only reaches `overlay_active` descendants and a `ScrollRegion` is
-            // not one, so without this the wheel never got to it. Only if nothing
-            // took it does the modal swallow it, keeping the page behind still.
-            Event::Scroll { .. } => {
-                let panel = self.base.children[0].base_mut().children[0].as_mut();
-                if self.focus.offer_to_overlay(panel, ev) == Handled::No {
-                    let _ = crate::component::dispatch(panel, ev);
+                _ => Handled::No,
+            },
+            // Classic, always-on focus traversal: Tab / Shift+Tab move focus within the modal.
+            // Universal widget behaviour, not a rebindable `[keys.widgets]` binding.
+            Event::Key { key: GridKey::Tab, pressed: true } => {
+                if self.mods.shift {
+                    self.focus_prev();
+                } else {
+                    self.focus_next();
                 }
                 Handled::Yes
             }
+            // Any other unconsumed key: `Handled::No`, so the host can resolve it against the
+            // configurable `[keys.widgets]` bindings (→ `WidgetIntent`).
             _ => Handled::No,
         }
     }
@@ -498,6 +450,7 @@ impl LayoutExt for Dialog {}
 
 #[cfg(test)]
 mod tests {
+    use crate::event::PointerButton;
     use super::*;
     use crate::widgets::{Button, Label};
     use std::cell::Cell;
@@ -633,7 +586,7 @@ mod tests {
         let panel = d.panel_bounds();
         let body = Point::new(panel.loc.x + panel.size.w * 0.5, panel.loc.y + 2.0);
         assert!(panel.contains(body), "test point is inside the panel body");
-        let _ = crate::component::dispatch(&mut d, &Event::PointerPressed { pos: body });
+        let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(body, PointerButton::Left));
 
         assert_eq!(
             focused_buttons(&d),
@@ -658,7 +611,7 @@ mod tests {
 
         // A scrim click (press outside the panel) on a forced dialog must NOT dismiss.
         flag.set(false);
-        let _ = crate::component::dispatch(&mut d, &Event::PointerPressed { pos: Point::new(-100.0, -100.0) });
+        let _ = crate::component::dispatch(&mut d, &Event::pointer_pressed(Point::new(-100.0, -100.0), PointerButton::Left));
         assert!(!flag.get(), "forced dialog ignores the scrim/outside click");
     }
 
@@ -684,9 +637,10 @@ mod tests {
             .action(Button::new("OK").on_click(move || f.set(true)))
             .action(Button::new("Cancel"))
             .open(true);
-        // A typed character is delivered field-first to (and consumed by) the focused input.
+        // Typed text is delivered field-first to (and consumed by) the focused input. Text, not a
+        // key: `Event::TextInput` is what the user actually committed.
         assert_eq!(
-            crate::component::dispatch(&mut d, &Event::Key { key: GridKey::Char('x'), pressed: true }),
+            crate::component::dispatch(&mut d, &Event::TextInput("x".to_string())),
             Handled::Yes,
             "the focused input receives typed characters",
         );

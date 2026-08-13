@@ -275,6 +275,41 @@ pub struct KeyHint {
 
 #[heca_grid_ui_macros::props]
 impl KeyHint {
+
+    /// **What a pick of this letter does.**
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::KeyHint;
+    ///
+    /// # let row_id = 7u64;
+    /// # fn cursor_to(_: u64) {}
+    /// let row = KeyHint::new(Row::new().child(Label::new("nvim")))
+    ///     .on_peek(move || cursor_to(row_id));
+    /// ```
+    ///
+    /// **It goes on the wrapper, not on every widget.** Being pickable is something you opt a
+    /// region into — you were already wrapping it to show the letter — so `Label::on_peek` is a
+    /// method that never has to exist, and you can read off the tree what is reachable. (A context
+    /// menu is the other shape on purpose: a menu is *about* a widget, so it is a slot any widget
+    /// carries; a peek is *aimed at* a region you chose to make reachable.)
+    ///
+    /// **It replaces an id and a registry.** A hint target used to be `hints.register(intent)`
+    /// followed by `.hint_target(id)` — three things a caller had to know (that a registry exists,
+    /// that they must pre-register, and a host-private intent type), and a plugin could construct
+    /// none of them. That made `prefix+/` a shipped feature a plugin could only have a
+    /// second-class version of, which RULE ZERO in `AGENTS.md` forbids. The framework collects
+    /// these out of the tree ([`hint::collect_peeks`](crate::hint::collect_peeks)), hands out the
+    /// letters, draws them, and runs this one when it is picked.
+    ///
+    /// **A pick is not a click.** They are different gestures and a region may answer them
+    /// differently: heca's sidebar row activates the pane on a click and *stays in the sidebar* on
+    /// a peek. Pointing one intent at both is what made `prefix+/` leave the sidebar.
+    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a closure")]
+    pub fn on_peek(mut self, f: impl Fn() + 'static) -> Self {
+        self.base.peek = Some(Box::new(f));
+        self
+    }
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
     pub fn new(child: impl Component + 'static) -> Self {
         Self::wrap(Box::new(child))

@@ -132,6 +132,7 @@ impl PtyHandle {
         cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
         command: &str,
+        shell_override: Option<&str>,
     ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows, cell_px);
@@ -139,7 +140,11 @@ impl PtyHandle {
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = default_shell();
+        // An explicit shell wins over `$SHELL`: a caller that needs the same behaviour on every
+        // machine cannot have the user's interactive rc in the way.
+        let shell = shell_override
+            .map(str::to_string)
+            .unwrap_or_else(default_shell);
         let cmd = command_for_spawned_command(&shell, command);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }
@@ -183,7 +188,8 @@ impl PtyHandle {
             let mut buf = [0u8; 4096];
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) | Err(_) => {
+                    // End of file: the slave side is closed for good.
+                    Ok(0) => {
                         if let Some(wake) = wake_on_output.as_ref() {
                             wake();
                         }
@@ -196,6 +202,15 @@ impl PtyHandle {
                         if let Some(wake) = wake_on_output.as_ref() {
                             wake();
                         }
+                    }
+                    // **A recoverable read error is not the end of the terminal.** Read on again;
+                    // see `read_ends_the_reader` for why this is not a detail.
+                    Err(err) if !read_ends_the_reader(&err) => continue,
+                    Err(_) => {
+                        if let Some(wake) = wake_on_output.as_ref() {
+                            wake();
+                        }
+                        break;
                     }
                 }
             }
@@ -331,6 +346,30 @@ fn shell_kind(shell: &str) -> Option<ShellKind> {
     }
 }
 
+/// Whether a failed read from the PTY master means the terminal is **over**, or merely that this
+/// one call did not complete.
+///
+/// **Getting this wrong kills the user's shell.** The reader thread owns the only cloned read handle
+/// on the master; when it returns, that handle drops, the kernel hangs up the terminal, and the
+/// child's process group is sent `SIGHUP`. So ending the thread does not just stop reading — it
+/// **terminates whatever was running in the pane**, and heca then closes the pane because its child
+/// exited.
+///
+/// It used to end on **any** error. `EINTR` is the ordinary case: a signal delivered while a read is
+/// blocked interrupts it, and the caller is expected to read again. Resizing a PTY raises `SIGWINCH`
+/// on the child's process group, and dragging a pane divider with the mouse resizes on **every
+/// frame** — hundreds of times a second. One interrupted read in that storm was enough to take the
+/// pane down, which is why the keyboard resize (a handful of calls) never did it and the mouse did
+/// it "after a few attempts" (F004/P084/T409).
+///
+/// `Interrupted` and `WouldBlock` are retried; everything else is treated as fatal, as before.
+fn read_ends_the_reader(err: &std::io::Error) -> bool {
+    !matches!(
+        err.kind(),
+        std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock
+    )
+}
+
 fn pty_size(cols: usize, rows: usize, cell_px: (f32, f32)) -> PtySize {
     let cols = cols.max(1);
     let rows = rows.max(1);
@@ -368,6 +407,47 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::read_ends_the_reader;
+
+    /// **An interrupted read must not end the reader thread** (F004/P084/T409).
+    ///
+    /// The thread owns the only cloned read handle on the PTY master. When it returns, that handle
+    /// drops, the kernel hangs up the terminal and the child's process group gets `SIGHUP` — so
+    /// ending the thread *kills whatever is running in the pane*, and heca then closes the pane
+    /// because its child exited.
+    ///
+    /// `EINTR` is routine: a signal arriving while a read is blocked interrupts it and the caller
+    /// reads again. Resizing a PTY raises `SIGWINCH`, and a mouse divider drag resizes on every
+    /// frame — so a pane would vanish mid-drag after a few attempts, while the keyboard resize
+    /// never did it.
+    #[test]
+    fn an_interrupted_read_does_not_end_the_reader() {
+        assert!(
+            !read_ends_the_reader(&io::Error::from(io::ErrorKind::Interrupted)),
+            "EINTR means read again — ending here SIGHUPs the user's shell",
+        );
+        assert!(
+            !read_ends_the_reader(&io::Error::from(io::ErrorKind::WouldBlock)),
+            "nothing to read yet is not the end of the terminal",
+        );
+    }
+
+    /// The other half: a genuinely broken master still ends the reader, so a dead PTY does not
+    /// leave a thread spinning on it forever.
+    #[test]
+    fn a_real_read_failure_still_ends_the_reader() {
+        for kind in [
+            io::ErrorKind::BrokenPipe,
+            io::ErrorKind::PermissionDenied,
+            io::ErrorKind::Other,
+        ] {
+            assert!(
+                read_ends_the_reader(&io::Error::from(kind)),
+                "{kind:?} is not recoverable — the reader must stop",
+            );
+        }
+    }
+
     use super::{
         PtyError, PtyOperation, ShellKind, command_for_spawned_command, resolve_shell, shell_kind,
     };
