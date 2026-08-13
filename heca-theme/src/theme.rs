@@ -238,6 +238,22 @@ pub struct Theme {
     /// — so a user's own theme gets a coherent selection without naming one.
     #[serde(default)]
     pub selected_background: Option<Color>,
+    /// **The row a back-and-forth binding would return to** (`prefix+i`) — "you were just here".
+    ///
+    /// A colour, not an alpha, for the same reason every other token here is one: a theme author
+    /// picks what they can see. `None` derives it — see
+    /// [`effective_previous_background`](Self::effective_previous_background).
+    #[serde(default)]
+    pub previous_background: Option<Color>,
+    /// **The frame of the workspace you are in.** A container hint, so it sits far closer to the
+    /// surface than a selected row does — a whole frame at a row's strength lifts every row inside
+    /// it and swallows the marks within.
+    #[serde(default)]
+    pub workspace_active_background: Option<Color>,
+    /// **The frame of the workspace `prefix+Shift+i` would return to.** Fainter again than the
+    /// active frame: it answers *where would I land*, not *where am I*.
+    #[serde(default)]
+    pub workspace_previous_background: Option<Color>,
     #[serde(default)]
     pub shadow: Shadow,
     #[serde(default = "default_danger")]
@@ -600,7 +616,16 @@ fn default_sidebar_button_font_size() -> f32 {
 }
 /// How far a derived [selected panel](Theme::effective_selected_background) is carried from the
 /// theme's `surface` toward its `accent`.
-const SELECTED_LIFT: f32 = 0.18;
+const SELECTED_LIFT: f32 = 0.42;
+/// How far a derived [previous row](Theme::effective_previous_background) sits between the surface
+/// and the selected panel. Tuned by measuring: it is the step that read as "findable but quiet" in
+/// all three shipped themes.
+const PREVIOUS_LIFT: f32 = 0.24;
+/// A derived **current-workspace frame**. Far below a row's, because a frame is a large area and
+/// the same strength would swallow every mark inside it.
+const WORKSPACE_ACTIVE_LIFT: f32 = 0.13;
+/// A derived **last-visited-workspace frame** — fainter again than the active one.
+const WORKSPACE_PREVIOUS_LIFT: f32 = 0.08;
 
 impl Default for Theme {
     fn default() -> Self {
@@ -619,6 +644,30 @@ impl Theme {
     pub fn effective_selected_background(&self) -> Color {
         self.selected_background
             .unwrap_or_else(|| self.surface.lerp(self.accent, SELECTED_LIFT))
+    }
+
+    /// The "you were just here" row, explicit or derived — the selected panel carried most of the
+    /// way back toward the surface, so the two read as one family at two strengths.
+    pub fn effective_previous_background(&self) -> Color {
+        self.previous_background.unwrap_or_else(|| {
+            self.surface.lerp(self.accent, PREVIOUS_LIFT)
+        })
+    }
+
+    /// The current workspace's frame, explicit or derived. **Container-scale**: a frame covers
+    /// every row inside it, so it lifts far less than a row does or the marks within it vanish.
+    pub fn effective_workspace_active_background(&self) -> Color {
+        self.workspace_active_background.unwrap_or_else(|| {
+            self.surface.lerp(self.accent, WORKSPACE_ACTIVE_LIFT)
+        })
+    }
+
+    /// The workspace back-and-forth would return to, explicit or derived — fainter than the active
+    /// frame.
+    pub fn effective_workspace_previous_background(&self) -> Color {
+        self.workspace_previous_background.unwrap_or_else(|| {
+            self.surface.lerp(self.accent, WORKSPACE_PREVIOUS_LIFT)
+        })
     }
 
     /// Corner radius for small controls — a fraction of the base [`radius`](Theme::radius).

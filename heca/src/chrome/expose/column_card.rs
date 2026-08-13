@@ -19,6 +19,8 @@ pub(crate) struct ColumnCard<'a> {
     pub(crate) column: &'a ExposeColumn,
     /// The workspace this column sits in, for the letter that deletes it.
     pub(crate) ws_idx: usize,
+    /// The pane a back-and-forth binding would return to, if any.
+    pub(crate) previous: Option<PaneId>,
     /// Where the cursor goes when one of these cards is deleted — asked per pane, while the row it
     /// belongs to is still whole.
     pub(crate) next_of: &'a dyn Fn(PaneId) -> Option<PaneId>,
@@ -46,6 +48,7 @@ impl ColumnCard<'_> {
                 pane_id: pane.pane_id,
                 name: &pane.name,
                 active: pane.active,
+                previous: self.previous == Some(pane.pane_id),
                 ws_idx: self.ws_idx,
                 col_idx: self.column.col_idx,
                 next: (self.next_of)(pane.pane_id),
@@ -92,6 +95,7 @@ mod tests {
         let (stack, _cells) = ColumnCard {
             column: &col,
             ws_idx: 0,
+            previous: None,
             next_of: &|_| None,
             theme: &theme,
             cb: &cb,

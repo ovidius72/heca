@@ -984,6 +984,7 @@ fn pane_card(
         .child(content);
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
+    signals.pane_previous.push((pane_id, card.previous_state()));
     signals.row_nav
         .push((mount.to_string(), pane_nav_key(pane_id), card.nav_state()));
     // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
@@ -1233,6 +1234,7 @@ fn build_workspaces_container(
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
         signals.ws_active.push((ws_pane_ids, dock.active_state()));
+        signals.ws_previous.push((ws_idx, dock.previous_state()));
         signals.row_nav
             .push((mount.clone(), workspace_nav_key(ws_idx), dock.nav_state()));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a

@@ -94,6 +94,9 @@ pub struct DockFrame {
     /// Sidebar-nav cursor state: paints a hollow **accent ring**, which reads over the selected
     /// panel rather than replacing it — an edge and a fill, never two fills. Signal-backed so the host flips it in place.
     nav: Signal<bool>,
+    /// **"You were just here"** — the workspace `prefix+Shift+l` would return to. The faintest
+    /// of the four weights, painted under the active wash. See [`previous`](DockFrame::previous).
+    previous: Signal<bool>,
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
     on_toggle: Option<Box<dyn Fn(Action)>>,
@@ -159,6 +162,7 @@ impl DockFrame {
             was_expanded: expanded.get_untracked(),
             active: signal(false),
             nav: signal(false),
+            previous: signal(false),
             chevron,
             on_toggle: None,
             rail_mode: None,
@@ -239,6 +243,20 @@ impl DockFrame {
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
+    }
+
+    /// Mark this frame as the workspace a **back-and-forth** binding would return to
+    /// (`prefix+Shift+l`). The faintest wash of the selection colour, under the active one, so a
+    /// frame that is both reads as active — you are there now, which outranks where you were.
+    #[heca_grid_ui_macros::prop]
+    pub fn previous(self, on: bool) -> Self {
+        self.previous.set(on);
+        self
+    }
+
+    /// The previous-state signal — bind it so the host flips the mark in place.
+    pub fn previous_state(&self) -> Signal<bool> {
+        self.previous
     }
 
     /// The active-state signal — bind it so the host can flip the wash in place
@@ -357,6 +375,19 @@ impl Component for DockFrame {
         // Active-region wash — a faint accent overlay over the whole frame when
         // this is the active one (e.g. the active workspace). Theme-driven alpha
         // and signal-backed, so the host flips it in place (no tree rebuild).
+        // **"You were just here"** — under the active wash, so a frame that is both simply reads
+        // as active. Where you are outranks where you were.
+        if self.previous.get_untracked() && !self.active.get_untracked() {
+            // ⚠️ **A frame's wash is CONTAINER-scale, never the row's `previous_wash_alpha`.**
+            //
+            // That token is tuned against a single row; over a whole frame the same value lifts
+            // every row inside it, and the pane mark within — which is the same colour — then has
+            // almost nothing left to say. The last-visited pane became indistinguishable from its
+            // siblings in exactly the workspace it was meant to be found in (Antonio, driving, both
+            // dark themes, 2026-08-13). So this is derived from `active_wash_alpha`, the theme's own
+            // answer for how faint a container hint is, and sits below it.
+            cx.rect(b, cx.theme().colors.effective_workspace_previous_background(), None, radius, None);
+        }
         if self.active.get_untracked() {
             // **A faint WASH of the selected colour — never the panel itself.**
             //
@@ -367,13 +398,7 @@ impl Component for DockFrame {
             // only the column's marker bar still said which row it was (Antonio, driving, with
             // three themes, 2026-08-13). `active_wash_alpha` is the theme's own answer to how
             // faint a container hint should be.
-            let (selected_bg, wash_alpha) = {
-                let t = cx.theme();
-                (t.colors.effective_selected_background(), t.colors.active_wash_alpha)
-            };
-            if wash_alpha > 0.0 {
-                cx.rect(b, selected_bg.with_alpha_f32(wash_alpha), None, radius, None);
-            }
+            cx.rect(b, cx.theme().colors.effective_workspace_active_background(), None, radius, None);
         }
 
         // Nav-cursor outline — a thick border + faint fill marking the cursor on this frame.

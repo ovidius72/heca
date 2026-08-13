@@ -178,6 +178,9 @@ pub(crate) fn map(
     start: Option<PaneId>,
     geometry: &heca_core::layout::LayoutOptions,
     keys: &ExposeDeleteKeys,
+    // The pane a back-and-forth binding would return to — plain data, resolved by `register` from
+    // the same field `prefix+i` reads.
+    previous: Option<PaneId>,
 ) -> Box<dyn Component> {
     let cb = callbacks(emit, keys.clone());
 
@@ -187,6 +190,7 @@ pub(crate) fn map(
         // `LayoutOptions` field the user sets in config.
         gap_frac: geometry.overview_gap,
         start,
+        previous,
         theme,
         cb: &cb,
     }
@@ -319,7 +323,14 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
             .in_surface(&name, "delete_workspace")
             .to_vec(),
     };
-    let root = map(&rows, &theme, emit, here, &state.session.options, &keys);
+        // The map's own "you were just here" mark, from the one field the bindings read.
+    let previous = state
+        .last_visited_pane_per_ws
+        .get(state.session.active_workspace_idx)
+        .copied()
+        .flatten()
+        .filter(|id| crate::app::focus::find_pane_workspace(&state.session, *id).is_some());
+    let root = map(&rows, &theme, emit, here, &state.session.options, &keys, previous);
     let was_visible = state.layers.is_visible_named(&name);
     let id = state.layers.add_named(
         id,
@@ -382,7 +393,7 @@ mod tests {
         let sink = seen.clone();
         let emit: super::super::ChromeIntentEmitter =
             std::rc::Rc::new(move |intent| sink.borrow_mut().push(format!("{intent:?}")));
-        let mut root = map(&rows, &theme, emit, start, &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, start, &LayoutOptions::default(), &shipped_keys(), None);
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
         (root, seen)
@@ -515,7 +526,7 @@ mod tests {
         let rows = model(&s, |p| p.title.clone());
         let theme = GuiTheme::default();
         let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
-        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys());
+        let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), None);
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
         // reaches the screen.
@@ -631,7 +642,7 @@ mod tests {
             let theme = GuiTheme::default();
             let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
             let mut root =
-                map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys());
+                map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
             heca_grid_ui::LayoutEngine::new()
                 .compute(root.as_mut(), heca_grid_ui::Size::new(w, h));
             let drawn = super::testing::cards_bounds(root.as_ref()).expect("the map has cards");

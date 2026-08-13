@@ -32,6 +32,8 @@ pub(crate) struct WorkspaceRow<'a> {
     /// The air a row reserves around its strip, in the model's own units — see
     /// [`ExposeGrid`](super::expose_grid::ExposeGrid), which computes it once for the map.
     pub(crate) gap: f64,
+    /// The pane a back-and-forth binding would return to, if it is in this workspace.
+    pub(crate) previous: Option<PaneId>,
     pub(crate) theme: &'a GuiTheme,
     pub(crate) cb: &'a ExposeCallbacks,
 }
@@ -93,6 +95,7 @@ impl WorkspaceRow<'_> {
             let (column, cells) = ColumnCard {
                 column: col,
                 ws_idx: ws.ws_idx,
+                previous: self.previous,
                 next_of: &next_of,
                 theme: self.theme,
                 cb: self.cb,
@@ -118,6 +121,7 @@ impl WorkspaceRow<'_> {
                 pane_id: float.pane_id,
                 name: &float.name,
                 active: float.active,
+                previous: self.previous == Some(float.pane_id),
                 ws_idx: ws.ws_idx,
                 // A float has no column, so the letter that deletes a column names the last one —
                 // it is still the column the user is looking at. `x` and `d` mean what they mean
@@ -192,6 +196,7 @@ mod tests {
         let theme = theme();
         let (row, _cells) = WorkspaceRow {
             workspace: ws,
+            previous: None,
             widest,
             // No air, so an assertion reads against the numbers it was given rather than against
             // the gap as well. The gap has its own test in `ExposeGrid`.

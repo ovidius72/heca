@@ -67,6 +67,9 @@ pub(crate) struct PaneCard<'a> {
     pub(crate) name: &'a str,
     /// Is this its workspace's focused pane?
     pub(crate) active: bool,
+    /// **Is this where back-and-forth would take you?** (`prefix+i`.) The faintest of the marks —
+    /// the map is where "where would I land" is most worth knowing.
+    pub(crate) previous: bool,
     /// Where it sits, for the letters that delete the column and the workspace around it.
     pub(crate) ws_idx: usize,
     pub(crate) col_idx: usize,
@@ -109,6 +112,7 @@ impl PaneCard<'_> {
             // 2026-08-13). `Row` already centres on its cross axis; this is the main one.
             .justify(Justify::Center)
             .active(self.active)
+            .previous(self.previous)
             .nav_key(pane_nav_key(self.pane_id));
         // **The card the cursor is on holds the keyboard**, so its own handlers are what a key
         // reaches — and what it does not take bubbles up to the `CardGrid` for the nav keys,
@@ -234,6 +238,7 @@ mod tests {
             pane_id: pane.pane_id,
             name: &pane.name,
             active: pane.active,
+            previous: false,
             ws_idx: 2,
             col_idx: 3,
             next,

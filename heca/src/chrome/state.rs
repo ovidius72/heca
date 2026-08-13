@@ -125,12 +125,21 @@ impl RegionState {
 #[derive(Clone, Debug)]
 pub(crate) struct ChromeSelection {
     pub(crate) active_pane: Signal<Option<PaneId>>,
+    /// **The pane a back-and-forth binding would return to, per workspace** (`prefix+i` /
+    /// `prefix+Shift+i`). Signal-backed like [`active_pane`](Self::active_pane), so the mark moves
+    /// without a rebuild. Per workspace because a cross-workspace jump leaves the target in the
+    /// workspace you came from.
+    pub(crate) previous_panes: Signal<Vec<Option<PaneId>>>,
+    /// The workspace `prefix+Shift+i` would return to.
+    pub(crate) previous_ws: Signal<Option<usize>>,
 }
 
 impl ChromeSelection {
     fn new() -> Self {
         Self {
             active_pane: signal(None),
+            previous_panes: signal(Vec::new()),
+            previous_ws: signal(None),
         }
     }
 }
@@ -248,6 +257,27 @@ impl WorkspacesContainerState {
     // ── Reads ──
     pub fn active_pane(&self) -> Option<PaneId> {
         self.selection.active_pane.get()
+    }
+    /// Is this pane the one a back-and-forth binding would return to, in **any** workspace?
+    pub fn is_previous_pane(&self, pane: PaneId) -> bool {
+        self.selection.previous_panes.get().contains(&Some(pane))
+    }
+    /// The workspace a back-and-forth binding would return to.
+    pub fn previous_ws(&self) -> Option<usize> {
+        self.selection.previous_ws.get()
+    }
+    /// Publish it, from `AppState::last_visited_ws_idx`.
+    pub fn set_previous_ws(&self, ws: Option<usize>) {
+        if self.selection.previous_ws.get_untracked() != ws {
+            self.selection.previous_ws.set(ws);
+        }
+    }
+    /// Publish the set; the host reads `AppState::last_visited_pane_per_ws`, the one source the
+    /// bindings themselves use.
+    pub fn set_previous_panes(&self, panes: Vec<Option<PaneId>>) {
+        if self.selection.previous_panes.get_untracked() != panes {
+            self.selection.previous_panes.set(panes);
+        }
     }
     /// The current sidebar-nav cursor selection (`None` when not navigating).
     pub fn nav_selection(&self) -> Option<SidebarSelection> {

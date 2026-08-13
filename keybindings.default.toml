@@ -117,7 +117,7 @@ workspace_next = ["prefix+d", "prefix+Ctrl+n"]
 
 # ── Focus toggle ──
 focus_toggle_local  = "prefix+i"        # Toggle last pane (same workspace)
-focus_toggle_global = "prefix+Shift+l"  # Toggle last pane (cross-workspace)
+focus_toggle_global = "prefix+Shift+i"  # Toggle last pane (cross-workspace)
 
 # ── Workspace / naming ──
 create_workspace = "prefix+w"        # Create new workspace + pane

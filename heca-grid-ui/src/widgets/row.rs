@@ -47,6 +47,9 @@ pub struct Row {
     active: Signal<bool>,
     /// Sidebar-nav cursor state: a hollow outline, distinct from `active`.
     nav: Signal<bool>,
+    /// **"You were just here"** — the row a back-and-forth binding would return to. A wash fainter
+    /// than any other state, under all of them. See [`previous`](Row::previous).
+    previous: Signal<bool>,
     /// **May this row ask to be scrolled into view?** `None` (the default) means yes, always —
     /// which is right for a list whose cursor only the keyboard moves. See
     /// [`reveal_when`](Row::reveal_when).
@@ -76,6 +79,7 @@ impl Row {
             base,
             active: signal(false),
             nav: signal(false),
+            previous: signal(false),
             reveal: None,
             // **No bar by default** — the same default `Item` has always had. Selected is now a
             // filled panel, which says it on its own; a bar beside it is a second mark for one
@@ -167,6 +171,24 @@ impl Row {
         self.active
     }
 
+    /// Mark this row as the one a **back-and-forth** binding would return to — the pane
+    /// `prefix+i` toggles back to, the workspace `prefix+Shift+l` does.
+    ///
+    /// Drawn as the faintest wash of the selection colour, **under** every other state, so it can
+    /// be true at the same time as the cursor and the selection (which it very often is: the pane
+    /// you toggle back to is usually the one you just left) without taking anything from either.
+    /// You should be able to find it when you look for it and never notice it when you are not.
+    #[heca_grid_ui_macros::prop]
+    pub fn previous(self, on: bool) -> Self {
+        self.previous.set(on);
+        self
+    }
+
+    /// The previous-state signal — bind it so the host flips the mark in place, without a rebuild.
+    pub fn previous_state(&self) -> Signal<bool> {
+        self.previous
+    }
+
     /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
     /// from the filled `active` pill (e.g. the workspaces sidebar highlights the
     /// nav cursor while the real focused pane keeps its pill).
@@ -225,9 +247,9 @@ impl Component for Row {
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia, selected_bg) = {
+        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia, selected_bg, previous_bg) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction, t.colors.effective_selected_background())
+            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction, t.colors.effective_selected_background(), t.colors.effective_previous_background())
         };
         let b = self.base.bounds;
 
@@ -251,6 +273,11 @@ impl Component for Row {
         // so state-tinted rows stay in-family. With an explicit `highlight`, use the
         // lighter Item-style accent wash instead of a heavy same-hue tint.
         let highlight_base = self.highlight.or(self.base.style.visual.fill);
+        // **"You were just here"** — painted first, so selection and cursor land on top of it and
+        // it only shows on a row that has neither.
+        if self.previous.get_untracked() {
+            cx.rect(sel, previous_bg, None, sel_radius, None);
+        }
         if active {
             // **Selected is a FILLED PANEL, and it carries no border.**
             //

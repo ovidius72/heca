@@ -29,6 +29,8 @@ pub(crate) struct ExposeGrid<'a> {
     pub(crate) gap_frac: f64,
     /// Where the cursor opens, if that pane is still on the map.
     pub(crate) start: Option<PaneId>,
+    /// The pane a back-and-forth binding would return to — marked, not selected.
+    pub(crate) previous: Option<PaneId>,
     pub(crate) theme: &'a GuiTheme,
     pub(crate) cb: &'a ExposeCallbacks,
 }
@@ -58,6 +60,7 @@ impl ExposeGrid<'_> {
                 workspace: ws,
                 widest,
                 gap,
+                previous: self.previous,
                 theme: self.theme,
                 cb: self.cb,
             }
@@ -135,7 +138,7 @@ mod tests {
     fn grid(rows: &[ExposeWorkspace], w: f64, h: f64) -> Box<dyn heca_grid_ui::Component> {
         let (cb, _sink) = callbacks();
         let theme = theme();
-        let g = ExposeGrid { rows, gap_frac: 0.1, start: None, theme: &theme, cb: &cb }.build();
+        let g = ExposeGrid { rows, gap_frac: 0.1, start: None, previous: None, theme: &theme, cb: &cb }.build();
         lay_out(g, w, h)
     }
 
@@ -234,6 +237,7 @@ mod tests {
             rows: &rows,
             gap_frac: 0.1,
             start: Some(PaneId(1)),
+            previous: None,
             theme: &theme,
             cb: &cb,
         }
@@ -295,6 +299,7 @@ mod tests {
             gap_frac: 0.1,
             // Start on the last tiled pane, so one step right is the float.
             start: Some(PaneId(1)),
+            previous: None,
             theme: &theme,
             cb: &cb,
         }

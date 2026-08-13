@@ -800,6 +800,11 @@ impl Row {
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)
     }
+    /// Mark as the one a **back-and-forth** binding would return to — the faintest of the
+    /// selection weights, under every other state.
+    pub fn previous(self, on: bool) -> Self {
+        self.prop("previous", on)
+    }
     /// How the active state is shown.
     pub fn marker(self, m: ViewMarker) -> Self {
         self.prop("marker", m)
@@ -849,6 +854,11 @@ impl ItemGroup {
 }
 
 impl DockFrame {
+    /// Mark as the one a **back-and-forth** binding would return to — the faintest of the
+    /// selection weights, under every other state.
+    pub fn previous(self, on: bool) -> Self {
+        self.prop("previous", on)
+    }
     /// Whether the frame is open.
     pub fn expanded(self, on: bool) -> Self {
         self.prop("expanded", on)

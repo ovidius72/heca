@@ -414,7 +414,7 @@ Ctrl+B → Shift+w  Rename workspace
 Ctrl+B → Shift+c  Rename active column
 Ctrl+B → $    Rename active pane/tab
 Ctrl+B → i    Toggle focus (local, same workspace)
-Ctrl+B → Shift+l  Toggle focus (global, cross-workspace)
+Ctrl+B → Shift+i  Toggle focus (global, cross-workspace)
 Ctrl+B → b    Toggle left sidebar
 Ctrl+B → r    Enter resize mode (sticky)
 Ctrl+B → Shift+r  Reload config at runtime
