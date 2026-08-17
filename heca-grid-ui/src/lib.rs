@@ -76,7 +76,7 @@ pub use hint::{
     clear_hints, collect_actions, collect_hints, fire_action, fire_hint, offer_hint,
     offer_hint_by_key, DeclaredAction,
 };
-pub use nav::{collect_keys, key_at};
+pub use nav::{collect_keys, identity_of, key_at};
 pub use effects::{Attention, Eased, Fade, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -109,7 +109,7 @@ pub mod prelude {
         clear_hints, collect_actions, collect_hints, fire_action, fire_hint, offer_hint,
         offer_hint_by_key,
     };
-    pub use crate::nav::{collect_keys, key_at};
+    pub use crate::nav::{collect_keys, identity_of, key_at};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::{TextAlign, TextStyle};
