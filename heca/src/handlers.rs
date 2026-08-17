@@ -1606,9 +1606,39 @@ pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) {
     crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Ranking);
 }
 
+/// What a request aimed at the dock `mount` should do, given who holds the keyboard.
+///
+/// A pure function of plain data so the one rule that separates `focus` from `toggle` is testable
+/// without a window, and lives in one place instead of once per handler (the shape
+/// `surface_action` uses for key resolution, F003/P082/T428).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DockFocus {
+    /// Give it the keyboard.
+    Take,
+    /// It already has the keyboard, and this gesture means "give it back".
+    Release,
+    /// It already has the keyboard, and this gesture does not mean anything else.
+    Nothing,
+}
+
+pub(crate) fn dock_focus_outcome(focused: Option<&str>, mount: &str, toggling: bool) -> DockFocus {
+    match (focused == Some(mount), toggling) {
+        (true, true) => DockFocus::Release,
+        (true, false) => DockFocus::Nothing,
+        (false, _) => DockFocus::Take,
+    }
+}
+
+/// Focus a dock, or open the pick when none is named.
+///
+/// **It only focuses.** Aiming it at the dock that already has the keyboard does nothing — the
+/// release is [`handle_toggle_dock`], which is what `global_focus` binds. Until F003/P082/T444 the
+/// toggle lived here, so *every* caller inherited it: a click inside a focused dock released it, and
+/// so did an RPC `focus-dock`. See [`WmAction::ToggleDock`].
 pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
-    let WmAction::FocusDock { dock } = action else {
-        return;
+    let dock = match action {
+        WmAction::FocusDock { dock } => dock,
+        _ => return,
     };
     if let Some(dock) = dock {
         // `dock` names a **placement or a component** (F003/P086/T363): a `global_focus` written
@@ -1627,11 +1657,10 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
             eprintln!("[heca] focus_dock: no container mounted under id or component '{dock}'");
             return;
         };
-        // Aimed at the dock that already has it: this is the way back out. One key both takes the
-        // keyboard and gives it back, so a binding to a named dock is a toggle rather than a
-        // one-way door the user has to remember a second key to leave (F003/P085/T352).
-        if focused.as_deref() == Some(mount.as_str()) {
-            handle_unfocus_dock(state, &WmAction::UnfocusDock);
+        // **Idempotent on purpose** — a click inside the dock, an RPC call and the command palette
+        // all mean "focus it", and none of them mean "and release it if it already is". The release
+        // is `ToggleDock` (F003/P082/T444).
+        if dock_focus_outcome(focused.as_deref(), &mount, false) == DockFocus::Nothing {
             return;
         }
         // Show the region it sits in. Focusing a container the user cannot see is a promise
@@ -1652,6 +1681,38 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
     }
     state.input_mode = InputMode::DockPick { candidates };
     state.needs_redraw = true;
+}
+
+/// **Focus a dock, or give the keyboard back if it already has it** — one key in and out.
+///
+/// This is what `global_focus` binds (`prefix+e` in, `prefix+e` out), so a binding to a named dock
+/// is not a one-way door the user has to remember a second key to leave (F003/P085/T352). `Esc` is
+/// the other way out, and both are deliberate.
+///
+/// **The toggle lives here and not in [`handle_focus_dock`]** because it belongs to the *gesture*,
+/// not to the verb: pressing a key again plainly means "undo that", while a click, an RPC call and a
+/// palette entry all mean "focus it" and nothing more. With the toggle inside `FocusDock`, every one
+/// of those released a dock by asking to focus it (F003/P082/T444).
+pub fn handle_toggle_dock(state: &mut AppState, action: &WmAction) {
+    let WmAction::ToggleDock { dock } = action else {
+        return;
+    };
+    if let Some(dock) = dock {
+        let focused = state.chrome_state.focused_container();
+        let last = state.chrome_state.last_focused_container();
+        if let Some(mount) = crate::chrome::placement_for(
+            &state.chrome_host,
+            dock,
+            focused.as_deref(),
+            last.as_deref(),
+        ) && dock_focus_outcome(focused.as_deref(), &mount, true) == DockFocus::Release
+        {
+            handle_unfocus_dock(state, &WmAction::UnfocusDock);
+            return;
+        }
+    }
+    // Anything else — not focused, or no dock named — is the plain focus, pick included.
+    handle_focus_dock(state, &WmAction::FocusDock { dock: dock.clone() });
 }
 
 /// Give the keyboard back to the focused pane: chrome focus is released (F003/P085/T352).
@@ -2954,5 +3015,38 @@ mod open_link_tests {
         ] {
             assert!(!link_scheme_allowed(url), "should reject {url}");
         }
+    }
+}
+
+#[cfg(test)]
+mod dock_focus_tests {
+    use super::{dock_focus_outcome, DockFocus};
+
+    /// **`FocusDock` only focuses.** Asking to focus the dock that already has the keyboard does
+    /// nothing — it does not hand it back.
+    ///
+    /// The toggle lived inside `FocusDock` until F003/P082/T444, so *everything* that asked to focus
+    /// a dock inherited it: a click inside a focused dock released it, and so did an RPC
+    /// `focus-dock` and the command palette. `aim_keyboard_at_click` carried an `if` to work around
+    /// it, which is a rule in a call site rather than in the model.
+    #[test]
+    fn focusing_a_dock_that_already_has_the_keyboard_does_nothing() {
+        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", false), DockFocus::Nothing);
+    }
+
+    /// **`ToggleDock` hands it back** — `prefix+e` in, `prefix+e` out. The toggle belongs to the
+    /// gesture: pressing a key again plainly means "undo that", while a click never does.
+    #[test]
+    fn toggling_a_dock_that_already_has_the_keyboard_gives_it_back() {
+        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", true), DockFocus::Release);
+    }
+
+    /// Both take it when the dock does not have it — that half is the same gesture either way.
+    #[test]
+    fn either_way_a_dock_without_the_keyboard_takes_it() {
+        assert_eq!(dock_focus_outcome(None, "workspaces", false), DockFocus::Take);
+        assert_eq!(dock_focus_outcome(None, "workspaces", true), DockFocus::Take);
+        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", false), DockFocus::Take);
+        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", true), DockFocus::Take);
     }
 }

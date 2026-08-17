@@ -548,6 +548,11 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "focus-dock" => Ok(WmAction::FocusDock {
             dock: parts.next().map(|s| s.to_string()),
         }),
+        // Focus it, or hand the keyboard back if it already has it — the scriptable form of what
+        // `global_focus` does at the keyboard.
+        "toggle-dock" => Ok(WmAction::ToggleDock {
+            dock: parts.next().map(|s| s.to_string()),
+        }),
         // …and the way back: the keyboard returns to the focused pane.
         "unfocus-dock" => Ok(WmAction::UnfocusDock),
         // Forget a search memory. The scope is optional in the same way: omitted, every search

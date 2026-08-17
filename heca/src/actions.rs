@@ -632,6 +632,21 @@ impl ActionRegistry {
             )],
         },
         ActionDescriptor {
+            name: "toggle_dock",
+            label: "Toggle Dock Focus",
+            description: "Give a dock the keyboard, or hand it back if that dock already has it.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            // The toggle belongs to the *gesture*: pressing a key again plainly means "undo that",
+            // while a click, an RPC call and a palette entry all mean "focus it" and nothing more.
+            // `global_focus` binds this; everything else binds `focus_dock` (F003/P082/T444).
+            args: &[ArgDescriptor::optional(
+                "dock",
+                ArgKind::Text,
+                "Id of the dock to toggle; omit to pick one by letter.",
+            )],
+        },
+        ActionDescriptor {
             name: "clear_search_history",
             label: "Clear Search History",
             description: "Forget the past queries the command palette remembers.",

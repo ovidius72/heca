@@ -490,11 +490,11 @@ fn bind_global_focus(
     index: &mut BindingIndex,
 ) {
     for entry in entries {
-        let action = ActionRef::Builtin(WmAction::FocusDock {
+        let action = ActionRef::Builtin(WmAction::ToggleDock {
             dock: Some(entry.target.clone()),
         });
         let written = Written {
-            action: "focus_dock",
+            action: "toggle_dock",
             layer: &entry.source,
             key: &entry.key,
         };
@@ -1075,6 +1075,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
     registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
+    registry.register(&WmAction::ToggleDock { dock: None }, handle_toggle_dock);
     registry.register(
         &WmAction::ClearSearchHistory { scope: None },
         crate::handlers::handle_clear_search_history,
@@ -2112,11 +2113,15 @@ mod tests {
         bind_global_focus(&mut flat, &global, &mut Conflicts::default(), &mut index);
         assert_eq!(
             flat.resolve_builtin("normal", &KeyCombo::parse("d")),
-            Some(&WmAction::FocusDock { dock: Some("docker".to_string()) }),
+            // **`ToggleDock`, not `FocusDock`** — `global_focus` is press-again-to-leave, and that
+            // toggle belongs to the binding rather than to the verb (F003/P082/T444). `FocusDock`
+            // only focuses, so a click, an RPC call and the palette cannot release a dock by asking
+            // to focus it.
+            Some(&WmAction::ToggleDock { dock: Some("docker".to_string()) }),
             "`prefix+d` lands in the leader map, aimed at this container",
         );
         assert!(
-            index["focus_dock"]
+            index["toggle_dock"]
                 .iter()
                 .any(|b| b.key == "prefix+d" && b.layer.contains("docker")),
             "and --keys-show can say where it came from: {index:?}",
@@ -2138,12 +2143,12 @@ mod tests {
 
         assert_eq!(
             flat.resolve_builtin("normal", &KeyCombo::parse("Shift+d")),
-            Some(&WmAction::FocusDock { dock: Some("docker.right".to_string()) }),
+            Some(&WmAction::ToggleDock { dock: Some("docker.right".to_string()) }),
             "the narrowed entry names its placement",
         );
         assert_eq!(
             flat.resolve_builtin("normal", &KeyCombo::parse("d")),
-            Some(&WmAction::FocusDock { dock: Some("docker".to_string()) }),
+            Some(&WmAction::ToggleDock { dock: Some("docker".to_string()) }),
             "the id-less entry names the component, resolved at press time",
         );
     }

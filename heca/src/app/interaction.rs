@@ -394,6 +394,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // two apart needs to know whether *this* dock is `keyboard_navigable`, and `policy_allows`
         // only receives the session — the widening tracked as F003/P086/T371.
         | WmAction::FocusDock { .. }
+        | WmAction::ToggleDock { .. }
         | WmAction::SidebarRight
         | WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace

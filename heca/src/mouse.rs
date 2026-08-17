@@ -124,12 +124,14 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
 fn aim_keyboard_at_click(state: &mut AppState, pos: (f32, f32)) {
     match crate::chrome::container_at(state, pos) {
         Some(container) => {
-            if state.chrome_state.focused_container().as_deref() != Some(container.as_str()) {
-                crate::handlers::handle_focus_dock(
-                    state,
-                    &WmAction::FocusDock { dock: Some(container.clone()) },
-                );
-            }
+            // No guard needed: `FocusDock` only focuses, and focusing the dock that already has the
+            // keyboard is a no-op. It used to toggle, so this call site carried an `if` to stop a
+            // click inside a focused dock from releasing it — a rule in a call site rather than in
+            // the model, and the reason `ToggleDock` exists (F003/P082/T444).
+            crate::handlers::handle_focus_dock(
+                state,
+                &WmAction::FocusDock { dock: Some(container.clone()) },
+            );
             // **The cursor and the click are the same thing.** Click row 5 and `j` must go to row
             // 6 — so the press moves the container's cursor, not just the highlight. A press that
             // lands on no row leaves the cursor alone: clicking a container's padding is not a
