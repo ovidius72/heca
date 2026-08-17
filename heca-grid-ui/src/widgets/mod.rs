@@ -82,7 +82,7 @@ pub use icon_button::IconButton;
 pub use input::Input;
 pub use item::{ActiveMarker, Item};
 pub use item_group::ItemGroup;
-pub use key_hint_group::KeyHintGroup;
+pub use key_hint_group::{KeyHintGroup, DEFAULT_LETTERS};
 pub use key_hint::{
     HintPlacement, HintStyle, KeyCap, KeyHint, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap,
     paint_keycap_nf,

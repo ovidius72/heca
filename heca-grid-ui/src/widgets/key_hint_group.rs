@@ -45,12 +45,26 @@ use crate::PaintCx;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::{Direction, Length};
 
-/// The letters handed out, in order. Lower case first because they are one keystroke on every
-/// layout; the capitals extend the run for a dense surface without introducing a modifier, which
-/// would be a second gesture rather than a longer alphabet.
-fn letters() -> impl Iterator<Item = char> {
-    ('a'..='z').chain('A'..='Z')
-}
+/// **The letters a picker hands out when its caller does not say otherwise**, in order.
+///
+/// **Home row first** — `asdfghjkl`, then the rest of the alphabet, then the same again shifted
+/// (F003/P082/T443). The letters are spent in the order they are listed, so the targets a picker
+/// finds first get the keys your fingers are already resting on. Antonio, 2026-08-17: *"a way to
+/// prefer row keys?"*
+///
+/// Lower case before capitals because they are one keystroke on every layout; the capitals extend
+/// the run for a dense surface without introducing a modifier, which would be a second gesture
+/// rather than a longer alphabet.
+///
+/// **One letter per pick, always, and 52 is the cap.** Past the end of this sequence a target simply
+/// gets none. Two-key sequences were raised and refused (Antonio, 2026-08-17: *"typing 2 letters is
+/// not an option. always 1. stay with 52."*) — anything needing more than 52 at once is a picker
+/// covering too much, and the answer is a smaller picker, never a longer keystroke.
+///
+/// It is public so a host can hand the same order to its own pickers instead of keeping a second
+/// copy of this decision.
+pub const DEFAULT_LETTERS: &str =
+    "asdfghjklbceimnopqrtuvwxyzASDFGHJKLBCEIMNOPQRTUVWXYZ";
 
 /// A picker over the subtree it wraps: while open, every hint declaration beneath it wears a
 /// letter, and typing one runs it.
@@ -65,6 +79,9 @@ pub struct KeyHintGroup {
     /// Last value seen by [`tick`](Component::tick), so opening and closing are edges rather than
     /// something re-derived every frame.
     seen: bool,
+    /// The letters this picker hands out, in order — [`DEFAULT_LETTERS`] unless the caller replaced
+    /// them with [`letters`](KeyHintGroup::letters).
+    letters: Vec<char>,
 }
 
 #[heca_grid_ui_macros::props]
@@ -88,7 +105,7 @@ impl KeyHintGroup {
         base.style.layout.height = Length::Auto;
         base.style.layout.direction = Direction::Column;
         base.children.push(child);
-        Self { base, open: signal(false), seen: false }
+        Self { base, open: signal(false), seen: false, letters: DEFAULT_LETTERS.chars().collect() }
     }
 
     /// Bind the **host-owned** open signal. Set it from an action — which is how a surface gives
@@ -101,6 +118,28 @@ impl KeyHintGroup {
         // owner's chain, so an open picker is on the path and a closed one is not. There is no
         // gate to write and nothing to decline.
         self.base.focused = open;
+        self
+    }
+
+    /// **The letters this picker hands out, in order.** Defaults to [`DEFAULT_LETTERS`].
+    ///
+    /// ```
+    /// use heca_grid_ui::widgets::{Flex, KeyHintGroup};
+    ///
+    /// // Home row first, so the nearest targets cost the least reach.
+    /// let picker = KeyHintGroup::new(Flex::column()).letters("asdfghjkl".chars());
+    /// ```
+    ///
+    /// **The library owns the mechanism; the caller owns the choice.** Which letters, in what order,
+    /// and which to keep free is a decision about *an app*, and it was baked into this widget — so
+    /// nobody reusing the library could ask for home-row ordering, a different keyboard layout, or a
+    /// letter reserved for something else (F003/P082/T433).
+    ///
+    /// Still exactly one keystroke per pick: a target past the end of the sequence gets no letter
+    /// rather than a longer one. See [`DEFAULT_LETTERS`].
+    #[heca_grid_ui_macros::host_only("an app's choice of alphabet, not data a described tree carries")]
+    pub fn letters(mut self, letters: impl IntoIterator<Item = char>) -> Self {
+        self.letters = letters.into_iter().collect();
         self
     }
 
@@ -136,7 +175,7 @@ impl KeyHintGroup {
             }
             return;
         }
-        for (path, ch) in targets.iter().zip(letters()) {
+        for (path, ch) in targets.iter().zip(self.letters.iter().copied()) {
             if let Some(node) = self.at(path) {
                 node.base().hint_label.set(Some(ch.to_string()));
             }
@@ -289,9 +328,63 @@ mod tests {
         open.set(true);
         g.tick(0.0);
 
+        // The first three of `DEFAULT_LETTERS`, which is home row first (F003/P082/T443).
         assert_eq!(label_of(&g, 0).as_deref(), Some("a"));
-        assert_eq!(label_of(&g, 1).as_deref(), Some("b"));
-        assert_eq!(label_of(&g, 2).as_deref(), Some("c"));
+        assert_eq!(label_of(&g, 1).as_deref(), Some("s"));
+        assert_eq!(label_of(&g, 2).as_deref(), Some("d"));
+    }
+
+    /// **The caller's alphabet, in the caller's order** (F003/P082/T433). Which letters to hand out
+    /// is a decision about an app — home row first, a different layout, a letter kept free — and it
+    /// was baked into this widget, so nobody reusing the library could make it.
+    #[test]
+    fn the_caller_chooses_the_letters_and_their_order() {
+        let open = signal(false);
+        let (g, _) = group(open);
+        let mut g = g.letters("jkl".chars());
+
+        open.set(true);
+        g.tick(0.0);
+
+        assert_eq!(label_of(&g, 0).as_deref(), Some("j"));
+        assert_eq!(label_of(&g, 1).as_deref(), Some("k"));
+        assert_eq!(label_of(&g, 2).as_deref(), Some("l"));
+    }
+
+    /// **One keystroke per pick, and a target past the end simply gets none** — never a second
+    /// letter to type. Antonio, 2026-08-17: *"typing 2 letters is not an option. always 1."*
+    #[test]
+    fn running_out_of_letters_gives_none_rather_than_a_longer_one() {
+        let open = signal(false);
+        let (g, _) = group(open);
+        let mut g = g.letters("x".chars()); // one letter, three targets
+
+        open.set(true);
+        g.tick(0.0);
+
+        assert_eq!(label_of(&g, 0).as_deref(), Some("x"));
+        assert_eq!(label_of(&g, 1), None, "no letter rather than a two-key sequence");
+        assert_eq!(label_of(&g, 2), None);
+    }
+
+    /// The default is 52 single keystrokes — the cap, stated once so a change to it is deliberate.
+    /// **Home row first**, and every letter used exactly once (F003/P082/T443).
+    #[test]
+    fn the_default_alphabet_is_fifty_two_single_keystrokes_home_row_first() {
+        assert_eq!(DEFAULT_LETTERS.chars().count(), 52);
+        assert!(DEFAULT_LETTERS.chars().all(|c| c.is_ascii_alphabetic()));
+
+        assert!(
+            DEFAULT_LETTERS.starts_with("asdfghjkl"),
+            "the keys your fingers rest on are spent first"
+        );
+
+        // No letter handed out twice, and none missing — a duplicate would give two targets the
+        // same key, and an omission would waste one of the 52.
+        let mut seen: Vec<char> = DEFAULT_LETTERS.chars().collect();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), 52, "every letter appears exactly once");
     }
 
     /// Typing a letter runs **that** declaration and closes the picker.
@@ -302,7 +395,8 @@ mod tests {
         open.set(true);
         g.tick(0.0);
 
-        let handled = g.on_event_capture(&Event::TextInput("b".to_string()));
+        // `s` is the second letter of `DEFAULT_LETTERS` — home row first (F003/P082/T443).
+        let handled = g.on_event_capture(&Event::TextInput("s".to_string()));
 
         assert_eq!(handled, Handled::Yes, "the picker claims the letter");
         assert_eq!(*picks.borrow(), vec![2], "the second row's own declaration ran");

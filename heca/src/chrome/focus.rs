@@ -186,10 +186,11 @@ mod tests {
         ]);
         assert_eq!(
             dock_candidates(&host, everywhere),
+            // The first three of the shared alphabet, which is home row first (F003/P082/T443).
             vec![
                 ('a', "workspaces".to_string()),
-                ('b', "docker".to_string()),
-                ('c', "notes".to_string()),
+                ('s', "docker".to_string()),
+                ('d', "notes".to_string()),
             ],
         );
     }
