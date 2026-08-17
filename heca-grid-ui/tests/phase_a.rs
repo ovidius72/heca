@@ -3326,7 +3326,10 @@ fn key_hint_overlays_letter_only_when_set() {
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
-            w.paint(&mut cx);
+            // `paint_child`, not `w.paint`: the framework draws the hint letter for whatever it is
+            // handed, which is what lets any widget carry one instead of only a `KeyHint`
+            // (F003/P082/T431). Calling `paint` directly is painting *around* the framework.
+            heca_grid_ui::paint_child(w, &mut cx);
         }
         let mut texts = Vec::new();
         let mut icons = 0usize;
@@ -3353,6 +3356,46 @@ fn key_hint_overlays_letter_only_when_set() {
     let (texts, icons) = paint(&mut wrapped);
     assert!(icons >= 2, "child icon still paints under the keycap");
     assert!(texts.iter().any(|t| t == "a"), "keycap letter paints while hint is Some");
+}
+
+/// **A widget that is not a `KeyHint` gets its letter drawn too** (F003/P082/T431).
+///
+/// This is the whole point of moving the drawing into `paint_child`: being pickable stopped
+/// depending on being wrapped. Before it, only `KeyHint::paint` knew how to draw a cap, so any
+/// widget that wanted one had to be put inside a wrapper — and a plugin's widget could not be
+/// pickable at all without knowing that.
+#[test]
+fn any_widget_carrying_a_letter_gets_a_keycap_not_only_key_hint() {
+    use heca_grid_ui::{FontRole, Label};
+
+    let letter: Signal<Option<String>> = signal(None);
+    // A plain `Label` — no `KeyHint` anywhere in this tree.
+    let mut plain = Label::new("nvim");
+    plain.base_mut().hint_label = letter;
+
+    let caps = |w: &mut Label| -> Vec<String> {
+        LayoutEngine::new().compute(w, Size::new(120.0, 40.0));
+        let theme = Theme::default();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(w, &mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) if t.font == FontRole::Text => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    assert!(!caps(&mut plain).iter().any(|t| t == "b"), "no letter while none is offered");
+
+    letter.set(Some("b".to_string()));
+    let texts = caps(&mut plain);
+    assert!(texts.iter().any(|t| t == "b"), "the framework draws the letter over a bare Label");
+    assert!(texts.iter().any(|t| t == "nvim"), "and the widget's own content still paints");
 }
 
 #[test]

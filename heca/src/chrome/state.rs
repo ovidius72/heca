@@ -168,18 +168,6 @@ pub struct WorkspacesContainerState {
     pub(crate) collapsed_ws: Signal<HashSet<usize>>,
     /// Active/hovered pane in this container.
     pub(crate) selection: ChromeSelection,
-    /// Targeting pick candidates (letter → pane) for move/swap/take overlays, driving
-    /// the universal `KeyHint`s. **Empty = no pick active.** Read via `with_pick_candidates`.
-    pub(crate) pick_candidates: Signal<Vec<(char, PaneId)>>,
-    /// Targeting pick candidates (letter → `ws_idx`) for the "move column/pane to
-    /// workspace" overlay, driving the universal `KeyHint`s over each workspace dock.
-    /// **Empty = no pick active.** Read via `with_ws_pick_candidates`. Transient UI
-    /// state, so (unlike pane picks) it emits no event bus notification.
-    pub(crate) ws_pick_candidates: Signal<Vec<(char, usize)>>,
-    /// Targeting pick candidates (letter → `(ws_idx, col_idx)`) for the "move pane to
-    /// column" overlay over every workspace's columns. **Empty = no pick active.**
-    /// Read via `with_col_pick_candidates`. Transient UI state (no event emitted).
-    pub(crate) col_pick_candidates: Signal<Vec<(char, usize, usize)>>,
     /// The keyboard pick currently in progress (move/select/swap/take), if any. Exposed
     /// reactively (+ `PendingPickChanged`) so components/plugins can render their own UI
     /// for the pending action. `None` when idle.
@@ -236,9 +224,6 @@ impl WorkspacesContainerState {
             )),
             collapsed_ws: signal(HashSet::new()),
             selection: ChromeSelection::new(),
-            pick_candidates: signal(Vec::new()),
-            ws_pick_candidates: signal(Vec::new()),
-            col_pick_candidates: signal(Vec::new()),
             pending_pick: signal(None),
             panes: signal(HashMap::new()),
             nav_selection: signal(None),
@@ -306,29 +291,6 @@ impl WorkspacesContainerState {
     /// Borrow the collapsed-ws set without cloning it.
     pub fn with_collapsed_ws<R>(&self, f: impl FnOnce(&HashSet<usize>) -> R) -> R {
         self.collapsed_ws.with(f)
-    }
-    /// Is a targeting pick active? (Borrows — no clone.)
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "pane-pick widgets do not bind this helper yet; covered by state tests today"
-        )
-    )]
-    pub fn pick_active(&self) -> bool {
-        self.pick_candidates.with(|c| !c.is_empty())
-    }
-    /// Borrow the pick candidates without cloning the Vec.
-    pub fn with_pick_candidates<R>(&self, f: impl FnOnce(&[(char, PaneId)]) -> R) -> R {
-        self.pick_candidates.with(|c| f(c))
-    }
-    /// Borrow the workspace pick candidates without cloning the Vec.
-    pub fn with_ws_pick_candidates<R>(&self, f: impl FnOnce(&[(char, usize)]) -> R) -> R {
-        self.ws_pick_candidates.with(|c| f(c))
-    }
-    /// Borrow the column pick candidates without cloning the Vec.
-    pub fn with_col_pick_candidates<R>(&self, f: impl FnOnce(&[(char, usize, usize)]) -> R) -> R {
-        self.col_pick_candidates.with(|c| f(c))
     }
     /// The in-progress keyboard pick (move/select/swap/take), if any.
     pub fn pending_pick(&self) -> Option<PendingPick> {
@@ -422,48 +384,6 @@ impl WorkspacesContainerState {
             return;
         }
         self.programs.set(programs);
-    }
-    pub fn set_pick_candidates(&self, candidates: Vec<(char, PaneId)>) {
-        if self.pick_candidates.get_untracked() == candidates {
-            return;
-        }
-        self.pick_candidates.set(candidates);
-        self.events.emit(ChromeEvent::PanePickCandidatesChanged {
-            candidates: self.pick_candidates.get_untracked(),
-        });
-    }
-    pub fn clear_pick_candidates(&self) {
-        if self.pick_candidates.get_untracked().is_empty() {
-            return;
-        }
-        self.pick_candidates.update(|c| c.clear());
-        self.events.emit(ChromeEvent::PanePickCandidatesChanged {
-            candidates: Vec::new(),
-        });
-    }
-    pub fn set_ws_pick_candidates(&self, candidates: Vec<(char, usize)>) {
-        if self.ws_pick_candidates.get_untracked() == candidates {
-            return;
-        }
-        self.ws_pick_candidates.set(candidates);
-    }
-    pub fn clear_ws_pick_candidates(&self) {
-        if self.ws_pick_candidates.get_untracked().is_empty() {
-            return;
-        }
-        self.ws_pick_candidates.update(|c| c.clear());
-    }
-    pub fn set_col_pick_candidates(&self, candidates: Vec<(char, usize, usize)>) {
-        if self.col_pick_candidates.get_untracked() == candidates {
-            return;
-        }
-        self.col_pick_candidates.set(candidates);
-    }
-    pub fn clear_col_pick_candidates(&self) {
-        if self.col_pick_candidates.get_untracked().is_empty() {
-            return;
-        }
-        self.col_pick_candidates.update(|c| c.clear());
     }
     /// Set the in-progress pick (`None` clears it). Guarded — emits
     /// [`ChromeEvent::PendingPickChanged`] only on a real change.
@@ -830,12 +750,6 @@ pub struct SharedChromeState {
     /// F003/P085/T354 (`nav_key`) is what writes it — a row declares its identity once and the
     /// cursor, the right-click target and (later) drag are three readers of that one declaration.
     container_cursor: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<Option<String>>>>>,
-    /// Letter → container id while a **dock pick** is open; empty means no pick.
-    ///
-    /// Shell-level, unlike the pane/workspace/column picks on
-    /// [`WorkspacesContainerState`]: the things being picked are the shell's mounted containers, and
-    /// no container knows about its siblings.
-    dock_pick_candidates: Signal<Vec<(char, String)>>,
 }
 
 impl SharedChromeState {
@@ -947,33 +861,8 @@ impl SharedChromeState {
         sig.set(key);
     }
 
-    /// Borrow the dock pick candidates without cloning the Vec.
-    pub fn with_dock_pick_candidates<R>(&self, f: impl FnOnce(&[(char, String)]) -> R) -> R {
-        self.dock_pick_candidates.with(|c| f(c))
-    }
 
-    /// Open (or move on) the dock pick. Guarded; emits
-    /// [`ChromeEvent::DockPickCandidatesChanged`] on a real change.
-    pub fn set_dock_pick_candidates(&self, candidates: Vec<(char, String)>) {
-        if self.dock_pick_candidates.get_untracked() == candidates {
-            return;
-        }
-        self.dock_pick_candidates.set(candidates);
-        self.events.emit(ChromeEvent::DockPickCandidatesChanged {
-            candidates: self.dock_pick_candidates.get_untracked(),
-        });
-    }
 
-    /// Close the dock pick.
-    pub fn clear_dock_pick_candidates(&self) {
-        if self.dock_pick_candidates.get_untracked().is_empty() {
-            return;
-        }
-        self.dock_pick_candidates.update(|c| c.clear());
-        self.events.emit(ChromeEvent::DockPickCandidatesChanged {
-            candidates: Vec::new(),
-        });
-    }
 
     /// Construct the store with initial region modes + widths (mirroring the
     /// `SidebarState` defaults during migration). Signals are created here — requires
@@ -997,7 +886,6 @@ impl SharedChromeState {
             last_focused_container: signal(None),
             container_cursor: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             keyboard_target: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
-            dock_pick_candidates: signal(Vec::new()),
         }
     }
 
@@ -1121,17 +1009,6 @@ mod tests {
         assert!(!s.workspaces.is_ws_collapsed(1));
     }
 
-    #[test]
-    fn pick_candidates_active_and_clear() {
-        let s = state();
-        assert!(!s.workspaces.pick_active());
-        s.workspaces
-            .set_pick_candidates(vec![('a', PaneId(1)), ('b', PaneId(2))]);
-        assert!(s.workspaces.pick_active());
-        assert_eq!(s.workspaces.with_pick_candidates(|c| c.len()), 2);
-        s.workspaces.clear_pick_candidates();
-        assert!(!s.workspaces.pick_active());
-    }
 
     #[test]
     fn selection_defaults_none_then_set() {
@@ -1325,22 +1202,16 @@ mod tests {
         assert!(!again.get_untracked(), "and it is the same signal, not a copy");
     }
 
-    #[test]
-    fn the_dock_pick_opens_and_closes() {
-        let s = state();
-        assert_eq!(s.with_dock_pick_candidates(|c| c.len()), 0);
-        s.set_dock_pick_candidates(vec![('a', "workspaces".into()), ('s', "docker".into())]);
-        assert_eq!(
-            s.with_dock_pick_candidates(|c| c.to_vec()),
-            vec![('a', "workspaces".to_string()), ('s', "docker".to_string())],
-        );
-        s.clear_dock_pick_candidates();
-        assert_eq!(s.with_dock_pick_candidates(|c| c.len()), 0);
-    }
 
-    /// Focus and the pick each emit once per real change, and never for a repeat.
+    /// Focus emits once per real change, and never for a repeat.
+    ///
+    /// ⚠️ It used to assert the dock **pick** alongside it, through `set_dock_pick_candidates` and
+    /// its `dock.pick.changed` event. That mirror is gone (F003/P082/T427): it existed to feed the
+    /// per-frame keycap projections, and the letters are offered straight from `InputMode` now. The
+    /// event went with it — see the phase handoff, because it was observable and nothing re-emits
+    /// it.
     #[test]
-    fn focus_and_dock_pick_emit_only_on_real_change() {
+    fn focus_emits_only_on_real_change() {
         let s = state();
         let seen = Rc::new(RefCell::new(Vec::new()));
         let log = seen.clone();
@@ -1350,19 +1221,8 @@ mod tests {
 
         s.set_focused_container(Some("workspaces".into()));
         s.set_focused_container(Some("workspaces".into()));
-        s.set_dock_pick_candidates(vec![('a', "workspaces".into())]);
-        s.set_dock_pick_candidates(vec![('a', "workspaces".into())]);
-        s.clear_dock_pick_candidates();
-        s.clear_dock_pick_candidates();
 
-        assert_eq!(
-            seen.borrow().as_slice(),
-            [
-                "chrome.container.focus.changed",
-                "dock.pick.changed",
-                "dock.pick.changed",
-            ],
-        );
+        assert_eq!(seen.borrow().as_slice(), ["chrome.container.focus.changed"]);
     }
 
     #[test]
@@ -1395,19 +1255,13 @@ mod tests {
         s.workspaces.set_active_pane(Some(PaneId(7)));
         s.set_left_mode(RegionMode::CollapsedRail);
         s.set_left_mode(RegionMode::CollapsedRail);
-        s.workspaces.set_pick_candidates(vec![('a', PaneId(7))]);
-        s.workspaces.set_pick_candidates(vec![('a', PaneId(7))]);
-        s.workspaces.clear_pick_candidates();
-        s.workspaces.clear_pick_candidates();
-
+        // ⚠️ The pane **pick** used to be asserted here too, through `set_pick_candidates` and its
+        // `pane.pick.changed` event. That mirror is gone (F003/P082/T427) — it fed the per-frame
+        // keycap projections and the letters come straight from `InputMode` now — and the event
+        // went with it. See the phase handoff: it was observable and nothing re-emits it.
         assert_eq!(
             seen.borrow().as_slice(),
-            [
-                "pane.active.changed",
-                "chrome.region.mode.changed",
-                "pane.pick.changed",
-                "pane.pick.changed",
-            ],
+            ["pane.active.changed", "chrome.region.mode.changed"],
         );
     }
 

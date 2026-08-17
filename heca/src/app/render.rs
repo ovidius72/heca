@@ -1116,15 +1116,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
             );
         }
     }
-    // The universal picker's keycaps (`prefix+/`), painted into the **layer** scene so they sit
-    // above every layer rather than beneath them. They used to go into the chrome scene, which is
-    // flushed before this pass: while the exposé was up the letters were drawn under the map and
-    // could not be seen, though the targets they named were live and answering (F003/P082/T416).
-    // A letter over a surface the user cannot see is not pickable in any useful sense.
+    // **The picker's keycaps are NOT painted here, and must never be.** Each is drawn by the widget
+    // that declared the pick, in that widget's own paint (`heca_grid_ui::offer_hint`).
     //
-    // Which targets are eligible is `chrome::active_peek_targets`' answer, not this pass's — here
-    // the letters only have to end up on top of what they are labelling.
-    crate::chrome::paint_peek_letters(state, &mut layer_scene, w, h, &chrome_theme);
+    // Twice now a host pass tried to draw them and put them somewhere the user could not see: first
+    // into the chrome scene, flushed before the layers, so the letters sat under the exposé
+    // (F003/P082/T416); then into this scene's **base**, while an `Overlay`-rooted layer paints
+    // into an overlay segment deferred to a later band — under the map again, at the right
+    // coordinates (F003/P082/T427). A host cannot know which half of which scene a widget it has
+    // never seen paints into, so it must not try.
     if !layer_scene.is_empty() {
         render_chrome(
             &mut state.grid_renderer,

@@ -18,7 +18,7 @@
 //! state means adding both lines, and this is the file where that is visible.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{pane_nav_key, pane_row_items, pane_row_press, row_peek, PaneEntry, MENU_PANE};
+use super::{pane_nav_key, pane_row_items, pane_row_press, row_hint, PaneEntry, MENU_PANE};
 use crate::chrome::{
     alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
     ChromeDragItem, PaneInfoSignals, RepaintWatch, CARD_META_FONT_SCALE,
@@ -311,13 +311,10 @@ impl PaneRow<'_> {
             pane_nav_key(pane_id),
             card.nav_state(),
         ));
-        // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
-        // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
-        // events/focus/drag straight through — so the card stays a drag source + target
-        // and clickable. The hint signal is driven each frame in `sync_chrome_signals`
-        // from the active `InputMode` candidates (keyboard logic stays the source of truth).
-        let hint = signal(None);
-        reg.signals.pane_hint.push((pane_id, hint));
+        // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this pane's
+        // letter over it. `KeyHint` is transparent — it hugs the child and routes events, focus and
+        // drag straight through — so the card stays a drag source and target, and clickable. **The
+        // letter is offered by nav_key** (`chrome::hint`) and drawn by the widget itself.
         reg.signals.pane_info.push((
             pane_id,
             PaneInfoSignals {
@@ -347,14 +344,13 @@ impl PaneRow<'_> {
         ));
         let (watch, _repaint) = RepaintWatch::new(
             KeyHint::new(card)
-                .hint(hint)
                 // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
                 // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
                 // registered and no id leaves this line — which is the only reason a plugin's row could
                 // ever have the same picker (RULE ZERO, F004/P084/T399).
-                .on_peek(crate::chrome::fires(
+                .on_hint(crate::chrome::fires(
                     seams.mount,
-                    row_peek(pane_nav_key(pane_id)),
+                    row_hint(pane_nav_key(pane_id)),
                     seams.emit,
                 ))
                 .placement(HintPlacement::CenterRight),
@@ -405,10 +401,9 @@ mod tests {
                 .any(|(m, k, _)| m == "left" && k == &pane_nav_key(PaneId(7))),
             "the cursor outline is per placement, so it is keyed by mount",
         );
-        assert!(
-            fx.signals.pane_hint.iter().any(|(p, _)| *p == PaneId(7)),
-            "the pick letter is driven each frame from the active InputMode",
-        );
+        // The pick letter is **not** a signal this component registers any more: it is offered by
+        // the row's own `nav_key` (`chrome::hint`) and drawn by the widget, so what this component
+        // owes is the identity — asserted above through `row_nav` — and nothing else.
     }
 
     /// A row declares the one identity everything else reads — the cursor, the drag, the

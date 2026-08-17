@@ -118,7 +118,7 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
     //
     // F003/P085/T352 put the release here, reasoning that "the keyboard goes to the pane". That is
     // not a property of a pane getting focus — it is a property of *what the user asked for*, and
-    // this handler cannot tell the two apart. `Space` (peek) focuses a pane and deliberately keeps
+    // this handler cannot tell the two apart. `Space` (hint) focuses a pane and deliberately keeps
     // the keyboard on the dock; the rule fired anyway and `j`/`k` stopped working.
     //
     // Every way out is now explicit at the site that means it: the component's activate-and-leave
@@ -799,8 +799,8 @@ pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
 pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     // Which targets are reachable is decided by the layered surface compositor — one rule
     // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
-    // See `chrome::active_peek_targets` and `docs/surface-compositor.md`.
-    let candidates: Vec<(char, crate::chrome::PeekTarget)> = crate::chrome::active_peek_targets(state)
+    // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
+    let candidates: Vec<(char, crate::chrome::HintTarget)> = crate::chrome::active_hint_targets(state)
         .into_iter()
         .enumerate()
         .filter_map(|(i, (target, _))| {
@@ -808,6 +808,10 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
         })
         .collect();
     if !candidates.is_empty() {
+        // **Hand each region its letter; nothing here draws one.** The widget that declared the
+        // pick paints its own keycap, so it lands wherever that widget is — at any nesting depth,
+        // on any surface, including a plugin's (F003/P082/T427).
+        crate::chrome::offer_hint_letters(state, &candidates);
         state.input_mode = InputMode::HintPick { candidates };
         state.needs_redraw = true;
     }

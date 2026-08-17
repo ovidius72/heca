@@ -54,10 +54,11 @@ pub(crate) mod workspace_row;
 mod testing;
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Overlay, Surface};
+use heca_grid_ui::reactive::{signal, SignalUpdate};
+use heca_grid_ui::widgets::{KeyHintGroup, Overlay, Surface};
 use heca_grid_ui::Component;
 
 pub(crate) use expose_grid::ExposeGrid;
@@ -75,6 +76,14 @@ const ZOOM_IN: f32 = 0.2;
 /// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
 /// constant so the layer, the config entry and the key lookup cannot drift apart.
 pub(crate) const SURFACE: &str = "expose";
+
+/// **The map's own picker, declared on the widget** (F003/P082/T427).
+///
+/// The action a `[[keys.surface]] heca.expose` entry binds as `pick`. It is the map's, not the
+/// app's: the surface declares the verb, the widget answers it, and config chooses the key. Before
+/// this the map had to borrow the built-in `hint_pick` — the only picker there was — which is why a
+/// plugin's overlay could contribute targets to heca's picker and never open one of its own.
+pub(crate) const PICK_ACTION: &str = "heca.expose.pick";
 
 /// **A share of the parent's height**, expressed the only way flexbox actually divides a box.
 ///
@@ -133,7 +142,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             // The middle step is the one that is invisible until it is missing. `focus_pane`
             // changes which pane is *active* and deliberately nothing else — it does not release
             // container focus, because whether the keyboard should follow is a property of what
-            // the user asked for, not of a pane being focused (a peek focuses without leaving).
+            // the user asked for, not of a pane being focused (a hint focuses without leaving).
             // Without it the map focused the right pane and the keyboard stayed where it was, so
             // choosing a card looked like it had done nothing at all.
             emit(crate::app::interaction::InteractionIntent::FocusPaneThenAction {
@@ -195,6 +204,20 @@ pub(crate) fn map(
         cb: &cb,
     }
     .build();
+
+    // **The picker is a widget, and the map declares it.** Open it and every card beneath wears a
+    // letter — each drawn by the card itself, so it lands wherever the card is, at any nesting
+    // depth. Typing one runs that card's own `on_hint`. Nothing host-side is involved: no input
+    // mode, no host paint pass, no registry.
+    let picker_open = signal(false);
+    let grid = KeyHintGroup::new(grid)
+        .open_when(picker_open)
+        .on_action(PICK_ACTION, move || picker_open.set(true))
+        // The wrapper hugs its child, so the room the panel gives it has to be passed on
+        // deliberately — the grid inside is a share of *this*, and a hugged wrapper would leave it
+        // resolving a percentage of nothing (the same term the cards' `KeyHint` needs).
+        .width(Length::Pct(1.0))
+        .height(Length::Pct(1.0));
 
     Box::new(
         Overlay::new()
@@ -661,6 +684,50 @@ mod tests {
             );
         }
     }
+
+    /// **The map declares its own picker, and its cards declare their own picks** (F003/P082/T427).
+    ///
+    /// Both halves, because either alone is silent: an action nothing declares is a no-op that
+    /// looks exactly like a typo, and a picker over cards that declare nothing shows no letters.
+    #[test]
+    fn the_map_owns_its_picker_and_every_card_is_a_target() {
+        let s = session();
+        let rows = model(&s, |p| p.title.clone());
+        let theme = GuiTheme::default();
+        let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let mut root =
+            map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
+        heca_grid_ui::LayoutEngine::new()
+            .compute(root.as_mut(), heca_grid_ui::Size::new(1280.0, 800.0));
+
+        assert!(
+            heca_grid_ui::collect_actions(root.as_ref()).contains(&PICK_ACTION.to_string()),
+            "the map declares its own pick action, rather than borrowing the app's",
+        );
+        assert_eq!(
+            heca_grid_ui::collect_hints(root.as_ref()).len(),
+            2,
+            "one pick target per card in the fixture's session",
+        );
+    }
+
+    /// **The shipped config binds the map's own action**, not a built-in it borrowed. A name that
+    /// no widget declares binds fine, dispatches, and does nothing — indistinguishable from a typo —
+    /// so the file and the declaration are held together here.
+    #[test]
+    fn the_shipped_defaults_bind_the_maps_own_pick_action() {
+        let config = heca_config::theme::KeysConfig::default();
+        let entry = config
+            .surfaces()
+            .find(|e| e.name == "heca.expose")
+            .expect("the map has a [[keys.surface]] entry");
+        let short = PICK_ACTION
+            .strip_prefix("heca.expose.")
+            .expect("the action is namespaced by its surface");
+        assert!(
+            entry.bindings.contains_key(short),
+            "`{short}` is bound in the shipped defaults: {:?}",
+            entry.bindings.keys().collect::<Vec<_>>(),
+        );
+    }
 }
-
-

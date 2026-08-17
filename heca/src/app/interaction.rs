@@ -385,7 +385,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SidebarLeft
         // **Taking** chrome focus, likewise. This was `Global`, justified as "unlike `SidebarFocus`,
         // which enters a nav mode that moves pane focus". That stopped being true when
-        // `sidebar_focus` was retired: a focused container's own `activate`/`peek` move pane focus,
+        // `sidebar_focus` was retired: a focused container's own `activate`/`hint` move pane focus,
         // and they are reached through this (F003/P085/T356). It also matches the two lines below —
         // a sidebar cannot even be toggled while floating, so being able to focus and drive one was
         // the stranger half.
@@ -1106,7 +1106,24 @@ pub(crate) fn dispatch_view_intent(
         return IntentOutcome::MissingArgs;
     }
 
-    // 2. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
+    // 2. **A widget on screen declares it** (F003/P082/T427). Between the built-ins and the
+    //    provider catalog, because a surface's own verb is the more specific thing the name means
+    //    while that surface is up — the same nearest-declaration rule keys and menus follow.
+    //
+    //    This is the seam a **layer** has and used not to: a dock declares its actions through
+    //    `Provider::actions`, while an overlay could only bind verbs the app had already compiled
+    //    in. It is why the exposé's picker had to borrow the built-in `hint_pick`, and why a plugin
+    //    could contribute targets to heca's picker but never open one of its own.
+    //
+    //    Reachability *is* the gate here, and deliberately so: a widget-declared action is found
+    //    only by walking the **visible** trees, so an unmounted surface's verb resolves to nothing
+    //    exactly as an unmounted provider's does. It needs no policy of its own because it cannot
+    //    be reached when its surface is not on screen.
+    if crate::chrome::fire_widget_action(state, &intent.action) {
+        return IntentOutcome::Ran;
+    }
+
+    // 3. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
     //    built-in path reaches through `route_action`, so a plugin action is judged by identical
     //    rules.
     let Some(policy) = state.action_catalog.policy(&intent.action) else {
@@ -1852,7 +1869,7 @@ mod tests {
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
         // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused
-        // container's own `activate`/`peek` move pane focus and are reached through the first, so it
+        // container's own `activate`/`hint` move pane focus and are reached through the first, so it
         // must not open while a float owns the domain — but a way out that can be blocked is not a
         // way out (F003/P085/T356).
         assert_eq!(

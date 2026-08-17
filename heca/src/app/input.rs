@@ -608,23 +608,27 @@ fn handle_follow_link_mode(
 /// pick does to it; any other key / Esc just exits. Mirrors [`handle_follow_link_mode`].
 ///
 /// **The host resolves nothing.** There is no registry to look an id up in and no intent to route
-/// here: the region declared the behaviour itself (`KeyHint::on_peek`, or a described node's `peek`
+/// here: the region declared the behaviour itself (`KeyHint::on_hint`, or a described node's `hint`
 /// event), and running it emits whatever that region emits — which is how a plugin's row gets the
 /// same picker the app's own rows have. A target whose tree was rebuilt under the letters simply
 /// answers `false`.
 fn handle_hint_pick_mode(
     _registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, crate::chrome::PeekTarget)],
+    candidates: &[(char, crate::chrome::HintTarget)],
     ctx: KeyInputContext<'_>,
 ) {
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
+    // The letters come down however this ends — picked, wrong key, or Esc. Withdrawn before the
+    // pick runs, because running it may tear the tree down and a keycap must not outlive the mode
+    // that put it up.
+    crate::chrome::clear_hint_letters(state);
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
     if let Some(ch) = typed
         && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        crate::chrome::fire_peek(state, target);
+        crate::chrome::fire_hint(state, target);
     }
     state.needs_redraw = true;
 }

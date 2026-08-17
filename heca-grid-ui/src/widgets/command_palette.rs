@@ -1076,7 +1076,9 @@ impl Component for CommandPalette {
                 } else {
                     muted.lerp(foreground, 0.7)
                 };
-                cx.with_content_color(content, |cx| self.row_child(m.index).paint(cx));
+                cx.with_content_color(content, |cx| {
+                    crate::component::paint_child(self.row_child(m.index), cx)
+                });
                 // Bindings: one row of keycap chips per binding, stacked down the row, each
                 // right-aligned to the same reserved column so every command's chips line up.
                 let cap_font = self.keycap_font();

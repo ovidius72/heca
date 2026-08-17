@@ -147,16 +147,26 @@ impl LayoutEngine {
         c.base_mut().font = resolved;
         // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
         // container takes its padding from the theme instead of a hand-computed value.
+        //
+        // **Rounded to whole pixels, and that is what makes air look even.** A token is a fraction
+        // of the font (`Xs` is a quarter of it), so it lands on halves at most sizes — and the two
+        // sides of a boundary between siblings then round in different directions. Percentage-sized
+        // siblings put the air in their padding rather than a gap (a gap is added *outside* a
+        // percentage and overflows it), so every boundary in such a row is made of two paddings, and
+        // half a pixel each side became a gap of 6, 7 or 8 where all of them should have been 7.
+        // Measured across fourteen equal columns of the exposé; uniform once the token resolves to a
+        // whole pixel. A widget's own padding moves by at most half a pixel, which is under what the
+        // screen can draw; the rhythm between siblings is the thing an eye actually reads.
         {
             let s = &mut c.base_mut().style.layout;
             if let Some(sp) = s.pad_spacing_x {
-                s.padding_x = Some(resolved * sp.scale());
+                s.padding_x = Some((resolved * sp.scale()).round());
             }
             if let Some(sp) = s.pad_spacing_y {
-                s.padding_y = Some(resolved * sp.scale());
+                s.padding_y = Some((resolved * sp.scale()).round());
             }
             if let Some(sp) = s.gap_spacing {
-                s.gap = resolved * sp.scale();
+                s.gap = (resolved * sp.scale()).round();
             }
         }
         c.remeasure();

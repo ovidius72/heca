@@ -1,7 +1,7 @@
 {
   "id": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
   "number": 6,
-  "shortId": "",
+  "shortId": "PERUP",
   "priority": 0,
   "name": "🛠️ App / Chrome Features",
   "description": "Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.",
@@ -29,16 +29,7 @@
     "821e5ab9-22e8-4e04-a356-209350f305d5"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "21d7ced7-8a6d-46b7-938d-81e26c3f9e01",
-      "date": "2026-08-13T19:56:32.461Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-01T18:08:37.398Z",
   "updatedAt": "2026-07-01T20:27:40.669Z"
 }

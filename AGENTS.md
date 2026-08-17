@@ -762,32 +762,32 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
 wrapper that draws the letter. One line, no id, no registry (F004/P084/T399):
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
-let peek = crate::chrome::fires(row_peek(pane_nav_key(pane_id)), emit); // the pick
+let hint = crate::chrome::fires(row_hint(pane_nav_key(pane_id)), emit); // the pick
 let row = Row::new().on_activate(fire);
-KeyHint::new(row).on_peek(peek)
+KeyHint::new(row).on_hint(hint)
 ```
-The slot is `Base::peek`, universal; the **builder is on `KeyHint`**, because being
-pickable is something you opt a region into — so `Label::on_peek` is a method that never
+The slot is `Base::hint`, universal; the **builder is on `KeyHint`**, because being
+pickable is something you opt a region into — so `Label::on_hint` is a method that never
 has to exist. The framework collects the declarations out of the laid-out tree
-(`heca_grid_ui::collect_peeks`) and runs one (`fire_peek`). Nothing is registered, so
+(`heca_grid_ui::collect_hints`) and runs one (`fire_hint`). Nothing is registered, so
 nothing has to be un-registered when a tree rebuilds; a candidate is a
-`chrome::PeekTarget` (which tree + the path in it), valid for exactly as long as the
-letters are up. The pick path is `handle_hint_pick` → `chrome::active_peek_targets`
-(eligibility, once) and `chrome::paint_peek_letters` (live bounds, every frame); both
+`chrome::HintTarget` (which tree + the path in it), valid for exactly as long as the
+letters are up. The pick path is `handle_hint_pick` → `chrome::active_hint_targets`
+(eligibility, once) and `chrome::paint_hint_letters` (live bounds, every frame); both
 walk the chrome tree, every `state.pane_headers` tree and every visible layer. See
-`sidebar_toggle_button` for a complete example (tooltip + peek together).
+`sidebar_toggle_button` for a complete example (tooltip + hint together).
 
 - **A pick is not a click.** They are different gestures and a region may answer them
   differently: a sidebar row activates the pane and *leaves* on a click, and stays in the
-  dock on a peek (`workspaces.peek_selected`, aimed at a row by its `key` argument).
+  dock on a hint (`workspaces.peek_selected`, aimed at a row by its `key` argument).
   Pointing one intent at both is what made `prefix+/` walk out of the sidebar. Declare
   the same closure for both only when they genuinely are the same act (a header button).
 - **Active-targeted buttons must focus first.** A pane button whose action acts on the
   *focused* pane (zoom/float — no pane id in the `WmAction`) emits a `FocusPane` before
   its action — the events are queued and processed in order, so it lands on this pane.
   Pane-parameterized actions (close/move/split carry the pane) just use `ActivateAction`.
-- **The declarative half is the same declaration.** A described node binds a `peek`
-  event to an `Intent` (`ViewNode::on_peek`), defaulting to its `press` — so every
+- **The declarative half is the same declaration.** A described node binds a `hint`
+  event to an `Intent` (`ViewNode::on_hint`), defaulting to its `press` — so every
   actionable described node is reachable by letter with nothing written, and a plugin's
   row gets the identical picker.
 - **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
@@ -1027,7 +1027,7 @@ everything below it, including the architecture section.
 **The test — apply it BEFORE writing any capability. Write the line a *plugin author* would type:**
 
 ```rust
-Row::new().child(…).on_peek(move || cursor_to(row_id))     // ✅ one line, on the widget
+Row::new().child(…).on_hint(move || cursor_to(row_id))     // ✅ one line, on the widget
 ```
 
 > Can someone get this behaviour by writing **one line on their widget**, without touching anything
@@ -1042,7 +1042,7 @@ already is), so a plugin writes the identical line. **One door, never two.**
 
 ```rust
 // ✅ now — one line, on the widget
-KeyHint::new(row).on_peek(move || emit(intent.clone()))
+KeyHint::new(row).on_hint(move || emit(intent.clone()))
 
 // ❌ before — a host-only enum, a registry, and an id to carry around
 let id = hints.register(InteractionIntent::FocusPaneThenAction { … });
@@ -1700,7 +1700,7 @@ These were clarified in detail with `/grill-me`; do not casually re-decide them:
 - `j/k` and `Up/Down` move sidebar cursor only.
 - Main scrolling/focus state does **not** auto-follow sidebar cursor movement.
 - `h/l` and `Left/Right` are tree-navigation keys on structural rows.
-- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and hands the keyboard back to it (`Space` peeks — it focuses the pane and keeps the keyboard on the container).
+- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and hands the keyboard back to it (`Space` hints — it focuses the pane and keeps the keyboard on the container).
 - `Esc` exits sidebar mode and focuses contextual content.
 - Sidebar-mode mutation keys are sidebar-only.
 - Global prefix collapse actions use **active main-view state**, not sidebar selection.

@@ -11,11 +11,10 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{
-    column_group::ColumnGroup, pane_row::PaneRow, row_peek, workspace_nav_key, workspace_row_items,
+    column_group::ColumnGroup, pane_row::PaneRow, row_hint, workspace_nav_key, workspace_row_items,
     ChromeDragItem, WorkspaceEntry, MENU_WORKSPACE,
 };
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::reactive::signal;
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, KeyHint};
 
@@ -133,15 +132,12 @@ impl WorkspaceFrame<'_> {
         // it. The keycap is tinted `warning` (not accent) so a workspace target reads
         // distinctly from a pane target. The hint signal is driven each frame in
         // `sync_chrome_signals` from the active pick candidates.
-        let ws_hint = signal::<Option<String>>(None);
-        reg.signals.ws_hint.push((ws_idx, ws_hint));
         KeyHint::new(dock)
-            .hint(ws_hint)
             // **What `prefix+/` does to this row** — the cursor lands on the workspace header
             // and the dock keeps the keyboard, exactly as it does on a pane row.
-            .on_peek(crate::chrome::fires(
+            .on_hint(crate::chrome::fires(
                 seams.mount,
-                row_peek(workspace_nav_key(ws_idx)),
+                row_hint(workspace_nav_key(ws_idx)),
                 seams.emit,
             ))
             .color(theme.colors.warning)

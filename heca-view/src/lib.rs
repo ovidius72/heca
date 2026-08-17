@@ -14,7 +14,7 @@
 //! Behaviour is expressed **only** through [`Intent`]s (an action id + args), never Rust
 //! closures — so the model stays serializable and uniform for native and plugin UI alike.
 //! A node that carries an `on_press`/`on_change` intent is *actionable*; `realize` makes every
-//! actionable node pickable by `prefix+/` for free, and `on_peek` says what a pick does when that
+//! actionable node pickable by `prefix+/` for free, and `on_hint` says what a pick does when that
 //! differs from a click.
 //!
 //! Adding a widget = one [`WidgetKind`] variant + one arm in `realize`. Nothing here holds
@@ -906,14 +906,14 @@ impl ViewNode {
         self.on("press", intent)
     }
 
-    /// Convenience: bind the `"peek"` event — **what a leader-key pick (`prefix+/`) does to this
+    /// Convenience: bind the `"hint"` event — **what a leader-key pick (`prefix+/`) does to this
     /// node**, when that is not simply what a click does.
     ///
     /// Unbound, a pick falls back to [`press`](Self::on_press), so every actionable node is
     /// reachable by letter for free. Bind it when the two genuinely differ: heca's sidebar row
-    /// activates the pane and leaves the sidebar on a click, and stays in the sidebar on a peek.
-    pub fn on_peek(self, intent: Intent) -> Self {
-        self.on("peek", intent)
+    /// activates the pane and leaves the sidebar on a click, and stays in the sidebar on a hint pick.
+    pub fn on_hint(self, intent: Intent) -> Self {
+        self.on("hint", intent)
     }
 
     /// Append a child node to the [`children`](Self::children) vec. The child is a full `ViewNode`
@@ -930,7 +930,7 @@ impl ViewNode {
     }
 
     /// Whether this node emits an activation intent — an actionable target. `realize` makes such a
-    /// node pickable by `prefix+/` even when it binds no `peek` of its own.
+    /// node pickable by `prefix+/` even when it binds no `hint` of its own.
     pub fn is_actionable(&self) -> bool {
         self.events.contains_key("press")
     }

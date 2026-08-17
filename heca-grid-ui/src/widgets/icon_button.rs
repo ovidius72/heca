@@ -104,6 +104,7 @@ impl IconButton {
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
+        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // clickable icon buttons are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
@@ -186,7 +187,7 @@ impl Component for IconButton {
 
         // The icon itself.
         for child in &self.base.children {
-            child.paint(cx);
+            crate::component::paint_child(child.as_ref(), cx);
         }
 
         if !disabled {

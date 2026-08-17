@@ -98,8 +98,19 @@ pub enum ChromeEvent {
     PaneActiveChanged {
         pane: Option<PaneId>,
     },
-    PanePickCandidatesChanged {
-        candidates: Vec<(char, PaneId)>,
+    /// **Which targets are wearing a pick letter**, as `(letter, target id)` — empty when the
+    /// picker closed (F003/P082/T427).
+    ///
+    /// One event for every kind of target, because there is now one mechanism: a pane, a workspace,
+    /// a column and a mounted dock are all lettered through the same door, addressed by the
+    /// identity each already declares (`nav_key`, or `scope_key` for a container). It replaces
+    /// `pane.pick.changed` and `dock.pick.changed`, which mirrored four per-frame projections that
+    /// no longer exist.
+    ///
+    /// This is what a plugin subscribes to — `app.on("hint.changed", …)` — to render its own prompt
+    /// or highlight beside heca's keycaps.
+    HintLettersChanged {
+        letters: Vec<(char, String)>,
     },
     PaneProcessChanged {
         pane: PaneId,
@@ -166,11 +177,6 @@ pub enum ChromeEvent {
     ContainerFocusChanged {
         container: Option<String>,
     },
-    /// The dock pick opened, moved on, or closed (empty = closed) — letter → container id.
-    /// Mirrors the pane/workspace/column pick candidates, at the shell level.
-    DockPickCandidatesChanged {
-        candidates: Vec<(char, String)>,
-    },
     /// A mounted container's host-level placement changed — it was moved to a
     /// different region or reordered within its region by `ChromeHost`. Lets
     /// future chrome consumers re-read placement. `region` is the container's new
@@ -191,7 +197,7 @@ impl ChromeEvent {
     pub fn name(&self) -> &'static str {
         match self {
             ChromeEvent::PaneActiveChanged { .. } => "pane.active.changed",
-            ChromeEvent::PanePickCandidatesChanged { .. } => "pane.pick.changed",
+            ChromeEvent::HintLettersChanged { .. } => "hint.changed",
             ChromeEvent::PaneProcessChanged { .. } => "pane.process.changed",
             ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",
             ChromeEvent::PaneCwdChanged { .. } => "pane.cwd.changed",
@@ -205,7 +211,6 @@ impl ChromeEvent {
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
             ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
             ChromeEvent::ContainerFocusChanged { .. } => "chrome.container.focus.changed",
-            ChromeEvent::DockPickCandidatesChanged { .. } => "dock.pick.changed",
             ChromeEvent::ContainerPlacementChanged { .. } => "chrome.container.placement.changed",
             ChromeEvent::SidebarSelectionChanged { .. } => "sidebar.selection.changed",
         }

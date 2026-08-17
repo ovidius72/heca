@@ -747,3 +747,11 @@ name = "heca.expose"
 delete_pane      = "x"
 delete_column    = "r"
 delete_workspace = "d"
+# **Type a letter to jump to any card** (F003/P082/T427). `pick` is the MAP's own action, declared
+# on its widget (`KeyHintGroup::on_action`) rather than borrowed from the app — which is what lets a
+# plugin's overlay have a picker of its own instead of only contributing targets to heca's.
+#
+# Bound as a bare `s` because the map holds the keyboard while it is up, and a surface's own entry
+# is consulted before the global map (see the resolution order above). Unbind it and the map simply
+# has no picker, exactly like the delete letters.
+pick             = "s"

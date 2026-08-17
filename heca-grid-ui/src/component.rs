@@ -8,6 +8,7 @@
 
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
+use crate::hint::DeclaredAction;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
     Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, ScanlineCmd, Scene, Shadow, TextAlign,
@@ -241,7 +242,7 @@ pub struct Base {
     /// widget, opened by a right-click or the keyboard action.
     pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
     /// **What a leader-key pick does to this region** — written with
-    /// [`KeyHint::on_peek`](crate::widgets::KeyHint::on_peek), the wrapper that draws the letter.
+    /// [`KeyHint::on_hint`](crate::widgets::KeyHint::on_hint), the wrapper that draws the letter.
     ///
     /// The whole of the capability: a wrapped region carrying one is offered a letter by the
     /// picker, and picking that letter runs it. There is no id to register, no registry to reach,
@@ -249,8 +250,71 @@ pub struct Base {
     ///
     /// The slot lives here so the collector stays one uniform walk, but **the builder is on the
     /// wrapper, not on every widget**: being pickable is something you opt a region into, so
-    /// `Label::on_peek` is a method that never has to exist.
-    pub peek: Option<Box<dyn Fn()>>,
+    /// `Label::on_hint` is a method that never has to exist.
+    pub hint: Option<Box<dyn Fn()>>,
+    /// **May this widget be offered a letter at all?** `true` for everything, until a caller says
+    /// otherwise with [`hintable(false)`](crate::builders::ComponentExt::hintable).
+    ///
+    /// It exists because being pickable is **not** opt-in: anything actionable gets a letter, so the
+    /// only thing left to say is "not me". Setting it `true` does nothing — a widget nobody can act
+    /// on has nothing for a letter to run (F003/P082/T441).
+    pub hintable: bool,
+    /// **Can the user act on this widget — click it, or activate it from the keyboard?**
+    ///
+    /// Set by whichever builder wires the action up, whatever it is called: the generic
+    /// [`on_click`](crate::builders::ComponentExt::on_click) /
+    /// [`on_double_click`](crate::builders::ComponentExt::on_double_click) /
+    /// [`on_key_down`](crate::builders::ComponentExt::on_key_down) /
+    /// [`on_key_up`](crate::builders::ComponentExt::on_key_up), and the widgets that keep their own
+    /// callback instead — `Button::on_click`, `Row::on_activate`, and the six like them.
+    ///
+    /// **It is a field and not a question asked of the handler list**, because the answer is not in
+    /// the handler list. Eight widgets store their action in a private field of their own, so
+    /// `Handlers::has(Click)` is `false` for a `Button` — the single case that matters most. And the
+    /// two spellings (`on_click`, `on_activate`) mean the same thing, so no set of `EventKind`s
+    /// names it either. One flag, set where the action is wired, is the only thing a walk over the
+    /// tree can read (F003/P082/T441).
+    pub activatable: bool,
+    /// **The letter currently offered for [`hint`](Self::hint)** — `Some("a")` while a picker is
+    /// open, `None` otherwise. Set by the host through
+    /// [`offer_hint`](crate::hint::offer_hint); drawn by the widget that declared the hint.
+    ///
+    /// **It lives beside the declaration on purpose, and this is load-bearing.** The letter has to
+    /// be drawn *by the widget*, in the widget's own paint, because that is the only way it lands
+    /// in the same place on screen as the thing it labels. A host that walks the trees and paints
+    /// the caps itself has to guess which scene — and which **half** of it — the declaring widget
+    /// ended up in, and it will guess wrong: a `Scene` defers overlay segments to a frame-final
+    /// band ordered by nesting depth, so caps painted into the base draw *under* any overlay, and
+    /// caps painted at depth 1 draw under anything nested deeper. Both failures are invisible in
+    /// every test and look exactly like "the picker does nothing".
+    ///
+    /// A plugin's surface therefore gets the picker right by construction: it declares a hint, the
+    /// framework offers it a letter, and its own paint puts that letter wherever the widget is.
+    /// There is nothing host-side to teach about the plugin's layering (F003/P082/T427).
+    pub hint_label: Signal<Option<String>>,
+    /// **How this widget's letter is drawn** — where it sits, its size, its colour.
+    ///
+    /// These were private fields on [`KeyHint`](crate::widgets::KeyHint), which is why a letter
+    /// could only appear by wrapping a widget in one. Here, the framework draws the cap for any
+    /// widget carrying a letter and each one places its own (F003/P082/T431).
+    pub hint_style: crate::widgets::HintStyle,
+    /// **Actions this widget declares by name** — what a binding, a menu entry or a script can ask
+    /// it to do (F003/P082/T427).
+    ///
+    /// The counterpart of [`hint`](Self::hint): a hint says what a *pick* does to this region, an
+    /// action says what a *named verb* does to it. Written with
+    /// [`on_action`](crate::builders::ComponentExt::on_action).
+    ///
+    /// **It exists so a surface can own a verb without being a `Provider`.** A dock declares its
+    /// actions through the provider trait; a *layer* — an overlay, a plugin's panel — had no such
+    /// seam at all, so it could only bind verbs the app had already compiled in. That is why the
+    /// exposé's picker had to borrow the built-in `hint_pick`, and why a plugin could contribute
+    /// targets to heca's picker but never open one of its own.
+    ///
+    /// The name is the whole address: the host finds the declaring widget by walking the retained
+    /// trees, exactly as it finds a hint. Nothing is registered, so nothing has to be
+    /// un-registered when a tree is rebuilt.
+    pub actions: Vec<DeclaredAction>,
     /// Whether [`Event::Mount`] has been delivered. Set by the first layout pass that sees this
     /// widget — the first moment it is both in a live tree and laid out.
     pub(crate) mounted: Cell<bool>,
@@ -285,7 +349,12 @@ impl Base {
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             context_menu: None,
-            peek: None,
+            hint: None,
+            hintable: true,
+            activatable: false,
+            hint_label: crate::reactive::signal(None),
+            hint_style: crate::widgets::HintStyle::default(),
+            actions: Vec::new(),
             mounted: Cell::new(false),
             needs_paint: Cell::new(true),
         }
@@ -875,11 +944,22 @@ pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectan
 /// bespoke paint loops (e.g. [`Pane`](crate::widgets::Pane),
 /// [`DockFrame`](crate::widgets::DockFrame)) reuse this so a collapsed body/group
 /// never bleeds onto the rest of the tree.
-pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
+///
+/// **It also draws the child's hint letter**, if it is carrying one (F003/P082/T431). That is here,
+/// and not in each widget, for the reason the hidden check is: it is the one place every container
+/// already funnels its children through, so a letter appears over *any* widget — a plugin's
+/// included — with nothing to opt into and no wrapper to remember. Before this, only
+/// [`KeyHint`](crate::widgets::KeyHint) could draw one, so being pickable meant being wrapped.
+///
+/// **No host pass may paint a keycap.** One that walks the trees itself has to guess which scene,
+/// and which half of it, the declaring widget ended up in — and it guesses wrong invisibly. See
+/// [`key_hint::paint_hint_label`](crate::widgets::key_hint::paint_hint_label).
+pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     if c.base().style.layout.hidden {
         return;
     }
     c.paint(cx);
+    crate::widgets::key_hint::paint_hint_label(c, cx);
 }
 
 /// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.

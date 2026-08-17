@@ -3,6 +3,28 @@
 //! UI dimensions, timing defaults, layout proportions, and render parameters
 //! that were previously scattered as magic numbers across the codebase.
 
+pub(crate) mod theme;
+pub(crate) use theme::{
+    alpha_u8, apply_pane_frame, chrome_colors, chrome_gui_theme, chrome_status,
+    left_sidebar_shell_background_color, right_sidebar_shell_background_color,
+};
+pub(crate) mod signals;
+pub(crate) use signals::{sync_chrome_signals, sync_chrome_state, ChromeSignals};
+pub(crate) mod pane_header;
+pub(crate) use pane_header::{
+    action_tooltip, clear_pane_headers, home_relative_path, pane_info_view, sync_pane_headers,
+    sync_pane_viewport_widgets, truncate_path_left, ActionShortcuts, PaneInfoSignals,
+    RetainedPaneHeader, RetainedPaneViewportWidgets, CARD_META_FONT_SCALE,
+};
+pub(crate) mod drag;
+pub(crate) use drag::{ChromeDragItem, DragItemRegistry};
+pub(crate) mod hint;
+// The hint half of the chrome — declarations, the visibility rule, and who is lettering what.
+// Re-exported so call sites keep naming `crate::chrome::…` while the code lives where it belongs.
+pub(crate) use hint::{
+    active_hint_targets, clear_hint_letters, fire_hint, fire_widget_action, offer_hint_letters,
+    HintTarget,
+};
 mod contribution;
 pub(crate) mod context_menu;
 mod events;
@@ -179,7 +201,7 @@ use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
+use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -191,1080 +213,6 @@ use heca_grid_ui::widgets::{
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PaneInfoView {
-    pub(crate) icon: Glyph,
-    /// Custom name if set, else the program name — the sidebar card's label.
-    pub(crate) title: String,
-    /// The program/application name (always the process, never the rename) — the info-bar
-    /// `AppName` segment shows this, so renaming a pane doesn't hide what's running in it.
-    pub(crate) app_name: String,
-    /// The process/program name shown as a small dimmed label *next to* a custom name (e.g.
-    /// `(nvim)`). `Some` only when the pane has a custom name and `pane_renamed_add_process_name`
-    /// is on — a pane that merely tracks its process has the process name *as* its title already.
-    pub(crate) process_hint: Option<String>,
-    pub(crate) status: ProcessStatus,
-    pub(crate) git_branch: Option<String>,
-    pub(crate) git_added: Option<String>,
-    pub(crate) git_modified: Option<String>,
-    pub(crate) git_deleted: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct PaneInfoSignals {
-    pub(crate) icon: Signal<Glyph>,
-    pub(crate) title_active: Signal<String>,
-    pub(crate) title_inactive: Signal<String>,
-    pub(crate) title_active_visible: Signal<bool>,
-    pub(crate) title_inactive_visible: Signal<bool>,
-    /// The dimmed `(process)` suffix text beside a renamed pane's name (e.g. `(nvim)`),
-    /// or empty when hidden. Signal-driven so a rename toggles it live without a tree
-    /// rebuild (renames update signals, they don't rebuild the sidebar card).
-    pub(crate) process_hint: Signal<String>,
-    pub(crate) process_hint_visible: Signal<bool>,
-    /// The pane's working-directory row text (home-relative path), and its visibility
-    /// (`[settings] pane_show_cwd` and the pane has a cwd). Signal-driven so a `cd` in the
-    /// pane updates the path live, mirroring the git-branch row.
-    pub(crate) cwd: Signal<String>,
-    pub(crate) cwd_visible: Signal<bool>,
-    pub(crate) status_idle_visible: Signal<bool>,
-    pub(crate) status_running_visible: Signal<bool>,
-    pub(crate) status_success_visible: Signal<bool>,
-    pub(crate) status_error_visible: Signal<bool>,
-    pub(crate) git_visible: Signal<bool>,
-    pub(crate) git_branch: Signal<String>,
-    pub(crate) git_branch_display: Signal<String>,
-    pub(crate) git_added_visible: Signal<bool>,
-    pub(crate) git_added: Signal<String>,
-    pub(crate) git_modified_visible: Signal<bool>,
-    pub(crate) git_modified: Signal<String>,
-    pub(crate) git_deleted_visible: Signal<bool>,
-    pub(crate) git_deleted: Signal<String>,
-}
-
-fn program_glyph(icon: ProgramIcon) -> Glyph {
-    match icon {
-        ProgramIcon::Terminal => Glyph::Terminal,
-        ProgramIcon::FileCode => Glyph::FileCode,
-        ProgramIcon::Folder => Glyph::Folder,
-        ProgramIcon::FolderOpen => Glyph::FolderOpen,
-        ProgramIcon::GitBranch => Glyph::GitBranch,
-        ProgramIcon::Gear => Glyph::Gear,
-        ProgramIcon::Search => Glyph::Search,
-    }
-}
-
-pub(crate) fn pane_info_view(
-    programs: &ProgramsConfig,
-    fallback_name: &str,
-    custom_name: Option<&str>,
-    runtime: Option<&PaneRuntime>,
-    add_process_name: bool,
-) -> PaneInfoView {
-    let raw = runtime
-        .and_then(|pane| pane.program.as_deref())
-        .filter(|raw| !raw.is_empty())
-        .unwrap_or(fallback_name);
-    let program = programs.resolve(raw);
-    let git = runtime.and_then(|pane| pane.git.as_ref());
-    let program_name = program.name.to_string();
-    // A user-set custom name wins over the process-derived program name; the icon still tracks
-    // the running program. When the pane has a custom name (and the setting is on), the program
-    // name is surfaced separately as `process_hint` (a small dimmed label next to the name).
-    let has_custom = custom_name.is_some_and(|name| !name.is_empty());
-    let title = if has_custom {
-        custom_name.unwrap_or_default().to_string()
-    } else {
-        program_name.clone()
-    };
-    let process_hint = (has_custom && add_process_name).then(|| program_name.clone());
-    PaneInfoView {
-        icon: program_glyph(program.icon),
-        title,
-        app_name: program_name,
-        process_hint,
-        status: runtime
-            .map(|pane| pane.status.clone())
-            .unwrap_or(ProcessStatus::Idle),
-        git_branch: git.map(|info| {
-            info.branch
-                .clone()
-                .unwrap_or_else(|| "detached".to_string())
-        }),
-        git_added: git.and_then(|info| (info.added > 0).then(|| format!("+{}", info.added))),
-        git_modified: git
-            .and_then(|info| (info.modified > 0).then(|| format!("~{}", info.modified))),
-        git_deleted: git.and_then(|info| (info.deleted > 0).then(|| format!("-{}", info.deleted))),
-    }
-}
-
-/// Left-truncate `text` to `max_chars`, keeping the **tail** with a leading
-/// ellipsis (`…/HypeSupport`) — paths read most usefully from the end.
-fn truncate_path_left(text: &str, max_chars: usize) -> String {
-    let len = text.chars().count();
-    if len <= max_chars {
-        return text.to_string();
-    }
-    match max_chars {
-        0 => String::new(),
-        1 => "…".to_string(),
-        n => {
-            let tail: String = text.chars().skip(len - (n - 1)).collect();
-            format!("…{tail}")
-        }
-    }
-}
-
-/// A path shown home-relative (`/Users/x/proj` → `~/proj`).
-pub(crate) fn home_relative_path(path: &std::path::Path) -> String {
-    if let Some(home) = std::env::var_os("HOME") {
-        let home = std::path::Path::new(&home);
-        if let Ok(rest) = path.strip_prefix(home) {
-            if rest.as_os_str().is_empty() {
-                return "~".to_string();
-            }
-            return format!("~/{}", rest.display());
-        }
-    }
-    path.display().to_string()
-}
-
-/// Build the pane info bar's segmented [`Tag`] from the configured `segments` and
-/// the pane's runtime, reusing the same catalog projection as the sidebar card.
-/// Segments with no data (e.g. git outside a repo) are skipped; returns `None`
-/// when nothing is produced. Used by the terminal pane shell (`app::terminal_render`).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "pane-info projection threads program/name/runtime + layout context explicitly; grouping into a struct is a later chrome refactor"
-)]
-pub(crate) fn build_pane_info_bar(
-    programs: &ProgramsConfig,
-    fallback_name: &str,
-    custom_name: Option<&str>,
-    runtime: Option<&PaneRuntime>,
-    segments: &[heca_config::appearance::PaneSegment],
-    theme: &GuiTheme,
-    max_width: f32,
-    font: f32,
-) -> Option<Tag> {
-    use heca_config::appearance::PaneSegment;
-
-    // The info bar never renders the `(process)` suffix — that's a sidebar-card affordance
-    // (see `pane_card`) — so it always projects the view without the hint.
-    let view = pane_info_view(programs, fallback_name, custom_name, runtime, false);
-    let git = runtime.and_then(|pane| pane.git.as_ref());
-
-    // Collect the produced (icon, text) segments, noting the location (the long,
-    // truncatable one), so we can fit the bar to `max_width` before building it.
-    let mut items: Vec<(Glyph, String)> = Vec::new();
-    let mut location_idx: Option<usize> = None;
-    for seg in segments {
-        let item = match seg {
-            PaneSegment::Location => match runtime.and_then(|pane| pane.cwd.as_ref()) {
-                Some(cwd) => {
-                    location_idx = Some(items.len());
-                    (Glyph::Folder, home_relative_path(cwd))
-                }
-                None => continue,
-            },
-            PaneSegment::AppName => (view.icon, view.app_name.clone()),
-            PaneSegment::PaneName => {
-                if view.title.is_empty() {
-                    continue;
-                }
-                (view.icon, view.title.clone())
-            }
-            PaneSegment::GitBranch => match git.and_then(|info| info.branch.clone()) {
-                Some(branch) => (Glyph::GitBranch, branch),
-                None => continue,
-            },
-            PaneSegment::GitStatus => {
-                let Some(info) = git else { continue };
-                let mut parts = Vec::new();
-                if info.added > 0 {
-                    parts.push(format!("+{}", info.added));
-                }
-                if info.modified > 0 {
-                    parts.push(format!("~{}", info.modified));
-                }
-                if info.deleted > 0 {
-                    parts.push(format!("-{}", info.deleted));
-                }
-                if parts.is_empty() {
-                    continue;
-                }
-                (Glyph::GitCommit, parts.join(" "))
-            }
-        };
-        items.push(item);
-    }
-    if items.is_empty() {
-        return None;
-    }
-
-    // Fit to width: if the bar would overflow the pane, shrink the location
-    // segment (left-ellipsised) by the overflow. The per-pane render clip is the
-    // hard backstop; this keeps it readable instead of a hard cut.
-    let char_w = (font * 0.6).max(1.0);
-    let per_segment_overhead = font * 2.5; // icon + gaps + segment padding + divider
-    let text_chars: usize = items.iter().map(|(_, text)| text.chars().count()).sum();
-    let estimated = text_chars as f32 * char_w + items.len() as f32 * per_segment_overhead;
-    if estimated > max_width
-        && let Some(idx) = location_idx
-    {
-        let overflow_chars = ((estimated - max_width) / char_w).ceil() as usize;
-        let loc_chars = items[idx].1.chars().count();
-        let keep = loc_chars.saturating_sub(overflow_chars).max(1);
-        items[idx].1 = truncate_path_left(&items[idx].1, keep);
-    }
-
-    let mut tag: Option<Tag> = None;
-    for (glyph, text) in items {
-        // No explicit size → the icon inherits the bar's base font, so glyph and
-        // label stay balanced when the bar font changes.
-        let leading = Icon::new(glyph).color(theme.colors.foreground);
-        tag = Some(match tag.take() {
-            None => Tag::new(text).leading(leading),
-            Some(existing) => existing.segment_text(text, Some(Box::new(leading))),
-        });
-    }
-    tag
-}
-
-// ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
-
-/// Horizontal margin from the pane edge to the header content (matches the render
-/// side's `TITLE_BAR_MARGIN` in `terminal_render.rs`).
-const HEADER_MARGIN: f32 = 6.0;
-/// Gap between adjacent action buttons (logical px) — tight, so the cluster reads
-/// as one control group.
-const HEADER_BUTTON_GAP: f32 = 1.0;
-
-/// Font multiplier for a sidebar card's **secondary metadata** — the dimmed `(process)`
-/// suffix and the cwd row — smaller than the name so it reads as supporting detail.
-pub(crate) const CARD_META_FONT_SCALE: f32 = 0.8;
-
-/// Per-pane context the header buttons need to build their (parameterized) actions
-/// and emit them through the app event loop.
-pub(crate) struct PaneHeaderCtx {
-    pub(crate) pane_id: PaneId,
-    pub(crate) ws_idx: usize,
-    pub(crate) col_idx: usize,
-    pub(crate) event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-}
-
-/// A retained per-pane info-bar header (segment `Tag` + action `IconButton`s).
-/// Rebuilt only when [`pane_header_key`] changes (so button hover/press signals
-/// survive across frames); re-laid-out + positioned every frame by
-/// [`sync_pane_headers`]; painted read-only in `terminal_render` and dispatched
-/// pointer events by `mouse.rs`.
-pub(crate) struct RetainedPaneHeader {
-    pub(crate) root: Flex,
-    /// Content key (see [`pane_header_key`]) the tree was built from.
-    pub(crate) key: String,
-}
-
-/// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge).
-/// Built once per pane, updated/repositioned every frame by
-/// [`sync_pane_viewport_widgets`], painted read-only in `terminal_render`, and
-/// dispatched pointer events in `events.rs`.
-pub(crate) struct RetainedPaneViewportWidgets {
-    pub(crate) scrollbar: ScrollBar,
-    pub(crate) badge: BadgeButton,
-}
-
-/// Resolved display shortcuts for **every bound action**, keyed by config name
-/// (`"close"`, `"sidebar_left"`, …). Built once at config load/reload from the
-/// default+user keybindings and stored on `AppState`; any button looks its own
-/// shortcut up by the name of the action it triggers, so the choice is never
-/// hand-made by a caller or plugin. The leader renders through the central
-/// [`PREFIX_SYMBOL`](crate::shortcut) seam, uniform across the app.
-/// **The bindings, not a sentence** (F003/P085/T358). One entry per binding, in the index's order —
-/// an action bound in two layers has two — and each stored as the **raw** config key
-/// (`"prefix+Shift+e"`), spelled for display on read.
-///
-/// It used to store one pre-joined display string, which decided for every surface at once. That is
-/// what left the command palette unable to draw keycaps: a surface that wants a line joins, a
-/// surface that wants a chip per key cannot un-join — and the two want different spellings anyway
-/// (a keycap draws a Nerd Font `⇧`, a tooltip has to write `Shift`).
-#[derive(Clone, Default, PartialEq)]
-pub(crate) struct ActionShortcuts {
-    by_action: std::collections::HashMap<String, Vec<String>>,
-    /// The same bindings kept **per layer** — `(layer label, action) → keys`.
-    ///
-    /// [`by_action`](Self#structfield.by_action) flattens every layer together, which is right for
-    /// a tooltip (*"what key runs this?"*) and wrong for a surface asking *"what key runs this **in
-    /// me**?"*. The exposé's cards need the second: their `x` is theirs, and a `close_pane_by_id`
-    /// bound somewhere else is not the card's gesture (F003/P082/T416).
-    by_layer: std::collections::HashMap<(String, String), Vec<String>>,
-    /// How [`get`](ActionShortcuts::get) spells a binding for a **text** surface.
-    style: crate::shortcut::KeyStyle,
-}
-
-impl ActionShortcuts {
-    /// Resolve a display shortcut for every action the **built keymaps** bind (F003/P086/T366).
-    ///
-    /// Built from [`Keymaps::by_action`](crate::keymap::Keymaps::by_action) rather than from the
-    /// config file, because the file is only part of the answer: reading `[keys]` alone missed every
-    /// `[[keys.mode]]` binding, would miss every `[[keys.component]]` one, and could never see a key
-    /// a plugin registered at runtime. A tooltip that says nothing for a key the user can actually
-    /// press is the bug this closes.
-    ///
-    /// An action bound in several layers keeps all of them — a component's `j` and a mode's `j` are
-    /// both real, and picking the first would be a guess.
-    ///
-    /// `style` is how [`get`](Self::get) spells a binding for a text surface — the optional
-    /// spelling switch, chosen once here rather than at each of the call sites that render a tip.
-    /// Keycaps are unaffected: they read [`chords`](Self::chords) and draw glyphs.
-    pub(crate) fn from_index(
-        index: &crate::keymap::BindingIndex,
-        style: crate::shortcut::KeyStyle,
-    ) -> Self {
-        let by_action = index
-            .iter()
-            .filter_map(|(action, bound)| {
-                // **One entry per distinct key.** A config can bind the same physical key twice
-                // under two spellings — the shipped default did: `cursor_up = "k,Up,ArrowUp"`, and
-                // `Up` and `ArrowUp` both parse to `GridKey::ArrowUp` — and the index keeps both,
-                // correctly, because it records what was written. A surface showing them draws the
-                // same keycap twice. Deduped here rather than in the config, because a user's own
-                // file can do it too and their config is not ours to police.
-                let mut keys: Vec<String> = Vec::new();
-                let mut seen: Vec<Vec<heca_grid_ui::widgets::KeyCap>> = Vec::new();
-                for b in bound {
-                    // Compared as **caps**, not as text: the caps come from the one key table, which
-                    // maps `up` and `arrowup` (and `enter`/`return`) to a single glyph — so two
-                    // spellings of one key collapse in every display style, while two genuinely
-                    // different keys stay two.
-                    let caps = crate::shortcut::chord_caps(&b.key);
-                    if !seen.contains(&caps) {
-                        seen.push(caps);
-                        keys.push(b.key.clone());
-                    }
-                }
-                (!keys.is_empty()).then(|| (action.clone(), keys))
-            })
-            .collect();
-        // The same index again, kept by the layer each binding was written in, so a surface can ask
-        // for its own keys without a second reader of the config file.
-        let mut by_layer: std::collections::HashMap<(String, String), Vec<String>> =
-            std::collections::HashMap::new();
-        for (action, bound) in index {
-            for b in bound {
-                by_layer
-                    .entry((b.layer.clone(), action.clone()))
-                    .or_default()
-                    .push(b.key.clone());
-            }
-        }
-        Self { by_action, by_layer, style }
-    }
-
-    /// **The keys `action_name` answers to in one surface's own layer** — empty when that surface
-    /// binds it to nothing.
-    ///
-    /// `surface` is the surface's name (`heca.expose`, `workspaces`) and `action_name` is the
-    /// **short name as written in its entry** — `delete_pane`, not `heca.expose.delete_pane`. Both
-    /// halves of the stored key are rebuilt from the functions that wrote it: the layer label the
-    /// way [`build_component_keymaps`](crate::app::registry::build_component_keymaps) spells it,
-    /// and the action id through
-    /// [`surface_action_id`](crate::app::registry::surface_action_id) — so neither can drift into a
-    /// second spelling of one thing.
-    ///
-    /// This exists so a widget's own key handler can take its letters from config instead of
-    /// holding them as literals — the exposé's `x` / `r` / `d` were hardcoded in `chrome/expose.rs`
-    /// while the workspaces dock's identical `x` came from `keybindings.default.toml`.
-    ///
-    /// Args are empty here because this answers for the flat `action = "key"` form. The
-    /// arg-carrying `[[keys.surface.bind]]` form names its action in full, which
-    /// `surface_action_id` leaves alone either way.
-    pub(crate) fn in_surface(&self, surface: &str, action_name: &str) -> &[String] {
-        let label = format!("[[keys.surface]] {surface}");
-        let id = crate::app::registry::surface_action_id(
-            surface,
-            action_name,
-            &std::collections::HashMap::new(),
-        );
-        self.by_layer.get(&(label, id)).map_or(&[], Vec::as_slice)
-    }
-
-    /// Every binding of `action_name` as its **raw config key**, in the index's order — empty when
-    /// unbound. What a surface drawing keycaps reads, through
-    /// [`chord_caps`](crate::shortcut::chord_caps).
-    pub(crate) fn chords(&self, action_name: &str) -> &[String] {
-        self.by_action.get(action_name).map_or(&[], Vec::as_slice)
-    }
-
-    /// The display shortcut for `action_name` as **one line** (several joined with ` / `), or `None`
-    /// when unbound — what a tooltip, which has a single line, shows.
-    pub(crate) fn get(&self, action_name: &str) -> Option<String> {
-        let keys = self.by_action.get(action_name)?;
-        let line = keys
-            .iter()
-            .map(|k| {
-                crate::shortcut::format_shortcut_styled(k, k.starts_with("prefix+"), self.style)
-            })
-            .collect::<Vec<_>>()
-            .join(" / ");
-        (!line.is_empty()).then_some(line)
-    }
-}
-
-/// The config action name a [`PaneAction`] button triggers — the canonical
-/// identity used to resolve its shortcut (the emitted `WmAction` may be a
-/// button-only variant like `ClosePaneById`, so the name is the stable key).
-pub(crate) fn pane_action_name(action: heca_config::appearance::PaneAction) -> &'static str {
-    use heca_config::appearance::PaneAction;
-    match action {
-        PaneAction::Split => "split_vertical",
-        PaneAction::MoveLeft => "move_pane_left",
-        PaneAction::MoveRight => "move_pane_right",
-        PaneAction::Close => "close",
-        PaneAction::Zoom => "zoom_column",
-        PaneAction::Float => "float",
-    }
-}
-
-/// Wrap a clickable `child` in a tooltip = `label` + the action's current shortcut,
-/// resolved centrally from `shortcuts` by `action_name`. The one place any button's
-/// tooltip is composed: callers name the action, never the shortcut, so a rebind
-/// updates every tip and no surface can drift on the leader symbol or format.
-fn action_tooltip(
-    child: impl Component + 'static,
-    action_name: &str,
-    label: &str,
-    shortcuts: &ActionShortcuts,
-) -> Tooltip {
-    let tip = match shortcuts.get(action_name) {
-        Some(sc) if !sc.is_empty() => format!("{label}  {sc}"),
-        _ => label.to_string(),
-    };
-    Tooltip::new(child, tip).side(TooltipSide::Bottom)
-}
-
-/// Map a configured [`PaneAction`] to its `(icon, WM action, label, needs_focus)`.
-///
-/// `needs_focus` is `true` for **active-targeted** unit actions (`ZoomColumn`/
-/// `Float`) — the button must focus its owning pane before dispatching so the
-/// action lands on the clicked pane, not whatever happened to be active. The other
-/// buttons carry the pane/column in the action itself, so they don't steal focus.
-fn pane_action_spec(
-    catalog: &crate::actions::ActionCatalog,
-    action: heca_config::appearance::PaneAction,
-    pane_id: PaneId,
-    ws_idx: usize,
-    col_idx: usize,
-) -> (Glyph, crate::input::WmAction, &'static str, bool) {
-    use crate::input::WmAction;
-    use heca_config::appearance::PaneAction;
-    // Icons come from the action catalog (the single source); the literal is a
-    // defensive fallback only, so the bar and the context menu can never drift.
-    let icon = |name: &str, fallback: Glyph| catalog.icon(name).unwrap_or(fallback);
-    match action {
-        PaneAction::Split => (
-            // Icon = the add-pane identity (FolderSimplePlus); the shortcut/tooltip name
-            // stays `split_vertical` (see `pane_action_name`) so the button still hints `v`.
-            icon("add_pane_to_column", Glyph::FolderSimplePlus),
-            WmAction::AddPaneToColumn { ws_idx, col_idx },
-            "New pane",
-            false,
-        ),
-        PaneAction::MoveLeft => (
-            icon("move_pane_left", Glyph::ArrowLineLeft),
-            WmAction::MovePaneLeft {
-                pane_id: Some(pane_id),
-            },
-            "Move left",
-            false,
-        ),
-        PaneAction::MoveRight => (
-            icon("move_pane_right", Glyph::ArrowLineRight),
-            WmAction::MovePaneRight {
-                pane_id: Some(pane_id),
-            },
-            "Move right",
-            false,
-        ),
-        PaneAction::Close => (
-            icon("close", Glyph::FolderSimpleMinus),
-            WmAction::ClosePaneById { pane_id },
-            "Close",
-            false,
-        ),
-        PaneAction::Zoom => (
-            icon("zoom_column", Glyph::FrameCorners),
-            WmAction::ZoomColumn,
-            "Zoom",
-            true,
-        ),
-        PaneAction::Float => (icon("float", Glyph::Cards), WmAction::Float, "Float", true),
-    }
-}
-
-/// What a pane header *renders* — the projection inputs shared by the rebuild key
-/// and the tree builder (groups args so neither fn explodes).
-pub(crate) struct PaneHeaderContent<'a> {
-    pub(crate) programs: &'a ProgramsConfig,
-    pub(crate) fallback_name: &'a str,
-    /// User-set override name (wins over the process-derived title), if any.
-    pub(crate) custom_name: Option<&'a str>,
-    pub(crate) runtime: Option<&'a PaneRuntime>,
-    pub(crate) segments: &'a [heca_config::appearance::PaneSegment],
-    pub(crate) actions: &'a [heca_config::appearance::PaneAction],
-    /// The pane's workspace + column — baked into the split action and tracked in
-    /// the rebuild key so the header re-bakes when the pane changes column.
-    pub(crate) ws_idx: usize,
-    pub(crate) col_idx: usize,
-    /// The pane's column is zoomed or full-width → the `zoom` button shows active.
-    pub(crate) zoomed: bool,
-    /// The pane is in the floating domain → the `float` button shows active and
-    /// non-floating buttons (split/zoom/move) are hidden (per the action policy).
-    pub(crate) floating: bool,
-    /// Tooltip keybind hints (tracked in the key so a config reload rebuilds tips).
-    pub(crate) shortcuts: &'a ActionShortcuts,
-    /// Runtime action-metadata catalog — the single source of each button's icon (and, later,
-    /// plugin-contributed action metadata). Threaded alongside `shortcuts`.
-    pub(crate) catalog: &'a crate::actions::ActionCatalog,
-}
-
-/// Whether a pane-action button stays visible when its pane is **floating**, driven
-/// by the shared [`action_policy`](crate::app::interaction) classification (split /
-/// zoom / move are tiled-only ⇒ hidden; float / close are focused-pane-local ⇒ kept).
-fn pane_action_visible_when_floating(
-    catalog: &crate::actions::ActionCatalog,
-    action: heca_config::appearance::PaneAction,
-) -> bool {
-    // Policy ignores the concrete ids (and the icon), so dummy ids are fine here.
-    let (_, wm, _, _) = pane_action_spec(catalog, action, PaneId(0), 0, 0);
-    crate::app::interaction::action_allowed_when_floating(&wm)
-}
-
-/// One resolved pane-header action button — the generic unit the header renders. The
-/// header is a **dynamic vector** of these, so nothing about the button set is baked
-/// into the render loop: today they come from `config.toml`'s `[pane] title_actions`
-/// (map via [`pane_action_spec`]), and this is also the seam where a **plugin** will
-/// append its own buttons once the plugin action surface exists (a plugin declares the
-/// same fields: an icon, an action name, and the `WmAction` to emit). The loop in
-/// [`build_pane_header`] never matches on the concrete [`PaneAction`] enum — it only
-/// reads these fields — so a new source of buttons needs no loop changes.
-struct PaneHeaderButton {
-    glyph: Glyph,
-    /// Canonical action name — the stable key for the tooltip shortcut lookup (the
-    /// emitted `WmAction` may be a button-only variant, so the name is the identity).
-    action_name: &'static str,
-    /// The action the button emits (click) and the KeyHint fires (picker).
-    wm_action: crate::input::WmAction,
-    label: &'static str,
-    /// Active-targeted (zoom/float): must focus the owning pane before the action so it
-    /// lands on this pane, not whatever is active. Cleared while the pane is floating.
-    needs_focus: bool,
-    /// Held-on status (zoomed column / floating pane) → the icon paints as toggled-on.
-    is_active: bool,
-    /// Destructive (close) → danger-hued glyph + hover/press.
-    is_close: bool,
-}
-
-/// Resolve the header's action buttons for `content` into the generic
-/// [`PaneHeaderButton`] vector the render loop consumes. Floating panes drop the
-/// tiled-only buttons (per the shared action policy). This is the single place the
-/// button *set* is decided — config-driven today, plugin-extensible later (see
-/// [`PaneHeaderButton`]).
-fn pane_header_buttons(content: &PaneHeaderContent, ctx: &PaneHeaderCtx) -> Vec<PaneHeaderButton> {
-    use heca_config::appearance::PaneAction;
-    let mut out: Vec<PaneHeaderButton> = content
-        .actions
-        .iter()
-        .copied()
-        .filter(|&a| !content.floating || pane_action_visible_when_floating(content.catalog, a))
-        .map(|action| {
-            let (glyph, wm_action, label, needs_focus) =
-                pane_action_spec(content.catalog, action, ctx.pane_id, ctx.ws_idx, ctx.col_idx);
-            let is_active = match action {
-                PaneAction::Zoom => content.zoomed,
-                PaneAction::Float => content.floating,
-                _ => false,
-            };
-            PaneHeaderButton {
-                glyph,
-                action_name: pane_action_name(action),
-                wm_action,
-                label,
-                // Don't focus-first when floating: the floating pane is already active,
-                // and a `FocusPane` from MouseContent is blocked in the floating domain.
-                needs_focus: needs_focus && !content.floating,
-                is_active,
-                is_close: matches!(action, PaneAction::Close),
-            }
-        })
-        .collect();
-    // ── Plugin seam ──────────────────────────────────────────────────────────────
-    // Plugin-contributed pane-header buttons will be appended to `out` here once the
-    // plugin action surface lands (each plugin supplies a `PaneHeaderButton`). Keeping
-    // the render loop descriptor-driven means that wiring needs no changes below.
-    let _ = &mut out;
-    out
-}
-
-/// A content key identifying everything the header *renders* — used to decide when
-/// the retained tree must be rebuilt (vs. just re-laid-out). Cheap per-frame string
-/// build (≤20 panes); avoids deriving `Hash` on the projection enums.
-pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f32) -> String {
-    let view = pane_info_view(
-        content.programs,
-        content.fallback_name,
-        content.custom_name,
-        content.runtime,
-        // The info bar never shows the process suffix, so it plays no part in the key.
-        false,
-    );
-    let cwd = content
-        .runtime
-        .and_then(|r| r.cwd.as_ref())
-        .map(|c| c.display().to_string());
-    // Bucket width so layout jitter doesn't thrash the rebuild, but real resizes
-    // re-truncate the location segment.
-    let w_bucket = (avail_w / 16.0) as i32;
-    // Tooltip hints for the configured actions (so a rebind rebuilds the tips).
-    let hints: Vec<String> = content
-        .actions
-        .iter()
-        .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or_default())
-        .collect();
-    format!(
-        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
-        view.icon,
-        view.title,
-        view.status,
-        view.git_branch,
-        view.git_added,
-        view.git_modified,
-        view.git_deleted,
-        cwd,
-        content.segments,
-        content.actions,
-        content.ws_idx,
-        content.col_idx,
-        content.zoomed,
-        content.floating,
-        font.to_bits(),
-        w_bucket,
-        hints,
-    )
-}
-
-/// Build the retained header tree: the segment `Tag` (left) + an `IconButton`
-/// cluster (right), each button wrapped in a `Tooltip` and wired to emit its
-/// (parameterized) WM action through `app.on`-style `ChromeIntent`. Returns `None`
-/// when there are neither segments-with-data nor actions.
-pub(crate) fn build_pane_header(
-    content: &PaneHeaderContent,
-    theme: &GuiTheme,
-    font: f32,
-    avail_w: f32,
-    ctx: PaneHeaderCtx,
-) -> Option<Flex> {
-    // The button set is a dynamic vector of descriptors (config-driven today,
-    // plugin-extensible later) — the loop below never matches on a concrete action.
-    let specs = pane_header_buttons(content, &ctx);
-    // Build the action-button cluster first: each button self-sizes from its
-    // `WidgetSize::Header` variant (emphasized glyph + snug cluster padding), so its
-    // width is owned by the widget, not hand-computed here.
-    let mut buttons = if specs.is_empty() {
-        None
-    } else {
-        let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
-        for spec in specs {
-            // Close is destructive → its glyph + hover/press use the theme danger
-            // hue; the rest use the foreground glyph with an accent hover. The danger
-            // glyph is softened toward the header surface so the red reads as a cue,
-            // not an alarm (full-intensity danger was too vibrant).
-            let (icon_color, tone) = if spec.is_close {
-                (theme.colors.danger.lerp(theme.colors.surface, 0.25), theme.colors.danger)
-            } else {
-                (theme.colors.foreground, theme.colors.accent)
-            };
-            let proxy = ctx.event_proxy.clone();
-            let pane_id = ctx.pane_id;
-            let wm_action = spec.wm_action.clone();
-            let needs_focus = spec.needs_focus;
-            // **One gesture, written once**: the click and the `prefix+/` pick both run this.
-            // Active-targeted actions (zoom/float) act on the focused pane, so it focuses this pane
-            // first — the events are queued and processed in order on the UI thread, so the action
-            // lands on this pane.
-            let fire = move || {
-                use crate::app::interaction::{InteractionIntent, InteractionSource};
-                if needs_focus {
-                    let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                        source: InteractionSource::MouseContent,
-                        intent: InteractionIntent::FocusPane { pane_id },
-                    });
-                }
-                let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                    source: InteractionSource::MouseContent,
-                    intent: InteractionIntent::ActivateAction(wm_action.clone()),
-                });
-            };
-            let peek = fire.clone();
-            let button = IconButton::new(Icon::new(spec.glyph).color(icon_color))
-                .size(WidgetSize::Header)
-                .tone(tone)
-                .active(spec.is_active)
-                .on_click(fire);
-            // **What a pick does to this button**, declared on the button itself: no id, no
-            // registry, and nothing for a config-added or plugin-added button to forget — the
-            // picker collects the declaration out of the laid-out tree.
-            let button = KeyHint::new(button).on_peek(peek);
-            // Tooltip = label + the action's current keybind(s), resolved centrally
-            // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL.
-            row = row.child(action_tooltip(button, spec.action_name, spec.label, content.shortcuts));
-        }
-        Some(row)
-    };
-
-    // Measure the cluster's natural width by laying it out on its own — the widget
-    // reports its size, we don't compute it. (The outer tree is re-laid-out every
-    // frame in `sync_pane_headers`; this pass only feeds the bar's truncation budget.)
-    let buttons_w = if let Some(row) = buttons.as_mut() {
-        LayoutEngine::new()
-            .base_font(font)
-            .compute(row, Size::new(avail_w as f64, avail_w as f64));
-        row.base().bounds.size.w as f32
-    } else {
-        0.0
-    };
-    // The bar yields width to the button cluster first.
-    let bar_max = (avail_w
-        - buttons_w
-        - if buttons_w > 0.0 { HEADER_BUTTON_GAP } else { 0.0 })
-    .max(0.0);
-    let bar = build_pane_info_bar(
-        content.programs,
-        content.fallback_name,
-        content.custom_name,
-        content.runtime,
-        content.segments,
-        theme,
-        bar_max,
-        font,
-    );
-
-    let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
-    let root = match (bar, buttons) {
-        (Some(bar), Some(buttons)) => root
-            .justify(Justify::SpaceBetween)
-            .child(bar)
-            .child(buttons),
-        (Some(bar), None) => root.justify(Justify::Start).child(bar),
-        (None, Some(buttons)) => root.justify(Justify::End).child(buttons),
-        (None, None) => return None,
-    };
-    Some(root)
-}
-
-const VIEWPORT_BADGE_MARGIN: f32 = 0.0;
-
-fn format_lines_above(lines: usize) -> String {
-    if lines == 1 {
-        "1 line above".to_string()
-    } else {
-        format!("{lines} lines above")
-    }
-}
-
-fn build_pane_viewport_widgets(
-    pane_id: PaneId,
-    event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-) -> RetainedPaneViewportWidgets {
-    use crate::app::interaction::{InteractionIntent, InteractionSource};
-    let badge_proxy = event_proxy.clone();
-    let mut badge = BadgeButton::accent("0 lines above").on_click(move || {
-        let _ = badge_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-            source: InteractionSource::MouseContent,
-            intent: InteractionIntent::FocusPane { pane_id },
-        });
-        let _ = badge_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-            source: InteractionSource::MouseContent,
-            intent: InteractionIntent::ActivateAction(crate::input::WmAction::ScrollToBottom),
-        });
-    });
-    badge.base_mut().visible.set(false);
-
-    let mut scrollbar = ScrollBar::new();
-    let content_signal = scrollbar.content_extent_signal();
-    let viewport_signal = scrollbar.viewport_extent_signal();
-    let bar_proxy = event_proxy.clone();
-    scrollbar = scrollbar.on_change(move |action| {
-        if let heca_grid_ui::SignalData::Float(offset_top) = action.data {
-            let max = (content_signal.get_untracked() - viewport_signal.get_untracked()).max(0.0);
-            let rows = ((max as f64) - offset_top)
-                .round()
-                .clamp(0.0, max as f64) as usize;
-            let _ = bar_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                source: InteractionSource::MouseContent,
-                intent: InteractionIntent::FocusPane { pane_id },
-            });
-            let _ = bar_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                source: InteractionSource::MouseContent,
-                intent: InteractionIntent::ActivateAction(crate::input::WmAction::ScrollToOffset {
-                    rows,
-                }),
-            });
-        }
-    });
-    scrollbar.base_mut().visible.set(false);
-
-    RetainedPaneViewportWidgets { scrollbar, badge }
-}
-
-/// Build/update/position the retained per-pane terminal viewport widgets for every
-/// visible terminal pane. Unlike pane headers, the tree shape is static, so the
-/// widgets are built once per pane and then driven by signals / relaid out.
-pub(crate) fn sync_pane_viewport_widgets(
-    state: &mut crate::app_state::AppState,
-    panes: &[&crate::app::terminal_render::PaneRenderState],
-) {
-    let font = chrome_gui_theme(state).font_size;
-    let show_mode = state.appearance.terminal.show_scrollbar;
-    let pane_info_bar_shown = state.appearance.pane_info_bar_visible();
-    let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
-    for pane in panes {
-        seen.insert(pane.pane_id);
-        let Some(mount) = pane.mount.as_ref() else {
-            state.pane_viewport_widgets.remove(&pane.pane_id);
-            continue;
-        };
-        let widgets = state
-            .pane_viewport_widgets
-            .entry(pane.pane_id)
-            .or_insert_with(|| build_pane_viewport_widgets(pane.pane_id, &state.event_proxy));
-
-        let scrollable = mount.snapshot.scrollback_rows > mount.snapshot.rows;
-        let max_offset = mount
-            .snapshot
-            .scrollback_rows
-            .saturating_sub(mount.snapshot.rows) as f32;
-        widgets
-            .scrollbar
-            .content_extent_signal()
-            .set(mount.snapshot.scrollback_rows as f32);
-        widgets
-            .scrollbar
-            .viewport_extent_signal()
-            .set(mount.snapshot.rows as f32);
-        widgets
-            .scrollbar
-            .offset_signal()
-            .set((max_offset - mount.snapshot.viewport_offset as f32).max(0.0));
-        let scrollbar_visible = match show_mode {
-            heca_config::appearance::ScrollbarVisibility::Always => scrollable,
-            heca_config::appearance::ScrollbarVisibility::WhenNeeded => {
-                scrollable && !mount.snapshot.at_bottom
-            }
-            heca_config::appearance::ScrollbarVisibility::Never => false,
-        };
-        widgets.scrollbar.base_mut().visible.set(scrollbar_visible);
-
-        let badge_visible = state.appearance.terminal.show_scrolled_up_badge
-            && !mount.snapshot.at_bottom
-            && mount.snapshot.viewport_offset > 0;
-        widgets.badge.base_mut().visible.set(badge_visible);
-        widgets
-            .badge
-            .label_signal()
-            .set(format_lines_above(mount.snapshot.viewport_offset));
-
-        let Some(content_rect) = pane.content_rect else {
-            continue;
-        };
-        if scrollbar_visible {
-            widgets.scrollbar.base_mut().style.layout.width =
-                heca_grid_ui::style::Length::Px(8.0);
-            widgets.scrollbar.base_mut().style.layout.height =
-                heca_grid_ui::style::Length::Px(content_rect.size.h as f32);
-            LayoutEngine::new().base_font(font).compute(
-                &mut widgets.scrollbar,
-                Size::new(8.0, content_rect.size.h),
-            );
-            let bar_bounds = widgets.scrollbar.base().bounds;
-            // X hugs the pane's outer right edge; Y/H follow the terminal content
-            // rect so the thumb stays below the header and above the bottom inset.
-            let bar_x = pane.x + pane.w - bar_bounds.size.w as f32;
-            translate_tree(&mut widgets.scrollbar, bar_x as f64, content_rect.loc.y);
-        }
-        if badge_visible {
-            LayoutEngine::new().base_font(font).compute(
-                &mut widgets.badge,
-                Size::new(pane.w as f64, pane.h as f64),
-            );
-            let badge_bounds = widgets.badge.base().bounds;
-            // Align to the pane's outer right edge (flush, like the scrollbar).
-            let badge_x = pane.x + pane.w - badge_bounds.size.w as f32;
-            // Sit *below* the pane info-bar header so it doesn't cover the action
-            // buttons. When the info bar is hidden there is no header to avoid.
-            let header_h = if pane_info_bar_shown {
-                crate::app::terminal_render::title_bar_reserve(font)
-            } else {
-                0.0
-            };
-            let badge_y = pane.y + header_h + VIEWPORT_BADGE_MARGIN;
-            translate_tree(&mut widgets.badge, badge_x as f64, badge_y as f64);
-        }
-    }
-    state.pane_viewport_widgets.retain(|id, _| seen.contains(id));
-}
-
-/// Drop every retained pane header. Used when headers are globally invalidated: the info-bar is
-/// turned off, or a config reload changes the theme/font baked into the trees (see `reload_config`,
-/// which mirrors this alongside `terminal_layers.clear()`). `sync_pane_headers` rebuilds them from
-/// scratch next frame.
-///
-/// Nothing has to be released with them: a header's pickable buttons declare what a pick does
-/// **on themselves** ([`PeekTarget`]), so a tree that is gone simply has no declarations left.
-pub(crate) fn clear_pane_headers(state: &mut crate::app_state::AppState) {
-    state.pane_headers.clear();
-}
-
-/// Build/position the retained per-pane info-bar headers for every visible pane.
-/// Runs at the **top** of `render_frame` (before the `scene_view` borrow of
-/// `state.compositor`) so it can mutate `state.pane_headers`; render then paints
-/// them read-only and `mouse.rs` dispatches pointer events into them. Rebuilds a
-/// pane's tree only when its content key changes; re-lays-out + repositions every
-/// frame; prunes panes that disappeared.
-pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
-    let segments = state.appearance.pane.title_segments.clone();
-    let actions = state.appearance.pane.title_actions.clone();
-    if segments.is_empty() && actions.is_empty() {
-        // Info bar disabled: drop every header (releasing its hint targets).
-        clear_pane_headers(state);
-        return;
-    }
-    let theme = chrome_gui_theme(state);
-    let font = theme.font_size;
-    let band = crate::app::terminal_render::title_bar_reserve(font);
-
-    // Phase 1: gather per-pane inputs with only immutable borrows of `state`.
-    struct Input {
-        pane_id: PaneId,
-        ws_idx: usize,
-        col_idx: usize,
-        name: String,
-        custom_name: Option<String>,
-        runtime: Option<PaneRuntime>,
-        zoomed: bool,
-        floating: bool,
-        x: f32,
-        y: f32,
-        avail_w: f32,
-    }
-    let frames = crate::app::terminal_host::pane_outer_frames(state);
-    let active_ws = state.session.active_workspace_idx;
-    let mut inputs = Vec::with_capacity(frames.len());
-    for (pane_id, x, y, w, _h) in frames {
-        let (ws_idx, col_idx) = crate::find_pane_location(&state.session, pane_id)
-            .map(|(ws, col, _)| (ws, col))
-            .unwrap_or((active_ws, 0));
-        let (name, custom_name, runtime) = state
-            .session
-            .active_workspace()
-            .and_then(|ws| ws.find_pane(pane_id))
-            .map(|p| {
-                (
-                    p.title.clone(),
-                    p.custom_name.clone(),
-                    Some(p.runtime.clone()),
-                )
-            })
-            .unwrap_or_else(|| (String::new(), None, None));
-        // Floating panes aren't in any column (`find_pane_location` returns None);
-        // detect them directly so the bar hides tiled-only buttons + flags float active.
-        let floating = state
-            .session
-            .active_workspace()
-            .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id == pane_id))
-            .unwrap_or(false);
-        let zoomed = !floating
-            && state
-                .session
-                .active_workspace()
-                .and_then(|ws| ws.scrolling.columns.get(col_idx))
-                .map(|c| c.is_zoomed() || c.is_full_width)
-                .unwrap_or(false);
-        inputs.push(Input {
-            pane_id,
-            ws_idx,
-            col_idx,
-            name,
-            custom_name,
-            runtime,
-            zoomed,
-            floating,
-            x,
-            y,
-            avail_w: (w - 2.0 * HEADER_MARGIN).max(0.0),
-        });
-    }
-
-    // Phase 2: build (if changed) + position each header (mutates `state.pane_headers`).
-    let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
-    for input in &inputs {
-        seen.insert(input.pane_id);
-        let content = PaneHeaderContent {
-            programs: &state.programs,
-            fallback_name: &input.name,
-            custom_name: input.custom_name.as_deref(),
-            runtime: input.runtime.as_ref(),
-            segments: &segments,
-            actions: &actions,
-            ws_idx: input.ws_idx,
-            col_idx: input.col_idx,
-            zoomed: input.zoomed,
-            floating: input.floating,
-            shortcuts: &state.action_shortcuts,
-            catalog: &state.action_catalog,
-        };
-        let key = pane_header_key(&content, font, input.avail_w);
-        let needs_build = state
-            .pane_headers
-            .get(&input.pane_id)
-            .map(|h| h.key != key)
-            .unwrap_or(true);
-        if needs_build {
-            let ctx = PaneHeaderCtx {
-                pane_id: input.pane_id,
-                ws_idx: input.ws_idx,
-                col_idx: input.col_idx,
-                event_proxy: state.event_proxy.clone(),
-            };
-            match build_pane_header(&content, &theme, font, input.avail_w, ctx) {
-                Some(root) => {
-                    state
-                        .pane_headers
-                        .insert(input.pane_id, RetainedPaneHeader { root, key });
-                }
-                None => {
-                    state.pane_headers.remove(&input.pane_id);
-                    continue;
-                }
-            }
-        }
-        if let Some(header) = state.pane_headers.get_mut(&input.pane_id) {
-            LayoutEngine::new().base_font(font).compute(
-                &mut header.root,
-                Size::new(input.avail_w as f64, band as f64),
-            );
-            let bar_h = header.root.base().bounds.size.h as f32;
-            let bar_y = input.y + f64::from(((band - bar_h) / 2.0).max(0.0)) as f32;
-            translate_tree(
-                &mut header.root,
-                (input.x + HEADER_MARGIN) as f64,
-                bar_y as f64,
-            );
-        }
-    }
-    // Prune vanished panes.
-    state.pane_headers.retain(|id, _| seen.contains(id));
-}
 
 /// Translate a freshly-laid-out widget subtree (positioned from the origin by
 /// [`LayoutEngine::compute`]) to an absolute `(dx, dy)`. Mirrors the helper in
@@ -1544,10 +492,10 @@ impl Component for RepaintWatch {
             return;
         }
         for child in &self.base.children {
-            if child.base().style.layout.hidden {
-                continue;
-            }
-            child.paint(cx);
+            // `paint_child` and not `child.paint`: it owns the hidden check *and* draws the child's
+            // hint letter, so a custom container gets both by going through the framework
+            // (F003/P082/T431).
+            heca_grid_ui::paint_child(child.as_ref(), cx);
         }
     }
 
@@ -1634,10 +582,7 @@ fn focus_and_pick(
     container: &str,
     share: f32,
     ctx: &crate::providers::ChromeCtx<'_>,
-    signals: &mut ChromeSignals,
 ) -> WidgetModel {
-    let hint = signal::<Option<String>>(None);
-    signals.dock_hint.push((container.to_string(), hint));
     // The share lands on the outermost node, so every level below it has to pass the box down or the
     // dock keeps its content height inside the slot its share won — measured 1214px inside 296px, the
     // same failure F003/P011/T021 fixed one level up.
@@ -1648,7 +593,6 @@ fn focus_and_pick(
         pass_box_down(body.as_mut());
     }
     let mut picked = KeyHint::new_boxed(body)
-        .hint(hint)
         // Top-centre over a tall dock. Outside a render pass there is no theme to tint it with, and
         // there is no keycap to draw either (no pick is open while a host reads metadata), so the
         // default accent stands.
@@ -1705,7 +649,7 @@ fn build_region_content(
                 // a share set on the body would leave the wrapper content-sized and divide nothing
                 // (F003/P011/T021's lesson, one level up).
                 Some(with_share(
-                    focus_and_pick(body, &c.id, c.grow, ctx, signals),
+                    focus_and_pick(body, &c.id, c.grow, ctx),
                     c.grow,
                 ))
             }
@@ -1849,14 +793,14 @@ fn sidebar_toggle_button(
         let action = action.clone();
         move || emit(InteractionIntent::ActivateAction(action.clone()))
     };
-    let peek = fire.clone();
+    let hint = fire.clone();
     // Just pick the size variant — the widget derives icon px + padding from the
     // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
     // `IconButton` scales its padding). No caller-side size math.
     let button = IconButton::new(Icon::new(glyph).color(color))
         .size(WidgetSize::Small)
         .on_click(fire);
-    action_tooltip(KeyHint::new(button).on_peek(peek), action_name, label, shortcuts)
+    action_tooltip(KeyHint::new(button).on_hint(hint), action_name, label, shortcuts)
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
@@ -1953,7 +897,7 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
         .compute(root, Size::new(w as f64, h as f64));
     {
         let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
-        root.paint(&mut cx);
+        heca_grid_ui::paint_child(root, &mut cx);
     }
     scene
 }
@@ -2015,26 +959,7 @@ pub(crate) fn paint_drag_overlay(
 /// Keycap glyph size (logical px) for follow-link hints — compact so a label sits
 /// legibly over a single terminal cell.
 const LINK_HINT_FONT: f32 = 13.0;
-/// Smaller keycap glyph size for **compact** targets (pane-header action buttons), so the
-/// keycap stays proportional to the little button it captions rather than dwarfing it.
-const HINT_COMPACT_FONT: f32 = 12.0;
 
-/// Vertical band (from a hint target's top edge) the keycap is centered within. A
-/// tall target (a workspace dock spanning its panes) gets its keycap centered on the
-/// header row rather than floating in the middle; a short target (a pane card) gets it
-/// centered on its single row. Roughly one sidebar row tall.
-const HINT_BAND_H: f64 = 40.0;
-/// Small inset from a hint target's left edge so the keycap sits just inside it.
-const HINT_INSET_X: f64 = 2.0;
-/// A hint target this small in **both** axes is icon-like (a pane-header action button):
-/// stamping the keycap *over* it would hide the very glyph the user is choosing, so it is
-/// placed just *outside* the target instead (see [`paint_hint_targets`]).
-const HINT_COMPACT_MAX: f64 = 34.0;
-/// Gap between a compact target's edge and its adjacent keycap.
-const HINT_ADJACENT_GAP: f64 = 2.0;
-/// Fraction of the keycap height a compact target's keycap is pulled back *toward* the
-/// button, so it reads as attached to it rather than floating too far below/above.
-const HINT_COMPACT_RISE: f64 = 0.42;
 
 /// Peak alpha of the visual-bell flash overlay (faded out over the flash window).
 const BELL_FLASH_MAX_ALPHA: u8 = 56;
@@ -2107,367 +1032,6 @@ pub(crate) fn paint_link_hints(
     }
 }
 
-/// One layer of the on-screen surface stack (front → back) for resolving which hint
-/// targets are reachable. See `docs/surface-compositor.md`: a surface owns its targets,
-/// the opaque region(s) it paints over lower layers (from real layout — never hardcoded),
-/// and whether it is `modal` (a blocking context that suppresses everything beneath it).
-struct HintLayer {
-    targets: Vec<(PeekTarget, Rectangle)>,
-    occluders: Vec<Rectangle>,
-    modal: bool,
-}
-
-/// **Which retained tree a peek declaration was collected from.** The app keeps several trees that
-/// rebuild on independent cadences — the chrome, one per pane header, one per registered layer —
-/// so a path alone does not say where to run it.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub(crate) enum PeekSurface {
-    /// The chrome tree (top bar, sidebars and everything a container contributed).
-    Chrome,
-    /// One pane's header tree.
-    PaneHeader(PaneId),
-    /// A dynamically registered layer (an exposé, a modal, a plugin panel).
-    Layer(super::chrome::layers::LayerId),
-}
-
-/// **One pickable region**: the tree it lives in and its path from that tree's root.
-///
-/// This is the whole of what a `prefix+/` candidate carries. It is deliberately *not* an id from a
-/// registry: nothing is registered, so nothing has to be un-registered when a tree is rebuilt or
-/// pruned, and there is no allocator whose ranges have to be kept in step with three rebuild
-/// cadences. A path is only meaningful for the tree it was read from, which is exactly the lifetime
-/// a pick has — the letters go up and one is chosen in the same breath. A tree rebuilt in between
-/// simply answers "nothing there" (`heca_grid_ui::fire_peek` returns `false`), which is not an
-/// error.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub(crate) struct PeekTarget {
-    pub(crate) surface: PeekSurface,
-    /// Child indices from the surface's root down to the declaring widget.
-    pub(crate) path: Vec<usize>,
-}
-
-impl PeekTarget {
-    fn new(surface: &PeekSurface, path: Vec<usize>) -> Self {
-        Self { surface: surface.clone(), path }
-    }
-}
-
-/// Run what the widget behind `target` said a pick does to it. `false` when its tree is gone or was
-/// rebuilt under the letters.
-pub(crate) fn fire_peek(state: &crate::app_state::AppState, target: &PeekTarget) -> bool {
-    let root: Option<&dyn heca_grid_ui::Component> = match &target.surface {
-        PeekSurface::Chrome => state.chrome_tree.as_ref().map(|t| &t.root as &dyn heca_grid_ui::Component),
-        PeekSurface::PaneHeader(pane_id) => state
-            .pane_headers
-            .get(pane_id)
-            .map(|h| &h.root as &dyn heca_grid_ui::Component),
-        PeekSurface::Layer(id) => state.layers.get(*id).map(|l| l.root()),
-    };
-    root.is_some_and(|root| heca_grid_ui::fire_peek(root, &target.path))
-}
-
-/// **Every peek declaration on screen, with its live bounds** — across all three kinds of retained
-/// tree, with no eligibility filter. What [`paint_peek_letters`] re-reads each frame so the keycaps
-/// track live layout; which targets are *eligible* was decided once, at pick time, by
-/// [`active_peek_targets`].
-fn collect_peek_targets(state: &crate::app_state::AppState) -> Vec<(PeekTarget, Rectangle)> {
-    let mut out = Vec::new();
-    if let Some(tree) = state.chrome_tree.as_ref() {
-        out.extend(peeks_of(&PeekSurface::Chrome, &tree.root));
-    }
-    for (&pane_id, header) in state.pane_headers.iter() {
-        out.extend(peeks_of(&PeekSurface::PaneHeader(pane_id), &header.root));
-    }
-    for layer in state.layers.visible_front_to_back() {
-        out.extend(peeks_of(&PeekSurface::Layer(layer.id), layer.root()));
-    }
-    out
-}
-
-/// The single visibility rule (`docs/surface-compositor.md` §3), both halves of it, in the order
-/// §2 keeps them: **coarse first, then fine.**
-///
-/// - **Coarse — context activation.** Walking front → back, the first **modal** layer is the active
-///   context, and everything beneath it is dormant: the walk stops there. This is what makes
-///   `prefix+/` under the exposé offer the map's cards and nothing else.
-/// - **Fine — geometric occlusion.** *Within* what the coarse rule left eligible, a target survives
-///   iff it lies in `viewport` and its **centre** is not covered by a higher surface's occluder.
-///
-/// The fine rule subsumes every case — off-screen, hidden behind the sidebar, a zoomed/floating
-/// pane drawn over another — and extends to new surfaces for free. The caller must hand `layers`
-/// in true front → back order; there is no sort here, because a second ordering is a second answer
-/// to "what is in front", and the two drifted once already (2026-08-11: input and painting
-/// disagreed about which layer was frontmost).
-fn resolve_hint_layers(
-    layers: Vec<HintLayer>,
-    viewport: Rectangle,
-) -> Vec<(PeekTarget, Rectangle)> {
-    let covers = |r: &Rectangle, x: f64, y: f64| {
-        x >= r.loc.x && x < r.loc.x + r.size.w && y >= r.loc.y && y < r.loc.y + r.size.h
-    };
-    let vr = viewport.loc.x + viewport.size.w;
-    let vb = viewport.loc.y + viewport.size.h;
-    let mut kept = Vec::new();
-    let mut occluders: Vec<Rectangle> = Vec::new();
-    for layer in layers {
-        for (target, b) in layer.targets {
-            let in_view = b.loc.x < vr
-                && b.loc.x + b.size.w > viewport.loc.x
-                && b.loc.y < vb
-                && b.loc.y + b.size.h > viewport.loc.y;
-            let cx = b.loc.x + b.size.w / 2.0;
-            let cy = b.loc.y + b.size.h / 2.0;
-            if in_view && !occluders.iter().any(|o| covers(o, cx, cy)) {
-                kept.push((target, b));
-            }
-        }
-        occluders.extend(layer.occluders.iter().copied());
-        if layer.modal {
-            break;
-        }
-    }
-    kept
-}
-
-/// The coarse half of §3 — the half that was missing, and the whole of F003/P082/T416's picker
-/// defect. Held here rather than in a behaviour test because the rule is a pure function of the
-/// stack, and because the failure it guards was invisible on screen: the letters were painted
-/// *under* the exposé while the targets they named answered normally.
-#[cfg(test)]
-mod hint_visibility {
-    use super::*;
-
-    /// A target somewhere harmless, named by a path so two of them are never equal.
-    fn target(path: usize, x: f64) -> (PeekTarget, Rectangle) {
-        (
-            PeekTarget { surface: PeekSurface::Chrome, path: vec![path] },
-            Rectangle::new(Point::new(x, 10.0), Size::new(20.0, 20.0)),
-        )
-    }
-
-    fn viewport() -> Rectangle {
-        Rectangle::new(Point::new(0.0, 0.0), Size::new(1000.0, 800.0))
-    }
-
-    /// **The defect this task exists for.** With the exposé up, `prefix+/` offered the sidebar's
-    /// rows — the letters were invisible under the map, so a keystroke drove a surface the user
-    /// could not see (Antonio, 2026-08-12). A modal layer is the active context: everything
-    /// beneath it is dormant, and dormant surfaces are not pickable.
-    #[test]
-    fn a_modal_layer_is_the_active_context_and_nothing_beneath_it_is_pickable() {
-        let stack = vec![
-            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: true },
-            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
-        ];
-        let kept = resolve_hint_layers(stack, viewport());
-        assert_eq!(kept.len(), 1, "only the active context's own targets survive");
-        assert_eq!(kept[0].0.path, vec![0]);
-    }
-
-    /// The counterpart, so the rule above cannot be satisfied by suppressing everything: a layer
-    /// that does **not** take the keyboard leaves the surfaces beneath it live. This is what keeps
-    /// the sidebar hintable while a pane is zoomed or a toast is up.
-    #[test]
-    fn a_non_modal_layer_leaves_what_is_beneath_it_pickable() {
-        let stack = vec![
-            HintLayer { targets: vec![target(0, 0.0)], occluders: vec![], modal: false },
-            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: false },
-        ];
-        assert_eq!(resolve_hint_layers(stack, viewport()).len(), 2);
-    }
-
-    /// Coarse first, then fine — both, not one. Within the active context a target is still
-    /// dropped when a surface in front of it covers its centre.
-    #[test]
-    fn occlusion_still_applies_inside_the_active_context() {
-        let stack = vec![
-            HintLayer {
-                targets: vec![target(0, 0.0)],
-                occluders: vec![Rectangle::new(Point::new(90.0, 0.0), Size::new(200.0, 100.0))],
-                modal: false,
-            },
-            HintLayer { targets: vec![target(1, 100.0)], occluders: vec![], modal: true },
-        ];
-        let kept = resolve_hint_layers(stack, viewport());
-        assert_eq!(kept.len(), 1, "the covered target is dropped, the covering one kept");
-        assert_eq!(kept[0].0.path, vec![0]);
-    }
-
-    /// A target scrolled off the window is not pickable however live its surface is.
-    #[test]
-    fn a_target_outside_the_viewport_is_dropped() {
-        let stack = vec![HintLayer {
-            targets: vec![target(0, 5_000.0)],
-            occluders: vec![],
-            modal: false,
-        }];
-        assert!(resolve_hint_layers(stack, viewport()).is_empty());
-    }
-}
-
-/// Build the current surface stack (front → back) and resolve the reachable hint targets
-/// for the universal picker. **The one place hint visibility is decided.** The stack
-/// mirrors the paint order so hints match what is visually on top; adding a new surface
-/// (overlay / exposé / …) means adding a layer here, never a bespoke filter. See
-/// `docs/surface-compositor.md`.
-pub(crate) fn active_peek_targets(
-    state: &crate::app_state::AppState,
-) -> Vec<(PeekTarget, Rectangle)> {
-    let (vw, vh) = {
-        let phys = state.window.inner_size();
-        let s = state.scale_factor;
-        (phys.width as f64 / s, phys.height as f64 / s)
-    };
-    let viewport = Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, vh));
-    let content = ChromeConfig {
-        tab_bar_height: state.tab_bar_height(),
-        status_bar_height: state.status_bar_height(),
-        left_sidebar_width: state.left_sidebar_width(),
-        right_sidebar_width: state.right_sidebar_width(),
-        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
-    }
-    .content_rect(vw as f32, vh as f32);
-
-    let mut layers: Vec<HintLayer> = Vec::new();
-
-    // The stack is assembled **front → back, in paint order reversed** — layers, then the chrome
-    // shell, then the panes. That is literally how the frame is drawn (`render.rs`: chrome scene,
-    // then `paint_layers` into a scene flushed after it), so building the stack this way makes the
-    // two agree by construction instead of by a second ordering rule that has to be kept in step.
-    //
-    // 1. Dynamically registered layers (the exposé, the context menu, the confirm dialog, a plugin
-    //    panel), front → back among themselves. Their targets and occluder come from their
-    //    laid-out tree, never a constant. The first **modal** one among them is the active context
-    //    and `resolve_hint_layers` stops there — which is what suppresses the chrome and the panes
-    //    beneath an exposé.
-    for layer in state.layers.visible_front_to_back() {
-        let bounds = layer.root().base().bounds;
-        layers.push(HintLayer {
-            targets: peeks_of(&PeekSurface::Layer(layer.id), layer.root()),
-            occluders: vec![bounds],
-            modal: layer.modal,
-        });
-    }
-
-    // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
-    //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
-    //    targets beneath it. Occluders come from `content_rect`, not constants.
-    if let Some(tree) = state.chrome_tree.as_ref() {
-        let (cl, ct) = (content.loc.x, content.loc.y);
-        let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
-        layers.push(HintLayer {
-            targets: peeks_of(&PeekSurface::Chrome, &tree.root),
-            occluders: vec![
-                Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
-                Rectangle::new(Point::new(0.0, 0.0), Size::new(cl, vh)), // left sidebar
-                Rectangle::new(Point::new(cr, 0.0), Size::new(vw - cr, vh)), // right sidebar
-                Rectangle::new(Point::new(0.0, cb), Size::new(vw, vh - cb)), // status bar
-            ],
-            modal: false,
-        });
-    }
-
-    // 3. Panes, front (topmost draw) → back. `pane_outer_frames` is in draw order (tiled
-    //    then floats; last = on top), so reversing it yields front→back: floats over tiled,
-    //    and a zoomed pane (a later sibling) over the panes behind it. Each pane occludes
-    //    the ones beneath by its own frame.
-    for (pane_id, x, y, w, h) in crate::app::terminal_host::pane_outer_frames(state)
-        .into_iter()
-        .rev()
-    {
-        let Some(header) = state.pane_headers.get(&pane_id) else {
-            continue;
-        };
-        layers.push(HintLayer {
-            targets: peeks_of(&PeekSurface::PaneHeader(pane_id), &header.root),
-            occluders: vec![Rectangle::new(
-                Point::new(x as f64, y as f64),
-                Size::new(w as f64, h as f64),
-            )],
-            modal: false,
-        });
-    }
-
-    resolve_hint_layers(layers, viewport)
-}
-
-/// One surface's peek declarations, addressed by [`PeekTarget`].
-fn peeks_of(
-    surface: &PeekSurface,
-    root: &dyn heca_grid_ui::Component,
-) -> Vec<(PeekTarget, Rectangle)> {
-    heca_grid_ui::collect_peeks(root)
-        .into_iter()
-        .map(|(path, bounds)| (PeekTarget::new(surface, path), bounds))
-        .collect()
-}
-
-/// Paint the universal picker overlay (`prefix+/`): a glowing keycap over every pickable region,
-/// driven by `InputMode::HintPick`. Bounds are re-collected from the retained trees each frame and
-/// matched to the mode's candidates by [`PeekTarget`], so the keycaps track layout. Mirrors
-/// [`paint_link_hints`]. No-op when the picker isn't active.
-pub(crate) fn paint_peek_letters(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let crate::app_state::InputMode::HintPick { candidates } = &state.input_mode else {
-        return;
-    };
-    // Look up the current bounds of every candidate. Collected from the SAME surfaces the picker
-    // resolves over (`collect_peek_targets`) — chrome, per-pane headers and every visible layer —
-    // and re-read each frame so the keycaps track live layout. Which targets are *eligible* was
-    // already decided at pick time; here we only need where they are now.
-    let bounds_by_target: std::collections::HashMap<PeekTarget, Rectangle> =
-        collect_peek_targets(state).into_iter().collect();
-    if bounds_by_target.is_empty() {
-        return;
-    }
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    for (label, target) in candidates {
-        let Some(bounds) = bounds_by_target.get(target) else {
-            continue;
-        };
-        let text = label.to_string();
-        // Icon-like targets (pane-header action buttons) are too small to hold a keycap
-        // without hiding their glyph, so the letter is placed just *below* them, centered
-        // and clamped on-screen — the icon stays fully visible with its letter as a
-        // caption. It also gets a smaller keycap so it stays proportional to the little
-        // button. Larger chrome targets (docks, cards, rows) keep the full-size keycap in
-        // their top band (inset from the left), where it never occludes meaningful content.
-        let compact = bounds.size.w <= HINT_COMPACT_MAX && bounds.size.h <= HINT_COMPACT_MAX;
-        let font = if compact { HINT_COMPACT_FONT } else { LINK_HINT_FONT };
-        let size = heca_grid_ui::keycap_size(font, &text);
-        let (x, y) = if compact {
-            let x = (bounds.loc.x + (bounds.size.w - size.w) / 2.0).clamp(0.0, w as f64 - size.w);
-            // Pull the cap back toward the button so it sits snug under it, not floating.
-            let rise = size.h * HINT_COMPACT_RISE;
-            let below = bounds.loc.y + bounds.size.h + HINT_ADJACENT_GAP - rise;
-            // Prefer below; flip above if it would fall off the bottom edge.
-            let y = if below + size.h <= h as f64 {
-                below
-            } else {
-                bounds.loc.y - size.h - HINT_ADJACENT_GAP + rise
-            };
-            (x, y)
-        } else {
-            let band = bounds.size.h.min(HINT_BAND_H);
-            (bounds.loc.x + HINT_INSET_X, bounds.loc.y + (band - size.h) / 2.0)
-        };
-        let cap = Rectangle::new(Point::new(x, y), size);
-        heca_grid_ui::paint_keycap(
-            &mut cx,
-            cap,
-            &text,
-            font,
-            None,
-            heca_grid_ui::KeycapVariant::Filled,
-        );
-    }
-}
-
 /// Lay out every visible dynamically-registered layer (an overlay dialog, a plugin panel)
 /// at full viewport size. Mutable pass, run before the scene-texture borrow so
 /// [`paint_layers`] can take a shared `&AppState`. Each layer's root is a self-centering /
@@ -2509,7 +1073,7 @@ pub(crate) fn paint_layers(
         // screen, so it grows from and shrinks toward the centre rather than a corner.
         let centre = Point::new(w as f64 / 2.0, h as f64 / 2.0);
         cx.with_opacity(layer.opacity(), |cx| {
-            cx.with_scale(layer.scale(), centre, |cx| layer.root().paint(cx))
+            cx.with_scale(layer.scale(), centre, |cx| heca_grid_ui::paint_child(layer.root(), cx))
         });
     }
 }
@@ -2695,7 +1259,7 @@ fn paint_search_bar(
     LayoutEngine::new()
         .base_font(theme.font_size)
         .compute(&mut root, viewport);
-    root.paint(cx);
+    heca_grid_ui::paint_child(&root, cx);
 
     // Draw the retained field into the slot the tree reserved for it.
     let Some(slot) = search_field_slot(&root) else {
@@ -2728,180 +1292,6 @@ fn chrome_scene(
     paint_chrome_root(&mut root, frame.w, frame.h, theme)
 }
 
-/// Convert a `0.0..=1.0` theme alpha token into an 8-bit channel value for
-/// [`Color::with_alpha`]. Clamped so out-of-range config values can't wrap.
-pub(crate) fn alpha_u8(a: f32) -> u8 {
-    (a.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
-/// Projects the loaded app theme into the grid-ui widget theme contract.
-///
-/// With the compose model, `heca_grid_ui::Theme` embeds `heca_theme::Theme`
-/// directly (the `colors` field), and `heca_config::theme::Theme` *is*
-/// `heca_theme::Theme` (re-exported), so no field-by-field conversion is
-/// needed — we clone the theme straight into `colors` and layer the
-/// system-local font tokens on top. Font family/size come from `font_config`
-/// (decoupled from the color theme).
-fn app_theme_to_gui_theme(
-    theme: &heca_config::theme::Theme,
-    font_config: &heca_config::font::FontConfig,
-) -> GuiTheme {
-    GuiTheme {
-        colors: theme.clone(),
-        font_family: font_config.family.ui_normal().to_string(),
-        font_size: font_config.size.ui,
-        // TODO: map from config `focus_border_width` once added to heca-theme; for
-        // now the affordance outlines (focus ring + selection) keep a visible default.
-        focus_border_width: 1.5,
-    }
-}
-
-fn chrome_surface_color(theme: &heca_config::theme::Theme) -> Color {
-    theme.surface
-}
-
-fn top_bottom_pane_background_color(theme: &heca_config::theme::Theme) -> Color {
-    theme.effective_top_bottom_pane_background()
-}
-
-fn chrome_bar_color_for(
-    theme: &heca_config::theme::Theme,
-    appearance: &heca_config::appearance::AppearanceConfig,
-) -> Color {
-    top_bottom_pane_background_color(theme).with_alpha(alpha_u8(appearance.chrome_opacity()))
-}
-
-fn sidebar_shell_background_color_for(
-    sidebar_bg: Color,
-    appearance: &heca_config::appearance::AppearanceConfig,
-) -> Color {
-    sidebar_bg.with_alpha(alpha_u8(appearance.opacity()))
-}
-
-fn chrome_shell_surface_color_for(
-    theme: &heca_config::theme::Theme,
-    appearance: &heca_config::appearance::AppearanceConfig,
-) -> Color {
-    chrome_surface_color(theme).with_alpha(alpha_u8(appearance.opacity()))
-}
-
-fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
-    chrome_bar_color_for(&state.theme, &state.appearance)
-}
-
-fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
-    let base = state.theme.effective_left_sidebar_background();
-    let resolved = state.appearance.effective_sidebar_background_color(base);
-    sidebar_shell_background_color_for(resolved, &state.appearance)
-}
-
-fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
-    let base = state.theme.effective_right_sidebar_background();
-    let resolved = state.appearance.effective_sidebar_background_color(base);
-    sidebar_shell_background_color_for(resolved, &state.appearance)
-}
-
-fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> Color {
-    chrome_shell_surface_color_for(&state.theme, &state.appearance)
-}
-
-/// Returns the shared chrome bar background, sidebar inner-surface background,
-/// and foreground text color for the current app state.
-///
-/// Sidebar shell backgrounds are driven separately so left/right sidebars can
-/// use distinct theme tokens without changing the inner chrome surface color.
-pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
-    let bar_bg = chrome_bar_color(state);
-    let sidebar_bg = chrome_shell_surface_color(state);
-    let fg = state.theme.foreground;
-    (bar_bg, sidebar_bg, fg)
-}
-
-/// Bridge the loaded app theme into a GuiTheme for chrome widgets.
-pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
-    let (_, sidebar_bg, _) = chrome_colors(state);
-    let mut theme = app_theme_to_gui_theme(&state.theme, &state.font_config);
-    // App-wide font zoom scales the chrome/UI font alongside the terminals, so the
-    // sidebar/tabs/status bar grow/shrink together with the panes. Read at paint
-    // time so it live-updates; a zoom change also bumps `chrome_signature` to force
-    // a tree rebuild at the new size.
-    theme.font_size = state.app_ui_font_size();
-    theme.colors.background = state.theme.background;
-    theme.colors.surface = sidebar_bg;
-    // `[appearance]` effect-token overrides take precedence over the theme.
-    // `glow_size` owns glow (presence + radius + strength); `intensity` owns
-    // scanline/CRT overlay opacity only. Unset → the theme value already set
-    // above by `app_theme_to_gui_theme` wins.
-    theme.colors.glow_size = state.appearance.effective_glow_size(&state.theme);
-    theme.colors.intensity = state.appearance.effective_intensity(&state.theme);
-    // Focus-outline visibility (config `show_focus_border`, theme fallback) — the
-    // app-wide focus-ring kill switch; rings additionally show only on keyboard
-    // focus (focus-visible), never on click.
-    theme.colors.show_focus_border = state
-        .appearance
-        .effective_show_focus_border(&state.theme);
-    // Overlay-panel frame style (config `overlay_border_style`, theme fallback) —
-    // bracket reticle / plain edge / none for dialogs, dropdowns, context menus and
-    // the command palette. Read at paint time, so it live-reloads like the rest.
-    theme.colors.overlay_frame = state
-        .appearance
-        .effective_overlay_border_style(&state.theme);
-    // Global decorative border width (config `border_width`, theme fallback) — the
-    // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
-    // chrome + sidebar frame width.
-    theme.colors.border_width = state.appearance.effective_border_width(&state.theme);
-    // Global decorative border color (config `border_color`, theme fallback) —
-    // drives the chrome/sidebar `bordered` frame. Read at paint, so it live-reloads.
-    theme.colors.border = state.appearance.effective_border_color(&state.theme);
-    // Affordance outlines (focus ring + selection) get their own configurable
-    // width, independent of the decorative border so they stay visible at
-    // `border_width = 0`.
-    theme.focus_border_width = state.appearance.effective_focus_border_width();
-    theme
-}
-
-/// Apply a config [`BorderStyle`](heca_config::appearance::BorderStyle) as the
-/// grid-ui [`Pane`] frame — the single mapping used for both terminal panes
-/// (`pane_border_style`) and the sidebar shell (`sidebar_border_style`).
-pub(crate) fn apply_pane_frame(
-    pane: Pane,
-    style: heca_config::appearance::BorderStyle,
-) -> Pane {
-    use heca_config::appearance::BorderStyle;
-    match style {
-        BorderStyle::None => pane.frameless(),
-        BorderStyle::Bordered => pane.bordered(),
-        BorderStyle::Bracketed => pane.bracketed(),
-    }
-}
-
-/// The status-bar text projection (`N panes | focus | MODE…`).
-fn chrome_status(state: &crate::app_state::AppState) -> String {
-    let pane_count = state
-        .session
-        .active_workspace()
-        .map(|ws| {
-            ws.scrolling
-                .columns
-                .iter()
-                .map(|c| c.panes.len())
-                .sum::<usize>()
-        })
-        .unwrap_or(0);
-    let focus_title = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
-        .unwrap_or("—");
-    let (mode_str, rename_hint) =
-        crate::app::render::status_mode_parts(&state.input_mode, &state.action_catalog);
-    format!(
-        "{} panes | {} | {}{}",
-        pane_count, focus_title, mode_str, rename_hint
-    )
-}
-
 /// A **retained** chrome tree + the signature of the state that produced it. The
 /// tree is rebuilt only when [`chrome_signature`] changes; otherwise it is just
 /// re-laid-out and painted each frame. This keeps the widget signals alive across
@@ -2919,48 +1309,6 @@ pub(crate) struct RetainedChrome {
     pub(crate) drag_items: DragItemRegistry,
 }
 
-/// What a sidebar [`DragItemId`] refers to. The drag framework is domain-neutral
-/// (ids are opaque `usize`); this app-side map gives them meaning. `ColumnId` can't
-/// be the id directly — it's assigned inconsistently and can collide with a `PaneId`
-/// (`scrolling.rs` builds `ColumnId(pane.id.0)`), so kind is decided by this map.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ChromeDragItem {
-    /// A pane card (drag source + drop target).
-    Pane(PaneId),
-    /// A column [`MarkerGroup`], addressed positionally (drag source + drop target).
-    Column { ws: usize, col: usize },
-    /// A workspace [`DockFrame`] (drop target only — drop a column here to move it
-    /// into that workspace).
-    Workspace { ws: usize },
-}
-
-/// Build-time registry that hands out dense [`DragItemId`]s (id = push index) and
-/// records what each refers to. Lives on [`RetainedChrome`]; rebuilt with the tree.
-#[derive(Default, Clone, Debug)]
-pub(crate) struct DragItemRegistry {
-    items: Vec<ChromeDragItem>,
-}
-
-impl DragItemRegistry {
-    /// Register a draggable/droppable item and return its freshly-assigned id.
-    pub(crate) fn register(&mut self, item: ChromeDragItem) -> DragItemId {
-        let id = DragItemId::new(self.items.len());
-        self.items.push(item);
-        id
-    }
-
-    /// Decode an id back to what it refers to (`None` if not from this build).
-    pub(crate) fn get(&self, id: DragItemId) -> Option<&ChromeDragItem> {
-        self.items.get(id.raw())
-    }
-
-    /// All registered items, in id order.
-    #[cfg(test)]
-    pub(crate) fn items(&self) -> &[ChromeDragItem] {
-        &self.items
-    }
-}
-
 /// **Fire a named gesture**: the closure that emits `intent` through this surface's chrome sink.
 ///
 /// This is `realize`'s `emit(intent)` for native code — deliberately the same one line, so the two
@@ -2969,7 +1317,7 @@ impl DragItemRegistry {
 /// ```ignore
 /// // declarative (heca-view-realize):     native (here):
 /// row.on_press(intent)                    row.on_activate(fires(mount, intent, emit))
-/// row.on_peek(intent)                     KeyHint::new(row).on_peek(fires(mount, intent, emit))
+/// row.on_hint(intent)                     KeyHint::new(row).on_hint(fires(mount, intent, emit))
 /// ```
 ///
 /// **Why a name and not a closure.** A closure is reachable from exactly one place: the gesture
@@ -3007,511 +1355,6 @@ pub(crate) fn fires(
             intent.clone(),
         ))
     }
-}
-
-/// Handles to the retained chrome tree's **value** signals — the state that changes
-/// without a structural change (pane/column selection + status text). Collected
-/// during [`build_chrome_root`] and pushed each frame by [`sync_chrome_signals`], so
-/// these values are **not** in [`chrome_signature`] and focus changes no longer
-/// rebuild the tree. Rebuilt with the tree on structural change.
-#[derive(Default)]
-pub(crate) struct ChromeSignals {
-    /// Each pane card's `active` signal, keyed by pane id.
-    pub(crate) pane_active: Vec<(PaneId, Signal<bool>)>,
-    /// **"You were just here"** per pane — the mark back-and-forth would return to. Bound like
-    /// [`pane_active`](Self::pane_active) because it changes on *focus*, which deliberately does
-    /// not rebuild the tree (`chrome_signature` excludes it): read as a plain bool at build time it
-    /// would freeze at whatever it was when the sidebar was last rebuilt.
-    pub(crate) pane_previous: Vec<(PaneId, Signal<bool>)>,
-    /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
-    /// iff it contains the active pane).
-    pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
-    /// Each workspace [`DockFrame`]'s `active` signal + the pane ids it holds (active
-    /// iff it contains the active pane). Drives the active-workspace accent wash in
-    /// place, mirroring [`col_active`](ChromeSignals::col_active).
-    pub(crate) ws_active: Vec<(Vec<PaneId>, Signal<bool>)>,
-    /// **The workspace `prefix+Shift+i` would return to**, by index. Bound like
-    /// [`ws_active`](Self::ws_active) because it changes on focus, which does not rebuild the tree.
-    pub(crate) ws_previous: Vec<(usize, Signal<bool>)>,
-    /// Every navigable row's cursor-outline signal, as `(mount, nav_key, signal)` — driven from
-    /// that **mount's** cursor (`container_cursor`), which is why the mount is part of the key.
-    ///
-    /// Generic since F003/P085/T354: this used to be two domain-keyed families (`pane_nav` by
-    /// `PaneId`, `ws_nav` by `ws_idx`), which no component outside the workspace tree could join. A
-    /// row now declares one identity (`Base::nav_key`) and this is the highlight half of it; the
-    /// cursor highlight stays distinct from `active_pane`, as it always was.
-    pub(crate) row_nav: Vec<(String, String, Signal<bool>)>,
-    /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
-    /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
-    /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
-    /// `None`. This is the move/swap/take **targeting overlay** — the keyboard logic
-    /// (candidates + key consumption) already lives in the action/input layer; this
-    /// only projects it into the retained Dock.
-    pub(crate) pane_hint: Vec<(PaneId, Signal<Option<String>>)>,
-    /// Each workspace [`DockFrame`]'s [`KeyHint`] pick-letter signal, keyed by `ws_idx`.
-    /// Driven each frame from the active "move column/pane to workspace" pick candidates
-    /// (mirrors [`pane_hint`](ChromeSignals::pane_hint)); the keycap is tinted differently
-    /// (theme `warning`) so a workspace target reads distinctly from a pane target.
-    pub(crate) ws_hint: Vec<(usize, Signal<Option<String>>)>,
-    /// Each column [`MarkerGroup`]'s [`KeyHint`] pick-letter signal, keyed by
-    /// `(ws_idx, col_idx)`. Driven from the active "move pane to column" pick candidates
-    /// (only the active workspace's columns light up); tinted `success` to read distinctly
-    /// from pane (accent) and workspace (warning) picks.
-    pub(crate) col_hint: Vec<(usize, usize, Signal<Option<String>>)>,
-    /// Each mounted container's [`KeyHint`] pick-letter signal, keyed by its **mount id**. Driven
-    /// from the active dock pick (`focus_dock` with no dock named), so the letters that appear over
-    /// the docks are a projection of the same candidates the keypress is resolved against
-    /// (F003/P011/T020).
-    pub(crate) dock_hint: Vec<(String, Signal<Option<String>>)>,
-    /// Per-pane runtime display signals for the fixed pane-info rows.
-    pub(crate) pane_info: Vec<(PaneId, PaneInfoSignals)>,
-    /// The status-bar label's text signal.
-    pub(crate) status: Option<Signal<String>>,
-}
-
-/// The move/swap/take pick keycap for `pane` — `Some(letter)` while it is a pick
-/// candidate, else `None`. The currently focused pane is never a target, so it shows
-/// no keycap. Pure projection of the active `InputMode` candidates; mirrors the
-/// legacy hand-drawn sidebar's `candidate_char` so the overlay reads identically.
-fn pick_keycap(
-    pane: PaneId,
-    active: Option<PaneId>,
-    candidates: Option<&[(char, PaneId)]>,
-) -> Option<String> {
-    if active == Some(pane) {
-        return None;
-    }
-    candidates?
-        .iter()
-        .find(|(_, p)| *p == pane)
-        .map(|(ch, _)| ch.to_string())
-}
-
-/// The dock pick keycap for `container` — `Some(letter)` while it is a candidate, else `None`.
-///
-/// Pure projection of the active dock-pick candidates, keyed by **mount id**: two placements of one
-/// container are two candidates with two letters, so this cannot match on the container's kind.
-fn dock_keycap(container: &str, candidates: &[(char, String)]) -> Option<String> {
-    candidates
-        .iter()
-        .find(|(_, id)| id == container)
-        .map(|(ch, _)| ch.to_string())
-}
-
-/// Find a pane's sidebar entry across all workspaces (tiled + floating).
-fn find_pane_entry(tree: &WorkspaceTree, pane_id: PaneId) -> Option<&PaneEntry> {
-    tree.workspaces
-        .iter()
-        .flat_map(|ws| {
-            ws.columns
-                .iter()
-                .flat_map(|col| col.panes.iter())
-                .chain(ws.floating_panes.iter())
-        })
-        .find(|pane| pane.pane_id == pane_id)
-}
-
-fn pane_fallback_name(tree: &WorkspaceTree, pane_id: PaneId) -> &str {
-    find_pane_entry(tree, pane_id)
-        .map(|pane| pane.name.as_str())
-        .unwrap_or_else(|| unreachable!("pane {pane_id:?} must exist in sidebar tree"))
-}
-
-/// The pane's user-set override name (from rename), if any — wins over the process
-/// title. `None` while the pane tracks its process.
-fn pane_custom_name(tree: &WorkspaceTree, pane_id: PaneId) -> Option<&str> {
-    find_pane_entry(tree, pane_id).and_then(|pane| pane.custom_name.as_deref())
-}
-
-fn sync_pane_runtime_state(
-    session: &heca_core::layout::Session,
-    workspaces: &WorkspacesContainerState,
-) -> bool {
-    use std::collections::HashSet;
-    // TODO(pane-runtime-tasks:F3): this is a per-frame full-sync push of every pane's runtime
-    // state into the store — the same push model Phase 0 is moving away from. It
-    // is change-guarded (the setters only `.set()`/emit on real change, so there
-    // are no spurious events or repaints), but it still borrows `panes` once per
-    // pane per frame. Fold this into the reactive damage-path work (Phase 0's last
-    // task) so runtime changes flow core→signal→paint without a per-frame scan.
-    let mut live_panes = HashSet::new();
-    let mut changed = false;
-    for ws in &session.workspaces {
-        for col in &ws.scrolling.columns {
-            for pane in &col.panes {
-                live_panes.insert(pane.id);
-                changed |= workspaces.set_pane_runtime(
-                    pane.id,
-                    &pane.runtime,
-                    pane.custom_name.as_deref(),
-                );
-            }
-        }
-        for float in &ws.floating_panes {
-            live_panes.insert(float.pane.id);
-            changed |= workspaces.set_pane_runtime(
-                float.pane.id,
-                &float.pane.runtime,
-                float.pane.custom_name.as_deref(),
-            );
-        }
-    }
-    workspaces.retain_panes(&live_panes);
-    changed
-}
-
-/// Mirror canonical app/runtime state into the shared chrome store before the
-/// retained tree reads it. `InputMode` remains the source of truth for keyboard
-/// pick flows; the store is the reactive UI mirror.
-pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool {
-    state
-        .chrome_state
-        .workspaces
-        .set_active_pane(state.focused_pane);
-    state
-        .chrome_state
-        .workspaces
-        .set_pane_renamed_add_process_name(state.pane_renamed_add_process_name);
-    state
-        .chrome_state
-        .workspaces
-        .set_pane_show_cwd(state.pane_show_cwd);
-    // The program catalog is this component's, not the shared context's (F003/P086/T367). Mirrored
-    // here like the display flags above, so `prefix+Shift+r` reaches it; guarded on `Rc` identity,
-    // which is exactly what a reload replaces.
-    state
-        .chrome_state
-        .workspaces
-        .set_programs(state.programs.clone());
-    // Sidebar-nav selection: the **store owns it**. The nav handlers
-    // publish into it (`publish_sidebar_selection`), and here it is projected back onto
-    // the tree's positional `cursor` — which `sync_from_session` rebuilds from scratch, so
-    // it cannot be the truth. That direction is also what lets an RPC or a plugin *drive*
-    // the selection: whatever they write into the store moves the cursor on the next
-    // frame.
-    //
-    // The selection lives exactly as long as a container holds the keyboard
-    // (`container_cursor_visible`) — including while a menu opened on one of its rows is up, since
-    // an overlay does not take chrome focus away. Selection-driven: it does NOT move the real
-    // focus (`active_pane`); the container renders both, distinctly. The setter is a
-    // change-guarded chokepoint, so calling it every frame is cheap.
-    if state.container_cursor_visible() {
-        let selection = state.chrome_state.workspaces.nav_selection();
-        state.chrome_state.workspaces.tree_mut().apply_nav_selection(selection);
-    } else {
-        state.chrome_state.workspaces.set_nav_selection(None);
-    }
-    let next_candidates = state
-        .input_mode
-        .candidates()
-        .map(|c| c.to_vec())
-        .unwrap_or_default();
-    if next_candidates.is_empty() {
-        state.chrome_state.workspaces.clear_pick_candidates();
-    } else {
-        state
-            .chrome_state
-            .workspaces
-            .set_pick_candidates(next_candidates);
-    }
-    let next_ws_candidates = state
-        .input_mode
-        .ws_candidates()
-        .map(|c| c.to_vec())
-        .unwrap_or_default();
-    if next_ws_candidates.is_empty() {
-        state.chrome_state.workspaces.clear_ws_pick_candidates();
-    } else {
-        state
-            .chrome_state
-            .workspaces
-            .set_ws_pick_candidates(next_ws_candidates);
-    }
-    let next_col_candidates = state
-        .input_mode
-        .col_candidates()
-        .map(|c| c.to_vec())
-        .unwrap_or_default();
-    if next_col_candidates.is_empty() {
-        state.chrome_state.workspaces.clear_col_pick_candidates();
-    } else {
-        state
-            .chrome_state
-            .workspaces
-            .set_col_pick_candidates(next_col_candidates);
-    }
-    let next_dock_candidates = state
-        .input_mode
-        .dock_candidates()
-        .map(|c| c.to_vec())
-        .unwrap_or_default();
-    if next_dock_candidates.is_empty() {
-        state.chrome_state.clear_dock_pick_candidates();
-    } else {
-        state
-            .chrome_state
-            .set_dock_pick_candidates(next_dock_candidates);
-    }
-    // Mirror the in-progress pick (its kind + prompt) into the store so components and
-    // plugins can react to the pending action (e.g. a custom prompt overlay).
-    let pending_pick = state.input_mode.pending_pick(&state.action_catalog);
-    state.chrome_state.workspaces.set_pending_pick(pending_pick);
-    // Phase 2: bridge backend-detected runtime → canonical `Pane.runtime` + emit
-    // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
-    crate::app::process_monitor::sync_pane_runtime_from_backends(state);
-    crate::app::git_monitor::sync_pane_git_from_cwds(state);
-    sync_pane_runtime_state(&state.session, &state.chrome_state.workspaces)
-}
-
-/// Push the chrome's value-state (selection + status text) into the retained tree's
-/// bound signals. Guarded — writes only on change, so unchanged frames cause no
-/// signal churn. Called each frame before paint; this is what lets focus changes
-/// update the highlight + status **without** rebuilding the tree.
-pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
-    let Some(retained) = state.chrome_tree.as_ref() else {
-        return false;
-    };
-    let mut changed = false;
-    let active = state.chrome_state.workspaces.active_pane();
-    for (pid, sig) in &retained.signals.pane_active {
-        let v = active == Some(*pid);
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    // The same sync for the back-and-forth mark, from the field `prefix+i` itself reads.
-    for (pid, sig) in &retained.signals.pane_previous {
-        let v = state.chrome_state.workspaces.is_previous_pane(*pid) && active != Some(*pid);
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    // The workspace back-and-forth would take you to — the frame says *which* workspace, the pane
-    // mark inside it says which pane. Two levels of one answer.
-    let previous_ws = state.chrome_state.workspaces.previous_ws();
-    for (idx, sig) in &retained.signals.ws_previous {
-        let v = Some(*idx) == previous_ws;
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    for (pids, sig) in &retained.signals.col_active {
-        let v = active.is_some_and(|a| pids.contains(&a));
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    for (pids, sig) in &retained.signals.ws_active {
-        let v = active.is_some_and(|a| pids.contains(&a));
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    // Project each mount's cursor onto its rows' cursor signals — distinct from `active` above, so
-    // the expanded sidebar shows both the real focus and the cursor. Keyed by `(mount, nav_key)`,
-    // so two placements of one container light **different** rows (F003/P085/T354).
-    for (mount, key, sig) in &retained.signals.row_nav {
-        let v = state
-            .chrome_state
-            .container_cursor(mount)
-            .get_untracked()
-            .as_deref()
-            == Some(key.as_str());
-        if sig.get_untracked() != v {
-            sig.set(v);
-            changed = true;
-        }
-    }
-    // Project the active move/swap/take pick candidates onto each pane's KeyHint
-    // keycap. The candidates (char→PaneId) and the key-press consumption already
-    // live in the `InputMode` / action layer (`app/input.rs`); this only mirrors the
-    // letters into the retained Dock. The currently focused pane is never a target,
-    // so it shows no keycap (matches the legacy hand-drawn sidebar's behavior).
-    let candidates = state
-        .chrome_state
-        .workspaces
-        .with_pick_candidates(|c| c.to_vec());
-    for (pid, sig) in &retained.signals.pane_hint {
-        let next = pick_keycap(*pid, active, Some(&candidates));
-        if sig.get_untracked() != next {
-            sig.set(next);
-            changed = true;
-        }
-    }
-    // Project the active "move to workspace" pick candidates onto each workspace's
-    // KeyHint keycap (letter → `ws_idx`). Same mechanism as the pane hints above.
-    let ws_candidates = state
-        .chrome_state
-        .workspaces
-        .with_ws_pick_candidates(|c| c.to_vec());
-    for (ws_idx, sig) in &retained.signals.ws_hint {
-        let next = ws_candidates
-            .iter()
-            .find(|(_, w)| w == ws_idx)
-            .map(|(ch, _)| ch.to_string());
-        if sig.get_untracked() != next {
-            sig.set(next);
-            changed = true;
-        }
-    }
-    // Project the active "move pane to column" candidates onto every column's KeyHint
-    // (letter → `(ws_idx, col_idx)`), across all workspaces.
-    let col_candidates = state
-        .chrome_state
-        .workspaces
-        .with_col_pick_candidates(|c| c.to_vec());
-    for (ws_idx, col_idx, sig) in &retained.signals.col_hint {
-        let next = col_candidates
-            .iter()
-            .find(|(_, w, c)| w == ws_idx && c == col_idx)
-            .map(|(ch, _, _)| ch.to_string());
-        if sig.get_untracked() != next {
-            sig.set(next);
-            changed = true;
-        }
-    }
-    // Project the active dock pick onto each mounted container's KeyHint (letter → container id).
-    // Same mechanism as the pane/workspace/column hints above, one level up: these targets are the
-    // shell's containers rather than anything inside one.
-    let dock_candidates = state
-        .chrome_state
-        .with_dock_pick_candidates(|c| c.to_vec());
-    for (container, sig) in &retained.signals.dock_hint {
-        let next = dock_keycap(container, &dock_candidates);
-        if sig.get_untracked() != next {
-            sig.set(next);
-            changed = true;
-        }
-    }
-    for (pid, sigs) in &retained.signals.pane_info {
-        let runtime = runtime_snapshot(&state.chrome_state.workspaces, *pid);
-        let next = pane_info_view(
-            &state.programs,
-            pane_fallback_name(&state.chrome_state.workspaces.tree(), *pid),
-            pane_custom_name(&state.chrome_state.workspaces.tree(), *pid),
-            runtime.as_ref(),
-            // Drive the sidebar card's `(process)` suffix live: compute the hint with the
-            // real flag so a rename toggles it without a tree rebuild. Only `process_hint`
-            // depends on this; icon/title/status/git are unaffected.
-            state
-                .chrome_state
-                .workspaces
-                .pane_renamed_add_process_name(),
-        );
-        let pane_active = active == Some(*pid);
-        if sigs.icon.get_untracked() != next.icon {
-            sigs.icon.set(next.icon);
-            changed = true;
-        }
-        if sigs.title_active.get_untracked() != next.title {
-            sigs.title_active.set(next.title.clone());
-            changed = true;
-        }
-        if sigs.title_inactive.get_untracked() != next.title {
-            sigs.title_inactive.set(next.title.clone());
-            changed = true;
-        }
-        let hint_text = next
-            .process_hint
-            .as_deref()
-            .map(|program| format!("({program})"))
-            .unwrap_or_default();
-        if sigs.process_hint.get_untracked() != hint_text {
-            sigs.process_hint.set(hint_text);
-            changed = true;
-        }
-        let hint_visible = next.process_hint.is_some();
-        if sigs.process_hint_visible.get_untracked() != hint_visible {
-            sigs.process_hint_visible.set(hint_visible);
-            changed = true;
-        }
-        // Cwd row: text follows the live cwd, visibility follows the setting + presence.
-        let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-        let cwd_text = cwd_path
-            .as_deref()
-            .map(home_relative_path)
-            .unwrap_or_default();
-        if sigs.cwd.get_untracked() != cwd_text {
-            sigs.cwd.set(cwd_text);
-            changed = true;
-        }
-        let cwd_visible =
-            state.chrome_state.workspaces.pane_show_cwd() && cwd_path.is_some();
-        if sigs.cwd_visible.get_untracked() != cwd_visible {
-            sigs.cwd_visible.set(cwd_visible);
-            changed = true;
-        }
-        for (signal, visible) in [
-            (sigs.title_active_visible, pane_active),
-            (sigs.title_inactive_visible, !pane_active),
-            (sigs.status_idle_visible, next.status == ProcessStatus::Idle),
-            (
-                sigs.status_running_visible,
-                next.status == ProcessStatus::Running,
-            ),
-            (
-                sigs.status_success_visible,
-                next.status == ProcessStatus::Success,
-            ),
-            (
-                sigs.status_error_visible,
-                next.status == ProcessStatus::Error,
-            ),
-        ] {
-            if signal.get_untracked() != visible {
-                signal.set(visible);
-                changed = true;
-            }
-        }
-        let git_visible = next.git_branch.is_some();
-        if sigs.git_visible.get_untracked() != git_visible {
-            sigs.git_visible.set(git_visible);
-            changed = true;
-        }
-        let branch = next.git_branch.unwrap_or_default();
-        if sigs.git_branch.get_untracked() != branch {
-            sigs.git_branch.set(branch.clone());
-            changed = true;
-        }
-        let branch_display = truncate_sidebar_git_branch(&branch);
-        if sigs.git_branch_display.get_untracked() != branch_display {
-            sigs.git_branch_display.set(branch_display);
-            changed = true;
-        }
-        for (visible_signal, label_signal, value) in [
-            (sigs.git_added_visible, sigs.git_added, next.git_added),
-            (
-                sigs.git_modified_visible,
-                sigs.git_modified,
-                next.git_modified,
-            ),
-            (sigs.git_deleted_visible, sigs.git_deleted, next.git_deleted),
-        ] {
-            let visible = value.is_some();
-            if visible_signal.get_untracked() != visible {
-                visible_signal.set(visible);
-                changed = true;
-            }
-            let label = value.unwrap_or_default();
-            if label_signal.get_untracked() != label {
-                label_signal.set(label);
-                changed = true;
-            }
-        }
-    }
-    if let Some(status) = &retained.signals.status {
-        let next = chrome_status(state);
-        if status.get_untracked() != next {
-            status.set(next);
-            changed = true;
-        }
-    }
-    changed
 }
 
 /// Build the chrome root tree from app state (the expensive part — creates the
@@ -4287,43 +2130,22 @@ mod tests {
         );
     }
 
+    /// **A placement is lettered by its own mount id** — `workspaces` and `workspaces.2` are two
+    /// targets, not one. Asserted through the door every target now uses rather than a host-side
+    /// projection helper, which is what this replaced (F003/P082/T427).
     #[test]
-    fn dock_keycap_projects_the_pick_by_mount_id() {
-        let candidates = [
-            ('a', "workspaces".to_string()),
-            ('b', "workspaces.2".to_string()),
-        ];
-        assert_eq!(dock_keycap("workspaces", &candidates), Some("a".to_string()));
+    fn a_second_placement_of_a_container_is_its_own_letter_target() {
+        let mode = crate::app_state::InputMode::DockPick {
+            candidates: vec![
+                ('a', "workspaces".to_string()),
+                ('b', "workspaces.2".to_string()),
+            ],
+        };
+        let wanted = crate::chrome::hint::wanted_for_tests(&mode);
         assert_eq!(
-            dock_keycap("workspaces.2", &candidates),
-            Some("b".to_string()),
-            "a second placement of the same container is its own candidate",
+            wanted,
+            vec![("workspaces".to_string(), 'a'), ("workspaces.2".to_string(), 'b')],
         );
-        assert_eq!(dock_keycap("docker", &candidates), None);
-        assert_eq!(dock_keycap("workspaces", &[]), None, "no pick, no keycap");
-    }
-
-    #[test]
-    fn pick_keycap_projects_candidates() {
-        let p1 = PaneId(1);
-        let p2 = PaneId(2);
-        let p3 = PaneId(3);
-        let cands = [('a', p1), ('s', p2)];
-        // No pick active → no keycap.
-        assert_eq!(pick_keycap(p1, Some(p3), None), None);
-        // Candidate pane → its letter.
-        assert_eq!(
-            pick_keycap(p1, Some(p3), Some(&cands)),
-            Some("a".to_string())
-        );
-        assert_eq!(
-            pick_keycap(p2, Some(p3), Some(&cands)),
-            Some("s".to_string())
-        );
-        // Non-candidate pane → none.
-        assert_eq!(pick_keycap(p3, Some(p1), Some(&cands)), None);
-        // The focused pane is never a target, even if listed as a candidate.
-        assert_eq!(pick_keycap(p1, Some(p1), Some(&cands)), None);
     }
 
     #[test]
@@ -4403,7 +2225,7 @@ mod tests {
     fn app_theme_to_gui_theme_preserves_loaded_palette_tokens() {
         let theme = heca_config::theme::load("mocha");
         let font_config = heca_config::font::FontConfig::default();
-        let gui = app_theme_to_gui_theme(&theme, &font_config);
+        let gui = super::theme::app_theme_to_gui_theme(&theme, &font_config);
 
         assert_eq!(gui.colors.name, theme.name);
         assert_eq!(gui.colors.background, theme.background);
@@ -4430,17 +2252,17 @@ mod tests {
         let latte = heca_config::theme::load("latte");
 
         assert_eq!(
-            top_bottom_pane_background_color(&tron),
+            super::theme::top_bottom_pane_background_color(&tron),
             tron.effective_top_bottom_pane_background()
         );
-        assert_eq!(chrome_surface_color(&tron), tron.surface);
+        assert_eq!(super::theme::chrome_surface_color(&tron), tron.surface);
         assert_eq!(
-            chrome_surface_color(&latte),
+            super::theme::chrome_surface_color(&latte),
             latte.surface
         );
         assert_ne!(
             latte.effective_left_sidebar_background(),
-            chrome_surface_color(&latte)
+            super::theme::chrome_surface_color(&latte)
         );
     }
 
@@ -4454,11 +2276,11 @@ mod tests {
 
         let left_bg = theme.effective_left_sidebar_background();
         assert_ne!(
-            chrome_bar_color_for(&theme, &appearance),
-            sidebar_shell_background_color_for(left_bg, &appearance)
+            super::theme::chrome_bar_color_for(&theme, &appearance),
+            super::theme::sidebar_shell_background_color_for(left_bg, &appearance)
         );
         assert_eq!(
-            sidebar_shell_background_color_for(left_bg, &appearance).r,
+            super::theme::sidebar_shell_background_color_for(left_bg, &appearance).r,
             theme.effective_left_sidebar_background().r
         );
     }
@@ -4738,25 +2560,25 @@ mod tests {
             content,
         );
 
-        assert_eq!(
-            signals.dock_hint.len(),
-            1,
-            "one mounted container ⇒ one dock-letter signal, keyed by its mount id",
-        );
-        let (container, hint) = &signals.dock_hint[0];
-        assert_eq!(container, "workspaces");
-
+        // **The dock is lettered by the identity it declares**, through the one door every other
+        // target uses — `offer_hint_by_key`, matching its `scope_key`. No per-widget signal list,
+        // and nothing projected onto it every frame (F003/P082/T427).
         let letter_drawn = |shell: &mut Flex| {
             super::paint_chrome_root(shell, 280.0, 600.0, &theme)
                 .iter()
                 .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "a"))
         };
         assert!(!letter_drawn(&mut shell), "no pick open, no keycap");
-        hint.set(Some("a".to_string()));
+        assert!(
+            heca_grid_ui::offer_hint_by_key(&shell, "workspaces", Some("a".to_string())),
+            "the mounted container answers to its own mount id",
+        );
         assert!(
             letter_drawn(&mut shell),
             "the dock's letter is stamped over it while the pick is open",
         );
+        heca_grid_ui::offer_hint_by_key(&shell, "workspaces", None);
+        assert!(!letter_drawn(&mut shell), "and withdrawn when the pick ends");
     }
 
     #[test]
@@ -4837,7 +2659,7 @@ mod tests {
             };
         }
 
-        sync_pane_runtime_state(&session, &chrome.workspaces);
+        super::signals::sync_pane_runtime_state(&session, &chrome.workspaces);
 
         let tiled = chrome.workspaces.with_pane_runtime(PaneId(10), |runtime| {
             runtime.expect("tiled runtime").snapshot()
@@ -4885,7 +2707,7 @@ mod tests {
             );
         }
 
-        sync_pane_runtime_state(&session, &chrome.workspaces);
+        super::signals::sync_pane_runtime_state(&session, &chrome.workspaces);
         assert!(
             chrome
                 .workspaces
@@ -4898,7 +2720,7 @@ mod tests {
             .scrolling
             .columns
             .clear();
-        sync_pane_runtime_state(&session, &chrome.workspaces);
+        super::signals::sync_pane_runtime_state(&session, &chrome.workspaces);
 
         assert!(
             !chrome
@@ -4985,7 +2807,7 @@ mod tests {
 
         // Renamed pane → the `pane_name` segment produces a bar (the custom name wins over
         // the program name, unlike `app_name` which always tracks the process).
-        let bar = build_pane_info_bar(
+        let bar = pane_header::build_pane_info_bar(
             &programs,
             "shell",
             Some("Editor"),
@@ -4998,7 +2820,7 @@ mod tests {
         assert!(bar.is_some());
 
         // Un-renamed pane → still produces a bar (falls back to the program name, never empty).
-        let bar = build_pane_info_bar(
+        let bar = pane_header::build_pane_info_bar(
             &programs,
             "shell",
             None,
@@ -5021,12 +2843,12 @@ mod tests {
         // Pane-parameterized actions carry the pane/column and don't need focus. Icons
         // resolve from the action catalog (close = FolderSimpleMinus; add-pane = the
         // add_pane_to_column identity → FolderSimplePlus).
-        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
+        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
         assert_eq!(g, Glyph::FolderSimpleMinus);
         assert_eq!(a, WmAction::ClosePaneById { pane_id: pid });
         assert!(!focus);
 
-        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
+        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
         assert_eq!(g, Glyph::FolderSimplePlus);
         assert_eq!(
             a,
@@ -5038,12 +2860,12 @@ mod tests {
         assert!(!focus);
 
         // Active-targeted actions use the requested icons + need focus-first.
-        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Zoom, pid, 0, 0);
+        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Zoom, pid, 0, 0);
         assert_eq!(g, Glyph::FrameCorners);
         assert_eq!(a, WmAction::ZoomColumn);
         assert!(focus);
 
-        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Float, pid, 0, 0);
+        let (g, a, _, focus) = super::pane_header::pane_action_spec(&catalog, PaneAction::Float, pid, 0, 0);
         assert_eq!(g, Glyph::Cards);
         assert_eq!(a, WmAction::Float);
         assert!(focus);
@@ -5055,12 +2877,12 @@ mod tests {
         let catalog = crate::actions::ActionCatalog::with_builtins();
         // Driven by the action policy: float/close are focused-pane-local (kept),
         // split/zoom/move are tiled-only (hidden when floating).
-        assert!(super::pane_action_visible_when_floating(&catalog, PaneAction::Float));
-        assert!(super::pane_action_visible_when_floating(&catalog, PaneAction::Close));
-        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::Split));
-        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::Zoom));
-        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::MoveLeft));
-        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::MoveRight));
+        assert!(super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Float));
+        assert!(super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Close));
+        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Split));
+        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::Zoom));
+        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::MoveLeft));
+        assert!(!super::pane_header::pane_action_visible_when_floating(&catalog, PaneAction::MoveRight));
     }
 
     #[test]
@@ -5089,8 +2911,8 @@ mod tests {
             hints: &'a ActionShortcuts,
             catalog: &'a crate::actions::ActionCatalog,
             col_idx: usize,
-        ) -> PaneHeaderContent<'a> {
-            PaneHeaderContent {
+        ) -> super::pane_header::PaneHeaderContent<'a> {
+            super::pane_header::PaneHeaderContent {
                 programs,
                 fallback_name: "shell",
                 custom_name: None,
@@ -5105,7 +2927,7 @@ mod tests {
                 catalog,
             }
         }
-        let base = pane_header_key(
+        let base = super::pane_header::pane_header_key(
             &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
             15.0,
             300.0,
@@ -5113,7 +2935,7 @@ mod tests {
         // Same inputs ⇒ same key (no needless rebuild).
         assert_eq!(
             base,
-            pane_header_key(
+            super::pane_header::pane_header_key(
                 &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
                 15.0,
                 300.0
@@ -5122,7 +2944,7 @@ mod tests {
         // A different column ⇒ different key (re-bakes the split action's col_idx).
         assert_ne!(
             base,
-            pane_header_key(
+            super::pane_header::pane_header_key(
                 &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 1),
                 15.0,
                 300.0
@@ -5136,7 +2958,7 @@ mod tests {
         });
         assert_ne!(
             base,
-            pane_header_key(
+            super::pane_header::pane_header_key(
                 &content(&programs, &segments, &actions, &other, &hints, &catalog, 0),
                 15.0,
                 300.0
@@ -5145,7 +2967,7 @@ mod tests {
         // A large width change ⇒ different key (re-truncate); tiny jitter ⇒ same bucket.
         assert_ne!(
             base,
-            pane_header_key(
+            super::pane_header::pane_header_key(
                 &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
                 15.0,
                 120.0
@@ -5153,7 +2975,7 @@ mod tests {
         );
         assert_eq!(
             base,
-            pane_header_key(
+            super::pane_header::pane_header_key(
                 &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
                 15.0,
                 295.0

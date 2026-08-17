@@ -39,7 +39,8 @@
     "fc620445-244f-494d-8ae8-60c88ad14ffa",
     "4e627ced-c92e-49ec-89f7-e6c1fb7831ee",
     "791ea225-2796-42ae-a534-5235203a9f50",
-    "d89b63d6-04f2-42f2-9acc-b947eed95306"
+    "d89b63d6-04f2-42f2-9acc-b947eed95306",
+    "9a43878a-20c7-4ed6-9728-439ea5ea7896"
   ],
   "tasks": [
     {
@@ -788,10 +789,32 @@
       "completedAt": "2026-08-11T14:36:40.984Z",
       "createdAt": "2026-08-11T14:04:24.706Z",
       "updatedAt": "2026-08-11T14:36:40.984Z"
+    },
+    {
+      "id": "9a43878a-20c7-4ed6-9728-439ea5ea7896",
+      "phaseId": "0e4c21e5-1cf7-4c0a-a00e-76ffbef60703",
+      "number": 442,
+      "shortId": "Z3QBC",
+      "priority": 19,
+      "shortName": "a-key-event-is-missing-what-a",
+      "title": "A key event is missing what a pointer event has — modifiers, and a typed accessor",
+      "status": "planned",
+      "description": "Antonio, 2026-08-17, on being told modifiers are not on the key event: \"as always: missing api despite i'm saying dom like since 3344 years.\"\n\nThe event system is meant to be DOM-shaped. For the pointer it is. For keys, three things are missing, and one of them answers wrongly rather than not at all.\n\n1. ⚠️ EventCx::modifiers() LIES ON A KEY EVENT (heca-grid-ui/src/event.rs:839).\n   pub fn modifiers(&self) -> Modifiers {\n       self.event.pointer().map(|p| p.modifiers)\n           .or_else(|| self.event.drag().map(|d| d.modifiers))\n           .unwrap_or_default()          // a key event lands here\n   }\n   Ask \"was shift held?\" inside a key handler and you get false — whether it was held or not. A silent wrong answer, not a missing one, so nothing fails and no test notices.\n\n2. Event::Key does not carry modifiers at all (event.rs:347): `Key { key: GridKey, pressed: bool }`. PointerEvent has a modifiers field (event.rs:246); DragEvent has one (event.rs:317, 459). Keys are the only hole. Modifiers arrive separately as Event::ModifiersChanged, broadcast to the whole tree, and each widget is expected to track the state itself — which is a rule in N widgets rather than in the API, and it means a handler reading modifiers is reading a state that may have moved on.\n\n3. EventCx has pointer() and drag() accessors but NO key(). So every key handler re-destructures the enum by hand:\n       if let Event::Key { key: GridKey::Char('x'), .. } = cx.event() { ... }\n   even though on_key_up already knows it is a key event and already filtered on release (builders.rs:601). It should read: if cx.key() == Some(GridKey::Char('x')).\n\nTARGET SHAPE: a key handler can ask the same questions a pointer handler can — which key, and which modifiers were held — off the event it was given, with no tracking of its own and no destructuring boilerplate.\n\nWATCH OUT\n- GridKey is names (Char('x'), Escape, ArrowLeft), not numeric key codes. Keep it that way — key codes are layout-dependent, which is why browsers deprecated them.\n- Whatever carries the modifiers must be the ones held WHEN THE KEY HAPPENED, not the current global state. The comment at event.rs:458 already says why that distinction matters.\n- Do not leave modifiers() answering for pointers only. If a caller cannot get the truth, it must not get a confident false.\n\nSurfaced while designing the hint work (F003/P082); independent of it.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-17T12:10:33.306Z",
+      "updatedAt": "2026-08-17T12:10:33.306Z"
     }
   ],
   "createdAt": "2026-07-26T16:49:11.138Z",
-  "updatedAt": "2026-08-11T23:08:49.806Z",
+  "updatedAt": "2026-08-17T12:10:33.306Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-08-11T14:05:35.021Z",
   "handoffReadAt": "",

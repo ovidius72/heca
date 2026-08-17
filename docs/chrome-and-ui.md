@@ -48,7 +48,7 @@ Two things this rules out permanently, and they have both been tried:
 - **A registry parameter on the bridge.** `realize` once took a `HintTargets` sink so the leader-key
   picker could reach a described node; the native side used a *different*, host-private registry for
   the same feature. Two doors, and the plugin's was the poorer one. Deleted in F004/P084/T399: a
-  node declares `peek` and the framework collects it out of the laid-out tree.
+  node declares `hint` and the framework collects it out of the laid-out tree.
 - **A host-private composite as the answer to "and also do X first".** `FocusPaneThenAction` /
   `FocusContainerThenAction` are `pub(crate)`, so a plugin cannot say them. If the behaviour is
   needed it gets a **name** a plugin can name, like `focus_pane` and `unfocus_dock` have.
@@ -382,17 +382,31 @@ leader key** (`prefix+/`): the host assigns the letters, draws them and runs the
 
 **And a pick is not a click** (F004/P084/T399). They are different gestures and a node may answer
 them differently — heca's own sidebar row activates the pane and *leaves* the sidebar on a click,
-and stays in it on a peek. Bind `peek` when they differ; leave it unbound and a pick does what a
+and stays in it on a hint. Bind `hint` when they differ; leave it unbound and a pick does what a
 press does:
 
 ```rust
 Row::new()
     .on_press(intent("docker.select", { "id": id }))   // go there
-    .on_peek(intent("docker.reveal", { "id": id }))    // look at it, stay where I am
+    .on_hint(intent("docker.reveal", { "id": id }))    // look at it, stay where I am
 ```
 
-*(`.hintable(false)` was written here as the opt-out and never existed. There is nothing to opt out
-of: a node with neither `press` nor `peek` is not a pick target.)*
+**`.hintable(false)` is the opt-out** (F003/P082/T441). Anything you can act on — a click, a double
+click, a key — wears a letter with nothing declared, so the only thing left to say is "not me":
+
+```rust
+Button::new("×").hintable(false)   // a close button on every row would eat a letter each
+```
+
+`hintable(true)` is the default and changes nothing on a widget nobody can act on: there would be
+nothing for the letter to run.
+
+> **Correction, 2026-08-17.** This paragraph used to say `.hintable(false)` *"was written here as the
+> opt-out and never existed. There is nothing to opt out of."* That was wrong, and how the decision
+> was lost the first time: automatic-plus-opt-out was the original documented design (quoted in
+> `BACKLOG.md:1490`), the native side only ever implemented explicit opt-in, and a later session
+> rewrote **the documentation to match the code** rather than the other way round. When the code and
+> a decision disagree, the code is what changes. Full record: `docs/hint-architecture.md` § 2.
 
 ---
 
@@ -448,7 +462,7 @@ untrusted input and is treated that way.
 | 2026-07-30 | A row's click, double-click and right-click are **named intents**, declared per item kind — never closures — so click, picker, menu, key and RPC are one path. (§2.11) |
 | 2026-07-27 | **The model and the bridge move below the app** (`heca-view`, `heca-view-realize`, F003/P017/T009), so a plugin can depend on the vocabulary without the renderer, and anything that can build widgets can render a description. |
 | 2026-08-07 | ⭐⭐ **RULE ZERO**: a capability is **one builder on the widget**. If getting it needs a registry, an id or a `pub(crate)` type, the API is the bug. Outranks the architecture rules. (`AGENTS.md`) |
-| 2026-08-11 | **A pick is not a click.** `peek` is its own event, defaulting to `press`. The hint registry — host-side *and* the `HintTargets` sink `realize` took — is deleted; a node declares what a pick does and the framework collects it out of the laid-out tree. (F004/P084/T399) |
+| 2026-08-11 | **A pick is not a click.** `hint` is its own event, defaulting to `press`. The hint registry — host-side *and* the `HintTargets` sink `realize` took — is deleted; a node declares what a pick does and the framework collects it out of the laid-out tree. (F004/P084/T399) |
 | 2026-08-11 | **A gesture names the seating it was declared in.** A widget built inside a mounted container carries that mount on the intent it emits, so the same container seated twice has rows that each answer for themselves — nothing is resolved back to an instance. `owning_mount` answers only for a call with no element behind it (a keybinding, a palette entry, RPC without `--dock`). (F004/P084/T399) |
 
 
@@ -1766,7 +1780,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 - **Oriented** shell: vertical (sidebars) or horizontal (top/bottom bars). One widget covers all four regions.
 - Toggle/collapse, **mode-aware**: informs children of the display mode via a signal. **In the app today
   the modes used are `Expanded` and `Hidden`** (`RegionMode::CollapsedRail` stays in the enum, unused).
-- **[DEFERRED] Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/peek — P2). **Two rail flavors (locked 2026-06-10):** a *tool* dock **folds** to a single icon (`DockFrame::rail(mode_signal, Glyph)`); a *list* dock (workspaces/columns/panes) **enumerates** — one `RailCell` (square icon cell) **per item**. **Icons by default**, not letters. The move/swap/focus-select **pick letters** appear over the cells via the generic **`KeyHint`** overlay, driven by a host-owned `Signal<Option<String>>`. **Shipped (grid-ui side):** `RailCell` + `KeyHint` + showcase `p`-pick demo. **App-side mapping: dropped (see the update note above); revive as the generic render-per-mode path if a Provider needs a rail.**
+- **[DEFERRED] Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/hint — P2). **Two rail flavors (locked 2026-06-10):** a *tool* dock **folds** to a single icon (`DockFrame::rail(mode_signal, Glyph)`); a *list* dock (workspaces/columns/panes) **enumerates** — one `RailCell` (square icon cell) **per item**. **Icons by default**, not letters. The move/swap/focus-select **pick letters** appear over the cells via the generic **`KeyHint`** overlay, driven by a host-owned `Signal<Option<String>>`. **Shipped (grid-ui side):** `RailCell` + `KeyHint` + showcase `p`-pick demo. **App-side mapping: dropped (see the update note above); revive as the generic render-per-mode path if a Provider needs a rail.**
 - Stacks `DockFrame`s, scrolls (§2.8), exposes **Dock-level drop targets**.
 - **No** workspace/tree/expand/drag *semantics* — those belong to the mounted Dock. Replaces the old "Sidebar = tree-nav".
 - **Status:** new.

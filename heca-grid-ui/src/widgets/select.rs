@@ -702,7 +702,7 @@ impl Component for Select {
                             None,
                         );
                     }
-                    child.paint(cx);
+                    crate::component::paint_child(child, cx);
                 }
 
                 // Scrollbar: a thumb sized/positioned by the visible window.

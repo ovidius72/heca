@@ -60,7 +60,7 @@ pub use builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, WidgetIntent, collect_damage,
-    deliver, dispatch, overlay_occluded_at,
+    deliver, dispatch, overlay_occluded_at, paint_child,
     install_frame_request, request_frame,
 };
 pub use event::{
@@ -72,7 +72,10 @@ pub use menu::{has_menu_sink, install_menu_sink, open_for_keyboard};
 pub use pointer::{PointerState, clear_hover, hit_test};
 pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
-pub use hint::{collect_peeks, fire_peek};
+pub use hint::{
+    clear_hints, collect_actions, collect_hints, fire_action, fire_hint, offer_hint,
+    offer_hint_by_key, DeclaredAction,
+};
 pub use nav::{collect_nav_keys, nav_key_at};
 pub use effects::{Attention, Eased, Fade, Flash};
 pub use focus::FocusManager;
@@ -102,7 +105,10 @@ pub mod prelude {
     pub use crate::event::{DragEvent, EventCx, EventKind, PointerButton, PointerEvent};
     pub use crate::keymap::{KeyChord, Keymap};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
-    pub use crate::hint::{collect_peeks, fire_peek};
+    pub use crate::hint::{
+        clear_hints, collect_actions, collect_hints, fire_action, fire_hint, offer_hint,
+        offer_hint_by_key,
+    };
     pub use crate::nav::{collect_nav_keys, nav_key_at};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};

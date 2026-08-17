@@ -11,7 +11,6 @@ use super::seams::{DockRegistries, DockSeams};
 use super::{column_nav_key, column_row_items, pane_row::PaneRow, ColumnEntry, MENU_COLUMN};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::reactive::signal;
 use heca_grid_ui::widgets::{HintPlacement, KeyHint, MarkerGroup};
 
 /// A generic [`MarkerGroup`] (left marker bar + grip gutter) holding the column's stacked pane
@@ -73,15 +72,11 @@ impl ColumnGroup<'_> {
             column_nav_key(ws_idx, column.col_idx),
             col.nav_state(),
         ));
-        // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can
-        // stamp this column's letter over it (tinted `success`, distinct from pane/workspace
-        // picks). Driven each frame in `sync_chrome_signals`.
-        let col_hint = signal::<Option<String>>(None);
-        reg.signals
-            .col_hint
-            .push((ws_idx, column.col_idx, col_hint));
+        // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can stamp this
+        // column's letter over it (tinted `success`, distinct from pane/workspace picks). **The
+        // letter is offered by nav_key** (`chrome::hint`) and drawn by the widget — nothing is
+        // registered here and nothing is projected onto it every frame.
         let hinted = KeyHint::new(col)
-            .hint(col_hint)
             .color(seams.theme.colors.success)
             .placement(HintPlacement::CenterRight);
         let (watch, _repaint) = RepaintWatch::new(hinted);

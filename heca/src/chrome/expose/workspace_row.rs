@@ -338,4 +338,37 @@ mod tests {
             "and it still lands inside the row: {f:?}",
         );
     }
+
+    /// **The air between the cards is the same everywhere** (Antonio, driving, 2026-08-13: *"the
+    /// only thing i see here is the different gap between the first 3/4 card at the top and the
+    /// last"*).
+    ///
+    /// A column's width is a percentage of the map's extent, so its boundaries land on fractional
+    /// pixels; the air between two columns is made of **two paddings**, one from each. When a
+    /// spacing token resolves to half a pixel the two sides round in opposite directions and the
+    /// gap comes out 6, 7 or 8 where every one should be 7 — a 14% variation on a 7px gap, which is
+    /// exactly the size of thing an eye reads as an uneven rhythm without being able to name it.
+    ///
+    /// Fixed in `heca-grid-ui`'s layout pass, where a spacing token now resolves to a whole pixel.
+    /// This asserts the property rather than the value, so it holds if the token or the font moves.
+    #[test]
+    fn the_air_between_the_columns_is_the_same_everywhere() {
+        let widths: Vec<f64> = vec![300.0; 14];
+        let ws = workspace(&widths, vec![]);
+        let extent: f64 = widths.iter().sum();
+        let root = row(&ws, extent, 1900.0, 600.0);
+
+        let mut edges = Vec::new();
+        for i in 0..widths.len() {
+            let c = card_of(root.as_ref(), &pane_nav_key(PaneId(i as u64 + 1)))
+                .unwrap_or_else(|| panic!("card {i} of the row"));
+            edges.push((c.loc.x, c.loc.x + c.size.w));
+        }
+        let gaps: Vec<f64> = edges.windows(2).map(|w| w[1].0 - w[0].1).collect();
+        let first = gaps[0];
+        assert!(
+            gaps.iter().all(|g| (g - first).abs() < 0.01),
+            "the cards do not sit on an even rhythm: {gaps:?}",
+        );
+    }
 }

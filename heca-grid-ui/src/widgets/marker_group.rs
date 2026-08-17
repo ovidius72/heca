@@ -16,7 +16,7 @@
 //!   A pointer press in the gutter resolves to the *group* (move the whole group);
 //!   a press on a child row resolves to the *row* — innermost-first hit-testing
 //!   makes the gutter the group's drag handle for free.
-//! - **Pick/peek**: wrap the group in [`KeyHint`](super::KeyHint); its keycap is an
+//! - **Pick/hint**: wrap the group in [`KeyHint`](super::KeyHint); its keycap is an
 //!   overlay anchored at the **top of the bar**, so it can render larger than the
 //!   thin gutter.
 //!

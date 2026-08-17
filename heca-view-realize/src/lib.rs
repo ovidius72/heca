@@ -16,9 +16,9 @@
 //! not an app type, so this mapper can live and be called below `heca` (F003/P017/T009). What an
 //! intent means is the host's business; the app wraps it as `InteractionIntent::View`.
 //!
-//! The universal picker (`prefix+/`) needs no seam at all: a node's `peek` event (defaulting to its
-//! `press`) is written straight into the widget's own `Base::peek` slot, and the framework collects
-//! the declarations out of the laid-out tree ([`collect_peeks`](heca_grid_ui::collect_peeks)). There
+//! The universal picker (`prefix+/`) needs no seam at all: a node's `hint` event (defaulting to its
+//! `press`) is written straight into the widget's own `Base::hint` slot, and the framework collects
+//! the declarations out of the laid-out tree ([`collect_hints`](heca_grid_ui::collect_hints)). There
 //! used to be a `HintTargets` registry sink here, mirroring a host-side registry that mapped an
 //! opaque id back to a `pub(crate)` app enum — two doors onto one feature, and the plugin-facing
 //! one was the second-class half.
@@ -126,16 +126,16 @@ pub fn realize(
     }
     // **What a leader-key pick does to this node**, read once here for every kind, like style.
     //
-    // Written into the widget's own [`Base::peek`] slot rather than through a wrapper. The native
-    // authoring surface for a peek is `KeyHint::on_peek` — a builder on a wrapper, so that
-    // `Label::on_peek` never has to exist — and the declarative authoring surface is this event.
+    // Written into the widget's own [`Base::hint`] slot rather than through a wrapper. The native
+    // authoring surface for a hint is `KeyHint::on_hint` — a builder on a wrapper, so that
+    // `Label::on_hint` never has to exist — and the declarative authoring surface is this event.
     // Two authoring models, one slot, and the framework's collector sees no difference between
     // them: that is what makes a described row and a native row equally pickable. A wrapper here
     // would be a second widget in the tree that the description never asked for, sitting between a
     // node and its parent with its own layout.
-    if let Some(carrier) = peek_intent(node) {
+    if let Some(carrier) = hint_intent(node) {
         let emit = emit.clone();
-        realized.base_mut().peek = Some(Box::new(move || emit(carrier.clone())));
+        realized.base_mut().hint = Some(Box::new(move || emit(carrier.clone())));
     }
     realized
 }
@@ -629,13 +629,13 @@ fn press_intent(node: &ViewNode) -> Option<Intent> {
 
 /// **What a leader-key pick (`prefix+/`) does to this node.**
 ///
-/// `peek` when the node declares one, otherwise `press` — so every actionable node stays reachable
+/// `hint` when the node declares one, otherwise `press` — so every actionable node stays reachable
 /// by letter for free (the "everything is an action" rule), and a node that wants a pick to mean
 /// something *else* than a click says so. That difference is the whole reason the two are separate
 /// events: heca's own sidebar row activates the pane and leaves on a click, and stays in the
-/// sidebar on a peek. Pointing one intent at both is what made `prefix+/` leave the sidebar.
-fn peek_intent(node: &ViewNode) -> Option<Intent> {
-    node.intent("peek").or_else(|| node.intent("press")).cloned()
+/// sidebar on a hint pick. Pointing one intent at both is what made `prefix+/` leave the sidebar.
+fn hint_intent(node: &ViewNode) -> Option<Intent> {
+    node.intent("hint").or_else(|| node.intent("press")).cloned()
 }
 
 /// The node's `"change"` intent as a carrier (value widgets — input/toggle/checkbox). Not a pick
@@ -1166,8 +1166,8 @@ mod tests {
     /// **What the framework's picker will find in a realized tree**, in document order: one path
     /// per node that declared what a pick does to it. There is no registry to interrogate any more
     /// — the declarations are in the tree, so the tests read them from the tree.
-    fn peeks(root: &dyn Component) -> Vec<Vec<usize>> {
-        heca_grid_ui::collect_peeks(root)
+    fn hints(root: &dyn Component) -> Vec<Vec<usize>> {
+        heca_grid_ui::collect_hints(root)
             .into_iter()
             .map(|(path, _)| path)
             .collect()
@@ -1219,14 +1219,14 @@ mod tests {
         assert_eq!(row.base().children.len(), 2, "row: two buttons");
     }
 
-    /// Every actionable node (a `"press"` binding) declares exactly one peek carrying the node's
+    /// Every actionable node (a `"press"` binding) declares exactly one hint carrying the node's
     /// own intent — so the picker fires the identical action a click would. Non-actionable nodes
     /// declare nothing.
     #[test]
-    fn actionable_nodes_declare_the_peek_their_click_would_fire() {
+    fn actionable_nodes_declare_the_hint_their_click_would_fire() {
         let (emit, fired) = recording_emitter();
-        let root = realize(&confirm_tree(), &Theme::default(), &emit, &mut FormBindings::default());
-        let found = peeks(root.as_ref());
+        let mut root = realize(&confirm_tree(), &Theme::default(), &emit, &mut FormBindings::default());
+        let found = hints(root.as_ref());
         assert_eq!(
             found.len(),
             2,
@@ -1235,26 +1235,26 @@ mod tests {
         // Document order: the row is the column's second child, Cancel its first.
         assert_eq!(found, vec![vec![1, 0], vec![1, 1]]);
         for path in &found {
-            assert!(heca_grid_ui::fire_peek(root.as_ref(), path));
+            assert!(heca_grid_ui::fire_hint(root.as_mut(), path));
         }
         let actions: Vec<String> = fired.borrow().iter().map(|i| i.action.clone()).collect();
         assert_eq!(actions, vec!["confirm_cancel", "confirm_ok"]);
     }
 
-    /// **A pick is not a click.** A node that declares its own `peek` fires *that*, not its
+    /// **A pick is not a click.** A node that declares its own `hint` fires *that*, not its
     /// `press` — which is the whole reason the two are separate events: heca's sidebar row
-    /// activates the pane and leaves on a click, and stays in the sidebar on a peek.
+    /// activates the pane and leaves on a click, and stays in the sidebar on a hint pick.
     #[test]
-    fn a_declared_peek_wins_over_the_press() {
+    fn a_declared_hint_wins_over_the_press() {
         let (emit, fired) = recording_emitter();
         let node = ViewNode::new(WidgetKind::Row)
             .on_press(Intent::new("activate_and_leave"))
-            .on_peek(Intent::new("peek_and_stay"));
-        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
-        assert!(heca_grid_ui::fire_peek(row.as_ref(), &[]));
+            .on_hint(Intent::new("hint_and_stay"));
+        let mut row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert!(heca_grid_ui::fire_hint(row.as_mut(), &[]));
         assert_eq!(
             fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
-            vec!["peek_and_stay"],
+            vec!["hint_and_stay"],
         );
     }
 
@@ -1288,7 +1288,7 @@ mod tests {
         assert_eq!(column[0].base().children.len(), 2, "row: icon + label");
 
         // The button is still one pick target, whatever it composes.
-        assert_eq!(peeks(button.as_ref()), vec![Vec::<usize>::new()], "the button, not its content");
+        assert_eq!(hints(button.as_ref()), vec![Vec::<usize>::new()], "the button, not its content");
     }
 
     /// A **childless** Button node falls back to the scalar sugar — `text` (+ an optional leading
@@ -1998,7 +1998,7 @@ mod tests {
 
         assert_eq!(row.base().children.len(), 2, "it holds its composed content");
         assert!(row.base().focusable, "an actionable row is focusable");
-        assert_eq!(peeks(row.as_ref()), vec![Vec::<usize>::new()], "one pick target: the row itself");
+        assert_eq!(hints(row.as_ref()), vec![Vec::<usize>::new()], "one pick target: the row itself");
 
         let b = row.base().bounds;
         // A click is a press and the release that completes it — pressing and dragging off the row
@@ -2028,7 +2028,7 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Label).text("just content"));
         let row = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         assert!(!row.base().focusable);
-        assert!(peeks(row.as_ref()).is_empty());
+        assert!(hints(row.as_ref()).is_empty());
         assert_eq!(row.base().children.len(), 1, "it still holds its content");
     }
 
@@ -2040,7 +2040,7 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Grid);
         let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         assert_eq!(realized.base().children.len(), 0);
-        assert!(peeks(realized.as_ref()).is_empty(), "an empty fallback declares no peek");
+        assert!(hints(realized.as_ref()).is_empty(), "an empty fallback declares no hint");
     }
 
     // ── Options (Choice / Select / Tabs) ──
@@ -2260,7 +2260,7 @@ mod tests {
 
         let markers = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         assert_eq!(markers.base().children.len(), 2, "the two realized rows");
-        assert!(peeks(markers.as_ref()).is_empty(), "an indicator is not a pick target");
+        assert!(hints(markers.as_ref()).is_empty(), "an indicator is not a pick target");
     }
 
     // ── Grid (tracks / areas / placement) ──
@@ -2694,14 +2694,14 @@ mod tests {
     /// A `"change"` binding (value widgets) fires the intent but is NOT a pick target (a value
     /// change isn't a gesture a letter can stand for); a `"press"` binding (Item) is.
     #[test]
-    fn change_binding_declares_no_peek_but_press_does() {
+    fn change_binding_declares_no_hint_but_press_does() {
         let input = realize(
             &ViewNode::new(WidgetKind::Input).on("change", Intent::new("q_changed")),
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert!(peeks(input.as_ref()).is_empty(), "a change binding is not a pick target");
+        assert!(hints(input.as_ref()).is_empty(), "a change binding is not a pick target");
 
         let item = realize(
             &ViewNode::new(WidgetKind::Item)
@@ -2711,7 +2711,7 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert_eq!(peeks(item.as_ref()), vec![Vec::<usize>::new()], "an actionable Item is");
+        assert_eq!(hints(item.as_ref()), vec![Vec::<usize>::new()], "an actionable Item is");
     }
 
     /// A value widget with a `"name"` prop is bound into the form; `collect()` reads its current

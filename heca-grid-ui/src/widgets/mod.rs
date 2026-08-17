@@ -29,7 +29,8 @@ mod icon_button;
 mod input;
 mod item;
 mod item_group;
-mod key_hint;
+pub(crate) mod key_hint;
+mod key_hint_group;
 mod label;
 mod marker_group;
 pub mod overlay;
@@ -81,8 +82,9 @@ pub use icon_button::IconButton;
 pub use input::Input;
 pub use item::{ActiveMarker, Item};
 pub use item_group::ItemGroup;
+pub use key_hint_group::KeyHintGroup;
 pub use key_hint::{
-    HintPlacement, KeyCap, KeyHint, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap,
+    HintPlacement, HintStyle, KeyCap, KeyHint, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap,
     paint_keycap_nf,
 };
 pub use label::{Ellipsis, Label};

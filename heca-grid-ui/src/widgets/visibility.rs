@@ -58,7 +58,7 @@ impl Component for Visibility {
         if let Some(child) = self.base.children.first()
             && !child.base().style.layout.hidden
         {
-            child.paint(cx);
+            crate::component::paint_child(child.as_ref(), cx);
         }
     }
 

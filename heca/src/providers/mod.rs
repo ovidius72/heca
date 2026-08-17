@@ -628,7 +628,7 @@ mod tests {
 
         assert!(body.base().children.is_empty(), "one label, no rows");
         assert!(drag.items().is_empty(), "…and it registered nothing host-side");
-        assert!(heca_grid_ui::collect_peeks(body.as_ref()).is_empty(), "…and declared no peek");
+        assert!(heca_grid_ui::collect_hints(body.as_ref()).is_empty(), "…and declared no hint");
     }
 
     #[test]

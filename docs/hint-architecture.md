@@ -1,0 +1,420 @@
+# Hint — one keystroke to any element
+
+*Decided 2026-08-14, refined 2026-08-17. This file is the record; it replaces §5 of the P082 handoff,
+which the planner archives as soon as a task in the phase starts.*
+
+Hint is the keyboard-first primitive: **give an element a one-keystroke address so the keyboard can
+reach it without arrow-walking.** Vimium's link hints, easymotion. It binds no app concept — a
+`Button` declaring a hint says nothing about workspaces, panes or terminals — so by AGENTS.md § 0b it
+lives in `heca-grid-ui`, not in `chrome/`.
+
+---
+
+## 1. The defect this fixes
+
+A target's **identity** and its **pick** were two declarations landing on **different elements**, and
+which one sat on top depended on how the tree happened to be built:
+
+- a **row** carries `nav_key`, and the `KeyHint` wrapping it carries the hint → the pick is on the
+  **parent**;
+- a **mounted dock** names itself on the outer `FocusScope` and declares the pick within → the pick
+  is on a **child**.
+
+So `offer_hint_by_key` had to search **both directions**. Search one only and the target silently
+never gets a letter — which is why sidebar lettering kept breaking in ways nothing caught.
+
+Antonio, 2026-08-14: *"How would a plugin author or another developer know and fix this? That should
+be transparent to clients… I always asked a DOM-like API."*
+
+---
+
+## 2. ⭐ Anything actionable is hintable. Opt out, never in.
+
+**Decided by Antonio, 2026-08-17.** *"every actionable widget gets automatically peekable"*, with a
+property to opt out.
+
+If a widget can be acted on, it gets a letter — no builder, no wrapper, nothing to remember. Picking
+it does what acting on it does. `on_hint` is the **override**, for the case where a pick should do
+something *different* from a click, and `.hintable(false)` is the way out for a widget that should
+never wear a letter.
+
+| what you write | what happens |
+|---|---|
+| nothing | actionable → gets a letter; picking it does what clicking it does |
+| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays) |
+| `.hintable(false)` | never gets a letter, however actionable it is |
+
+`.hintable(true)` is the default and does nothing on a widget that cannot be acted on — there would
+be nothing for the letter to run.
+
+### This was already the design, and it was deleted
+
+`BACKLOG.md:1490` quotes what `docs/chrome-and-ui.md` used to say:
+
+> *"KeyHint is the host's universal leader/vimium overlay… any widget that exposes an `on_press`
+> intent is automatically hintable; the leader assigns letters to every clickable target (app +
+> plugin) and emits the intent on keypress; **opt out with `.hintable(false)`**. One system covers
+> app and plugin alike."*
+
+The native side only ever implemented explicit opt-in. A later session noticed the mismatch and
+**rewrote the documentation to match the code**, so `docs/chrome-and-ui.md:394` now reads:
+
+> *"`.hintable(false)` was written here as the opt-out and never existed. There is nothing to opt out
+> of: a node with neither `press` nor `hint` is not a pick target."*
+
+⚠️ **That sentence is wrong and must be corrected when this lands.** It is the record of a decision
+being overwritten by an implementation gap, and it is exactly how this was lost the first time. When
+the code and a decision disagree, the code is what changes.
+
+### The declarative half already does it
+
+`heca-view-realize/src/lib.rs:638`:
+
+```rust
+node.intent("hint").or_else(|| node.intent("press")).cloned()
+```
+
+So a plugin's two buttons already get letters from their `press` alone. Only native Rust widgets
+still require an explicit declaration — that is the drift this closes.
+
+### Delegation is still not how you declare
+
+Rejected separately and still rejected: a container handler reading `ev.target` is how you *listen*
+for picks in a region, never how a widget becomes pickable. Being actionable is what makes a widget
+pickable; nothing a parent says changes that for its children.
+
+---
+
+## 2a. ⭐ One letter. Always. 52 targets, and that is the limit.
+
+**Decided by Antonio, 2026-08-17:** *"typing 2 letters is not an option. always 1. stay with 52."*
+
+A pick is **one keystroke**. Not a sequence you type and narrow, not a first letter followed by a
+second. `a`–`z` then `A`–`Z` is 52, and past 52 a target simply gets no letter.
+
+Do not propose two-key sequences again. It has been raised and refused; vimium doing it is not an
+argument. Anything that needs more than 52 at once is a **scope** problem — the picker is over too
+much — and the answer is a smaller picker (§2c), never a longer keystroke.
+
+The 52 cap is already how the link picker behaves (`heca/src/app/terminal_host.rs:783`,
+`return hints; // 52-label cap reached`). Keep it, and keep it silent-free: a target with no letter
+is not an error, but it must not look like a broken picker either.
+
+---
+
+## 2b. ⭐ What "actionable" means
+
+**Decided by Antonio, 2026-08-17:** *"if we have on_click, on_key_up, on_double_click also maybe it
+needs to be hintable."*
+
+So: a widget is actionable when it listens for a deliberate act on itself — a click, a double click,
+a key. If it does, it gets a letter.
+
+### How it is asked: read the handler list at pick time
+
+**Antonio, 2026-08-17:** *"we can see when prefix+/ is pressed if there is an actionable event like
+on_click, on_key_up etc… and if it has hintable(false). Can we?"* Yes.
+
+`Handlers::has(kind)` is already public (`heca-grid-ui/src/event.rs:915`) — *"the cheap check the
+router makes before building an event nobody wants."* So the walk that hands out letters asks each
+widget directly:
+
+```
+actionable = has(Click) || has(DoubleClick) || has(Key)
+gets a letter = actionable && !hintable(false)
+```
+
+**No new flag on `Base`.** An earlier plan added one so activation would have a single name; it is not
+needed, because the handler list answers the question well enough and the walk already has to visit
+every widget anyway.
+
+**Note `Widget` is deliberately not in the list.** `EventKind::Widget` covers `Activate`, `Dismiss`,
+`ScrollPageDown` and `MenuUp` alike, so counting it would letter every `ScrollRegion`.
+
+**Known consequence, accepted:** `on_key_down` and `on_key_up` both register as `EventKind::Key` and
+sort themselves out *inside* the closure (`builders.rs:601`), so `has(Key)` is also true of a widget
+that listens only for Escape or arrows. Those get a letter too. Watch it on screen; `.hintable(false)`
+is the fix where it is wrong, not a narrower rule.
+
+**And the cost is nothing.** The walk runs **once, when the picker opens** — not per frame. Afterwards
+each widget just reads its own signal to draw its letter. Do **not** cache the result: trees are
+rebuilt between frames, and a cached path pointing at a widget that has moved is precisely the bug
+this design avoids (`fire_hint`: a rebuilt tree "simply offers a fresh set").
+
+---
+
+## 2c. ⭐ Which targets a picker covers
+
+**Decided by Antonio, 2026-08-17:** *"prefix+/ should work on all surfaces but show hint only on the
+active one"*, and — on why the sidebars do not disappear from it — *"top/bottom/left-right sidebar
+all live in the main surface. the exposé is another overlay."*
+
+So there are two levels, and they already exist in the code:
+
+**The global picker, `prefix+/`.** Letters the surface in front of you:
+
+- the **top-most overlay** when one is up — the exposé, a modal, a plugin's panel;
+- otherwise **the main surface**, which is the sidebars *and* the top/bottom bars *and* the panes,
+  together, as one picture. Focusing a sidebar does not make it a separate surface — that changes
+  who gets keys, not what you are looking at.
+
+This is what `active_hint_targets` (`heca/src/chrome/hint.rs:490`) already does: it walks layers
+front-to-back, stops at the first modal one, and otherwise falls through to chrome + panes together.
+Its occluder rectangles stay too — inside the main surface, a pane behind the left sidebar should not
+wear a letter that draws underneath it.
+
+⚠️ **Note the distinction, it has been got wrong once.** `FocusedSurface`
+(`heca/src/app/input.rs:60`) is `Layer | Dock | Panes` and answers *who holds the keyboard*. That is
+**not** this question. A focused sidebar is its own surface for keys and part of the main surface for
+letters.
+
+**A surface's own picker.** A component declares an action that opens a `KeyHintGroup` over its own
+subtree; config binds the key per surface. The exposé already runs this end to end: it declares
+`heca.expose.pick`, `[[keys.surface]]` binds `pick = "s"`, and `s` letters its cards only. That is
+the answer whenever a picker would otherwise cover too much.
+
+---
+
+## 2d. ⭐ Identity — automatic by default, `id` when you mean to point at it
+
+**Decided by Antonio, 2026-08-17**, on being told stable letters need `nav_key`: *"i don't want plugin
+authors or developers to have to add this strange and confusing name… if i were a developer adding a
+button i will forget to add that."*
+
+### The names go
+
+`nav_key` and `scope_key` say *how the framework uses the string*. **`id`** says what it is, and every
+developer already knows it:
+
+```rust
+Row::new().id("pane:7")             // was .nav_key("pane:7")
+Flex::column().id("workspaces")     // was .scope_key("workspaces")
+```
+
+The real difference the two fields carry is **row vs region** — a `nav_key` is steppable by the
+keyboard cursor, a `scope_key` is not, and folding them naively would make docks turn up as rows you
+can arrow through. But that belongs to *what the widget is*, not to which field was used: a `Row` is
+steppable because it is a `Row`.
+
+### And nobody has to write one
+
+Every widget gets an identity with no author input, derived in three levels — each used only when the
+one above is ambiguous:
+
+1. **its name, inside the nearest named ancestor** — `pane:7 / ×`
+2. **name + index among identically-named siblings in that scope** — `topbar / ×[1]`
+3. nothing else; that is the floor
+
+The name comes from `Component::text_summary()` (`heca-grid-ui/src/component.rs:507`), which already
+computes one *"from the contents, like the web's accessible-name algorithm"* — so the machinery
+exists.
+
+⚠️ **Derive from content, never from position.** `Flex/Row[2]/Button[0]` looks automatic and drifts on
+every tree change — which is the exact bug this is for: expanding a pane moved a button's letter from
+`k` to `j`. Content-based identity does not move. The level-2 index counts only identically-named
+siblings *in one scope*, so it shifts when a `×` is added beside other `×`s and never because
+something changed elsewhere.
+
+**Known limit:** a derived identity changes if the label changes. Fine for a remembered letter; not
+fine for a keybinding — which is what `id()` is for.
+
+### Forcing an author to write `id` is the wrong goal
+
+Considered and rejected: a typestate builder where `on_click` only exists on a named widget. It
+compiles the rule in, but it is noise on every button, and a plugin sending JSON never meets the Rust
+compiler anyway. It is also the same friction that made `nav_key` a problem — demand a name from
+everyone for a feature most will never use and you get `"btn1"`, which is worse than no name.
+
+What is built instead:
+
+- **automatic identity always**, so everything is addressable and letters are stable with nobody
+  writing anything;
+- **`id()` only when you point at it precisely** — a keybinding, an RPC call, a script. That enforces
+  itself: there is nothing else to type in the config.
+- **a test** over heca's own chrome, so *our* actionable widgets stay properly named;
+- **an error at realize time** for a plugin's node that declares a `press` and no `id` — the only
+  mechanism that reaches a plugin author, and it reaches them when they can act on it.
+
+---
+
+## 2e. ⭐ A letter stays with its target
+
+**Antonio, driving, 2026-08-17:** *"i want to expand a pane, prefix+/ and `k` appears on that icon. I
+press k and it expands correctly. Then I want to collapse. prefix+/ and `j` appears on that button,
+while I was expecting `k`."*
+
+**The letter is currently the index.** `handle_hint_pick` enumerates targets in document order and
+calls `candidate_letter(i)`, over a flat `a…z` then `A…Z`. Add or remove any target earlier in the
+tree and everything after it shifts.
+
+**The fix:** remember the assignment across openings, keyed by the target's identity (§2d). Two
+passes — targets that had a letter and are still there keep it, then the rest fill the gaps.
+
+**Home row first.** The order is `asdfghjkl`, then the rest of `a–z`, then the capitals. Two places
+hold it today: `CANDIDATE_ALPHABET` (`heca/src/app/selection.rs`) and `letters()`
+(`key_hint_group.rs:51`) — which is one of the two reasons the labeller becomes caller-supplied.
+
+**Do home row first, stability second**, or the letters get relearned twice: changing the alphabet
+reshuffles everything once.
+
+---
+
+## 3. Candidacy is not the pick
+
+The single most important distinction, and the one that dissolves "does it bubble?":
+
+| | what it is | traversal | when |
+|---|---|---|---|
+| **candidacy** — "I am hintable" | a *property* | collection walk, **top-down** over the picker's visible subtree | when the picker opens |
+| **the pick** — "letter `a` resolved to me" | an *event* | dispatch walk, **target → up** along one path | when the key is pressed |
+
+**Candidacy never propagates**, in either direction. A container declaring a hint does not make its
+children hintable, and does not make itself hintable on their behalf. There is no event yet when the
+letters are handed out.
+
+**The pick propagates** like any other event, through the existing `deliver_to_path`
+(`heca-grid-ui/src/component.rs:830`): capture down → target → bubble up, with `stop_propagation`
+ending the walk. No second dispatch path.
+
+The closest DOM analogy is **not** `onclick`. It is `tabindex`: scarce, explicit, per-element, and a
+`tabindex` on a parent tells you nothing about its children — while the *focus event* bubbles
+normally. Hint is that pair.
+
+---
+
+## 4. `on_hint` fires in the target phase only
+
+**Decided 2026-08-17.** `on_hint` runs only when *this widget is the target* — not when a pick
+merely passes through it on the bubble.
+
+The case it exists for: a Pane that is itself hintable **and** contains hintable rows. Pick a row and
+without target-only the pane's handler fires too, so you land on the pane instead of the row.
+Otherwise every such container writes the DOM's `e.target !== e.currentTarget` guard by hand — N
+copies of a framework rule, which by our own rule means the API is missing.
+
+This diverges from `on_click`, and the divergence is correct: clicking a child of a clickable div
+**is** clicking the div, because the pointer is over both. Picking a row is **not** picking the pane
+— a pick is nominal, not spatial.
+
+**Delegation still exists**, as a separate spelling: the ordinary bubbled `hint` event, seeing
+`ev.target`, able to `stop_propagation`. It declares nothing and gets no letter. Both forms ship
+together — "when a plugin asks" is how work gets forgotten.
+
+---
+
+## 5. The three roles, so they stop blurring
+
+| | what it is | analogy |
+|---|---|---|
+| `on_hint` on a widget | *this element is pickable, and here is what picking it does* | `onclick` |
+| `KeyHint` | draws a cap over a **region** that is not a widget you can put a builder on | a decorator |
+| `KeyHintGroup` | **the picker**: opens, letters the declarations beneath it, reads the keystroke | a dialog / a mode |
+
+They are not alternatives. `KeyHint` and `KeyHintGroup` read alike because both take a subtree — that
+is the whole source of the confusion — but one is **a target** and the other is **a picker**.
+
+---
+
+## 6. Library vs app — where the line falls
+
+Hint must survive `heca-grid-ui` becoming a standalone reusable UI library.
+
+| layer | belongs to |
+|---|---|
+| `Base::hint`, `Base::hint_label`, `on_hint`, cap painting | **library** — mechanism, no policy |
+| `KeyHintGroup` — the picker widget | **library** — same category as Menu or Dialog |
+| which letters, in what order, who is excluded | **`chrome/hint.rs`** — this app's judgement |
+
+`chrome/hint.rs` already holds the policy correctly: `wanted`,
+`the_pane_you_are_on_gets_no_letter`, and the withdrawal bookkeeping (whoever offers a letter owns it
+until they withdraw it).
+
+**One leak, found 2026-08-17:** `heca-grid-ui/src/widgets/key_hint_group.rs:51` hardcodes
+`('a'..='z').chain('A'..='Z')`. That is policy inside a reusable widget — an outside user cannot
+choose homerow-first ordering, a different layout, or reserve a letter for dismissal. The labeller
+must be caller-supplied, with the current alphabet as the default.
+
+The refactor **loosens** coupling rather than tightening it: what existed before was a *host paint
+pass* in `chrome/` that encoded how heca builds its trees. Mechanism down, policy up.
+
+**The name, decided 2026-08-17.** This was called `peek` until Antonio renamed it to `hint`: an
+outsider reaching for a keyboard-navigation library searches for *hints*, and the library module was
+already called `hint` — only the functions inside said "peek", so the rename made it agree with
+itself.
+
+**One thing deliberately NOT renamed:** `workspaces.peek_selected` (`Space` — focus the row but keep
+the keyboard on the dock). That is the *other* meaning of peek — look at it without committing — and
+has nothing to do with letters. A hint pick happens to fire it, but its own name is about previewing,
+so it stays `peek_selected`.
+
+---
+
+## 7. The steps, in order
+
+Each deletes something. The order is load-bearing: nothing can carry a hint until the framework can
+draw its cap without a wrapper.
+
+**1. The framework paints the cap.** Drawing moves out of `KeyHint::paint` into
+`component::paint_child`; `Base::hint_label` already holds the letter, so the drawing is generic.
+⚠️ Check `Pane` and `DockFrame` — they have bespoke paint loops — still route through it.
+*Deletes:* `KeyHint` as a **required** type (it stays as an optional decorator) and most of
+`HintPlacement`, since a control places its own cap. **Antonio drives this one**: it is rendering,
+and green tests do not verify it.
+
+
+
+
+**2. Anything actionable is hintable, and `.hintable(false)` opts out** (§2). `collect_hints`
+(`heca-grid-ui/src/hint.rs:39`) stops requiring an explicit `Base::hint` and takes anything
+actionable; `fire_hint` runs the explicit hint when there is one and the widget's own action
+otherwise — the same `hint.or_else(press)` rule the declarative side has had all along. **Correct
+`docs/chrome-and-ui.md:394` in this step**, or the contradiction outlives the fix.
+
+**3. `on_hint` onto `ComponentExt`, and `hint` becomes a real event.** Now the *override*, not the
+switch: it says a pick does something other than a click. Target-phase-only (§4), plus the bubbled
+delegation seam, on the existing `deliver_to_path` walk. *Deletes:* the wrapper requirement; the
+two-direction search in `offer_hint_by_key`; the "is the pick on the parent or the child" question.
+`Base::hint` is **already** on `Base` (`component.rs:254`) — only the builder was in the wrong place,
+and the doc at `component.rs:245` claiming it belongs on the wrapper is what this falsifies.
+
+**4. The labeller becomes caller-supplied** (§6), current alphabet as default. **One letter, never
+two** (§2a).
+
+**5. The guard test, written failing, before the ViewNode work.** *Every widget that can declare a
+hint natively must be declarable with a `hint` event through `ViewNode`* — same shape as
+`every_widget_property_is_reachable_from_the_sdk`, which caught two mistakes in one day without
+anyone remembering it existed. Written first and left red; steps 6 and 7 turn it green. Written
+afterwards it would only record what was built.
+
+**6. `hint` as a `ViewNode` event carrying an `Intent`.** The actual plugin half — a closure cannot
+cross the boundary, so the declarative spelling is not a nicety, it is the feature:
+
+```json
+{ "kind": "Row",
+  "props":  { "nav_key": "docker:abc" },
+  "events": { "hint": { "action": "docker.restart", "args": { "id": "abc" } } } }
+```
+
+`realize` wires it to `on_hint` firing the intent — the same two-spellings-one-slot pattern `press`
+and `change` already use. Both converge on `Base::hint`: one door, no second path to drift.
+
+**7. `KeyHintGroup` gets a `WidgetKind`, and `on_action` its declarative form.** Otherwise a plugin
+can contribute *targets* but still cannot own a *picker* — the gap just closed for native code and
+left open for everyone else.
+
+---
+
+## 8. What a plugin author writes, after it
+
+Everything is either a builder on their own widget or a string in their own `ViewNode`. No registry,
+no host-private type in any signature, no id to pre-register and release; the identity is the
+widget's own `nav_key`, which already serializes; and they react to the picker through
+`hint.changed` (`ChromeEvent::HintLettersChanged`).
+
+---
+
+## 9. Why a test, not a paragraph
+
+RULE ZERO is written in three places, was read three times in one day, and a host-side paint fix was
+still written. **Encode a rule as a failing test, not a prose section.** §4's guard test is that
+rule applied to this feature.

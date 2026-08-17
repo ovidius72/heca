@@ -110,6 +110,7 @@ impl Row {
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
+        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
@@ -365,7 +366,7 @@ impl Component for Row {
 
         // Content.
         for child in &self.base.children {
-            child.paint(cx);
+            crate::component::paint_child(child.as_ref(), cx);
         }
 
         if self.interactive() && !disabled {

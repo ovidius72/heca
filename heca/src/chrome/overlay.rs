@@ -229,7 +229,7 @@ pub(crate) fn open_modal(
 ///
 /// `band`, `modal` and `covers_content` are the caller's: a plugin panel over the scrolling area is
 /// `Overlay` + `covers_content: true` + not modal, a rich dialog is `Modal` + both. **No occluder is
-/// passed** — `active_peek_targets` reads it from the realized tree's laid-out bounds, which is the
+/// passed** — `active_hint_targets` reads it from the realized tree's laid-out bounds, which is the
 /// invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
@@ -543,7 +543,7 @@ fn build_modal_root(
         });
         let emit = emit.clone();
         let fire = move || emit(carrier.clone());
-        let peek = fire.clone();
+        let hint = fire.clone();
         let button = Button::new(action.label.clone())
             .variant(variant)
             .on_click(fire);
@@ -558,7 +558,7 @@ fn build_modal_root(
         // Tooltip + live shortcut from the action id — the one centralized path. The pick
         // declaration goes on the wrapper around the button, where the letter is drawn.
         dialog = dialog.action(super::action_tooltip(
-            heca_grid_ui::widgets::KeyHint::new(button).on_peek(peek),
+            heca_grid_ui::widgets::KeyHint::new(button).on_hint(hint),
             &action.id,
             &action.label,
             shortcuts,
@@ -663,12 +663,12 @@ mod tests {
             let fired = fired.clone();
             Rc::new(move |intent| fired.borrow_mut().push(intent))
         };
-        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
+        let mut root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
 
-        let targets = heca_grid_ui::collect_peeks(root.as_ref());
+        let targets = heca_grid_ui::collect_hints(root.as_ref());
         assert_eq!(targets.len(), 2, "two actions → two pick targets");
         for (offset, action_id) in [(0, "cancel"), (1, "confirm")] {
-            assert!(heca_grid_ui::fire_peek(root.as_ref(), &targets[offset].0));
+            assert!(heca_grid_ui::fire_hint(root.as_mut(), &targets[offset].0));
             let intent = fired.borrow().last().cloned().unwrap();
             assert!(
                 matches!(

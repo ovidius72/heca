@@ -9,9 +9,9 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::style::{Justify, Spacing};
+use heca_grid_ui::style::{Justify, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{GridCell, Label, Row};
+use heca_grid_ui::widgets::{GridCell, HintPlacement, KeyHint, Label, Row};
 use heca_grid_ui::Component;
 
 /// The `nav_key` of a pane's box — the row's one identity, so the cursor, the right-click target
@@ -83,10 +83,11 @@ pub(crate) struct PaneCard<'a> {
 impl PaneCard<'_> {
     /// Build the card and the cell the grid navigates it by.
     ///
-    /// Returns the concrete [`Row`] rather than a boxed component **on purpose**: the parent still
-    /// has to give it its size — a share of a column, or a rect of a row — and a box has no
-    /// builders left to do it with.
-    pub(crate) fn build(self) -> (Row, GridCell) {
+    /// Returns the concrete [`KeyHint`] rather than a boxed component **on purpose**: the parent
+    /// still has to give it its size — a share of a column, or a rect of a row — and a box has no
+    /// builders left to do it with. `KeyHint` is transparent (it hugs its child and routes events,
+    /// focus and drag straight through), so wrapping costs the parent nothing.
+    pub(crate) fn build(self) -> (KeyHint, GridCell) {
         let theme = self.theme;
         // The card's own cursor signal, created before anything reads it: the `GridCell` lights it,
         // the card is focused by it, and both are the same value rather than two kept in step.
@@ -111,6 +112,12 @@ impl PaneCard<'_> {
             // against the left edge reads as the start of a list item (Antonio, driving,
             // 2026-08-13). `Row` already centres on its cross axis; this is the main one.
             .justify(Justify::Center)
+            // **The card fills the wrapper the parent sized.** `KeyHint` is transparent and hugs
+            // its child, so the share or the rect the parent handed the wrapper has to be passed on
+            // deliberately — a card left to hug its own label would collapse to the width of the
+            // word in it, whatever the column was given.
+            .width(Length::Pct(1.0))
+            .height(Length::Pct(1.0))
             .active(self.active)
             .previous(self.previous)
             .nav_key(pane_nav_key(self.pane_id));
@@ -137,6 +144,28 @@ impl PaneCard<'_> {
                 move || choose(id)
             })
             .child(Label::new(self.name.to_string()));
+        // **Type a letter to jump to any card** (F003/P082/T427). One line on the widget, which is
+        // the whole of it: the framework collects the declaration out of the laid-out tree
+        // (`collect_hint_targets` already walks every visible layer) and paints the letters itself.
+        // Nothing is registered, so nothing has to be un-registered when the map rebuilds — and a
+        // plugin's own surface gets the picker by writing this same line (⭐⭐ RULE ZERO).
+        //
+        // **A pick and a click point at the same closure here, and that is worth saying out loud**
+        // because the default assumption is the opposite: the two are different gestures and a
+        // surface may answer them differently. In the sidebar a pick means *look at that one* and
+        // keeps the keyboard, while a click means *go there and leave*. In the map both mean choose
+        // that pane — the map exists to be left.
+        let card = KeyHint::new(card)
+            .on_hint({
+                let choose = self.cb.choose.clone();
+                let id = self.pane_id;
+                move || choose(id)
+            })
+            // **Top-left, inside the card.** `CenterRight` put the letter on the card's right
+            // border, where it reads as falling out of the box (Antonio, driving, 2026-08-14) —
+            // and it was invisible as a choice until now, because the deleted host pass drew every
+            // large target's cap in a top band and ignored what the widget declared.
+            .placement(HintPlacement::TopLeft);
         (card, cell)
     }
 }
@@ -247,8 +276,9 @@ mod tests {
         }
         .build();
         // The card's own cursor signal — the one the `GridCell` was handed, so lighting it here is
-        // exactly what the grid does when the cursor arrives.
-        let cursor = row.nav_state();
+        // exactly what the grid does when the cursor arrives. Read off the wrapped card rather than
+        // the `KeyHint` around it: the wrapper is transparent, and the signal belongs to the card.
+        let cursor = row.base().children[0].base().focused;
         (lay_out(row, 200.0, 100.0), cursor, sink)
     }
 
@@ -271,14 +301,15 @@ mod tests {
             })
             .collect();
         assert!(drawn.iter().any(|t| t == "editor"), "the card shows its name: {drawn:?}");
+        let inner = root.base().children[0].base();
         assert_eq!(
-            root.base().nav_key.as_deref(),
+            inner.nav_key.as_deref(),
             Some(pane_nav_key(PaneId(7)).as_str()),
             "and answers to its pane's one identity",
         );
         // **Centred, not against the left edge** — a card is a picture of a pane, not a list row.
-        let card = root.base().bounds;
-        let label = root.base().children[0].base().bounds;
+        let card = inner.bounds;
+        let label = inner.children[0].base().bounds;
         let slack = (label.loc.x - card.loc.x) - ((card.loc.x + card.size.w) - (label.loc.x + label.size.w));
         assert!(
             slack.abs() < 1.0,
@@ -288,7 +319,7 @@ mod tests {
         assert!(!cursor.get_untracked());
         cursor.set(true);
         assert!(
-            root.base().focused.get_untracked(),
+            root.base().children[0].base().focused.get_untracked(),
             "the card the cursor is on is the card that holds the keyboard",
         );
     }
@@ -374,5 +405,29 @@ mod tests {
             "it focuses its own pane: {got}",
         );
         assert!(got.contains("CloseOverlay"), "and puts the map away: {got}");
+    }
+
+    /// **Every card declares a pick, and it chooses that card's pane** (F003/P082/T427).
+    ///
+    /// The declaration is the whole feature: `collect_hints` walks the laid-out tree of every
+    /// visible layer, so a card that declares one is in the picker and a card that does not is
+    /// invisible to it — there is no registry to forget to update. This asserts the declaration is
+    /// there and that firing it is the same act as choosing the card, which is what lets `s` and a
+    /// click agree.
+    #[test]
+    fn a_card_declares_a_pick_that_chooses_its_pane() {
+        let (mut root, _cursor, sink) = card(false, None);
+        let hints = heca_grid_ui::collect_hints(root.as_ref());
+        assert_eq!(hints.len(), 1, "one card, one pick: {hints:?}");
+
+        assert!(
+            heca_grid_ui::fire_hint(root.as_mut(), &hints[0].0),
+            "and the declaration runs",
+        );
+        let got = format!("{:?}", sink.borrow());
+        assert!(
+            got.contains("FocusPaneThenAction") && got.contains("PaneId(7)"),
+            "the pick chooses this card's pane, exactly as a click does: {got}",
+        );
     }
 }

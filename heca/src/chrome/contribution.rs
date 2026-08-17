@@ -42,7 +42,7 @@ pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel
 /// item id per draggable/droppable row, and a signal per value that changes without a
 /// structural rebuild. Those registries are owned by the host, so the build has to borrow them
 /// mutably. (A **pickable** row needs nothing here: it declares what a `prefix+/` pick does on
-/// itself with `KeyHint::on_peek`, and the framework collects the declaration out of the laid-out
+/// itself with `KeyHint::on_hint`, and the framework collects the declaration out of the laid-out
 /// tree — which is what a plugin row could never do through a host-private registry.)
 ///
 /// They are passed as an explicit `&mut` parameter rather than hidden behind interior

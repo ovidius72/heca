@@ -126,10 +126,10 @@ pub enum InputMode {
     /// Universal leader/vimium **picker** (entered with `prefix+/`): every region that said what a
     /// pick does to it gets a letter (a keycap stamped over its bounds), and the next keypress runs
     /// that region's own declaration. Each candidate carries a
-    /// [`PeekTarget`](crate::chrome::PeekTarget) — the tree it lives in and its path in it, valid
+    /// [`HintTarget`](crate::chrome::HintTarget) — the tree it lives in and its path in it, valid
     /// for exactly as long as the letters are up. Any other key / Esc exits.
     HintPick {
-        candidates: Vec<(char, crate::chrome::PeekTarget)>,
+        candidates: Vec<(char, crate::chrome::HintTarget)>,
     },
 }
 
@@ -802,6 +802,15 @@ pub struct AppState {
     /// Only consulted while the map is **already up**. Opening it fresh still starts at the
     /// workspace you are standing in, which is what the memory above is for.
     pub expose_cursor_ws: Option<usize>,
+    /// **Which targets the host currently has a keycap on**, by the identity they declare
+    /// (F003/P082/T427).
+    ///
+    /// The whole of the letter-ownership rule: `chrome::hint` withdraws exactly what it offered and
+    /// never clears a label somebody else set, so the universal picker, a surface's own
+    /// `KeyHintGroup` and the move/swap/take modes cannot erase one another. It replaced four
+    /// per-widget signal lists projected every frame, which wrote `None` over every offered letter
+    /// and needed a host-mode check to stop — a check a plugin could never add itself to.
+    pub offered_letters: std::cell::RefCell<crate::chrome::hint::OfferedLetters>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.

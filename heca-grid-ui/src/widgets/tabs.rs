@@ -273,7 +273,7 @@ impl Component for Tabs {
         // The tabs paint themselves: their pill, their hover tint, and their content in the state
         // color the `Choice` publishes (accent when selected). The strip adds only its own chrome.
         for tab in &self.base.children {
-            tab.paint(cx);
+            crate::component::paint_child(tab.as_ref(), cx);
         }
 
         // Animated underline under the active tab — sized and placed from that tab's real bounds.
