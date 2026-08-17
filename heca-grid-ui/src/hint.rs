@@ -223,7 +223,7 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
     true
 }
 
-/// **Offer the letter `label` to the hint target declaring `nav_key`.** `None` withdraws it.
+/// **Offer the letter `label` to the hint target declaring `key`.** `None` withdraws it.
 ///
 /// The id-addressed twin of [`offer_hint`], for a host mode that knows *what* it is lettering (this
 /// pane, that workspace) but not where the widget drawing it sits. It reuses the identity the
@@ -231,7 +231,7 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
 /// than inventing a second addressing scheme for the same rows.
 ///
 /// **Whichever identity the target declares.** A row names itself with
-/// [`Base::nav_key`](crate::component::Base::nav_key) and a mounted container with
+/// [`Base::key`](crate::component::Base::key) and a mounted container with
 /// [`Base::scope_key`](crate::component::Base::scope_key) — they answer different questions (which
 /// row is the cursor on; which container did this press land in) and a target has one or the other.
 /// Matching both is what keeps this a single door for the caller, who only knows the name.
@@ -241,7 +241,7 @@ pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -
 /// Being pickable is something you *wrap* a region in, so the two declarations end up on different
 /// nodes — and which one is on top depends on what was wrapped:
 ///
-/// - a **row** carries `nav_key` and the [`KeyHint`](crate::widgets::KeyHint) around it carries the
+/// - a **row** carries `key` and the [`KeyHint`](crate::widgets::KeyHint) around it carries the
 ///   hint — the pick is on the **parent**;
 /// - a **mounted dock** names itself on the outer wrapper and declares the pick within — the pick
 ///   is on a **child**.
@@ -266,7 +266,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         } else {
             enclosing
         };
-        let names_itself = node.base().nav_key.as_deref() == Some(key)
+        let names_itself = node.base().key.as_deref() == Some(key)
             || node.base().scope_key.as_deref() == Some(key);
         if names_itself {
             if label_nearest(node, label.clone()) {
@@ -456,7 +456,7 @@ mod offer_tests {
     #[test]
     fn a_named_row_wrapped_in_a_keyhint_is_letterable() {
         let tree = Flex::column().child(
-            KeyHint::new(Row::new().nav_key("pane:7").child(Label::new("zsh"))).on_hint(|| {}),
+            KeyHint::new(Row::new().key("pane:7").child(Label::new("zsh"))).on_hint(|| {}),
         );
 
         assert!(offer_hint_by_key(&tree, "pane:7", Some("a".into())));
@@ -487,8 +487,8 @@ mod offer_tests {
     #[test]
     fn a_target_listed_in_two_places_is_lettered_in_both() {
         let tree = Flex::column()
-            .child(KeyHint::new(Row::new().nav_key("pane:7").child(Label::new("zsh"))).on_hint(|| {}))
-            .child(KeyHint::new(Row::new().nav_key("pane:7").child(Label::new("zsh"))).on_hint(|| {}));
+            .child(KeyHint::new(Row::new().key("pane:7").child(Label::new("zsh"))).on_hint(|| {}))
+            .child(KeyHint::new(Row::new().key("pane:7").child(Label::new("zsh"))).on_hint(|| {}));
 
         assert!(offer_hint_by_key(&tree, "pane:7", Some("a".into())));
         let left = &tree.base().children[0];
@@ -505,7 +505,7 @@ mod offer_tests {
     /// letterable" — never a keycap that does nothing.
     #[test]
     fn a_target_with_no_pick_is_not_letterable() {
-        let tree = Flex::column().child(Row::new().nav_key("pane:9"));
+        let tree = Flex::column().child(Row::new().key("pane:9"));
         assert!(!offer_hint_by_key(&tree, "pane:9", Some("c".into())));
         assert!(!offer_hint_by_key(&tree, "nothing", Some("c".into())));
     }

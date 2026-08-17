@@ -115,7 +115,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // setters are change-guarded, so an unchanged selection costs nothing and emits nothing.
     if let Some(selection) = cursor_follow(prev_focused, state.focused_pane) {
         state.chrome_state.workspaces.set_nav_selection(Some(selection));
-        let key = crate::providers::workspaces::selection_nav_key(selection);
+        let key = crate::providers::workspaces::selection_key(selection);
         // Every seating of the component, since each keeps its own cursor.
         let mounts: Vec<String> = state
             .chrome_host

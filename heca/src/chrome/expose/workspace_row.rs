@@ -160,7 +160,7 @@ impl WorkspaceRow<'_> {
 mod tests {
     use super::*;
     use crate::chrome::expose::model::{ExposeColumn, ExposeFloating, ExposePane};
-    use crate::chrome::expose::pane_card::pane_nav_key;
+    use crate::chrome::expose::pane_card::pane_key;
     use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
     use heca_core::layout::PaneId;
 
@@ -216,8 +216,8 @@ mod tests {
         let ws = workspace(&[400.0, 200.0], vec![]);
         // Measured against a map twice as wide as this workspace: the row must then take half.
         let root = row(&ws, 1200.0, 1200.0, 600.0);
-        let wide = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the wide column's card");
-        let narrow = card_of(root.as_ref(), &pane_nav_key(PaneId(2))).expect("the narrow one's");
+        let wide = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the wide column's card");
+        let narrow = card_of(root.as_ref(), &pane_key(PaneId(2))).expect("the narrow one's");
         assert!(
             (wide.size.w / narrow.size.w - 2.0).abs() < 0.15,
             "twice the width is drawn twice as wide: {wide:?} vs {narrow:?}",
@@ -236,7 +236,7 @@ mod tests {
     fn a_row_narrower_than_the_map_is_centred_in_it() {
         let ws = workspace(&[400.0], vec![]);
         let root = row(&ws, 1600.0, 1600.0, 600.0);
-        let card = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the only card");
+        let card = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the only card");
         let mid = card.loc.x + card.size.w / 2.0;
         assert!((mid - 800.0).abs() < 4.0, "centred across a 1600 map, got {mid}: {card:?}");
     }
@@ -264,7 +264,7 @@ mod tests {
         // Extent 800 wide by 600 tall, drawn into exactly that box, so the fractions come out as
         // the model's own numbers and a wrong axis cannot hide behind a coincidence.
         let root = row(&ws, 800.0, 800.0, 600.0);
-        let f = card_of(root.as_ref(), &pane_nav_key(PaneId(9))).expect("the float's card");
+        let f = card_of(root.as_ref(), &pane_key(PaneId(9))).expect("the float's card");
         // The strip fills the box here (extent == widest == the width given), so its own origin is
         // the box's and the float's fractions come out as the model's own numbers.
         assert!(
@@ -302,8 +302,8 @@ mod tests {
         );
         let a = row(&plain, 800.0, 800.0, 600.0);
         let b = row(&with_float, 800.0, 800.0, 600.0);
-        let before = card_of(a.as_ref(), &pane_nav_key(PaneId(1))).expect("without");
-        let after = card_of(b.as_ref(), &pane_nav_key(PaneId(1))).expect("with");
+        let before = card_of(a.as_ref(), &pane_key(PaneId(1))).expect("without");
+        let after = card_of(b.as_ref(), &pane_key(PaneId(1))).expect("with");
         assert!(
             (before.loc.x - after.loc.x).abs() < 1.0
                 && (before.loc.y - after.loc.y).abs() < 1.0
@@ -332,7 +332,7 @@ mod tests {
         );
         assert_eq!(extent(&ws), 800.0, "the float reaches to 800, past the 400-wide strip");
         let root = row(&ws, 800.0, 800.0, 600.0);
-        let f = card_of(root.as_ref(), &pane_nav_key(PaneId(9))).expect("the float");
+        let f = card_of(root.as_ref(), &pane_key(PaneId(9))).expect("the float");
         assert!(
             f.loc.x + f.size.w <= 801.0,
             "and it still lands inside the row: {f:?}",
@@ -360,7 +360,7 @@ mod tests {
 
         let mut edges = Vec::new();
         for i in 0..widths.len() {
-            let c = card_of(root.as_ref(), &pane_nav_key(PaneId(i as u64 + 1)))
+            let c = card_of(root.as_ref(), &pane_key(PaneId(i as u64 + 1)))
                 .unwrap_or_else(|| panic!("card {i} of the row"));
             edges.push((c.loc.x, c.loc.x + c.size.w));
         }

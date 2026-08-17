@@ -296,7 +296,7 @@ impl Provider for WorkspacesContainerProvider {
             tree.flat_items
                 .iter()
                 .map(|row| row.selection())
-                .find(|sel| selection_nav_key(*sel) == key)
+                .find(|sel| selection_key(*sel) == key)
         };
         let Some(selection) = selection else {
             return;
@@ -597,7 +597,7 @@ impl WorkspacesContainerProvider {
             state.workspaces().set_nav_selection(selection);
             selection
         };
-        cx.set_selected(selection.map(selection_nav_key));
+        cx.set_selected(selection.map(selection_key));
     }
 }
 
@@ -678,18 +678,18 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
 // changes is not a cursor. Positions therefore never appear in a key that has an id available.
 
 /// `pane:<id>` — a pane card, tiled or floating.
-pub(crate) fn pane_nav_key(pane: PaneId) -> String {
+pub(crate) fn pane_key(pane: PaneId) -> String {
     format!("pane:{}", pane.0)
 }
 
 /// `ws:<idx>` — a workspace header.
-pub(crate) fn workspace_nav_key(ws_idx: usize) -> String {
+pub(crate) fn workspace_key(ws_idx: usize) -> String {
     format!("ws:{ws_idx}")
 }
 
 /// `col:<ws>:<idx>` — a column group. Positional because a column has no id of its own; it is
 /// re-derived on rebuild like every other column reference in the app.
-pub(crate) fn column_nav_key(ws_idx: usize, col_idx: usize) -> String {
+pub(crate) fn column_key(ws_idx: usize, col_idx: usize) -> String {
     format!("col:{ws_idx}:{col_idx}")
 }
 
@@ -727,8 +727,8 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
 /// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
 /// started activating the pane and leaving the sidebar.
-fn row_hint(nav_key: String) -> Intent {
-    Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(nav_key))
+fn row_hint(key: String) -> Intent {
+    Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(key))
 }
 
 /// The nav key naming the row a [`SidebarSelection`] points at.
@@ -736,12 +736,12 @@ fn row_hint(nav_key: String) -> Intent {
 /// The bridge between the domain-typed selection this container still keeps and the generic cursor
 /// every row's outline now reads. It goes away with the selection itself (F003/P085/T356) — until
 /// then it is the single conversion point, so the two cannot drift.
-pub(crate) fn selection_nav_key(selection: crate::chrome::SidebarSelection) -> String {
+pub(crate) fn selection_key(selection: crate::chrome::SidebarSelection) -> String {
     use crate::chrome::SidebarSelection as S;
     match selection {
-        S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_nav_key(pane_id),
-        S::Column { ws_idx, col_idx } => column_nav_key(ws_idx, col_idx),
-        S::Workspace { ws_idx } => workspace_nav_key(ws_idx),
+        S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_key(pane_id),
+        S::Column { ws_idx, col_idx } => column_key(ws_idx, col_idx),
+        S::Workspace { ws_idx } => workspace_key(ws_idx),
     }
 }
 
@@ -775,7 +775,7 @@ pub(crate) fn container_items() -> Vec<DropdownItem> {
 fn row_at_key(tree: &WorkspaceTree, key: &str) -> Option<WorkspaceRow> {
     tree.flat_items
         .iter()
-        .find(|row| selection_nav_key(row.selection()) == key)
+        .find(|row| selection_key(row.selection()) == key)
         .cloned()
 }
 
@@ -895,9 +895,9 @@ mod tests {
     use heca_grid_ui::theme::Theme as GuiTheme;
     use std::rc::Rc;
 
-    /// **Every row kind declares its own `nav_key` on the widget.**
+    /// **Every row kind declares its own `key` on the widget.**
     ///
-    /// `nav_key_at` — how a right-click finds out what it landed on — reads `Base::nav_key` and
+    /// `key_at` — how a right-click finds out what it landed on — reads `Base::key` and
     /// nothing else. The workspace header pushed its key into the cursor-signal list and never told
     /// the widget, so the hit-test found nothing at that row: right-clicking a pane or a column
     /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
@@ -907,7 +907,7 @@ mod tests {
     /// Note what this test no longer needs: a `ChromeCtx`, and therefore a window. The dock is
     /// components now, so it is built from its seams (F006/P032/T429).
     #[test]
-    fn every_row_kind_carries_a_nav_key_the_hit_test_can_find() {
+    fn every_row_kind_carries_a_key_the_hit_test_can_find() {
         let tree = testing::tree();
         let mut fx = testing::Fixture::default();
         let root = {
@@ -920,11 +920,11 @@ mod tests {
             .build(&seams, &mut reg)
         };
 
-        let declared = testing::declared_nav_keys(&root);
+        let declared = testing::declared_keys(&root);
         for expected in [
-            workspace_nav_key(0),
-            column_nav_key(0, 0),
-            pane_nav_key(PaneId(1)),
+            workspace_key(0),
+            column_key(0, 0),
+            pane_key(PaneId(1)),
         ] {
             assert!(
                 declared.contains(&expected),
@@ -1105,7 +1105,7 @@ mod tests {
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         // The fixture's rows are the workspace and its one pane; aim at the pane.
-        let pane_key = pane_nav_key(PaneId(1));
+        let pane_key = pane_key(PaneId(1));
         p.cursor_moved(&pane_key, &mut cx);
 
         assert!(
@@ -1217,7 +1217,7 @@ mod tests {
             None => panic!("the fixture has a pane row"),
         };
         let aimed = Intent::new(PEEK_SELECTED)
-            .arg("key", PropValue::Text(pane_nav_key(pane_id)));
+            .arg("key", PropValue::Text(pane_key(pane_id)));
         p.perform(PEEK_SELECTED, &aimed, &mut cx);
 
         assert!(

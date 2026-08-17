@@ -14,9 +14,9 @@ use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{GridCell, HintPlacement, KeyHint, Label, Row};
 use heca_grid_ui::Component;
 
-/// The `nav_key` of a pane's box — the row's one identity, so the cursor, the right-click target
+/// The `key` of a pane's box — the row's one identity, so the cursor, the right-click target
 /// and later a drag are three readers of a single declaration (F003/P085/T354).
-pub(crate) fn pane_nav_key(pane_id: PaneId) -> String {
+pub(crate) fn pane_key(pane_id: PaneId) -> String {
     format!("expose.pane.{}", pane_id.0)
 }
 
@@ -120,7 +120,7 @@ impl PaneCard<'_> {
             .height(Length::Pct(1.0))
             .active(self.active)
             .previous(self.previous)
-            .nav_key(pane_nav_key(self.pane_id));
+            .key(pane_key(self.pane_id));
         // **The card the cursor is on holds the keyboard**, so its own handlers are what a key
         // reaches — and what it does not take bubbles up to the `CardGrid` for the nav keys,
         // exactly as a browser's listbox option does (AGENTS § 0c). The cursor signal *is* the
@@ -303,8 +303,8 @@ mod tests {
         assert!(drawn.iter().any(|t| t == "editor"), "the card shows its name: {drawn:?}");
         let inner = root.base().children[0].base();
         assert_eq!(
-            inner.nav_key.as_deref(),
-            Some(pane_nav_key(PaneId(7)).as_str()),
+            inner.key.as_deref(),
+            Some(pane_key(PaneId(7)).as_str()),
             "and answers to its pane's one identity",
         );
         // **Centred, not against the left edge** — a card is a picture of a pane, not a list row.

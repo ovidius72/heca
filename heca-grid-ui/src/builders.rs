@@ -439,7 +439,7 @@ impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
 /// One trait, blanket-implemented for every [`Component`], holding the builders that are true of
 /// all of them: what happens to a widget ([`on_click`](ComponentExt::on_click),
 /// [`on_key`](ComponentExt::on_key), [`context_menu`](ComponentExt::context_menu)), who it is
-/// ([`nav_key`](ComponentExt::nav_key)), and what it does in a drag
+/// ([`key`](ComponentExt::key)), and what it does in a drag
 /// ([`draggable`](ComponentExt::draggable), [`drop_target`](ComponentExt::drop_target)).
 ///
 /// It was four traits — `ComponentExt`, `ComponentExt`, `ComponentExt`, `ComponentExt` — split by nothing but the order
@@ -469,8 +469,8 @@ pub trait ComponentExt: Component + Sized {
     /// drag identity. The string is **opaque to the library** — only the component that wrote it
     /// and the host routing back to that component ever interpret it — and it must be stable across
     /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
-    fn nav_key(mut self, key: impl Into<String>) -> Self {
-        self.base_mut().nav_key = Some(key.into());
+    fn key(mut self, key: impl Into<String>) -> Self {
+        self.base_mut().key = Some(key.into());
         self
     }
 
@@ -713,7 +713,7 @@ pub trait ComponentExt: Component + Sized {
     ///
     /// Nothing else is needed: no row identity, no path string, no registered builder, no
     /// host-side hit test, no `Shift+F10` handling, and no anchor — the framework picks that from
-    /// what triggered the menu. Universal, like `nav_key`, so an `Icon` and a plugin's own widget
+    /// what triggered the menu. Universal, like `key`, so an `Icon` and a plugin's own widget
     /// carry one on the same terms as a `Row`. See [`crate::menu`] for bubbling and the host sink.
     ///
     /// **A value or a closure** — see [`IntoContextMenu`]. Either way the menu is realized when it

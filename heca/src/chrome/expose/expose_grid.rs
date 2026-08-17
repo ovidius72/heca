@@ -105,7 +105,7 @@ impl ExposeGrid<'_> {
 mod tests {
     use super::*;
     use crate::chrome::expose::model::{ExposeColumn, ExposePane, ExposeWorkspace};
-    use crate::chrome::expose::pane_card::pane_nav_key;
+    use crate::chrome::expose::pane_card::pane_key;
     use crate::chrome::expose::testing::{callbacks, card_of, cards_bounds, lay_out, theme};
 
     /// A workspace of `cols` columns on a screen of `screen`, each column one pane.
@@ -194,8 +194,8 @@ mod tests {
     fn rows_take_the_share_of_the_map_their_screens_are_worth() {
         let rows = vec![ws(0, 1, (800.0, 600.0)), ws(1, 1, (800.0, 1200.0))];
         let root = grid(&rows, 1200.0, 900.0);
-        let first = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the first row's card");
-        let second = card_of(root.as_ref(), &pane_nav_key(PaneId(101))).expect("the second's");
+        let first = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the first row's card");
+        let second = card_of(root.as_ref(), &pane_key(PaneId(101))).expect("the second's");
         let ratio = second.size.h / first.size.h;
         assert!(
             (ratio - 2.0).abs() < 0.15,
@@ -209,8 +209,8 @@ mod tests {
     fn the_rows_are_separated_by_a_fraction_of_a_screen() {
         let rows = vec![ws(0, 1, (800.0, 600.0)), ws(1, 1, (800.0, 600.0))];
         let root = grid(&rows, 1200.0, 900.0);
-        let first = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the first");
-        let second = card_of(root.as_ref(), &pane_nav_key(PaneId(101))).expect("the second");
+        let first = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the first");
+        let second = card_of(root.as_ref(), &pane_key(PaneId(101))).expect("the second");
         let air = second.loc.y - (first.loc.y + first.size.h);
         // A tenth of a row, give or take the rounding of a share.
         assert!(
@@ -246,7 +246,7 @@ mod tests {
 
         fn focused_keys(n: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
             if n.base().focused.get_untracked()
-                && let Some(k) = n.base().nav_key.as_deref()
+                && let Some(k) = n.base().key.as_deref()
             {
                 out.push(k.to_string());
             }

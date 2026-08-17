@@ -130,7 +130,7 @@ pub trait Provider {
     /// (F003/P086/T365).
     ///
     /// The host resolves *which row* was right-clicked (the container under the point, the
-    /// `nav_key` on it) and *when* to open a menu; it cannot know that `pane:7` is a pane and
+    /// `key` on it) and *when* to open a menu; it cannot know that `pane:7` is a pane and
     /// `ws:2` a workspace, and must not learn. So it asks the component that wrote the key, gets
     /// back a path, and looks that path up in the registry exactly as it does for any other. A
     /// Docker dock answering `"docker.container"` gets a right-click menu with no host code.
@@ -190,7 +190,7 @@ pub trait Provider {
 
     /// The host moved this placement's cursor to `key` — a click, an RPC call, a script.
     ///
-    /// The key is one **this component wrote** (`ComponentExt::nav_key`), so only it can say which row
+    /// The key is one **this component wrote** (`ComponentExt::key`), so only it can say which row
     /// that is; the host deliberately never parses it. Whatever the component keeps of its own — a
     /// positional index, a domain-typed selection — reconciles here.
     ///
@@ -308,7 +308,7 @@ impl<'a> ProviderCx<'a> {
         StateView::over(&self.store)
     }
 
-    /// **This placement's** selected row, as the row declared it (`nav_key`, F003/P085/T354).
+    /// **This placement's** selected row, as the row declared it (`key`, F003/P085/T354).
     ///
     /// Per mount, like the scroll offset and the focus beside it: two placements of one container
     /// have two cursors, so "the selection" is only ever a question about *one* seating. `None`
@@ -323,7 +323,7 @@ impl<'a> ProviderCx<'a> {
     /// A component owns its own cursor, because only it knows what its rows are and what "next"
     /// means among them — the workspace tree steps workspaces, columns and panes; a label showing
     /// one number has no cursor at all. There is deliberately **no** host-side "step to the next
-    /// `nav_key`": that would impose one notion of next on components it means nothing to.
+    /// `key`": that would impose one notion of next on components it means nothing to.
     ///
     /// Writing goes to the **store**, not to app state — read-via-signals / write-via-actions, so
     /// the row outlines follow with no rebuild and §2.3 still holds.

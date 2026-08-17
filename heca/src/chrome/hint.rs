@@ -20,24 +20,24 @@
 //! # Addressing
 //!
 //! A mode knows *what* it is lettering (this pane, that workspace) but not where the widget drawing
-//! it sits, so it offers by the target's **`nav_key`** — the identity the widget already declares
+//! it sits, so it offers by the target's **`key`** — the identity the widget already declares
 //! and that the cursor, the right-click and the drag all read. No second addressing scheme for the
 //! same rows. The universal picker keeps the path form, because it collects paths, and both write
 //! the same slot.
 
 use crate::app_state::InputMode;
-use crate::providers::workspaces::{column_nav_key, pane_nav_key, workspace_nav_key};
+use crate::providers::workspaces::{column_key, pane_key, workspace_key};
 use super::{ChromeConfig, LayerId};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 
-/// The targets this module has a letter on, by `nav_key`. Withdrawal is exactly this set, which is
+/// The targets this module has a letter on, by `key`. Withdrawal is exactly this set, which is
 /// what makes the rule ownership rather than "clear everything and hope".
 #[derive(Default, Debug)]
 pub(crate) struct OfferedLetters {
     keys: Vec<String>,
 }
 
-/// What the **current input mode** wants lettered, as `(nav_key, letter)`.
+/// What the **current input mode** wants lettered, as `(key, letter)`.
 ///
 /// One place that knows how a mode's candidates become row identities, so a new pick mode is one
 /// arm here rather than a fifth signal list and a fifth projection.
@@ -50,20 +50,20 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
             cands
                 .iter()
                 .filter(|(_, id)| Some(*id) != active_pane)
-                .map(|(ch, id)| (pane_nav_key(*id), *ch)),
+                .map(|(ch, id)| (pane_key(*id), *ch)),
         );
     }
     if let Some(cands) = mode.ws_candidates() {
-        out.extend(cands.iter().map(|(ch, ws)| (workspace_nav_key(*ws), *ch)));
+        out.extend(cands.iter().map(|(ch, ws)| (workspace_key(*ws), *ch)));
     }
     if let Some(cands) = mode.col_candidates() {
         out.extend(
             cands
                 .iter()
-                .map(|(ch, ws, col)| (column_nav_key(*ws, *col), *ch)),
+                .map(|(ch, ws, col)| (column_key(*ws, *col), *ch)),
         );
     }
-    // A dock names itself with `scope_key` rather than `nav_key` — a container's identity, not a
+    // A dock names itself with `scope_key` rather than `key` — a container's identity, not a
     // row's — and `offer_hint_by_key` matches either, so this is the same one line as the rest.
     if let Some(cands) = mode.dock_candidates() {
         out.extend(cands.iter().map(|(ch, id)| (id.clone(), *ch)));
@@ -121,27 +121,27 @@ pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
     changed
 }
 
-/// Offer `label` to whichever retained tree declares `nav_key`. Front to back, so a surface in
+/// Offer `label` to whichever retained tree declares `key`. Front to back, so a surface in
 /// front shadows one behind it — the nearest declaration wins, as everywhere else.
 fn offer_in_every_tree(
     state: &crate::app_state::AppState,
-    nav_key: &str,
+    key: &str,
     label: Option<String>,
 ) -> bool {
     for layer in state.layers.visible_front_to_back() {
-        if heca_grid_ui::offer_hint_by_key(layer.root(), nav_key, label.clone()) {
+        if heca_grid_ui::offer_hint_by_key(layer.root(), key, label.clone()) {
             return true;
         }
     }
     if let Some(tree) = state.chrome_tree.as_ref()
-        && heca_grid_ui::offer_hint_by_key(&tree.root, nav_key, label.clone())
+        && heca_grid_ui::offer_hint_by_key(&tree.root, key, label.clone())
     {
         return true;
     }
     state
         .pane_headers
         .values()
-        .any(|h| heca_grid_ui::offer_hint_by_key(&h.root, nav_key, label.clone()))
+        .any(|h| heca_grid_ui::offer_hint_by_key(&h.root, key, label.clone()))
 }
 
 /// [`wanted`] for a test in another module — the mapping is the interesting part and belongs to
@@ -166,8 +166,8 @@ mod tests {
         assert_eq!(
             wanted(&mode, None),
             vec![
-                (pane_nav_key(PaneId(7)), 'a'),
-                (pane_nav_key(PaneId(9)), 'b'),
+                (pane_key(PaneId(7)), 'a'),
+                (pane_key(PaneId(9)), 'b'),
             ],
         );
     }
@@ -191,7 +191,7 @@ mod tests {
         };
         assert_eq!(
             wanted(&mode, Some(PaneId(1))),
-            vec![(pane_nav_key(PaneId(2)), 's')],
+            vec![(pane_key(PaneId(2)), 's')],
         );
     }
     /// **`hint.changed` fires when the lettering changes, and not otherwise** — the event a plugin
@@ -216,7 +216,7 @@ mod tests {
         store
             .events()
             .emit(crate::chrome::ChromeEvent::HintLettersChanged {
-                letters: vec![('a', pane_nav_key(PaneId(1)))],
+                letters: vec![('a', pane_key(PaneId(1)))],
             });
 
         assert_eq!(seen.borrow().len(), 1, "the name a plugin filters on is `hint.changed`");

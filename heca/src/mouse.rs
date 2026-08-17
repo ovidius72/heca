@@ -134,7 +134,7 @@ fn aim_keyboard_at_click(state: &mut AppState, pos: (f32, f32)) {
             // 6 — so the press moves the container's cursor, not just the highlight. A press that
             // lands on no row leaves the cursor alone: clicking a container's padding is not a
             // request to move it.
-            if let Some(key) = crate::chrome::nav_key_at(state, pos) {
+            if let Some(key) = crate::chrome::key_at(state, pos) {
                 crate::providers::move_provider_cursor(state, &container, &key);
             }
         }

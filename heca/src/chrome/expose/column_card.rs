@@ -72,7 +72,7 @@ mod tests {
     use super::*;
     use crate::chrome::expose::model::ExposePane;
     use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
-    use crate::chrome::expose::pane_card::pane_nav_key;
+    use crate::chrome::expose::pane_card::pane_key;
     use heca_grid_ui::style::Length;
 
     fn column(heights: &[f64]) -> Box<dyn heca_grid_ui::Component> {
@@ -111,8 +111,8 @@ mod tests {
     #[test]
     fn panes_take_the_share_of_the_column_their_real_heights_are_worth() {
         let root = column(&[400.0, 200.0]);
-        let top = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the first card");
-        let bottom = card_of(root.as_ref(), &pane_nav_key(PaneId(2))).expect("the second");
+        let top = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the first card");
+        let bottom = card_of(root.as_ref(), &pane_key(PaneId(2))).expect("the second");
         let drawn = top.size.h / bottom.size.h;
         assert!(
             (drawn - 2.0).abs() < 0.1,
@@ -135,7 +135,7 @@ mod tests {
             let box_h = root.base().bounds.size.h;
             let mut low = 0.0_f64;
             for i in 0..heights.len() {
-                let c = card_of(root.as_ref(), &pane_nav_key(PaneId(i as u64 + 1)))
+                let c = card_of(root.as_ref(), &pane_key(PaneId(i as u64 + 1)))
                     .unwrap_or_else(|| panic!("card {i} of {heights:?}"));
                 low = low.max(c.loc.y + c.size.h);
             }

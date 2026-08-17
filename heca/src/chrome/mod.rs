@@ -1581,7 +1581,7 @@ pub(crate) fn chrome_dispatch_button_release(
 /// pane, a column, a workspace and a plugin's own row without the host knowing any of them exist.
 pub(crate) fn open_declared_menu_for_focus(state: &mut crate::app_state::AppState) -> bool {
     // **Where the keyboard is, in a chrome surface, is the focused container's cursor** — the
-    // `nav_key` of the row it sits on. That is the half only the host knows, so it is the half the
+    // `key` of the row it sits on. That is the half only the host knows, so it is the half the
     // host passes; `open_for_keyboard` owns the rest, including falling back to a genuinely focused
     // widget (a plugin's input) when the cursor names nothing.
     let cursor = {
@@ -1637,9 +1637,9 @@ pub(crate) fn container_at(state: &crate::app_state::AppState, pos: (f32, f32)) 
 ///
 /// Read off the retained tree's real laid-out bounds, the same walk the right-click target and the
 /// drag source use, so all three agree about what a point is pointing at.
-pub(crate) fn nav_key_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
+pub(crate) fn key_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
     let tree = state.chrome_tree.as_ref()?;
-    heca_grid_ui::nav_key_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
+    heca_grid_ui::key_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
 }
 
 /// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.

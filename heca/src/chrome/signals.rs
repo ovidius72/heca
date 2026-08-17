@@ -41,12 +41,12 @@ pub(crate) struct ChromeSignals {
     /// **The workspace `prefix+Shift+i` would return to**, by index. Bound like
     /// [`ws_active`](Self::ws_active) because it changes on focus, which does not rebuild the tree.
     pub(crate) ws_previous: Vec<(usize, Signal<bool>)>,
-    /// Every navigable row's cursor-outline signal, as `(mount, nav_key, signal)` — driven from
+    /// Every navigable row's cursor-outline signal, as `(mount, key, signal)` — driven from
     /// that **mount's** cursor (`container_cursor`), which is why the mount is part of the key.
     ///
     /// Generic since F003/P085/T354: this used to be two domain-keyed families (`pane_nav` by
     /// `PaneId`, `ws_nav` by `ws_idx`), which no component outside the workspace tree could join. A
-    /// row now declares one identity (`Base::nav_key`) and this is the highlight half of it; the
+    /// row now declares one identity (`Base::key`) and this is the highlight half of it; the
     /// cursor highlight stays distinct from `active_pane`, as it always was.
     pub(crate) row_nav: Vec<(String, String, Signal<bool>)>,
     /// Per-pane runtime display signals for the fixed pane-info rows.
@@ -227,7 +227,7 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         }
     }
     // Project each mount's cursor onto its rows' cursor signals — distinct from `active` above, so
-    // the expanded sidebar shows both the real focus and the cursor. Keyed by `(mount, nav_key)`,
+    // the expanded sidebar shows both the real focus and the cursor. Keyed by `(mount, key)`,
     // so two placements of one container light **different** rows (F003/P085/T354).
     for (mount, key, sig) in &retained.signals.row_nav {
         let v = state

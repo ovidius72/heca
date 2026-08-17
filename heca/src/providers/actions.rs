@@ -110,7 +110,7 @@ pub(crate) fn bind_provider_keybindings(
 /// the right one pointing somewhere else is the model disagreeing with itself.
 ///
 /// Done here, after the component has written its own, rather than by teaching the render to read a
-/// shared cursor: the projection is deliberately keyed by `(mount, nav_key)` so that a component
+/// shared cursor: the projection is deliberately keyed by `(mount, key)` so that a component
 /// which *does* keep per-placement cursors still gets them, and that must not be special-cased for
 /// one component.
 ///

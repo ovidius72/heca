@@ -110,10 +110,10 @@ pub(crate) fn pane(pane_id: PaneId, name: &str) -> PaneEntry {
     }
 }
 
-/// Every `nav_key` declared anywhere in a built tree — how a right-click finds what it landed on.
-pub(crate) fn declared_nav_keys(root: &dyn heca_grid_ui::Component) -> Vec<String> {
+/// Every `key` declared anywhere in a built tree — how a right-click finds what it landed on.
+pub(crate) fn declared_keys(root: &dyn heca_grid_ui::Component) -> Vec<String> {
     fn walk(n: &dyn heca_grid_ui::Component, out: &mut Vec<String>) {
-        if let Some(k) = n.base().nav_key.clone() {
+        if let Some(k) = n.base().key.clone() {
             out.push(k);
         }
         for c in &n.base().children {

@@ -76,9 +76,9 @@ pub(super) fn lay_out<T: Component + 'static>(node: T, w: f64, h: f64) -> Box<dy
     root
 }
 
-/// The bounds of the card a pane's `nav_key` names, wherever it sits in the tree.
+/// The bounds of the card a pane's `key` names, wherever it sits in the tree.
 pub(super) fn card_of(n: &dyn Component, key: &str) -> Option<heca_grid_ui::Rectangle> {
-    if n.base().nav_key.as_deref() == Some(key) {
+    if n.base().key.as_deref() == Some(key) {
         return Some(n.base().bounds);
     }
     n.base().children.iter().find_map(|c| card_of(c.as_ref(), key))
@@ -88,7 +88,7 @@ pub(super) fn card_of(n: &dyn Component, key: &str) -> Option<heca_grid_ui::Rect
 /// was given, however many workspaces there are and whatever shape the window is.
 pub(super) fn cards_bounds(root: &dyn Component) -> Option<heca_grid_ui::Rectangle> {
     fn walk(n: &dyn Component, acc: &mut Option<heca_grid_ui::Rectangle>) {
-        if n.base().nav_key.is_some() {
+        if n.base().key.is_some() {
             let b = n.base().bounds;
             *acc = Some(match acc.take() {
                 None => b,

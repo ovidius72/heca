@@ -2,8 +2,8 @@
 //!
 //! Getting a menu onto a row used to take four things, three of them invisible: a `context_path`
 //! mapping a row key to a menu-id string, a builder registered for that id, the items themselves,
-//! and — the one nobody would think of — a `.nav_key(..)` on the row, because the host resolved
-//! "what did you right-click" from a *position* and read the answer off `Base::nav_key`. A
+//! and — the one nobody would think of — a `.key(..)` on the row, because the host resolved
+//! "what did you right-click" from a *position* and read the answer off `Base::key`. A
 //! workspace header had the first three and not the fourth: right-clicking it opened nothing while
 //! panes and columns worked, with no error and no failing test.
 //!

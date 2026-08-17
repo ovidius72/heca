@@ -11,7 +11,7 @@
 //! | | where it lives |
 //! |---|---|
 //! | Generic, self-contained, complete on its own — `Row`, `Item`, `ScrollRegion`, `Dialog` | **`heca-grid-ui`.** If it can be built inside the library, it belongs in the library — the test is capability, not size. |
-//! | A composition that **also binds an app concept** — an `Intent`, an action **name**, a drag id, a chrome signal, a `nav_key` | **a component.** That binding is the *only* thing that justifies leaving the library. |
+//! | A composition that **also binds an app concept** — an `Intent`, an action **name**, a drag id, a chrome signal, a `key` | **a component.** That binding is the *only* thing that justifies leaving the library. |
 //! | A composition that binds **none** of them | a widget in the wrong crate. Send it down; do not keep it up here. |
 //!
 //! # Where a component lives — beside its surface first

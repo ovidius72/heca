@@ -676,7 +676,7 @@ mod tests {
                     && drawn.loc.y + drawn.size.h <= h + 1.0,
                 "in {w}x{h} the cards reach {drawn:?}",
             );
-            let card = card_of(root.as_ref(), &pane_card::pane_nav_key(PaneId(1)))
+            let card = card_of(root.as_ref(), &pane_card::pane_key(PaneId(1)))
                 .expect("the first pane's card");
             assert!(
                 card.size.h > h * 0.3,

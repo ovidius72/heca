@@ -103,7 +103,7 @@ pub enum ChromeEvent {
     ///
     /// One event for every kind of target, because there is now one mechanism: a pane, a workspace,
     /// a column and a mounted dock are all lettered through the same door, addressed by the
-    /// identity each already declares (`nav_key`, or `scope_key` for a container). It replaces
+    /// identity each already declares (`key`, or `scope_key` for a container). It replaces
     /// `pane.pick.changed` and `dock.pick.changed`, which mirrored four per-frame projections that
     /// no longer exist.
     ///

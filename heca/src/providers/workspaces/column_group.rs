@@ -8,7 +8,7 @@
 //! routes a grip press to the column and a card press to the pane for free — no geometry here.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{column_nav_key, column_row_items, pane_row::PaneRow, ColumnEntry, MENU_COLUMN};
+use super::{column_key, column_row_items, pane_row::PaneRow, ColumnEntry, MENU_COLUMN};
 use crate::chrome::{ChromeDragItem, RepaintWatch};
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
 use heca_grid_ui::widgets::{HintPlacement, KeyHint, MarkerGroup};
@@ -41,7 +41,7 @@ impl ColumnGroup<'_> {
         let mut col = MarkerGroup::new()
             .active(active)
             .gap(3.0)
-            .nav_key(column_nav_key(ws_idx, column.col_idx))
+            .key(column_key(ws_idx, column.col_idx))
             .context_menu({
                 let menu = crate::chrome::context_menu::menu_from_items(
                     "Column",
@@ -69,12 +69,12 @@ impl ColumnGroup<'_> {
         reg.signals.col_active.push((pane_ids, col.state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            column_nav_key(ws_idx, column.col_idx),
+            column_key(ws_idx, column.col_idx),
             col.nav_state(),
         ));
         // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can stamp this
         // column's letter over it (tinted `success`, distinct from pane/workspace picks). **The
-        // letter is offered by nav_key** (`chrome::hint`) and drawn by the widget — nothing is
+        // letter is offered by key** (`chrome::hint`) and drawn by the widget — nothing is
         // registered here and nothing is projected onto it every frame.
         let hinted = KeyHint::new(col)
             .color(seams.theme.colors.success)
@@ -105,13 +105,13 @@ mod tests {
             .build(&seams, &mut reg)
         };
 
-        let declared = testing::declared_nav_keys(&group);
+        let declared = testing::declared_keys(&group);
         assert!(
-            declared.contains(&column_nav_key(0, 0)),
+            declared.contains(&column_key(0, 0)),
             "the column names itself: {declared:?}",
         );
         assert!(
-            declared.contains(&super::super::pane_nav_key(PaneId(1))),
+            declared.contains(&super::super::pane_key(PaneId(1))),
             "and its pane still names itself inside it: {declared:?}",
         );
     }

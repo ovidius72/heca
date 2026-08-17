@@ -741,13 +741,13 @@ pub struct SharedChromeState {
     /// component's action from the palette while nothing is focused would have to guess between two
     /// placements — see `owning_mount` (F003/P085/T353).
     last_focused_container: Signal<Option<String>>,
-    /// **This placement's** selected row, as the row declared it (`nav_key`).
+    /// **This placement's** selected row, as the row declared it (`key`).
     ///
     /// Per mount, exactly like the scroll offset and the keyboard target beside it: two placements
     /// of one container have two cursors. Created on first ask, and outliving the retained tree so
     /// a rebuild restores the cursor rather than dropping it.
     ///
-    /// F003/P085/T354 (`nav_key`) is what writes it — a row declares its identity once and the
+    /// F003/P085/T354 (`key`) is what writes it — a row declares its identity once and the
     /// cursor, the right-click target and (later) drag are three readers of that one declaration.
     container_cursor: std::rc::Rc<std::cell::RefCell<HashMap<String, Signal<Option<String>>>>>,
 }

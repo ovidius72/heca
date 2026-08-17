@@ -18,7 +18,7 @@
 //! state means adding both lines, and this is the file where that is visible.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{pane_nav_key, pane_row_items, pane_row_press, row_hint, PaneEntry, MENU_PANE};
+use super::{pane_key, pane_row_items, pane_row_press, row_hint, PaneEntry, MENU_PANE};
 use crate::chrome::{
     alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
     ChromeDragItem, PaneInfoSignals, RepaintWatch, CARD_META_FONT_SCALE,
@@ -277,8 +277,8 @@ impl PaneRow<'_> {
             .nav_selected(false)
             // The row's ONE identity: the cursor and (later) drag read this single declaration
             // (F003/P085/T354). **The right-click no longer does** — the menu is declared below, on
-            // this widget, so a row that forgets `nav_key` still opens its menu (F004/P084/T395).
-            .nav_key(pane_nav_key(pane_id))
+            // this widget, so a row that forgets `key` still opens its menu (F004/P084/T395).
+            .key(pane_key(pane_id))
             // **This row's menu, built where this row's data is.** No `context_path`, no registered
             // builder, no menu-id string: the entries capture `pane_id` from the loop that is already
             // drawing it. Built at trigger time, so "Use process name" appears exactly when there is a
@@ -308,13 +308,13 @@ impl PaneRow<'_> {
             .push((pane_id, card.previous_state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            pane_nav_key(pane_id),
+            pane_key(pane_id),
             card.nav_state(),
         ));
         // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this pane's
         // letter over it. `KeyHint` is transparent — it hugs the child and routes events, focus and
         // drag straight through — so the card stays a drag source and target, and clickable. **The
-        // letter is offered by nav_key** (`chrome::hint`) and drawn by the widget itself.
+        // letter is offered by key** (`chrome::hint`) and drawn by the widget itself.
         reg.signals.pane_info.push((
             pane_id,
             PaneInfoSignals {
@@ -350,7 +350,7 @@ impl PaneRow<'_> {
                 // ever have the same picker (RULE ZERO, F004/P084/T399).
                 .on_hint(crate::chrome::fires(
                     seams.mount,
-                    row_hint(pane_nav_key(pane_id)),
+                    row_hint(pane_key(pane_id)),
                     seams.emit,
                 ))
                 .placement(HintPlacement::CenterRight),
@@ -398,11 +398,11 @@ mod tests {
             fx.signals
                 .row_nav
                 .iter()
-                .any(|(m, k, _)| m == "left" && k == &pane_nav_key(PaneId(7))),
+                .any(|(m, k, _)| m == "left" && k == &pane_key(PaneId(7))),
             "the cursor outline is per placement, so it is keyed by mount",
         );
         // The pick letter is **not** a signal this component registers any more: it is offered by
-        // the row's own `nav_key` (`chrome::hint`) and drawn by the widget, so what this component
+        // the row's own `key` (`chrome::hint`) and drawn by the widget, so what this component
         // owes is the identity — asserted above through `row_nav` — and nothing else.
     }
 
@@ -422,7 +422,7 @@ mod tests {
         };
 
         assert!(
-            testing::declared_nav_keys(&row).contains(&pane_nav_key(PaneId(9))),
+            testing::declared_keys(&row).contains(&pane_key(PaneId(9))),
             "a float carries the same identity a tiled card does",
         );
     }
