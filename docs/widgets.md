@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Choice`](#choice), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`FocusScope`](#focusscope)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint), [`KeyHintGroup`](#keyhintgroup), [`FocusScope`](#focusscope)
   - Overlays: [`Overlay`](#overlay) (the base layer), [`Tooltip`](#tooltip), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
   - Menus: [`MenuItem` / `Menu` / `ContextMenu`](#menus--menuitem-menu-contextmenu) — declared on the widget they belong to
   - Glyphs: [`Icon`](#icon) (Phosphor pictograms), [`NfIcon`](#nficon) (Nerd Font — the keyboard set)
@@ -522,8 +522,8 @@ return `Self` for chaining.
 > `Surface`/`Card` to give it a background.
 
 <a id="componentext--what-every-widget-gets"></a>
-**`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `nav_key`
-(who it is) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
+**`ComponentExt`** — **everything every component gets**: handlers (what happens to it), `key`
+(who it is), `hintable` (whether the picker may reach it) and the drag slots. It was four traits — `ComponentExt`, `ComponentExt`, `DragExt`, `HintExt` —
 split by nothing but the order they were added in; all four were unconditional, so the split carried
 no rule. The two that remain separate do carry one, enforced by the type system: `StyleExt` is
 surfaces only, `Parent` is containers only.
@@ -591,82 +591,185 @@ takes no argument and there is no event to carry.
 > inherent methods win over the trait one. `.child_boxed` is the plain "append it to my
 > children" case.
 
+<a id="hintable-and-being-pickable"></a>
+**Being pickable** (part of `ComponentExt`):
+
+| Method | Effect |
+|--------|--------|
+| `.hintable(bool)` | Keep this widget **out of the picker**, however actionable it is. Default `true`. |
+
+**Being pickable is not opt-in** (F003/P082/T441). A widget you can act on — a click, a double click,
+a key — is offered a letter by `prefix+/` and by any enclosing [`KeyHintGroup`](#keyhintgroup) with
+nothing declared, and picking it does what clicking it does. So the only thing left to say is
+"not me":
+
+```rust
+Button::new("×").hintable(false)   // a close button on every row would eat a letter each
+```
+
+`.hintable(true)` is the default and does nothing on a widget nobody can act on — there would be
+nothing for the letter to run.
+
+| what you write | what happens |
+|---|---|
+| nothing | actionable → gets a letter; picking it does what clicking it does |
+| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays) |
+| `.hintable(false)` | never gets a letter, however actionable it is |
+
+**"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
+for the generic listeners (`Click`, `DoubleClick`, `Key` — so `on_click`, `on_double_click`,
+`on_key_down`, `on_key_up`), and in each widget that keeps its own callback instead (`Button`,
+`IconButton`, `BadgeButton`, `Toast` via `on_click`; `Choice`, `RailCell`, `Item`, `Row` via
+`on_activate`). It is a field and not a question asked of the handler list, because those eight
+store their action privately — `Handlers::has(Click)` is `false` for a `Button`. Right-click and
+middle-click are deliberately excluded: a right-click opens a context menu rather than doing the
+thing, so it should not spend one of the 52 letters.
+
+**Letters are scarce.** One picker hands out 52, one keystroke each — `.hintable(false)` is how a
+dense surface keeps them for the targets that matter.
+
+> **Declarative form:** `hintable` is an ordinary boolean prop on the node.
+
 **Identity** (part of `ComponentExt`):
 
 | Method | Effect |
 |--------|--------|
-| `.nav_key(impl Into<String>)` | Declare this widget to be a **row with an identity of its own**. |
-| `.scope_key(impl Into<String>)` | Declare this subtree to be an **enclosing region** with an identity of its own — a panel, a dock, a tab group. |
+| `.key(impl Into<String>)` | The identity of **this item**, when it is one of a collection you are iterating. |
+
+> ⚠️ **`nav_key` and `scope_key` are being replaced by `key`** (F003/P082/T444, decided 2026-08-17).
+> The rest of this section documents the settled design; the code still says `nav_key`/`scope_key`
+> until that task lands.
+
+#### The rule: two cases, and only two
+
+| what you are building | what you write |
+|---|---|
+| anything at all — a button, an icon, a card, a label | **nothing** |
+| an item in a collection you are iterating | **`.key(…)`** — the item's own id, from your data |
 
 ```rust
-// A list-shaped component labels its rows. That is the whole of its side.
-Row::new()
-    .nav_key(format!("pane:{}", pane.id))
-    .child(Label::new(&pane.name))
+IconButton::new(Glyph::ChevronDown).on_click(move || expand(id))   // nothing
+
+for pane in &column.panes {
+    Item::new(&pane.name).key(pane.id)                             // its own id
+}
 ```
 
-**One declaration, three readers.** The host derives the keyboard **cursor**, the
-**right-click target**, and (later) the **drag identity** from this single string — instead of a
-closed enum of row kinds that only the app could extend, which is what made a plugin row impossible
-to point at.
+That is the whole surface. No role to declare, no region to name, nothing to remember on an ordinary
+widget.
 
-**Why a string, when `DragItemId` is an opaque integer.** That one is a *registry slot*: the widget
-takes a token and the app keeps the map, valid only for the tree that handed it out. A nav key is
-the opposite — it must **survive a tree rebuild**, because a retained tree is
-rebuilt for reasons that have nothing to do with navigation (in heca, a pane's git status changing
-is enough), and a cursor that resets every time is not a cursor. An index into a tree cannot do
-that; an identity the row asserts about itself can. It is also why a scoped `FocusManager` — a visit
-*index* — cannot be the cursor.
+**Why the old names went.** `nav_key` and `scope_key` described *how the framework used the string*
+rather than what it was, so a developer adding a widget had no reason to guess either existed.
+Antonio, 2026-08-17: *"i don't want plugin authors or developers to have to add this strange and
+confusing name… if i were a developer adding a button i will forget to add that."*
 
-The key is **opaque to the library**: nothing here parses it. Choose something stable — prefer an id
-over a position (`pane:7`, not `row:3`) wherever the data has one.
+#### `key` is React's `key`, and means the same thing
 
-Two free functions read them, both in `heca_grid_ui::nav`:
+When you render a collection, each child carries the identity of *the thing it represents*, so the
+framework can tell "this row again" from "a different row" after a rebuild. Exactly what is needed
+here, for the same reason: a chrome tree is rebuilt for reasons that have nothing to do with
+navigation — a pane's git status changing is enough — and a cursor, a letter or a right-click target
+that resets every rebuild is not one.
 
-| Function | Answers |
-|----------|---------|
-| `collect_nav_keys(&dyn Component) -> Vec<(String, Rectangle)>` | Every navigable row with its laid-out bounds, in **document order** — the order the user sees, which is what "next row" means. Hidden subtrees are skipped, so a collapsed group's rows are not steppable. |
-| `nav_key_at(&dyn Component, Point) -> Option<String>` | The **topmost, deepest** row under a point — what a right-click is aimed at. Same walk as `drag::source_at`, deliberately: a right-click and a drag must agree about what they are pointing at. |
-| `scope_at(&dyn Component, Point) -> Option<String>` | The **innermost scope** under a point — which enclosing region the press landed in. `None` means outside every scope, which is a real answer a host acts on. |
+**You never count.** `key` is never a position and never a counter; it comes from the data you are
+already iterating. Antonio, 2026-08-17: *"what does it mean `pane:7`? Should the developer count the
+number of panes they are adding?"* No. If you are reaching for a counter the key is wrong — an index
+is exactly the thing that changes when the list changes, which is what identity is for.
 
-A row that should not be navigable simply declares no key. The **cursor highlight** is separate and
-host-driven: `Row`, `Item`, `DockFrame` and `MarkerGroup` expose `nav_state() -> Signal<bool>`, and
-a widget whose nav state is set reports `wants_visible()`, so any enclosing
-[`ScrollRegion`](#scrollregion) scrolls it into view with nothing wired at the call site.
+**Where it is required:** in a collection, and nowhere else — the same rule React uses, and the same
+place a developer already expects to think about it.
 
-#### `scope_key` — the same idea one level up
+#### Nesting is structure, not a second concept
 
-`nav_key` answers *which row*; `scope_key` answers *which region containing rows*. A host commonly
-wants both from a single press: heca resolves the press to a chrome container (focus it) **and** to
-the row inside it (move that container's cursor there).
+The sidebar is a **tree**: a workspace row holds column rows, which hold pane rows. Every level is
+both *a row the cursor stops on* and *a container of the next level*.
 
 ```rust
-// The host stamps it on the wrapper it already puts around each mounted panel.
-Box::new(FocusScope::new(body).scope_key(panel_id))
+DockFrame::new(&ws.name).key(ws.id)                 // a row, and a container
+    .child(MarkerGroup::new().key(col.id)           // a row, and a container
+        .child(Item::new(&pane.name).key(pane.id))) // a leaf row
 ```
 
-Three properties earn it a field of its own rather than a convention on top of `nav_key`:
+One property at every level. Nesting is expressed by the tree, exactly as in React's nested lists.
 
-- **Innermost wins**, the same rule as the deepest row: a scope nested inside another resolves to
-  the inner one, so nesting composes instead of needing a flag.
-- **It is independent of consumption.** A press a widget consumes — a scrollbar thumb, a button —
-  still resolves to the scope containing it, because "which panel did the user click in" is not the
-  same question as "did anything handle the click". This is what makes *click a panel to focus it*
-  work for every panel with nothing declared per panel.
-- **It must not be a row.** Folding it into `nav_key` would make every region turn up in
-  `collect_nav_keys` as a steppable row, which it is not.
+**This is why `scope_key` disappears.** It answered *"which region did this press land in"* — a
+second declaration for the same point in the tree, and the reason two fields existed. With a key at
+every level it is **derived**: the region is the **nearest keyed ancestor**. Nobody declares it, and
+it cannot fall out of step with the row it encloses.
 
-Like `nav_key`, the string is opaque here and must survive a tree rebuild.
+> The old `scope_key` documentation argued the two must stay separate, because folding them would
+> make a region turn up in `collect_nav_keys` as a steppable row. That held while identity and role
+> were the same declaration. Once every node is keyed, "region" is a question you *ask* of the tree
+> rather than something a widget asserts.
 
-**It is entirely optional.** It defaults to `None`, and a consumer that never calls `.scope_key(…)`
-never meets it — `scope_at` simply answers `None` everywhere. It is the fourth of four host-facing
-identity slots on `ComponentBase` (`drag_source`, `drop_target`, `nav_key`, `scope_key`), all the
-same bargain: the library provides the slot and the resolver, the host gives it meaning. (`hint` is
-a fifth slot but not an *identity* one: it carries the behaviour itself, not a token to look up.)
+#### Everything else gets an identity anyway
 
-> **Declarative form:** none. A `nav_key` or `scope_key` is authored by the component that owns the
-> row or region, and a described tree carries it as an ordinary prop on the node — see
-> [`ViewNode`](#declarative-ui-model-viewnode).
+A widget that declares no `key` still needs one, or a hint letter cannot stay with it between
+openings of the picker. It is derived, in three levels — each used only when the one above is
+ambiguous:
+
+1. **its name, within the nearest keyed ancestor** — `pane:7 / ×`
+2. **name + index among identically-named siblings in that scope** — `topbar / ×[1]`
+3. nothing else; that is the floor
+
+The name comes from `Component::text_summary()`, which already computes one *"from the contents, like
+the web's accessible-name algorithm"*.
+
+⚠️ **Derive from content, never from position.** `Flex/Row[2]/Button[0]` looks automatic and drifts on
+every tree change — which is the bug this exists for: expanding a pane moved a button's hint letter
+from `k` to `j`. Content-based identity does not move. The level-2 index counts only
+identically-named siblings *in one scope*, so it shifts when a `×` is added beside other `×`s and
+never because something changed elsewhere.
+
+**Known limit:** a derived identity changes if the label changes. Fine for a remembered letter; not
+fine for anything durable, which is what an explicit `key` is for.
+
+#### Forcing a `key` — a warning, not a type
+
+Considered and rejected: a typestate builder where an item in a collection does not compile without a
+key. It puts the rule in the compiler, but it is noise on every widget, and a plugin sending JSON
+never meets the Rust compiler. What is built instead, again as React does:
+
+- **a warning when a collection's children have no keys** — the moment it can be seen and fixed;
+- **a test** over heca's own chrome, so our rows stay keyed;
+- **an error at realize time** for a plugin node declaring a `press` inside a collection with no
+  `key` — the only mechanism that reaches a plugin author.
+
+Demanding a name from everyone up front is how you get `"btn1"`, which is worse than no name.
+
+#### Naming
+
+**`key`, not `id`.** `id` suggests global uniqueness across a document, the way HTML means it. This is
+scoped to its collection — two lists may both have a `key("1")` — which is precisely React's meaning.
+
+**No `Hintable…` prefix on anything.** The identity serves the cursor, the right-click, drag *and* the
+picker; naming it after one of four readers would be wrong, and `HintableItem` would suggest a second
+kind of `Item` rather than a property of the one that exists.
+
+#### One declaration, four readers
+
+The host derives the keyboard **cursor**, the **right-click target**, the **drag identity** and the
+**hint picker's** stable letters from this single string — instead of a closed enum of row kinds that
+only the app could extend, which is what made a plugin row impossible to point at.
+
+| Free function | What it answers |
+|---|---|
+| `collect_nav_keys(&dyn Component) -> Vec<(String, Rectangle)>` | Every keyed item with its laid-out bounds, in **document order** — the order the user sees, which is what "next row" means. Hidden subtrees are skipped, so a collapsed group's rows are not steppable. |
+| `nav_key_at(&dyn Component, Point) -> Option<String>` | The **topmost, deepest** item under a point — what a right-click is aimed at. Same walk as `drag::source_at`, deliberately: a right-click and a drag must agree about what they are pointing at. |
+| `scope_at(&dyn Component, Point) -> Option<String>` | The **nearest keyed ancestor** of that point — which region the press landed in. Derived, not declared. |
+
+**Innermost wins**, the same rule as the deepest row: a keyed node nested inside another resolves to
+the inner one, so nesting composes instead of needing a flag. And it is **independent of
+consumption** — a press a widget consumes (a scrollbar thumb, a button) still resolves to the region
+containing it, because "which panel did the user click in" is not the same question as "did anything
+handle the click". That is what makes *click a panel to focus it* work everywhere with nothing
+declared per panel.
+
+The string is **opaque to the library** — nothing here parses it — and must survive a tree rebuild.
+
+> **Declarative form:** `key` is an ordinary prop on the node — see
+> [`ViewNode`](#declarative-ui-model-viewnode). A described tree carries it exactly as a native one
+> does, and `realize` writes it into the same slot.
 
 ### `Style` & layout enums
 
@@ -1928,8 +2031,9 @@ spellings — never two paint paths.
   — scales font **and** padding, and **cascades into the content**) · `.font_size(f32)` (pin an
   explicit size) · `.glow(bool)` (hover glow, default on) · `.bordered(bool)` (default on).
 - **Behavior builders**: `.on_click(impl Fn() + 'static)`, plus the shared `LayoutExt`
-  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …). To make it pickable by `prefix+/`,
-  wrap it: `KeyHint::new(button).on_hint(…)`.
+  (`.disabled(bool)`, `.tab_index(i32)`, `.width/.height`, …). **It is pickable by `prefix+/` with
+  nothing written** — a click handler is what makes it so; use `.hintable(false)` to keep it out, or
+  `.on_hint(…)` when a pick should do something other than the click.
 - **Accessor**: `.hovered() -> Signal<bool>`.
 - **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
 
@@ -3104,7 +3208,8 @@ sidebar.toggle();   // or the host sets mode_signal() from a key / RPC
 A focusable **square icon cell** — the per-item unit a *list* Dock (workspaces / panes) shows
 when collapsed to a rail, so every pane stays visible and addressable (vs a tool Dock folding to
 one icon). Centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash;
-focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick letters.
+focus ring. It wears a move/swap/select pick letter with nothing written, because `on_activate`
+makes it actionable — see [`.hintable`](#hintable-and-being-pickable).
 
 **At rest it publishes a content glow so its bare glyph still haloes.** The cell draws no surface
 at rest — the bare icon *is* the resting look — so there is nothing to carry the halo every
@@ -3152,18 +3257,27 @@ ViewNode::new(WidgetKind::RailCell)
 > menu** is a host-owned dropdown the plugin declares with `.context_menu(…)`, not a nested widget.
 > See **[chrome-and-ui.md](chrome-and-ui.md)** → §0 and "Menus and keyboard hints".
 
-A **generic** transparent wrapper that does two things for the region it wraps: it overlays a
-glowing **keycap letter** while a host-owned `Signal<Option<String>>` is `Some`, and it declares
-**what a leader-key pick does** to that region (`on_hint`). It is transparent to focus and events
-(the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so mouse,
-keyboard, and RPC all light it up identically.
+A **transparent wrapper that carries a hint letter on behalf of a region** — a group of widgets, or
+something that is not a widget you can put a builder on. It is transparent to focus, layout and
+events (the wrapped widget stays clickable and focusable); it only adds a declaration.
 
-**Why the pick declaration lives here and not on every widget.** Being pickable is something you opt
-a *region* into — and you were already wrapping it to show the letter — so `Label::on_hint` is a
-method that never has to exist and you can read off the tree what is reachable. (A context menu is
-the opposite shape on purpose: a menu is *about* a widget, so it is a slot any widget carries; a
-hint is *aimed at* a region you chose to make reachable.) The slot itself is universal —
-`Base::hint` — so the framework's collector is one uniform walk with no downcasting.
+> ⚠️ **It no longer draws the letter, and it is no longer how a widget becomes pickable.** Both
+> changed on 2026-08-17 (F003/P082/T431 and T441). Reach for it only when there is nothing to hang a
+> declaration on.
+
+**What replaced it, and why.** Two rules used to live here and now live in the framework:
+
+1. **Drawing.** Only `KeyHint::paint` knew how to draw a keycap, so a widget got one by being
+   wrapped. The drawing moved into `component::paint_child`, which every container already funnels
+   its children through, so **any** widget carrying a letter shows it — a plugin's included. The four
+   placement knobs moved with it, onto `Base::hint_style`.
+2. **Being pickable.** It used to say *"being pickable is something you opt a region into, so
+   `Label::on_hint` is a method that never has to exist."* That is no longer true. **Anything you can
+   act on wears a letter with nothing declared** — see [`.hintable`](#hintable-and-being-pickable) —
+   and `on_hint` is the *override*, for a region that answers a pick differently from a click.
+
+The slot itself is universal — `Base::hint` — so the framework's collector stays one uniform walk
+with no downcasting.
 
 - **Construct**: `KeyHint::new(child)`, or `KeyHint::new_boxed(Box<dyn Component>)` for a subtree built
   dynamically — a `realize`d `ViewNode` tree, or a chrome provider's render seam — where the concrete
@@ -3247,6 +3361,86 @@ paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a
 
 **Plugins** never call this directly — a described node with a `press` (or `hint`) intent is a pick
 target and the host stamps the keycap for it.
+
+### KeyHintGroup
+
+A **picker you can declare**, over a subtree you choose. [`KeyHint`](#keyhint) carries one region's
+declaration; this opens a picker over *many*: while open it letters every target beneath it, holds
+the keyboard, and runs the one whose letter you type.
+
+**Why it is a widget and not a host facility.** It used to be host-only, which made the picker a
+shipped feature nobody outside the app could have — a plugin could contribute *targets* to heca's
+picker and never own one. Nothing about it needed the host: a widget can hold focus, and a focused
+widget gets the keys. So the whole picker is (1) walk my own descendants for targets, (2) hand each
+one a letter — `Base::hint_label`, which the declaring widget **draws itself**, (3) hold focus while
+open and fire on the next typed character.
+
+The host keeps exactly one thing, because only it can answer it: **which surfaces are eligible** when
+the picker's scope is the whole screen. `prefix+/` is this widget's behaviour at screen scope with
+that filter applied; a plugin's is the same behaviour scoped to its own panel.
+
+- **Construct**: `KeyHintGroup::new(child)`, or `KeyHintGroup::new_boxed(Box<dyn Component>)` for a
+  subtree built dynamically (mirrors [`Parent::child_boxed`](#builder-traits)).
+- **Builders**:
+  - `.open_when(Signal<bool>)` — the **host-owned** open state. Set it from an action, which is how a
+    surface gives its picker a binding without any widget naming a key. Host-only. Binding it also
+    makes the group hold focus while open: holding focus *is* taking the keyboard, so there is no
+    gate to write and nothing to decline.
+  - `.letters(impl IntoIterator<Item = char>)` — **the letters this picker hands out, in order.**
+    Defaults to `DEFAULT_LETTERS`. Host-only (an app's choice of alphabet, not data a described tree
+    carries).
+- **Accessors**: `.is_open() -> bool`, `.open_signal() -> Signal<bool>`.
+- **Dismissal** comes from `[keys.widgets]`, so the widget names no key of its own.
+- **Letters are claimed in capture**, before the subtree sees them: the regions a picker covers
+  commonly answer typed characters themselves — the exposé's cards take `x`, `r`, `d` — and while it
+  is open those letters are the picker's.
+- A group **does not letter itself**, so a group nested in another is a target of the outer one only
+  through its children.
+
+**`DEFAULT_LETTERS`** — the shared alphabet, `pub` from `heca_grid_ui::widgets`:
+
+```
+asdfghjklbceimnopqrtuvwxyzASDFGHJKLBCEIMNOPQRTUVWXYZ
+```
+
+**Home row first**, so the targets a picker finds first get the keys your fingers rest on; lower case
+before capitals because they are one keystroke on every layout. **One letter per pick, always, and 52
+is the cap** — past the end of the sequence a target simply gets no letter. Two-key sequences were
+raised and refused (Antonio, 2026-08-17: *"typing 2 letters is not an option. always 1. stay with
+52."*): anything needing more than 52 at once is a picker covering too much, and the answer is a
+smaller picker, never a longer keystroke.
+
+The app reads the same constant, so `prefix+/`, the pane / column / workspace / dock picks and a
+widget picker all spend letters in the same order.
+
+**Native:**
+
+```rust
+let open = signal(false);          // the host flips this from an action
+let picker = KeyHintGroup::new(
+    Flex::column()
+        .child(Item::new("one").on_activate(|| choose(1)))
+        .child(Item::new("two").on_activate(|| choose(2))),
+)
+.open_when(open)
+.letters("asdfghjkl".chars());     // optional — home row only, for a small panel
+```
+
+Note neither item declares anything to be pickable: both are actionable, so both wear a letter — see
+[`.hintable`](#hintable-and-being-pickable).
+
+**Declarative** — a described tree opens a picker over its own subtree the same way, and binds the
+key through `[[keys.surface]]` on the action the component declares with `on_action`:
+
+```toml
+[[keys.surface]]
+name = "mypanel"
+pick = "s"          # → mypanel.pick
+```
+
+*(`WidgetKind` for `KeyHintGroup` and the declarative form of `on_action` are F003/P082/T436 — until
+that lands, a plugin can be picked but cannot own a picker.)*
+
 
 ### FocusScope
 
