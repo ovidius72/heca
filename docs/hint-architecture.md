@@ -115,26 +115,31 @@ a key. If it does, it gets a letter.
 **Antonio, 2026-08-17:** *"we can see when prefix+/ is pressed if there is an actionable event like
 on_click, on_key_up etc… and if it has hintable(false). Can we?"* Yes.
 
-`Handlers::has(kind)` is already public (`heca-grid-ui/src/event.rs:915`) — *"the cheap check the
-router makes before building an event nobody wants."* So the walk that hands out letters asks each
-widget directly:
+The plan was to read `Handlers::has(kind)` at pick time and add no field. **It was tried and it does
+not work** — two red tests said so before anything was built on it:
+
+- **Eight widgets keep their action in a private field of their own** — `Button`, `IconButton`,
+  `BadgeButton`, `Toast`, `Choice`, `RailCell`, `Item`, `Row`. `Handlers::has(Click)` is `false` for a
+  `Button`, the case that matters most.
+- **`on_click` and `on_activate` are two spellings of one thing**, so no set of `EventKind`s names it
+  either.
+
+So it is a field after all: **`Base::activatable`**, set wherever the action is wired — once in
+`ComponentExt::on` for the generic listeners (`Click`, `DoubleClick`, `Key`, which covers `on_click`,
+`on_double_click`, `on_key_down` and `on_key_up`), and one line in each of the eight. That line sits
+beside their existing `base.focusable` and `base.one_click_target`, which are the same pattern.
 
 ```
-actionable = has(Click) || has(DoubleClick) || has(Key)
-gets a letter = actionable && !hintable(false)
+gets a letter = activatable && !hintable(false)
 ```
 
-**No new flag on `Base`.** An earlier plan added one so activation would have a single name; it is not
-needed, because the handler list answers the question well enough and the walk already has to visit
-every widget anyway.
-
-**Note `Widget` is deliberately not in the list.** `EventKind::Widget` covers `Activate`, `Dismiss`,
-`ScrollPageDown` and `MenuUp` alike, so counting it would letter every `ScrollRegion`.
+**Right-click and middle-click are deliberately out** — a right-click opens a context menu rather
+than doing the thing, so it should not spend one of the 52.
 
 **Known consequence, accepted:** `on_key_down` and `on_key_up` both register as `EventKind::Key` and
-sort themselves out *inside* the closure (`builders.rs:601`), so `has(Key)` is also true of a widget
-that listens only for Escape or arrows. Those get a letter too. Watch it on screen; `.hintable(false)`
-is the fix where it is wrong, not a narrower rule.
+sort themselves out *inside* the closure (`builders.rs:601`), so a widget listening only for Escape or
+arrows is still marked activatable. Those get a letter too. Watch it on screen; `.hintable(false)` is
+the fix where it is wrong, not a narrower rule.
 
 **And the cost is nothing.** The walk runs **once, when the picker opens** — not per frame. Afterwards
 each widget just reads its own signal to draw its letter. Do **not** cache the result: trees are
@@ -175,65 +180,26 @@ the answer whenever a picker would otherwise cover too much.
 
 ---
 
-## 2d. ⭐ Identity — automatic by default, `id` when you mean to point at it
+## 2d. ⭐ Identity — see `docs/widget-identity.md`
 
-**Decided by Antonio, 2026-08-17**, on being told stable letters need `nav_key`: *"i don't want plugin
-authors or developers to have to add this strange and confusing name… if i were a developer adding a
-button i will forget to add that."*
+A letter cannot stay with its target between openings unless the target can be recognised next time,
+so the picker needs an identity for every widget. That grew past hints — the keyboard cursor, the
+right-click and drag all read the same thing — and lives in its own record:
+**[`docs/widget-identity.md`](widget-identity.md)**.
 
-### The names go
+The short of it, decided 2026-08-17:
 
-`nav_key` and `scope_key` say *how the framework uses the string*. **`id`** says what it is, and every
-developer already knows it:
+- **You write nothing** on an ordinary widget. A button, an icon, a card, a label: nothing.
+- **`.key(…)`** on items in a collection you are iterating — the item's own id from your data, never
+  a counter. It is React's `key`, and means the same thing.
+- **Regions are derived**, as the nearest keyed ancestor. `scope_key` disappears; nesting is
+  structure, and the sidebar's tree carries a key at every level because each level is both a row and
+  a container.
+- Anything unkeyed still gets a **derived** identity, from its accessible name within the nearest
+  keyed ancestor — from content, never from position, because position is exactly what drifts.
 
-```rust
-Row::new().id("pane:7")             // was .nav_key("pane:7")
-Flex::column().id("workspaces")     // was .scope_key("workspaces")
-```
-
-The real difference the two fields carry is **row vs region** — a `nav_key` is steppable by the
-keyboard cursor, a `scope_key` is not, and folding them naively would make docks turn up as rows you
-can arrow through. But that belongs to *what the widget is*, not to which field was used: a `Row` is
-steppable because it is a `Row`.
-
-### And nobody has to write one
-
-Every widget gets an identity with no author input, derived in three levels — each used only when the
-one above is ambiguous:
-
-1. **its name, inside the nearest named ancestor** — `pane:7 / ×`
-2. **name + index among identically-named siblings in that scope** — `topbar / ×[1]`
-3. nothing else; that is the floor
-
-The name comes from `Component::text_summary()` (`heca-grid-ui/src/component.rs:507`), which already
-computes one *"from the contents, like the web's accessible-name algorithm"* — so the machinery
-exists.
-
-⚠️ **Derive from content, never from position.** `Flex/Row[2]/Button[0]` looks automatic and drifts on
-every tree change — which is the exact bug this is for: expanding a pane moved a button's letter from
-`k` to `j`. Content-based identity does not move. The level-2 index counts only identically-named
-siblings *in one scope*, so it shifts when a `×` is added beside other `×`s and never because
-something changed elsewhere.
-
-**Known limit:** a derived identity changes if the label changes. Fine for a remembered letter; not
-fine for a keybinding — which is what `id()` is for.
-
-### Forcing an author to write `id` is the wrong goal
-
-Considered and rejected: a typestate builder where `on_click` only exists on a named widget. It
-compiles the rule in, but it is noise on every button, and a plugin sending JSON never meets the Rust
-compiler anyway. It is also the same friction that made `nav_key` a problem — demand a name from
-everyone for a feature most will never use and you get `"btn1"`, which is worse than no name.
-
-What is built instead:
-
-- **automatic identity always**, so everything is addressable and letters are stable with nobody
-  writing anything;
-- **`id()` only when you point at it precisely** — a keybinding, an RPC call, a script. That enforces
-  itself: there is nothing else to type in the config.
-- **a test** over heca's own chrome, so *our* actionable widgets stay properly named;
-- **an error at realize time** for a plugin's node that declares a `press` and no `id` — the only
-  mechanism that reaches a plugin author, and it reaches them when they can act on it.
+`nav_key` and `scope_key` are gone. They named *how the framework used the string* rather than what
+it was, which is why nobody remembered they existed.
 
 ---
 
