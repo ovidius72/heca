@@ -811,6 +811,18 @@ pub struct AppState {
     /// per-widget signal lists projected every frame, which wrote `None` over every offered letter
     /// and needed a host-mode check to stop — a check a plugin could never add itself to.
     pub offered_letters: std::cell::RefCell<crate::chrome::hint::OfferedLetters>,
+    /// **Which letter each pick target wore last time** — so it wears the same one again
+    /// (F003/P082/T445).
+    ///
+    /// Keyed by the target's identity rather than its path, because a path lives one frame. Rebuilt
+    /// on every pick from what is actually on screen, so a target that has gone releases its letter
+    /// instead of holding one nobody can reach.
+    ///
+    /// Antonio, driving, 2026-08-17: *"I want to expand a pane, prefix+/ and `k` appears on that
+    /// icon… then I want to collapse. prefix+/ and `j` appears on that button, while I was expecting
+    /// `k`."* The letter was the target's **index**, so anything appearing earlier in the tree
+    /// shifted every letter after it.
+    pub remembered_letters: std::collections::HashMap<String, char>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.

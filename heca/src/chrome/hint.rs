@@ -309,6 +309,29 @@ fn hint_surface_root_mut<'a>(
     }
 }
 
+/// **What to call this target, so its letter can find it again next time** (F003/P082/T445).
+///
+/// A target is addressed by a **path**, which lives exactly as long as the frame it was collected
+/// in — that is what makes the picker need no registry, and also what makes a letter forget which
+/// widget it belonged to. The identity is the durable half: the widget's own `key` where it has one,
+/// derived from its name and scope where it has not (`heca_grid_ui::identity_of`).
+///
+/// Prefixed by the surface, because two surfaces may each hold a `pane:7` and they are not the same
+/// pickable thing.
+pub(crate) fn target_identity(
+    state: &crate::app_state::AppState,
+    target: &HintTarget,
+) -> Option<String> {
+    let root = hint_surface_root(state, &target.surface)?;
+    let within = heca_grid_ui::identity_of(root, &target.path)?;
+    let surface = match &target.surface {
+        HintSurface::Chrome => "chrome".to_string(),
+        HintSurface::PaneHeader(id) => format!("pane-header:{}", id.0),
+        HintSurface::Layer(id) => format!("layer:{id:?}"),
+    };
+    Some(format!("{surface}/{within}"))
+}
+
 /// Run what a pick does to the widget behind `target`. `false` when its tree is gone or was rebuilt
 /// under the letters.
 pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTarget) -> bool {

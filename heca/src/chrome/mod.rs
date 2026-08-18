@@ -23,6 +23,7 @@ pub(crate) mod hint;
 // Re-exported so call sites keep naming `crate::chrome::…` while the code lives where it belongs.
 pub(crate) use hint::{
     active_hint_targets, clear_hint_letters, fire_hint, fire_widget_action, offer_hint_letters,
+    target_identity,
     HintTarget,
 };
 mod contribution;

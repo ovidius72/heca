@@ -462,6 +462,7 @@ pub(crate) async fn init_state(
         expose_cursor_per_ws: vec![None; ws_count],
         expose_cursor_ws: None,
         offered_letters: Default::default(),
+        remembered_letters: Default::default(),
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,
