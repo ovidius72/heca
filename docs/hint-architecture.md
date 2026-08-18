@@ -57,14 +57,15 @@ be nothing for the letter to run.
 > app and plugin alike."*
 
 The native side only ever implemented explicit opt-in. A later session noticed the mismatch and
-**rewrote the documentation to match the code**, so `docs/chrome-and-ui.md:394` now reads:
+**rewrote the documentation to match the code**, so `docs/chrome-and-ui.md` came to say:
 
 > *"`.hintable(false)` was written here as the opt-out and never existed. There is nothing to opt out
 > of: a node with neither `press` nor `hint` is not a pick target."*
 
-⚠️ **That sentence is wrong and must be corrected when this lands.** It is the record of a decision
-being overwritten by an implementation gap, and it is exactly how this was lost the first time. When
-the code and a decision disagree, the code is what changes.
+**Corrected 2026-08-17** — that file now documents the opt-out properly, with a note recording what
+it used to claim. Keep the episode in mind rather than the sentence: it is a decision overwritten by
+an implementation gap, and it is how this was lost the first time. **When the code and a decision
+disagree, the code is what changes.**
 
 ### The declarative half already does it
 
@@ -180,12 +181,13 @@ the answer whenever a picker would otherwise cover too much.
 
 ---
 
-## 2d. ⭐ Identity — see `docs/widget-identity.md`
+## 2d. ⭐ Identity — see `docs/widgets.md` § Identity
 
 A letter cannot stay with its target between openings unless the target can be recognised next time,
 so the picker needs an identity for every widget. That grew past hints — the keyboard cursor, the
 right-click and drag all read the same thing — and lives in its own record:
-**[`docs/widget-identity.md`](widget-identity.md)**.
+**[`docs/widgets.md`](widgets.md) § Identity** — the widget catalog, where the reference for it
+belongs. (It was briefly its own file; folded back in, because separate files fragment the docs.)
 
 The short of it, decided 2026-08-17:
 
