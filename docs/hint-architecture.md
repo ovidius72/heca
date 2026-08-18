@@ -1,7 +1,7 @@
 # Hint — one keystroke to any element
 
-*Decided 2026-08-14, refined 2026-08-17. This file is the record; it replaces §5 of the P082 handoff,
-which the planner archives as soon as a task in the phase starts.*
+*Decided 2026-08-14, refined 2026-08-17. This file is the record — kept in the repo rather than only
+in a phase handoff, so it survives independently of the planner's lifecycle.*
 
 Hint is the keyboard-first primitive: **give an element a one-keystroke address so the keyboard can
 reach it without arrow-walking.** Vimium's link hints, easymotion. It binds no app concept — a
