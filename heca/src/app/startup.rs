@@ -439,6 +439,7 @@ pub(crate) async fn init_state(
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
         chrome_tree: None,
+        panes: std::collections::HashMap::new(),
         pane_headers: std::collections::HashMap::new(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),

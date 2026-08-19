@@ -190,6 +190,41 @@ impl InputMode {
         }
     }
 
+    /// **Is a letter picker up, waiting for one keystroke?**
+    ///
+    /// The family, named once. Every one of these modes ends on the next key — picked, wrong key,
+    /// or Esc — which means a modifier being held would end it too: reaching for Shift to type a
+    /// capital is *part of* pressing that letter, and the picker would vanish before the letter
+    /// arrived.
+    ///
+    /// **Exhaustive on purpose — no wildcard.** Adding an `InputMode` variant does not compile until
+    /// it is classified here, which is the same technique `action_policy()` uses for `WmAction` and
+    /// for the same reason. Asking the question per handler first put the guard in three of eight
+    /// modes; writing it as a `matches!` list then left `DockPick` out on the day it was written,
+    /// and nothing failed — a wildcard answers `false` for whatever nobody listed, silently. A
+    /// compile error is the only form of this rule that cannot be forgotten.
+    pub fn awaits_pick_letter(&self) -> bool {
+        match self {
+            // A letter is on screen and the next keystroke chooses one.
+            InputMode::PaneSelect { .. }
+            | InputMode::PaneSwap { .. }
+            | InputMode::PaneTake { .. }
+            | InputMode::WorkspacePick { .. }
+            | InputMode::ColumnPick { .. }
+            | InputMode::DockPick { .. }
+            | InputMode::FollowLink { .. }
+            | InputMode::HintPick { .. } => true,
+            // Everything else reads keys for something other than picking a letter, or reads none.
+            InputMode::Normal
+            | InputMode::Prefix
+            | InputMode::Chord { .. }
+            | InputMode::Mode { .. }
+            | InputMode::Selection
+            | InputMode::ConfirmDelete
+            | InputMode::Search => false,
+        }
+    }
+
     /// Workspace pick candidates (letter → `ws_idx`) while a `WorkspacePick` is active.
     pub fn ws_candidates(&self) -> Option<&[(char, usize)]> {
         match self {
@@ -704,6 +739,16 @@ pub struct AppState {
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
+    /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
+    /// and the widget that carries the pane's identity and its pick letter. Built/positioned each
+    /// frame by `chrome::sync_panes`, painted through `heca_grid_ui::paint_child` (which is what
+    /// draws the letter).
+    ///
+    /// Retained rather than rebuilt in paint: the picker writes a letter into the tree when it
+    /// opens and reads it back a keystroke later, so a tree that does not outlive the frame cannot
+    /// carry one — which is why the pane letters used to be stamped by a host paint pass
+    /// (F011/P094/T451).
+    pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
     /// Retained per-pane info-bar headers (segment `Tag` + action `IconButton`s),
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.

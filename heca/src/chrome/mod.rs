@@ -10,6 +10,8 @@ pub(crate) use theme::{
 };
 pub(crate) mod signals;
 pub(crate) use signals::{sync_chrome_signals, sync_chrome_state, ChromeSignals};
+pub(crate) mod pane;
+pub(crate) use pane::{clear_panes, sync_panes, RetainedPane};
 pub(crate) mod pane_header;
 pub(crate) use pane_header::{
     action_tooltip, clear_pane_headers, home_relative_path, pane_info_view, sync_pane_headers,
@@ -218,7 +220,7 @@ use std::rc::Rc;
 /// Translate a freshly-laid-out widget subtree (positioned from the origin by
 /// [`LayoutEngine::compute`]) to an absolute `(dx, dy)`. Mirrors the helper in
 /// `terminal_render` so the retained header can be placed at its pane.
-fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
+pub(crate) fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
     let b = c.base().bounds;
     c.base_mut().bounds = Rectangle::new(Point::new(b.loc.x + dx, b.loc.y + dy), b.size);
     for child in c.base_mut().children.iter_mut() {
@@ -1341,6 +1343,19 @@ pub(crate) struct RetainedChrome {
 /// `prefix+/` pick. Those are different gestures — a click on a sidebar row means *go there and
 /// leave*, a pick means *look at that one* — and serving both from one declaration is what made
 /// `prefix+/` walk out of the sidebar (F004/P084/T399).
+/// `pane:<id>` — **a pane's identity**, declared by the pane itself.
+///
+/// Whoever owns the thing declares its identity; anything else showing it is a view. A pane owns
+/// `pane:7`; the sidebar row and the exposé card that show that pane are second views of it. This
+/// lives here rather than in a provider so the pane and every view of it read the SAME string
+/// instead of keeping two copies in step (it was defined twice before F011/P094/T451).
+///
+/// It is never a position and never a counter: a `PaneId` survives every tree rebuild, which is
+/// what lets a hint letter stay with the same pane between openings of the picker.
+pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
+    format!("pane:{}", pane.0)
+}
+
 pub(crate) fn fires(
     mount: &str,
     mut intent: Intent,

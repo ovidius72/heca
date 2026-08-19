@@ -10,11 +10,9 @@ use crate::app_state::AppState;
 use heca_config::theme::Color;
 use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
-use heca_grid_ui::builders::{LayoutExt, StyleExt};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::Pane as UiPane;
 use heca_grid_ui::{
-    Color as GuiColor, Component, LayoutEngine, PaintCx, Point as GuiPoint,
+    Color as GuiColor, Component, PaintCx, Point as GuiPoint,
     Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
 };
 use heca_renderer::image::ImageLayer;
@@ -606,8 +604,6 @@ pub(crate) struct TerminalPaneShell {
     pub(crate) border_color: [f32; 4],
     pub(crate) border_width: f32,
     pub(crate) border_radius: f32,
-    pub(crate) content_inset: f32,
-    pub(crate) is_active: bool,
 }
 
 /// Approx `Tag` internal vertical padding (each side) — for bar height/centering.
@@ -729,30 +725,13 @@ pub(crate) fn paint_terminal_pane_shell(
         border_color,
         border_width,
         border_radius,
-        content_inset,
-        is_active,
     } = shell;
     let theme = terminal_pane_gui_theme(state, border_color, border_width, border_radius);
-    // Frame style is configurable (`pane_border_style`); width/color come from the
-    // pane shell theme above (border_width already drives the global control).
-    let mut pane = crate::chrome::apply_pane_frame(
-        UiPane::new(),
-        state.appearance.effective_pane_border_style(),
-    )
-        .width(heca_grid_ui::Length::Px(w))
-        .height(heca_grid_ui::Length::Px(h))
-        .padding(content_inset)
-        .border(to_gui_color(border_color), border_width)
-        .radius(border_radius);
-    if is_active {
-        pane = pane.glow_with(to_gui_color(border_color), 10.0, 0.55);
-    }
-
-    LayoutEngine::new().compute(&mut pane, GuiSize::new(w as f64, h as f64));
-    pane.base_mut().bounds = GuiRectangle::new(
-        GuiPoint::new(x as f64, y as f64),
-        GuiSize::new(w as f64, h as f64),
-    );
+    // The frame is the pane's **retained** shell (`chrome::sync_panes`), not a tree built here and
+    // thrown away: the picker writes a letter into it when it opens and reads it back a keystroke
+    // later, so a tree that does not outlive the frame cannot carry one. That is why the pane
+    // letters used to be stamped by a host paint pass in `render.rs` (F011/P094/T451).
+    let retained_pane = state.panes.get(&pane_id);
 
     let show_bar = pane_info_bar_shown(state);
     let bar_theme = crate::chrome::chrome_gui_theme(state);
@@ -781,7 +760,12 @@ pub(crate) fn paint_terminal_pane_shell(
                 None,
             );
         }
-        pane.paint(&mut cx);
+        // **Painted through `paint_child`, never `paint`** — `paint_child` is what draws a
+        // widget's hint letter after painting it. A direct `.paint(cx)` here is exactly why a pane
+        // could never show its own letter.
+        if let Some(retained) = retained_pane {
+            heca_grid_ui::paint_child(&retained.root, &mut cx);
+        }
     }
 
     // Pane info-bar header (segments + action buttons): painted from the retained
@@ -797,7 +781,9 @@ pub(crate) fn paint_terminal_pane_shell(
             GuiSize::new(w as f64, h as f64),
         );
         let mut cx = PaintCx::new(scene, &bar_theme);
-        cx.with_clip(clip, |cx| header.root.paint(cx));
+        // Through `paint_child` for the same reason the pane is: a header button carrying a hint
+        // letter cannot draw one when it is painted directly.
+        cx.with_clip(clip, |cx| heca_grid_ui::paint_child(&header.root, cx));
     }
 
     if let Some(viewport) = state.pane_viewport_widgets.get(&pane_id) {

@@ -678,9 +678,10 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
 // changes is not a cursor. Positions therefore never appear in a key that has an id available.
 
 /// `pane:<id>` — a pane card, tiled or floating.
-pub(crate) fn pane_key(pane: PaneId) -> String {
-    format!("pane:{}", pane.0)
-}
+///
+/// **The pane declares this, not the row.** A sidebar row showing a pane is a *view* of it, so it
+/// reads the pane's own identity rather than spelling a second copy (F011/P094/T451).
+pub(crate) use crate::chrome::pane_key;
 
 /// `ws:<idx>` — a workspace header.
 pub(crate) fn workspace_key(ws_idx: usize) -> String {

@@ -92,6 +92,13 @@ pub(crate) fn handle_keyboard_input(
         &keymaps.triggers,
     );
     let input_mode = state.input_mode.clone();
+    // **A picker is waiting for one letter, and a modifier is not it.** Every pick mode ends on the
+    // next key — picked, wrong key, or Esc — so reaching for Shift to type a capital would cancel
+    // the picker before the letter arrived. Asked once here rather than inside each mode's handler:
+    // there are seven of them, and guarding them one at a time reached three.
+    if input_mode.awaits_pick_letter() && crate::app::keyboard::is_modifier_key(ctx.logical_key) {
+        return;
+    }
     match input_mode {
         InputMode::Normal => {
             if ctx.is_prefix {
@@ -157,18 +164,8 @@ pub(crate) fn handle_keyboard_input(
                 // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
                 // e.g. Shift+click mouse selection works after scrolling
                 // with direct bindings.
-                let is_modifier_only = ctx.key_text.is_empty()
-                    && matches!(
-                        ctx.logical_key,
-                        Key::Named(
-                            NamedKey::Shift
-                                | NamedKey::Control
-                                | NamedKey::Alt
-                                | NamedKey::Super
-                                | NamedKey::Hyper
-                                | NamedKey::Meta
-                        )
-                    );
+                let is_modifier_only =
+                    ctx.key_text.is_empty() && crate::app::keyboard::is_modifier_key(ctx.logical_key);
                 if !is_modifier_only {
                     backend.scroll_to_bottom();
                 }
@@ -563,7 +560,7 @@ fn handle_pane_select_mode(
 ) {
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -588,7 +585,7 @@ fn handle_follow_link_mode(
     let candidates = candidates.to_vec();
     // Any key exits the overlay; a matching letter opens its link. Esc just exits.
     state.input_mode = InputMode::Normal;
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some(hint) = candidates.iter().find(|h| h.label == ch)
     {
@@ -624,7 +621,7 @@ fn handle_hint_pick_mode(
     // pick runs, because running it may tear the tree down and a keycap must not outlive the mode
     // that put it up.
     crate::chrome::clear_hint_letters(state);
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -643,7 +640,7 @@ fn handle_pane_swap_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     let current_id = state.focused_pane;
     if let Some(ch) = typed
         && let Some(current_id) = current_id
@@ -694,7 +691,7 @@ fn handle_pane_take_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -724,7 +721,7 @@ fn handle_workspace_pick_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target_ws)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -769,7 +766,7 @@ fn handle_column_pick_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, ws_idx, col_idx)) = candidates.iter().find(|(c, _, _)| *c == ch)
     {
@@ -802,7 +799,7 @@ fn handle_dock_pick_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, dock)) = candidates.iter().find(|(c, _)| *c == ch)
     {

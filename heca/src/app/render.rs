@@ -205,6 +205,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // below (`scene_view` borrows `state.compositor`), so render can paint them
     // read-only and `mouse.rs` can dispatch pointer events into them.
     crate::chrome::sync_pane_headers(state);
+    // The retained per-pane shells — the frame, the pane's identity and its pick letter. Same
+    // moment and same reason as the headers: built before the GPU borrow so render can paint them
+    // read-only (F011/P094/T451).
+    crate::chrome::sync_panes(state);
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
@@ -700,8 +704,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     border_color: bcolor,
                     border_width: pane_border_width,
                     border_radius: pane_border_radius,
-                    content_inset: pane_content_inset,
-                    is_active: pane.is_active,
                 },
             );
         }
@@ -911,8 +913,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     border_color: fborder,
                     border_width: pane_border_width,
                     border_radius: pane_border_radius,
-                    content_inset: pane_content_inset,
-                    is_active: pane.is_active,
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
@@ -947,50 +947,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Reborrow compositor scene texture for the final flush (the previous
     // `scene_view` borrow ended at its last use before the mouse:: calls above).
     let scene_view = state.compositor.scene_view();
-
-    if let Some(candidates) = state.input_mode.candidates() {
-        let letter_size = 48.0f32;
-        let label_color = [1.0, 0.9, 0.3, 0.9];
-        for (ch, target_id) in candidates {
-            if Some(*target_id) == active_pane_id {
-                continue;
-            }
-            let mut found = false;
-            for (pane_id, rect) in &pane_positions {
-                if *pane_id == *target_id {
-                    let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-                    let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-                    let pw = rect.size.w as f32;
-                    let ph = rect.size.h as f32;
-                    let lx = px + (pw - letter_size * 0.6) / 2.0;
-                    let ly = py + (ph - letter_size) / 2.0;
-                    let label = ch.to_string();
-                    state
-                        .text_renderer
-                        .queue_text(&label, lx, ly, letter_size, label_color);
-                    found = true;
-                    break;
-                }
-            }
-            if !found && let Some(ws) = state.session.active_workspace() {
-                for float in &ws.floating_panes {
-                    if float.pane.id == *target_id {
-                        let fx = float.position.x as f32 + pane_area.loc.x as f32;
-                        let fy = float.position.y as f32 + pane_area.loc.y as f32;
-                        let fw = float.size.w as f32;
-                        let fh = float.size.h as f32;
-                        let lx = fx + (fw - letter_size * 0.6) / 2.0;
-                        let ly = fy + (fh - letter_size) / 2.0;
-                        let label = ch.to_string();
-                        state
-                            .text_renderer
-                            .queue_text(&label, lx, ly, letter_size, label_color);
-                        break;
-                    }
-                }
-            }
-        }
-    }
 
     state
         .primitive_renderer

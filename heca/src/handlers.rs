@@ -773,12 +773,47 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     handle_close_pane_by_id(state, &WmAction::ClosePaneById { pane_id });
 }
 
+/// **Every pane, each keeping the letter it had last time** — the stable half of a pane pick.
+///
+/// `collect_all_pane_candidates` orders the panes and applies the 52 cap; the letters it hands out
+/// are its *index*, which is the defect: anything appearing earlier in the list shifts every letter
+/// after it, so splitting a column renumbers panes you were aiming at. Antonio, driving,
+/// 2026-08-17: *"i want to expand a pane, prefix+/ and `k` appears on that icon... Then I want to
+/// collapse. prefix+/ and `j` appears on that button, while I was expecting `k`."*
+///
+/// So the order comes from there and the LETTERS come from [`assign_letters`], keyed by the pane's
+/// own identity — the same function and the same remembered map `prefix+/` uses. One assignment
+/// rule for both pickers, which is the whole point of F011/P094/T451.
+fn pane_candidates_with_stable_letters(state: &mut AppState) -> Vec<(char, PaneId)> {
+    let panes: Vec<PaneId> = collect_all_pane_candidates(&state.session)
+        .into_iter()
+        .map(|(_, id)| id)
+        .collect();
+    let identities: Vec<Option<String>> = panes
+        .iter()
+        .map(|id| Some(crate::chrome::pane_key(*id)))
+        .collect();
+    let letters = assign_letters(&identities, &state.remembered_letters);
+    // Merged, not rebuilt: a pane that is off screen keeps its letter for when it comes back.
+    state.remembered_letters.extend(
+        identities
+            .iter()
+            .zip(letters.iter())
+            .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
+    );
+    panes
+        .into_iter()
+        .zip(letters)
+        .filter_map(|(id, ch)| ch.map(|ch| (ch, id)))
+        .collect()
+}
+
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSelect { candidates };
         state.needs_redraw = true;
@@ -893,7 +928,7 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
             candidates,
@@ -908,7 +943,7 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
             candidates,
@@ -1386,7 +1421,7 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = crate::collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {
             candidates,
@@ -1401,7 +1436,7 @@ pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = crate::collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {
             candidates,

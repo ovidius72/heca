@@ -229,6 +229,8 @@ impl HecaApp {
             // panes keep stale (faint) icon colors after a theme swap while
             // freshly-created panes look correct.
             crate::chrome::clear_pane_headers(state);
+            // The pane shells bake the theme too, so they are invalidated with the headers.
+            crate::chrome::clear_panes(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.widget_keymap = crate::app::registry::build_widget_keymap(&self.app_config.config);
             state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(

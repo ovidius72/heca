@@ -78,6 +78,13 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
 /// Returns whether anything changed, so the caller can decide to repaint.
 pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
     let wanted = wanted(&state.input_mode, state.focused_pane);
+    // **Which pane shells could actually show a letter.** Computed ONCE per pass, not per key: it
+    // resolves the whole surface stack.
+    let visible_panes = if wanted.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        visible_pane_targets(state)
+    };
     let mut changed = false;
 
     // Withdraw first, so a target that keeps its letter across a mode change is not briefly cleared.
@@ -90,12 +97,12 @@ pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
         .cloned()
         .collect();
     for key in &stale {
-        offer_in_every_tree(state, key, None);
+        offer_in_every_tree(state, key, None, &visible_panes);
         changed = true;
     }
 
     for (key, ch) in &wanted {
-        if offer_in_every_tree(state, key, Some(ch.to_string())) {
+        if offer_in_every_tree(state, key, Some(ch.to_string()), &visible_panes) {
             changed = true;
         }
     }
@@ -127,21 +134,37 @@ fn offer_in_every_tree(
     state: &crate::app_state::AppState,
     key: &str,
     label: Option<String>,
+    visible_panes: &std::collections::HashSet<PaneId>,
 ) -> bool {
     for layer in state.layers.visible_front_to_back() {
         if heca_grid_ui::offer_hint_by_key(layer.root(), key, label.clone()) {
             return true;
         }
     }
-    if let Some(tree) = state.chrome_tree.as_ref()
-        && heca_grid_ui::offer_hint_by_key(&tree.root, key, label.clone())
-    {
-        return true;
+    // Below the layers there is no shadowing, because these are not competing surfaces — they are
+    // **several views of one thing**. A pane and the sidebar row that names it both declare
+    // `pane:7`, and both must wear the letter: the pane owns the identity, the row shows it. An
+    // early return here is what made a pane listed in BOTH sidebars get lettered in only one of
+    // them (F003/P082, found by tracing `nodes naming it: chrome=2` while one letter went out).
+    let mut offered = false;
+    if let Some(tree) = state.chrome_tree.as_ref() {
+        offered |= heca_grid_ui::offer_hint_by_key(&tree.root, key, label.clone());
     }
-    state
-        .pane_headers
-        .values()
-        .any(|h| heca_grid_ui::offer_hint_by_key(&h.root, key, label.clone()))
+    // **A pane scrolled behind a sidebar is skipped — the pane, not the pick.** Its keycap draws on
+    // the overlay layer, so it would land on top of the very thing covering it (Antonio, driving,
+    // 2026-08-19). Its sidebar row is a second view of the same pane and IS visible, so it still
+    // wears the letter and the pane stays reachable — which is why this filters the VIEW rather
+    // than the candidate. Visibility is asked of `resolve_hint_layers`, never re-derived here.
+    for (pane_id, shell) in state.panes.iter() {
+        if !visible_panes.contains(pane_id) {
+            continue;
+        }
+        offered |= heca_grid_ui::offer_hint_by_key(&shell.root, key, label.clone());
+    }
+    for header in state.pane_headers.values() {
+        offered |= heca_grid_ui::offer_hint_by_key(&header.root, key, label.clone());
+    }
+    offered
 }
 
 /// [`wanted`] for a test in another module — the mapping is the interesting part and belongs to
@@ -243,6 +266,8 @@ struct HintLayer {
 pub(crate) enum HintSurface {
     /// The chrome tree (top bar, sidebars and everything a container contributed).
     Chrome,
+    /// One pane's own shell tree — the frame that owns the pane's identity and its letter.
+    Pane(PaneId),
     /// One pane's header tree.
     PaneHeader(PaneId),
     /// A dynamically registered layer (an exposé, a modal, a plugin panel).
@@ -281,6 +306,10 @@ fn hint_surface_root<'a>(
             .chrome_tree
             .as_ref()
             .map(|t| &t.root as &dyn heca_grid_ui::Component),
+        HintSurface::Pane(pane_id) => state
+            .panes
+            .get(pane_id)
+            .map(|p| &p.root as &dyn heca_grid_ui::Component),
         HintSurface::PaneHeader(pane_id) => state
             .pane_headers
             .get(pane_id)
@@ -301,6 +330,10 @@ fn hint_surface_root_mut<'a>(
             .chrome_tree
             .as_mut()
             .map(|t| &mut t.root as &mut dyn heca_grid_ui::Component),
+        HintSurface::Pane(pane_id) => state
+            .panes
+            .get_mut(pane_id)
+            .map(|p| &mut p.root as &mut dyn heca_grid_ui::Component),
         HintSurface::PaneHeader(pane_id) => state
             .pane_headers
             .get_mut(pane_id)
@@ -326,6 +359,7 @@ pub(crate) fn target_identity(
     let within = heca_grid_ui::identity_of(root, &target.path)?;
     let surface = match &target.surface {
         HintSurface::Chrome => "chrome".to_string(),
+        HintSurface::Pane(id) => format!("pane:{}", id.0),
         HintSurface::PaneHeader(id) => format!("pane-header:{}", id.0),
         HintSurface::Layer(id) => format!("layer:{id:?}"),
     };
@@ -395,6 +429,9 @@ pub(crate) fn fire_widget_action(state: &crate::app_state::AppState, name: &str)
 pub(crate) fn clear_hint_letters(state: &crate::app_state::AppState) {
     if let Some(tree) = state.chrome_tree.as_ref() {
         heca_grid_ui::clear_hints(&tree.root);
+    }
+    for shell in state.panes.values() {
+        heca_grid_ui::clear_hints(&shell.root);
     }
     for header in state.pane_headers.values() {
         heca_grid_ui::clear_hints(&header.root);
@@ -596,11 +633,21 @@ pub(crate) fn active_hint_targets(
         .into_iter()
         .rev()
     {
-        let Some(header) = state.pane_headers.get(&pane_id) else {
-            continue;
+        // The pane's own shell first — it OWNS the pane (its identity, its letter); the header is
+        // a view of what runs inside it. Both are real declarations, so both wear a letter, and
+        // both are hidden by the same occluder because they are one pane.
+        let mut targets = match state.panes.get(&pane_id) {
+            Some(shell) => hints_of(&HintSurface::Pane(pane_id), &shell.root),
+            None => Vec::new(),
         };
+        if let Some(header) = state.pane_headers.get(&pane_id) {
+            targets.extend(hints_of(&HintSurface::PaneHeader(pane_id), &header.root));
+        }
+        if targets.is_empty() {
+            continue;
+        }
         layers.push(HintLayer {
-            targets: hints_of(&HintSurface::PaneHeader(pane_id), &header.root),
+            targets,
             occluders: vec![Rectangle::new(
                 Point::new(x as f64, y as f64),
                 Size::new(w as f64, h as f64),
@@ -610,6 +657,29 @@ pub(crate) fn active_hint_targets(
     }
 
     resolve_hint_layers(layers, viewport)
+}
+
+/// **Which panes could actually show a letter**, by the one visibility rule.
+///
+/// A pane scrolled behind a sidebar is still a pane, and a pick mode reading the SESSION happily
+/// letters it — so its keycap draws on top of the sidebar covering it (Antonio, driving,
+/// 2026-08-19). `prefix+/` never had this problem because [`active_hint_targets`] resolves the
+/// surface stack first: a target whose centre is covered by something in front is dropped.
+///
+/// So this asks that same function rather than testing rects again here. Occlusion is decided in
+/// exactly one place — `resolve_hint_layers` — and a second copy would be one more thing to keep in
+/// step with the layer stack. It collapses entirely when the pick modes become the one picker
+/// (F011/P094/T457).
+pub(crate) fn visible_pane_targets(
+    state: &crate::app_state::AppState,
+) -> std::collections::HashSet<PaneId> {
+    active_hint_targets(state)
+        .into_iter()
+        .filter_map(|(target, _)| match target.surface {
+            HintSurface::Pane(id) => Some(id),
+            _ => None,
+        })
+        .collect()
 }
 
 /// One surface's hint declarations, addressed by [`HintTarget`].

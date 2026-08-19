@@ -9,7 +9,7 @@
 
 These are made over and over. **Violating any = redo.**
 
-### 0. THE PRE-FLIGHT — three answers, written down, BEFORE the first line of code.
+### 0. THE PRE-FLIGHT — three answers and two rules, BEFORE the first line of code
 
 Not a mindset. Three questions with written answers, in the task or the PR body. No answer = you are
 reinventing something, and it will be rejected.
@@ -26,6 +26,26 @@ reinventing something, and it will be rejected.
    **file it in the planner**, not in a prose list: this file's own "open gaps" section is how
    `Label` truncation stayed open long enough for FOUR separate hand-rolled truncations to be
    written around it. A gap in a doc is never scheduled. A gap in the planner gets done.
+
+**And two rules that hold whatever those answers were:**
+
+4. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what
+   someone has to hold in their head to change it safely. **Aim under 400 lines; above 600, stop
+   and agree a split** before adding to it. Those numbers come from this codebase, not from taste:
+   components written to § 0b-bis land at 150–450 on their own (`chrome/expose/` is 149 / 282 /
+   327 / 374 / 433, `chrome/pane/` is 39 / 60 / 152 / 200), and every file above 600 here is a file
+   doing several jobs — `terminal_render.rs` (1700) interleaves the pane shell with the GPU passes,
+   `chrome/mod.rs` (3074) is host logic and UI composition together. Length is what makes you look;
+   **the defect is always the second job**, and no line limit catches a 250-line file that mixes
+   host wiring with a component. This applies to code you are only passing through: when you meet an
+   oversized file while fixing something else, **say so and agree the split first** — a large file
+   quietly reorganised is a diff nobody can review.
+5. **Write it for the next caller, not for this one.** Every widget, component and function will be
+   used by another developer, another agent, or a plugin — and none of them should have to make the
+   same fix or build the same thing twice. So **centralise the logic**: a second copy of a rule is
+   the bug, not the copy you are about to write. And a capability must be reachable from all three
+   surfaces — the app, a plugin, and RPC — never trapped in the one that needed it first. This is
+   ⭐⭐ RULE ZERO stated up front; that section is the full form.
 
 **The tell you are about to fail this**: you are writing `paint`, a measure, a hit-test, a scroll
 offset, or an event-forwarding `match` inside a widget or the app. Every one of those is some
@@ -138,7 +158,7 @@ heca/src/chrome/<surface>/
 Give every question exactly one owner, and write the owner down. The exposé's split:
 
 | component | owns | owns **nothing** about |
-|---|---|---|
+| --- | --- | --- |
 | `PaneCard` | what a card *is*: name, cursor/focus state, delete letters, activate | where it goes, how big it is |
 | `ColumnCard` | the panes' **vertical** shares | its own width |
 | `WorkspaceRow` | the columns' **horizontal** shares, the floats' rects | its own height |
@@ -214,14 +234,14 @@ seven failures. Fixtures live in `testing.rs` so each test reads as its assertio
 
 A move, never a copy. See § 0b.
 
-### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling.
+### 0c. THE EVENT SYSTEM IS DOM-SHAPED. Read this before you write ANY input handling
 
 **Every agent forgets this and re-invents it.** It is capture → target → bubble, exactly like a
 browser. `heca-grid-ui/src/component.rs` (`dispatch` / `deliver` / `deliver_to_path`) is the whole
 of it; `tests/pointer_routing.rs` + `tests/pointer_delivery.rs` hold it.
 
 | | The browser | heca |
-|---|---|---|
+| --- | --- | --- |
 | what enters | a device event | `Event::Raw(RawPointer)` — the **only** pointer event a host builds |
 | what a widget sees | `click`, `contextmenu`, `wheel`, … | `Click`, `RightClick`, `Scroll`, `Drop`, … already resolved and hit-tested |
 | pointer target | the element under the cursor | the widget under the pointer |
@@ -252,7 +272,8 @@ not add an intent, a policy arm, a registry or a host-side key match until you h
 cannot do it. Full model: `docs/widgets.md` → "The event model" and "The keyboard — delivery follows
 focus".
 
-### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
+### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase
+
 - **Before building ANY UI**, look at what already exists:
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
   - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive, and [`docs/overlay-design.md`](docs/overlay-design.md). **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
@@ -270,7 +291,8 @@ focus".
   **NEVER** ad-hoc inline `Flex`/`Surface` with hardcoded sizes/colors in the app. Domain-neutral
   (never name a widget for workspace/column/pane). Full rule: **§ "Creating new widgets"** below.
 
-#### Searching, filtering or ranking a list → `heca_grid_ui::search`. Do NOT write a matcher.
+#### Searching, filtering or ranking a list → `heca_grid_ui::search`. Do NOT write a matcher
+
 - **There is exactly one matcher in this workspace** (`heca-grid-ui/src/search.rs`) and there must
   stay one. Fuzzy matching, smart-case, ranking by past use and query history all live there; a
   widget **embeds a `SearchModel`** the way anything that needs to scroll nests a `ScrollRegion`.
@@ -290,6 +312,7 @@ focus".
   `[keys.widgets]`, not one widget's binding.
 
 #### FUNDAMENTAL — the styling/layout contract (violating any of these = redo)
+
 - **Don't invent widgets.** Use the library widgets. Never hand-roll UI in the app.
 - **Only library-provided values.** No hardcoded size/padding/alpha/color/spacing **anywhere** —
   every value comes from the `Theme` or a widget **variant**. Magic numbers are a bug.
@@ -304,7 +327,8 @@ focus".
   change `heca-grid-ui` unilaterally — **propose** the addition (what + why), get the OK, then
   implement. Track pending gaps in the plan (e.g. BACKLOG `gridui-styling-foundation`).
 
-### 2. Behavior/keys → register through the registries. NEVER hardcode.
+### 2. Behavior/keys → register through the registries. NEVER hardcode
+
 - **Every action goes through `ActionRegistry`** (`heca/src/actions.rs`): `registry.register(...)` +
   `registry.execute(...)`. **Registry bypasses are bugs.** No direct state mutation from input code.
 - **Every keybinding goes through `KeymapRegistry`** (`heca/src/keymap.rs`) and is **configurable in
@@ -327,7 +351,8 @@ focus".
 > If a change touches UI or input and you didn't open `docs/widgets.md`/the showcase, or didn't go
 > through the registries, stop and redo it.
 
-### 3. No "for now" fixes left behind.
+### 3. No "for now" fixes left behind
+
 - Do **not** land temporary workarounds, degraded fallbacks, or "we'll fix this later" code as the final state of a task.
 - If a bug needs a real architectural fix, implement that fix in the same task before closing it.
 - If work truly cannot be completed in the task, record the follow-up explicitly in the repo's tracked plan/task files **before** stopping. Untracked cleanup debt is a bug.
@@ -345,7 +370,7 @@ A keyboard-native workspace where every tool lives in a tiled, floating, or scra
 ### Key Differentiators
 
 | Feature | Why It Matters |
-|---------|---------------|
+| --------- | --------------- |
 | GPU-native text rendering | Sharp fonts, ligatures, smooth animations. Terminal emulators can't match this. |
 | Single-frame compositing | All panes + chrome render in one GPU pass. No window seams between panes. |
 | NIRI-inspired scrolling columns | Horizontal scrollable columns (not BSP tree). View offset animates when switching focus. |
@@ -588,7 +613,7 @@ says *what owns the screen right now*. The domain has **four** states, computed 
 from the whole `AppState` and handed to the (still pure, still unit-tested) router:
 
 | `Domain` | when |
-|---|---|
+| --- | --- |
 | `Tiled` | a pane has the keyboard |
 | `Floating` | a floating pane is active |
 | `Container` | a **dock** has the keyboard (keyboard/provider sources; a mouse click is judged by what it landed on) |
@@ -604,7 +629,7 @@ in.
 **The 7 `ActionPolicy` variants** (and what they mean for the Floating domain):
 
 | Policy | Tiled | Floating | Examples |
-|--------|-------|----------|----------|
+| -------- | ------- | ---------- | ---------- |
 | `Global` | Allow | **Allow** | `ReloadConfig` — true app-level, no layout impact, must work even when floating |
 | `AlwaysAllowed` | Allow | **Block** (current sources) | `CommandPalette`, `SpawnCommand`, `EnterMode` — app-level but layout-affecting |
 | `TiledOnly` | Allow | Block | `Focus*`, `Split*`, `ZoomColumn`, `Resize*`, `Swap*`, `Move*`, `Sidebar*`, `PaneSelect/Swap/Take`, `FloatAt`, `RenameColumn`, `DeleteColumn`, collapse/expand workspace+column |
@@ -620,6 +645,7 @@ in.
 **Interaction sources:** `Keyboard`, `MouseContent`, `MouseLeftSidebar` (future: `MouseRightSidebar`, `MouseTopMenu`, `MouseStatusBar`, `Rpc`). Source matters for `SourceDependent` actions and for future chrome sources that may allow `AlwaysAllowed` actions even while floating.
 
 **Adding a new action — policy step (in addition to the "Adding New Actions" checklist above):**
+
 1. Classify the variant in `action_policy()` under the right policy arm — choose carefully using the table above. When in doubt, ask: "should this work while a floating pane is active?" → if yes and it has no layout impact, `Global`; if yes and it's pane-local, `FocusedPaneLocal`; if no, `TiledOnly`/`WorkspaceLevel`/`AlwaysAllowed`.
 2. If you introduce a **new `ActionPolicy` variant**, handle it in the exhaustive `match policy` in `route_action()`.
 3. Add a spot-check assertion (`assert_eq!(action_policy(&WmAction::X), ActionPolicy::Y)`) and routing tests (tiled allows it, floating blocks/allows it as appropriate).
@@ -705,10 +731,12 @@ both empty ⇒ no bar and no reserved space. User-facing list of supported value
 lives in `README.md` ("Pane Info Bar"); keep it in sync when you change the enums.
 
 Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "snake_case")]`:
+
 - `PaneSegment` — `Location`, `AppName`, `GitBranch`, `GitStatus`.
 - `PaneAction` — `Split`, `MoveLeft`, `MoveRight`, `Close`.
 
 **To add a new segment kind:**
+
 1. Add the variant to `PaneSegment` (`heca-config/src/appearance.rs`); document the doc-comment.
 2. Render it in the segment match in `heca/src/chrome/mod.rs` (around the
    `PaneSegment::Location =>` arm) — pull from the pane's `PaneRuntime` projection;
@@ -716,6 +744,7 @@ Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "
 3. Update `README.md` (supported-segments table) + `config.default.toml`.
 
 **To add a new action kind:**
+
 1. Add the variant to `PaneAction` (`heca-config/src/appearance.rs`).
 2. Map it in `pane_action_spec()` (`heca/src/chrome/mod.rs`) → `(Glyph icon,
    WmAction, label, needs_focus)`, and give it a config **name** in
@@ -743,9 +772,11 @@ tip. This is the one pattern; follow it for any new button.
 > visibility filter — model the surface instead.
 
 **1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/mod.rs`):
+
 ```rust
 row = row.child(action_tooltip(button, action_name, label, &state.action_shortcuts));
 ```
+
 - `action_name` is the action's **config name** (`"close"`, `"sidebar_left"`, …) — the
   canonical identity. The emitted `WmAction` may be a button-only variant
   (`ClosePaneById`, `AddPaneToColumn`) that isn't itself bound, so the *name* is the key.
@@ -760,12 +791,14 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
 
 **2. KeyHint (vimium-style `prefix+/` pick)** — declare **what a pick does** on the
 wrapper that draws the letter. One line, no id, no registry (F004/P084/T399):
+
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
 let hint = crate::chrome::fires(row_hint(pane_nav_key(pane_id)), emit); // the pick
 let row = Row::new().on_activate(fire);
 KeyHint::new(row).on_hint(hint)
 ```
+
 The slot is `Base::hint`, universal; the **builder is on `KeyHint`**, because being
 pickable is something you opt a region into — so `Label::on_hint` is a method that never
 has to exist. The framework collects the declarations out of the laid-out tree
@@ -919,7 +952,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 ## Stack
 
 | Layer | Crate | Version | Why |
-|-------|-------|---------|-----|
+| ------- | ------- | --------- | ----- |
 | Windowing | `winit` | 0.30+ | De-facto Rust standard, cross-platform, HiDPI. |
 | GPU API | `wgpu` | 0.25+ | Cross-platform (Vulkan/Metal/DX12/WebGPU), safe Rust. |
 | Text layout | `cosmic-text` | 0.14+ | Best pure-Rust text stack; atlas caching, ligatures, variable fonts. |
@@ -934,7 +967,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 ### What NOT to use
 
 | Technology | Reason |
-|------------|--------|
+| ------------ | -------- |
 | Dioxus / Tauri / Electron | WebView-based; can't own the GPU render loop freely. |
 | GTK / Qt | Fight you for custom GPU surfaces. Heavy cross-platform packaging. |
 | egui / iced | Immediate-mode or over-constrained layout; we need to own pane rectangle assignment. |
@@ -958,8 +991,8 @@ try z=0 without macOS vibrancy first).
   blurred result into its own cache before returning, so the shared `state.blur`
   is free to be reused afterwards by the floating-pane frost pass.
 - **Render order** (see `heca/src/app/render.rs`): `clear → z=0 blit (pre-stencil,
-  `Backdrop::draw` fullscreen at `background_alpha()`, `stencil = None`) → tiled
-  stencil → tiled content (translucent `surface_alpha` over z=0) → borders →
+  `Backdrop::draw` fullscreen at `background_alpha()`,`stencil = None`) → tiled
+  stencil → tiled content (translucent`surface_alpha`over z=0) → borders →
   floating blur capture → floating stencil → floating backdrop(1.0) + content →
   grid-ui chrome → present`. z=0 is pre-stencil so the tiled content-clip never
   clips the background.
@@ -1058,6 +1091,7 @@ rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Bas
 `named_press` are all gone; **do not reintroduce any of them.**
 
 **Corollaries:**
+
 - A host-private composite (`FocusPaneThenAction`, `FocusContainerThenAction`) means the behaviour
   has **no name a plugin can say**. Give it one; do not reach for the private enum.
 - **Never add a second path beside one that exists.** Two paths over one input cannot stay
@@ -1084,6 +1118,7 @@ remembered (F004/P084/T395). When you touch a capability, check its neighbours f
 - **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
+
 - it is **realizable via `ViewNode`** (a `WidgetKind` + props + events + a `realize` arm), and
 - it is **extended by composition, not rewrite** — a new affordance (e.g. a button's accelerator = an `Icon(CaretUp) + Label`) is a **child/slot**, not a hand-positioned `cx.icon`/`cx.text` call.
 
@@ -1102,7 +1137,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 ```
 
 | Question | Answer — do NOT re-propose |
-|---|---|
+| --- | --- |
 | Should `heca-grid-ui` own `ViewNode`? | **NO.** It inverts the crate graph (the library would then need `realize`, which needs the app's `InteractionIntent` / theme wiring). |
 | Can a widget constructor take a `ViewNode` — `Button::new(ViewNode)`? | **NO — impossible.** `ViewNode` lives in the **app** (`heca/src/chrome/view.rs`); the library cannot see it. |
 | Then move `ViewNode` down into the library? | **NO.** `ViewNode` **cannot carry closures or signals** (it must serialize for WASM). The native chrome depends on both — `.on_activate(move \|\| …)`, `row.state().set(true)`, `label.text_signal().set(…)` — which update **in place, with no rebuild**. Routing all native UI through `ViewNode` turns every state change into a full rebuild and fights the reactive chrome store. **The library keeps its builder API.** |
@@ -1141,6 +1176,7 @@ Button::destructive("Delete")
 > **real placed children**. **Do not add a new self-describing predicate.**
 
 **SETTLED — the input model (F004/P084/T394, 2026-08-06; keyboard half rebuilt by T400, 2026-08-10):**
+
 - **A host builds ONE pointer event**, `Event::Raw(RawPointer)`, carrying the **button** and the
   **modifiers**. The framework resolves it once — hit-test, hover, press/release pairing, click
   runs, drag threshold — and delivers what it meant: `Click`, `RightClick`, `PointerEnter`,
@@ -1176,7 +1212,7 @@ Four names, and there is no fifth. **The panel is `ContextMenu`'s own body, not 
 inventing a `MenuPanel` for it was rejected outright.
 
 | type | what it is |
-|---|---|
+| --- | --- |
 | `MenuItem` | one row: sugar (`.label()` / `.icon()`) **or** any widget subtree (`.child(\|\| …)`); children win |
 | `Menu` | a titled list of items. **Content only** — no triggers, no anchors, no keys |
 | `ContextMenu` | a **named** presenter holding **one** `Menu`; it *is* the panel |
@@ -1212,6 +1248,7 @@ inventing a `MenuPanel` for it was rejected outright.
 truncation/ellipsis + wrapping (a long label overflows its box today).
 
 **SETTLED since (do not re-open):**
+
 - **`realize` coverage is COMPLETE.** Every `WidgetKind` maps to a live widget, and a test
   (`every_widget_kind_realizes_to_a_live_widget_except_the_host_only_ones`) walks `WidgetKind::ALL`
   and fails if one doesn't — so a new kind cannot silently render an empty container. Do **not**
@@ -1264,7 +1301,7 @@ is incomplete — and the task is not done — unless it documents:
   ones"), what each does, and its default;
 - a **runnable native example** — the Rust builder API (`Button::destructive("Delete").icon(Glyph::Trash)`);
 - a **runnable declarative example** — the `ViewNode` form a plugin/RPC would author (`WidgetKind`
-  + props + `children` + `Intent`s), including which props `realize` reads and any **precedence**
+  - props + `children` + `Intent`s), including which props `realize` reads and any **precedence**
   rules (e.g. a Button's `children` win over its `text`/`icon` sugar);
 - how to **compose/extend** it (what may go inside it, and what the widget owns vs. what the caller
   provides).
@@ -1570,7 +1607,7 @@ Outstanding work lives in **the planner** (single source of truth). See it for p
 See `niri-compatibility-review.md` for full details. Key issues:
 
 | ID | Issue | Severity | Status |
-|----|-------|----------|--------|
+| ---- | ------- | ---------- | -------- |
 | K1 | Prefix mode hardcodes `ctrl=false` | Critical | ✅ **FIXED** — passes real modifier state |
 | K2 | Prefix key not configurable | High | ✅ **FIXED** — `prefix = "ctrl+b"` in config |
 | K3 | No prefix timeout | Medium | ✅ **FIXED** — 500ms auto-exit |
@@ -1595,7 +1632,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 ### NIRI Terminology Mapping
 
 | NIRI term | heca equivalent | Notes |
-|-----------|----------------|-------|
+| ----------- | ---------------- | ------- |
 | `Tile<W>` | `Pane` | Content leaf node |
 | `Column<W>` | `Column` | Vertical stack of panes |
 | `ScrollingSpace<W>` | `ScrollingSpace` | Horizontal column strip |
@@ -1613,6 +1650,7 @@ Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactor
 ### Work completed
 
 **Track 1 — Rust code hygiene (PR #34, merged):**
+
 - Remove dead `mouse/drop.rs`, clean `InputMode::Chord` allow
 - Descriptive messages to 4 `unreachable!()` calls
 - `Rectangle` type instead of `(f32,f32,f32,f32)` tuples
@@ -1621,6 +1659,7 @@ Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactor
 - Extract mouse release handlers into `mouse/release.rs`
 
 **Track 2 — Surface-agnostic DnD (PR #36, open):**
+
 - `heca-grid-ui/src/drag/` framework types (5 files, 430+ lines):
   - `DragSurfaceId` (enum), `DragItemId` (newtype), `DragContext` (per-surface state), `SurfaceDragPhase` (state machine)
   - `rubberband()` math with unit tests

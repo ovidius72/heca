@@ -732,7 +732,23 @@ pub(crate) fn build_pane_header(
             // **What a pick does to this button**, declared on the button itself: no id, no
             // registry, and nothing for a config-added or plugin-added button to forget — the
             // picker collects the declaration out of the laid-out tree.
-            let button = KeyHint::new(button).on_hint(hint);
+            // **The button's identity, from its data — the action it runs.**
+            //
+            // Without it the identity is DERIVED from the button's content, and a derived identity
+            // moves when the content does: zooming changes what the cluster renders, so a button's
+            // name or its index among identically-named siblings shifts, and the picker can no
+            // longer tell it is the same button — so its letter changes under you
+            // (Antonio, driving, 2026-08-19). `docs/widgets.md` § Identity states the limit:
+            // derived identity is fine for a remembered letter until the label changes.
+            //
+            // The action name is exactly what a key should be — from the data, never a counter —
+            // and it is unique WITHOUT the pane id in it, because each pane's header is its own
+            // hint surface: `target_identity` prefixes it, giving `pane-header:7/zoom` and
+            // `pane-header:9/zoom`. It goes on the wrapper because the wrapper is what declares the
+            // pick, and the picker addresses whatever declared it.
+            let button = KeyHint::new(button)
+                .key(spec.action_name)
+                .on_hint(hint);
             // Tooltip = label + the action's current keybind(s), resolved centrally
             // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL.
             row = row.child(action_tooltip(button, spec.action_name, spec.label, content.shortcuts));

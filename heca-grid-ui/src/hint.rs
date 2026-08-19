@@ -255,6 +255,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         key: &str,
         label: &Option<String>,
         enclosing: Option<&dyn Component>,
+        declaring: Option<&dyn Component>,
     ) -> bool {
         if skip(node) {
             return false;
@@ -266,10 +267,30 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         } else {
             enclosing
         };
+        // …and separately, the nearest **declaring** ancestor. `enclosing` takes anything that
+        // counts as a target, which includes the named node itself once it is merely actionable —
+        // so by the time we arrive at a keyed row it has overwritten the wrapper we were looking
+        // for. Two questions, two variables.
+        let declaring = if node.base().hint.is_some() {
+            Some(node)
+        } else {
+            declaring
+        };
         let names_itself = node.base().key.as_deref() == Some(key)
             || node.base().scope_key.as_deref() == Some(key);
         if names_itself {
-            if label_nearest(node, label.clone()) {
+            // A declaration inside wins first (a dock names itself on the outside and declares the
+            // pick within), then a declaration *enclosing* it, and only then anything merely
+            // actionable inside. Same precedence in both directions: whoever DECLARED what a pick
+            // does owns the letter — and the placement it drew with.
+            if label_nearest_matching(node, label, &|c: &dyn Component| c.base().hint.is_some()) {
+                return true;
+            }
+            if let Some(outer) = declaring {
+                outer.base().hint_label.set(label.clone());
+                return true;
+            }
+            if label_nearest_matching(node, label, &|_: &dyn Component| true) {
                 return true;
             }
             if let Some(outer) = enclosing {
@@ -288,28 +309,42 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         // `||` cannot be used to fold this either: it short-circuits the same way.
         let mut found = false;
         for child in &node.base().children {
-            if walk(child.as_ref(), key, label, enclosing) {
+            if walk(child.as_ref(), key, label, enclosing, declaring) {
                 found = true;
             }
         }
         found
     }
-    walk(root, key, &label, None)
+    walk(root, key, &label, None, None)
 }
 
-/// Give `label` to the nearest hint declaration at or under `node`.
-fn label_nearest(node: &dyn Component, label: Option<String>) -> bool {
+/// The nearest target in this subtree that `pick` accepts, labelled.
+///
+/// Split in two passes so a **declaration wins over mere actionability**, which is the precedence
+/// T441 settled: a declared hint shadows something merely actionable beneath it, but never another
+/// declaration. One pass could not express it — the first target found won, whatever it was.
+///
+/// The case that forced it: heca's sidebar pane row carries the identity and is *actionable*
+/// (`on_activate`), while the `KeyHint` around it carries the *declaration* and the placement that
+/// goes with it (`CenterRight`, so the letter clears the row's label). A single inner-first pass
+/// labelled the row, so the same pane wore a right-aligned keycap under one picker and a
+/// top-centred one under the other — same letter, two widgets, two looks.
+fn label_nearest_matching(
+    node: &dyn Component,
+    label: &Option<String>,
+    pick: &dyn Fn(&dyn Component) -> bool,
+) -> bool {
     if skip(node) {
         return false;
     }
-    if is_target(node) {
-        node.base().hint_label.set(label);
+    if is_target(node) && pick(node) {
+        node.base().hint_label.set(label.clone());
         return true;
     }
     node.base()
         .children
         .iter()
-        .any(|c| label_nearest(c.as_ref(), label.clone()))
+        .any(|c| label_nearest_matching(c.as_ref(), label, pick))
 }
 
 /// Withdraw every letter in this tree — what a host calls when the picker closes.
@@ -348,6 +383,67 @@ mod tests {
         let mut wrapper = KeyHint::new(Surface::new()).on_hint(move || log.borrow_mut().push(tag));
         wrapper.base_mut().bounds = Rectangle::new(Point::new(x, y), Size::new(w, h));
         Box::new(wrapper)
+    }
+
+    /// **The widget that DECLARED the pick gets the letter — not something merely actionable
+    /// inside it.** Both pickers must land on the same widget, or the same target wears the letter
+    /// in two different places: a declaration carries its own placement, so labelling a different
+    /// node silently moves the keycap.
+    ///
+    /// heca's case: a sidebar pane row carries the identity and is actionable (`on_activate`),
+    /// wrapped in a `KeyHint` that carries the declaration and `CenterRight`. Labelling by key used
+    /// to take the row — so the same pane showed a right-aligned cap under `prefix+/` and a
+    /// top-centred one under `prefix+q`.
+    #[test]
+    fn a_declaration_outranks_mere_actionability_when_offering_by_key() {
+        use crate::builders::ComponentExt;
+        use crate::reactive::SignalGet;
+
+        let inner = Surface::new().key("pane:7").on_click(|_| {});
+        let wrapper = KeyHint::new(inner).on_hint(|| {});
+        let mut root = Flex::column();
+        root.base_mut().children.push(Box::new(wrapper));
+
+        assert!(offer_hint_by_key(&root, "pane:7", Some("a".into())));
+
+        let wrapper = &root.base().children[0];
+        assert_eq!(
+            wrapper.base().hint_label.get_untracked().as_deref(),
+            Some("a"),
+            "the letter must go to the widget that declared the pick"
+        );
+        assert!(
+            wrapper.base().children[0]
+                .base()
+                .hint_label
+                .get_untracked()
+                .is_none(),
+            "the merely-actionable node inside must not also wear it"
+        );
+    }
+
+    /// The other direction still works: a container that names itself on the OUTSIDE and declares
+    /// the pick on a child — heca's mounted docks — must letter the child.
+    #[test]
+    fn a_declaration_inside_the_named_node_still_wins() {
+        use crate::builders::ComponentExt;
+        use crate::reactive::SignalGet;
+
+        let declaring = KeyHint::new(Surface::new()).on_hint(|| {});
+        let mut named = Flex::column().key("workspaces");
+        named.base_mut().children.push(Box::new(declaring));
+        let mut root = Flex::column();
+        root.base_mut().children.push(Box::new(named));
+
+        assert!(offer_hint_by_key(&root, "workspaces", Some("b".into())));
+        assert_eq!(
+            root.base().children[0].base().children[0]
+                .base()
+                .hint_label
+                .get_untracked()
+                .as_deref(),
+            Some("b")
+        );
     }
 
     #[test]
