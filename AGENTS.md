@@ -60,7 +60,7 @@ a tree and it works, with **no host wiring**. A UI library also ships composed o
 **if it can be built inside grid-ui, it belongs in grid-ui.**
 
 **Component** — a composition of widgets that **also binds an app concept**: an `Intent`, an action
-**name**, a drag id, a hint target id, a chrome signal, a `nav_key`. That binding is the *only* thing
+**name**, a drag id, a chrome signal, a row's `key`. That binding is the *only* thing
 that justifies leaving the library. A composition that binds none of them is a widget in the wrong
 crate — move it down, don't keep it up here.
 
@@ -794,7 +794,7 @@ wrapper that draws the letter. One line, no id, no registry (F004/P084/T399):
 
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
-let hint = crate::chrome::fires(row_hint(pane_nav_key(pane_id)), emit); // the pick
+let hint = crate::chrome::fires(row_hint(pane_key(pane_id)), emit); // the pick
 let row = Row::new().on_activate(fire);
 KeyHint::new(row).on_hint(hint)
 ```
@@ -1105,7 +1105,7 @@ rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Bas
 - Tests must be written in the **agreed authoring API**, because a test is documentation of how the
   thing is meant to be used.
 
-This is what made `.context_menu()` replace `context_path` + a builder registry + a `nav_key` nobody
+This is what made `.context_menu()` replace `context_path` + a builder registry + a `key` nobody
 remembered (F004/P084/T395). When you touch a capability, check its neighbours for the same shape.
 
 ---
@@ -1200,7 +1200,7 @@ Button::destructive("Delete")
   fixup — that patch existed only because a field rebuilt text from keys.
 - **Handlers live on `Base`**, written with `ComponentExt` (`.on_click`, `.on_right_click`, `.on_key`,
   `.on(kind, …)`) — one trait, blanket-implemented, holding everything every component gets:
-  handlers, `nav_key`, and the drag slots. Every widget has them; none opts in. **One spelling, one argument**: an `&mut EventCx` carrying the event *and*
+  handlers, `key`, `hintable`, and the drag slots. Every widget has them; none opts in. **One spelling, one argument**: an `&mut EventCx` carrying the event *and*
   `stop_propagation()`, and **nothing is consumed for you** — a handler that wants the event says so.
 - **Events say what happened, never what to do about it**: `right_click`, not `context_menu`.
 - Full model: [`docs/widgets.md` → the event model](docs/widgets.md); the rules are held by
@@ -1584,7 +1584,14 @@ cargo test
 cargo test -p heca-core
 cargo test -p heca-renderer
 
-# Lint (before committing)
+# Lint (before committing) -- SCOPED to the crates you actually touched.
+# `--workspace` here costs 20+ minutes. Use this instead.
+./scripts/lint-changed.sh              # clippy the changed crates
+./scripts/lint-changed.sh test         # test the changed crates
+./scripts/lint-changed.sh clippy main  # diff against a different base
+DRY_RUN=1 ./scripts/lint-changed.sh    # print the crate list, run nothing
+
+# Full workspace lint -- only before opening a PR, not in the edit loop.
 cargo clippy --workspace --all-targets --all-features
 
 # Fix auto-fixable issues
@@ -1593,6 +1600,34 @@ cargo clippy --fix --workspace --all-targets --all-features
 # Watch (auto-rebuild on changes)
 cargo watch -x check
 ```
+
+### Builds are disk-bound here. Do not reach for `--workspace` by reflex
+
+Two things make this workspace slow, and neither is CPU:
+
+1. **Stale object files.** Incremental dev builds split each crate into 256
+   codegen units, and cargo never garbage-collects the objects left behind by
+   earlier builds. They had reached **946,549 `.o` files / 68 GB**, at which
+   point a scoped *no-op* `cargo check` measured `real 13.7s` against only
+   `user 1.6s / sys 2.0s` -- ten seconds of pure I/O, stat-ing a million files
+   before compiling anything. 12 cores sat idle. The root `Cargo.toml` now sets
+   `incremental = false` and `debug = "line-tables-only"` to stop the pile-up.
+   If `target/` climbs back into the tens of GB, `cargo clean` is the fix.
+
+2. **Two cargo processes on one target dir.** Cargo takes an exclusive lock on
+   `target/`. A second `cargo test --workspace` does not run in parallel -- it
+   *blocks*, silently, for as long as the first one takes. One such orphan sat
+   14 minutes at 0.3s of CPU. Before launching a long build, check nothing else
+   is already running:
+
+   ```bash
+   pgrep -fl "cargo (test|clippy|build)"
+   ```
+
+`scripts/lint-changed.sh` maps changed files to workspace members via
+`cargo metadata` and passes `-p` for only those. It escalates to the full
+workspace when `Cargo.toml`, `Cargo.lock`, or the toolchain file changes, and
+ignores paths that belong to no crate (`docs/`, `.planner/`).
 
 ---
 
