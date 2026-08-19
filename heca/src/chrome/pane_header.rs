@@ -1072,6 +1072,11 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             };
             match build_pane_header(&content, &theme, font, input.avail_w, ctx) {
                 Some(root) => {
+                    // The identity rule's warning half (F003/P082/T444). This tree is where it was
+                    // actually broken: zooming changed what the header rendered, and the buttons'
+                    // hint letters moved under Antonio while he was driving (F011/P094/T451). They
+                    // carry `.key(action_name)` now, and this is what says so if that ever goes.
+                    super::identity::report_ambiguous_widgets("pane-header", &root);
                     state
                         .pane_headers
                         .insert(input.pane_id, RetainedPaneHeader { root, key });

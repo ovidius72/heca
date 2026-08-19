@@ -48,6 +48,8 @@ pub(crate) fn rebuild_named_layer(state: &mut crate::app_state::AppState, name: 
 }
 mod focus;
 mod host;
+/// The identity rule's reporting half (F003/P082/T444) — see the module docs.
+mod identity;
 mod layers;
 mod overlay;
 mod palette;
@@ -1516,6 +1518,10 @@ pub(crate) fn build_chrome_root(
         right_toggle,
         &mut signals,
     );
+    // The identity rule's warning half (F003/P082/T444): a collection of ours whose items were
+    // never keyed loses its cursor position and its hint letters on the next rebuild, and nothing
+    // fails when it does. Said once per distinct finding, in debug builds only.
+    identity::report_ambiguous_widgets("chrome", &root);
     (root, signals, drag_items)
 }
 

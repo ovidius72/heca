@@ -251,6 +251,9 @@ pub(crate) fn open_view_layer(
     };
     let theme = super::chrome_gui_theme(state);
     let mut forms = FormBindings::default();
+    // The identity rule's declarative half, said once per description rather than per realize —
+    // this node is realized again on every theme reload (F003/P082/T444).
+    super::identity::report_unkeyed_description("view layer", &node);
     let realized = super::realize(&node, &theme, &view_emit, &mut forms);
     let id = state
         .layers
@@ -528,6 +531,7 @@ fn build_modal_root(
             let emit = emit.clone();
             Rc::new(move |intent| emit(InteractionIntent::View(intent)))
         };
+        super::identity::report_unkeyed_description("modal body", &spec.body);
         super::realize(&spec.body, theme, &view_emit, forms)
     };
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);

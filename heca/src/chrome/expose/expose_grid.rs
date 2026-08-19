@@ -142,6 +142,55 @@ mod tests {
         lay_out(g, w, h)
     }
 
+    /// **The map's cards stay keyed** (F003/P082/T444) — the exposé's half of the identity-rule
+    /// test.
+    ///
+    /// The map is a collection of collections: workspaces of columns of panes, every one of them a
+    /// card the cursor stops on and a letter can land on. Built here so nothing can be told apart by
+    /// its content — every pane in every workspace is called `zsh` — because that is the case a
+    /// derived identity cannot serve, and the case a real session produces the moment you open two
+    /// shells.
+    #[test]
+    fn every_card_of_the_map_is_keyed_even_when_every_pane_shares_a_name() {
+        let twins = |idx: usize| ExposeWorkspace {
+            ws_idx: idx,
+            name: format!("ws{idx}"),
+            active: idx == 0,
+            columns: (0..2)
+                .map(|c| ExposeColumn {
+                    col_idx: c,
+                    width: 400.0,
+                    panes: vec![
+                        ExposePane {
+                            pane_id: PaneId((idx * 100 + c * 10 + 1) as u64),
+                            name: "zsh".into(),
+                            active: false,
+                            height: 300.0,
+                        },
+                        ExposePane {
+                            pane_id: PaneId((idx * 100 + c * 10 + 2) as u64),
+                            name: "zsh".into(),
+                            active: false,
+                            height: 300.0,
+                        },
+                    ],
+                })
+                .collect(),
+            floating: Vec::new(),
+            viewport: (0.0, 800.0),
+            viewport_h: 600.0,
+            strip_width: 800.0,
+        };
+        let rows = [twins(0), twins(1)];
+        let map = grid(&rows, 900.0, 700.0);
+
+        let ambiguous = heca_grid_ui::nav::ambiguous_identities(map.as_ref());
+        assert!(
+            ambiguous.is_empty(),
+            "a collection in the exposé lost its keys: {ambiguous:#?}",
+        );
+    }
+
     /// ⚠️ **THE test.** The whole map stays inside the box it is given — at several window sizes,
     /// several row counts, and rows of unequal height.
     ///

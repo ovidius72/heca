@@ -895,6 +895,39 @@ impl ViewNode {
         self.prop("text", PropValue::Text(s.into()))
     }
 
+    /// Convenience: set the `"key"` prop — **this node's identity, when it is one of a collection
+    /// you are iterating**.
+    ///
+    /// The same `key` a native tree declares with `ComponentExt::key`, and it means React's `key`:
+    /// the identity of the *thing this node represents*, taken from your data, so the framework can
+    /// tell "this row again" from "a different row" after the tree is rebuilt. `realize` writes it
+    /// into the widget's own slot, so a described row and a native row are identified alike.
+    ///
+    /// **Where it is required: in a collection, and nowhere else.** An ordinary node — a button, an
+    /// icon, a card — needs nothing; its identity is derived from its content. What derivation
+    /// cannot do is tell apart several nodes that read the same, which is exactly what iterating
+    /// produces.
+    ///
+    /// **You never count.** A key is never a position and never a counter — an index is precisely
+    /// the thing that changes when the list changes, which is what identity exists to survive.
+    ///
+    /// ```ignore
+    /// for pane in panes {
+    ///     Row::new().key(pane.id).on_press(Intent::new("focus_pane"))
+    /// }
+    /// ```
+    pub fn key(self, k: impl Into<String>) -> Self {
+        self.prop("key", PropValue::Text(k.into()))
+    }
+
+    /// This node's declared identity, if it carries one — see [`key`](Self::key).
+    pub fn declared_key(&self) -> Option<&str> {
+        match self.props.get("key") {
+            Some(PropValue::Text(k)) => Some(k.as_str()),
+            _ => None,
+        }
+    }
+
     /// Bind an event to an intent (e.g. `.on("press", Intent::new("close"))`).
     pub fn on(mut self, event: impl Into<String>, intent: Intent) -> Self {
         self.events.insert(event.into(), intent);
@@ -941,9 +974,224 @@ impl ViewNode {
     }
 }
 
+/// A described node that carries a `press` while sitting in a **collection** with no
+/// [`key`](ViewNode::key) — the identity rule broken in the one place it is required.
+///
+/// Reported by [`unkeyed_collection_items`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnkeyedItem {
+    /// Where it is: the child indices from the root down to it. A description has no file and no
+    /// line, so this is the only way to point at one node in it.
+    pub path: Vec<usize>,
+    /// Which widget it is — and, because the siblings it clashes with are the same kind, what the
+    /// collection is made of.
+    pub kind: WidgetKind,
+    /// The action its `press` names. An author recognises their own tree by this long before they
+    /// recognise a path.
+    pub action: String,
+    /// How many siblings of this kind are in the collection, this one included.
+    pub siblings: usize,
+}
+
+/// Every node in `root` that binds a `press` inside a collection and declares no
+/// [`key`](ViewNode::key).
+///
+/// **This is the enforcement that reaches a plugin author** — the only one of the identity rule's
+/// three that does. The other two are for us: a warning over a live widget tree
+/// (`heca_grid_ui::nav::ambiguous_identities`) and a test over heca's own chrome. Someone whose UI
+/// is JSON or a WASM module never meets the Rust compiler and never reads our test suite, so
+/// without this their rows silently lose their cursor position and their hint letter on every
+/// rebuild, and nothing anywhere says why.
+///
+/// **A collection is two or more direct children of one container with the same
+/// [`WidgetKind`].** That mirrors the native condition — two or more unkeyed children deriving the
+/// same name — with the stronger signal a description happens to carry: `WidgetKind` is real type
+/// information, so `[Icon, Label]` is a composed control by construction and `[Row, Row, Row]` is a
+/// list by construction, with nothing to infer about the author's intent.
+///
+/// **Only an actionable node is reported.** Identity is what a cursor, a right-click, a drag and a
+/// remembered hint letter are kept *on*, and all four need something to act on. Three decorative
+/// labels in a row lose nothing by being anonymous; three rows you can press lose all four.
+///
+/// A **keyed** node is skipped — it said who it is. So the fix is always the same one line, on the
+/// item, from the data already being iterated:
+///
+/// ```ignore
+/// for pane in panes {
+///     Row::new().key(pane.id).on_press(Intent::new("focus_pane"))   // ← .key(…)
+/// }
+/// ```
+///
+/// It is **pure data, and it lives in this crate on purpose**: `heca-view` compiles without
+/// anything that draws, so a plugin's own build can run this check against its own tree, long
+/// before a host ever realizes it. The host runs it too — once per description, at the bridge —
+/// which is also why it is not folded into `realize`: a description is realized again on every
+/// theme reload and every plugin update, and a diagnostic that repeats on each of those is one
+/// nobody reads.
+pub fn unkeyed_collection_items(root: &ViewNode) -> Vec<UnkeyedItem> {
+    let mut out = Vec::new();
+    walk_unkeyed(root, &mut Vec::new(), &mut out);
+    out
+}
+
+fn walk_unkeyed(node: &ViewNode, path: &mut Vec<usize>, out: &mut Vec<UnkeyedItem>) {
+    // How many direct children share each kind — the collections this container holds.
+    let mut counts: Vec<(WidgetKind, usize)> = Vec::new();
+    for child in &node.children {
+        match counts.iter_mut().find(|(k, _)| *k == child.kind) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((child.kind, 1)),
+        }
+    }
+
+    for (i, child) in node.children.iter().enumerate() {
+        let siblings = counts
+            .iter()
+            .find(|(k, _)| *k == child.kind)
+            .map(|(_, n)| *n)
+            .unwrap_or(1);
+        path.push(i);
+        if let Some(intent) = child
+            .intent("press")
+            .filter(|_| siblings >= 2 && child.declared_key().is_none())
+        {
+            out.push(UnkeyedItem {
+                path: path.clone(),
+                kind: child.kind,
+                action: intent.action.clone(),
+                siblings,
+            });
+        }
+        walk_unkeyed(child, path, out);
+        path.pop();
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── The identity rule, declarative half: a `press` in a collection needs a `key` ──────────
+
+    fn row(action: &str) -> ViewNode {
+        ViewNode::new(WidgetKind::Row).on_press(Intent::new(action))
+    }
+
+    /// The case this exists for: rows built by iterating, none of them keyed. Every one is
+    /// reported, because every one loses its cursor position and its letter on the next rebuild.
+    #[test]
+    fn every_unkeyed_pressable_row_of_a_collection_is_reported() {
+        let tree = ViewNode::new(WidgetKind::VStack)
+            .child(row("focus_pane"))
+            .child(row("focus_pane"))
+            .child(row("focus_pane"));
+
+        let found = unkeyed_collection_items(&tree);
+        assert_eq!(found.len(), 3);
+        assert_eq!(found[0].path, vec![0]);
+        assert_eq!(found[2].path, vec![2]);
+        assert_eq!(found[0].kind, WidgetKind::Row);
+        assert_eq!(found[0].action, "focus_pane");
+        assert_eq!(found[0].siblings, 3, "what the author has to look at to see the collection");
+    }
+
+    /// Keying the items is the fix, and it is the only thing the report ever asks for.
+    #[test]
+    fn keyed_items_are_never_reported() {
+        let tree = ViewNode::new(WidgetKind::VStack)
+            .child(row("focus_pane").key("pane:7"))
+            .child(row("focus_pane").key("pane:9"));
+
+        assert_eq!(unkeyed_collection_items(&tree), vec![]);
+    }
+
+    /// A composed control is not a collection: `WidgetKind` says so by construction, with nothing
+    /// to infer about what the author meant.
+    #[test]
+    fn a_composed_control_is_not_a_collection() {
+        let tree = ViewNode::new(WidgetKind::Choice)
+            .on_press(Intent::new("set_level"))
+            .child(ViewNode::new(WidgetKind::Icon))
+            .child(ViewNode::new(WidgetKind::Label).text("HIGH"));
+
+        assert_eq!(unkeyed_collection_items(&tree), vec![]);
+    }
+
+    /// **Only an actionable node is reported.** Identity is what a cursor, a right-click, a drag and
+    /// a remembered letter are kept on — decorative siblings have none of those to lose.
+    #[test]
+    fn a_collection_with_nothing_to_press_is_not_reported() {
+        let tree = ViewNode::new(WidgetKind::VStack)
+            .child(ViewNode::new(WidgetKind::Label).text("one"))
+            .child(ViewNode::new(WidgetKind::Label).text("two"))
+            .child(ViewNode::new(WidgetKind::Label).text("three"));
+
+        assert_eq!(unkeyed_collection_items(&tree), vec![]);
+    }
+
+    /// A single pressable child is not a collection — the ordinary case of a button in a box, which
+    /// needs no key and must never be asked for one.
+    #[test]
+    fn a_lone_pressable_child_is_not_a_collection() {
+        let tree = ViewNode::new(WidgetKind::HStack)
+            .child(ViewNode::new(WidgetKind::Label).text("Delete pane?"))
+            .child(ViewNode::new(WidgetKind::Button).text("OK").on_press(Intent::new("confirm_ok")));
+
+        assert_eq!(unkeyed_collection_items(&tree), vec![]);
+    }
+
+    /// Two buttons side by side **are** a collection of two, so an unkeyed pressable one is
+    /// reported — a confirm dialog's Cancel/OK pair is the everyday example, and the everyday fix
+    /// is a key naming the action.
+    #[test]
+    fn a_pair_of_buttons_is_a_collection_of_two() {
+        let tree = ViewNode::new(WidgetKind::HStack)
+            .child(ViewNode::new(WidgetKind::Button).text("Cancel").on_press(Intent::new("cancel")))
+            .child(ViewNode::new(WidgetKind::Button).text("OK").on_press(Intent::new("confirm_ok")));
+
+        let found = unkeyed_collection_items(&tree);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].action, "cancel");
+        assert_eq!(found[1].action, "confirm_ok");
+    }
+
+    /// The report reaches the whole tree, not only its top: a list nested inside a card is still a
+    /// list, and its path says where to look.
+    #[test]
+    fn a_nested_collection_is_reported_with_its_path() {
+        let tree = ViewNode::new(WidgetKind::VStack).child(
+            ViewNode::new(WidgetKind::Card)
+                .child(row("open"))
+                .child(row("open")),
+        );
+
+        let found = unkeyed_collection_items(&tree);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].path, vec![0, 0]);
+        assert_eq!(found[1].path, vec![0, 1]);
+    }
+
+    /// Siblings of **different** kinds are not one collection, however many of them there are.
+    #[test]
+    fn different_kinds_are_not_one_collection() {
+        let tree = ViewNode::new(WidgetKind::HStack)
+            .child(ViewNode::new(WidgetKind::Button).on_press(Intent::new("a")))
+            .child(ViewNode::new(WidgetKind::Row).on_press(Intent::new("b")))
+            .child(ViewNode::new(WidgetKind::Item).on_press(Intent::new("c")));
+
+        assert_eq!(unkeyed_collection_items(&tree), vec![]);
+    }
+
+    /// `realize` writes a described key into the very slot a native `.key(..)` writes — held on the
+    /// realize side; here we only hold that the node carries it and reads it back.
+    #[test]
+    fn a_key_is_an_ordinary_prop_read_back_by_name() {
+        let node = ViewNode::new(WidgetKind::Row).key("pane:7");
+        assert_eq!(node.declared_key(), Some("pane:7"));
+        assert_eq!(node.props.get("key"), Some(&PropValue::Text("pane:7".into())));
+        assert_eq!(ViewNode::new(WidgetKind::Row).declared_key(), None);
+    }
 
     /// A small confirm-dialog-shaped tree: a column with a message + two action buttons.
     fn confirm_tree() -> ViewNode {

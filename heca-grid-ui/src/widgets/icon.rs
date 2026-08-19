@@ -97,6 +97,77 @@ pub enum Glyph {
 
 #[heca_grid_ui_macros::props]
 impl Glyph {
+    /// **The glyph's name** — its stable, plugin-facing spelling (`"trash"`, `"git_branch"`).
+    ///
+    /// One source for two readers that had drifted apart: a described node names its icon by this
+    /// string, and [`Icon`] reports it as its accessible name so an icon-only control HAS an
+    /// identity (`Component::text_summary`). Only `Label`, `Badge`, `BadgeButton` and `Tag` supplied
+    /// one before, so every icon-only button — a pane-header action, a rail cell, a close button —
+    /// resolved to no identity at all, and nothing about it could be remembered: not a hint letter,
+    /// not a cursor position (F003/P082/T444).
+    ///
+    /// **Exhaustive on purpose.** A new glyph does not compile until it is named here, which is what
+    /// keeps this in step with [`Glyph::ALL`]. The host-side name→glyph map was a hand-written
+    /// SUBSET and had fallen 16 glyphs behind — `caret_left`, `pencil`, `x_circle`,
+    /// `folder_simple_plus` and the rest were unreachable from a description, silently rendering
+    /// nothing.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Glyph::Folder => "folder",
+            Glyph::FolderOpen => "folder_open",
+            Glyph::File => "file",
+            Glyph::FileCode => "file_code",
+            Glyph::GitBranch => "git_branch",
+            Glyph::GitCommit => "git_commit",
+            Glyph::GitMerge => "git_merge",
+            Glyph::GitPullRequest => "git_pull_request",
+            Glyph::Terminal => "terminal",
+            Glyph::Gear => "gear",
+            Glyph::Search => "search",
+            Glyph::Close => "close",
+            Glyph::Check => "check",
+            Glyph::CaretRight => "caret_right",
+            Glyph::CaretLeft => "caret_left",
+            Glyph::CaretDown => "caret_down",
+            Glyph::CaretUp => "caret_up",
+            Glyph::Play => "play",
+            Glyph::Pause => "pause",
+            Glyph::Stop => "stop",
+            Glyph::Warning => "warning",
+            Glyph::WarningCircle => "warning_circle",
+            Glyph::Info => "info",
+            Glyph::Circle => "circle",
+            Glyph::Lightning => "lightning",
+            Glyph::List => "list",
+            Glyph::Sidebar => "sidebar",
+            Glyph::DotsThreeVertical => "dots_three_vertical",
+            Glyph::ArrowRight => "arrow_right",
+            Glyph::ArrowLineLeft => "arrow_line_left",
+            Glyph::ArrowLineRight => "arrow_line_right",
+            Glyph::Plus => "plus",
+            Glyph::Minus => "minus",
+            Glyph::SquareSplitVertical => "square_split_vertical",
+            Glyph::XSquare => "x_square",
+            Glyph::FrameCorners => "frame_corners",
+            Glyph::Cards => "cards",
+            Glyph::Pencil => "pencil",
+            Glyph::NotePencil => "note_pencil",
+            Glyph::Backspace => "backspace",
+            Glyph::Trash => "trash",
+            Glyph::XCircle => "x_circle",
+            Glyph::PlusCircle => "plus_circle",
+            Glyph::FolderSimpleMinus => "folder_simple_minus",
+            Glyph::FolderSimplePlus => "folder_simple_plus",
+            Glyph::StackPlus => "stack_plus",
+            Glyph::StackMinus => "stack_minus",
+            Glyph::ColumnsPlusLeft => "columns_plus_left",
+            Glyph::ColumnsPlusRight => "columns_plus_right",
+            Glyph::SquareHalf => "square_half",
+            Glyph::SquareSplitHorizontal => "square_split_horizontal",
+            Glyph::SquareHalfBottom => "square_half_bottom",
+        }
+    }
+
     /// Every curated glyph, in enum order — the single enumerable source of the icon
     /// set. Rust can't iterate enum variants without a macro/dependency, so this list
     /// is the one place they're collected (a unit test asserts it stays complete). Use

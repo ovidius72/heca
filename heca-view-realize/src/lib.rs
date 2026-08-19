@@ -137,6 +137,22 @@ pub fn realize(
         let emit = emit.clone();
         realized.base_mut().hint = Some(Box::new(move || emit(carrier.clone())));
     }
+    // **Who this node is**, read once here for every kind, exactly like style and the hint above.
+    //
+    // It cannot be a per-kind property: `key` is `ComponentExt::key` natively — on *every* widget,
+    // because a collection can be built from any of them — so there is no widget whose builder
+    // surface it belongs to. Reading it here is the same statement, and it means a described row
+    // and a native row land in the **same** `Base::key` slot: the keyboard cursor, the right-click
+    // target, the drag identity and the picker's remembered letter all read that one string and
+    // cannot tell the two authoring paths apart.
+    //
+    // `hintable` rides along for the same reason — universal on `Base`, so universal here.
+    if let Some(key) = node.declared_key() {
+        realized.base_mut().key = Some(key.to_string());
+    }
+    if let Some(PropValue::Bool(hintable)) = node.props.get("hintable") {
+        realized.base_mut().hintable = *hintable;
+    }
     realized
 }
 
@@ -1063,46 +1079,12 @@ fn glyph_prop(node: &ViewNode) -> Option<Glyph> {
 /// NB: this is a **curated stopgap of ~35 icons**. The complete app iconset + a generated
 /// name↔`Glyph` mapping (so this can't drift from the enum) is tracked as `plugin-task-ui-8`.
 fn glyph_from_name(name: &str) -> Option<Glyph> {
-    let g = match name {
-        "folder" => Glyph::Folder,
-        "folder_open" => Glyph::FolderOpen,
-        "file" => Glyph::File,
-        "file_code" => Glyph::FileCode,
-        "git_branch" => Glyph::GitBranch,
-        "git_commit" => Glyph::GitCommit,
-        "git_merge" => Glyph::GitMerge,
-        "git_pull_request" => Glyph::GitPullRequest,
-        "terminal" => Glyph::Terminal,
-        "gear" => Glyph::Gear,
-        "search" => Glyph::Search,
-        "close" => Glyph::Close,
-        "check" => Glyph::Check,
-        "caret_right" => Glyph::CaretRight,
-        "caret_down" => Glyph::CaretDown,
-        "play" => Glyph::Play,
-        "pause" => Glyph::Pause,
-        "stop" => Glyph::Stop,
-        "warning" => Glyph::Warning,
-        "warning_circle" => Glyph::WarningCircle,
-        "info" => Glyph::Info,
-        "circle" => Glyph::Circle,
-        "lightning" => Glyph::Lightning,
-        "list" => Glyph::List,
-        "sidebar" => Glyph::Sidebar,
-        "dots_three_vertical" => Glyph::DotsThreeVertical,
-        "arrow_right" => Glyph::ArrowRight,
-        "arrow_line_left" => Glyph::ArrowLineLeft,
-        "arrow_line_right" => Glyph::ArrowLineRight,
-        "plus" => Glyph::Plus,
-        "minus" => Glyph::Minus,
-        "square_split_vertical" => Glyph::SquareSplitVertical,
-        "x_square" => Glyph::XSquare,
-        "frame_corners" => Glyph::FrameCorners,
-        "cards" => Glyph::Cards,
-        "trash" => Glyph::Trash,
-        _ => return None,
-    };
-    Some(g)
+    // **Looked up, not listed.** This was a hand-written `match` of 36 arms beside a `Glyph::ALL`
+    // of 52, so sixteen glyphs — `caret_left`, `pencil`, `x_circle`, `folder_simple_plus` and the
+    // rest — could not be named from a description at all and silently rendered nothing. A second
+    // copy of a mapping drifts; `Glyph::name` is the one source and a new glyph cannot compile
+    // without joining it (F003/P082/T444).
+    Glyph::ALL.iter().copied().find(|g| g.name() == name)
 }
 
 /// The `"variant"` prop mapped to the grid-ui [`ButtonVariant`].
@@ -1968,6 +1950,75 @@ mod tests {
         );
         assert_eq!(w.base().style.visual.radius, 7.0, "the good one still applied");
         assert!(w.base().style.visual.fill.is_none(), "the bad one was dropped, not fatal");
+    }
+
+    /// **A described key lands in the very slot a native `.key(..)` writes.** That is the whole of
+    /// the declarative half of the identity rule: one slot, so the keyboard cursor, the right-click
+    /// target, the drag identity and the picker's remembered letter cannot tell a described row
+    /// from a native one.
+    #[test]
+    fn a_described_key_lands_in_the_widgets_own_slot() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let node = ViewNode::new(WidgetKind::Row)
+            .key("pane:7")
+            .on_press(Intent::new("focus_pane"));
+
+        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert_eq!(row.base().key.as_deref(), Some("pane:7"));
+    }
+
+    /// It is read **generically, for every kind** — not in one arm. A key belongs to no widget in
+    /// particular, because a collection can be built from any of them.
+    #[test]
+    fn every_kind_carries_a_described_key() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        for kind in [
+            WidgetKind::Row,
+            WidgetKind::Item,
+            WidgetKind::Button,
+            WidgetKind::Card,
+            WidgetKind::Label,
+            WidgetKind::VStack,
+        ] {
+            let node = ViewNode::new(kind).key("k");
+            let w = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            assert_eq!(w.base().key.as_deref(), Some("k"), "{kind:?} dropped its key");
+        }
+    }
+
+    /// A node that declares nothing carries nothing — its identity is derived from its content, and
+    /// an empty string would be a name that collides with every other empty one.
+    #[test]
+    fn a_node_with_no_key_declares_none() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let node = ViewNode::new(WidgetKind::Row).on_press(Intent::new("focus_pane"));
+        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert_eq!(row.base().key, None);
+    }
+
+    /// `hintable` rides the same generic pass — universal on `Base`, so universal here. Being
+    /// pickable is not opt-in, so the only thing a description has to say is "not me".
+    #[test]
+    fn a_node_can_keep_itself_out_of_the_picker() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let node = ViewNode::new(WidgetKind::Button)
+            .text("×")
+            .prop("hintable", PropValue::Bool(false))
+            .on_press(Intent::new("close"));
+
+        let w = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert!(!w.base().hintable);
+        assert!(
+            realize(
+                &ViewNode::new(WidgetKind::Button).on_press(Intent::new("close")),
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            )
+            .base()
+            .hintable,
+            "the default is pickable — a node says only \"not me\"",
+        );
     }
 
     /// **A described `Row` is the interactive widget, not a box.** Click it and its intent fires;

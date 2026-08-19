@@ -220,6 +220,51 @@ pub trait Style: Sized {
         self.prop("hidden", hidden)
     }
 
+    // ── Identity ──
+    /// **This node's identity, when it is one of a collection you are iterating** — React's `key`,
+    /// meaning exactly what it means there.
+    ///
+    /// It is on this trait, not on one builder, for the reason `ComponentExt::key` is on every
+    /// widget: a collection can be built from any kind, so the identity of an item cannot belong to
+    /// a particular one. `realize` reads it once for every kind and writes it into the widget's own
+    /// slot, so a described row is identified exactly as a native row is — the cursor, the
+    /// right-click target, the drag identity and the picker's remembered letter all read that one
+    /// string.
+    ///
+    /// **Two cases, and only two:**
+    ///
+    /// | what you are building | what you write |
+    /// |---|---|
+    /// | anything at all — a button, an icon, a card | **nothing** |
+    /// | an item in a collection you are iterating | **`.key(…)`** — the item's own id, from your data |
+    ///
+    /// Everything else gets an identity anyway, derived from its content. What derivation cannot do
+    /// is tell apart several nodes that read the same, and that is what iterating produces — so
+    /// this is required in a collection and nowhere else.
+    ///
+    /// **You never count.** A key is never a position and never a counter: an index is the one
+    /// thing that changes when the list changes, which is what identity exists to survive. If you
+    /// are reaching for a counter, the key is wrong.
+    ///
+    /// ```ignore
+    /// for pane in &column.panes {
+    ///     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", pane.id))
+    /// }
+    /// ```
+    fn key(self, key: impl Into<String>) -> Self {
+        self.prop("key", PropValue::Text(key.into()))
+    }
+
+    /// Keep this node **out of the picker**, however actionable it is. Default `true`.
+    ///
+    /// The declarative spelling of `ComponentExt::hintable`. Being pickable is not opt-in — a node
+    /// with a `press` wears a letter with nothing written — so the only thing left to say is "not
+    /// me". Letters are scarce (52, one keystroke each), and a close button on every row of a long
+    /// list would spend one apiece.
+    fn hintable(self, hintable: bool) -> Self {
+        self.prop("hintable", hintable)
+    }
+
     // ── Appearance ──
     /// Background colour: a theme token name (`"accent"`) or a literal (`"#ff8800"`).
     ///

@@ -33,6 +33,8 @@ const ACTIVE_GLOW_INTENSITY: f32 = 0.22;
 /// A focusable, selectable square icon cell.
 pub struct RailCell {
     base: Base,
+    /// The glyph's name — this cell's accessible name. See [`RailCell::new`].
+    name: &'static str,
     /// Square cell extent (px).
     cell: f32,
     /// Active (current / selected) state — accent tint + border + glow.
@@ -46,6 +48,10 @@ impl RailCell {
     /// A new cell wrapping `icon`, centered in a square. Make it
     /// clickable/keyboard-activatable with [`on_activate`](RailCell::on_activate).
     pub fn new(icon: Icon) -> Self {
+        // Its name, taken while the icon is still typed — a rail cell IS its glyph. Same reason as
+        // `IconButton::new`: without it the cell has no identity at all, and `Icon` must stay silent
+        // so it does not shadow a `Label` beside it elsewhere (F003/P082/T444).
+        let name = icon.glyph_signal().get_untracked().name();
         let mut base = Base::new();
         // Center the single icon child both ways within the square cell.
         base.style.layout.direction = Direction::Row;
@@ -54,6 +60,7 @@ impl RailCell {
         base.children.push(Box::new(icon));
         let mut cell = Self {
             base,
+            name,
             cell: DEFAULT_CELL,
             active: signal(false),
             flash: Flash::new(),
@@ -112,6 +119,11 @@ impl Component for RailCell {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
+    }
+
+    /// **An icon-only control is its glyph, so that is its name.** See [`RailCell::new`].
+    fn text_summary(&self) -> Option<String> {
+        Some(self.name.to_string())
     }
 
     /// A fixed square along both axes.

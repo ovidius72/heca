@@ -29,6 +29,8 @@ const GLOW_INTENSITY: f32 = 0.18;
 /// A compact, clickable icon button.
 pub struct IconButton {
     base: Base,
+    /// The glyph's name — this control's accessible name. See [`IconButton::new`].
+    name: &'static str,
     /// Explicit square size (px); otherwise hugs the icon + padding.
     cell: Option<f32>,
     /// Hover/press hue (default: theme accent).
@@ -47,6 +49,16 @@ pub struct IconButton {
 impl IconButton {
     /// A new icon button wrapping `icon`, centered.
     pub fn new(icon: Icon) -> Self {
+        // **Its name, taken while the icon is still typed.** An icon-only control IS its glyph, so
+        // this is what it is called — and without it `nav::identity_of` returns `None` and the
+        // button has no identity at all: nothing about it can be remembered, not a hint letter, not
+        // a cursor position (F003/P082/T444). Only `Label`, `Badge`, `BadgeButton` and `Tag`
+        // supplied a name before, so every pane-header action, close button and rail cell was in
+        // that state. Read here rather than from the child, because `Icon` must stay silent: the
+        // accessible-name walk takes the first child that answers, so an `Icon` naming itself would
+        // shadow the `Label` beside it in a `Choice` and `Select` would report "warning" instead of
+        // "HIGH".
+        let name = icon.glyph_signal().get_untracked().name();
         let mut base = Base::new();
         // Center the single icon child; pad it so the hover frame has breathing room.
         base.style.layout.direction = Direction::Row;
@@ -56,6 +68,7 @@ impl IconButton {
         base.children.push(Box::new(icon));
         Self {
             base,
+            name,
             cell: None,
             tone: None,
             active: false,
@@ -129,6 +142,12 @@ impl Component for IconButton {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
+    }
+
+    /// **An icon-only control is its glyph, so that is its name.** See [`IconButton::new`] for why
+    /// it is read there and not delegated to the `Icon` child.
+    fn text_summary(&self) -> Option<String> {
+        Some(self.name.to_string())
     }
 
     /// A pinned square, or auto (hug the icon + padding) when unset. The size

@@ -628,7 +628,7 @@ thing, so it should not spend one of the 52 letters.
 **Letters are scarce.** One picker hands out 52, one keystroke each — `.hintable(false)` is how a
 dense surface keeps them for the targets that matter.
 
-> **Declarative form:** `hintable` is an ordinary boolean prop on the node.
+> **Declarative form:** `hintable` is an ordinary boolean prop on the node, read for every kind — see [Identity props](#identity-props--key-and-hintable-on-every-kind).
 
 **Identity** (part of `ComponentExt`):
 
@@ -636,9 +636,10 @@ dense surface keeps them for the targets that matter.
 |--------|--------|
 | `.key(impl Into<String>)` | The identity of **this item**, when it is one of a collection you are iterating. |
 
-> ⚠️ **`nav_key` and `scope_key` are being replaced by `key`** (F003/P082/T444, decided 2026-08-17).
-> The rest of this section documents the settled design; the code still says `nav_key`/`scope_key`
-> until that task lands.
+> **`key` replaced `nav_key`** (F003/P082/T444, decided 2026-08-17, renamed in `0a06ef5`). The
+> declarative form and the enforcement landed with the rest of T444. `scope_key` is **still here**:
+> folding it into `key` turned out to change behaviour — see the note at the end of
+> [Nesting](#nesting-is-structure-not-a-second-concept) — and it moved to its own task.
 
 #### The rule: two cases, and only two
 
@@ -692,13 +693,20 @@ DockFrame::new(&ws.name).key(ws.id)                 // a row, and a container
 
 One property at every level. Nesting is expressed by the tree, exactly as in React's nested lists.
 
-**This is why `scope_key` disappears.** It answered *"which region did this press land in"* — a
-second declaration for the same point in the tree, and the reason two fields existed. With a key at
-every level it is **derived**: the region is the **nearest keyed ancestor**. Nobody declares it, and
-it cannot fall out of step with the row it encloses.
+**This is why `scope_key` was meant to disappear.** It answered *"which region did this press land
+in"* — a second declaration for the same point in the tree, and the reason two fields existed. With a
+key at every level it looks **derived**: the region is the **nearest keyed ancestor**, declared by
+nobody and unable to fall out of step with the row it encloses.
+
+> ⚠️ **It has not disappeared, and the reason is worth keeping.** `mouse.rs` states a deliberate
+> rule — *"clicking a container's padding is not a request to move the cursor"* — and merging the
+> two fields makes `key_at` answer a padding click with the **container's own** key, moving the
+> cursor to something that is not a row. The obvious repair ("a keyed node with keyed children is a
+> region") fails too: the sidebar is a tree, so a workspace row contains column rows while being a
+> perfectly good cursor target itself. `Base::scope_key` therefore stays for now, with its own task.
 
 > The old `scope_key` documentation argued the two must stay separate, because folding them would
-> make a region turn up in `collect_nav_keys` as a steppable row. That held while identity and role
+> make a region turn up in `collect_keys` as a steppable row. That held while identity and role
 > were the same declaration. Once every node is keyed, "region" is a question you *ask* of the tree
 > rather than something a widget asserts.
 
@@ -728,12 +736,33 @@ fine for anything durable, which is what an explicit `key` is for.
 
 Considered and rejected: a typestate builder where an item in a collection does not compile without a
 key. It puts the rule in the compiler, but it is noise on every widget, and a plugin sending JSON
-never meets the Rust compiler. What is built instead, again as React does:
+never meets the Rust compiler. What is built instead, again as React does — three reports, none of
+them a failure:
 
-- **a warning when a collection's children have no keys** — the moment it can be seen and fixed;
-- **a test** over heca's own chrome, so our rows stay keyed;
-- **an error at realize time** for a plugin node declaring a `press` inside a collection with no
-  `key` — the only mechanism that reaches a plugin author.
+| | walk | what it looks at | who reads it |
+|---|---|---|---|
+| a **warning** | `nav::ambiguous_identities(&dyn Component)` | a live widget tree | us, while building chrome (debug builds) |
+| a **test** | the same walk, over heca's own sidebar | our rows | CI, so our rows stay keyed |
+| an **error** | `heca_view::unkeyed_collection_items(&ViewNode)` | a description, before it is realized | a **plugin author** |
+
+**A collection is two or more siblings of the same container**, and each half says that in the
+vocabulary it has: over widgets, two or more that derive the **same name**; over a description, two
+or more of the same **`WidgetKind`**, which is real type information and needs nothing inferred. So
+an `[Icon, Label]` control never trips either one, and three rows always trip both.
+
+**Only what you can act on is reported** — `Base::activatable` natively, a bound `press` in a
+description. Identity is what a cursor, a right-click, a drag and a remembered hint letter are kept
+*on*, and all four need something to act on: two labels inside one row are that row's **content**,
+and the row above them is what carries the key. Without that clause the widget walk reports every
+transparent wrapper in the tree, because a [`KeyHint`](#keyhint) around a keyed row inherits the
+row's name through `text_summary` while carrying no key of its own.
+
+Both walks are **pure functions returning findings** — the library holds the data, the app owns the
+failure behaviour, the same split the [search](#persistence-is-the-hosts) history uses. heca reports
+each distinct finding **once**: a chrome tree is rebuilt for reasons that have nothing to do with
+identity, and a description is realized again on every theme reload, so a diagnostic repeating with
+them is one nobody reads. The description half is therefore checked **at the bridge, per
+description** rather than inside `realize`.
 
 Demanding a name from everyone up front is how you get `"btn1"`, which is worse than no name.
 
@@ -754,9 +783,10 @@ only the app could extend, which is what made a plugin row impossible to point a
 
 | Free function | What it answers |
 |---|---|
-| `collect_nav_keys(&dyn Component) -> Vec<(String, Rectangle)>` | Every keyed item with its laid-out bounds, in **document order** — the order the user sees, which is what "next row" means. Hidden subtrees are skipped, so a collapsed group's rows are not steppable. |
-| `nav_key_at(&dyn Component, Point) -> Option<String>` | The **topmost, deepest** item under a point — what a right-click is aimed at. Same walk as `drag::source_at`, deliberately: a right-click and a drag must agree about what they are pointing at. |
-| `scope_at(&dyn Component, Point) -> Option<String>` | The **nearest keyed ancestor** of that point — which region the press landed in. Derived, not declared. |
+| `collect_keys(&dyn Component) -> Vec<(String, Rectangle)>` | Every keyed item with its laid-out bounds, in **document order** — the order the user sees, which is what "next row" means. Hidden subtrees are skipped, so a collapsed group's rows are not steppable. |
+| `key_at(&dyn Component, Point) -> Option<String>` | The **topmost, deepest** item under a point — what a right-click is aimed at. Same walk as `drag::source_at`, deliberately: a right-click and a drag must agree about what they are pointing at. |
+| `scope_at(&dyn Component, Point) -> Option<String>` | The **nearest keyed ancestor** of that point — which region the press landed in. |
+| `identity_of(&dyn Component, &[usize]) -> Option<String>` | One widget's full identity, keyed or derived — the string a remembered hint letter is filed under. |
 
 **Innermost wins**, the same rule as the deepest row: a keyed node nested inside another resolves to
 the inner one, so nesting composes instead of needing a flag. And it is **independent of
@@ -767,9 +797,25 @@ declared per panel.
 
 The string is **opaque to the library** — nothing here parses it — and must survive a tree rebuild.
 
-> **Declarative form:** `key` is an ordinary prop on the node — see
-> [`ViewNode`](#declarative-ui-model-viewnode). A described tree carries it exactly as a native one
-> does, and `realize` writes it into the same slot.
+> **Declarative form:** `key` is an ordinary prop on the node, and `realize` reads it **once for
+> every kind** — alongside style and the `hint` event, never in a per-widget arm, because a
+> collection can be built from any kind and so the identity of an item belongs to no widget in
+> particular. It lands in the same `Base::key` slot a native `.key(..)` writes, which is what makes
+> a described row and a native row indistinguishable to the cursor, the right-click, the drag and
+> the picker.
+>
+> ```rust
+> for pane in panes {
+>     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", pane.id))
+> }
+> ```
+>
+> ```rust
+> // …or, without the typed builder:
+> ViewNode::new(WidgetKind::Row)
+>     .prop("key", PropValue::Text(format!("pane:{}", pane.id)))
+>     .on_press(Intent::new("focus_pane"));
+> ```
 
 ### `Style` & layout enums
 
@@ -4097,8 +4143,8 @@ whole point of declaring the menu on the widget.
 
 Getting a menu onto a row used to take **four** things, three of them invisible: a `context_path`
 mapping a row key to a menu-id string, a builder registered for that id, the items, and — the one
-nobody would think of — a `.nav_key(..)` on the row, because the host resolved *what did you
-right-click* from a **position** and read the answer off `Base::nav_key`. A workspace header had the
+nobody would think of — a `.key(..)` on the row (spelled `nav_key` then), because the host resolved
+*what did you right-click* from a **position** and read the answer off that slot. A workspace header had the
 first three and not the fourth: right-clicking it opened **nothing**, with no error and no failing
 test. The design was the bug.
 
@@ -4136,7 +4182,7 @@ Row::new().context_menu(ctx.clone());            // a value — `ContextMenu` is
 Row::new().context_menu(move || build_menu(id)); // a closure — rows read state at open time
 ```
 
-Universal, like `nav_key`: an `Icon`, a `Label` and a plugin's own widget carry one on the same
+Universal, like `key`: an `Icon`, a `Label` and a plugin's own widget carry one on the same
 terms as a `Row`, because the declaration lives on `Base`.
 
 #### Two roads to show a menu
@@ -4342,6 +4388,33 @@ ViewNode::new(WidgetKind::VStack)
 The merge lands **on top of** the constructed widget, so a widget's own constructor settings survive
 any property the node doesn't mention — a `Scroll` keeps the zeroed min-sizes and shrink factor that
 let a viewport be smaller than its content.
+
+### Identity props — `key` and `hintable`, on every kind
+
+Two more props are read for **every** kind, for the same reason the style halves are: they live on
+`Base` and every widget has them, so they belong to no widget's builder surface.
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `key` | `Text` | **This node's identity**, when it is one of a collection you are iterating — see [Identity](#builder-traits). Written into `Base::key`, the same slot a native `.key(..)` writes. |
+| `hintable` | `Bool` | `false` keeps the node **out of the picker**, however actionable it is. Default `true`. |
+
+```rust
+// Typed builder (heca_view::build):
+Row::new().key(pane.id).hintable(false).on_press(Intent::new("focus_pane"))
+
+// Raw node:
+ViewNode::new(WidgetKind::Row)
+    .prop("key", PropValue::Text("pane:7".into()))
+    .prop("hintable", PropValue::Bool(false))
+    .on_press(Intent::new("focus_pane"));
+```
+
+`key` is required **in a collection and nowhere else**, and a description that breaks that is
+reported before it is realized — see
+[Forcing a `key`](#forcing-a-key--a-warning-not-a-type). `heca_view::unkeyed_collection_items`
+is the check, and it lives in `heca-view`, which compiles without anything that draws, so a plugin's
+own build can run it against its own tree.
 
 ### Widget props — the builders decide, not a list
 

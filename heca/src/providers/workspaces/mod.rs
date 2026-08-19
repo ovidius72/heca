@@ -1446,6 +1446,64 @@ mod tests {
         assert_eq!(signals.pane_active.len(), 1);
     }
 
+    /// **Our own rows stay keyed** (F003/P082/T444) — the test half of the identity rule.
+    ///
+    /// The sidebar is heca's biggest collection: workspaces holding columns holding panes, rebuilt
+    /// whenever anything about a pane changes. Every level declares a `key`, so the keyboard
+    /// cursor, the right-click target, the drag identity and the picker's remembered letter all
+    /// survive a rebuild. Stop declaring one at any level and the rows fall back to a **derived**
+    /// identity — their name — and this fixture is built so that fallback is not enough: two panes
+    /// in a column are both called `zsh`, and both workspaces are built the same way, which is the
+    /// everyday case and not a contrived one.
+    ///
+    /// Nothing fails when the keys go. The letters just move under whoever is driving, which is
+    /// what happened to the pane-header buttons (F011/P094/T451) and what nothing caught. That is
+    /// why this assertion exists rather than a behavioural one.
+    #[test]
+    fn every_row_of_the_real_sidebar_tree_is_keyed_even_when_two_panes_share_a_name() {
+        use super::testing::pane;
+        use heca_core::layout::PaneId;
+
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let store = store();
+
+        // Two workspaces, each with a column of two identically-named panes — nothing here can be
+        // told apart by its content, so only a declared key can tell it apart at all.
+        let twins = |ws_idx: usize| WorkspaceEntry {
+            ws_idx,
+            name: format!("ws{ws_idx}"),
+            custom_name: None,
+            collapsed: false,
+            state: SidebarItemState::None,
+            columns: vec![ColumnEntry {
+                col_idx: 0,
+                panes: vec![pane(PaneId(1), "zsh"), pane(PaneId(2), "zsh")],
+                collapsed: false,
+            }],
+            floating_panes: Vec::new(),
+        };
+        let mut model = WorkspaceTree::new();
+        model.workspaces.push(twins(0));
+        model.workspaces.push(twins(1));
+        *store.workspaces.tree_mut() = model;
+
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let c = container(&p, &ctx);
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
+
+        let ambiguous = heca_grid_ui::nav::ambiguous_identities(body.as_ref());
+        assert!(
+            ambiguous.is_empty(),
+            "a collection in heca's own sidebar lost its keys: {ambiguous:#?}",
+        );
+    }
+
     /// **A row's gesture is a NAME** (F003/P086/T365) — an action id plus arguments, so a menu
     /// entry, a keybinding and RPC all reach the same thing a click does. It used to be a closure
     /// emitting a host-side variant, which only the click could ever run.
