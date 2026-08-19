@@ -154,6 +154,12 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
         node = node.base().children.get(*step)?.as_ref();
     }
 
+    // **A wrapper answers with the identity of what it wraps.** The picker addresses the node that
+    // declared the hint, which is commonly a `KeyHint` around the control that has the key — so
+    // resolving here is what lets a caller key the *control*, once, and every wrapper above it
+    // agree. Keying the wrapper instead was a call-site fix for a missing rule, and it would have
+    // had to be repeated at every wrapped control in the app.
+    let node = through_wrappers(node);
     let own = match node.base().key.as_ref() {
         Some(k) => k.clone(),
         None => {
@@ -276,6 +282,48 @@ pub fn ambiguous_identities(root: &dyn Component) -> Vec<Ambiguity> {
     out
 }
 
+/// **Down through transparent wrappers to the node that actually carries the identity.**
+///
+/// A control is rarely the node you are handed. A chrome button is
+/// `Tooltip(KeyHint(IconButton))`, and the picker addresses the node that *declared the hint* —
+/// the `KeyHint` — while the thing with a name and a `key` is the `IconButton` two levels down.
+/// Without this, every author wrapping a control would have to remember to put the key on the
+/// wrapper instead of the control, which is a rule a caller has to remember and therefore one that
+/// belongs here.
+///
+/// A **wrapper** is a node with no key of its own, no action of its own, and exactly one visible
+/// child. The descent stops at the first node that is keyed (it said who it is) or actionable (it
+/// is the control), and at anything holding several children — that is a real container, not a
+/// wrapper, and descending into it would speak for something that is not one thing.
+fn through_wrappers(node: &dyn Component) -> &dyn Component {
+    let mut at = node;
+    // Bounded by the depth walked; a wrapper chain is two or three deep in practice.
+    loop {
+        if at.base().key.is_some() || at.base().activatable {
+            return at;
+        }
+        match at.base().children.as_slice() {
+            [only] if !skip(only.as_ref()) => at = only.as_ref(),
+            _ => return at,
+        }
+    }
+}
+
+/// The **item** a container's child stands for — the thing whose identity would be kept — or `None`
+/// when that child is not an item at all.
+///
+/// [`through_wrappers`] finds the control; this decides whether it is an item worth reporting. A
+/// **keyed** node is not: it said who it is, which is the whole point of saying it. Neither is an
+/// inert one: identity is what a cursor, a right-click, a drag and a remembered letter are kept
+/// *on*, and all four need something to act on.
+fn item_of(child: &dyn Component) -> Option<&dyn Component> {
+    if skip(child) {
+        return None;
+    }
+    let at = through_wrappers(child);
+    (at.base().key.is_none() && at.base().activatable).then_some(at)
+}
+
 fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>) {
     if skip(node) {
         return;
@@ -291,12 +339,9 @@ fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>)
     // siblings, and document order is the order the user sees, which is the order to report in.
     let mut names: Vec<(String, usize)> = Vec::new();
     for child in node.base().children.iter() {
-        let child = child.as_ref();
-        // Unkeyed, actionable, and named — all three, or it is not an item whose identity anyone
-        // was going to keep.
-        if skip(child) || child.base().key.is_some() || !child.base().activatable {
+        let Some(child) = item_of(child.as_ref()) else {
             continue;
-        }
+        };
         let Some(name) = child.text_summary() else {
             continue;
         };
@@ -582,6 +627,22 @@ mod identity_tests {
             .child(Label::new("zsh"));
 
         assert_eq!(ambiguous_identities(&tree), vec![]);
+    }
+
+    /// **A wrapped control is still an item.** A chrome button is `Tooltip(KeyHint(IconButton))`,
+    /// so a walk that only looks at direct children finds two `Tooltip`s, neither actionable, and
+    /// reports nothing — which is exactly how the top bar's two sidebar toggles collided in the
+    /// running app with this check live and silent (Antonio, driving, 2026-08-19).
+    #[test]
+    fn a_control_behind_wrappers_is_still_an_item() {
+        let wrapped = || KeyHint::new(row("×"));
+        let tree = Flex::row().child(wrapped()).child(wrapped());
+
+        assert_eq!(
+            ambiguous_identities(&tree),
+            vec![Ambiguity { scope: String::new(), name: "×".into(), count: 2 }],
+            "the wrapper is transparent; the control inside it is the item",
+        );
     }
 
     /// **A transparent wrapper is not an item.** `KeyHint` wraps a row without keying itself, and

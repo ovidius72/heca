@@ -59,7 +59,7 @@ mod state;
 #[allow(unused_imports)]
 pub(crate) use expose::record_expose_cursor;
 pub(crate) use layers::{
-    LayerBackdrop, LayerBand, LayerId, LayerKind, LayerRegistry,
+    LayerBackdrop, LayerId, LayerKind, LayerRegistry,
 };
 // Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
 // It lives in the `heca-view` crate since F003/P017/T009 — a plugin depends on that crate, and it
@@ -802,7 +802,15 @@ fn sidebar_toggle_button(
     // Just pick the size variant — the widget derives icon px + padding from the
     // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
     // `IconButton` scales its padding). No caller-side size math.
+    // **Its identity is the action it runs, not the arrow it shows.** Both toggles flip their
+    // glyph with the sidebar's state — left is `ArrowLineLeft` expanded and `ArrowLineRight`
+    // collapsed, right is the mirror — so a derived identity (the glyph's name) changes under the
+    // user every time they use the button, and the two buttons can even derive the *same* name at
+    // once (left expanded and right collapsed are both `arrow_line_left`), at which point document
+    // order decides which one wears the index. Either way the `prefix+/` letters moved on every
+    // pick (Antonio, driving, 2026-08-19). The action name is stable through both states.
     let button = IconButton::new(Icon::new(glyph).color(color))
+        .key(action_name)
         .size(WidgetSize::Small)
         .on_click(fire);
     action_tooltip(KeyHint::new(button).on_hint(hint), action_name, label, shortcuts)
@@ -1919,6 +1927,86 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The two sidebar toggles keep their letters when you toggle a sidebar** (F003/P082/T444).
+    ///
+    /// Both buttons flip their glyph with the sidebar's state — left shows `ArrowLineLeft` while
+    /// expanded and `ArrowLineRight` while collapsed, right is the mirror. With no `key` their
+    /// identity is the glyph's name, so collapsing the left sidebar made *both* buttons derive
+    /// `arrow_line_right`: one wore the bare name and the other `arrow_line_right[1]`, decided by
+    /// document order. The left button took the name the right one had, and their remembered
+    /// `prefix+/` letters swapped with it.
+    ///
+    /// Antonio, driving, 2026-08-19: *"toggling the left sidebar the letter are a and s, toggling
+    /// again they get inverted s and a"*.
+    ///
+    /// Keyed by the action they run, both identities are stable through every combination of
+    /// states — which is the whole point of a key: it comes from the data, not from the picture.
+    #[test]
+    fn the_sidebar_toggles_keep_their_identity_when_a_sidebar_is_toggled() {
+        use heca_grid_ui::nav::identity_of;
+
+        let shortcuts = ActionShortcuts::default();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+
+        // The bar as it is built: the two toggles side by side, in document order.
+        let bar = |left_open: bool, right_open: bool| {
+            let left_glyph = if left_open { Glyph::ArrowLineLeft } else { Glyph::ArrowLineRight };
+            let right_glyph = if right_open { Glyph::ArrowLineRight } else { Glyph::ArrowLineLeft };
+            Flex::row()
+                .child(sidebar_toggle_button(
+                    left_glyph,
+                    crate::input::WmAction::SidebarLeft,
+                    "sidebar_left",
+                    &shortcuts,
+                    &catalog,
+                    emit.clone(),
+                    Color::rgb(255, 255, 255),
+                ))
+                .child(sidebar_toggle_button(
+                    right_glyph,
+                    crate::input::WmAction::SidebarRight,
+                    "sidebar_right",
+                    &shortcuts,
+                    &catalog,
+                    emit.clone(),
+                    Color::rgb(255, 255, 255),
+                ))
+        };
+
+        // **Ask the collector where the targets are** rather than assuming a depth: the picker
+        // identifies the node that declared the hint, and that is the node whose key has to be
+        // stable. Assuming the button's own path is what made an earlier version of this test pass
+        // while the app still swapped the letters.
+        let ids = |left_open: bool, right_open: bool| {
+            let mut tree = bar(left_open, right_open);
+            heca_grid_ui::LayoutEngine::new()
+                .compute(&mut tree, heca_core::layout::Size::new(400.0, 40.0));
+            let paths: Vec<Vec<usize>> = heca_grid_ui::collect_hints(&tree)
+                .into_iter()
+                .map(|(path, _bounds)| path)
+                .collect();
+            assert_eq!(paths.len(), 2, "one pick target per toggle");
+            (
+                identity_of(&tree, &paths[0]),
+                identity_of(&tree, &paths[1]),
+            )
+        };
+
+        let (l_open, r_open) = ids(true, true);
+        assert_eq!(l_open.as_deref(), Some("sidebar_left"));
+        assert_eq!(r_open.as_deref(), Some("sidebar_right"));
+
+        // The state that used to collide: left collapsed shows the same arrow the right one does.
+        assert_eq!(
+            ids(false, true),
+            (l_open.clone(), r_open.clone()),
+            "collapsing the left sidebar must not rename either button",
+        );
+        assert_eq!(ids(true, false), (l_open.clone(), r_open.clone()));
+        assert_eq!(ids(false, false), (l_open, r_open));
+    }
     use heca_config::programs::ProgramsConfig;
     use heca_core::layout::{LayoutOptions, Session, SessionId};
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};

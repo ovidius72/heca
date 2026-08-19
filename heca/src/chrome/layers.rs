@@ -54,38 +54,6 @@ impl LayerId {
     }
 }
 
-/// Semantic z **band** — replaces raw z numbers (no magic values). Order within a band is
-/// insertion order. Higher bands paint/hint **in front of** lower ones.
-///
-/// Ordinal order (front → back) is `Modal > Overlay > Floating > Content > Background`,
-/// given by the enum discriminant via [`LayerBand::rank`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LayerBand {
-    /// Frosted background behind everything. Passive.
-    Background,
-    /// The base UI: panes.
-    Content,
-    /// Floating panes, above the tiled content.
-    Floating,
-    /// Chrome and on-demand panels drawn above the content (sidebar, an exposé).
-    Overlay,
-    /// Blocking dialogs/menus that capture the context.
-    Modal,
-}
-
-impl LayerBand {
-    /// Front-to-back rank: higher paints/hints in front. Used to order the stack.
-    pub(crate) fn rank(self) -> u8 {
-        match self {
-            LayerBand::Background => 0,
-            LayerBand::Content => 1,
-            LayerBand::Floating => 2,
-            LayerBand::Overlay => 3,
-            LayerBand::Modal => 4,
-        }
-    }
-}
-
 /// Whether a layer is always present or shown on demand — the "panes-like vs exposé-like"
 /// distinction. Only [`OnDemand`](LayerKind::OnDemand) layers are meaningfully driven by
 /// `ShowLayer`/`HideLayer`.
@@ -121,7 +89,22 @@ pub(crate) enum LayerBackdrop {
 /// [`ViewNode`] description — see [`LayerContent`].
 pub(crate) struct DynamicLayer {
     pub(crate) id: LayerId,
-    pub(crate) band: LayerBand,
+    /// **Who this surface hangs from — and therefore where it sits in z.**
+    ///
+    /// `None` is a child of the root. A child is drawn *above* its parent and later siblings above
+    /// earlier ones, so z is the chain of sibling indices from the root down
+    /// ([`z_path`](LayerRegistry::z_path)) and ordering is lexicographic on it — which is a
+    /// pre-order walk, which is paint order. **Nobody writes a z.**
+    ///
+    /// This replaced a five-variant `LayerBand` enum every caller picked from, which was a stored z
+    /// one step removed and is what §6 of the surface-compositor model forbids. Two bugs found in
+    /// one day were both "z is stored" bugs and neither is expressible here: a rebuild replaces a
+    /// node in place, and there is exactly one order for paint and input to read.
+    ///
+    /// An overlay is a child of **whatever opened it**, so a modal raised from the exposé sits
+    /// above the exposé and goes when it goes — bookkeeping every caller could get wrong in a flat
+    /// list, and free in a tree.
+    pub(crate) parent: Option<LayerId>,
     /// What this layer wants drawn behind it. See [`LayerBackdrop`].
     pub(crate) backdrop: LayerBackdrop,
     /// Set while a **removal** is waiting on the dissolve: the layer is gone as far as its owner is
@@ -281,6 +264,19 @@ impl DynamicLayer {
 pub(crate) struct LayerRegistry {
     layers: Vec<DynamicLayer>,
     next: u64,
+    /// **The active context surface** — the coarse half of layering, kept apart from the fine
+    /// geometric half on purpose.
+    ///
+    /// It says *which context is live*, and it is moved **only** by opening and closing a context
+    /// surface: an exposé, a modal. Zoom, scroll and picking a different dock never touch it, which
+    /// is what keeps the sidebar reachable while a pane is zoomed. `None` is the base context —
+    /// panes, sidebar and floats together, none of them exclusive.
+    ///
+    /// An overlay mounts as a child of this, which is how "a modal opened from the exposé is a
+    /// child of the exposé" happens without any caller saying so.
+    current: Option<LayerId>,
+    /// The contexts to fall back through as each one closes, most recent last.
+    context_stack: Vec<Option<LayerId>>,
 }
 
 impl LayerRegistry {
@@ -288,14 +284,14 @@ impl LayerRegistry {
     /// `OnDemand` layers start hidden (show them with [`show`](LayerRegistry::show)).
     pub(crate) fn add(
         &mut self,
-        band: LayerBand,
+        parent: Option<LayerId>,
         kind: LayerKind,
         modal: bool,
         covers_content: bool,
         root: Box<dyn Component>,
     ) -> LayerId {
         let id = self.reserve_id();
-        self.push_layer(id, band, kind, modal, covers_content, LayerContent::Native(root), None);
+        self.push_layer(id, parent, kind, modal, covers_content, LayerContent::Native(root), None);
         id
     }
 
@@ -306,7 +302,7 @@ impl LayerRegistry {
     fn push_layer(
         &mut self,
         id: LayerId,
-        band: LayerBand,
+        parent: Option<LayerId>,
         kind: LayerKind,
         modal: bool,
         covers_content: bool,
@@ -315,7 +311,7 @@ impl LayerRegistry {
     ) {
         self.layers.push(DynamicLayer {
             id,
-            band,
+            parent,
             backdrop: LayerBackdrop::default(),
             doomed: false,
             fade: Fade::new(0.0),
@@ -342,7 +338,7 @@ impl LayerRegistry {
     pub(crate) fn add_view(
         &mut self,
         id: LayerId,
-        band: LayerBand,
+        parent: Option<LayerId>,
         kind: LayerKind,
         modal: bool,
         covers_content: bool,
@@ -351,7 +347,7 @@ impl LayerRegistry {
     ) -> LayerId {
         self.push_layer(
             id,
-            band,
+            parent,
             kind,
             modal,
             covers_content,
@@ -380,7 +376,7 @@ impl LayerRegistry {
         &mut self,
         id: LayerId,
         name: String,
-        band: LayerBand,
+        parent: Option<LayerId>,
         kind: LayerKind,
         modal: bool,
         covers_content: bool,
@@ -412,7 +408,7 @@ impl LayerRegistry {
         if let Some(at) = previous {
             self.layers.remove(at);
         }
-        self.push_layer(id, band, kind, modal, covers_content, LayerContent::Native(root), None);
+        self.push_layer(id, parent, kind, modal, covers_content, LayerContent::Native(root), None);
         if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
             l.name = Some(name);
             if let Some((visible, fade, zoom, doomed)) = carried {
@@ -611,7 +607,7 @@ impl LayerRegistry {
     pub(crate) fn insert(
         &mut self,
         id: LayerId,
-        band: LayerBand,
+        parent: Option<LayerId>,
         kind: LayerKind,
         modal: bool,
         covers_content: bool,
@@ -619,7 +615,7 @@ impl LayerRegistry {
     ) {
         self.layers.push(DynamicLayer {
             id,
-            band,
+            parent,
             backdrop: LayerBackdrop::default(),
             doomed: false,
             fade: Fade::new(0.0),
@@ -632,6 +628,9 @@ impl LayerRegistry {
             content: LayerContent::Native(root),
             realized: None,
         });
+        if modal {
+            self.enter_context(id);
+        }
     }
 
     /// Remove a layer entirely — **after its dissolve, if it declared one.**
@@ -644,6 +643,9 @@ impl LayerRegistry {
     /// Its completion has already run by then; what lingers is only the picture. [`tick`](Self::tick)
     /// finishes the job.
     pub(crate) fn remove(&mut self, id: LayerId) {
+        // The context goes back now, not when the picture finishes: as far as its owner is
+        // concerned this surface is already gone, and what lingers is only the dissolve.
+        self.leave_context(id);
         let Some(l) = self.layers.iter_mut().find(|l| l.id == id) else { return };
         if l.visible {
             l.fade.start();
@@ -675,6 +677,13 @@ impl LayerRegistry {
                 false => l.zoom.cancel(),
             }
         }
+        // **A modal that arrives becomes the active context**, and only a modal does. That is §2's
+        // coarse mechanism: an exclusive surface makes everything beneath it dormant, while the
+        // base context keeps several surfaces live together. A non-modal overlay — a dropdown, a
+        // toast — is a child of the context, never one itself.
+        if self.layers.iter().any(|l| l.id == id && l.modal && l.visible) {
+            self.enter_context(id);
+        }
     }
 
     /// Hide a layer. `HideLayer` dispatches here.
@@ -694,31 +703,33 @@ impl LayerRegistry {
                 l.visible = false;
             }
         }
+        self.leave_context(id);
     }
 
     /// Is the tiled area covered by any visible layer? The input to `Domain::Overlay`
     /// (F003/P086/T371).
     ///
-    /// **A `Modal`-band layer counts whether or not it declared coverage.** It demands a decision,
-    /// so acting on the panes behind it is refused by construction rather than trusted at each
-    /// `insert` — a call site passing `false` there re-opens exactly one hole: the prefix sequence
-    /// deliberately falls through the overlay key path (`app/events.rs`, so `prefix+/` can pick a
-    /// menu entry), reaches the router, and runs. `prefix+x` with a context menu open raising the
-    /// close-pane confirm was that hole (user, 2026-07-30).
+    /// **It is `covers_content` alone, and `modal` has nothing to do with it.** The two answer
+    /// different questions: `modal` is "does this take the keyboard", `covers_content` is "may
+    /// actions still touch the panes". Conflating them left one surface impossible to describe —
+    /// the exposé is both a keyboard owner and a *map of the panes*, so acting on the one you can
+    /// see in it is the entire point. While `modal` implied coverage the map blocked every act on
+    /// the pane it was built to let you choose, and no arrangement of intents could get past it
+    /// (Antonio, 2026-08-05: *"we have actions in ActionRegistry for all the methods we need — why
+    /// is this so difficult here?"*). It was not the actions; it was this.
     ///
-    /// **Below that band it is `covers_content` alone**, and `modal` has nothing to do with it.
-    /// The two answer different questions and conflating them left one surface impossible to
-    /// describe: `modal` is "does this take the keyboard", `covers_content` is "may actions still
-    /// touch the panes". The exposé is both at once — it takes the keyboard, and it is a *map of
-    /// the panes*, so acting on the one you can see in it is the entire point. While `modal`
-    /// implied coverage, the map blocked every act on the pane it was built to let you choose, and
-    /// no arrangement of intents could get past it (Antonio, 2026-08-05: *"we have actions in
-    /// ActionRegistry for all the methods we need — why is this so difficult here?"*). It was not
-    /// the actions; it was this.
+    /// A `Modal`-band override used to force coverage on top of the declaration, because a call
+    /// site passing `false` re-opened exactly one hole: the prefix sequence deliberately falls
+    /// through the overlay key path (`app/events.rs`, so `prefix+/` can pick a menu entry), reaches
+    /// the router and runs — `prefix+x` with a context menu open raised the close-pane confirm
+    /// (user, 2026-07-30). **The override went with the band** (F003/P082/T417), and it is not
+    /// missed: both paths that raise a decision-demanding overlay — `open_modal` and
+    /// `insert_menu_layer` — declare coverage themselves, which is where the declaration belongs.
+    /// Forcing it here meant the exposé could never say the truth about itself.
     pub(crate) fn content_covered(&self) -> bool {
         self.layers
             .iter()
-            .any(|l| l.is_active() && (l.covers_content || l.band == LayerBand::Modal))
+            .any(|l| l.is_active() && l.covers_content)
     }
 
     /// One layer by id, whatever its visibility — how a [`HintTarget`](super::HintTarget) finds
@@ -733,12 +744,73 @@ impl LayerRegistry {
         self.layers.iter_mut().find(|l| l.id == id)
     }
 
+    /// **This surface's z, as a path.** The chain of sibling indices from the root down to it —
+    /// `[4, 0]` is the first child of the fifth root surface.
+    ///
+    /// Ordering is lexicographic on this, which is a pre-order walk, which is paint order. Three
+    /// things fall out of that and none of them is written anywhere: a child is above its parent,
+    /// a later sibling is above an earlier one, and inserting in the middle is an insert at a
+    /// sibling index — no renumbering, no fractional z.
+    fn z_path(&self, id: LayerId) -> Vec<usize> {
+        let mut path = Vec::new();
+        let mut at = Some(id);
+        // Up the parent chain, recording where each one stands among its own siblings. A cycle
+        // cannot be built through the API (a parent is always an id that already exists), but the
+        // walk is bounded by the layer count regardless so a malformed registry cannot hang a frame.
+        for _ in 0..=self.layers.len() {
+            let Some(this) = at else { break };
+            let Some(layer) = self.layers.iter().find(|l| l.id == this) else { break };
+            let among = self
+                .layers
+                .iter()
+                .filter(|s| s.parent == layer.parent)
+                .position(|s| s.id == this)
+                .unwrap_or(0);
+            path.push(among);
+            at = layer.parent;
+        }
+        path.reverse();
+        path
+    }
+
+    /// The active context surface, or `None` for the base context. See
+    /// [`current`](DynamicLayer#structfield.parent) — an overlay hangs from this.
+    pub(crate) fn current(&self) -> Option<LayerId> {
+        self.current
+    }
+
+    /// Make `id` the active context, remembering what to go back to.
+    ///
+    /// Only a **context** surface calls this. An ordinary overlay — a dropdown, a tooltip — is a
+    /// child of the current context and does not become one.
+    fn enter_context(&mut self, id: LayerId) {
+        if self.current == Some(id) {
+            return;
+        }
+        self.context_stack.push(self.current);
+        self.current = Some(id);
+    }
+
+    /// Leave `id` as the active context, restoring the one beneath it.
+    ///
+    /// A no-op when `id` is not the current context: closing a surface that something else has
+    /// already opened over must not steal the context from it.
+    fn leave_context(&mut self, id: LayerId) {
+        if self.current != Some(id) {
+            // It is somewhere further down the stack — drop it from the history so restoring never
+            // lands on a surface that has gone.
+            self.context_stack.retain(|c| *c != Some(id));
+            return;
+        }
+        self.current = self.context_stack.pop().flatten();
+    }
+
     /// The currently-visible layers, in **front → back** order (highest band first, then
     /// most-recently-added within a band). Consumed by `active_hint_targets`.
     pub(crate) fn visible_front_to_back(&self) -> Vec<&DynamicLayer> {
         let mut out: Vec<&DynamicLayer> = self.layers.iter().filter(|l| l.visible).collect();
-        // Stable sort by band rank DESC (front first) — keeps insertion order within a band.
-        out.sort_by_key(|l| std::cmp::Reverse(l.band.rank()));
+        // Lexicographic on the z-path, reversed: the deepest, latest surface is the front-most.
+        out.sort_by_key(|l| std::cmp::Reverse(self.z_path(l.id)));
         out
     }
 
@@ -777,9 +849,9 @@ impl LayerRegistry {
             .iter()
             .enumerate()
             .filter(|(_, l)| l.is_active() && l.modal)
-            // Band first, then insertion order — the key is compared left to right, so a later
-            // layer in a lower band never wins over an earlier one in a higher band.
-            .max_by_key(|(i, l)| (l.band.rank(), *i))
+            // The front-most is the greatest z-path. Paint reads the same order, so the two can no
+            // longer disagree about which surface is in front.
+            .max_by_key(|(_, l)| self.z_path(l.id))
             .map(|(i, _)| i)
     }
 
@@ -810,8 +882,8 @@ mod tests {
     #[test]
     fn only_a_visible_layer_that_asked_for_it_wants_a_frost() {
         let mut reg = LayerRegistry::default();
-        let plain = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
-        let frosted = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, true, empty_root());
+        let plain = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
+        let frosted = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
         reg.set_backdrop(frosted, LayerBackdrop::Frosted);
 
         assert!(!reg.wants_frost(), "both are hidden — nothing to frost behind");
@@ -829,7 +901,7 @@ mod tests {
     #[test]
     fn removing_a_fading_layer_waits_for_the_fade() {
         let mut reg = LayerRegistry::default();
-        let id = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, true, empty_root());
+        let id = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
         reg.set_fade_out(id, 0.1);
         reg.show(id);
 
@@ -851,7 +923,7 @@ mod tests {
     #[test]
     fn a_dissolving_layer_no_longer_covers_the_content() {
         let mut reg = LayerRegistry::default();
-        let id = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, true, empty_root());
+        let id = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
         reg.set_fade_out(id, 0.1);
         reg.show(id);
         assert!(reg.content_covered(), "up and in charge");
@@ -866,7 +938,7 @@ mod tests {
     #[test]
     fn removing_a_plain_layer_is_immediate() {
         let mut reg = LayerRegistry::default();
-        let id = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        let id = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
         reg.show(id);
         reg.remove(id);
         assert!(!reg.any_visible());
@@ -878,14 +950,19 @@ mod tests {
     /// passed `false` let `prefix+x` raise the close-pane confirm with a context menu open (user,
     /// 2026-07-30).
     #[test]
-    fn a_modal_band_layer_covers_the_content_even_if_it_says_otherwise() {
+    fn coverage_is_what_the_surface_declared_not_what_its_place_implies() {
         let mut reg = LayerRegistry::default();
-        // Deliberately declaring `false`, as the dropdown path once did.
-        reg.insert(LayerId(7), LayerBand::Modal, LayerKind::OnDemand, true, false, empty_root());
+        // Takes the keyboard, declares it covers nothing — and is believed.
+        reg.insert(LayerId(7), None, LayerKind::OnDemand, true, false, empty_root());
         assert!(
-            reg.content_covered(),
-            "a decision-demanding surface covers, whatever the flag says",
+            !reg.content_covered(),
+            "a modal that says it covers nothing covers nothing — the band used to overrule this",
         );
+
+        // The decision-demanding surfaces declare it themselves, which is where it belongs:
+        // `open_modal` and `insert_menu_layer` both pass `true`.
+        reg.insert(LayerId(8), None, LayerKind::OnDemand, true, true, empty_root());
+        assert!(reg.content_covered(), "and a surface that says it covers, does");
     }
 
     /// **Below the `Modal` band, coverage is what the layer declared — `modal` says nothing about
@@ -896,7 +973,7 @@ mod tests {
     #[test]
     fn an_overlay_that_takes_the_keyboard_can_still_declare_it_covers_nothing() {
         let mut reg = LayerRegistry::default();
-        let map = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        let map = reg.add(None, LayerKind::OnDemand, true, false, empty_root());
         reg.show(map);
         assert!(!reg.content_covered(), "a map of the panes does not cover them");
         assert_eq!(reg.top_modal_id(), Some(map), "and it still owns the keyboard");
@@ -907,10 +984,10 @@ mod tests {
     #[test]
     fn coverage_is_reported_only_while_the_layer_is_visible() {
         let mut reg = LayerRegistry::default();
-        let corner = reg.add(LayerBand::Overlay, LayerKind::Persistent, false, false, empty_root());
+        let corner = reg.add(None, LayerKind::Persistent, false, false, empty_root());
         assert!(!reg.content_covered(), "a non-covering layer covers nothing");
 
-        let over = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        let over = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
         assert!(!reg.content_covered(), "on-demand starts hidden");
         reg.show(over);
         assert!(reg.content_covered(), "shown, and it covers the panes");
@@ -922,26 +999,58 @@ mod tests {
     #[test]
     fn on_demand_starts_hidden_persistent_starts_visible() {
         let mut reg = LayerRegistry::default();
-        let a = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
-        let b = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
+        let a = reg.add(None, LayerKind::OnDemand, true, false, empty_root());
+        let b = reg.add(None, LayerKind::Persistent, false, false, empty_root());
         let vis: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
         assert_eq!(vis, vec![b], "on-demand hidden until shown; persistent visible");
         reg.show(a);
-        // Now both visible; Overlay band ranks in front of Content.
+        // Both visible now. `b` was registered second, so it is the later sibling and in front.
         let vis: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
-        assert_eq!(vis, vec![a, b], "shown overlay sorts in front of content");
+        assert_eq!(vis, vec![b, a], "a later sibling is in front");
         reg.hide(a);
         assert_eq!(reg.visible_front_to_back().len(), 1);
     }
 
+    /// **z is the position in the tree, so order is a pre-order walk of it.** Two rules, and both
+    /// fall out of comparing the z-paths rather than being written anywhere: a later sibling is in
+    /// front of an earlier one, and a child is in front of its parent.
+    ///
+    /// This replaced `band_orders_front_to_back`, which asserted a five-variant enum's ranking —
+    /// a stored z one step removed, and the thing §6 of the surface-compositor model forbids.
     #[test]
-    fn band_orders_front_to_back() {
+    fn z_is_a_path_so_a_child_is_in_front_of_its_parent_and_a_later_sibling_of_an_earlier() {
         let mut reg = LayerRegistry::default();
-        let content = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
-        let modal = reg.add(LayerBand::Modal, LayerKind::Persistent, true, false, empty_root());
-        let overlay = reg.add(LayerBand::Overlay, LayerKind::Persistent, false, false, empty_root());
+        let first = reg.add(None, LayerKind::Persistent, false, false, empty_root());
+        let second = reg.add(None, LayerKind::Persistent, false, false, empty_root());
+        // Opened BY `first`, so it hangs from it — and sits above it without outranking `second`'s
+        // own children, because a path is compared left to right.
+        let childs_child = reg.add(Some(first), LayerKind::Persistent, false, false, empty_root());
+
         let order: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
-        assert_eq!(order, vec![modal, overlay, content], "Modal > Overlay > Content");
+        assert_eq!(
+            order,
+            vec![second, childs_child, first],
+            "[1] > [0,0] > [0] — lexicographic on the path",
+        );
+    }
+
+    /// **A surface goes above whatever opened it, wherever that is.** The deciding case for
+    /// plugins: a panel opens a modal, and the modal must sit above *that* panel — not above
+    /// whatever happens to have been registered last.
+    #[test]
+    fn an_overlay_sits_above_its_opener_not_above_the_newest_layer() {
+        let mut reg = LayerRegistry::default();
+        let panel = reg.add(None, LayerKind::Persistent, false, false, empty_root());
+        let unrelated = reg.add(None, LayerKind::Persistent, false, false, empty_root());
+        let modal = reg.add(Some(panel), LayerKind::Persistent, true, false, empty_root());
+
+        let order: Vec<LayerId> = reg.visible_front_to_back().iter().map(|l| l.id).collect();
+        assert_eq!(order, vec![unrelated, modal, panel]);
+        assert_eq!(
+            reg.top_modal_id(),
+            Some(modal),
+            "and input agrees with the picture, because both read the one order",
+        );
     }
 
     /// **A described layer is a real layer.** It sorts, shows, hides and covers exactly like a
@@ -950,12 +1059,12 @@ mod tests {
     fn a_view_layer_behaves_like_any_other_and_keeps_its_description() {
         use heca_view::{ViewNode, WidgetKind};
         let mut reg = LayerRegistry::default();
-        let native = reg.add(LayerBand::Content, LayerKind::Persistent, false, false, empty_root());
+        let native = reg.add(None, LayerKind::Persistent, false, false, empty_root());
         let node = ViewNode::new(WidgetKind::Label);
         let slot = reg.reserve_id();
         let described = reg.add_view(
             slot,
-            LayerBand::Overlay,
+            None,
             LayerKind::Persistent,
             false,
             true,
@@ -1012,7 +1121,7 @@ mod tests {
         let name = layer_name(HOST_OWNER, "expose").expect("valid");
         let slot = reg.slot_for_name(&name);
         let id = reg.add_named(
-            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), None, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.set_zoom(id, 0.2, 1.3);
         reg.show(id);
@@ -1025,7 +1134,7 @@ mod tests {
         // The session changes: the layer is rebuilt and re-shown.
         let slot = reg.slot_for_name(&name);
         let rebuilt = reg.add_named(
-            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), None, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.set_zoom(rebuilt, 0.2, 1.3);
         reg.show(rebuilt);
@@ -1035,35 +1144,56 @@ mod tests {
         assert_eq!(l.scale(), 1.0, "it is simply there");
     }
 
-    /// **Input goes to the layer the user sees in front, which means the BAND decides.**
+    /// **Input goes to the layer the user sees in front, and there is only one order to read.**
     ///
-    /// Painting has always ordered by band; input ordered by "last added" and ignored the band, so
-    /// the two could name different layers. A dialog in the `Modal` band is in front of an exposé
-    /// in the `Overlay` band no matter which was registered first — and now the pointer agrees
-    /// with the picture.
+    /// Painting used to sort by band while input took "the last one added", so the two could name
+    /// different layers — a dialog was drawn over the exposé while the map quietly took the
+    /// pointer. Both now read the z-path, so disagreeing is not expressible.
     #[test]
-    fn input_goes_to_the_front_most_band_not_the_last_one_added() {
+    fn input_goes_to_the_front_most_surface_not_the_last_one_added() {
         let mut reg = LayerRegistry::default();
-        // The dialog is registered FIRST, and is still in front: it is in the higher band.
-        let dialog = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
-        reg.show(dialog);
-        let map = reg.add(LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root());
+        let map = reg.add(None, LayerKind::OnDemand, true, false, empty_root());
         reg.show(map);
+        // Raised FROM the map, so it is the map's child and above it.
+        let dialog = reg.add(Some(map), LayerKind::OnDemand, true, true, empty_root());
+        reg.show(dialog);
 
         assert_eq!(
             reg.top_modal_id(),
             Some(dialog),
-            "a Modal-band dialog outranks an Overlay-band map added after it",
+            "a surface opened from the map sits above the map",
         );
 
-        // Within one band, the later one is in front — insertion order still decides there.
-        let second_dialog = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        // Among siblings, the later one is in front.
+        let second_dialog = reg.add(Some(map), LayerKind::OnDemand, true, true, empty_root());
         reg.show(second_dialog);
-        assert_eq!(reg.top_modal_id(), Some(second_dialog), "same band, later wins");
+        assert_eq!(reg.top_modal_id(), Some(second_dialog), "same parent, later wins");
 
         // And a layer on its way out never holds the input.
         reg.remove(second_dialog);
         assert_eq!(reg.top_modal_id(), Some(dialog), "a dissolving layer is not the target");
+    }
+
+    /// **The active context follows the exclusive surfaces**, so an overlay knows what to hang
+    /// from without any caller telling it. Closing one restores the context beneath it.
+    #[test]
+    fn the_active_context_follows_the_modal_surfaces() {
+        let mut reg = LayerRegistry::default();
+        assert_eq!(reg.current(), None, "the base context: panes, sidebar and floats together");
+
+        let map = reg.add(None, LayerKind::OnDemand, true, false, empty_root());
+        reg.show(map);
+        assert_eq!(reg.current(), Some(map));
+
+        let dialog = reg.add(reg.current(), LayerKind::OnDemand, true, true, empty_root());
+        reg.show(dialog);
+        assert_eq!(reg.current(), Some(dialog), "a modal raised from the map takes the context");
+        assert_eq!(reg.get(dialog).and_then(|l| l.parent), Some(map), "and hangs from it");
+
+        reg.hide(dialog);
+        assert_eq!(reg.current(), Some(map), "closing it hands the context back");
+        reg.hide(map);
+        assert_eq!(reg.current(), None, "and back to the base context");
     }
 
     /// **A rebuild keeps the layer's place, so it cannot climb over what opened above it.**
@@ -1080,18 +1210,18 @@ mod tests {
         let name = layer_name(HOST_OWNER, "expose").expect("valid");
         let slot = reg.slot_for_name(&name);
         let map = reg.add_named(
-            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), None, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.show(map);
         // A confirm dialog opens ON TOP of it.
-        let dialog = reg.add(LayerBand::Modal, LayerKind::OnDemand, true, true, empty_root());
+        let dialog = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
         reg.show(dialog);
         assert_eq!(reg.top_modal_id(), Some(dialog), "the dialog is the input target");
 
         // The session changes under both, so the map is rebuilt.
         let slot = reg.slot_for_name(&name);
         let rebuilt = reg.add_named(
-            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, true, false, empty_root(),
+            slot, name.clone(), None, LayerKind::OnDemand, true, false, empty_root(),
         );
         reg.show(rebuilt);
 
@@ -1108,12 +1238,12 @@ mod tests {
     #[test]
     fn a_named_layer_is_addressable_and_re_registering_replaces_it() {
         let mut reg = LayerRegistry::default();
-        let anonymous = reg.add(LayerBand::Overlay, LayerKind::OnDemand, false, false, empty_root());
+        let anonymous = reg.add(None, LayerKind::OnDemand, false, false, empty_root());
         let name = layer_name(HOST_OWNER, "expose").expect("valid");
 
         let slot = reg.slot_for_name(&name);
         let first = reg.add_named(
-            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
+            slot, name.clone(), None, LayerKind::OnDemand, false, true, empty_root(),
         );
         assert_eq!(reg.by_name(&name), Some(first));
         assert!(!reg.is_visible_named(&name), "OnDemand starts hidden");
@@ -1131,7 +1261,7 @@ mod tests {
         // flight.
         let slot = reg.slot_for_name(&name);
         let second = reg.add_named(
-            slot, name.clone(), LayerBand::Overlay, LayerKind::OnDemand, false, true, empty_root(),
+            slot, name.clone(), None, LayerKind::OnDemand, false, true, empty_root(),
         );
         // **And it keeps its ID.** Changed 2026-08-12 (F003/P082/T416): a rebuild used to mint a
         // new one, so anything holding a `LayerId` across a session change — a plugin's handle, and

@@ -22,7 +22,7 @@ use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
 use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerBand, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerId, LayerKind};
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
@@ -207,7 +207,7 @@ pub(crate) fn open_modal(
     // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
     state.layers.insert(
         id.0,
-        LayerBand::Modal,
+        state.layers.current(),
         LayerKind::OnDemand,
         true,
         true,
@@ -227,13 +227,15 @@ pub(crate) fn open_modal(
 /// keeps the node beside the realized tree so a theme reload or a plugin update can re-realize from
 /// the description rather than from whatever the tree has become.
 ///
-/// `band`, `modal` and `covers_content` are the caller's: a plugin panel over the scrolling area is
-/// `Overlay` + `covers_content: true` + not modal, a rich dialog is `Modal` + both. **No occluder is
-/// passed** — `active_hint_targets` reads it from the realized tree's laid-out bounds, which is the
-/// invariant this path must not break.
+/// `parent`, `modal` and `covers_content` are the caller's. `parent` is **what opened this** —
+/// pass `state.layers.current()` for a panel raised from wherever the user is, so it sits above
+/// that surface and goes with it; pass `None` for a surface that belongs to the base context. A
+/// plugin panel over the scrolling area is `covers_content: true` and not modal; a rich dialog is
+/// both. **No occluder is passed** — `active_hint_targets` reads it from the realized tree's
+/// laid-out bounds, which is the invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
-    band: LayerBand,
+    parent: Option<LayerId>,
     kind: LayerKind,
     modal: bool,
     covers_content: bool,
@@ -257,7 +259,7 @@ pub(crate) fn open_view_layer(
     let realized = super::realize(&node, &theme, &view_emit, &mut forms);
     let id = state
         .layers
-        .add_view(id, band, kind, modal, covers_content, node, realized);
+        .add_view(id, parent, kind, modal, covers_content, node, realized);
     state.needs_redraw = true;
     id
 }
@@ -365,7 +367,7 @@ impl DropdownSpec {
 fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
     state.layers.insert(
         id.0,
-        LayerBand::Overlay,
+        state.layers.current(),
         LayerKind::OnDemand,
         true,
         true,

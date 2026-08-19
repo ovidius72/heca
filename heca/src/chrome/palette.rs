@@ -25,7 +25,7 @@ use std::rc::Rc;
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Command, CommandPalette, Glyph};
 
-use super::{ChromeIntentEmitter, LayerBand, LayerKind, ModalResult, OverlayId};
+use super::{ChromeIntentEmitter, LayerKind, ModalResult, OverlayId};
 use crate::app::events::AppEvent;
 use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
 use crate::app_state::AppState;
@@ -480,7 +480,7 @@ pub(crate) fn open_command_palette(
     // acted on — `Domain::Overlay` says so for policy, `covers_content` is the fact it reads.
     state.layers.insert(
         id.0,
-        LayerBand::Overlay,
+        state.layers.current(),
         LayerKind::OnDemand,
         true,
         true,

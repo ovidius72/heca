@@ -358,7 +358,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     let id = state.layers.add_named(
         id,
         name.clone(),
-        super::LayerBand::Overlay,
+        None,
         super::LayerKind::OnDemand,
         // Modal: it takes the keyboard while it is up.
         true,
