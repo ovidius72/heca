@@ -66,12 +66,28 @@ pub(crate) use model::{model, ExposeWorkspace};
 pub(crate) use pane_card::{DispatchAction, ExposeCallbacks, ExposeDeleteKeys};
 
 /// How long the map takes to dissolve when it is dismissed, in seconds.
-const FADE_OUT: f32 = 0.14;
+/// How long the map takes to dissolve on the way out.
+///
+/// It **matches the shrink** ([`ZOOM_IN`]) rather than being shorter than it: a dissolve that
+/// finishes first leaves the last of the movement playing on an already-invisible surface, and one
+/// that finishes after leaves a still picture fading on nothing. Either reads as a step.
+const FADE_OUT: f32 = ZOOM_IN;
 /// How long the map takes to zoom out to its map size when it opens, in seconds.
 ///
 /// niri's own overview animation is in this range; long enough to read as one picture pulling back
 /// and short enough that `prefix+Tab` never feels like waiting.
 const ZOOM_IN: f32 = 0.2;
+
+/// How much of the exit's **shrink** plays before the dissolve starts, as a share of it.
+///
+/// A share rather than a second duration, so the two cannot drift apart when either is tuned.
+///
+/// ⚠️ **Small.** At `0.66` the surface held fully opaque for two thirds of the shrink and then
+/// dropped — movement with no fade, then fade with no movement, and the step between them read as a
+/// flash on the way out (Antonio, driving, 2026-08-19). The dissolve has to **ride** the shrink,
+/// not follow it: one gesture, not two. A short lead is all that is wanted, so the surface is still
+/// solid as it starts to move.
+const FADE_LAG: f32 = 0.15;
 
 /// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
 /// constant so the layer, the config entry and the key lookup cannot drift apart.
@@ -376,11 +392,17 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // **Choosing a pane does not make the map vanish.** It dissolves while the app comes back into
     // focus behind it, so the eye follows one picture becoming another instead of being cut to a
     // different screen. A full-screen surface disappearing between two frames reads as a glitch.
-    // ⚠️ **The dissolve is NOT delayed behind the zoom.** Tried 2026-08-11 so the shrink would
-    // play before the surface went; the layer is retired when the *fade* finishes, so waiting left
-    // the cards on screen after the map had gone (Antonio, driving). If the two are ever to be
-    // sequenced, the layer's lifetime has to follow the whole exit, not the fade alone.
-    state.layers.set_fade_out(id, FADE_OUT);
+    // **The shrink leads and the dissolve follows it**, so the map reads as one surface going away
+    // rather than two effects running at once. The lag is a share of the shrink, not a second
+    // duration to keep in step with it: change `ZOOM_IN` and the sequencing still holds.
+    //
+    // This was tried on 2026-08-11 and reverted, because a layer was retired when its *fade*
+    // finished — so delaying the fade left the cards on screen after the map had gone (Antonio,
+    // driving). A layer's lifetime now follows the **whole** exit (`DynamicLayer::is_leaving`), so
+    // the delay is safe: nothing retires the surface until both halves have played out.
+    state
+        .layers
+        .set_fade_out_after(id, FADE_OUT, ZOOM_IN * FADE_LAG);
     // **It opens by pulling back, the way niri's overview does** — the same session seen from
     // further away, rather than a different picture arriving. Antonio: *"The animation in niri is
     // zoom-in/out not fade."*

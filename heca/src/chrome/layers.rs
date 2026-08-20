@@ -228,7 +228,20 @@ impl DynamicLayer {
     /// by `Domain::Overlay` for the whole length of the animation — every activation blocked, with
     /// `blocked intent from Keyboard` in the log.
     pub(crate) fn is_active(&self) -> bool {
-        self.visible && !self.fade.is_running()
+        self.visible && !self.is_leaving()
+    }
+
+    /// **Is this surface still leaving?** Any part of its exit still playing — the dissolve, the
+    /// shrink, or both.
+    ///
+    /// A surface's exit is one gesture made of several effects, and it is not gone until every one
+    /// of them has finished. Everything that asks "is it still there" reads *this*, so a surface can
+    /// sequence its exit — hold the picture, shrink, then dissolve — without any of them retiring it
+    /// early. Tying the lifetime to the **fade alone** is what made `Fade::delay` unusable: delaying
+    /// the dissolve left the cards on screen after the map itself had gone, so the feature was built
+    /// and reverted (F003/P082/T327, 2026-08-12).
+    pub(crate) fn is_leaving(&self) -> bool {
+        self.fade.is_running() || self.zoom.is_leaving()
     }
 
     /// The live tree — what the host lays out, paints and hint-walks.
@@ -500,16 +513,30 @@ impl LayerRegistry {
             if l.zoom.tick(dt) {
                 fading = true;
             }
-            let was_running = l.fade.is_running();
-            match l.fade.tick(dt) {
-                true => fading = true,
-                // The frame a running fade reports finished is the frame the layer can go.
-                false if was_running => l.visible = false,
-                false => {}
+            let was_leaving = l.is_leaving();
+            if l.fade.tick(dt) {
+                fading = true;
+            }
+            // **The frame the whole exit finishes is the frame the surface goes** — not the frame
+            // the fade finishes. The zoom is ticked above, so by here both have advanced.
+            if was_leaving && !l.is_leaving() {
+                l.visible = false;
+                // **And ask for one more frame, to paint its absence.** Both effects have just
+                // reported themselves done, so without this nothing requests another frame — and
+                // the last frame actually drawn was the one before, still faintly visible. The map
+                // stayed on the glass at about a tenth opacity until some other input forced a
+                // repaint (Antonio, driving, 2026-08-19). Going away is a change like any other:
+                // whatever makes it needs the frame that shows it.
+                fading = true;
             }
         }
-        // A layer whose removal was waiting on its dissolve leaves for good now.
-        self.layers.retain(|l| !l.doomed || l.fade.is_running());
+        // A layer whose removal was waiting on its exit leaves for good now — and that, too, is a
+        // change to the picture, so the frame that paints it is requested here.
+        let before = self.layers.len();
+        self.layers.retain(|l| !l.doomed || l.is_leaving());
+        if self.layers.len() != before {
+            fading = true;
+        }
         fading
     }
 
@@ -651,7 +678,7 @@ impl LayerRegistry {
             l.fade.start();
             l.zoom.leave();
         }
-        if l.fade.is_running() {
+        if l.is_leaving() {
             l.doomed = true;
             return;
         }
@@ -668,12 +695,22 @@ impl LayerRegistry {
             // opened (Antonio, driving, 2026-08-11).
             let arriving = !l.visible;
             l.visible = true;
-            // Re-shown mid-fade: cancel it and be fully there again, rather than opening
-            // half-transparent and finishing a disappearance nobody still wants.
-            l.fade.cancel();
             match arriving {
-                true => l.zoom.enter(),
-                // Already up: whatever the zoom was doing, it is *here* now.
+                // **A real arrival**: cancel any disappearance still playing and come in fresh,
+                // rather than opening half-transparent to finish an exit nobody still wants.
+                true => {
+                    l.fade.cancel();
+                    l.zoom.enter();
+                }
+                // **Already up — so this is not an arrival**, and nothing about the picture
+                // changes. A surface is re-registered and re-shown every time the session changes
+                // underneath it, and a *leaving* surface is still visible, so cancelling its exit
+                // here made the map snap back to full opacity and start leaving again: a fast
+                // fade-in immediately before it vanished (Antonio, driving, 2026-08-19). The
+                // exposé hits this on the ordinary path — it dismisses itself and *then* focuses
+                // the pane you chose, and focusing rebuilds the map mid-exit.
+                //
+                // The zoom already read this flag; the fade did not, and that was the whole bug.
                 false => l.zoom.cancel(),
             }
         }
@@ -698,8 +735,8 @@ impl LayerRegistry {
                 l.fade.start();
                 l.zoom.leave();
             }
-            // No fade declared (or none left to run) ⇒ it goes now.
-            if !l.fade.is_running() {
+            // Nothing declared to play on the way out ⇒ it goes now.
+            if !l.is_leaving() {
                 l.visible = false;
             }
         }
@@ -898,6 +935,31 @@ mod tests {
     /// **A dissolving layer is removed only after its dissolve.** Escape and a widget's own
     /// dismiss both go through `overlay::resolve`, which *removes*; hiding was the only path that
     /// faded. So the map dissolved on a click and cut on Escape — two dismissals, two behaviours.
+    /// **Re-showing a surface that is leaving does not resurrect it.**
+    ///
+    /// A layer is re-registered and re-shown every time the session changes underneath it, and a
+    /// leaving layer is still visible — so cancelling its fade here made the map snap back to full
+    /// opacity and start its exit over: a fast fade-in immediately before it vanished. The exposé
+    /// hits this on the ordinary path, because it dismisses itself and *then* focuses the pane you
+    /// chose, and focusing rebuilds the map mid-exit.
+    #[test]
+    fn re_showing_a_leaving_layer_does_not_cancel_its_exit() {
+        let mut reg = LayerRegistry::default();
+        let id = reg.add(None, LayerKind::OnDemand, true, true, empty_root());
+        reg.set_fade_out(id, 0.2);
+        reg.show(id);
+
+        reg.hide(id);
+        reg.tick(0.1);
+        let mid = reg.opacity(id);
+        assert!(mid < 1.0, "it is on its way out: {mid}");
+
+        // The rebuild: same layer, still visible, shown again.
+        reg.show(id);
+        assert_eq!(reg.opacity(id), mid, "the exit carries on from where it was");
+        assert!(reg.get(id).is_some_and(|l| l.is_leaving()), "and it is still leaving");
+    }
+
     #[test]
     fn removing_a_fading_layer_waits_for_the_fade() {
         let mut reg = LayerRegistry::default();
@@ -909,8 +971,16 @@ mod tests {
         assert!(reg.any_visible(), "it is on its way out, not gone");
         assert!(reg.tick(0.05), "still dissolving");
         assert!(reg.opacity(id) < 1.0, "and visibly on its way: {}", reg.opacity(id));
-        assert!(!reg.tick(0.05), "and now it is done");
+
+        // **The tick that finishes the exit still asks for a frame** — the one that paints the
+        // absence. Both effects report themselves done here, so without it nothing requests
+        // another frame and the last frame actually drawn is the one before, still faintly there:
+        // the map stayed on the glass at about a tenth opacity until some other input forced a
+        // repaint (Antonio, driving, 2026-08-19). This assertion used to read `!reg.tick(..)`,
+        // which is that bug written down.
+        assert!(reg.tick(0.05), "one more frame, to paint it gone");
         assert!(!reg.any_visible(), "the layer is gone for good");
+        assert!(!reg.tick(0.05), "and now it asks for nothing");
     }
 
     /// **A dissolving layer stops being in charge the moment it is dismissed**, even though it is

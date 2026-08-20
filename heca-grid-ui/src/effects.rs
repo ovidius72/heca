@@ -287,6 +287,24 @@ impl Fade {
 
 #[cfg(test)]
 mod tests {
+    /// **A finished leave rests small.** The scale is where the surface *is*, and one that has
+    /// zoomed away has not come back — resting at life size snapped the cards to full for the last
+    /// frames of an exit whose fade was still running, a flash right before they vanished.
+    #[test]
+    fn a_finished_leave_rests_at_from_not_back_at_life_size() {
+        let mut z = super::Zoom::new(0.2, 0.8);
+        z.enter();
+        while z.tick(0.05) {}
+        assert_eq!(z.amount(), 1.0, "arrived: life size");
+
+        z.leave();
+        while z.tick(0.05) {}
+        assert_eq!(z.amount(), 0.8, "left: still small, not snapped back");
+
+        z.cancel();
+        assert_eq!(z.amount(), 1.0, "cancelled is a return to life size");
+    }
+
     use super::*;
 
     /// **It retargets rather than restarting.** A cursor moved three times mid-flight ends at the
@@ -417,6 +435,15 @@ impl Zoom {
     }
 
     /// Is a zoom in progress?
+    /// Is this zoom **on its way out** — the shrink half of an exit, still playing?
+    ///
+    /// A surface's exit is one gesture made of several effects, and the surface is not gone until
+    /// every one of them has finished. A host that retires it when only the fade ends takes the
+    /// tree away mid-shrink; a host that asks this too can sequence them.
+    pub fn is_leaving(&self) -> bool {
+        self.leaving && self.is_running()
+    }
+
     pub fn is_running(&self) -> bool {
         self.left.is_some()
     }
@@ -426,7 +453,18 @@ impl Zoom {
     /// Eased with the same smoothstep the rest of the library uses, so a zoom does not read as a
     /// linear slide while everything beside it accelerates.
     pub fn amount(&self) -> f32 {
-        let Some(left) = self.left else { return 1.0 };
+        let Some(left) = self.left else {
+            // **A finished LEAVE rests where it left off, not back at life size.** The scale is
+            // where the surface *is*, and a surface that has zoomed away is small — it has not
+            // returned. Resting at `1.0` snapped the cards back to full size for the last frames
+            // of an exit whose fade was still running, which reads as a flash immediately before
+            // they vanish (Antonio, driving, 2026-08-19). `enter` and `cancel` both clear
+            // `leaving`, so this is only ever the completed-exit case.
+            return match self.leaving {
+                true => self.from,
+                false => 1.0,
+            };
+        };
         if self.duration <= 0.0 {
             return 1.0;
         }
