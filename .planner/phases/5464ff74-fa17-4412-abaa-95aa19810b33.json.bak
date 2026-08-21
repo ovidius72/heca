@@ -1282,9 +1282,14 @@
   "createdAt": "2026-07-26T11:28:31.721Z",
   "updatedAt": "2026-08-21T15:18:23.686Z",
   "handoff": "",
-  "handoffUpdatedAt": "2026-08-21T11:18:49.046Z",
+  "handoffUpdatedAt": "2026-08-21T15:28:54.687Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T17-01-21-877Z.md",
+      "clearedAt": "2026-08-21T17:01:21.877Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T15-28-54-679Z.md",
       "clearedAt": "2026-08-21T15:28:54.679Z",
@@ -1303,11 +1308,6 @@
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-19T13-07-04-664Z.md",
       "clearedAt": "2026-08-19T13:07:04.664Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-18T09-41-26-630Z.md",
-      "clearedAt": "2026-08-18T09:41:26.630Z",
       "reason": "superseded"
     }
   ],
