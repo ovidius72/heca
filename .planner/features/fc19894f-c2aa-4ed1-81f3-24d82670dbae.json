@@ -1,10 +1,11 @@
 {
   "id": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 9,
-  "shortId": "YFYDF",
+  "shortId": "",
   "priority": 0,
   "name": "🔔 Notification System",
   "description": "Sistema notifiche configurabile per Heca. V1 implementa notifiche in-app tramite i widget esistenti `Toast`, `ToastStack`, `ToastSpec` e `ToastSeverity`; Heca possiede modello, store, queue, lifecycle, timer, dedup, routing e dispatch azioni. Backend OS/system notifications e integrazione global KeyHint per azioni toast restano differiti. Out of scope: confirmation modals e confirmation-before-action flow.",
+  "descriptionUpdatedAt": "2026-07-03T22:49:39.780Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",

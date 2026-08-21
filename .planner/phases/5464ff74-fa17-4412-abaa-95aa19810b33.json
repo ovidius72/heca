@@ -53,7 +53,8 @@
     "28072415-5aa4-4d4a-b444-1489906a0579",
     "783f66a3-1635-4b08-b869-0624b313c0e3",
     "288b4d88-6142-41ef-a5c1-8a018d4806f9",
-    "88c8a8ef-5576-4b4e-a6f9-e8022bae7148"
+    "88c8a8ef-5576-4b4e-a6f9-e8022bae7148",
+    "417ae37c-cebc-4986-ae83-5d0b86ee4ee5"
   ],
   "tasks": [
     {
@@ -93,6 +94,8 @@
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-04T19:31:52.135Z",
       "completedAt": "2026-08-04T19:31:52.135Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
@@ -106,9 +109,9 @@
       "priority": 4,
       "shortName": "show-layer-actions",
       "title": "ShowLayer / HideLayer on-demand layers → a first native exposé",
-      "status": "in-progress",
-      "description": "Migration step 3. `ShowLayer(id)` makes an OnDemand layer visible and active, so the base context goes dormant when it is a context switch. A keybinding maps to it like any action, so it is rebindable and reachable from mouse and RPC.\n\n## 🔴 STATE — 2026-08-12. All four items BUILT; three driven; one thing left in item 1.\n\n`prefix+Tab` opens it; Enter/Space/click choose a pane; Escape/`q`/`Ctrl+q` close it.\n\n| # | item | state |\n|---|---|---|\n| 1 | zoom in/out instead of the fade | ✅ built — **but its exit cannot sequence the shrink before the fade** (below) |\n| 2 | floating panes drawn | ✅ built + driven |\n| 3 | `preferred_height` respected | ✅ built; **not yet driven** with unequal stacked panes |\n| 4 | `x` / `r` / `d` delete from the map | ✅ built + driven (\"seems to work\") |\n\n### 1 — the zoom (`PaintCx::with_scale` + `effects::Zoom` + `LayerRegistry::set_zoom`)\n\nReusable, per Antonio: *\"I expect they to be reusable APIs for other components and plugins.\"* The\npaint transform scales geometry **and** font size, radius, border width, glow/shadow and clip rects;\nthe effect is a sibling of `Fade`; the layer declares it like `set_fade_out`. Any layer or plugin can\nuse all three.\n\n**Direction: it GROWS IN and shrinks away** — `[settings] overview_zoom_from`, default `0.8`. Antonio\ndrove big→small (niri's reading, 1.3 and 2.0) and rejected both: *\"it should go from smaller to big,\nthe opposite when exiting.\"* The setting spans both, so it is one number, not a code change.\n\n⚠️ **Left to do: the exit plays the fade over the shrink.** `Fade::delay` and\n`LayerRegistry::set_fade_out_after` were built for it and **reverted** — a layer is retired when the\n*fade* finishes, so delaying the fade left the cards on screen after the map had gone. Sequencing an\nexit needs a layer's lifetime to follow the **whole** exit, not the fade alone. Both APIs remain in\nthe library and are correct; nothing uses the delay.\n\n### 2, 3, 4 — what they are\n\n- **Floats** are drawn at their own rect over the strip, stacked with `Grid` (one cell, offset by a\n  margin — `docs/widgets.md` → \"Placing a widget at an app-chosen rect\"), and are **one more column\n  of cells** so the cursor reaches them. ⚠️ The strip must **stretch inside its cell**: carrying\n  `align_self(Start)` there collapsed every card to a 7px sliver.\n- **Pane heights** come from `Column::pane_sizes` (the layout's resolved answer), so a stack dragged\n  out of balance is drawn out of balance. Columns also gained a `Spacing::Sm` gap.\n- **Delete** is the card's own `on_text_input` handler dispatching `close_pane_by_id` /\n  `delete_column` / `delete_workspace` through the ActionRegistry. `x` = pane, `r` = column,\n  `d` = workspace — `r`, because `x` and `X` are the same *key* and differ only as typed text.\n  Nothing was added to `WidgetIntent` or `ActionPolicy`; the confirm arrives with the action.\n  Deleting hands the cursor to the next card in the row **first**, since afterwards the neighbour\n  cannot be found.\n\n### Five bugs it uncovered, all OUTSIDE the exposé — fixed, do not re-fix here\n\nKey **releases** were discarded by the window loop · `add_named` promoted a rebuilt layer above\nnewer ones · input and painting disagreed about which layer is in front · **`close_pane_by_id`\nsearched only the active workspace** (the real cause of \"delete does nothing in the second row\") ·\na visible layer was never rebuilt when the session changed. Each has a test or a source lint. Found\nby instrumenting the whole chain **after three speculative fixes failed** — reach for the trace\nfirst.\n\n### Settled about the map — do not \"restore fidelity\" to niri\n\nAntonio overrode niri after seeing it (2026-08-05): **centre the CARD THE CURSOR IS ON**, both axes,\nunclamped. `RevealWindow` and `Component::reveal_rect` were reverted; do not reintroduce them. No\nworkspace-name gutter. Zoom and gap come from `LayoutOptions` / `[settings]`, **never constants in\n`expose.rs`**.\n\n### The map's cursor\n\n`AppState::expose_cursor_ws` records **which row** the cursor is on, so a rebuild restores it there;\n`expose_cursor_per_ws` is still the per-workspace memory used when the map opens fresh.\n\n## ✅ DECIDED 2026-08-04 — how a plugin updates a layer it already owns\n\n**Signals — the plugin never resends the tree.** The mechanism is **P085(F003)/T360** (`58SE7`): a\n`(mount, key) → Signal<PropValue>` map on `SharedChromeState`, plus a `ViewNode` that can name a\nvalue key instead of a literal, so the realized widget binds the signal and updates **in place**. The\nprop spelling is decided: a `bindings: Map<PropName, String>` map beside `events`. Both\n`PropValue::Text(\"@key\")` and `PropValue::Binding(String)` were rejected. **Rejected with reasons:**\n*replace on update* (`update_view`) — throws the retained tree away, so caret, selection, scroll,\nfocus and `FormBindings` die with it; **do not add `update_view` to `LayerRegistry`**. *Diff and\nreconcile* — no precedent here, largest thing in the plugin path, not until something demands it.\n*Immutable layers in v1* — Antonio went to the signal model directly. Full reasoning in T360; do not\nre-ask.\n\nT327 needs a **native** exposé, which updates nothing, so nothing here is blocked by T360.\n\n## Related tasks opened by this work\n\n**T416** (surface-scoped keybindings — `prefix+/` currently lights hints on the sidebar *underneath*\nthe map) and **T417** (the layer stack becomes the surface tree), both on this phase.\n**T415** (F006/P031) — config reload is a hand-written list.",
-      "descriptionUpdatedAt": "2026-07-26T11:44:50.918444Z",
+      "status": "done",
+      "description": "Migration step 3. `ShowLayer(id)` makes an OnDemand layer visible and active, so the base context goes dormant when it is a context switch. A keybinding maps to it like any action, so it is rebindable and reachable from mouse and RPC.\n\n## 🔴 STATE — 2026-08-12. All four items BUILT; three driven; one thing left in item 1.\n\n`prefix+Tab` opens it; Enter/Space/click choose a pane; Escape/`q`/`Ctrl+q` close it.\n\n| # | item | state |\n|---|---|---|\n| 1 | zoom in/out instead of the fade | ✅ built — **but its exit cannot sequence the shrink before the fade** (below) |\n| 2 | floating panes drawn | ✅ built + driven |\n| 3 | `preferred_height` respected | ✅ built; **not yet driven** with unequal stacked panes |\n| 4 | `x` / `r` / `d` delete from the map | ✅ built + driven (\"seems to work\") |\n\n### 1 — the zoom (`PaintCx::with_scale` + `effects::Zoom` + `LayerRegistry::set_zoom`)\n\nReusable, per Antonio: *\"I expect they to be reusable APIs for other components and plugins.\"* The\npaint transform scales geometry **and** font size, radius, border width, glow/shadow and clip rects;\nthe effect is a sibling of `Fade`; the layer declares it like `set_fade_out`. Any layer or plugin can\nuse all three.\n\n**Direction: it GROWS IN and shrinks away** — `[settings] overview_zoom_from`, default `0.8`. Antonio\ndrove big→small (niri's reading, 1.3 and 2.0) and rejected both: *\"it should go from smaller to big,\nthe opposite when exiting.\"* The setting spans both, so it is one number, not a code change.\n\n⚠️ **Left to do: the exit plays the fade over the shrink.** `Fade::delay` and\n`LayerRegistry::set_fade_out_after` were built for it and **reverted** — a layer is retired when the\n*fade* finishes, so delaying the fade left the cards on screen after the map had gone. Sequencing an\nexit needs a layer's lifetime to follow the **whole** exit, not the fade alone. Both APIs remain in\nthe library and are correct; nothing uses the delay.\n\n### 2, 3, 4 — what they are\n\n- **Floats** are drawn at their own rect over the strip, stacked with `Grid` (one cell, offset by a\n  margin — `docs/widgets.md` → \"Placing a widget at an app-chosen rect\"), and are **one more column\n  of cells** so the cursor reaches them. ⚠️ The strip must **stretch inside its cell**: carrying\n  `align_self(Start)` there collapsed every card to a 7px sliver.\n- **Pane heights** come from `Column::pane_sizes` (the layout's resolved answer), so a stack dragged\n  out of balance is drawn out of balance. Columns also gained a `Spacing::Sm` gap.\n- **Delete** is the card's own `on_text_input` handler dispatching `close_pane_by_id` /\n  `delete_column` / `delete_workspace` through the ActionRegistry. `x` = pane, `r` = column,\n  `d` = workspace — `r`, because `x` and `X` are the same *key* and differ only as typed text.\n  Nothing was added to `WidgetIntent` or `ActionPolicy`; the confirm arrives with the action.\n  Deleting hands the cursor to the next card in the row **first**, since afterwards the neighbour\n  cannot be found.\n\n### Five bugs it uncovered, all OUTSIDE the exposé — fixed, do not re-fix here\n\nKey **releases** were discarded by the window loop · `add_named` promoted a rebuilt layer above\nnewer ones · input and painting disagreed about which layer is in front · **`close_pane_by_id`\nsearched only the active workspace** (the real cause of \"delete does nothing in the second row\") ·\na visible layer was never rebuilt when the session changed. Each has a test or a source lint. Found\nby instrumenting the whole chain **after three speculative fixes failed** — reach for the trace\nfirst.\n\n### Settled about the map — do not \"restore fidelity\" to niri\n\nAntonio overrode niri after seeing it (2026-08-05): **centre the CARD THE CURSOR IS ON**, both axes,\nunclamped. `RevealWindow` and `Component::reveal_rect` were reverted; do not reintroduce them. No\nworkspace-name gutter. Zoom and gap come from `LayoutOptions` / `[settings]`, **never constants in\n`expose.rs`**.\n\n### The map's cursor\n\n`AppState::expose_cursor_ws` records **which row** the cursor is on, so a rebuild restores it there;\n`expose_cursor_per_ws` is still the per-workspace memory used when the map opens fresh.\n\n## ✅ DECIDED 2026-08-04 — how a plugin updates a layer it already owns\n\n**Signals — the plugin never resends the tree.** The mechanism is **P085(F003)/T360** (`58SE7`): a\n`(mount, key) → Signal<PropValue>` map on `SharedChromeState`, plus a `ViewNode` that can name a\nvalue key instead of a literal, so the realized widget binds the signal and updates **in place**. The\nprop spelling is decided: a `bindings: Map<PropName, String>` map beside `events`. Both\n`PropValue::Text(\"@key\")` and `PropValue::Binding(String)` were rejected. **Rejected with reasons:**\n*replace on update* (`update_view`) — throws the retained tree away, so caret, selection, scroll,\nfocus and `FormBindings` die with it; **do not add `update_view` to `LayerRegistry`**. *Diff and\nreconcile* — no precedent here, largest thing in the plugin path, not until something demands it.\n*Immutable layers in v1* — Antonio went to the signal model directly. Full reasoning in T360; do not\nre-ask.\n\nT327 needs a **native** exposé, which updates nothing, so nothing here is blocked by T360.\n\n## Related tasks opened by this work\n\n**T416** (surface-scoped keybindings — `prefix+/` currently lights hints on the sidebar *underneath*\nthe map) and **T417** (the layer stack becomes the surface tree), both on this phase.\n**T415** (F006/P031) — config reload is a hand-written list.\n\n---\n**Completion summary:**\nDONE 2026-08-20, commits 99d1ab4 + 4c8cb70. Driven and confirmed by Antonio: \"T327 looks ok. pane height respect the real columns and pane height. Close it everything looks good.\"\n\nAll four items built AND driven:\n1. zoom in/out instead of the fade — built + driven (its exit sequencing was the last open piece)\n2. floating panes drawn — built + driven\n3. `preferred_height` respected — built + DRIVEN 2026-08-20 (the outstanding \"not yet driven\" item; Antonio confirmed unequal stacked panes draw in proportion)\n4. `x` / `r` / `d` delete from the map — built + driven\n\n═══ THE LAST ITEM — the exit ═══\nParked 2026-08-12: the exit could not sequence the shrink before the fade, because a layer was\nretired when its FADE finished, so delaying the fade left the cards on screen after the map had\ngone. That needed a layer's lifetime to follow the WHOLE exit — T417's territory, landed 99d1ab4.\n\n`DynamicLayer::is_leaving()` (fade running OR zoom leaving) is now what `is_active`, the visibility\nend, the retirement `retain` and both `hide`/`remove` gates read. So `Fade::delay` /\n`set_fade_out_after` — built and reverted a week ago — are usable, and the map's dissolve RIDES its\nshrink, lagging by a SHARE of it (`ZOOM_IN * FADE_LAG`) rather than a second duration that could\ndrift out of step. `FADE_OUT` is `ZOOM_IN`, same reason.\n\n═══ THREE BUGS, ALL FOUND BY TRACING THE FRAME — never by reasoning ═══\nAntonio reported a fast flash just before the map vanished. THREE diagnoses by inspection (the\nlayer render pass, the overlay band, a missing frame) were each eliminated by an env-gated trace\n(`HECA_TRACE_LAYERS`) printing per-frame `any_visible / scene cmds / band segments / each layer's\nown op + scale`. The trace named it in one round, as it has every time on this phase:\n\n  op=0.190 scale=0.801 leaving=true\n  op=0.110 scale=1.000 leaving=true   <- the flash\n  op=0.030 scale=1.000 leaving=true\n\n1. `Zoom::amount` rested at 1.0. Not running => life size — but the fade outlasts the shrink, so for\n   the last frames the zoom was finished while the surface was still visible at a tenth opacity, and\n   the cards snapped back to full size as they faded. A finished LEAVE now rests at `from`.\n   `enter`/`cancel` clear `leaving`, so only a completed exit is affected, and every surface with a\n   zoom-out gets it. (heca-grid-ui/src/effects.rs)\n2. A rebuild resurrected a surface mid-exit. `show` cancelled the fade unconditionally; it already\n   computed `arriving` and used it for the zoom, and the fade now reads the same flag. The exposé\n   hits this on the ordinary path — it dismisses itself and THEN focuses the pane you chose, and\n   focusing rebuilds the map.\n3. Nothing requested the frame that paints an absence. Both effects report done on the tick that\n   ends an exit, so no further frame was asked for and the last one drawn still showed the surface\n   faintly. `LayerRegistry::tick` now returns true on that frame, and on the frame a doomed layer is\n   dropped. The test `removing_a_fading_layer_waits_for_the_fade` had the bug written into it as\n   `!reg.tick(..)`.\n\nFix 2 was first written as a guard at the exposé call site and REJECTED by Antonio: \"don't make fix\nhardcoding code around, they should be centralized\". Both 1 and 2 are framework fixes; the call site\nis one plain line.\n\n═══ VERIFICATION ═══\nheca 565 / 0 · heca-grid-ui 236 / 0 · clippy clean. Instrumentation removed.\nRegression tests `re_showing_a_leaving_layer_does_not_cancel_its_exit` and\n`a_finished_leave_rests_at_from_not_back_at_life_size` were each verified to FAIL without their fix.\n\n═══ STILL OPEN, NOT THIS TASK ═══\nThe map is slow with >20 panes (Antonio, 2026-08-19) — that is T421, and it is UNMEASURED. Do not\nguess: instrument `layout_layers` (a full `LayoutEngine::compute` over every visible layer each\nframe, no dirty check) and the frosted backdrop's per-frame full-screen blur first.",
+      "descriptionUpdatedAt": "2026-08-20T13:46:54.768Z",
       "notes": "",
       "statusLog": [
         {
@@ -143,27 +146,29 @@
           "id": "show-layer-actions-c1",
           "number": 1,
           "title": "ShowLayer/HideLayer drive OnDemand layers",
-          "checked": false
+          "checked": true
         },
         {
           "id": "show-layer-actions-c2",
           "number": 2,
           "title": "Bindable + RPC-reachable like any action",
-          "checked": false
+          "checked": true
         },
         {
           "id": "show-layer-actions-c3",
           "number": 3,
           "title": "A first native exposé proves it",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-04T20:16:52.186Z",
-      "completedAt": "",
+      "completedAt": "2026-08-20T13:46:54.766Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
-      "updatedAt": "2026-08-19T16:00:44.422Z"
+      "updatedAt": "2026-08-20T13:46:54.766Z"
     },
     {
       "id": "eaff801f-599f-4580-b20c-a2abfb842142",
@@ -208,6 +213,8 @@
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-04T19:32:03.187Z",
       "completedAt": "2026-08-04T19:32:03.187Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
@@ -250,6 +257,8 @@
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-04T19:36:13.155Z",
       "completedAt": "2026-08-04T19:42:24.499Z",
       "createdAt": "2026-07-26T11:44:50.918444Z",
@@ -290,6 +299,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-11T23:09:17.101Z",
       "completedAt": "2026-08-12T07:03:09.534Z",
       "createdAt": "2026-08-11T22:38:47.582Z",
@@ -313,6 +324,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-19T15:58:23.880Z",
       "completedAt": "2026-08-19T15:58:23.880Z",
       "createdAt": "2026-08-11T22:39:14.614Z",
@@ -353,6 +366,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-12T07:03:13.738Z",
       "completedAt": "2026-08-13T20:39:27.135Z",
       "createdAt": "2026-08-11T22:55:42.451Z",
@@ -376,6 +391,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-12T22:21:58.873Z",
       "completedAt": "2026-08-12T22:21:58.873Z",
       "createdAt": "2026-08-12T08:47:42.555Z",
@@ -399,6 +416,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-12T21:44:53.385Z",
       "completedAt": "2026-08-13T12:27:07.910Z",
       "createdAt": "2026-08-12T16:11:51.102Z",
@@ -412,9 +431,9 @@
       "priority": 10,
       "shortName": "the-expos-is-laggy-with-many-p",
       "title": "The exposé is laggy with many panes — moving the cursor, and opening and closing it",
-      "status": "planned",
-      "description": "**Antonio, driving, 2026-08-12:** *\"moving between panes is laggy, likewise opening / closing the expose with such a number of items\"* — three workspaces, ~25 panes. **Still reported after the T420 rebuild** (2026-08-13): *\"slowness where there are lots of panes is still a problem. opening and moving around is laggy.\"*\n\n# MEASURED 2026-08-13 — the instrumentation pass is DONE. Read this before optimising anything.\n\nA headless harness built the real `ExposeGrid` tree and timed build / layout / paint, 20 iterations each, at three sizes. Numbers per operation:\n\n| session | build | **layout** | paint |\n|---|---|---|---|\n| 27 panes (3 ws × 3 cols × 3) | 1.74 ms | **1.97 ms** | 0.22 ms |\n| 81 panes | 2.46 ms | **4.76 ms** | 0.65 ms |\n| 9 panes | 0.30 ms | 0.69 ms | 0.08 ms |\n\n**In `--release` the same numbers are 0.26 / 0.22 / 0.02 ms (27 panes) and 0.42 / 0.49 / 0.09 ms (81)** — a **9–10× difference**. `cargo run -p heca` is a **debug** build.\n\n## What the measurement RULES OUT\n\n- **A cursor move does not rebuild the layer.** `InteractionIntent::ExposeCursor` reaches `record_expose_cursor` (`app/interaction.rs:945`), which only writes `AppState`; `after_mutation_change_inner` deliberately excludes `MutationKind::Focus` from `refresh_visible_layers` (`app/mutations.rs:34`). Candidate 1 in the original list is **dead** — moving the cursor costs no rebuild.\n- **The frame loop is on demand, not continuous** (`app/lifecycle.rs:155`): a frame is requested only when something animates or changes. A map sitting still costs nothing.\n\n## What the measurement LEAVES STANDING\n\n1. **`layout_layers` rebuilds the taffy tree from scratch every frame.** `chrome/mod.rs`: `LayoutEngine::new().compute(root, …)` per visible layer, per frame, with **no dirty check** — a fresh taffy tree, not a re-compute of a kept one. This is the cost in the table, it is the only one that **scales with pane count**, and it is what Antonio's \"lots of panes\" points at. The chrome tree has a `chrome_signature` retention check (`app/render.rs:1009`); the layers have nothing equivalent.\n2. **A full-screen blur runs on every rendered frame while the map is up.** `app/render.rs:1094`: `state.blur.process(…, frost_radius * scale_factor)` whenever `layers.wants_frost()`. It does **not** scale with pane count, so it is the candidate for \"opening/closing is laggy\" specifically — an animation means every frame pays it — and on a HiDPI display it is a full-resolution Gaussian per frame.\n\n## The fix to decide — do NOT ship one without Antonio choosing\n\n**Layer layout retention.** The clean version needs a layout-dirty concept `heca-grid-ui` does not have; the cheap version gates `layout_layers` on *(the layer was rebuilt) OR (the viewport changed) OR (any node reports `needs_paint`)*. ⚠️ The gate must not use `collect_damage`, which **clears** the flags the paint pass needs. A gate that misses a case produces a silently stale layout — the exact failure class that cost 2026-08-11 — so it wants its own test: change a signal that moves something, assert the layer re-laid out.\n\n**Two cheaper things first, because they may be the whole of it:**\n\n- **Ask whether the session is running debug.** 2 ms vs 0.2 ms per frame is most of the reported difference, and it costs nothing to check.\n- **`MutationKind::Config` no longer needs to rebuild layers.** That arm exists (`app/mutations.rs:34`) because *\"the exposé resolves its zoom from the room it has when it is built\"* — under T420's shares it re-fits itself from the layout engine at any size, so a resize needs no rebuild at all. Dropping it removes the resize-storm rebuild (candidate 2) **and** a per-resize `model()` + build.\n\n# Cleanup already done here\n\nRemoved `trace_layer_geometry` (`chrome/mod.rs`) — the `expose laid out:` spine trace T420's delete list named. It existed to diagnose the fit that no longer exists.\n\n# Verification (Antonio drives)\n\nThree workspaces, ~25 panes: `ctrl+h/l` moves the cursor with no perceptible delay, and `prefix+Tab` opens and closes at the frame rate the app runs at otherwise.",
-      "descriptionUpdatedAt": "2026-08-12T16:12:10.071Z",
+      "status": "done",
+      "description": "The exposé is laggy with many panes (26+ across 3 workspaces), worst on open/close and while moving the cursor.\n\n═══ MEASURED 2026-08-19/20 — the guessing is over ═══\nInstrumented per frame in a debug build with a many-pane session (`HECA_TRACE_PERF=1`):\n\n    layout_layers   ~2.8–3.3 ms      <- every frame, whether or not anything moved\n    frost blur      ~0.45 ms\n    paint_layers    ~0.23 ms   (cmds=46–52)\n\n`layout_layers` is about **four times the paint and the blur combined**, and it is rock-steady:\nthe cost does not vary with what the user is doing, because it is unconditional. In a 16.6 ms\nbudget at 60 fps that is a fifth of the frame before the panes, chrome or terminal are touched.\n\nThe second suspect named in the phase description — the frosted backdrop's full-screen blur — is\n**not** the problem: 0.45 ms. Do not spend time on it.\n\n`layout_layers` is `heca/src/chrome/mod.rs:1054`: a full `LayoutEngine::compute` over every visible\nlayer's root, each frame, with no dirty check.\n\n═══ ATTEMPT 1 — REVERTED. Read this before designing attempt 2 ═══\nA cache was added inside `LayoutEngine::compute` (record `(w, h, base_font, generation)` on the\nroot, skip while all four hold; the generation bumped by `mark_needs_paint`, since a tree has no\nupward links). It was in the right place — the library, so every caller including a plugin benefits\n— and it was **reverted immediately**: it broke the running app on startup. Pane borders detached\nfrom their panes and drifted, and the pane header lost its title and its buttons.\n\n**Why, exactly** (`heca/src/chrome/pane_header.rs:1090`): `sync_pane_headers` computes the header\nand then calls `translate_tree(&mut header.root, x, y)` — mutating every widget's bounds AFTER the\npass, every frame. `compute` is therefore doing double duty: producing the layout **and resetting\nthe bounds to natural** so the next translate starts from a known place. Skip it and the translate\ncompounds frame after frame, and the header walks off screen.\n\n**The premise was wrong, and that is the lesson.** \"Layout is a pure function of the tree, its box\nand its font\" is false here: the host mutates retained trees between passes, and nothing declares\nit. The measurement said WHERE the cost was; it did not say the work was skippable, and that was\ntreated as though it had.\n\n`ScrollRegion` already solved the same problem the other way — its `on_layout` resets the baked\noffset and re-applies it from scratch, so it is idempotent and a fresh pass cannot compound. That\nis the shape to copy, not the flag to bolt on.\n\n═══ THE OPTIONS — Antonio picks; do not choose one silently ═══\n\n**A. Make placement idempotent, so skipping becomes safe.**\nReplace `translate_tree`-after-compute with placement inside `Component::on_layout`, re-derived\nfrom scratch each pass — exactly what `ScrollRegion` does today (`shift_subtree` + `on_layout`,\n\"a fresh layout pass would compound the shift, so on_layout resets and re-applies from scratch\").\nThen layout really is pure, the cache from attempt 1 works unchanged, and every caller benefits.\nCost: touches `sync_pane_headers`, the search bar (`chrome/mod.rs:1259` computes a tree then reads\nits measured size back out) and `chrome/pane/shell.rs:193`. Aligns with the standing T400 note in\nAGENTS.md — \"bounds === what is drawn === what is clickable\", floating panels become real placed\nchildren. Biggest change, and the only one that removes the unstated contract rather than\ndocumenting it.\n\n**B. An explicit invalidation signal.**\n`Base`/`LayoutEngine` gains \"this tree was mutated out of band, re-run me\", and every out-of-band\nmutator calls it. Small diff. **But it is a rule every caller has to remember**, and a caller who\nforgets gets silent stale bounds — the same class of failure as the deleted `routes_own_subtree` /\n`takes_raw_keys` predicates, and the opposite of what Antonio has asked for repeatedly (\"centralize\nresolutions, do not just fix the call\"). Recorded for completeness; it is the weakest option.\n\n**C. Attack the COST, not the frequency — and measure it first.**\n2.8 ms for one tree of ~26 panes is itself suspicious; taffy alone should not cost that. The prime\nunmeasured suspect is **text measurement**: `measure_text_node` (heca-grid-ui/src/layout.rs) shapes\nevery label on every pass, and shaping is the expensive part. A shaping cache keyed on\n`(text, font, constraints)` lives entirely inside the engine, needs **no contract change**, cannot\nbreak any caller, and helps every layout in the app — not just layers.\n**Do this measurement before choosing**: time `measure_text_node` separately from the taffy solve.\nIf shaping dominates, C alone may remove the problem and A becomes optional cleanup rather than a\nprerequisite.\n\n═══ NEXT STEP ═══\nSplit the 2.8 ms: how much is taffy solving, how much is text shaping. That single number decides\nbetween C (cheap, safe, no contract change) and A (correct, larger, removes the unstated contract).\nInstrumentation for the outer three passes is already in `heca/src/app/render.rs`, env-gated behind\n`HECA_TRACE_PERF` — extend it inward rather than writing a new one.\n\n═══ THE RULE THIS TASK KEEPS BREAKING ═══\nMeasure before fixing (the phase says so, and it has been right every time). But measuring where\nthe cost is is **not** the same as establishing that the work is unnecessary — attempt 1 conflated\nthe two and shipped a regression to Antonio's running app.\n\n---\n**Completion summary:**\nCLOSED 2026-08-20 — NOT A BUG. Measured to nothing: the lag exists only in a debug build, and only with a pane count that never occurs while developing.\n\nAntonio, 2026-08-20: \"just run and in release mode there is no lag\" · \"while developing there will never be more than 4/5 panes so the problem does not exist. No need to optimize.\"\n\n═══ WHAT WAS MEASURED ═══\nTwo rounds of per-frame instrumentation in a DEBUG build with 26 panes across 3 workspaces.\n\nRound 1 — the three passes the phase named as suspects:\n    layout_layers   ~2.8-3.3 ms   <- every frame, whether or not anything moved\n    frost blur      ~0.45 ms\n    paint_layers    ~0.23 ms  (cmds=46-52)\nThe frosted backdrop's full-screen blur — the phase's second suspect — was never the problem.\n\nRound 2 — inside `LayoutEngine::compute`, splitting tree construction from the taffy solve:\n    nodes=1514   build=1.5-1.9 ms   solve=22.5-23.6 ms   <- ONE tree, once per frame\n    nodes=25     build=~26 us       solve=~270 us        <- x12, the pane headers\n    nodes=2      build=~2 us        solve=~5 us          <- x12\n\nThree findings, and the first two corrected earlier assumptions:\n\n1. **The 1514-node tree is NOT a layer.** `layout_layers` accounted for only 2.8 ms, so the big\n   cost comes from elsewhere — `paint_chrome_root` (the sidebar with every workspace, column and\n   pane expanded), whose doc comment claims \"Re-run every frame; cheap and creates no signals\". At\n   1514 nodes it is not cheap. Round 1 had been pointed at the wrong pass.\n2. **Solve dominates build 15:1**, so keeping the taffy tree between passes would not have helped.\n   The cost is taffy solving, not constructing nodes.\n3. **`measure_text_node` shapes nothing** — it is arithmetic on a monospace advance ratio\n   (`MONO_ADVANCE_RATIO`), so a text-shaping cache, the option that looked most attractive on\n   paper, would have bought nothing either.\n\n═══ WHY IT IS CLOSED ═══\nTaffy is heavily generic, and unoptimised generics in a debug build routinely run 10-50x slower\nthan release. Antonio ran the same session in release: **no lag at all.** The 23 ms solve is a\ndebug-build artefact, not shipped behaviour.\n\nAnd the debug case does not matter either: development happens with 4-5 panes, where the same tree\nis a fraction of the size. A `[profile.dev.package.\"*\"] opt-level = 2` line would have made even\nthe 26-pane debug case fast, and was declined as unnecessary — correctly, since nothing is slow in\nthe situation it would serve.\n\n═══ THE ATTEMPT THAT WAS REVERTED — keep this, it is the real lesson ═══\nBefore the release measurement, a cache was added inside `LayoutEngine::compute` (record\n`(w, h, base_font, generation)` on the root, skip while all four hold; the generation bumped by\n`mark_needs_paint`, since a tree has no upward links). It was in the right PLACE — the library, so\nevery caller including a plugin would benefit — and it broke the running app on startup: pane\nborders detached from their panes and drifted, and the pane header lost its title and its buttons.\n\nWhy exactly (`heca/src/chrome/pane_header.rs:1090`): `sync_pane_headers` computes the header and\nthen calls `translate_tree(&mut header.root, x, y)`, mutating every widget's bounds AFTER the pass,\nevery frame. `compute` is doing double duty — producing the layout AND resetting the bounds to\nnatural so the next translate starts from a known place. Skip it and the translate compounds frame\nafter frame, and the header walks off screen.\n\n**\"Layout is a pure function of the tree, its box and its font\" is FALSE in this app**, because the\nhost mutates retained trees between passes and nothing declares it. `ScrollRegion` solved the same\nproblem the other way — its `on_layout` resets the baked offset and re-applies from scratch, so it\nis idempotent and a fresh pass cannot compound. That is the shape to copy if this is ever revisited.\n\n**The mistake worth remembering:** measuring WHERE the cost is is not the same as establishing that\nthe work is unnecessary. Round 1 was treated as though it had said both, and a regression shipped to\nAntonio's running app.\n\n═══ IF THIS EVER COMES BACK ═══\nReal profiling in RELEASE first. If a cost is confirmed there, the recorded options were:\nA. Make placement idempotent (`on_layout` re-derives, like `ScrollRegion`), so layout becomes pure\n   and skipping is safe. Touches `sync_pane_headers`, the search bar (`chrome/mod.rs:1259`) and\n   `chrome/pane/shell.rs:193`. Aligns with the T400 note in AGENTS.md — \"bounds === what is drawn\n   === what is clickable\". The only option that removes the unstated contract rather than\n   documenting it.\nB. An explicit \"this tree was mutated\" signal every out-of-band mutator must call — small diff, but\n   a rule every caller has to remember, and forgetting it gives silent stale bounds. Weakest.\nC. Reduce the cost itself — ruled out above: build is 1/15 of solve, and text is not shaped.\n\nInstrumentation has been removed. Nothing from this task remains in the tree.",
+      "descriptionUpdatedAt": "2026-08-20T14:38:35.440Z",
       "notes": "",
       "statusLog": [
         {
@@ -424,6 +443,14 @@
           "toStatus": "planned",
           "title": "Back to planned 2026-08-18: nobody is working on it. It was left in-progress from before the hint work and has been untouched since, which made four tasks claim to be active at once and stopped the planner recommending anything. Its own guidance is unchanged and still the first step — MEASURE BEFORE FIXING, and ask whether the session was a debug build (1.97 ms/frame at 27 panes in debug, 0.22 in release).",
           "description": "Back to planned 2026-08-18: nobody is working on it. It was left in-progress from before the hint work and has been untouched since, which made four tasks claim to be active at once and stopped the planner recommending anything. Its own guidance is unchanged and still the first step — MEASURE BEFORE FIXING, and ask whether the session was a debug build (1.97 ms/frame at 27 panes in debug, 0.22 in release)."
+        },
+        {
+          "id": "03a5c4c2-9bfd-4c8a-abe2-4ab1eb2b5875-check-002-in-progress-planned",
+          "date": "2026-08-20T14:18:13.875Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Back to planned 2026-08-20: attempt 1 (a layout cache in LayoutEngine) was reverted after it broke the running app — `sync_pane_headers` mutates bounds after the pass, so skipping compute made the translate compound. The measurement stands (layout_layers ~2.8ms/frame, 4x paint+blur), but the invalidation model is an open design decision Antonio is choosing between three recorded options, and no code should be written until he picks.",
+          "description": "Back to planned 2026-08-20: attempt 1 (a layout cache in LayoutEngine) was reverted after it broke the running app — `sync_pane_headers` mutates bounds after the pass, so skipping compute made the translate compound. The measurement stands (layout_layers ~2.8ms/frame, 4x paint+blur), but the invalidation model is an open design decision Antonio is choosing between three recorded options, and no code should be written until he picks."
         }
       ],
       "decisions": [],
@@ -431,10 +458,12 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-13T07:58:09.891Z",
-      "completedAt": "",
+      "completedAt": "2026-08-20T14:38:35.438Z",
       "createdAt": "2026-08-12T16:12:10.071Z",
-      "updatedAt": "2026-08-18T09:58:44.176Z"
+      "updatedAt": "2026-08-20T14:38:35.438Z"
     },
     {
       "id": "fb73a5e4-dea9-4d86-8219-71c103ada2a5",
@@ -454,6 +483,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-12T22:22:21.740Z",
@@ -477,6 +508,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-13T07:25:49.322Z",
       "completedAt": "2026-08-13T07:55:44.769Z",
       "createdAt": "2026-08-13T07:25:46.853Z",
@@ -509,6 +542,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-13T08:16:05.790Z",
       "completedAt": "2026-08-13T12:27:24.200Z",
       "createdAt": "2026-08-13T08:16:01.978Z",
@@ -541,6 +576,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-13T12:27:41.185Z",
       "completedAt": "2026-08-13T19:55:37.837Z",
       "createdAt": "2026-08-13T12:13:05.159Z",
@@ -564,6 +601,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-13T20:39:36.747Z",
       "completedAt": "2026-08-18T09:58:37.343Z",
       "createdAt": "2026-08-13T12:20:54.816Z",
@@ -596,6 +635,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-13T19:15:57.276Z",
       "completedAt": "2026-08-13T19:39:16.929Z",
       "createdAt": "2026-08-13T14:51:11.720Z",
@@ -619,6 +660,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-17T09:27:24.000Z",
       "completedAt": "2026-08-17T13:56:04.101Z",
       "createdAt": "2026-08-17T08:21:09.188Z",
@@ -632,20 +675,31 @@
       "priority": 18,
       "shortName": "peek-2-on-peek-onto-componente",
       "title": "Hint 4 — on_hint becomes the override, and a pick becomes a real event",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Read docs/hint-architecture.md sections 3, 4 and 7 step 4. Needs T431, T440 and T441 first.\n\n⚠️ CHANGED 2026-08-17. on_hint is no longer what makes a widget pickable — T441 does that for anything actionable. on_hint is now the OVERRIDE: it says a pick does something DIFFERENT from a click. heca's sidebar row is the case it exists for: a click activates the pane and leaves the sidebar, a pick stays in the sidebar.\n\nWHAT IS WRONG NOW\nTwo facts about a target live on two different widgets: who it is (nav_key) and what picking it does. Which is on top depends on how the tree was built. A sidebar row carries its own name and the KeyHint around it carries the pick — so the pick is on the parent. A dock names itself outside and declares the pick inside — so the pick is on a child. The code matching a letter to an action has to look both up and down, and looking one way only means the target quietly gets no letter. That is why sidebar letters kept failing with no error.\n\nWHAT TO BUILD\n1. on_hint next to on_click (heca-grid-ui/src/builders.rs, on_click is at line 499). The slot, Base::hint, already exists (component.rs:254) — only the builder was in the wrong place. Fix the comment at component.rs:245 saying the hint belongs on the wrapper.\n2. A pick travels like any other event on the walk that already exists (component.rs:830): down through the parents, to the target, back up. stop_propagation ends it. No second way of delivering events.\n3. on_hint runs only when THIS widget is the one picked — not when a pick from a child passes through on the way up. Without it, a Pane that can be picked holding rows that can be picked fires both and you land on the pane. Every such container would otherwise hand-write \"was it me or my child?\", and the same check in many places means the framework is missing something.\n4. A container can listen for picks from its children — separate, shipping in this same task. It sees which widget was picked and can stop the pick going further. It declares nothing and gets no letter.\n\n═══ ⭐ AND THE REASON THIS IS NEEDED, FOUND 2026-08-18 (F011/P094/T451) ═══\n\n**A pick that will be REFUSED must not be offered a letter.** Antonio, driving: with a floating pane\nactive, `prefix+/` letters every pane and every sidebar row showing a pane — and pressing one does\nNOTHING, because `ActionPolicy` correctly refuses a `FocusPane` that does not target the active\nfloat (verified live: `domain=Floating`, blocked, focus does not move). A picker offering letters\nthat do nothing is a broken picker; docs/hint-architecture.md § 2a says a target with no letter is\nnot an error but must not look like one either.\n\n**It cannot be fixed before this task**, and that is the point: `Base::hint` is\n`Option<Box<dyn Fn()>>` — an OPAQUE CLOSURE. There is nothing to ask the policy about. Any filter\ntoday would have to infer intent from the identity string (`pane:7`), which is stringly-typed and\nfragile — a naive match makes `pane:1` match `pane:10` too.\n\n**Once a pick carries its `Intent`** (this task), `chrome::active_hint_targets` can ask\n`route_interaction` per candidate and drop every refused one: ONE rule, every surface, no special\ncase per widget. It covers the pane and the sidebar row that shows the same pane together, which is\nexactly right — the row is a view of the pane, and Antonio asked for the two to behave alike.\n\nAntonio, 2026-08-18: *\"if so we should prevent sidebar pane to have hint when in float\"*, and\n*\"for now leave it\"* — so this ships HERE, not as a narrow pane-specific filter beforehand.\n\nInclude a test: with a floating pane active, the candidate list offered by the picker contains\nneither the other panes nor the sidebar rows naming them.\n\nTHE PART EASY TO GET WRONG\nBeing pickable does not spread. A container is not speaking for its children. Being pickable is a fact read off the tree when the picker opens; a pick is an event that happens later.\n\nDELETES: the wrapper requirement, the two-direction search in offer_hint_by_key, the \"parent or child\" question.\n\nTESTS: a pickable container holding a pickable child — only the child's handler runs. A listening container sees which child was picked. stop_propagation stops the pick going up. Plus the refused-pick test above.",
       "descriptionUpdatedAt": "2026-08-17T08:21:21.318Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ec2f214b-e40d-41f9-ab60-f3aacd2b6821-check-001-planned-in-progress",
+          "date": "2026-08-21T11:08:41.284Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T11:08:41.284Z",
       "completedAt": "",
       "createdAt": "2026-08-17T08:21:21.318Z",
-      "updatedAt": "2026-08-18T16:16:37.312Z"
+      "updatedAt": "2026-08-21T11:08:41.284Z"
     },
     {
       "id": "206dfe29-866a-4138-9ae5-667a8502e77b",
@@ -665,6 +719,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-17T16:05:45.410Z",
       "completedAt": "2026-08-17T16:21:27.436Z",
       "createdAt": "2026-08-17T08:21:32.792Z",
@@ -688,6 +744,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-17T08:21:41.749Z",
@@ -711,6 +769,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-17T08:21:50.685Z",
@@ -734,6 +794,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-17T08:22:00.289Z",
@@ -757,6 +819,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-17T08:22:19.479Z",
@@ -780,6 +844,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-17T08:22:29.058Z",
@@ -803,6 +869,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-17T13:56:06.409Z",
       "completedAt": "2026-08-17T16:03:47.435Z",
       "createdAt": "2026-08-17T11:30:20.300Z",
@@ -826,6 +894,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-17T16:21:42.370Z",
       "completedAt": "2026-08-17T16:33:06.613Z",
       "createdAt": "2026-08-17T15:54:31.087Z",
@@ -866,6 +936,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-17T16:56:02.662Z",
       "completedAt": "2026-08-19T14:57:44.057Z",
       "createdAt": "2026-08-17T15:54:49.547Z",
@@ -889,6 +961,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-17T22:10:21.520Z",
       "completedAt": "2026-08-19T08:57:13.092Z",
       "createdAt": "2026-08-17T15:55:02.914Z",
@@ -912,6 +986,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-17T21:34:09.347Z",
@@ -944,6 +1020,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-08-18T10:04:31.642Z",
       "completedAt": "",
       "createdAt": "2026-08-18T10:00:25.903Z",
@@ -967,18 +1045,140 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-19T08:57:51.665Z",
       "updatedAt": "2026-08-19T08:57:51.665Z"
+    },
+    {
+      "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 459,
+      "shortId": "TSWYZ",
+      "priority": 34,
+      "shortName": "a-surface-declares-its-animati",
+      "title": "Overlay owns appearing, animating and disappearing — an Animation TRAIT, and the exposé becomes an Overlay",
+      "status": "done",
+      "description": "⭐⭐ RULE ZERO TASK. Antonio, 2026-08-20: \"add every single detail to make each overlay reusable. We want also support other animation. For now Fade is ok but that enum could be expanded with new ones so an animation must follow a Trait and Overlay should be able to animate delegating the animation to the Animate api. The expose must be an instance of the Overlay or a child and reuse all the Overlay API for animation, appearing etc...\"\n\n═══ THE TEST — write the line a PLUGIN AUTHOR would type ═══\n    Overlay::new().panel(body).animation(Fade::new())\n    Overlay::new().panel(body).animation(ZoomFade::new().from(0.8))\n    Overlay::new().panel(body).animation(MyPluginSlide::new())   // <- their own, no host change\n\nOne builder on the widget. No id, no registry, no host-private type, and NO enum a plugin cannot\nextend. A third-party animation must be possible **without touching heca-grid-ui** — that is the\ndifference between a trait and an enum, and it is why Antonio asked for a trait.\n\n═══ WHY THIS IS A BUG, NOT A FEATURE REQUEST ═══\nThe capability is trapped in `LayerRegistry` (`heca/src/chrome/layers.rs`), which is `pub(crate)`.\nTo get what the exposé has, an author writes three calls on a registry while holding an id:\n\n    let id = state.layers.add(parent, kind, modal, covers, root);\n    state.layers.set_fade_out_after(id, FADE_OUT, ZOOM_IN * FADE_LAG);\n    state.layers.set_zoom(id, ZOOM_IN, from);\n\n…and must know the sequencing rule themselves (the lag is a SHARE of the zoom, never a second\nabsolute duration). A plugin can reach none of it. Exactly the shape ⭐⭐ RULE ZERO forbids — the\nsame defect `HintTargetRegistry` had before F004/P084/T399 deleted it.\n\n`Overlay` (heca-grid-ui/src/widgets/overlay.rs) has NO animation at all. Verified 2026-08-20: its\nwhole builder surface is `panel` :584, `panel_boxed` :595, `panel_size` :625, `blocking` :655,\n`position` :662, `anchored` :672, `open` :718, `open_signal` :724, `on_outside_click` :732,\n`panel_bounds` :738. Opening is a bool with no transition.\n\n═══ 1. THE `Animation` TRAIT (heca-grid-ui) ═══\nAn animation is a thing that, given progress through an arrival or an exit, says how the surface\nshould be drawn. It owns its own timing and reports when it is finished:\n\n    pub trait Animation {\n        fn tick(&mut self, dt: f32) -> bool;   // true while moving; mirrors Component::tick\n        fn enter(&mut self);\n        fn leave(&mut self);\n        fn cancel(&mut self);\n        fn is_leaving(&self) -> bool;          // still playing an EXIT — see Exit below\n        fn frame(&self) -> AnimationFrame;     // { opacity, scale, offset }\n    }\n\n`AnimationFrame` is the whole vocabulary a surface's presentation needs, so a new animation adds no\nnew plumbing: a slide sets `offset`, a fade sets `opacity`, a zoom sets `scale`, and the painter\napplies all three where it already applies opacity and `PaintCx::with_scale`. **Adding an animation\nmust not require a change in the painter** — that is the test for whether the vocabulary is right.\nIf a future one needs something outside it (a rotation, a clip), add it to the frame ONCE, centrally.\n\nShip: `Fade`, `Zoom` (with `from`), their **composition** (the dissolve RIDES the movement, lagging\nby a SHARE of it — never a second duration that can drift), and `NoAnimation` (the default: a cut,\nso a surface that declares nothing costs nothing and needs no special case).\n\n`heca-grid-ui/src/effects.rs` already has `Fade` (with `delay`) and `Zoom` (`enter`/`leave`/\n`cancel`/`is_leaving`/`amount`), both correct and tested; `Zoom::amount` rests at `from` after a\nleave (F003/P082/T327). **Build ON these — do not rewrite them.** They have exactly ONE consumer in\nthe repo today (`LayerRegistry`), so nothing is duplicated yet; this task stops that becoming N\nconsumers each re-deriving the rules.\n\n═══ 2. `Exit` — THE COMPOSITION BECOMES A TYPE ═══\nToday `DynamicLayer::is_leaving()` composes `fade.is_running() || zoom.is_leaving()` app-side. \"A\nsurface's exit is one gesture made of several effects, and it is not over until every one has\nfinished\" is a general truth about effects, not about layers — a plugin building its own animated\nsurface would have to rediscover it. Getting it wrong made `Fade::delay` unusable for a week: a\nlayer was retired when its FADE ended, so the cards stayed on screen after the map had gone\n(F003/P082/T327). With the trait, `is_leaving` is one method and a composite answers for all its\nparts — a type guarantee rather than something the host knows.\n\n═══ 3. `Overlay` DELEGATES — it does not implement animation ═══\n    Overlay::new().panel(body).animation(impl Animation + 'static)\n\n`Overlay` owns appearing/disappearing as a CONCEPT and hands the how to the `Animation`. It already\nowns the scrim, the panel chrome, the placement and `open`; the animation joins that list. `open`\nbecomes \"begin arriving / begin leaving\" rather than an instant bool — and a surface with\n`NoAnimation` behaves exactly as today. The painter applies `AnimationFrame` in ONE place, so no\nwidget and no host re-implements it.\n\n═══ 4. THE DECLARATIVE HALF — one door, never two ═══\nA described node names its animation, so a plugin sending JSON gets identical behaviour to native\ncode. Names resolve the way a **theme colour token** does (docs/widgets.md → \"Appearance: the theme\nis the default, not a wall\"): unknown name ⇒ the default, debug-logged, never a panic — `realize`\nstays total for untrusted input.\n\n═══ 5. THE EXPOSÉ BECOMES AN OVERLAY — Antonio's explicit requirement ═══\n\"The expose must be an instance of the Overlay or a child and reuse all the Overlay API for\nanimation, appearing etc.\"\n\nToday `heca/src/chrome/expose/mod.rs` is a bespoke layer: it builds its own root and drives fade,\nzoom and backdrop through three `LayerRegistry` calls, with `FADE_OUT` / `ZOOM_IN` / `FADE_LAG` as\nprivate constants. After this task it declares an `Overlay` with an `Animation`, exactly as a plugin\nwould — which is the proof the API is real. **If the exposé still needs anything the `Overlay` API\ncannot express, THAT is the missing builder: add it to `Overlay`, never special-case the exposé.**\n`set_fade_out_after` / `set_zoom` then stop being public surface on `LayerRegistry`.\n\n═══ 6. FILE STRUCTURE — one file, one thing, exactly as § 0b-bis lays it out ═══\nAntonio, 2026-08-20: \"animation and expose must follow the code structure described in AGENTS.md\nchrome/expose, and for effects maybe animation/fade.rs, animation/bounce.rs etc… and for example an\nanimation/mod.rs for common things if needed.\"\n\n    heca-grid-ui/src/animation/\n    ├── mod.rs        the `Animation` TRAIT, `AnimationFrame`, shared easing, re-exports\n    ├── fade.rs       Fade\n    ├── zoom.rs       Zoom\n    ├── sequence.rs   the composition — one animation riding another, lag as a SHARE\n    ├── none.rs       NoAnimation (the default)\n    └── bounce.rs     … and every future one is a NEW FILE, nothing else edited\n\nThat last line is the point of the whole task. Adding `bounce.rs` must touch **no other file** — no\nenum arm, no painter match, no registry. If it does, the trait or `AnimationFrame` is wrong; fix the\nmodel, not the new file.\n\n`mod.rs` holds only what is genuinely common — the trait, the frame, easing shared by several\nanimations. Not a dumping ground: an animation's own timing belongs to that animation.\n\n**What moves, what stays.** `effects.rs` holds `Flash` :8, `Attention` :63, `Eased` :133, `Fade`\n:201, `Zoom` :394. `Fade` and `Zoom` are *surface* animations and move into `animation/`; `Flash`,\n`Attention` and `Eased` are per-widget effects (a press flash, an attention pulse, a smoothed value)\nwith different consumers, and stay. Re-export `Eased` from `animation/mod.rs` if the animations need\nit — reuse it, never write a second easing.\n\n**The app side already follows § 0b-bis** (`heca/src/chrome/expose/`: `mod.rs` host wiring — the\nonly file that may touch `AppState` — plus `model.rs`, `pane_card.rs`, `column_card.rs`,\n`workspace_row.rs`, `expose_grid.rs`, `testing.rs`). Keep that shape. Becoming an `Overlay` changes\n`mod.rs`, which is where host wiring belongs, and must not push presentation into the component\nfiles or geometry into `mod.rs`.\n\n**Sizes stay shares.** § 0b: a composition that multiplies model numbers by a scale of its own has\ntaken over the layout engine's job. An animation's `scale` is a PAINT transform\n(`PaintCx::with_scale`), never a layout number — animating a surface must not reintroduce computed\npixels into the exposé, which took seven attempts to remove.\n\n═══ WHAT MUST SURVIVE — every one found by DRIVING, none by tests ═══\n- A finished LEAVE rests at `from`, not back at life size (else the cards flash to full size as they\n  fade — F003/P082/T327).\n- Re-showing a surface that is LEAVING must not cancel its exit. The exposé hits this on the\n  ordinary path: it dismisses itself and THEN focuses the pane you chose, and focusing rebuilds the\n  map mid-exit.\n- The tick that ENDS an exit must still request a frame, to paint the absence — otherwise the last\n  frame drawn still shows the surface faintly until some other input forces a repaint.\n- A dissolving surface holds no input (`is_active`), and removal waits for the WHOLE exit.\n- `add_named`'s in-place replacement keeps a layer's place, its visibility AND its animation in\n  flight (a rebuild must not replay an arrival).\n\n═══ VERIFICATION ═══\nAnimation is visible behaviour: Antonio drives it. Green tests found NONE of the three exit bugs —\nall three came from tracing the running frame (per-layer `op`/`scale`, per frame) after three\ndiagnoses by inspection were each wrong. Instrument before concluding.\n\n═══ THE STANDING RULE THIS TASK EXISTS TO HONOUR ═══\nAntonio, repeatedly, 2026-08-19/20: \"don't make fix hardcoding code around. they should be\ncentralized. Don't let me repeat this other 100000 times\" · \"Please, as always, try to centralize\nresolutions. do not just fix the call\" · \"always think of extensibility, plugin authors, and\nreusability\". Before writing a fix at a call site, ask whether a second author would hit the same\nthing — if yes, it belongs in the model.\n\n---\n**Completion summary:**\nDONE 2026-08-21, driven and confirmed by Antonio (\"expose works\", \"all works good\"). NOT COMMITTED — the whole change is in the working tree.\n\nSHIPPED, as the API Antonio decided:\n- `heca-grid-ui/src/animation/` — `Animate` TRAIT (the extension point) + `Animation` VALUE a caller names: `Animation::{None, Fade, Zoom, ZoomFade, Custom}` with `Animation::of(mine)`, `.from(scale)`, `.seconds(s)`. One file per member: mod.rs (trait, `AnimationFrame{opacity,scale,offset}`, `smoothstep`, `AnimationFrame::apply` — the one place a frame becomes a picture), fade.rs, zoom.rs, sequence.rs (lag = a SHARE of the lead), zoom_fade.rs (the exposé's gesture, defined ONCE), vocabulary.rs, presence.rs.\n- No composition at a call site: the exposé is `.animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))`. FADE_OUT/ZOOM_IN/FADE_LAG deleted from expose/mod.rs.\n- No null object: `Presence` holds `Option<Box<dyn Animate>>`; `NoAnimation` deleted.\n- Verbs on the widget: `Overlay::{open, hide, toggle}` + `Component::{open, hide, toggle}`; build-time state is `.opened(bool)`. `Presence::{enter, leave, follow}` owns BOTH rules (entering something already up is not an arrival; entering something leaving does not resurrect it), so no host re-derives them — `LayerRegistry::show` is `l.visible = true; l.root_mut().open();`.\n- `LayerRegistry` lost `fade`/`zoom`/`set_fade_out`/`set_fade_out_after`/`set_zoom`; `paint_layers` no longer applies opacity/scale; the registry ticks its own roots and carries a `Presence` across a rebuild.\n- Declarative half: `WidgetKind::Overlay` + typed SDK builder + realize arm; ONE prop, `animation` (`\"fade\"` / `\"zoom_fade\"` …), unknown name ⇒ default.\n- Docs: `docs/widgets.md` (Animations section + rewritten Overlay entry, both audiences, incl. who calls open/hide for a mounted surface), AGENTS.md catalog.\n- Showcase: an animated `Overlay` to drive.\n- File splits agreed with Antonio: `widgets/overlay/{mod,place,chrome,tests}.rs` and `chrome/layers/{mod,layer,order,tests}.rs`, all under 600 lines.\n\nGates at completion: heca 575 / heca-grid-ui 253 / heca-view 20 / heca-view-realize 63, workspace clippy clean.",
+      "descriptionUpdatedAt": "2026-08-21T11:03:50.953Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-001-planned-in-progress",
+          "date": "2026-08-20T15:24:48.874Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-002-in-progress-done",
+          "date": "2026-08-21T11:03:50.951Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-001-animation-value-type-in-heca-grid-ui-fade-zoom-and-both-sequenced-with-the-lag-as-a-share",
+          "number": 1,
+          "title": "Animation value type in heca-grid-ui — fade, zoom, and both sequenced, with the lag as a share",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-002-exit-as-a-type-an-exit-is-over-only-when-every-effect-in-it-has-finished",
+          "number": 2,
+          "title": "Exit as a type: an exit is over only when every effect in it has finished",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-003-overlay-animation-one-builder-on-the-widget-no-id-and-no-registry",
+          "number": 3,
+          "title": "Overlay::animation(..) — one builder on the widget, no id and no registry",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-004-the-declarative-half-a-described-node-names-the-same-animation",
+          "number": 4,
+          "title": "The declarative half: a described node names the same animation",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-005-migrate-the-expos-and-layerregistry-onto-it-set-fade-out-after-set-zoom-stop-being-public",
+          "number": 5,
+          "title": "Migrate the exposé and LayerRegistry onto it; set_fade_out_after/set_zoom stop being public",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-006-antonio-drives-it-arrival-exit-and-a-rebuild-mid-exit",
+          "number": 6,
+          "title": "Antonio drives it: arrival, exit, and a rebuild mid-exit",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-007-animation-is-a-trait-not-an-enum-a-third-party-adds-one-with-no-change-to-heca-grid-ui",
+          "number": 7,
+          "title": "Animation is a TRAIT, not an enum — a third party adds one with no change to heca-grid-ui",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-008-animationframe-opacity-scale-offset-a-new-animation-needs-no-painter-change-the-painter-applies-it-in-one-place",
+          "number": 8,
+          "title": "AnimationFrame (opacity, scale, offset) — a new animation needs NO painter change; the painter applies it in ONE place",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-009-the-expos-becomes-an-overlay-instance-and-reuses-the-whole-api-anything-it-cannot-express-is-a-missing-overlay-builder",
+          "number": 9,
+          "title": "The exposé becomes an Overlay instance and reuses the whole API — anything it cannot express is a missing Overlay builder",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-010-noanimation-is-the-default-a-surface-that-declares-nothing-costs-nothing-and-needs-no-special-case",
+          "number": 10,
+          "title": "NoAnimation is the default — a surface that declares nothing costs nothing and needs no special case",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-011-animation-is-one-file-per-animation-fade-rs-zoom-rs-sequence-rs-none-rs-bounce-rs-with-mod-rs-for-the-trait-and-what-is-genuinely-shared",
+          "number": 11,
+          "title": "animation/ is one file per animation (fade.rs, zoom.rs, sequence.rs, none.rs, bounce.rs…) with mod.rs for the trait and what is genuinely shared",
+          "checked": true
+        },
+        {
+          "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5-check-012-adding-bounce-rs-must-touch-no-other-file-no-enum-arm-no-painter-match-no-registry-if-it-does-the-trait-is-wrong",
+          "number": 12,
+          "title": "Adding bounce.rs must touch NO other file — no enum arm, no painter match, no registry. If it does, the trait is wrong",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-20T15:24:48.874Z",
+      "completedAt": "2026-08-21T11:03:50.951Z",
+      "createdAt": "2026-08-20T14:05:13.632Z",
+      "updatedAt": "2026-08-21T11:03:50.951Z"
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-08-19T16:00:44.422Z",
-  "handoff": "# P082 — back on this phase, by PRIORITY; T444 part-built, uncommitted work in the tree\n\n**Created at / Updated at:** 2026-08-19.\n**Reason:** requested by Antonio. **Supersedes the 2026-08-18 handoff on this phase** — its ordering\nis what took the work off-priority, and three of the tasks it lists have since closed or moved.\n\n---\n\n## ⚠️ READ THIS FIRST — the process failure that made this handoff necessary\n\nThis phase was the active one, with **T444 in progress**, and the session left it: I started T447 on\nthe strength of the OLD handoff's prose ordering rather than the planner's priorities, then proposed\nfolding T447 into a **new phase in another feature** (F011/P094), and worked there instead.\n\nAntonio, 2026-08-19: *\"I asked to create a new feature for 3 but never said to start right there…\nT444 MUST be completed and all its phase and feature. You switched completely to another feature.\nthat's bad bad bad.\"* And: *\"P082 working order is also wrong. You need to do task by priority.\"*\n\n**Two rules that follow, and they are not negotiable:**\n1. **A phase is a unit to finish.** Do not open work in another feature while this one is active.\n2. **Order by the planner's `priority` field, never by a handoff's narrative.** A handoff explains;\n   it does not schedule.\n\nAlso settled this session: **`in-progress` means the task is PART-BUILT and still being carried** —\nnot \"someone is typing on it right now\". Do not reset such a task to `planned`; that throws the\nsignal away and makes it look untouched (T444 was reset and had to be put back).\n\n---\n\n## Current focus\n\n**T444 (priority 29, in-progress)** — *The identity rule is enforced — a warning, a test, and a\nrealize-time error*. Retitled and re-scoped this session; its description is now accurate.\n\n- **DONE, earlier:** `nav_key` → `key` (commit `0a06ef5`), and the derived identity\n  (`heca_grid_ui::nav::identity_of`, nav.rs:141). Its text used to claim the identity was still to\n  build; it was not.\n- **DONE, this session (UNCOMMITTED — see below):** icon-only controls have an identity at all.\n- **STILL OWED — the three enforcement pieces, none started:**\n  1. a **warning** when a container has two or more unkeyed children that derive the SAME name;\n  2. a **test over heca's own chrome**, so our rows stay keyed;\n  3. an **error at realize time** for a described node with a `press` inside a collection and no\n     `key` — the only piece that reaches a plugin author.\n\n## What was being done\n\nMaking icon-only controls nameable, which is what (1) above is meant to catch.\n\n**The finding that drove it:** only **four** widgets supplied `Component::text_summary` — `Label`,\n`Badge`, `BadgeButton`, `Tag`. `Icon` did not. So every icon-only control — every pane-header action,\nevery close button, every rail cell — resolved to `None` in `identity_of` and had **NO IDENTITY AT\nALL**. Nothing about it could be remembered: not a hint letter, not a cursor position, not a\nright-click target. (This also corrects an explanation given earlier in the session: the pane-header\nbuttons' letters did not \"drift because their content changed\" — they had no identity to drift.)\n\n**A second finding:** `glyph_from_name` (heca-view-realize) was a hand-written `match` of **36** arms\nbeside a `Glyph::ALL` of **52**. Sixteen glyphs — `caret_left`, `pencil`, `x_circle`,\n`folder_simple_plus`, `columns_plus_left` and the rest — could not be named from a description at\nall and silently rendered nothing.\n\n## Files touched — UNCOMMITTED, green, clippy-clean\n\nWorking tree on top of `8a540c8`, branch `feat/hint-anything-actionable`:\n\n- `heca-grid-ui/src/widgets/icon.rs` — **`Glyph::name()`**, exhaustive over all 52 variants, so a new\n  glyph cannot compile without a name. One source for two readers that had drifted apart.\n- `heca-view-realize/src/lib.rs` — `glyph_from_name` is now a **lookup over `Glyph::ALL`**; 36\n  hand-written arms deleted, 16 previously unreachable glyphs now work.\n- `heca-grid-ui/src/widgets/icon_button.rs`, `rail_cell.rs` — each reads its glyph's name in the\n  constructor (while the `Icon` is still typed) and returns it from `text_summary`.\n\n⚠️ **`Icon` itself deliberately does NOT implement `text_summary`.** It was tried and reverted: the\naccessible-name walk takes the **first child that answers**, so an `Icon` naming itself shadows the\n`Label` beside it — a `Choice` of `[Icon(Warning), Label(\"HIGH\")]` began reporting `\"warning\"`, and\n`Select::selected_label()` / `Tabs` broke. Two tests caught it. **Do not \"fix\" this by making `Icon`\nname itself.**\n\n⚠️ **A `Component::summary_is_picture()` predicate was proposed and REJECTED** — it is a fourth\nself-describing predicate, and `routes_own_subtree` / `takes_raw_keys` / `takes_text_input` were all\ndeleted for being exactly that. AGENTS.md: *\"Do not add a new self-describing predicate.\"* The\nresolution is the one above: the icon-only CONTROL names itself, the `Icon` stays silent.\n\n## How to resume\n\n1. `cargo test --workspace` and `cargo clippy --workspace --all-targets --all-features` — both were\n   green at handoff. Then decide whether to commit the above before continuing.\n2. Finish T444's three enforcement pieces, in that order. The warning's condition is **settled with\n   Antonio**: a container with two or more unkeyed children deriving the same name. It needs no\n   notion of \"iteration\" — `[Icon, Label]` never trips it, `[Row, Row, Row]` always does. On the\n   declarative side the signal is stronger (`WidgetKind` is real type information), which is why that\n   one is an **error** and the native one a **warning**.\n3. Then work **strictly down the priority list** (below).\n\n## Blockers\n\nNone on T444. Note **T327 (priority 4, status `waiting`)** is the highest-priority open item in the\nphase and is parked on something not investigated this session — establish what, before calling the\nphase finishable.\n\n## Next steps — THE PRIORITY ORDER (this is the schedule)\n\nAntonio, 2026-08-19: *\"t444 first then by priority.\"*\n\n| priority | status | task |\n|---|---|---|\n| — | in-progress | **T444** — the identity rule is enforced ← **finish this first** |\n| 4 | waiting | T327 — ShowLayer/HideLayer on-demand layers → a first native exposé |\n| 6 | planned | T417 — the layer stack becomes the surface TREE, z is a path |\n| 10 | planned | T421 — the exposé is laggy with many panes |\n| 11 | planned | T422 — the core's overview mode is dormant |\n| 18 | planned | T432 — Hint 4, `on_hint` becomes the override, a pick carries an `Intent` |\n| 20 | planned | T434 — Hint 6, the failing test first |\n| 21 | planned | T435 — Hint 7, a plugin can be picked from JSON |\n| 22 | planned | T436 — Hint 8, a plugin can own a picker |\n| 24 | planned | T438 — the sidebar's letter positions, never driven |\n| 25 | planned | T439 — finish breaking up `chrome/mod.rs` |\n| 31 | planned | T446 — click-to-focus by handler |\n| 33 | planned | T458 — positional `ws:`/`col:` ancestor keys |\n\n## Recent decisions\n\n- **T447 canceled**, folded into F011/P094/T451 (done, committed `8a540c8`): the pane is a retained\n  component that owns its letter, both pickers assign through `assign_letters`, the 48px host letter\n  pass is deleted. Six bugs were found by driving it — full record in T451's completion note.\n- **T445 done** — verified deliverable by deliverable against its own description, not assumed.\n- **T458 filed** — the positional ancestor keys had no task at all; the P082 handoff had left it\n  \"decide whether that is T444 or its own task\" and nobody decided.\n- **F011/P094 is PARKED** with its own handoff. Do not resume it until this phase and then the rest of\n  F003 are finished. Its T448 has a pre-flight and an open question for Antonio, and **no code**.\n- **The warning's condition** (ambiguity, not iteration) and **icon-only controls naming themselves**\n  were both agreed with Antonio in discussion before any code.\n\n## Reminder\n\nAntonio drives every visual check; green tests are not verification. Never commit unasked. During a\ndesign discussion write **zero** code — answer, then wait for an explicit go (broken twice this\nsession, both times called out). And this handoff **explains**; the `priority` field **schedules**.",
-  "handoffUpdatedAt": "2026-08-19T13:07:04.673Z",
+  "updatedAt": "2026-08-21T11:08:41.284Z",
+  "handoff": "# P082 — four tasks closed; T459 (Animation trait + Overlay) is next, and HOW TO WRITE CODE HERE\n\n> **Created at / Updated at:** 2026-08-20.\n> **Reason:** end of a long session. Four tasks closed, one filed. Read § 0 before touching anything.\n\n---\n\n# 0. ⛔ HOW CODE MUST BE WRITTEN HERE — read this first, every time\n\nAntonio corrected me on the same thing **five separate times** in one session. He said, verbatim:\n\n> *\"don't make fix hardcoding code around. they should be centralized. Don't let me repeat this\n> other 100000 times\"*\n> *\"Please, as always, try to centralize resolutions. do not just fix the call\"*\n> *\"always think of extensibility, plugin authors, and reusability\"*\n> *\"i'm really tired of you always doing this same SHIT. STOP\"*\n> *\"Damn I'm saying you all the time how i want you to reason while coding and you keep hardcoding\n> everytime not worried at all about reusability, extendibility... WHY??????\"*\n\n## 0.1 THE ONE QUESTION, BEFORE EVERY FIX\n\n**\"Would a second author hit this same thing?\"**\n\nIf yes → it belongs in the **model**, not at the call site. Say where the fix belongs and why\n*before* writing it, so he can stop you at that sentence rather than after the diff.\n\nThree worked examples from this session, all the same shape:\n\n| symptom | the call-site fix (WRONG) | the model fix (RIGHT) |\n|---|---|---|\n| sidebar toggles swapped their `prefix+/` letters | `.key()` on the `KeyHint` wrapper | `nav::identity_of` resolves **through transparent wrappers** — every wrapped control everywhere |\n| the map flashed back to full opacity mid-exit | a guard at the exposé's `show` call | `LayerRegistry::show` reads `arriving` for the fade as it already did for the zoom |\n| cards snapped to full size as they faded | special-case the exposé's last frames | `Zoom::amount` — a finished LEAVE rests at `from`, in `heca-grid-ui` |\n\nThe first version of **each** was written at the call site and rejected. Do not repeat this.\n\n## 0.2 ⭐⭐ RULE ZERO — write the line a PLUGIN AUTHOR would type\n\n```rust\nOverlay::new().panel(body).animation(Fade::new())   // ✅ one line, on the widget\n```\n\nIf a capability needs **a registry, an id, or a crate-private type**, that IS the bug — what exists\nis ceremony around a missing API. A **trait, not an enum**, whenever a third party might extend it:\nan enum cannot be extended without editing the host, which is precisely what a plugin cannot do.\n\n**The test for a good abstraction:** adding a new implementation must touch **no other file**. No\nenum arm, no painter `match`, no registry entry. If it does, the trait or its value type is wrong —\nfix the model, not the new file.\n\n## 0.3 FOLDER STRUCTURE — one file, one thing\n\n**Library (`heca-grid-ui`)** — a new family gets a folder, one file per member:\n\n```\nheca-grid-ui/src/animation/\n├── mod.rs        the TRAIT, the shared value type, shared helpers, re-exports\n├── fade.rs       one animation\n├── zoom.rs       one animation\n├── sequence.rs   the composition\n├── none.rs       the no-op default\n└── bounce.rs     … every future one is a NEW FILE, nothing else edited\n```\n\n`mod.rs` holds only what is *genuinely* common. It is not a dumping ground: an implementation's own\ntiming/state belongs to that implementation.\n\n**App surface (`heca/src/chrome/<surface>/`)** — AGENTS.md § 0b-bis, exactly:\n\n```\nmod.rs            host wiring — the ONLY file that may touch AppState\nmodel.rs          the session reduced to plain data\n<leaf>_card.rs    the smallest piece\n<group>_card.rs   composed of the leaf\n<row>.rs          composed of the group\n<surface>_grid.rs composed of the rows\ntesting.rs        #[cfg(test)] shared fixtures\n```\n\n`heca/src/chrome/expose/` already follows this. Keep it. Never `&AppState` outside `mod.rs` — it\nneeds a window, so a component taking it is a component nobody can test.\n\n**Where a thing lives:** if it can be built inside `heca-grid-ui`, it belongs there (§ 0b). A\ncomponent only leaves the library because it binds an **app concept** (an `Intent`, an action name,\na drag id, a chrome signal, a row's `key`).\n\n## 0.4 SIZES ARE SHARES, NEVER COMPUTED PIXELS\n\n`Length::Pct` of one shared denominator, or a `grow` weight. A composition that multiplies model\nnumbers by a scale of its own has taken over the layout engine's job — and then owns every term\n(window, margin, padding, gaps, row count, row heights, centring). The exposé did this: **seven\nattempts, six wrong, each missing a different term.**\n\nAn animation's `scale` is a **paint** transform (`PaintCx::with_scale`), never a layout number.\n\n## 0.5 MEASURE — and know what the measurement did NOT say\n\nThe phase rule is \"measure before fixing\", and it was right every time this session. But there is a\nsecond half I got wrong and it cost Antonio a broken app:\n\n> **Measuring WHERE the cost is is not the same as establishing that the work is UNNECESSARY.**\n\n`layout_layers` measured 2.8ms/frame. True. I concluded it was skippable. False —\n`sync_pane_headers` mutates bounds *after* the pass, so `compute` doubles as \"reset to natural\".\nSkipping it made the translate compound and the pane header walked off screen.\n\n**Three diagnoses by inspection were each wrong** on the exposé flash. The trace named it in one\nround, every time. Instrument the running frame (env-gated `eprintln!`, the `HECA_TRACE_PAD`\nprecedent); do not reason your way to a cause.\n\n**And check RELEASE before optimising anything.** T421's entire premise evaporated in a release\nbuild: taffy is heavily generic and debug runs 10–50× slower.\n\n## 0.6 VERIFICATION — green tests are not verification\n\nAntonio drives every visual check. Green tests found **none** of this phase's real bugs. When you\nadd a regression test, **verify it FAILS without the fix** — I shipped one that passed while the app\nwas still broken, because it asserted the wrong node's path.\n\n## 0.7 WAIT WHEN DISCUSSING\n\nA question mid-work is a question, **not** a go. Answer it, then wait. Write **zero** code while any\nquestion is open — including planner writes. \"Never commit unasked.\"\n\n---\n\n# 1. What shipped this session\n\n| task | what | commit |\n|---|---|---|\n| **T444** done | the identity rule is enforced — a warning, two chrome tests, a realize-time check, and `key`/`hintable` on the declarative side | `92e5b36` |\n| **T417** done | `LayerBand` deleted; z is a **path** through the surface tree; `current` context; overlays are children of their opener | `99d1ab4` |\n| **T327** done | the exposé's exit is one gesture and plays to the end (three bugs) | `4c8cb70` |\n| **T421** done | **closed as NOT A BUG** — measured to nothing; no lag in release | — |\n| **T459** filed | `Animation` TRAIT + `Overlay` owns appearing/disappearing + the exposé becomes an `Overlay` | — |\n\nBranch `feat/hint-anything-actionable`, pushed, tip `4c8cb70`.\nAlso committed: `4e42020` (build profile + `scripts/lint-changed.sh` + AGENTS.md build notes).\n\n**Gates:** heca 565 / 0 · heca-grid-ui 236 / 0 · `cargo clippy --workspace --all-targets\n--all-features` clean.\n\n---\n\n# 2. Current focus — T459 is next\n\n**`Overlay owns appearing, animating and disappearing — an Animation TRAIT, and the exposé becomes\nan Overlay`** (P082/T459). Its description is ~10k chars and is the execution context — **read it\nin full**, it carries the trait shape, `AnimationFrame`, the file layout, and every exit rule that\nmust survive.\n\nAntonio's own words on it:\n\n> *\"an animation must follow a Trait and Overlay should be able to animate delegating the animation\n> to the Animate api. The expose must be an instance of the Overlay or a child and reuse all the\n> Overlay API for animation, appearing etc...\"*\n> *\"animation and expose must follow the code structure described in AGENTS.md chrome/expose, and\n> for effects maybe animation/fade.rs, animation/bounce.rs etc… and animation/mod.rs for common\n> things if needed.\"*\n\n**Why it exists:** the capability is trapped in `LayerRegistry` (`pub(crate)`). Today an author\nwrites three registry calls while holding an id, and must know the sequencing rule themselves. A\nplugin can reach none of it. `Overlay` (`heca-grid-ui/src/widgets/overlay.rs`) has **no animation at\nall** — its whole surface is `panel` :584, `panel_boxed` :595, `panel_size` :625, `blocking` :655,\n`position` :662, `anchored` :672, `open` :718, `on_outside_click` :732.\n\n**The proof the API is real:** the exposé declares its animation exactly as a plugin would. If the\nexposé still needs something `Overlay` cannot express, **that is a missing `Overlay` builder** — add\nit to `Overlay`, never special-case the exposé.\n\n---\n\n# 3. How to resume\n\n1. `cargo test -p heca -p heca-grid-ui` and `cargo clippy -p heca -p heca-grid-ui --all-targets`.\n   **Scope cargo to the crates you touched** — `--workspace` costs 20+ minutes, and cargo takes an\n   exclusive lock on `target/`, so a second run blocks silently. Check `pgrep -fl \"cargo (test|clippy|build)\"`\n   before launching anything long. `./scripts/lint-changed.sh` does the scoping for you.\n2. Read T459 in full, then AGENTS.md § 0 / § 0b / § 0b-bis / ⭐⭐ RULE ZERO.\n3. Build `heca-grid-ui/src/animation/` first (trait + `AnimationFrame` + `Fade`/`Zoom`/`sequence`/\n   `none`), then `Overlay::animation`, then migrate the exposé, then the declarative half.\n4. After T459, the priority order is **T432 (18) → T434 (20) → T435 (21) → T436 (22) → T438 (24) →\n   T439 (25) → T446 (31) → T458 (33)**. Order by the planner's `priority` field, never by prose.\n\n---\n\n# 4. Files touched this session\n\n- `heca-grid-ui/src/nav.rs` — `ambiguous_identities`, `Ambiguity`, `through_wrappers`, `item_of`;\n  `identity_of` resolves through wrappers.\n- `heca-grid-ui/src/effects.rs` — `Zoom::is_leaving()`, and a finished LEAVE rests at `from`.\n- `heca-view/src/lib.rs` — `ViewNode::key`/`declared_key`, `unkeyed_collection_items`, `UnkeyedItem`.\n- `heca-view/src/build.rs` — `Style::key`, `Style::hintable`.\n- `heca-view-realize/src/lib.rs` — `key`/`hintable` read **generically** for every kind, beside\n  style and the `hint` event.\n- `heca/src/chrome/identity.rs` — **new**; reports each distinct finding once.\n- `heca/src/chrome/layers.rs` — `parent` replaces `band`; `z_path`; `current`/`context_stack`;\n  `is_leaving`; `show` respects `arriving`; `tick` requests the frame that paints an absence.\n- `heca/src/chrome/expose/mod.rs` — `set_fade_out_after`, `FADE_LAG`, mounts at `None`.\n- `heca/src/chrome/mod.rs` — `.key(action_name)` on the sidebar toggles; the identity warning.\n- `heca/src/chrome/{overlay,palette,pane_header}.rs`, `expose/expose_grid.rs`,\n  `providers/workspaces/mod.rs` — call sites + tests.\n- `docs/widgets.md`, `AGENTS.md` — § Identity destaled; `nav_key` → `key`.\n\n---\n\n# 5. Blockers\n\n**None.** T459 is fully specified and unblocked.\n\nNote `.DS_Store` is untracked and deliberately never committed.\n\n---\n\n# 6. Recent decisions\n\n- **`content_covered` is the layer's own declaration alone.** The `Modal`-band override went with\n  the band. Both paths that raise a decision-demanding overlay (`open_modal`, `insert_menu_layer`)\n  already declare `covers_content: true`. Forcing it centrally is what stopped the exposé telling\n  the truth about itself — it takes the keyboard **and** is a map of the panes.\n- **Only what you can act on gets an identity report** — `Base::activatable` natively, a bound\n  `press` declaratively. Without this the warning reports every transparent wrapper in the tree.\n- **A collection is 2+ siblings of one container**: same derived *name* over widgets, same\n  *`WidgetKind`* over a description.\n- **T421 closed by measurement.** No lag in release; development never exceeds 4–5 panes. A\n  `[profile.dev.package.\"*\"] opt-level = 2` line was offered and **declined as unnecessary**.\n- **`Base::scope_key` still exists** (T446). `docs/widgets.md` claimed it was gone; corrected. A\n  padding click must not move the cursor, which merging it would break.\n- **The build profile in `Cargo.toml` stays** (`incremental = false`, `debug = \"line-tables-only\"`).\n  Antonio: *\"cargo change can stay.\"*\n\n---\n\n# 7. Reminder\n\nAntonio drives every visual check; green tests are not verification. Never commit unasked. During a\ndesign discussion write **zero** code — answer, then wait for an explicit go. This handoff\n**explains**; the `priority` field **schedules**.\n\nAnd before every fix, out loud: **would a second author hit this? Then it goes in the model.**",
+  "handoffUpdatedAt": "2026-08-20T15:19:17.173Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-20T15-19-17-165Z.md",
+      "clearedAt": "2026-08-20T15:19:17.165Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-19T13-07-04-664Z.md",
       "clearedAt": "2026-08-19T13:07:04.664Z",
@@ -997,11 +1197,6 @@
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-14T09-00-07-832Z.md",
       "clearedAt": "2026-08-14T09:00:07.832Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-14T07-47-04-962Z.md",
-      "clearedAt": "2026-08-14T07:47:04.962Z",
       "reason": "superseded"
     }
   ],
