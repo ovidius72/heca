@@ -974,11 +974,42 @@ mod tests {
             surface_action(&surface, &modes, &components, &KeyCombo::parse("x")).is_some(),
             "the map's own delete key resolves in its own layer",
         );
+        // A key neither the map nor the `layer` floor claims. (Not `q` — that is the floor's, and
+        // key matching is case-insensitive on the name, so `Q` is the same key.)
         assert_eq!(
-            surface_action(&surface, &modes, &components, &KeyCombo::parse("Q")),
+            surface_action(&surface, &modes, &components, &KeyCombo::parse("w")),
             None,
             "and a key it does not claim falls through to the global map",
         );
+    }
+
+    /// **A way out of an overlay is declared once, for every layer** — in the `layer` floor, not in
+    /// each surface's own entry and not in the global map.
+    ///
+    /// The global map is the fallback for what nothing in front claimed, so a key there is taken
+    /// from the program in the pane whether or not an overlay is up. `close_overlay` shipped as a
+    /// global `q`, and `:q` in vim stopped at the colon — in every terminal, always (Antonio,
+    /// driving, 2026-08-20). Declared here it exists only while a layer holds the keyboard, which
+    /// is the same thing tmux's key tables do.
+    #[test]
+    fn closing_an_overlay_is_a_layer_key_never_a_global_one() {
+        let (modes, components) = defaults();
+        let layer = FocusedSurface::Layer {
+            name: Some("heca.expose".to_string()),
+        };
+        for key in ["q", "Ctrl+q"] {
+            assert_eq!(
+                surface_action(&layer, &modes, &components, &KeyCombo::parse(key)),
+                Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay { overlay: None })),
+                "{key} closes the overlay in front of you",
+            );
+            // …and in the scrolling area nobody claims it, which is what sends it to the program.
+            assert_eq!(
+                surface_action(&FocusedSurface::Panes, &modes, &components, &KeyCombo::parse(key)),
+                None,
+                "{key} belongs to the pane when no overlay is up",
+            );
+        }
     }
 
     /// A dock is consulted at two names, **placement before component**, so narrowing one seating

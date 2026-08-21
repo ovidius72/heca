@@ -22,6 +22,10 @@
 # Modifiers: Ctrl, Shift, Alt, Super (also accepts Win/Cmd).
 # Named keys: Enter, Tab, Escape, Backspace, ArrowLeft/Right/Up/Down.
 
+# Every `keys` value below takes **one combo, several comma-separated, or a list** — the three are
+# the same binding, in every table: `keys = "q"`, `keys = "q, Ctrl+q"`, `keys = ["q", "Ctrl+q"]`.
+# So one action reached by two keys is one entry, never a repeated block.
+
 [keys]
 # Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
 prefix = "ctrl+b"
@@ -140,18 +144,12 @@ swap_down  = "prefix+Ctrl+j"
 # ── System ──
 command_palette = "prefix+p"        # Open command palette (actions)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
-# Close the front-most overlay — the exposé, a dialog, a menu. A real action, so it is rebindable
-# here, listed in the palette and reachable over RPC. It takes no target: an overlay id is a runtime
-# counter nothing outside the process could name, so it closes whatever is in front, and does
-# nothing when there is none.
-#
-# NB: `Escape` is deliberately NOT in this list. Escape acts on the surface that holds the keyboard
-# (F003/P082/T428) — a layer closes itself, a focused dock hands the keyboard back, and in the
-# scrolling area it reaches the program running in the pane. A *global* Escape would beat all three,
-# which is exactly what it did: it closed nothing while a dock was focused, because no overlay was
-# up, and the keyboard stayed stranded in the dock. These two keys are global on purpose — they
-# close the front-most layer from anywhere, and nothing else claims them.
-close_overlay   = ["q", "Ctrl+q"]
+# NB: `close_overlay` is NOT bound here. Closing an overlay is a **surface** key, and it lives in
+# the `layer` floor further down — see the `[[keys.mode]] name = "layer"` block. Bound globally, its
+# keys are taken from the program running in the pane whether or not an overlay is up: `q` shipped
+# here, and `:q` in vim stopped at the colon, in every terminal, always (Antonio, driving,
+# 2026-08-20). Escape is not here either, and for the same reason — a key that acts on the surface
+# in front of you belongs to that surface, never to everyone.
 
 
 
@@ -504,6 +502,27 @@ args = { target = "pane", axis = "y", amount = "-40" }
 # PANE and, while a dock is focused, are aimed at the dock too — one binding, one
 # meaning: scroll whatever has the keyboard. Horizontal takes the same four keys with
 # Alt, since a terminal viewport has no horizontal axis to share them with.
+# ── layer ── (entered by an overlay being SHOWN — no trigger of its own)
+#
+# The twin of `focus` below, for the other kind of surface that holds the keyboard: a layer — the
+# exposé, a dialog, a menu, a plugin's panel. What is written here applies to **every** layer, so a
+# way out is declared once instead of copied into each surface's own `[[keys.surface]]` entry (and
+# a plugin's surface gets it for free, which is the point).
+#
+# It is also why these keys are not global. While no overlay is up they do not exist, so the
+# program in the pane keeps them: `q` closes the map, and `:q` still quits vim. `Ctrl+q` is
+# `quoted-insert` in emacs and readline, which a global binding would shadow everywhere.
+#
+# `Escape` is asserted over whatever is written here and cannot be unbound — a surface must always
+# have a way out. Add further keys; you cannot remove that one.
+[[keys.mode]]
+name = "layer"
+trigger = ""
+sticky = true
+[[keys.mode.bindings]]
+action = "close_overlay"
+keys = ["q", "Ctrl+q"]
+
 [[keys.mode]]
 name = "focus"
 trigger = ""

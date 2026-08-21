@@ -374,7 +374,7 @@ pub fn build_keymap(
     // parameterized global binding is not a second resolution path.
     for binding in &merged_bind {
         let action = action_ref_from_config(&binding.action, &binding.args);
-        for key_str in binding.keys.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        for key_str in binding.keys.keys() {
             let written = Written {
                 action: &binding.action,
                 layer: "[[keys.bind]]",
@@ -633,15 +633,17 @@ pub fn build_component_keymaps(
         }
         for binding in &layer.bind {
             let (id, action) = component_action(&layer.name, &binding.action, &binding.args);
-            bind_with_conflict_tracking(
-                &mut keymap,
-                &layer_name,
-                KeyCombo::parse(&binding.keys),
-                action,
-                Written { action: &id, layer: &bind_label, key: binding.keys.trim() },
-                conflicts,
-                index,
-            );
+            for key_str in binding.keys.keys() {
+                bind_with_conflict_tracking(
+                    &mut keymap,
+                    &layer_name,
+                    KeyCombo::parse(key_str),
+                    action.clone(),
+                    Written { action: &id, layer: &bind_label, key: key_str },
+                    conflicts,
+                    index,
+                );
+            }
         }
         for combo in layer.unbind.keys() {
             unbind_and_deindex(&mut keymap, &layer_name, &label, combo, index);
@@ -702,19 +704,24 @@ pub fn build_modes(
             // Same rule as the flat bindings: an unresolvable name is a Dynamic ref, not a dropped
             // binding. A mode binding's `args` become the Intent's args.
             let action = action_ref_from_config(&binding.action, &binding.args);
-            bind_with_conflict_tracking(
-                &mut mode_map,
-                &mode_cfg.name,
-                KeyCombo::parse(&binding.keys),
-                action,
-                Written {
-                    action: &binding.action,
-                    layer: &label,
-                    key: binding.keys.trim(),
-                },
-                conflicts,
-                index,
-            );
+            // **One action, however many keys reach it** — `keys = ["q", "Ctrl+q"]`, a
+            // comma-separated string, or a single combo. The same `BindingValue` every other
+            // binding table takes, so a mode block does not need a repeated entry per key.
+            for key_str in binding.keys.keys() {
+                bind_with_conflict_tracking(
+                    &mut mode_map,
+                    &mode_cfg.name,
+                    KeyCombo::parse(key_str),
+                    action.clone(),
+                    Written {
+                        action: &binding.action,
+                        layer: &label,
+                        key: key_str,
+                    },
+                    conflicts,
+                    index,
+                );
+            }
         }
         assert_escape_floor(&mut mode_map, &mode_cfg.name, conflicts, index);
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
@@ -1251,6 +1258,7 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
+    use heca_config::keys::BindingValue;
     use super::{
         action_ref_from_config, bind_global_focus, binding_arg_problems,
         build_component_keymaps, build_keymap, build_modes, build_registry, build_widget_keymap,
@@ -2185,7 +2193,7 @@ mod tests {
             sticky: true,
             bindings: vec![heca_config::theme::ModeBindingConfig {
                 action: "scroll_page_up".to_string(),
-                keys: "PageUp".to_string(),
+                keys: BindingValue::Single("PageUp".to_string()),
                 args: HashMap::new(),
             }],
         }];
@@ -2210,7 +2218,7 @@ mod tests {
             sticky: true,
             bindings: vec![heca_config::theme::ModeBindingConfig {
                 action: "scroll_to_top".to_string(),
-                keys: "Escape".to_string(),
+                keys: BindingValue::Single("Escape".to_string()),
                 args: HashMap::new(),
             }],
         }];
@@ -2257,12 +2265,57 @@ mod tests {
         );
     }
 
+    /// **One action, however many keys reach it — in every binding table.**
+    ///
+    /// `keys` takes one combo, several comma-separated, or a list, and the three are the same
+    /// binding. It was a bare `String` in `[[keys.mode.bindings]]` alone, so a mode block needed a
+    /// repeated entry per key while `[keys]` beside it took a list — the same capability spelled
+    /// two ways in two tables (Antonio, 2026-08-21: *"why not `keys = ["q", "Ctrl+q"]`?"*).
+    #[test]
+    fn a_binding_takes_one_key_a_list_or_a_comma_separated_string() {
+        let mode_with = |keys: BindingValue| {
+            let mut config = heca_config::theme::Config::default();
+            config.keys.mode.push(heca_config::keys::KeyModeConfig {
+                name: "spelling".to_string(),
+                trigger: "".to_string(),
+                sticky: true,
+                bindings: vec![heca_config::keys::ModeBindingConfig {
+                    action: "close_overlay".to_string(),
+                    keys,
+                    args: Default::default(),
+                }],
+            });
+            let (modes, _) = build_modes(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+            let map = modes.get("spelling").expect("the mode");
+            ["q", "Ctrl+q"].map(|k| {
+                map.resolve_builtin("spelling", &KeyCombo::parse(k))
+                    == Some(&WmAction::CloseOverlay { overlay: None })
+            })
+        };
+
+        assert_eq!(
+            mode_with(BindingValue::Many(vec!["q".into(), "Ctrl+q".into()])),
+            [true, true],
+            "a list binds every key in it",
+        );
+        assert_eq!(
+            mode_with(BindingValue::Single("q, Ctrl+q".into())),
+            [true, true],
+            "…and so does one comma-separated string",
+        );
+        assert_eq!(
+            mode_with(BindingValue::Single("q".into())),
+            [true, false],
+            "…while a single combo binds exactly itself",
+        );
+    }
+
     /// **`Escape` must not be a global binding** (F003/P082/T428). The global map is the fallback
     /// for what no surface in front claimed, so an `Escape` in it outranks all three floors at once
     /// — which is how `close_overlay` came to eat the key while a dock held the keyboard, closing
     /// nothing because no overlay was up.
     ///
-    /// The two keys that *are* global stay global: they close the front-most layer from anywhere.
+    /// **Nor is `close_overlay`**, for exactly the same reason — see below.
     #[test]
     fn escape_is_never_a_global_binding() {
         let keymaps = super::build_keymaps(
@@ -2275,13 +2328,27 @@ mod tests {
             None,
             "Escape belongs to the surface that holds the keyboard, never to the whole app",
         );
-        assert_eq!(
-            keymaps
-                .flat
-                .resolve_builtin("global", &KeyCombo::parse("q")),
-            Some(&WmAction::CloseOverlay { overlay: None }),
-            "and the keys that are global keep working from anywhere",
-        );
+        // **And neither is a way out of an overlay.** `close_overlay` shipped as a global `q` +
+        // `Ctrl+q`, so both were taken from the program in the pane whether or not an overlay was
+        // up: `:q` in vim stopped at the colon, in every terminal (Antonio, driving, 2026-08-20).
+        // They live in the `layer` floor now, which is consulted only while a layer holds the
+        // keyboard — and `Ctrl+q` is `quoted-insert` in emacs and readline, so shadowing it
+        // globally was wrong twice over.
+        for key in ["q", "Ctrl+q"] {
+            assert_eq!(
+                keymaps.flat.resolve_builtin("global", &KeyCombo::parse(key)),
+                None,
+                "{key} belongs to the program in the pane, not to the whole app",
+            );
+            assert_eq!(
+                keymaps
+                    .modes
+                    .get(crate::app::input::LAYER_FLOOR)
+                    .and_then(|m| m.resolve_builtin(crate::app::input::LAYER_FLOOR, &KeyCombo::parse(key))),
+                Some(&WmAction::CloseOverlay { overlay: None }),
+                "{key} closes the front-most overlay while one holds the keyboard",
+            );
+        }
     }
 
     /// The index is what `--keys-show` and every tooltip read, so it must carry the **qualified** id
@@ -2405,7 +2472,7 @@ mod tests {
         use heca_config::theme::ModeBindingConfig;
         let bind = |action: &str, keys: &str, cmd: &str| ModeBindingConfig {
             action: action.to_string(),
-            keys: keys.to_string(),
+            keys: BindingValue::Single(keys.to_string()),
             args: HashMap::from([("command".to_string(), cmd.to_string())]),
         };
         let shipped = heca_config::theme::SurfaceKeysConfig {
@@ -2508,7 +2575,7 @@ mod tests {
             sticky: true,
             bindings: vec![ModeBindingConfig {
                 action: "resize_increase".to_string(),
-                keys: "x".to_string(),
+                keys: BindingValue::Single("x".to_string()),
                 args: HashMap::new(),
             }],
         });
