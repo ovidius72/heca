@@ -17,7 +17,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[`ComponentExt`](#componentext--what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Search](#search--matching-ranking-by-use-and-query-history)**
+- [Foundations](#foundations) — `Base`, `Component`, **[the event model](#the-event-model--the-framework-resolves-the-pointer-and-walks-the-tree)**, builder traits (incl. **[`ComponentExt`](#componentext--what-every-widget-gets)**), `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, **[the glow model](#the-glow-model--who-owns-what)**, **[the focus model](#the-focus-model--ring-visibility)**, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`, **[Animations](#animations--how-a-surface-arrives-and-leaves)**, **[Search](#search--matching-ranking-by-use-and-query-history)**
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
@@ -340,7 +340,7 @@ on a right press is what lets the context menu open. `Yes` is not private: it te
 the input is spent.
 
 > **Claim what you act on, and nothing else.** An overlay once returned `Yes` for every key it was
-> offered, including ones it ignored. `q` — catalogued, and bound globally to `close_overlay` —
+> offered, including ones it ignored. `q` — catalogued, and bound to `close_overlay` in the `layer` floor —
 > did nothing at all while a layer was up, because the layer swallowed it before the host could
 > resolve it.
 
@@ -1085,6 +1085,66 @@ A "needs attention" pulse: `Attention::new()`; `.trigger(pulses)` runs a fixed n
 sawtooth flashes (snap to `1.0`, fade to `0.0`, repeat) then stops; `.tick(dt)` (`true` while
 pulsing), `.amount()` (0–1), `.is_active()`. Used by [`Row.attention`](#row) — the widget
 flashes; the host plays any **sound** (the library is audio-free).
+
+### Animations — how a surface arrives and leaves
+
+`Flash` and `Attention` are things a widget does to **itself** while it is present. An **animation**
+is something done to a whole **surface** as it comes and goes.
+
+**A caller names one. Nobody composes one at a call site.**
+
+```rust
+Overlay::new().panel(body).animation(Animation::Fade)
+Overlay::new().panel(body).animation(Animation::ZoomFade)           // the exposé's gesture
+Overlay::new().panel(body).animation(Animation::Zoom.from(0.8))     // tuned
+Overlay::new().panel(body).animation(Animation::of(MyWhirl::new())) // …or one you wrote
+```
+
+| | |
+|---|---|
+| `Animation` | The vocabulary: `None` (the default — a cut) · `Fade` · `Zoom` · `ZoomFade` · `Custom`, built with **`Animation::of(impl Animate)`**. Tuners: `.from(scale)` (how far away it starts — below `1.0` grows in from smaller, above it pulls back from larger) and `.seconds(s)`; a built-in with no such dimension, and a `Custom` one, are returned unchanged. The variants are also the **names a description writes** (`"zoom_fade"`) — one builder, both authors |
+| `Animate` | The **trait**, and the extension point: `enter()` / `leave()` begin an arrival and an exit · `cancel()` settles fully present · `tick(dt) -> bool` advances it · `is_leaving() -> bool` says whether the surface may be taken away yet · `frame() -> AnimationFrame` is what to draw · `duration() -> f32` (default `0.0`) is how long one gesture takes |
+| `AnimationFrame` | `{ opacity, scale, offset }` — the whole vocabulary a surface's presentation needs, plus `IDENTITY`, `over(other)` (compose: multiply, and add the offsets) and `apply(cx, origin, f)`, **the one place a frame becomes a picture** |
+| `Presence` | Whether a surface is up, plus the **`Option<Box<dyn Animate>>`** carrying it — `enter()` / `leave()` (which own the two rules below), `follow(open)` for a signal-driven surface, `assume_open(open)` (adopt without playing — a surface born open, or one carried across a rebuild), `is_open()`, `is_animated()`, `is_leaving()`, `tick(dt)`, `frame()`. **No animation is an absence, not a null object**: nothing is ever mid-gesture, so nothing waits for it |
+
+The parts behind the names are public too — `Fade` (`new()` both ways, `out()` for a cut in and a
+dissolve out, `.seconds`), `Zoom` (`.from`, `.seconds`), `Sequence::new(lead, follow).lag(share)`
+and `ZoomFade` — but reach for them only to build a gesture the vocabulary does not have. `Sequence`
+is where "the dissolve **rides** the movement, lagging by a *share* of it" lives: a share, never a
+second duration, so tuning the lead keeps the sequencing.
+
+**Two rules you never write twice.** Entering a surface that is already up is not an arrival (a
+rebuilt surface must not zoom open again), and entering one that is **leaving** does not resurrect
+it (a re-open mid-exit made the map snap back to full opacity and start leaving again). Both live in
+`Presence`, so every host — the layer stack, a plugin panel host, a composing widget — gets them for
+free.
+
+**Writing one is a single new file.** `heca-grid-ui/src/animation/` is one file per animation
+(`fade.rs`, `zoom.rs`, `sequence.rs`, `zoom_fade.rs`, and `vocabulary.rs` for the names). A **third party** adds nothing
+anywhere: they implement `Animate` in their own crate and pass `Animation::of(..)`. A built-in
+shipped *by this library* is a new file plus one arm in `Animation` — the name is the only thing
+written down. Either way nothing in the painter, the widgets or any host changes:
+
+```rust
+/// A surface that swings in from the left. Nothing else in the library knows this type exists.
+impl Animate for SlideIn {
+    fn enter(&mut self)  { self.leaving = false; self.left = Some(self.duration); }
+    fn leave(&mut self)  { self.leaving = true;  self.left = Some(self.duration); }
+    fn cancel(&mut self) { self.leaving = false; self.left = None; }
+    fn tick(&mut self, dt: f32) -> bool { /* count down; true while going */ }
+    fn is_leaving(&self) -> bool { self.leaving && self.left.is_some() }
+    fn frame(&self) -> AnimationFrame { AnimationFrame::offset(self.x(), 0.0) }
+    fn duration(&self) -> f32 { self.duration }
+}
+```
+
+If a new animation ever makes you touch a second file, `AnimationFrame` is missing a channel — widen
+it **once**, here, where every surface picks it up at the same time.
+
+**A frame is a paint transform, never a layout number.** The tree is laid out once, at life size;
+opacity, scale and offset are applied to the picture on the way out through `PaintCx`. Nothing is
+re-measured, no bounds move — so a surface mid-animation is still exactly where its bounds say, and
+hit-testing, focus and drag are untouched.
 
 ### Search — matching, ranking by use, and query history
 
@@ -3655,8 +3715,8 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   the chrome around it. `.panel_boxed(Box<dyn Component>)` takes a mapper-produced panel (e.g.
   `heca`'s `realize(ViewNode)`).
 - **Builders**: `.blocking(bool)` (default `true` — scrim + swallow outside input; `false` = no
-  scrim, outside input falls through), `.open(bool)`,
-  `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
+  scrim, outside input falls through), `.opened(bool)` (the **initial** state — see *Showing and
+  hiding* below), `.on_outside_click(impl Fn())` (standalone dismissal hook; a composing widget applies its own
   policy instead).
 - **Positioning**: `.position(OverlayPosition)` picks how the panel is placed —
   `OverlayPosition::Center` (default: fill the viewport, taffy-center the panel — the modal
@@ -3684,8 +3744,74 @@ semantics itself: nested-overlay-first routing, outside-click callback, blocking
   **Why it matters:** a [`ScrollRegion`](#scrollregion) only scrolls when its parent *bounds* it. An
   unsized panel grows with its content, so a long body never overflows and no scrollbar appears.
   Size the panel and the body can scroll inside it.
+- **Arriving and leaving**: `.animation(Animation)` — see
+  [Animations](#animations--how-a-surface-arrives-and-leaves). The `Overlay` owns appearing and
+  disappearing as a *concept* and hands the **how** to the animation, so showing and hiding stop
+  being instant: a dismissed overlay stays on screen, **inert**, until its exit has played out.
+  Unset ⇒ a cut, which costs nothing.
+  ```rust
+  Overlay::new().panel(body).animation(Animation::Fade)
+  Overlay::new().panel(body).animation(Animation::ZoomFade)           // the exposé's gesture
+  Overlay::new().panel(body).animation(Animation::Zoom.from(0.8))     // tuned
+  Overlay::new().panel(body).animation(Animation::of(MyWhirl::new())) // …or one you wrote
+  ```
+  **One builder, both authors** — a description names the same animation, because `Animation`'s
+  variants *are* the vocabulary:
+  ```jsonc
+  { "kind": "overlay",
+    "props": { "blocking": true, "open": true, "animation": "zoom_fade" },
+    "children": [ { "kind": "panel", "props": { "title": "MAP" }, "children": [ … ] } ] }
+  ```
+  ```rust
+  // …or through the typed SDK (heca-view):
+  build::Overlay::new()
+      .animation(ViewAnimation::ZoomFade)
+      .child(build::Panel::new().title("MAP").child(build::Label::new("…")))
+  ```
+  **Input follows open; painting follows the gesture.** A leaving surface holds no input — it is
+  not focusable, occludes nothing and hit-tests to nothing — while it keeps being drawn. (Counting a
+  dissolving map as coverage refused every act on the pane it exists to let you choose.)
+- **Showing and hiding**: `open()` / `hide()` / `toggle()` — on the widget, and on `Component` so a
+  host can drive one it only holds as `Box<dyn Component>`. All three are safe at any time: opening
+  something already up is not an arrival, and one already on its way out is not resurrected (those
+  rules live in `Presence`, so no caller repeats them).
+  ```rust
+  let mut o = Overlay::new().panel(body);                       // no animation — that is fine
+  let mut o = Overlay::new().panel(body).animation(Animation::ZoomFade);
+
+  o.open();     // animation declared? it plays. None? it is simply up.
+  o.hide();     // animation declared? the exit begins, and it stays on screen, inert, until the
+                // gesture has played out. None? it is gone now.
+  o.toggle();
+  ```
+  `.opened(bool)` is the **build-time** state: a surface born open is already there and plays no
+  arrival. `open_signal()` is the same fact as a signal, which is how a *composing* widget drives it
+  ([`Dialog`](#dialog)'s buttons flip it); `Overlay::tick` follows the signal, so a flip is an
+  arrival or a dismissal exactly as the verbs are.
+- **Who calls them for a mounted surface** — in `heca`, the **layer stack**, not the surface itself.
+  The exposé is the worked example, and it calls none of the three:
+  1. `prefix+Tab` → `WmAction::ToggleLayer { name: "heca.expose" }` →
+     `handlers::handle_layer_visibility`.
+  2. That **rebuilds** the surface first — `chrome::rebuild_named_layer(state, name)`, which calls
+     `expose::register(state)`: the content is structural (a pane opened, a column went), and a
+     signal replaces a value, never a child. `register` is the only part that touches `AppState`; it
+     gathers the session and calls `expose::map(..)`, which builds the `Overlay` — that returned
+     `Box<dyn Component>` is the layer's **root**.
+  3. Then `LayerRegistry::show(id)` marks the layer visible and calls `l.root_mut().open()` — the
+     `Overlay` from step 2. `hide(id)` calls `root.hide()` and keeps the layer mounted while
+     `is_leaving()`.
+  4. A rebuild *while it is up* hands the old tree's `Presence` to the new one, so an arrival
+     already played does not play again and one still in flight carries on.
+
+  A surface that is **not** a layer — a popover inside a page — is driven directly: hold it (or its
+  `open_signal`) and call `open()` / `hide()` / `toggle()` yourself.
 - **Accessors**: `.open_signal() -> Signal<bool>`; `.panel_bounds() -> Rectangle` (valid after
-  layout).
+  layout); `.presence()` / `.presence_mut()` (`Component`) — the surface's arrival and exit as one
+  value, which is how a host carries a gesture across a **rebuild**: swap the `Presence` into the
+  fresh tree and an arrival already played does not play again, while one still in flight carries on.
+- **Declarative kind**: `WidgetKind::Overlay`. Its `children` are the panel — one child *is* the
+  panel, several are stacked into one. Props: `blocking`, `open`, `animation`. Placement is
+  host-only (an anchored overlay carries a host-computed trigger rect).
 - **Contract**: `focusable`/`overlay_active` only while open (host overlay scan);
   `overlay_occludes` = whole viewport when blocking, else the panel rect.
 - **Shared panel chrome**: `paint_panel_chrome(cx, rect, PanelChrome { border, glow, elevation })` is the single
@@ -4466,6 +4592,7 @@ and a bad value costs only itself: the good props on the same node still apply.
 | `Surface` | (container — children only) | — |
 | `Panel` | `text` (the heading; omit it and no header row is drawn) + children | — |
 | `Scroll` | `axes` (`vertical` / `horizontal` / `both`, default vertical) + children | — |
+| **`Overlay`** | `blocking` (Bool, default `true`), `open` (Bool), `animation` (`none` / `fade` / `zoom` / `zoom_fade`), **+ children** = the panel (one child *is* the panel; several are stacked into one) | — (dismissal is the host's) |
 | `Label` | `text`, `bold`, `italic`, `underline`, `strikethrough` (Bool) | — |
 | `Badge` / `Tag` / `Alert` | `text` | — |
 | **`Button`** | `variant`, `size`, **+ children** (the content); `text`, `icon` = the **childless sugar** | `press` |

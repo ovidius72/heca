@@ -203,31 +203,21 @@ impl PaneRow<'_> {
         // Optional cwd row (folder icon + home-relative path), stacked between the name and
         // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
         // row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd.
+        // **One shape, shared with the exposé's card** (`components::FolderLine`): the map and the
+        // dock must not describe the same pane two different ways. The signals come back because a
+        // cwd changes without a rebuild — a `cd` updates the path in place, and
+        // `[settings] pane_show_cwd` turns the line on and off the same way.
         let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-        let show_cwd = ws_state.pane_show_cwd() && cwd_path.is_some();
-        let cwd_text = cwd_path
-            .as_deref()
-            .map(home_relative_path)
-            .unwrap_or_default();
-        // Readable, matching the sibling git-branch row (which colors its label
-        // `foreground`); `muted` was too dim for a primary info row.
-        let cwd_label = Label::new(cwd_text)
-            .color(theme.colors.foreground)
-            .font_scale(CARD_META_FONT_SCALE);
-        let cwd_signal = cwd_label.text_signal();
-        let cwd_row = Visibility::new(
-            Flex::row()
-                .align(Align::Center)
-                .gap(6.0)
-                .child(
-                    Icon::new(Glyph::Folder)
-                        .size(12.0)
-                        .color(theme.colors.foreground),
-                )
-                .child(cwd_label),
-            show_cwd,
-        );
-        let cwd_visible_signal = cwd_row.visible_signal();
+        let cwd_text = cwd_path.as_deref().map(home_relative_path);
+        let cwd = crate::components::FolderLine {
+            path: cwd_text.as_deref(),
+            show: ws_state.pane_show_cwd(),
+            font_scale: CARD_META_FONT_SCALE,
+            theme,
+        }
+        .build();
+        let show_cwd = ws_state.pane_show_cwd() && cwd_text.is_some();
+        let (cwd_row, cwd_signal, cwd_visible_signal) = (cwd.widget, cwd.text, cwd.visible);
         // The pane's identity row (status dots + program icon + name) — shared by every card
         // layout so the cwd and git rows just stack beneath it in one column.
         let name_row = Flex::row()

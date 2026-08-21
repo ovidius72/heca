@@ -44,7 +44,8 @@
 
 use crate::{
     Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
-    ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity, ViewSize,
+    ViewAnimation, ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity,
+    ViewSize,
     ViewTextAlign, ViewVariant,
     WidgetKind,
 };
@@ -475,6 +476,17 @@ builder!(
     DockFrame => DockFrame
 );
 builder!(
+    /// **A surface over the page**: a scrim, a panel holding the children, and how it arrives and
+    /// leaves ([`animation`](Overlay::animation)).
+    ///
+    /// ```ignore
+    /// Overlay::new()
+    ///     .animation(ViewAnimation::ZoomFade)
+    ///     .child(Panel::new().title("MAP").child(Label::new("…")))
+    /// ```
+    Overlay => Overlay
+);
+builder!(
     /// A row of column/pane markers.
     MarkerGroup => MarkerGroup
 );
@@ -498,6 +510,7 @@ impl Parent for Panel {}
 impl Parent for Surface {}
 impl Parent for ItemGroup {}
 impl Parent for DockFrame {}
+impl Parent for Overlay {}
 impl Parent for MarkerGroup {}
 impl Parent for Tabs {}
 impl Parent for Choice {}
@@ -948,6 +961,27 @@ impl Panel {
     /// The heading above the rule.
     pub fn title(self, text: impl Into<String>) -> Self {
         self.prop("title", PropValue::Text(text.into()))
+    }
+}
+
+impl Overlay {
+    /// **How it arrives and leaves.** Unset, it cuts.
+    ///
+    /// These are the built-ins. An animation nobody named is a Rust type handed to
+    /// `heca_grid_ui::Overlay::animation`, which is what a plugin writing its own curve uses —
+    /// static data cannot carry a live object, so it names one instead.
+    pub fn animation(self, animation: ViewAnimation) -> Self {
+        self.prop("animation", animation)
+    }
+    /// Modal (the default): a dimming scrim, and outside input swallowed. Off, outside input falls
+    /// through to the page — a light-dismiss popover.
+    pub fn blocking(self, on: bool) -> Self {
+        self.prop("blocking", PropValue::Bool(on))
+    }
+    /// Whether it starts up. A surface **born** open is already there and plays no arrival; one
+    /// that *becomes* open arrives.
+    pub fn opened(self, on: bool) -> Self {
+        self.prop("opened", PropValue::Bool(on))
     }
 }
 

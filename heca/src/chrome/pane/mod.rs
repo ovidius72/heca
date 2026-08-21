@@ -43,6 +43,16 @@ pub(crate) struct RetainedPane {
 ///
 /// Nothing has to be released with them: a pane declares its pick **on itself**, so a tree that is
 /// gone simply has no declaration left. That is the whole reason the picker registers nothing.
+/// **The halo an ACTIVE surface wears** — radius and strength.
+///
+/// One definition, because two things draw it: the focused pane's own frame
+/// ([`shell`](self::shell)) and the card that stands for that pane in the exposé
+/// (`chrome::expose::PaneCard`). Written twice they drift, and the map stops looking like the app
+/// it is a picture of. Scaled by the theme's `glow_size` at the single `PaintCx` chokepoint like
+/// every other glow, so `glow_size = none` removes it with the rest.
+pub(crate) const ACTIVE_GLOW_RADIUS: f32 = 10.0;
+pub(crate) const ACTIVE_GLOW_STRENGTH: f32 = 0.55;
+
 pub(crate) fn clear_panes(state: &mut crate::app_state::AppState) {
     state.panes.clear();
 }

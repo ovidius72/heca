@@ -254,6 +254,14 @@ pub struct Theme {
     /// active frame: it answers *where would I land*, not *where am I*.
     #[serde(default)]
     pub workspace_previous_background: Option<Color>,
+    /// **The card `prefix+i` would return to** — the exposé's "you were just here", at card scale.
+    ///
+    /// The third scale, because a card is neither: bigger than a row, so a row's tint shouts on it;
+    /// far smaller than a workspace frame, so a frame's tint vanishes on it. Both were tried on the
+    /// map and both were wrong, in opposite directions (Antonio, driving, 2026-08-21). `None`
+    /// derives it — see [`effective_card_previous_background`](Self::effective_card_previous_background).
+    #[serde(default)]
+    pub card_previous_background: Option<Color>,
     #[serde(default)]
     pub shadow: Shadow,
     #[serde(default = "default_danger")]
@@ -630,6 +638,11 @@ const PREVIOUS_LIFT: f32 = 0.34;
 const WORKSPACE_ACTIVE_LIFT: f32 = 0.13;
 /// A derived **last-visited-workspace frame** — fainter again than the active one.
 const WORKSPACE_PREVIOUS_LIFT: f32 = 0.08;
+/// A derived **last-visited card** — between a row's mark and a whole frame's, because a card is
+/// between the two in size. A row's `0.34` shouts on a surface the size of a pane; a frame's `0.08`
+/// disappears on it. This is the value that stays findable at a glance across a grid of cards
+/// without competing with the one you are actually on.
+const CARD_PREVIOUS_LIFT: f32 = 0.22;
 
 impl Default for Theme {
     fn default() -> Self {
@@ -664,6 +677,14 @@ impl Theme {
         self.workspace_active_background.unwrap_or_else(|| {
             self.surface.lerp(self.accent, WORKSPACE_ACTIVE_LIFT)
         })
+    }
+
+    /// The **card** back-and-forth would return to, explicit or derived. See
+    /// [`card_previous_background`](Self::card_previous_background) for why a card has a scale of
+    /// its own.
+    pub fn effective_card_previous_background(&self) -> Color {
+        self.card_previous_background
+            .unwrap_or_else(|| self.surface.lerp(self.accent, CARD_PREVIOUS_LIFT))
     }
 
     /// The workspace back-and-forth would return to, explicit or derived — fainter than the active

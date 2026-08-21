@@ -36,8 +36,9 @@
 //! size. There is no fit to compute, nothing to cap, and nothing to scroll: a picture built out of
 //! shares of the window cannot overflow it.
 //!
-//! **The zoom *effect* is a different thing and stays**: `LayerRegistry::set_zoom` plays the map's
-//! open animation over any layer, a plugin's included.
+//! **The zoom *effect* is a different thing and stays** — it is declared on the surface itself
+//! ([`Overlay::animation`](heca_grid_ui::widgets::Overlay::animation)) and plays over any surface,
+//! a plugin's included. A paint transform is not a size: nothing is measured again.
 //!
 //! Panes are drawn as **boxes** for now: a border, the pane's name and its icon. A real snapshot
 //! needs a scene primitive `heca-grid-ui` does not have (its vocabulary is `Rect`, `Text`, `Icon`,
@@ -58,36 +59,13 @@ use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::reactive::{signal, SignalUpdate};
+use heca_grid_ui::animation::Animation;
 use heca_grid_ui::widgets::{KeyHintGroup, Overlay, Surface};
 use heca_grid_ui::Component;
 
 pub(crate) use expose_grid::ExposeGrid;
 pub(crate) use model::{model, ExposeWorkspace};
 pub(crate) use pane_card::{DispatchAction, ExposeCallbacks, ExposeDeleteKeys};
-
-/// How long the map takes to dissolve when it is dismissed, in seconds.
-/// How long the map takes to dissolve on the way out.
-///
-/// It **matches the shrink** ([`ZOOM_IN`]) rather than being shorter than it: a dissolve that
-/// finishes first leaves the last of the movement playing on an already-invisible surface, and one
-/// that finishes after leaves a still picture fading on nothing. Either reads as a step.
-const FADE_OUT: f32 = ZOOM_IN;
-/// How long the map takes to zoom out to its map size when it opens, in seconds.
-///
-/// niri's own overview animation is in this range; long enough to read as one picture pulling back
-/// and short enough that `prefix+Tab` never feels like waiting.
-const ZOOM_IN: f32 = 0.2;
-
-/// How much of the exit's **shrink** plays before the dissolve starts, as a share of it.
-///
-/// A share rather than a second duration, so the two cannot drift apart when either is tuned.
-///
-/// ⚠️ **Small.** At `0.66` the surface held fully opaque for two thirds of the shrink and then
-/// dropped — movement with no fade, then fade with no movement, and the step between them read as a
-/// flash on the way out (Antonio, driving, 2026-08-19). The dissolve has to **ride** the shrink,
-/// not follow it: one gesture, not two. A short lead is all that is wanted, so the surface is still
-/// solid as it starts to move.
-const FADE_LAG: f32 = 0.15;
 
 /// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
 /// constant so the layer, the config entry and the key lookup cannot drift apart.
@@ -238,6 +216,19 @@ pub(crate) fn map(
     Box::new(
         Overlay::new()
             .blocking(true)
+            // **The map names how it comes and goes, exactly as a plugin's surface would.**
+            //
+            // It opens by pulling back, the way niri's overview does — the same session seen from
+            // further away, rather than a different picture arriving. Antonio: *"The animation in
+            // niri is zoom-in/out not fade."* Going, the shrink leads and the dissolve rides it,
+            // which is what `ZoomFade` **is**: the gesture is defined once, in the library, so no
+            // surface composes it out of parts and none of them can drift.
+            //
+            // How far back is `[settings] overview_zoom_from`, not a constant here: `1 /
+            // overview_zoom` would start the cards at exactly life size, which is the truest
+            // reading and overshoots — at 2× the outer rows begin off-screen and rush in. The
+            // setting defaults to a gentler 1.3, and a user who wants the literal reading sets 2.0.
+            .animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))
             .panel_size(Length::Pct(1.0), Length::Pct(1.0))
             // **The panel is the frost's tint, not a lid.** The host stamps the blurred frame
             // under this layer (`LayerBackdrop::Frosted`), so the surface here is the background
@@ -251,7 +242,11 @@ pub(crate) fn map(
                     .pad_all(Spacing::Md)
                     .child(grid),
             )
-            .open(true),
+            // **Closed until the stack shows it**, which is what plays the arrival: `ShowLayer`
+            // rebuilds the map and then shows the layer, and showing states that the surface is
+            // open. A rebuild while it is already up carries the gesture over from the tree it
+            // replaces, so nothing replays.
+            .opened(false),
     )
 }
 
@@ -325,16 +320,24 @@ fn open_on(
 pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::LayerId> {
     let name = super::layers::layer_name(super::layers::HOST_OWNER, SURFACE)?;
     let programs = state.programs.clone();
-    let rows = model(&state.session, |pane| {
-        super::pane_info_view(
-            &programs,
-            &pane.title,
-            pane.custom_name.as_deref(),
-            Some(&pane.runtime),
-            false,
-        )
-        .title
-    });
+    // **Where each pane is, if the user asked for it** — `[settings] pane_show_cwd`, the same
+    // setting the sidebar's rows follow, read here because this is the file that may touch
+    // `AppState`. Off ⇒ the model simply carries no folder, and nothing below has a flag to pass on.
+    let folders = state.chrome_state.workspaces.pane_show_cwd();
+    let rows = model(
+        &state.session,
+        |pane| {
+            super::pane_info_view(
+                &programs,
+                &pane.title,
+                pane.custom_name.as_deref(),
+                Some(&pane.runtime),
+                false,
+            )
+            .title
+        },
+        folders,
+    );
     let theme = super::chrome_gui_theme(state);
     // **The map's own id, so its intents say the map made them.** Stamped `Keyboard` before, which
     // was indistinguishable from `prefix+j` typed at the session behind the map — and once the
@@ -389,31 +392,9 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // The map floats **over** the session, so the session has to still be there underneath — but
     // legibly out of focus. A flat fill made it a different screen; the blur makes it a lens.
     state.layers.set_backdrop(id, super::LayerBackdrop::Frosted);
-    // **Choosing a pane does not make the map vanish.** It dissolves while the app comes back into
-    // focus behind it, so the eye follows one picture becoming another instead of being cut to a
-    // different screen. A full-screen surface disappearing between two frames reads as a glitch.
-    // **The shrink leads and the dissolve follows it**, so the map reads as one surface going away
-    // rather than two effects running at once. The lag is a share of the shrink, not a second
-    // duration to keep in step with it: change `ZOOM_IN` and the sequencing still holds.
-    //
-    // This was tried on 2026-08-11 and reverted, because a layer was retired when its *fade*
-    // finished — so delaying the fade left the cards on screen after the map had gone (Antonio,
-    // driving). A layer's lifetime now follows the **whole** exit (`DynamicLayer::is_leaving`), so
-    // the delay is safe: nothing retires the surface until both halves have played out.
-    state
-        .layers
-        .set_fade_out_after(id, FADE_OUT, ZOOM_IN * FADE_LAG);
-    // **It opens by pulling back, the way niri's overview does** — the same session seen from
-    // further away, rather than a different picture arriving. Antonio: *"The animation in niri is
-    // zoom-in/out not fade."*
-    //
-    // How far back is `[settings] overview_zoom_from`, not a constant here: `1 / overview_zoom`
-    // would start the cards at exactly life size, which is the truest reading and overshoots — at
-    // 2× the outer rows begin off-screen and rush in. The setting defaults to a gentler 1.3, and a
-    // user who wants the literal reading sets 2.0.
-    state
-        .layers
-        .set_zoom(id, ZOOM_IN, state.session.options.overview_zoom_from as f32);
+    // **The animation is declared on the surface, in `map`** — one builder on the widget, exactly
+    // what a plugin writes. It used to be two `pub(crate)` calls on the registry here, holding a
+    // `LayerId` and knowing the sequencing rule; a plugin could reach none of it (F003/P082/T459).
     if was_visible {
         state.layers.show(id);
     }
@@ -432,13 +413,17 @@ mod tests {
         start: Option<PaneId>,
     ) -> (Box<dyn Component>, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
         let s = session();
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
         let sink = seen.clone();
         let emit: super::super::ChromeIntentEmitter =
             std::rc::Rc::new(move |intent| sink.borrow_mut().push(format!("{intent:?}")));
         let mut root = map(&rows, &theme, emit, start, &LayoutOptions::default(), &shipped_keys(), None);
+        // **Shown, as the layer stack shows it.** The map is built closed and opened by whoever
+        // mounts it (`LayerRegistry::show`), which is also what plays its arrival — so a test that
+        // never opens it is testing a surface nobody has raised.
+        root.open();
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
         (root, seen)
@@ -568,10 +553,11 @@ mod tests {
     #[test]
     fn a_row_carries_no_workspace_label() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
         let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), None);
+        root.open(); // as the layer stack shows it — see `built`
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
         // reaches the screen.
@@ -683,7 +669,7 @@ mod tests {
     fn the_assembled_map_stays_inside_the_window() {
         for (w, h) in [(1280.0, 800.0), (1900.0, 1200.0), (800.0, 600.0)] {
             let s = session();
-            let rows = model(&s, |p| p.title.clone());
+            let rows = model(&s, |p| p.title.clone(), false);
             let theme = GuiTheme::default();
             let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
             let mut root =
@@ -714,7 +700,7 @@ mod tests {
     #[test]
     fn the_map_owns_its_picker_and_every_card_is_a_target() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
         let mut root =

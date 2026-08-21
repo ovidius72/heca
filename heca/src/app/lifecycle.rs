@@ -123,15 +123,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         chrome_animating |= widgets.badge.tick(dt);
         chrome_animating |= widgets.scrollbar.tick(dt);
     }
-    // Tick every dynamically-registered layer (overlay dialogs, plugin panels) the same way,
-    // so a widget inside a layer — e.g. a modal button's tooltip reveal / hover flash — advances
-    // and keeps requesting frames instead of only updating when some other event forces a redraw.
-    // The layer system ticks all its layers; a new layer animates for free, no per-layer wiring.
-    for root in state.layers.visible_roots_mut() {
-        chrome_animating |= root.tick(dt);
-    }
-    // A layer dissolving on its way out: the registry owns the fade, because the layer is being
-    // taken away *by* the registry and its own tree cannot outlive the decision to remove it.
+    // Every dynamically-registered layer (overlay dialogs, plugin panels, the exposé) advances in
+    // one pass inside the registry: the widgets in a layer's tree — a modal button's tooltip
+    // reveal, a press flash — and the surface's own arrival or exit are the same frame, and the
+    // registry has to see the frame an exit *finishes* to retire the layer on it. A new layer
+    // animates for free, with no per-layer wiring.
     chrome_animating |= state.layers.tick(dt);
 
     let backend_poll = poll_backends(state);

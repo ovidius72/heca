@@ -1077,17 +1077,11 @@ pub(crate) fn paint_layers(
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     for layer in layers {
-        // A layer on its way out paints at falling opacity rather than vanishing between two
-        // frames, and a layer that declared a zoom paints at its current scale. `PaintCx` applies
-        // both to every command it emits, so the layer's own widgets know nothing about either —
-        // they are things done *to* a surface.
-        //
-        // The zoom's fixed point is the middle of the window: an overview belongs to the whole
-        // screen, so it grows from and shrinks toward the centre rather than a corner.
-        let centre = Point::new(w as f64 / 2.0, h as f64 / 2.0);
-        cx.with_opacity(layer.opacity(), |cx| {
-            cx.with_scale(layer.scale(), centre, |cx| heca_grid_ui::paint_child(layer.root(), cx))
-        });
+        // **A surface's arrival and exit are its own** — an `Overlay` paints itself under its
+        // `Animation`'s frame, about its own centre, so this pass simply draws each layer. The
+        // host used to apply the opacity and the scale here, which is why the capability was
+        // reachable only through the registry and never from a widget (F003/P082/T459).
+        heca_grid_ui::paint_child(layer.root(), &mut cx);
     }
 }
 

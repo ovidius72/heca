@@ -121,6 +121,7 @@ impl WorkspaceRow<'_> {
                 pane_id: float.pane_id,
                 name: &float.name,
                 active: float.active,
+                folder: float.folder.as_deref(),
                 previous: self.previous == Some(float.pane_id),
                 ws_idx: ws.ws_idx,
                 // A float has no column, so the letter that deletes a column names the last one —
@@ -165,7 +166,7 @@ mod tests {
     use heca_core::layout::PaneId;
 
     fn pane(id: u64, h: f64) -> ExposePane {
-        ExposePane { pane_id: PaneId(id), name: format!("p{id}"), active: false, height: h }
+        ExposePane { pane_id: PaneId(id), name: format!("p{id}"), folder: None, active: false, height: h }
     }
 
     fn workspace(widths: &[f64], floats: Vec<ExposeFloating>) -> ExposeWorkspace {
@@ -253,6 +254,7 @@ mod tests {
             &[800.0],
             vec![ExposeFloating {
                 pane_id: PaneId(9),
+                folder: None,
                 name: "float".into(),
                 active: false,
                 x: 200.0,
@@ -292,6 +294,7 @@ mod tests {
             &[800.0],
             vec![ExposeFloating {
                 pane_id: PaneId(9),
+                folder: None,
                 name: "float".into(),
                 active: false,
                 x: 100.0,
@@ -322,6 +325,7 @@ mod tests {
             &[400.0],
             vec![ExposeFloating {
                 pane_id: PaneId(9),
+                folder: None,
                 name: "float".into(),
                 active: false,
                 x: 600.0,

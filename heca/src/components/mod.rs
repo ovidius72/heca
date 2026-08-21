@@ -80,3 +80,7 @@
 //! [`ChromeIntentEmitter`]: crate::chrome::ChromeIntentEmitter
 //! [`Intent`]: heca_view::Intent
 //! [`WidgetModel`]: crate::chrome::WidgetModel
+
+pub(crate) mod folder_line;
+
+pub(crate) use folder_line::FolderLine;

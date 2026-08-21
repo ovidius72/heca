@@ -66,7 +66,11 @@ impl PaneShell<'_> {
             .border(to_gui_color(border_color), border_width)
             .radius(border_radius);
         if active {
-            pane = pane.glow_with(to_gui_color(border_color), ACTIVE_GLOW_RADIUS, ACTIVE_GLOW_STRENGTH);
+            pane = pane.glow_with(
+                to_gui_color(border_color),
+                super::ACTIVE_GLOW_RADIUS,
+                super::ACTIVE_GLOW_STRENGTH,
+            );
         }
 
         // The pane's own identity, from the data — never a counter, never a position. A pane id is
@@ -99,11 +103,6 @@ pub(crate) fn size_to(root: &mut KeyHint, w: f32, h: f32) {
     style.height = heca_grid_ui::Length::Px(h);
 }
 
-/// Halo radius + strength for the active pane's frame. Kept here beside the only widget that draws
-/// it, and scaled by the theme's `glow_size` at the single `PaintCx` chokepoint like every other
-/// glow — so `glow_size = none` removes it with the rest.
-const ACTIVE_GLOW_RADIUS: f32 = 10.0;
-const ACTIVE_GLOW_STRENGTH: f32 = 0.55;
 
 fn to_gui_color(color: [f32; 4]) -> heca_grid_ui::Color {
     heca_grid_ui::Color::new(

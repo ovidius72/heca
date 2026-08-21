@@ -48,6 +48,7 @@ impl ColumnCard<'_> {
                 pane_id: pane.pane_id,
                 name: &pane.name,
                 active: pane.active,
+                folder: pane.folder.as_deref(),
                 previous: self.previous == Some(pane.pane_id),
                 ws_idx: self.ws_idx,
                 col_idx: self.column.col_idx,
@@ -86,6 +87,7 @@ mod tests {
                 .enumerate()
                 .map(|(i, h)| ExposePane {
                     pane_id: PaneId(i as u64 + 1),
+                    folder: None,
                     name: format!("p{i}"),
                     active: i == 0,
                     height: *h,

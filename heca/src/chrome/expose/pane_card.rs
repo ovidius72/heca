@@ -9,9 +9,9 @@
 
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::style::{Justify, Length, Spacing};
+use heca_grid_ui::style::{Align, Justify, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{GridCell, HintPlacement, KeyHint, Label, Row};
+use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, KeyHint, Label, Row};
 use heca_grid_ui::Component;
 
 /// The `key` of a pane's box — the row's one identity, so the cursor, the right-click target
@@ -67,6 +67,10 @@ pub(crate) struct PaneCard<'a> {
     pub(crate) name: &'a str,
     /// Is this its workspace's focused pane?
     pub(crate) active: bool,
+    /// **Where the pane is** — its working directory, home-relative, or `None` when there is none
+    /// to show. Shown under the name by the same [`FolderLine`](crate::components::FolderLine) the
+    /// sidebar's row uses, so the map and the dock describe a pane the same way.
+    pub(crate) folder: Option<&'a str>,
     /// **Is this where back-and-forth would take you?** (`prefix+i`.) The faintest of the marks —
     /// the map is where "where would I land" is most worth knowing.
     pub(crate) previous: bool,
@@ -120,7 +124,34 @@ impl PaneCard<'_> {
             .height(Length::Pct(1.0))
             .active(self.active)
             .previous(self.previous)
+            // **A card has a scale of its own.** The theme's default previous mark is tuned for a
+            // row in a list and shouts on a surface the size of a pane; the workspace *frame*'s is
+            // tuned for a whole container and disappears on one. Both were tried here and both were
+            // wrong, in opposite directions — so the theme carries the third scale, and this asks
+            // for it by name rather than picking a number.
+            .previous_tint(theme.colors.effective_card_previous_background())
             .key(pane_key(self.pane_id));
+        // **The pane you are on wears the frame it wears in the app.**
+        //
+        // The two fills alone could not carry it: "selected" and "last visited" are one accent ramp
+        // eight points apart, tuned for a sidebar ROW — and the same two lifts on a card the size of
+        // a pane read as one colour (Antonio, driving, 2026-08-21). Area changes how a lift reads,
+        // which the theme already knows: a workspace *frame* lifts 0.13 where a row lifts 0.42.
+        //
+        // So the two states differ in **kind** rather than in strength — the same move `Row` makes
+        // between its selected panel and its cursor ring. The current pane takes the accent edge and
+        // the halo a focused pane frame carries (`chrome::pane::ACTIVE_GLOW_*`, one definition for
+        // both, so the map cannot drift from the app it pictures); last-visited keeps the faint fill
+        // it had, and now has it to itself.
+        if self.active {
+            card = card
+                .border(theme.colors.accent, theme.focus_border_width)
+                .glow_with(
+                    theme.colors.accent,
+                    crate::chrome::pane::ACTIVE_GLOW_RADIUS,
+                    crate::chrome::pane::ACTIVE_GLOW_STRENGTH,
+                );
+        }
         // **The card the cursor is on holds the keyboard**, so its own handlers are what a key
         // reaches — and what it does not take bubbles up to the `CardGrid` for the nav keys,
         // exactly as a browser's listbox option does (AGENTS § 0c). The cursor signal *is* the
@@ -143,7 +174,24 @@ impl PaneCard<'_> {
                 let id = self.pane_id;
                 move || choose(id)
             })
-            .child(Label::new(self.name.to_string()));
+            .child({
+                // The name, and under it where the pane is — one column so a card with no folder
+                // to show lays out exactly as it did before (a one-child column adds no gap).
+                let folder = crate::components::FolderLine {
+                    path: self.folder,
+                    // Nothing to show *is* the setting being off — `model` resolved both into the
+                    // same absence, so a card has one question to answer rather than two.
+                    show: true,
+                    font_scale: crate::chrome::CARD_META_FONT_SCALE,
+                    theme,
+                }
+                .build();
+                Flex::column()
+                    .align(Align::Center)
+                    .gap(2.0)
+                    .child(Label::new(self.name.to_string()))
+                    .child(folder.widget)
+            });
         // **Type a letter to jump to any card** (F003/P082/T427). One line on the widget, which is
         // the whole of it: the framework collects the declaration out of the laid-out tree
         // (`collect_hint_targets` already walks every visible layer) and paints the letters itself.
@@ -247,6 +295,85 @@ mod tests {
     use heca_grid_ui::event::Event;
     use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
 
+    /// **A card says where its pane is**, with the same line the sidebar's row uses — so the map
+    /// and the dock describe a pane the same way. Nothing to show is nothing drawn: `model` folds
+    /// "no cwd" and "`pane_show_cwd` is off" into one absence before a card ever sees it.
+    #[test]
+    fn a_card_shows_the_folder_its_pane_is_in() {
+        let text_of = |folder: Option<&str>| {
+            let (cb, _sink) = callbacks();
+            let theme = theme();
+            let (row, _cell) = PaneCard {
+                pane_id: PaneId(7),
+                folder,
+                name: "editor",
+                active: false,
+                previous: false,
+                ws_idx: 0,
+                col_idx: 0,
+                next: None,
+                theme: &theme,
+                cb: &cb,
+            }
+            .build();
+            let root = lay_out(row, 400.0, 200.0);
+            let mut scene = heca_grid_ui::Scene::new();
+            root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+            scene
+                .iter()
+                .filter_map(|c| match c {
+                    heca_grid_ui::DrawCommand::Text(t) => Some(t.text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let shown = text_of(Some("~/projects/heca"));
+        assert!(shown.iter().any(|t| t == "editor"), "the name: {shown:?}");
+        assert!(shown.iter().any(|t| t == "~/projects/heca"), "and the folder: {shown:?}");
+
+        let bare = text_of(None);
+        assert!(bare.iter().any(|t| t == "editor"), "the name is always there: {bare:?}");
+        assert!(
+            !bare.iter().any(|t| t.contains('/')),
+            "and nothing is drawn where there is no folder: {bare:?}",
+        );
+    }
+
+    /// **The pane you are on is told apart by KIND, not by strength.** Two fills eight points
+    /// apart on one accent ramp read as one colour at card size — so the current card takes the
+    /// accent edge and halo a focused pane frame wears, and last-visited keeps the fill to itself.
+    #[test]
+    fn the_current_card_wears_the_frame_a_focused_pane_wears() {
+        let visual = |active: bool| {
+            let (cb, _sink) = callbacks();
+            let theme = theme();
+            let (row, _cell) = PaneCard {
+                pane_id: PaneId(7),
+                folder: None,
+                name: "editor",
+                active,
+                previous: !active,
+                ws_idx: 0,
+                col_idx: 0,
+                next: None,
+                theme: &theme,
+                cb: &cb,
+            }
+            .build();
+            let card = &row.base().children[0];
+            let v = card.base().style.visual;
+            (v.border.is_some(), v.glow.is_some())
+        };
+
+        assert_eq!(visual(true), (true, true), "the current card: an accent edge and a halo");
+        assert_eq!(
+            visual(false),
+            (false, false),
+            "and last-visited keeps only its fill, so the two cannot read as one",
+        );
+    }
+
     /// Build one card on its own — the whole point of the component being one.
     type Built = (
         Box<dyn heca_grid_ui::Component>,
@@ -259,12 +386,14 @@ mod tests {
         let theme = theme();
         let pane = ExposePane {
             pane_id: PaneId(7),
+            folder: None,
             name: "editor".into(),
             active,
             height: 300.0,
         };
         let (row, _cell) = PaneCard {
             pane_id: pane.pane_id,
+            folder: None,
             name: &pane.name,
             active: pane.active,
             previous: false,

@@ -27,7 +27,6 @@ const NO_SURFACE_REQUIRED: &[(&str, &str)] = &[
     ("ContextMenu", "host-owned overlay: it holds a Menu and shows it; the Menu's items are the property surface"),
     ("Menu", "its rows are MenuItem values carrying closures, which static data cannot supply — the items are the property surface"),
     ("KeyHint", "host-owned overlay, targets come from the hint registry"),
-    ("Overlay", "host-owned surface; placement is decided by the host"),
     ("Dialog", "host-owned overlay; body/actions arrive as realized subtrees"),
     ("Grid", "track templates are List-valued and handled by the Grid arm"),
     ("Spinner", "no configurable properties"),

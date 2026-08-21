@@ -41,7 +41,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
-use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, Label, LayoutExt, MarkerGroup, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
+use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
     Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
@@ -366,6 +366,20 @@ fn realize_kind(
         WidgetKind::Panel => {
             let panel = with_props(Panel::new().title(text_of(node)), node, theme);
             attach_children(Box::new(panel), node, theme, emit, forms)
+        }
+        // **A described surface** — the same widget the exposé is, raised from data.
+        //
+        // Its children are its panel: one child is the panel itself, several are stacked into one,
+        // because an `Overlay` centres and decorates exactly one. `animation_named` and `blocking`
+        // arrive through the generated property surface, so how a described surface comes and goes
+        // is the widget's own builder and not a list repeated here — `"animation": "zoom_fade"`
+        // names the same gesture native code names.
+        WidgetKind::Overlay => {
+            let panel: Box<dyn Component> = match node.children.len() {
+                1 => realize(&node.children[0], theme, emit, forms),
+                _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
+            };
+            Box::new(with_props(Overlay::new().panel_boxed(panel), node, theme))
         }
         WidgetKind::Scroll => {
             // `axes` reaches the widget through its own builder, so a declarative region can be
@@ -1155,6 +1169,47 @@ mod tests {
             .collect()
     }
 
+    /// **A described surface arrives and leaves exactly as a native one does** (F003/P082/T459).
+    ///
+    /// The declarative half of `Overlay::animation`: a plugin that can only send JSON names a
+    /// built-in and gets the same gesture native code gets — one door, two spellings. The surface
+    /// then holds itself on screen for the whole of its exit, which is the behaviour that makes an
+    /// animated dismissal possible at all.
+    #[test]
+    fn a_described_overlay_names_how_it_arrives_and_leaves() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let mut forms = FormBindings::default();
+        let theme = Theme::default();
+
+        let node = ViewNode::new(WidgetKind::Overlay)
+            .prop("animation", PropValue::Text("zoom_fade".into()))
+            .prop("opened", PropValue::Bool(true))
+            .child(ViewNode::new(WidgetKind::Label).text("MAP"));
+        let mut surface = realize(&node, &theme, &emit, &mut forms);
+
+        assert!(surface.presence().is_some(), "a described overlay is a surface a host can drive");
+        surface.hide();
+        assert!(
+            surface.presence().is_some_and(|p| p.is_leaving()),
+            "the named animation plays on the way out",
+        );
+        let mut frames = 0;
+        while surface.tick(1.0 / 60.0) && frames < 600 {
+            frames += 1;
+        }
+        assert!(frames > 1, "it played rather than cutting: {frames} frames");
+        assert!(!surface.presence().is_some_and(|p| p.is_leaving()), "and then it is gone");
+
+        // Untrusted input stays total: an unknown name leaves the surface with its default.
+        let unknown = ViewNode::new(WidgetKind::Overlay)
+            .prop("animation", PropValue::Text("supernova".into()))
+            .child(ViewNode::new(WidgetKind::Label).text("MAP"));
+        let mut cut = realize(&unknown, &theme, &emit, &mut forms);
+        cut.open();
+        cut.hide();
+        assert!(!cut.presence().is_some_and(|p| p.is_leaving()), "a cut, not a panic");
+    }
+
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
     /// buttons (Cancel / Delete), each carrying a `"press"` intent.
     fn confirm_tree() -> ViewNode {
@@ -1658,6 +1713,7 @@ mod tests {
         check("ItemGroup", <ItemGroup as SetProp>::PROP_NAMES, "ItemGroup");
         check("Label", <Label as SetProp>::PROP_NAMES, "Label");
         check("MarkerGroup", <MarkerGroup as SetProp>::PROP_NAMES, "MarkerGroup");
+        check("Overlay", <Overlay as SetProp>::PROP_NAMES, "Overlay");
         check("Panel", <Panel as SetProp>::PROP_NAMES, "Panel");
         check("RailCell", <RailCell as SetProp>::PROP_NAMES, "RailCell");
         check("Row", <GridRow as SetProp>::PROP_NAMES, "Row");
@@ -2606,7 +2662,8 @@ mod tests {
             | WidgetKind::Grid
             | WidgetKind::MarkerGroup
             | WidgetKind::ItemGroup
-            | WidgetKind::DockFrame => node
+            | WidgetKind::DockFrame
+            | WidgetKind::Overlay => node
                 .text("TITLE")
                 .child(ViewNode::new(WidgetKind::Label).text("child")),
 

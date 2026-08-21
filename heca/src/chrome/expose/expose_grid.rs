@@ -116,6 +116,7 @@ mod tests {
                 width: screen.0 / 2.0,
                 panes: vec![ExposePane {
                     pane_id: PaneId((idx * 100 + c + 1) as u64),
+                    folder: None,
                     name: format!("w{idx}c{c}"),
                     active: c == 0,
                     height: screen.1,
@@ -163,12 +164,14 @@ mod tests {
                     panes: vec![
                         ExposePane {
                             pane_id: PaneId((idx * 100 + c * 10 + 1) as u64),
+                            folder: None,
                             name: "zsh".into(),
                             active: false,
                             height: 300.0,
                         },
                         ExposePane {
                             pane_id: PaneId((idx * 100 + c * 10 + 2) as u64),
+                            folder: None,
                             name: "zsh".into(),
                             active: false,
                             height: 300.0,
@@ -334,6 +337,7 @@ mod tests {
         let mut rows = vec![ws(0, 1, (800.0, 600.0))];
         rows[0].floating.push(ExposeFloating {
             pane_id: PaneId(9),
+            folder: None,
             name: "float".into(),
             active: false,
             x: 40.0,

@@ -57,6 +57,13 @@ pub enum WidgetKind {
     ItemGroup,
     /// A titled, collapsible dock frame.
     DockFrame,
+    /// **A surface over the page**: a scrim, a panel holding the children, and — the reason a
+    /// description can raise one at all — how it **arrives and leaves** (`animation_named`).
+    ///
+    /// The panel is the children: one child is the panel, several are stacked into one. Native
+    /// code hands the widget a live animation, including a type this model has never heard of; a
+    /// description names a built-in and gets the same gesture (`heca_grid_ui::NamedAnimation`).
+    Overlay,
     /// A row of column/pane markers.
     MarkerGroup,
     /// A tab strip + panel.
@@ -107,6 +114,7 @@ impl WidgetKind {
         WidgetKind::Surface,
         WidgetKind::ItemGroup,
         WidgetKind::DockFrame,
+        WidgetKind::Overlay,
         WidgetKind::MarkerGroup,
         WidgetKind::Tabs,
         WidgetKind::Choice,
@@ -155,28 +163,29 @@ impl WidgetKind {
             WidgetKind::Surface => 7,
             WidgetKind::ItemGroup => 8,
             WidgetKind::DockFrame => 9,
-            WidgetKind::MarkerGroup => 10,
-            WidgetKind::Tabs => 11,
-            WidgetKind::Choice => 12,
-            WidgetKind::Label => 13,
-            WidgetKind::Button => 14,
-            WidgetKind::IconButton => 15,
-            WidgetKind::Badge => 16,
-            WidgetKind::BadgeButton => 17,
-            WidgetKind::Tag => 18,
-            WidgetKind::Icon => 19,
-            WidgetKind::Input => 20,
-            WidgetKind::Select => 21,
-            WidgetKind::Toggle => 22,
-            WidgetKind::Checkbox => 23,
-            WidgetKind::StatusDot => 24,
-            WidgetKind::Gauge => 25,
-            WidgetKind::ScrollBar => 26,
-            WidgetKind::Alert => 27,
-            WidgetKind::Toast => 28,
-            WidgetKind::RailCell => 29,
-            WidgetKind::Item => 30,
-            WidgetKind::Separator => 31,
+            WidgetKind::Overlay => 10,
+            WidgetKind::MarkerGroup => 11,
+            WidgetKind::Tabs => 12,
+            WidgetKind::Choice => 13,
+            WidgetKind::Label => 14,
+            WidgetKind::Button => 15,
+            WidgetKind::IconButton => 16,
+            WidgetKind::Badge => 17,
+            WidgetKind::BadgeButton => 18,
+            WidgetKind::Tag => 19,
+            WidgetKind::Icon => 20,
+            WidgetKind::Input => 21,
+            WidgetKind::Select => 22,
+            WidgetKind::Toggle => 23,
+            WidgetKind::Checkbox => 24,
+            WidgetKind::StatusDot => 25,
+            WidgetKind::Gauge => 26,
+            WidgetKind::ScrollBar => 27,
+            WidgetKind::Alert => 28,
+            WidgetKind::Toast => 29,
+            WidgetKind::RailCell => 30,
+            WidgetKind::Item => 31,
+            WidgetKind::Separator => 32,
         }
     }
 }
@@ -240,6 +249,23 @@ pub enum ViewScrollAxes {
     Vertical,
     Horizontal,
     Both,
+}
+
+/// How a surface arrives and leaves — mirrors grid-ui `NamedAnimation` (`Overlay`).
+///
+/// The **built-ins**, which is all a description can name: a live animation is a Rust type, and a
+/// plugin that writes its own reaches it from native code rather than from data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewAnimation {
+    /// A cut: there, then gone.
+    None,
+    /// A dissolve, both ways.
+    Fade,
+    /// Growing in from smaller, shrinking away again.
+    Zoom,
+    /// The exposé's gesture: it shrinks away, and the dissolve rides the shrink.
+    ZoomFade,
 }
 
 /// Where a scroll region puts the descendant it follows — mirrors grid-ui `RevealAlign`.
@@ -357,6 +383,7 @@ value_set! {
     ViewOrientation { Horizontal => "horizontal", Vertical => "vertical" }
     ViewScrollAxes { Vertical => "vertical", Horizontal => "horizontal", Both => "both" }
     ViewRevealAlign { Minimal => "minimal", Center => "center" }
+    ViewAnimation { None => "none", Fade => "fade", Zoom => "zoom", ZoomFade => "zoom_fade" }
     ViewSeverity { Info => "info", Success => "success", Warning => "warning", Danger => "danger" }
     ViewLabelSide { Right => "right", Left => "left" }
     ViewMarker { None => "none", Bar => "bar", Check => "check" }
@@ -1321,6 +1348,7 @@ mod tests {
         check(ViewOrientation::ALL, ViewOrientation::name);
         check(ViewScrollAxes::ALL, ViewScrollAxes::name);
         check(ViewRevealAlign::ALL, ViewRevealAlign::name);
+        check(ViewAnimation::ALL, ViewAnimation::name);
         check(ViewSeverity::ALL, ViewSeverity::name);
         check(ViewLabelSide::ALL, ViewLabelSide::name);
         check(ViewMarker::ALL, ViewMarker::name);

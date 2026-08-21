@@ -30,6 +30,7 @@
 extern crate self as heca_grid_ui;
 
 pub mod action;
+pub mod animation;
 pub mod builders;
 pub mod color;
 pub mod component;
@@ -77,7 +78,10 @@ pub use hint::{
     offer_hint_by_key, DeclaredAction,
 };
 pub use nav::{collect_keys, identity_of, key_at};
-pub use effects::{Attention, Eased, Fade, Flash};
+pub use effects::{Attention, Eased, Flash};
+pub use animation::{
+    Animate, Animation, AnimationFrame, Fade, Presence, Sequence, Zoom, ZoomFade, smoothstep,
+};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene, TextStyle};
@@ -92,13 +96,16 @@ pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, Choice, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Ellipsis, Flex, FocusScope, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, MarkerGroup, NfGlyph, NfIcon, Orientation, Pane, PaneFrame, Panel, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
+    LabelSide, MarkerGroup, NfGlyph, NfIcon, Orientation, Overlay, OverlayPosition, Pane, PaneFrame, Panel, ProgressBar, RailCell, RegionMode, RevealAlign, Row, ScrollAxes, ScrollBar, ScrollInfo, ScrollRegion, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, KeyCap, KeycapVariant, keycap_size, keycap_size_nf, paint_keycap, paint_keycap_nf,
 };
 
 /// Common imports for building UIs.
 pub mod prelude {
     pub use crate::action::{Action, SignalData};
+    pub use crate::animation::{
+        Animate, Animation, AnimationFrame, Fade, Sequence, Zoom, ZoomFade,
+    };
     pub use crate::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers, WidgetIntent};

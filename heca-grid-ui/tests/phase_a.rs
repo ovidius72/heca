@@ -5640,7 +5640,7 @@ fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
     let grid = CardGrid::new()
         .row(vec![vec![GridCell::new("a", lit)]], Flex::row().child(Label::new("a")))
         .on_dismiss(move || d.set(true));
-    let mut overlay = Overlay::new().blocking(true).panel(grid).open(true);
+    let mut overlay = Overlay::new().blocking(true).panel(grid).opened(true);
 
     // A raw key the panel has no use for: the overlay must NOT claim it, or the keymap stops here.
     let handled = heca_grid_ui::dispatch(

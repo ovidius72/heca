@@ -498,6 +498,61 @@ pub trait Component {
         None
     }
 
+    /// **This surface's arrival and exit, if it has one** — the seam a host drives.
+    ///
+    /// A widget that can appear and disappear embeds a [`Presence`](crate::animation::Presence)
+    /// and returns it here; everything else keeps the default `None` and is a *cut*, which costs
+    /// nothing and needs no special case anywhere.
+    ///
+    /// It exists beside [`base`](Self::base) because a host that **mounts** surfaces — the layer
+    /// stack, a plugin panel host — has to do three things to a surface without knowing which
+    /// widget it is: keep it mounted while its exit is still playing
+    /// ([`Presence::is_leaving`](crate::animation::Presence::is_leaving)), paint it as its
+    /// animation says ([`Presence::frame`](crate::animation::Presence::frame)), and — when the
+    /// surface is **rebuilt** with fresh content — carry the gesture across to the new tree by
+    /// swapping this value, so an arrival already played does not play again.
+    ///
+    /// It is deliberately **not** recursive: a surface is the root of what was mounted, not
+    /// something to be hunted for in a subtree. A widget that *composes* an
+    /// [`Overlay`](crate::widgets::Overlay) (a [`Dialog`](crate::widgets::Dialog)) forwards this to
+    /// the overlay it composes if it wants a host to drive it.
+    fn presence(&self) -> Option<&crate::animation::Presence> {
+        None
+    }
+
+    /// The mutable half of [`presence`](Self::presence) — see there. Both, for the same reason
+    /// [`base`](Self::base) and [`base_mut`](Self::base_mut) are both there.
+    fn presence_mut(&mut self) -> Option<&mut crate::animation::Presence> {
+        None
+    }
+
+    /// **Put this surface on screen.**
+    ///
+    /// Safe to call at any time: a surface already up is not re-arrived, and one already on its way
+    /// out is not resurrected. Both rules live in [`Presence`](crate::animation::Presence), so no
+    /// caller repeats them. With no animation declared it is simply up.
+    ///
+    /// Default: nothing to open.
+    fn open(&mut self) {}
+
+    /// **Dismiss this surface.**
+    ///
+    /// With an animation declared this *begins* the exit — the surface is gone when
+    /// [`Presence::is_leaving`](crate::animation::Presence::is_leaving) says the gesture has played
+    /// out, which is what lets a host keep painting it while it goes. With none, it is simply gone.
+    ///
+    /// Default: nothing to hide.
+    fn hide(&mut self) {}
+
+    /// Open it if it is closed, dismiss it if it is open. The default reads
+    /// [`presence`](Self::presence), so a surface gets it for free.
+    fn toggle(&mut self) {
+        match self.presence().is_some_and(crate::animation::Presence::is_open) {
+            true => self.hide(),
+            false => self.open(),
+        }
+    }
+
     /// Whether this component currently has an **open overlay** (e.g. a `Select`
     /// dropdown). The host routes pointer/key events to an overlay-active widget
     /// first, so it can capture clicks/keys outside its layout bounds. Default
