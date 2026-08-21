@@ -224,10 +224,10 @@ pub(crate) fn map(
             // which is what `ZoomFade` **is**: the gesture is defined once, in the library, so no
             // surface composes it out of parts and none of them can drift.
             //
-            // How far back is `[settings] overview_zoom_from`, not a constant here: `1 /
-            // overview_zoom` would start the cards at exactly life size, which is the truest
-            // reading and overshoots — at 2× the outer rows begin off-screen and rush in. The
-            // setting defaults to a gentler 1.3, and a user who wants the literal reading sets 2.0.
+            // How far back is `[settings] overview_zoom_from`, not a constant here. Starting the
+            // cards at exactly life size is the truest reading and overshoots — at 2× the outer
+            // rows begin off-screen and rush in. The setting defaults to a gentler value, and a
+            // user who wants the literal reading sets 2.0.
             .animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))
             .panel_size(Length::Pct(1.0), Length::Pct(1.0))
             // **The panel is the frost's tint, not a lid.** The host stamps the blurred frame

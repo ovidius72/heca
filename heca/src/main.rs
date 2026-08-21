@@ -203,7 +203,7 @@ impl HecaApp {
             state.search_case = self.app_config.config.settings.search_case;
             state.search_history = self.app_config.config.settings.search_history;
             // **The layout's own options too.** They were read once at startup and never again, so
-            // editing `overview_zoom`, `overview_gap`, `overview_zoom_from`, the pane gap or
+            // editing `overview_gap`, `overview_zoom_from`, the pane gap or
             // `center_focused_column` and pressing reload appeared to do nothing — the settings
             // were live in the file and dead in the app (Antonio, 2026-08-11). One mapping,
             // `startup::layout_options_from`, shared by both paths so they cannot drift.

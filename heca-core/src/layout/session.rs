@@ -3,16 +3,20 @@ use super::column::Pane;
 use super::types::*;
 use super::workspace::Workspace;
 
-/// A session manages all workspaces, the overview/expose mode, and workspace switching.
+/// A session manages all workspaces and workspace switching.
 ///
-/// This is the top-level layout container. In NIRI terms, this combines
-/// `Layout<W>` (monitors + workspaces) and adds the overview state.
+/// This is the top-level layout container — NIRI's `Layout<W>` (monitors + workspaces).
+///
+/// **It has no overview state.** heca's overview is the exposé, a *layer* built out of widgets
+/// (`heca/src/chrome/expose/`) that draws its own map and never asks the session to zoom. The
+/// pre-layer overview that lived here — `OverviewState`, `toggle_overview`, `overview_zoom`,
+/// `overview_workspace_geometries` — was unreachable code by the time it was removed: nothing
+/// outside this file ever set it active (F003/P082/T422).
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id: SessionId,
     pub workspaces: Vec<Workspace>,
     pub active_workspace_idx: usize,
-    pub overview: OverviewState,
     pub workspace_switch: WorkspaceSwitch,
     /// Viewport size (full window size).
     pub viewport_size: Size,
@@ -22,29 +26,6 @@ pub struct Session {
     pub options: LayoutOptions,
     /// Next ID counter.
     next_id: u64,
-}
-
-/// Overview / Expose mode state.
-#[derive(Debug, Clone)]
-pub struct OverviewState {
-    pub open: bool,
-    /// 0.0 = normal view, 1.0 = fully zoomed out overview.
-    pub progress: Animated<f64>,
-    /// Scale factor for overview (e.g., 0.25 = 25% size).
-    pub zoom: f64,
-    /// Gap between workspace thumbnails.
-    pub gap: f64,
-}
-
-impl Default for OverviewState {
-    fn default() -> Self {
-        Self {
-            open: false,
-            progress: Animated::Static(0.0),
-            zoom: 0.25,
-            gap: 16.0,
-        }
-    }
 }
 
 /// Workspace switching state.
@@ -73,7 +54,6 @@ impl Session {
             id,
             workspaces: Vec::new(),
             active_workspace_idx: 0,
-            overview: OverviewState::default(),
             workspace_switch: WorkspaceSwitch::None,
             viewport_size,
             scale,
@@ -173,87 +153,25 @@ impl Session {
         true
     }
 
-    /// Toggle the overview/expose mode.
-    pub fn toggle_overview(&mut self) {
-        self.overview.open = !self.overview.open;
-        let from = match &self.overview.progress {
-            Animated::Static(v) => *v,
-            Animated::Animating { animation, .. } => animation.value(),
-        };
-        let to = if self.overview.open { 1.0 } else { 0.0 };
-        self.overview.progress = Animated::Animating {
-            animation: Animation::new(from, to, AnimationConfig::default()),
-            from,
-            to,
-        };
-    }
-
-    /// Compute the zoom factor for the current overview progress.
-    pub fn overview_zoom(&self) -> f64 {
-        let progress = self.overview.progress.current();
-        let scale = self.options.overview_scale;
-        // Zoom from 1.0 down to scale as progress goes 0 -> 1.
-        1.0 - (1.0 - scale) * progress
-    }
-
     /// Get workspace geometries for rendering.
     ///
-    /// Returns each workspace with its position and size for the current frame.
-    /// In normal mode, only the active workspace is at (0, 0) with full viewport size.
-    /// In overview mode, all workspaces are stacked vertically as thumbnails.
+    /// The active workspace at `(0, 0)`, the size of the viewport — and nothing else, because only
+    /// one workspace is on screen at a time. There used to be a second branch here that stacked
+    /// every workspace as a thumbnail for the overview; it went with the overview itself, which
+    /// nothing had been able to reach since the exposé became a layer (F003/P082/T422).
     pub fn workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
-        if !self.overview.is_active() {
-            // Normal mode: only active workspace visible.
-            if self.active_workspace().is_some() {
-                vec![(
-                    self.active_workspace_idx,
-                    Rectangle::new(Point::default(), self.viewport_size),
-                )]
-            } else {
-                vec![]
-            }
+        if self.active_workspace().is_some() {
+            vec![(
+                self.active_workspace_idx,
+                Rectangle::new(Point::default(), self.viewport_size),
+            )]
         } else {
-            // Overview mode: all workspaces as thumbnails.
-            self.overview_workspace_geometries()
+            vec![]
         }
-    }
-
-    fn overview_workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
-        let zoom = self.overview_zoom();
-        let ws_size = Size::new(self.viewport_size.w * zoom, self.viewport_size.h * zoom);
-        // The gap is a fraction of a screen height (times the zoom) — niri's `workspace_gap`.
-        let gap = self.viewport_size.h * self.options.overview_gap * zoom;
-        let ws_height = ws_size.h + gap;
-
-        // **Centre the ACTIVE workspace, not the stack** (niri `monitor.rs::workspaces_render_geo`:
-        // `static_offset = (view_size - ws_size) / 2`). Centring the whole stack and then offsetting
-        // by the active index puts the active row off-centre by half the difference between the
-        // stack and one workspace — it only looks right when there is exactly one workspace.
-        let active_y_offset = self.active_workspace_idx as f64 * ws_height;
-        let start_y = (self.viewport_size.h - ws_size.h) / 2.0 - active_y_offset;
-        let center_x = (self.viewport_size.w - ws_size.w) / 2.0;
-
-        self.workspaces
-            .iter()
-            .enumerate()
-            .map(|(idx, _)| {
-                let y = start_y + idx as f64 * ws_height;
-                let rect = Rectangle::new(Point::new(center_x, y), ws_size);
-                (idx, rect)
-            })
-            .collect()
     }
 
     /// Advance all animations in the session.
     pub fn advance_animations(&mut self) {
-        // Advance overview animation.
-        if let Animated::Animating { ref animation, .. } = self.overview.progress
-            && animation.is_done()
-        {
-            let final_value = animation.target();
-            self.overview.progress = Animated::Static(final_value);
-        }
-
         // Advance workspace switch animation.
         match &mut self.workspace_switch {
             WorkspaceSwitch::Animation {
@@ -276,8 +194,7 @@ impl Session {
 
     /// Check if any animations are ongoing.
     pub fn are_animations_ongoing(&self) -> bool {
-        !self.overview.progress.is_done()
-            || matches!(self.workspace_switch, WorkspaceSwitch::Animation { .. })
+        matches!(self.workspace_switch, WorkspaceSwitch::Animation { .. })
             || self.workspaces.iter().any(|w| w.are_animations_ongoing())
     }
 
@@ -336,16 +253,6 @@ impl Session {
         let working_area = Rectangle::new(Point::default(), size);
         for ws in &mut self.workspaces {
             ws.update_working_area(working_area);
-        }
-    }
-}
-
-impl OverviewState {
-    /// Whether overview is fully or partially active.
-    pub fn is_active(&self) -> bool {
-        match &self.progress {
-            Animated::Static(v) => *v > 0.001,
-            Animated::Animating { .. } => true,
         }
     }
 }

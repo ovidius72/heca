@@ -384,7 +384,7 @@ A keyboard-native workspace where every tool lives in a tiled, floating, or scra
 ## Architecture (NIRI Scrolling Layout)
 
 ```
-Session                          ← manages all workspaces + overview/expose mode
+Session                          ← manages all workspaces + workspace switching
 ├── workspaces: Vec<Workspace>   ← arranged VERTICALLY (discrete switching)
 │   └── Workspace
 │       ├── scrolling: ScrollingSpace   ← horizontal COLUMNS (continuous scroll)
@@ -395,7 +395,6 @@ Session                          ← manages all workspaces + overview/expose mo
 │       │   │   └── pane_sizes: Vec<Size>
 │       │   └── active_column_idx
 │       └── floating_panes: Vec<FloatingPane>
-├── overview: OverviewState      ← zoom progress, open/closed
 ├── workspace_switch: WorkspaceSwitch  ← animated vertical transitions
 └── active_workspace_idx
 ```
@@ -1370,7 +1369,7 @@ myvim/
 │   │   │   ├── column.rs  ← Column, Pane, height distribution
 │   │   │   ├── scrolling.rs  ← ScrollingSpace, focus, add/remove, view positions
 │   │   │   ├── workspace.rs  ← Workspace, FloatingPane
-│   │   │   └── session.rs ← Session, OverviewState, WorkspaceSwitch
+│   │   │   └── session.rs ← Session, WorkspaceSwitch
 │   │   ├── backend/
 │   │   │   ├── mod.rs     ← PaneBackend trait, BackendRenderData
 │   │   │   ├── terminal.rs  ← TerminalBackend (PTY + vte)
