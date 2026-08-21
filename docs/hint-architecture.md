@@ -338,12 +338,55 @@ actionable; `fire_hint` runs the explicit hint when there is one and the widget'
 otherwise — the same `hint.or_else(press)` rule the declarative side has had all along. **Correct
 `docs/chrome-and-ui.md:394` in this step**, or the contradiction outlives the fix.
 
-**3. `on_hint` onto `ComponentExt`, and `hint` becomes a real event.** Now the *override*, not the
+**3. `on_hint` onto `ComponentExt`, and `hint` becomes a real event.** ✅ **DONE — F003/P082/T432.** Now the *override*, not the
 switch: it says a pick does something other than a click. Target-phase-only (§4), plus the bubbled
 delegation seam, on the existing `deliver_to_path` walk. *Deletes:* the wrapper requirement; the
 two-direction search in `offer_hint_by_key`; the "is the pick on the parent or the child" question.
 `Base::hint` is **already** on `Base` (`component.rs:254`) — only the builder was in the wrong place,
 and the doc at `component.rs:245` claiming it belongs on the wrapper is what this falsifies.
+
+**What it actually landed as.** `Base::hint` became a `Hint { intent: Option<Intent>, run }` rather
+than a bare closure, and `heca-grid-ui` took a dependency on `heca-view` to name that `Intent` —
+serde-only with no dependencies of its own, so it is not a cycle and nothing moved. The reason is
+the refused-pick rule below: **a host cannot ask its policy about an opaque closure.** The library
+stores the value and never reads it; which candidates are excluded stays the app's judgement, per
+§ 6. Both authoring paths write the same slot — `chrome::picks(mount, intent, emit)` natively,
+`realize`'s `hint` event declaratively — so there is still one door.
+
+The pick is delivered as `Event::Hint(HintEvent { key, bounds })` through `deliver_to_path`. The
+widget's own declaration runs in the **target phase** (`component::run_pick`); what bubbles is the
+event, which is the delegation seam — `.on(EventKind::Hint, …)`, which declares nothing and gets no
+letter. `stop_propagation` there stops **outer** listeners hearing it; it does not un-run the widget
+that was picked, because the target phase already happened. That is the phases working, not a gap in
+them.
+
+**A refused pick gets no letter, and the rule knows no kinds.** `chrome::active_hint_targets` asks
+one question of every candidate on every surface — *what do you do?* — takes the `Intent` off the
+declaration and asks `route_interaction` about it. There is no `state.panes` in it, no key
+resolution and no list of kinds, so a widget nobody has written yet and a plugin's row are judged
+exactly as heca's own rows are. Two supporting pieces make it honest:
+
+- **The source comes from the emitter, never from the filter.** `ChromeIntentEmitter` carries the
+  `InteractionSource` it stamps, `RetainedChrome` stores it, and `pick_source` reads it off the
+  surface. Candidacy asking as `Keyboard` while the chrome tree dispatches as `MouseLeftSidebar`
+  resolved to two different domains, so the picker offered letters in `Container` that execution
+  refused in `Floating`.
+- **A chrome button's pick is named where its tooltip is** (`action_tooltip`). A button hands over
+  one closure for its click and its pick; a closure is opaque, so every chrome button escaped the
+  filter — the sidebar toggles wore letters while `sidebar_left` was already being refused.
+
+The other half of the contract is the **declaration's**: `ActionMeta.policy` is required and has no
+permissive default, and an action that misdescribes itself is the one thing no mechanism can
+correct. `workspaces.peek_selected` and `workspaces.activate_selected` both declared `Global` — the
+one policy no domain refuses — while both end by focusing a pane; they share one named constant
+(`reaches_a_pane = SourceDependent`) so the rule has one name and no copy is left to be found by
+hand later.
+
+**Still standing, deliberately:** the two-direction search in `offer_hint_by_key`. It is only
+deletable once the app's declarations move off their `KeyHint` wrappers onto the widgets themselves,
+and today the wrapper is also what carries the **placement** (`Base::hint_style`, whose builders are
+`KeyHint`'s). Moving them without a placement builder on `ComponentExt` would silently relocate every
+keycap — a visual change nobody can verify from a test. It goes with T438.
 
 **4. The labeller becomes caller-supplied** (§6), current alphabet as default. **One letter, never
 two** (§2a).

@@ -126,16 +126,23 @@ pub fn realize(
     }
     // **What a leader-key pick does to this node**, read once here for every kind, like style.
     //
-    // Written into the widget's own [`Base::hint`] slot rather than through a wrapper. The native
-    // authoring surface for a hint is `KeyHint::on_hint` — a builder on a wrapper, so that
-    // `Label::on_hint` never has to exist — and the declarative authoring surface is this event.
-    // Two authoring models, one slot, and the framework's collector sees no difference between
-    // them: that is what makes a described row and a native row equally pickable. A wrapper here
-    // would be a second widget in the tree that the description never asked for, sitting between a
-    // node and its parent with its own layout.
+    // Written into the widget's own [`Base::hint`] slot. The native authoring surface is
+    // `ComponentExt::on_hint` — on every widget since F003/P082/T432 — and the declarative one is
+    // this event. Two authoring models, one slot, and the framework's collector sees no difference
+    // between them: that is what makes a described row and a native row equally pickable. A wrapper
+    // here would be a second widget in the tree that the description never asked for, sitting
+    // between a node and its parent with its own layout.
+    //
+    // **The intent travels with the closure**, not only inside it: a host cannot ask its policy
+    // about an opaque `Fn()`, and a candidate whose action would be refused must not be offered a
+    // letter (F003/P082/T432). A plugin's row therefore gets the same filtering heca's own rows do,
+    // with nothing extra declared — which is the whole point of one slot.
     if let Some(carrier) = hint_intent(node) {
         let emit = emit.clone();
-        realized.base_mut().hint = Some(Box::new(move || emit(carrier.clone())));
+        let run = carrier.clone();
+        realized.base_mut().hint = Some(heca_grid_ui::hint::Hint::of(carrier, move || {
+            emit(run.clone())
+        }));
     }
     // **Who this node is**, read once here for every kind, exactly like style and the hint above.
     //

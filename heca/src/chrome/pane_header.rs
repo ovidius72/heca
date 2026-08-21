@@ -458,6 +458,25 @@ pub(crate) fn action_tooltip(
         Some(sc) if !sc.is_empty() => format!("{label}  {sc}"),
         _ => label.to_string(),
     };
+    // **A button's pick is named here too, from the same action name the tooltip resolves.**
+    //
+    // A chrome button declares its pick as a closure — the click and the pick are the same gesture
+    // for a button, so it hands over the one it already built. A closure is opaque, and a host
+    // cannot ask its policy about an opaque thing: the `prefix+/` picker therefore lettered the
+    // sidebar toggles while a pane was floating, even though `sidebar_left` is `TiledOnly` and the
+    // click was already being refused (Antonio, driving 2026-08-21). The letter did nothing.
+    //
+    // Naming it here rather than at each button is the whole point of this function: it is the one
+    // place a chrome button's action name is known, which is why the tooltip and its live keybinding
+    // are resolved here and not spelled at call sites (AGENTS § "Chrome buttons → action, tooltip,
+    // KeyHint"). Every button — this pane header's, the sidebar toggles, a modal's — is covered
+    // without any of them saying anything new.
+    let mut child = child;
+    if let Some(hint) = child.base_mut().hint.as_mut()
+        && hint.intent.is_none()
+    {
+        hint.intent = Some(heca_view::Intent::new(action_name));
+    }
     Tooltip::new(child, tip).side(TooltipSide::Bottom)
 }
 
@@ -1105,3 +1124,59 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
     state.pane_headers.retain(|id, _| seen.contains(id));
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heca_grid_ui::builders::ComponentExt as _;
+    use heca_grid_ui::widgets::Label;
+
+    /// **A chrome button's pick says what it is, so the picker can refuse it** (F003/P082/T432).
+    ///
+    /// A button hands over the same closure for its click and its pick — they are one gesture for a
+    /// button — and a closure is opaque, so the policy had nothing to ask about. `prefix+/`
+    /// therefore lettered the sidebar toggles while a pane was floating, even though `sidebar_left`
+    /// is `TiledOnly` and the click was already refused: a letter that did nothing.
+    ///
+    /// It is named here because this is the one place a chrome button's action name is known — the
+    /// same place the tooltip and its live keybinding come from. If that ever goes, every chrome
+    /// button silently escapes the filter again and nothing else would notice.
+    #[test]
+    fn a_buttons_pick_is_named_from_its_action() {
+        let shortcuts = ActionShortcuts::default();
+        let button = Label::new("×").on_hint(|| {});
+        let tip = action_tooltip(button, "close", "Close", &shortcuts);
+
+        let named = tip.base().children[0]
+            .base()
+            .hint
+            .as_ref()
+            .expect("the button declares a pick")
+            .intent
+            .as_ref()
+            .expect("…and it is named");
+        assert_eq!(named.action, "close");
+    }
+
+    /// A pick that already said what it is keeps it — the caller knows more than the action name
+    /// alone (a pane button carries the pane it acts on).
+    #[test]
+    fn a_pick_that_already_named_itself_is_left_alone() {
+        let shortcuts = ActionShortcuts::default();
+        let button = Label::new("×").on_hint(heca_grid_ui::Hint::of(
+            heca_view::Intent::new("close_pane_by_id").arg("pane_id", heca_view::PropValue::Int(7)),
+            || {},
+        ));
+        let tip = action_tooltip(button, "close", "Close", &shortcuts);
+
+        let named = tip.base().children[0]
+            .base()
+            .hint
+            .as_ref()
+            .unwrap()
+            .intent
+            .as_ref()
+            .unwrap();
+        assert_eq!(named.action, "close_pane_by_id", "the caller's own naming wins");
+    }
+}

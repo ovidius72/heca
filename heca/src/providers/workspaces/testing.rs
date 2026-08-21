@@ -16,7 +16,6 @@ use crate::chrome::{
 use heca_config::programs::ProgramsConfig;
 use heca_core::layout::PaneId;
 use heca_grid_ui::theme::Theme as GuiTheme;
-use std::rc::Rc;
 
 /// Everything a component's seams borrow from, owned by the test for as long as it runs.
 pub(crate) struct Fixture {
@@ -36,7 +35,7 @@ impl Default for Fixture {
         Self {
             theme: GuiTheme::default(),
             programs: ProgramsConfig::default(),
-            emit: Rc::new(|_| {}),
+            emit: crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {}),
             catalog: ActionCatalog::with_builtins(),
             store,
             signals: ChromeSignals::default(),

@@ -775,6 +775,42 @@ pub trait ComponentExt: Component + Sized {
         self
     }
 
+    /// **What a pick does to this widget, when that differs from acting on it.**
+    ///
+    /// Being pickable is **not** what this turns on — anything actionable already wears a letter,
+    /// and picking it does what clicking it does (F003/P082/T441). This is the **override**:
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::Row;
+    ///
+    /// // A click activates the pane and leaves the sidebar; a pick looks at it and stays.
+    /// let row = Row::new().on_activate(|| { /* focus_pane */ }).on_hint(|| { /* peek_selected */ });
+    /// ```
+    ///
+    /// **It fires in the target phase only** — when *this* widget is the one picked, never when a
+    /// pick from a child passes through on the way up. A pane that is itself pickable and holds
+    /// pickable rows would otherwise fire both and land you on the pane, and every such container
+    /// would hand-write the DOM's `e.target !== e.currentTarget` guard — N copies of a framework
+    /// rule, which by our own rule means the API is missing. This deliberately diverges from
+    /// [`on_click`](ComponentExt::on_click): clicking a child of a clickable box **is** clicking the
+    /// box, because the pointer is over both, while picking a row is **not** picking the pane — a
+    /// pick is nominal, not spatial.
+    ///
+    /// **To watch picks from your children instead**, listen for the bubbled event:
+    /// `.on(EventKind::Hint, |e| …)`. It sees which widget was picked and can
+    /// [`stop_propagation`](crate::event::EventCx::stop_propagation); it declares nothing and gets
+    /// no letter of its own.
+    ///
+    /// **Say what it is, where you can.** `f` may be a plain closure, or a
+    /// [`Hint`](crate::hint::Hint) carrying the [`Intent`](heca_view::Intent) the act *is* — which
+    /// is what lets a host ask its own policy about a candidate before spending a letter on it. The
+    /// app's `fires` and `realize` both hand over the pair; nothing else has to.
+    fn on_hint(mut self, f: impl Into<crate::hint::Hint>) -> Self {
+        self.base_mut().hint = Some(f.into());
+        self
+    }
+
     fn on_action(mut self, name: impl Into<String>, f: impl Fn() + 'static) -> Self {
         self.base_mut().actions.push(crate::hint::DeclaredAction {
             name: name.into(),

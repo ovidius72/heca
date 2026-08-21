@@ -306,40 +306,17 @@ pub struct KeyHint {
 #[heca_grid_ui_macros::props]
 impl KeyHint {
 
-    /// **What a pick of this letter does.**
-    ///
-    /// ```
-    /// use heca_grid_ui::prelude::*;
-    /// use heca_grid_ui::widgets::KeyHint;
-    ///
-    /// # let row_id = 7u64;
-    /// # fn cursor_to(_: u64) {}
-    /// let row = KeyHint::new(Row::new().child(Label::new("nvim")))
-    ///     .on_hint(move || cursor_to(row_id));
-    /// ```
-    ///
-    /// **It goes on the wrapper, not on every widget.** Being pickable is something you opt a
-    /// region into — you were already wrapping it to show the letter — so `Label::on_hint` is a
-    /// method that never has to exist, and you can read off the tree what is reachable. (A context
-    /// menu is the other shape on purpose: a menu is *about* a widget, so it is a slot any widget
-    /// carries; a hint is *aimed at* a region you chose to make reachable.)
-    ///
-    /// **It replaces an id and a registry.** A hint target used to be `hints.register(intent)`
-    /// followed by `.hint_target(id)` — three things a caller had to know (that a registry exists,
-    /// that they must pre-register, and a host-private intent type), and a plugin could construct
-    /// none of them. That made `prefix+/` a shipped feature a plugin could only have a
-    /// second-class version of, which RULE ZERO in `AGENTS.md` forbids. The framework collects
-    /// these out of the tree ([`hint::collect_hints`](crate::hint::collect_hints)), hands out the
-    /// letters, draws them, and runs this one when it is picked.
-    ///
-    /// **A pick is not a click.** They are different gestures and a region may answer them
-    /// differently: heca's sidebar row activates the pane on a click and *stays in the sidebar* on
-    /// a hint. Pointing one intent at both is what made `prefix+/` leave the sidebar.
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a closure")]
-    pub fn on_hint(mut self, f: impl Fn() + 'static) -> Self {
-        self.base.hint = Some(Box::new(f));
-        self
-    }
+    // `on_hint` is **not here any more** (F003/P082/T432). It is
+    // [`ComponentExt::on_hint`](crate::builders::ComponentExt::on_hint), on every widget — so a
+    // `KeyHint::new(row).on_hint(…)` call still reads exactly the same, and a widget that can carry
+    // the declaration itself no longer has to be wrapped to say what a pick does to it.
+    //
+    // Having it here put the two facts about a target on two different nodes: a row named itself
+    // and the wrapper around it carried the pick, while a mounted dock named itself outside and
+    // declared the pick within. Which one was on top depended on how the tree was built, so the
+    // code matching a letter to an action had to search both up and down — and searching one way
+    // only is why sidebar letters kept failing with no error.
+
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
     pub fn new(child: impl Component + 'static) -> Self {
         Self::wrap(Box::new(child))

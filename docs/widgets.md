@@ -283,6 +283,7 @@ chain fell silent the day one row forgot to declare its key. N copies of a rule 
 | `TextInput(String)` | text the user **committed** — typed, pasted, or composed by an IME. Distinct from `Key`: `Shift+2` is `Char('2')` there and `"@"` here. A field types from this and from nothing else. |
 | `ModifiersChanged` | broadcast; observers return `Handled::No`. |
 | `Widget(WidgetIntent)` | a semantic, configurable intent resolved from `[keys.widgets]`. |
+| `Hint(HintEvent)` | a picker's letter resolved to a widget. The picked widget's own `on_hint` runs in the **target phase only**; what bubbles is this event, so a container can watch — and take — picks from its children. Carries the picked widget's `key` and `bounds`. |
 | `Focus` / `Blur` | this widget gained or lost keyboard focus — the moment to select-all, commit an edit, or close a popup. |
 | `Mount` / `Unmount` | it entered a live tree (first layout pass), or is being dropped (a rebuilt tree throwing the old one away). |
 
@@ -557,6 +558,7 @@ let row = Row::new()
 | `.on_pointer_enter(f)` / `.on_pointer_leave(f)` | Hover transitions. Several widgets on one path enter together, so claiming one is almost always wrong. |
 | `.on_scroll(f)` | The wheel over this widget. Stop propagation to keep it from also scrolling whatever contains this widget. |
 | `.on_pointer_down_outside(f)` | A press landed somewhere else — how a popup closes itself. |
+| `.on_hint(f)` | **What a pick does to this widget, when that differs from acting on it** — the override, on every widget. Fires in the **target phase only**; listen with `.on(EventKind::Hint, …)` to watch picks from your children instead. |
 | `.on_key(f)` / `.on_text_input(f)` | A key, or committed text, that reached this widget — it holds the keyboard, or contains what does. Intercepting a shortcut or a quick-pick letter is the same one line as intercepting a click. |
 | `.on_focus_gained(f)` / `.on_focus_lost(f)` | Keyboard focus arrived or left. (Named this way because `Component::on_focus` is the widget's own hook for the same moment.) |
 | `.on_mount(f)` / `.on_unmount(f)` | Entered a live tree (first layout pass) / is being dropped. `on_unmount` is where a widget releases what it registered with the host, at the moment the tree that registered it goes away. |
@@ -613,7 +615,7 @@ nothing for the letter to run.
 | what you write | what happens |
 |---|---|
 | nothing | actionable → gets a letter; picking it does what clicking it does |
-| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays) |
+| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget since F003/P082/T432 — it was a `KeyHint` builder before |
 | `.hintable(false)` | never gets a letter, however actionable it is |
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
@@ -2763,7 +2765,7 @@ row that nothing can activate should not look like a control.
 > ```rust
 > // declarative (heca-view-realize)              native (heca/src/chrome)
 > node.on_press(intent)                           row.on_activate(fires(intent, emit))
-> node.on_hint(intent)                            KeyHint::new(row).on_hint(fires(intent, emit))
+> node.on_hint(intent)                            row.on_hint(picks(mount, intent, emit))
 > ```
 >
 > **The click and the pick are two declarations, not one** (F004/P084/T399). A click on a sidebar
@@ -3398,9 +3400,11 @@ with no downcasting.
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
   tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
   child row fills its column instead of shrinking to content width.
-  `.on_hint(impl Fn() + 'static)` — **what a `prefix+/` pick does to this region.** Host-only
-  (behaviour crosses a description boundary as an `Intent`, never a closure); the declarative
-  spelling is the node's `hint` event. Unset ⇒ the region is not a pick target.
+  **`on_hint` is no longer here** (F003/P082/T432) — it is
+  [`ComponentExt::on_hint`](#componentext--what-every-widget-gets), on every widget, so the two
+  facts about a target (who it is, and what picking it does) stop living on two different nodes.
+  A `KeyHint::new(row).on_hint(…)` call reads exactly the same; what changed is that a widget which
+  can carry the declaration itself no longer has to be wrapped to say what a pick does to it.
 - **Accessors**: `.hint_signal() -> Signal<Option<String>>`.
 
 **Native:**
@@ -3432,7 +3436,16 @@ Bind neither and the node is not a pick target; bind only `press` and a pick doe
 
 **How the framework uses it** (`heca_grid_ui::hint`): `collect_hints(root)` walks the laid-out tree
 and returns every declaration in document order with the rect its letter goes over; `fire_hint(root,
-&path)` runs one, answering `false` when the tree was rebuilt under the letters. **Nothing is
+&path)` **delivers the pick as an `Event::Hint`** on the walk every other event uses, answering
+`false` when the tree was rebuilt under the letters.
+
+**A declaration can say what it *is*, not only what it runs.** `on_hint` takes a closure or a
+`Hint` — `Hint::of(intent, run)` — carrying the `Intent` the act names. That is what lets a host ask
+its own policy about a candidate *before* spending a letter on it: `hint_intent(root, &path)` hands
+the declaration back and the library takes no view. heca uses it for one rule in one place — a pick
+whose action the current focus domain would refuse is dropped from the candidate list, so
+`prefix+/` stops lettering panes you cannot focus while a pane is floating. A plain closure has
+nothing to ask about and is always offered. **Nothing is
 registered** — a target is addressed by its path for exactly as long as the letters are up, so there
 is no allocator to keep in step with three rebuild cadences and nothing to un-register. This
 replaced an opaque `HintTargetId` the host mapped back to a `pub(crate)` enum, which a plugin could
@@ -3662,7 +3675,7 @@ Any chrome button that triggers a `WmAction` gets its **tooltip** and its `prefi
 **KeyHint** from that action, automatically — the caller names the action, never a
 shortcut string, the leader symbol, or a hand-built tip. This keeps every button
 uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
-**`Tooltip`**, and **`KeyHint::on_hint`** ([`KeyHint`](#keyhint) framework); the
+**`Tooltip`**, and **`ComponentExt::on_hint`** ([`KeyHint`](#keyhint) framework); the
 resolution seam is app-side.
 
 ```rust

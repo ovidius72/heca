@@ -257,9 +257,9 @@ impl Component for KeyHintGroup {
                 self.set_letters(false);
                 if let Some(path) = picked
                     && let Some(node) = self.at(&path)
-                    && let Some(run) = &node.base().hint
+                    && let Some(hint) = &node.base().hint
                 {
-                    run();
+                    hint.run();
                 }
                 Handled::Yes
             }
@@ -293,7 +293,7 @@ impl crate::builders::Parent for KeyHintGroup {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::Parent as _;
+    use crate::builders::{ComponentExt as _, Parent as _};
     use crate::widgets::{Flex, KeyHint, Label, Row};
     use std::cell::RefCell;
     use std::rc::Rc;

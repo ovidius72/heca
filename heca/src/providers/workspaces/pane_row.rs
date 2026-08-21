@@ -338,7 +338,7 @@ impl PaneRow<'_> {
                 // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
                 // registered and no id leaves this line — which is the only reason a plugin's row could
                 // ever have the same picker (RULE ZERO, F004/P084/T399).
-                .on_hint(crate::chrome::fires(
+                .on_hint(crate::chrome::picks(
                     seams.mount,
                     row_hint(pane_key(pane_id)),
                     seams.emit,

@@ -41,7 +41,7 @@ pub(super) fn callbacks() -> (ExposeCallbacks, Sink) {
     let sink: Sink = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let emit: crate::chrome::ChromeIntentEmitter = {
         let sink = sink.clone();
-        std::rc::Rc::new(move |i| sink.borrow_mut().push(i))
+        crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, i| sink.borrow_mut().push(i))
     };
     (super::callbacks(emit, shipped_keys()), sink)
 }

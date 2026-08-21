@@ -59,7 +59,7 @@ impl WorkspaceFrame<'_> {
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {
-                emit(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx });
+                emit.fire(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx });
             })
             .header(
                 Flex::row()
@@ -135,7 +135,7 @@ impl WorkspaceFrame<'_> {
         KeyHint::new(dock)
             // **What `prefix+/` does to this row** — the cursor lands on the workspace header
             // and the dock keeps the keyboard, exactly as it does on a pane row.
-            .on_hint(crate::chrome::fires(
+            .on_hint(crate::chrome::picks(
                 seams.mount,
                 row_hint(workspace_key(ws_idx)),
                 seams.emit,

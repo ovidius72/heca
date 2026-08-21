@@ -425,7 +425,54 @@ pub(crate) fn truncate_sidebar_git_branch(branch: &str) -> String {
 /// [`InteractionIntent`](crate::app::interaction::InteractionIntent), never a direct
 /// state mutation. Handed to container providers through
 /// [`ChromeCtx::emit_intent`](crate::providers::ChromeCtx::emit_intent).
-pub(crate) type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
+#[derive(Clone)]
+pub(crate) struct ChromeIntentEmitter {
+    source: crate::app::interaction::InteractionSource,
+    sink: Rc<dyn Fn(crate::app::interaction::InteractionSource, crate::app::interaction::InteractionIntent)>,
+}
+
+impl ChromeIntentEmitter {
+    /// A sink that stamps everything it posts with `source`.
+    pub(crate) fn new(
+        event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+        source: crate::app::interaction::InteractionSource,
+    ) -> Self {
+        let event_proxy = event_proxy.clone();
+        Self {
+            source,
+            sink: Rc::new(move |source, intent| {
+                let _ = event_proxy
+                    .send_event(crate::app::events::AppEvent::ChromeIntent { source, intent });
+            }),
+        }
+    }
+
+    /// A sink of your own — what a test uses to record what a component emitted.
+    #[cfg(test)]
+    pub(crate) fn of(
+        source: crate::app::interaction::InteractionSource,
+        sink: impl Fn(crate::app::interaction::InteractionSource, crate::app::interaction::InteractionIntent)
+            + 'static,
+    ) -> Self {
+        Self { source, sink: Rc::new(sink) }
+    }
+
+    /// **Where intents from this tree come from.**
+    ///
+    /// It is readable, and that is the point: asking *"would this be allowed?"* and *running* it
+    /// have to ask the identical question, and they cannot while one of them invents an answer.
+    /// The `prefix+/` picker asked as `Keyboard` while the chrome tree dispatches as
+    /// `MouseLeftSidebar`, so the two disagreed about the domain — the picker offered letters in
+    /// `Container` that execution then refused in `Floating` (Antonio, driving 2026-08-21).
+    pub(crate) fn source(&self) -> crate::app::interaction::InteractionSource {
+        self.source
+    }
+
+    /// Post an intent, stamped with this sink's source.
+    pub(crate) fn fire(&self, intent: crate::app::interaction::InteractionIntent) {
+        (self.sink)(self.source, intent)
+    }
+}
 
 /// **The intent sink for one layer's own retained tree** — the exposé's cards, a modal's buttons, a
 /// plugin panel's widgets (F003/P082/T416).
@@ -446,13 +493,10 @@ pub(crate) fn layer_emitter(
     event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
     id: LayerId,
 ) -> ChromeIntentEmitter {
-    let event_proxy = event_proxy.clone();
-    Rc::new(move |intent| {
-        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-            source: crate::app::interaction::InteractionSource::Surface(id),
-            intent,
-        });
-    })
+    ChromeIntentEmitter::new(
+        event_proxy,
+        crate::app::interaction::InteractionSource::Surface(id),
+    )
 }
 
 /// Transparent wrapper that marks only its own bounds dirty when the host bumps
@@ -796,7 +840,7 @@ fn sidebar_toggle_button(
     let fire = {
         let emit = emit.clone();
         let action = action.clone();
-        move || emit(InteractionIntent::ActivateAction(action.clone()))
+        move || emit.fire(InteractionIntent::ActivateAction(action.clone()))
     };
     let hint = fire.clone();
     // Just pick the size variant — the widget derives icon px + padding from the
@@ -1314,6 +1358,16 @@ pub(crate) struct RetainedChrome {
     /// is* (pane / column / workspace). Populated during [`build_chrome_root`] and
     /// queried by [`sidebar_drag_source`]/[`sidebar_drop_target`].
     pub(crate) drag_items: DragItemRegistry,
+    /// **The [`InteractionSource`](crate::app::interaction::InteractionSource) every intent from
+    /// this tree is dispatched with** — taken from the emitter that built it, never restated.
+    ///
+    /// It is here so that *asking whether a gesture would be allowed* and *running it* ask the
+    /// identical question. The `prefix+/` picker judged its candidates as `Keyboard` while this
+    /// tree dispatches as `MouseLeftSidebar`; the two resolved to different domains, so the picker
+    /// offered letters in `Container` that execution then refused in `Floating` — a letter that did
+    /// nothing (Antonio, driving 2026-08-21). Guessing the source in the filter was the bug; there
+    /// is one authority and this is a copy of it, made at construction.
+    pub(crate) intent_source: crate::app::interaction::InteractionSource,
 }
 
 /// **Fire a named gesture**: the closure that emits `intent` through this surface's chrome sink.
@@ -1324,7 +1378,7 @@ pub(crate) struct RetainedChrome {
 /// ```ignore
 /// // declarative (heca-view-realize):     native (here):
 /// row.on_press(intent)                    row.on_activate(fires(mount, intent, emit))
-/// row.on_hint(intent)                     KeyHint::new(row).on_hint(fires(mount, intent, emit))
+/// row.on_hint(intent)                     row.on_hint(picks(mount, intent, emit))
 /// ```
 ///
 /// **Why a name and not a closure.** A closure is reachable from exactly one place: the gesture
@@ -1362,19 +1416,46 @@ pub(crate) fn pane_key(pane: heca_core::layout::PaneId) -> String {
 
 pub(crate) fn fires(
     mount: &str,
-    mut intent: Intent,
+    intent: Intent,
     emit: &ChromeIntentEmitter,
 ) -> impl Fn() + 'static {
+    let seated = seated(mount, intent);
+    let emit = emit.clone();
+    move || {
+        emit.fire(crate::app::interaction::InteractionIntent::View(
+            seated.clone(),
+        ))
+    }
+}
+
+/// **What a `prefix+/` pick does** — [`fires`], plus the declaration of *what it is*.
+///
+/// The same closure, carried in a [`Hint`](heca_grid_ui::Hint) that keeps the [`Intent`] beside it.
+/// A closure alone is opaque, and a host cannot ask its policy about an opaque thing — so a pick
+/// whose action the domain would refuse was still offered a letter, and pressing it did nothing
+/// (F003/P082/T432). With the intent in hand, `chrome::active_hint_targets` drops the candidate
+/// before the letter is spent.
+///
+/// Reach for it wherever a pick has a name. A pick that genuinely has none is still a plain closure
+/// — it simply cannot be judged, and is offered as it always was.
+pub(crate) fn picks(mount: &str, intent: Intent, emit: &ChromeIntentEmitter) -> heca_grid_ui::Hint {
+    let seated = seated(mount, intent);
+    let run = seated.clone();
+    let emit = emit.clone();
+    heca_grid_ui::Hint::of(seated, move || {
+        emit.fire(crate::app::interaction::InteractionIntent::View(run.clone()))
+    })
+}
+
+/// Stamp the seating onto an intent — **which element this is**, so the same container seated twice
+/// has two rows that each answer for themselves. One definition, so a click and a pick of the same
+/// row cannot be addressed differently.
+fn seated(mount: &str, mut intent: Intent) -> Intent {
     intent.args.insert(
         crate::providers::SEAT_ARG.to_string(),
         heca_view::PropValue::Text(mount.to_string()),
     );
-    let emit = emit.clone();
-    move || {
-        emit(crate::app::interaction::InteractionIntent::View(
-            intent.clone(),
-        ))
-    }
+    intent
 }
 
 /// Build the chrome root tree from app state (the expensive part — creates the
@@ -1382,7 +1463,7 @@ pub(crate) fn fires(
 pub(crate) fn build_chrome_root(
     state: &crate::app_state::AppState,
     chrome: ChromeConfig,
-) -> (Flex, ChromeSignals, DragItemRegistry) {
+) -> (Flex, ChromeSignals, DragItemRegistry, crate::app::interaction::InteractionSource) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
@@ -1392,13 +1473,10 @@ pub(crate) fn build_chrome_root(
     let status = chrome_status(state);
     let mut signals = ChromeSignals::default();
     let mut drag_items = DragItemRegistry::default();
-    let event_proxy = state.event_proxy.clone();
-    let emit_intent: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-            source: crate::app::interaction::InteractionSource::MouseLeftSidebar,
-            intent,
-        });
-    });
+    let emit_intent = ChromeIntentEmitter::new(
+        &state.event_proxy,
+        crate::app::interaction::InteractionSource::MouseLeftSidebar,
+    );
 
     // Expanded ⇄ Hidden: width is 0 when the region is Hidden (no icon rail — see
     // `docs/sidebar-provider-modes.md`), so a positive width means Expanded.
@@ -1524,7 +1602,8 @@ pub(crate) fn build_chrome_root(
     // never keyed loses its cursor position and its hint letters on the next rebuild, and nothing
     // fails when it does. Said once per distinct finding, in debug builds only.
     identity::report_ambiguous_widgets("chrome", &root);
-    (root, signals, drag_items)
+    let source = emit_intent.source();
+    (root, signals, drag_items, source)
 }
 
 /// Feed a pointer-press into the retained chrome tree so widget callbacks can route
@@ -1942,7 +2021,7 @@ mod tests {
 
         let shortcuts = ActionShortcuts::default();
         let catalog = crate::actions::ActionCatalog::with_builtins();
-        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
 
         // The bar as it is built: the two toggles side by side, in document order.
         let bar = |left_open: bool, right_open: bool| {
@@ -2456,7 +2535,7 @@ mod tests {
     ) -> Option<super::WidgetModel> {
         let mut host = super::ChromeHost::new(chrome.events());
         host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
-        let emit: super::ChromeIntentEmitter = Rc::new(|_| {});
+        let emit: super::ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         // The component reads its model from its own state, so the fixture puts it there rather
         // than handing it to the context (F003/P086/T367).
         *chrome.workspaces.tree_mut() = tree.clone();

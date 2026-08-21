@@ -964,12 +964,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals, drag_items) = crate::chrome::build_chrome_root(state, chrome);
+        let (root, signals, drag_items, intent_source) =
+            crate::chrome::build_chrome_root(state, chrome);
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
             root,
             sig: chrome_sig,
             signals,
             drag_items,
+            intent_source,
         });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so

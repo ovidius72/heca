@@ -74,8 +74,8 @@ pub use pointer::{PointerState, clear_hover, hit_test};
 pub use keymap::{KeyChord, KeyPress, Keymap};
 pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
 pub use hint::{
-    clear_hints, collect_actions, collect_hints, fire_action, fire_hint, offer_hint,
-    offer_hint_by_key, DeclaredAction,
+    clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent, offer_hint,
+    offer_hint_by_key, DeclaredAction, Hint,
 };
 pub use nav::{collect_keys, identity_of, key_at};
 pub use effects::{Attention, Eased, Flash};
@@ -113,8 +113,8 @@ pub mod prelude {
     pub use crate::keymap::{KeyChord, Keymap};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
     pub use crate::hint::{
-        clear_hints, collect_actions, collect_hints, fire_action, fire_hint, offer_hint,
-        offer_hint_by_key,
+        clear_hints, collect_actions, collect_hints, fire_action, fire_hint, hint_intent,
+        offer_hint, offer_hint_by_key, Hint,
     };
     pub use crate::nav::{collect_keys, identity_of, key_at};
     pub use crate::focus::FocusManager;

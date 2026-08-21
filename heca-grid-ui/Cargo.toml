@@ -8,6 +8,12 @@ description = "GPU-free, signal-driven, composable Grid/Tron UI component librar
 [dependencies]
 heca-core = { path = "../heca-core" }
 heca-theme = { path = "../heca-theme" }
+# The shared vocabulary for "a named action with arguments" (`Intent` / `PropValue`), so a hint
+# declaration can carry WHAT a pick would do and a host can ask its own policy about it before
+# offering a letter (F003/P082/T432). Serde-only with no dependencies of its own, so this is not a
+# cycle and inverts nothing; the library stores the value and never reads it — the judgement stays
+# in the app (`heca/src/chrome/hint.rs`, `docs/hint-architecture.md` § 6).
+heca-view = { path = "../heca-view" }
 floem_reactive = "0.2"
 taffy = "0.7"
 serde = { version = "1", features = ["derive"] }

@@ -318,7 +318,7 @@ pub(crate) fn menu_from_items(
             .danger(it.danger)
             .enabled(it.enabled)
             .on_click(move || {
-                emit_e(crate::app::interaction::InteractionIntent::View(intent.clone()))
+                emit_e.fire(crate::app::interaction::InteractionIntent::View(intent.clone()))
             });
         if let Some(glyph) = catalog.icon(&it.id) {
             row = row.icon(glyph);

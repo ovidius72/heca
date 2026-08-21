@@ -79,13 +79,26 @@ impl PaneShell<'_> {
         let pane = pane.key(crate::chrome::pane_key(pane_id));
 
         let pick = self.cb.pick.clone();
+        // **Say what the pick IS, not only what it runs** (F003/P082/T432). The closure emits
+        // `InteractionIntent::FocusPane`, which is host-private and opaque to a policy; the intent
+        // beside it is the same act as data, so `chrome::active_hint_targets` can ask
+        // `route_interaction` whether focusing *this* pane is permitted before spending a letter on
+        // it. With a floating pane active it is not, and the pane now gets no letter instead of one
+        // that does nothing.
+        //
+        // It names the built-in `focus_pane` with the argument that action declares, so the letter,
+        // a keybinding, a menu entry and RPC all resolve through one `build_action`.
+        let picked = heca_view::Intent::new("focus_pane").arg(
+            "pane_id",
+            heca_view::PropValue::Int(pane_id.0 as i64),
+        );
         KeyHint::new(pane)
             // Centred over the pane, which is where the letter is today and what the maintainer
             // expects. `TopCenter` is for compact square targets; a pane is the large-target case.
             .placement(HintPlacement::Center)
             // The theme accent, not the ambient one: see `PaneShellModel::accent`.
             .color(to_gui_color(accent))
-            .on_hint(move || pick(pane_id))
+            .on_hint(heca_grid_ui::Hint::of(picked, move || pick(pane_id)))
     }
 }
 
@@ -131,6 +144,34 @@ mod tests {
         assert_eq!(pane.base().key.as_deref(), Some("pane:7"));
     }
 
+    /// **A pick says what it IS, not only what it runs** (F003/P082/T432).
+    ///
+    /// This is what lets a policy refuse a candidate *before* a letter is spent on it: with a
+    /// floating pane active, `prefix+/` lettered every pane and pressing one did nothing, because
+    /// `ActionPolicy` correctly refuses a `FocusPane` that does not target the active float. A
+    /// closure gives the policy nothing to ask about — so if this declaration is ever reduced back
+    /// to one, every pane silently gets its useless letter again and no other test would notice.
+    #[test]
+    fn the_pane_says_what_picking_it_would_do() {
+        let (cb, _) = recording_callbacks();
+        let m = model(7);
+        let tree = PaneShell { model: &m, cb: &cb }.build();
+        let intent = tree
+            .base()
+            .hint
+            .as_ref()
+            .expect("the pane declares a pick")
+            .intent
+            .as_ref()
+            .expect("…and says what that pick is");
+        assert_eq!(intent.action, "focus_pane", "the built-in, by the name every surface uses");
+        assert_eq!(
+            intent.args.get("pane_id"),
+            Some(&heca_view::PropValue::Int(7)),
+            "aimed at this pane, so the policy can judge THIS candidate rather than panes in general"
+        );
+    }
+
     /// It answers what it binds: picking it focuses that pane, and nothing else.
     #[test]
     fn picking_the_pane_focuses_that_pane() {
@@ -138,7 +179,7 @@ mod tests {
         let m = model(3);
         let tree = PaneShell { model: &m, cb: &cb }.build();
         let hint = tree.base().hint.as_ref().expect("the pane declares a pick");
-        hint();
+        hint.run();
         assert_eq!(*picked.borrow(), vec![heca_core::layout::PaneId(3)]);
     }
 

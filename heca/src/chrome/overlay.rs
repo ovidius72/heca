@@ -19,14 +19,13 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, Point};
+use heca_grid_ui::{Button, ButtonVariant, Component, ComponentExt as _, Dialog, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
 use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerId, LayerKind};
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
-use crate::app::events::AppEvent;
 use crate::app::interaction::{InteractionIntent, InteractionSource};
 use heca_view::Intent;
 use crate::app_state::AppState;
@@ -249,7 +248,7 @@ pub(crate) fn open_view_layer(
     // nothing of `InteractionIntent`, so the carrier is put on here.
     let view_emit: super::IntentEmitter = {
         let emit = emit.clone();
-        Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+        Rc::new(move |intent| emit.fire(InteractionIntent::View(intent)))
     };
     let theme = super::chrome_gui_theme(state);
     let mut forms = FormBindings::default();
@@ -386,11 +385,8 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
 /// component declared. A menu that named itself nothing is simply itself.
 pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuAnchor) -> OverlayId {
     let id = OverlayId(state.layers.reserve_id());
-    let event_proxy = state.event_proxy.clone();
     let source = InteractionSource::MouseContent;
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
-    });
+    let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     // Rows other components added to this menu — only if it named itself.
     let mut ctx = ctx;
@@ -405,8 +401,8 @@ pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuA
     let dismiss = emit.clone();
     let panel = anchor
         .open(ctx)
-        .after_select(move || after(closing.clone()))
-        .on_dismiss(move || dismiss(close.clone()));
+        .after_select(move || after.fire(closing.clone()))
+        .on_dismiss(move || dismiss.fire(close.clone()));
 
     insert_menu_layer(state, id, panel);
     state.needs_redraw = true;
@@ -444,7 +440,7 @@ fn merge_contributions(
         let emit_e = emit.clone();
         let mut entry = MenuItem::new()
             .label(item.label.clone())
-            .on_click(move || emit_e(carrier.clone()))
+            .on_click(move || emit_e.fire(carrier.clone()))
             .danger(item.danger)
             .enabled(item.enabled);
         if let Some(glyph) = state.action_catalog.icon(&item.id) {
@@ -463,10 +459,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     let id = OverlayId(state.layers.reserve_id());
     let source = spec.source;
 
-    let event_proxy = state.event_proxy.clone();
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
-    });
+    let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     // **The same builder every declared menu uses.** A dropdown has no declaring widget — the host
     // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
@@ -488,14 +481,14 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         .child(items)
         .anchor(spec.anchor)
         .centered(spec.centered)
-        .on_dismiss(move || emit_dismiss(dismiss_close.clone()))
+        .on_dismiss(move || emit_dismiss.fire(dismiss_close.clone()))
         // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
         // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
         // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
         // panel hid itself while the layer stayed registered: still modal, still holding the
         // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
         // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
-        .after_select(move || emit_after(close.clone()))
+        .after_select(move || emit_after.fire(close.clone()))
         .open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
@@ -531,7 +524,7 @@ fn build_modal_root(
     let body = {
         let view_emit: super::IntentEmitter = {
             let emit = emit.clone();
-            Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+            Rc::new(move |intent| emit.fire(InteractionIntent::View(intent)))
         };
         super::identity::report_unkeyed_description("modal body", &spec.body);
         super::realize(&spec.body, theme, &view_emit, forms)
@@ -548,7 +541,7 @@ fn build_modal_root(
             action: action.id.clone(),
         });
         let emit = emit.clone();
-        let fire = move || emit(carrier.clone());
+        let fire = move || emit.fire(carrier.clone());
         let hint = fire.clone();
         let button = Button::new(action.label.clone())
             .variant(variant)
@@ -577,7 +570,7 @@ fn build_modal_root(
     Box::new(
         dialog
             .dismissible(spec.dismissible)
-            .on_dismiss(move || emit_dismiss(close.clone()))
+            .on_dismiss(move || emit_dismiss.fire(close.clone()))
             .open(true),
     )
 }
@@ -611,7 +604,7 @@ mod tests {
     use heca_view::PropValue;
 
     fn noop_emit() -> ChromeIntentEmitter {
-        Rc::new(|_| {})
+        ChromeIntentEmitter::of(InteractionSource::MouseContent, |_, _| {})
     }
 
     #[test]
@@ -667,7 +660,9 @@ mod tests {
         let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit: ChromeIntentEmitter = {
             let fired = fired.clone();
-            Rc::new(move |intent| fired.borrow_mut().push(intent))
+            ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
         };
         let mut root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
 

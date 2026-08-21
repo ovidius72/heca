@@ -241,17 +241,24 @@ pub struct Base {
     /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
     /// widget, opened by a right-click or the keyboard action.
     pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
-    /// **What a leader-key pick does to this region** — written with
-    /// [`KeyHint::on_hint`](crate::widgets::KeyHint::on_hint), the wrapper that draws the letter.
+    /// **What a leader-key pick does to this widget, when that differs from acting on it** —
+    /// written with [`on_hint`](crate::builders::ComponentExt::on_hint), on any widget.
     ///
-    /// The whole of the capability: a wrapped region carrying one is offered a letter by the
-    /// picker, and picking that letter runs it. There is no id to register, no registry to reach,
-    /// and no host type in the closure.
+    /// It is the **override**, not the switch. Being pickable is not opt-in: anything actionable is
+    /// offered a letter and picking it does what clicking it does (F003/P082/T441). This says a pick
+    /// does something *else* — heca's sidebar row activates the pane and leaves the sidebar on a
+    /// click, and stays in the sidebar on a pick.
     ///
-    /// The slot lives here so the collector stays one uniform walk, but **the builder is on the
-    /// wrapper, not on every widget**: being pickable is something you opt a region into, so
-    /// `Label::on_hint` is a method that never has to exist.
-    pub hint: Option<Box<dyn Fn()>>,
+    /// There is no id to register and no registry to reach; the declaration lives on the widget and
+    /// the collector reads it out of the laid-out tree.
+    ///
+    /// **The builder is on every widget** (F003/P082/T432). It used to be on
+    /// [`KeyHint`](crate::widgets::KeyHint) alone, which put the two facts about a target — who it
+    /// is and what picking it does — on two different nodes, and which of them was on top depended
+    /// on how the tree was built. That is why the matching code had to search both up and down, and
+    /// why sidebar letters kept failing with no error. `KeyHint` stays as a decorator for a
+    /// **region that is not a widget you can put a builder on**, and nothing else.
+    pub hint: Option<crate::hint::Hint>,
     /// **May this widget be offered a letter at all?** `true` for everything, until a caller says
     /// otherwise with [`hintable(false)`](crate::builders::ComponentExt::hintable).
     ///
@@ -914,7 +921,7 @@ pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// The alternative — letting an intent descend into the target's subtree — was tried and taken out.
 /// It made a whole region answer for a capability nobody in it had claimed, so two widgets that both
 /// handled one intent was not an error, and reading the tree could not tell you where a key landed.
-fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
+pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
     if node.on_event_capture(ev) == Handled::Yes {
         return Handled::Yes;
     }
@@ -944,11 +951,48 @@ fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Hand
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
+    } else if matches!(ev, Event::Hint(_)) {
+        // **A pick acts on the widget it named, and on nothing else** (F003/P082/T432). This is the
+        // target phase, and it is the only place a widget's own declaration runs — what continues
+        // up the chain is the *event*, which is the delegation seam.
+        //
+        // The divergence from a click is deliberate: clicking a child of a clickable box **is**
+        // clicking the box, because the pointer is over both, while picking a row is **not** picking
+        // the pane that holds it. A pick is nominal, not spatial. Without this, a pickable pane
+        // holding pickable rows fires both and you land on the pane — and every such container would
+        // hand-write the DOM's `e.target !== e.currentTarget` guard, which is N copies of a rule
+        // that belongs here.
+        run_pick(node);
     }
     if node.base_mut().run_handlers(ev) == Handled::Yes {
         return Handled::Yes;
     }
     node.on_event(ev)
+}
+
+/// **Do to `node` what picking it means**, in two cases and in this order (F003/P082/T441):
+///
+/// 1. it **declared** what a pick does ([`Base::hint`]) — run that. The override, for a region that
+///    answers a pick differently from a click: heca's sidebar row activates the pane and leaves on a
+///    click, and stays in the sidebar on a pick.
+/// 2. otherwise **act on it as a click would**, because that is what a letter over an ordinary
+///    button promises. Delivered as a real [`Event::Click`] at the widget's centre, through the
+///    handlers it already registered — never a second path that could drift from what the mouse
+///    does.
+fn run_pick(node: &mut dyn Component) {
+    if let Some(hint) = &node.base().hint {
+        hint.run();
+        return;
+    }
+    if !crate::hint::is_target(node) {
+        return;
+    }
+    // The centre, so a handler reading the position lands inside the widget it was aimed at.
+    let b = node.base().bounds;
+    let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let click = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
+    node.base_mut().run_handlers(&click);
+    node.on_event(&click);
 }
 
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything

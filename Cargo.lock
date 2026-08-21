@@ -1247,6 +1247,7 @@ dependencies = [
  "heca-core",
  "heca-grid-ui-macros",
  "heca-theme",
+ "heca-view",
  "serde",
  "taffy",
 ]

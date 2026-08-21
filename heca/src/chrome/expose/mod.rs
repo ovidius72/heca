@@ -113,7 +113,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             let intent = args.iter().fold(heca_view::Intent::new(action), |i, (k, v)| {
                 i.arg(*k, heca_view::PropValue::Int(*v))
             });
-            emit(crate::app::interaction::InteractionIntent::View(intent));
+            emit.fire(crate::app::interaction::InteractionIntent::View(intent));
         })
     };
     // Moving the map's highlight is its own intent — the same one `CardGrid::on_move` sends when
@@ -122,7 +122,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
     let cursor_to: std::rc::Rc<dyn Fn(PaneId)> = {
         let emit = emit.clone();
         std::rc::Rc::new(move |pane_id: PaneId| {
-            emit(crate::app::interaction::InteractionIntent::ExposeCursor { pane_id });
+            emit.fire(crate::app::interaction::InteractionIntent::ExposeCursor { pane_id });
         })
     };
     let choose: std::rc::Rc<dyn Fn(PaneId)> = {
@@ -139,11 +139,11 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             // the user asked for, not of a pane being focused (a hint focuses without leaving).
             // Without it the map focused the right pane and the keyboard stayed where it was, so
             // choosing a card looked like it had done nothing at all.
-            emit(crate::app::interaction::InteractionIntent::FocusPaneThenAction {
+            emit.fire(crate::app::interaction::InteractionIntent::FocusPaneThenAction {
                 pane_id,
                 action: Box::new(crate::input::WmAction::UnfocusDock),
             });
-            emit(crate::app::interaction::InteractionIntent::ActivateAction(
+            emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
                 crate::input::WmAction::CloseOverlay { overlay: None },
             ));
         })
@@ -153,7 +153,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
     let dismiss: std::rc::Rc<dyn Fn()> = {
         let emit = emit.clone();
         std::rc::Rc::new(move || {
-            emit(crate::app::interaction::InteractionIntent::ActivateAction(
+            emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
                 crate::input::WmAction::CloseOverlay { overlay: None },
             ));
         })
@@ -418,7 +418,9 @@ mod tests {
         let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
         let sink = seen.clone();
         let emit: super::super::ChromeIntentEmitter =
-            std::rc::Rc::new(move |intent| sink.borrow_mut().push(format!("{intent:?}")));
+            super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
+                sink.borrow_mut().push(format!("{intent:?}"))
+            });
         let mut root = map(&rows, &theme, emit, start, &LayoutOptions::default(), &shipped_keys(), None);
         // **Shown, as the layer stack shows it.** The map is built closed and opened by whoever
         // mounts it (`LayerRegistry::show`), which is also what plays its arrival — so a test that
@@ -555,7 +557,7 @@ mod tests {
         let s = session();
         let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
-        let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), None);
         root.open(); // as the layer stack shows it — see `built`
 
@@ -671,7 +673,7 @@ mod tests {
             let s = session();
             let rows = model(&s, |p| p.title.clone(), false);
             let theme = GuiTheme::default();
-            let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+            let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
             let mut root =
                 map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
             heca_grid_ui::LayoutEngine::new()
@@ -702,7 +704,7 @@ mod tests {
         let s = session();
         let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
-        let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let mut root =
             map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
         heca_grid_ui::LayoutEngine::new()

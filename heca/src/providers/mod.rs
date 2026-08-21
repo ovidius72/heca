@@ -614,7 +614,7 @@ mod tests {
     fn the_shared_context_carries_nothing_of_one_components_domain() {
         let store = store();
         let theme = heca_grid_ui::theme::Theme::default();
-        let emit: crate::chrome::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let emit: crate::chrome::ChromeIntentEmitter = crate::chrome::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let catalog = crate::actions::ActionCatalog::with_builtins();
         let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
 

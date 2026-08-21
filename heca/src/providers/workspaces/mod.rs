@@ -173,6 +173,26 @@ impl Provider for WorkspacesContainerProvider {
         // Chrome state: the cursor is not the pane layout, so these stay reachable while a floating
         // pane is active — the dock is still there to be driven.
         let cursor = ActionPolicy::Global;
+        // **A verb that ends by FOCUSING A PANE cannot be `Global`**, however harmless its first
+        // half looks (F003/P082/T432). `peek_selected` and `activate_selected` both move the cursor
+        // *and then* activate the row, and both were declared beside the pure cursor verbs because
+        // the cursor half is what you notice.
+        //
+        // `Global` is the one policy no domain refuses, so with a floating pane active the picker
+        // offered a letter on every sidebar row naming a pane: pressing one moved the cursor while
+        // the pane focus was refused underneath (`blocked intent from Provider`) — a letter that
+        // half worked, which is worse than one that does nothing (Antonio, driving 2026-08-21).
+        //
+        // This is the declaration telling the truth about itself, which is the *only* input the
+        // picker's filter takes. That filter knows nothing about panes, rows or workspaces, and it
+        // must not: it asks each candidate what it does and asks the policy about the answer. An
+        // action that misdescribes itself is the one thing no mechanism can correct.
+        //
+        // `SourceDependent` is the existing answer for "it depends what you are aiming at". With no
+        // introspectable `WmAction` behind a name-keyed verb the router takes its conservative
+        // branch while floating and refuses it; in `Container` and `Tiled` it is permitted, so
+        // `Space` from inside the dock and `prefix+/` over an ordinary layout are untouched.
+        let reaches_a_pane = ActionPolicy::SourceDependent;
         // Everything that acts on **the row the cursor is on**, which is only a question worth
         // asking while this dock has the keyboard (F003/P086/T371). They declared `TiledOnly`, which
         // was true but not the point: it blocked them while floating and left them reachable from
@@ -207,7 +227,7 @@ impl Provider for WorkspacesContainerProvider {
                 "Activate Row",
                 "Expand a structural row, or focus the pane under the cursor and leave the dock.",
                 Some(Glyph::CaretRight),
-                cursor,
+                reaches_a_pane,
             ),
             // **A hint can be aimed.** It acts on the cursor by default; the universal picker
             // passes the nav key of the row whose letter was chosen, so `prefix+/` lands on *that*
@@ -226,7 +246,7 @@ impl Provider for WorkspacesContainerProvider {
                     "Hint Row",
                     "Focus what the cursor points at without leaving the dock.",
                     Some(Glyph::Search),
-                    cursor,
+                    reaches_a_pane,
                 )
             },
             act(
@@ -1417,7 +1437,7 @@ mod tests {
         // registries.
         let p = WorkspacesContainerProvider::new();
         let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let store = store();
         // The model is the component's own, read off its state — not handed in by the host.
         *store.workspaces.tree_mut() = tree();
@@ -1466,7 +1486,7 @@ mod tests {
 
         let p = WorkspacesContainerProvider::new();
         let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let store = store();
 
         // Two workspaces, each with a column of two identically-named panes — nothing here can be
@@ -1523,7 +1543,9 @@ mod tests {
         let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit: ChromeIntentEmitter = {
             let fired = fired.clone();
-            Rc::new(move |intent| fired.borrow_mut().push(intent))
+            ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
         };
         let store = store();
         *store.workspaces.tree_mut() = tree();
@@ -1585,7 +1607,9 @@ mod tests {
             let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
             let emit: ChromeIntentEmitter = {
                 let fired = fired.clone();
-                Rc::new(move |intent| fired.borrow_mut().push(intent))
+                ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
             };
             let store = store();
             *store.workspaces.tree_mut() = tree();

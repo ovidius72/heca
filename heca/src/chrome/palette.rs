@@ -20,13 +20,11 @@
 //! resolved by the overlay host, so the entry's intent is policy-routed and confirm-gated like any
 //! other dispatch.
 
-use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Command, CommandPalette, Glyph};
 
 use super::{ChromeIntentEmitter, LayerKind, ModalResult, OverlayId};
-use crate::app::events::AppEvent;
 use crate::app::interaction::{dispatch_intent, InteractionIntent, InteractionSource};
 use crate::app_state::AppState;
 use crate::chrome::Intent;
@@ -353,10 +351,7 @@ pub(crate) fn open_command_palette(
     );
     let source = InteractionSource::Keyboard;
 
-    let event_proxy = state.event_proxy.clone();
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
-    });
+    let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     let owners = owners(state);
     let mut rows = entries(&state.action_catalog, &owners, &state.action_shortcuts);
@@ -400,7 +395,7 @@ pub(crate) fn open_command_palette(
             action: row.id.clone(),
         });
         let emit_run = emit.clone();
-        let mut command = Command::new(row.label.clone(), move || emit_run(carrier.clone()))
+        let mut command = Command::new(row.label.clone(), move || emit_run.fire(carrier.clone()))
             .group(group_of(row, &owners))
             .current(row.current)
             .preselect(row.preselect)
@@ -471,7 +466,7 @@ pub(crate) fn open_command_palette(
     let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: Some(id) });
     create_effect(move |_| {
         if !open.get() {
-            emit_close(close.clone());
+            emit_close.fire(close.clone());
         }
     });
 
