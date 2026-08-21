@@ -2774,6 +2774,156 @@ mod tests {
         }
     }
 
+    /// **What a plugin actually writes** — the SDK, end to end (F003/P082/T435).
+    ///
+    /// A plugin cannot hand us a Rust function, so without a declarative spelling it can draw a row
+    /// and never make that row pickable. The JSON is not a convenience, it is the feature.
+    ///
+    /// The kind here is a `Label` on purpose: nothing about it is clickable, `realize` wires no
+    /// `press` for it, and it is still a perfectly good thing to point at — which is why a hint is
+    /// enough on its own to make a node a target.
+    #[test]
+    fn a_plugin_can_make_anything_pickable_from_the_sdk() {
+        use heca_view::build;
+
+        let (emit, fired) = recording_emitter();
+        let node: ViewNode = build::Label::new("nginx")
+            .on_hint(Intent::new("docker.reveal").arg("id", PropValue::Text("abc".into())))
+            .into();
+
+        let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert_eq!(hints(widget.as_ref()), vec![Vec::<usize>::new()], "the label is a target");
+        assert!(heca_grid_ui::fire_hint(widget.as_mut(), &[]));
+        assert_eq!(
+            fired.borrow()[0].args.get("id"),
+            Some(&PropValue::Text("abc".into())),
+            "and picking it fires the plugin's own intent, arguments and all",
+        );
+    }
+
+    /// **T432's rule holds for a described tree too**: a pick acts on the widget it named and on
+    /// nothing else, so a plugin's nested pickable rows behave exactly like heca's own.
+    ///
+    /// Without it a plugin composing a pickable card out of pickable rows would fire both and land
+    /// the user on the card — and would have to hand-write the DOM's `e.target !== e.currentTarget`
+    /// guard, which it has no way to express at all.
+    #[test]
+    fn a_described_pick_lands_on_the_node_it_named_and_not_its_container() {
+        use heca_view::build;
+
+        let (emit, fired) = recording_emitter();
+        use heca_view::build::Parent as _;
+        let node: ViewNode = build::Card::new("Containers")
+            .on_hint(Intent::new("the_card"))
+            .child(build::Label::new("row").on_hint(Intent::new("the_row")))
+            .into();
+
+        let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let inner = hints(widget.as_ref())
+            .into_iter()
+            .find(|p| !p.is_empty())
+            .expect("the nested label is its own target");
+        assert!(heca_grid_ui::fire_hint(widget.as_mut(), &inner));
+        assert_eq!(
+            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            vec!["the_row"],
+            "the card it sits in must not answer for it",
+        );
+    }
+
+    /// **Anything a widget can be given in Rust, a description must be able to ask for.**
+    ///
+    /// The runtime half: a `hint` written into a node of **any** kind survives `realize` and is
+    /// found by the picker. `on_hint` is on `ComponentExt` (F003/P082/T432), so natively *every*
+    /// widget can be told what a pick does to it; this holds the described side to the same reach.
+    ///
+    /// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its
+    /// state is a live host signal, and `realize` refuses it rather than producing a dead control.
+    #[test]
+    fn a_hint_written_into_any_kind_is_found_by_the_picker() {
+        let mut unreachable: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            if kind == WidgetKind::ScrollBar {
+                continue;
+            }
+            let (emit, fired) = recording_emitter();
+            let node = sample_node(kind).on_hint(Intent::new("picked"));
+            let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            if !heca_grid_ui::fire_hint(widget.as_mut(), &[]) {
+                unreachable.push(format!("{kind:?} (no hint declaration on the realized widget)"));
+                continue;
+            }
+            if fired.borrow().iter().all(|i| i.action != "picked") {
+                unreachable.push(format!("{kind:?} (declared a hint that fired something else)"));
+            }
+        }
+        assert!(
+            unreachable.is_empty(),
+            "a `hint` event written into these kinds does not reach the picker, so a plugin can \
+             draw them but never make them pickable: {unreachable:#?}",
+        );
+    }
+
+    /// **The same reach, through the typed SDK.**
+    ///
+    /// The raw `ViewNode` form is the wire; `heca_view::build` is what an author actually writes,
+    /// and it is hand-written — so the thing that keeps it honest is a guard, exactly as
+    /// [`every_widget_property_is_reachable_from_the_sdk`] does for properties. A capability that
+    /// exists on the wire and not in the SDK is one nobody will find.
+    ///
+    /// It reads the SDK's source rather than calling it, because *"does a method exist"* is not a
+    /// question a running test can ask — the same technique, for the same reason.
+    ///
+    /// ⚠️ **Written red on purpose** (F003/P082/T434): `on_hint` sits on seven kinds today. It is
+    /// **F003/P082/T435** that makes it pass, by extending the `with_event!` table. Written
+    /// afterwards this test would only describe what was built, which protects nothing.
+    #[test]
+    fn every_kind_can_be_given_a_hint_from_the_sdk() {
+        /// Kinds with no `on_hint`, each with the reason. An entry here is a capability an author
+        /// cannot reach — keep it short, and never add one to make the test pass.
+        const NO_HINT: &[(&str, &str)] = &[(
+            "ScrollBar",
+            "host-only: its state is live host signals, and `realize` refuses it outright",
+        )];
+
+        let sdk = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-view/src/build.rs"),
+        )
+        .expect("the SDK source is where it is expected");
+
+        // `with_event!` is the one table that gives a builder its event setters, so this asks the
+        // table rather than looking for a method: `Row { on_press => "press", on_hint => "hint" }`.
+        let events = {
+            let start = sdk.find("with_event!(").expect("the SDK binds its events in one table");
+            let rest = &sdk[start..];
+            let end = rest.find("\n);").unwrap_or(rest.len());
+            rest[..end].to_string()
+        };
+
+        let mut missing: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let name = format!("{kind:?}");
+            if NO_HINT.iter().any(|(k, _)| *k == name) {
+                continue;
+            }
+            let declares = events
+                .lines()
+                .filter(|l| l.trim_start().starts_with(&format!("{name} {{")))
+                .any(|l| l.contains("on_hint"));
+            if !declares {
+                missing.push(name);
+            }
+        }
+
+        assert!(
+            missing.is_empty(),
+            "these kinds take a hint natively (`ComponentExt::on_hint` is on every widget) but \
+             cannot be given one through the typed SDK, so an author writing them can draw a \
+             thing and never make it pickable: {missing:#?}\n\nAdd `on_hint => \"hint\"` to the \
+             kind's `with_event!` row, or add it to NO_HINT with the reason.",
+        );
+    }
+
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.
     #[test]
     fn glyph_from_name_resolves_known_and_rejects_unknown() {

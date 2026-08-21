@@ -599,9 +599,25 @@ with_text!(
 );
 
 with_event!(
-    // `hint` beside `press` on every actionable kind: **a leader-key pick is its own gesture**, and
-    // a row that answers it differently has to be able to say so. Left unbound it falls back to
-    // `press`, so an actionable node stays reachable by letter with nothing written.
+    // **`hint` is on every kind, because `on_hint` is on every widget.**
+    //
+    // Natively a hint is `ComponentExt::on_hint` — universal, on `Base`, no widget opts in
+    // (F003/P082/T432) — and `realize` writes a node's `hint` event into that same slot for every
+    // kind, in the common path rather than a per-kind arm. The SDK offered it on seven kinds, so an
+    // author writing a `Label`, a `Card` or a `Panel` could draw the thing and never make it
+    // pickable, while the very same tree written as a raw `ViewNode` could. That is the drift
+    // `every_kind_can_be_given_a_hint_from_the_sdk` was written red to catch (F003/P082/T434).
+    //
+    // A hint is enough on its own: a node carrying one **is** a pick target, whether or not it can
+    // be clicked (`heca_grid_ui::hint::is_target` — `hintable && (hint.is_some() || actionable)`).
+    // So this is not "hint beside press"; it is a capability of every node, listed here because
+    // this table is where a builder gets its event setters.
+    //
+    // `press` stays on the kinds `realize` actually wires a click for — that is a per-kind arm, and
+    // a `press` on a `Separator` would be a setter that silently does nothing.
+    //
+    // `ScrollBar` is absent from this table and from the SDK entirely: host-only, its state is live
+    // host signals, and `realize` refuses it outright rather than render a dead control.
     Row { on_press => "press", on_hint => "hint" }
     Button { on_press => "press", on_hint => "hint" }
     IconButton { on_press => "press", on_hint => "hint" }
@@ -609,14 +625,36 @@ with_event!(
     Item { on_press => "press", on_hint => "hint" }
     RailCell { on_press => "press", on_hint => "hint" }
     Choice { on_press => "press", on_hint => "hint" }
-    Input { on_change => "change" }
-    Toggle { on_change => "change" }
-    Checkbox { on_change => "change" }
-    Select { on_change => "change" }
-    Tabs { on_change => "change" }
-    ItemGroup { on_toggle => "toggle" }
-    DockFrame { on_toggle => "toggle" }
-    Toast { on_action => "action", on_dismiss => "dismiss" }
+    Input { on_change => "change", on_hint => "hint" }
+    Toggle { on_change => "change", on_hint => "hint" }
+    Checkbox { on_change => "change", on_hint => "hint" }
+    Select { on_change => "change", on_hint => "hint" }
+    Tabs { on_change => "change", on_hint => "hint" }
+    ItemGroup { on_toggle => "toggle", on_hint => "hint" }
+    DockFrame { on_toggle => "toggle", on_hint => "hint" }
+    Toast { on_action => "action", on_dismiss => "dismiss", on_hint => "hint" }
+
+    // The kinds whose only event is the pick. Nothing here is clickable through a description —
+    // `realize` wires no `press` for them — but every one of them can be *picked*, and several
+    // want to be: a `Card` standing for a thing, a `Panel` heading a plugin's section, a `Label`
+    // that is the only handle on a row.
+    VStack { on_hint => "hint" }
+    HStack { on_hint => "hint" }
+    Grid { on_hint => "hint" }
+    Card { on_hint => "hint" }
+    Scroll { on_hint => "hint" }
+    Panel { on_hint => "hint" }
+    Surface { on_hint => "hint" }
+    Overlay { on_hint => "hint" }
+    MarkerGroup { on_hint => "hint" }
+    Label { on_hint => "hint" }
+    Badge { on_hint => "hint" }
+    Tag { on_hint => "hint" }
+    Icon { on_hint => "hint" }
+    StatusDot { on_hint => "hint" }
+    Gauge { on_hint => "hint" }
+    Alert { on_hint => "hint" }
+    Separator { on_hint => "hint" }
 );
 
 // ── The per-kind properties ───────────────────────────────────────────────────────────────
@@ -874,6 +912,15 @@ impl Row {
     /// The hover/active highlight colour: a theme token name or a literal.
     pub fn highlight(self, colour: &str) -> Self {
         self.prop("highlight", PropValue::Color(colour.to_string()))
+    }
+    /// The colour of the **"you were just here"** mark, overriding the theme's row-scale
+    /// `previous_background`.
+    ///
+    /// The pair with [`highlight`](Row::highlight), for the same reason: the theme's default is
+    /// tuned for a row in a list, and the same tint on a much larger surface reads differently —
+    /// area changes how a lift reads. A token name or a literal.
+    pub fn previous_tint(self, colour: &str) -> Self {
+        self.prop("previous_tint", PropValue::Color(colour.to_string()))
     }
     /// The colour of the attention pulse.
     pub fn attention_color(self, colour: &str) -> Self {
