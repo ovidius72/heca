@@ -464,6 +464,13 @@ fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport:
 ///   *tree* by the layout pass, so inside a pane header it is the header's own box — a few dozen
 ///   pixels tall. Reading it there made every compact cap "not fit below", flip above, and get
 ///   clipped by the pane frame (Antonio, driving, 2026-08-14).
+/// - **The cap is nudged, never cut.** A row half past a sidebar's fold is still a target — you can
+///   see it, so you can aim at it — and its letter is drawn **whole** so it stays readable (Antonio,
+///   2026-08-23: *"a half visible pane row should have the letter to peek"*). Clipping it would make
+///   it unreadable, so instead it is moved inside the visible part of its own row —
+///   [`fit_into_view`] — and dropped when that part is too small to hold it. What stops a cap for a
+///   row nobody can see at all is **candidacy**, one level up: [`hint::collect`](crate::hint) drops
+///   a target outside its clipping ancestors, so the letter is never handed out.
 /// - **Into the OVERLAY band**, so nothing painted after this widget covers its letter. Drawing it
 ///   inline puts the cap at this widget's position in the paint order and every sibling drawn later
 ///   sits on top: a top-bar button's letter disappeared under the sidebar frame beside it, and a
@@ -471,6 +478,43 @@ fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport:
 ///   own scene**, nested exactly as deep as the widget is — the property the whole fix rests on,
 ///   since a plugin's overlay-nested picker then lands above its own content with nothing
 ///   host-side to teach.
+/// **Keep the cap inside the part of its row you can actually see.**
+///
+/// A row half past a sidebar's fold keeps its letter — you can see it, so you can aim at it — but
+/// the cap is placed relative to the row's *whole* box, so for a row that is nine tenths below the
+/// fold that lands on the dock's frame, outside the sidebar entirely (Antonio, driving, 2026-08-23:
+/// *"letter should not overlap the parent DockView"*). The renderer cannot stop it: the cap is drawn
+/// into the overlay band, which starts unclipped so a dropdown can escape a scroll region.
+///
+/// So it is nudged — never cut — into `bounds ∩ clip`, **the visible part of its own row**, not
+/// merely into the clip: pushing it anywhere in the viewport would park it over the row above,
+/// beside that row's own letter, naming something it does not name.
+///
+/// `None` when the visible sliver is too small to hold the cap. There is nowhere honest to put it
+/// then, so nothing is drawn.
+fn fit_into_view(
+    cap: Rectangle,
+    bounds: Rectangle,
+    clip: Option<Rectangle>,
+) -> Option<Rectangle> {
+    let Some(clip) = clip else {
+        return Some(cap);
+    };
+    let room = bounds.intersection(clip)?;
+    if room.size.w < cap.size.w || room.size.h < cap.size.h {
+        return None;
+    }
+    let x = cap
+        .loc
+        .x
+        .clamp(room.loc.x, room.loc.x + room.size.w - cap.size.w);
+    let y = cap
+        .loc
+        .y
+        .clamp(room.loc.y, room.loc.y + room.size.h - cap.size.h);
+    Some(Rectangle::new(Point::new(x, y), cap.size))
+}
+
 pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     let base = c.base();
     if !base.visible.get_untracked() {
@@ -484,6 +528,9 @@ pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
     }
     let style = base.hint_style;
     let cap = keycap_rect(base.bounds, base.font, &style, &text, cx.viewport());
+    let Some(cap) = fit_into_view(cap, base.bounds, cx.clip()) else {
+        return;
+    };
     let font = hint_font(base.font, &style, base.bounds);
     cx.with_overlay(|cx| {
         paint_keycap(cx, cap, &text, font, style.color, KeycapVariant::Filled);
@@ -518,6 +565,55 @@ impl Parent for KeyHint {}
 #[cfg(test)]
 mod tests {
     use super::keycap_size;
+
+    use super::fit_into_view;
+    use heca_core::layout::{Point, Rectangle, Size};
+
+    fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
+        Rectangle::new(Point::new(x, y), Size::new(w, h))
+    }
+
+    /// **Nothing clipping it, nothing to do** — the cap stays exactly where its placement put it.
+    #[test]
+    fn an_unclipped_cap_is_left_where_it_was_placed() {
+        let cap = rect(180.0, 10.0, 20.0, 20.0);
+        assert_eq!(fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), None), Some(cap));
+        // …and so is one whose row is fully inside the clip.
+        assert_eq!(
+            fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), Some(rect(0.0, 0.0, 200.0, 400.0))),
+            Some(cap),
+        );
+    }
+
+    /// **A row nine tenths past the fold keeps its letter, inside the dock** (F003/P082/T438).
+    ///
+    /// The cap is centred in the row's whole box, which for a row cut to a 25px sliver at the
+    /// bottom of a sidebar lands on the dock's frame. It moves up into the sliver instead — and
+    /// stays whole, because a cut letter cannot be read.
+    #[test]
+    fn a_cap_moves_into_the_visible_sliver_of_its_row() {
+        let row = rect(0.0, 375.0, 200.0, 40.0); // 25px of it is above the fold at y=400
+        let clip = rect(0.0, 0.0, 200.0, 400.0);
+        let cap = rect(174.0, 385.0, 20.0, 20.0); // centred in the row: 5px of it hangs out
+
+        let fitted = fit_into_view(cap, row, Some(clip)).expect("25px of row holds a 20px cap");
+        assert_eq!(fitted.size, cap.size, "whole, never cut");
+        assert!(
+            fitted.loc.y + fitted.size.h <= clip.loc.y + clip.size.h,
+            "and inside the dock: {fitted:?}",
+        );
+        assert!(fitted.loc.y >= row.loc.y, "still within its own row, not the one above");
+    }
+
+    /// **Too little of the row left to hold a letter, so none is drawn.** Nudging it any further
+    /// would park it over the row above, beside that row's own letter, naming something else.
+    #[test]
+    fn a_cap_with_no_room_left_is_not_drawn() {
+        let row = rect(0.0, 392.0, 200.0, 40.0); // only 8px visible
+        let clip = rect(0.0, 0.0, 200.0, 400.0);
+        let cap = rect(174.0, 402.0, 20.0, 20.0);
+        assert_eq!(fit_into_view(cap, row, Some(clip)), None);
+    }
 
     #[test]
     fn keycap_size_is_positive_and_grows_with_text() {

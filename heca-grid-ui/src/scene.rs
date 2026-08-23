@@ -105,7 +105,10 @@ impl Scene {
         // Remember how many clips were open, so `end_overlay` restores exactly
         // those and not any the nested overlay opened. The nested segment itself
         // starts UNCLIPPED on purpose: a dropdown opened inside a scroll region
-        // must be able to extend beyond it.
+        // must be able to extend beyond it — and so must a hint keycap, which is
+        // drawn whole for a row only half in view (F003/P082/T438). The cost of
+        // that freedom is that geometry alone cannot stop a cap for a row nobody
+        // can see: the picker's candidacy walk does, before a letter is handed out.
         self.clip_depth_stack.push(self.overlay_clips.len());
     }
 

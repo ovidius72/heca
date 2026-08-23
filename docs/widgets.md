@@ -612,6 +612,12 @@ Button::new("×").hintable(false)   // a close button on every row would eat a l
 `.hintable(true)` is the default and does nothing on a widget nobody can act on — there would be
 nothing for the letter to run.
 
+**And a widget nobody can see gets no letter.** A target scrolled out of a clipping ancestor — a
+sidebar row past the fold — is dropped by the candidacy walk, through the same
+`Component::clips_children` that paint and input already honour (F003/P082/T438). Nothing to write:
+put a widget in a `ScrollRegion` and its letters follow the fold. **A row you can half see keeps
+its letter**, and the keycap is drawn whole rather than cut, so you can still read what to press.
+
 | what you write | what happens |
 |---|---|
 | nothing | actionable → gets a letter; picking it does what clicking it does |

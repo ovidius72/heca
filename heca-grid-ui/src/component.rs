@@ -706,6 +706,15 @@ pub trait Component {
     /// clickable where it *would* have been: its bounds are real, it simply isn't drawn. Paint
     /// already honours the clip; this is the same rule for input, in the one place that walks the
     /// tree rather than in each clipping widget's own gate.
+    ///
+    /// **Three walks ask it now**, and each one that forgets shows the same defect from a different
+    /// angle: paint (the clip itself), input ([`hit_test`](crate::pointer::hit_test) — a row past
+    /// the fold is not clickable) and the **picker** ([`hint`](crate::hint) — a row past the fold
+    /// gets no letter). The picker was the one that did not, and its symptom was keycaps for
+    /// scrolled-away sidebar rows painted over the top bar and the status bar, because a cap goes
+    /// into the overlay band and an overlay segment starts unclipped on purpose (F003/P082/T438).
+    ///
+    /// If you are adding a fourth walk over the tree, it asks this too.
     fn clips_children(&self) -> bool {
         false
     }
@@ -1126,6 +1135,15 @@ pub struct PaintCx<'a> {
     scale: f32,
     /// The fixed point the scale shrinks toward, already in scene coordinates.
     scale_origin: Point,
+    /// The clip currently in force — every open [`with_clip`](Self::with_clip) intersected, in the
+    /// same space the callers passed (a widget's own layout coordinates, before
+    /// [`placed`](Self::placed)), so a value read off `Base::bounds` can be compared with it
+    /// directly. `None` is *"nothing clips this"*.
+    ///
+    /// Read by [`clip`](Self::clip) — a widget that draws into the **overlay band** needs it,
+    /// because that band starts unclipped and geometry alone would let a keycap land outside the
+    /// dock it belongs to (F003/P082/T438).
+    clip: Option<Rectangle>,
 }
 
 /// Scale every colour in a draw command by `a`, leaving its geometry alone.
@@ -1224,6 +1242,7 @@ impl<'a> PaintCx<'a> {
             opacity: 1.0,
             scale: 1.0,
             scale_origin: Point::new(0.0, 0.0),
+            clip: None,
         }
     }
 
@@ -1380,8 +1399,29 @@ impl<'a> PaintCx<'a> {
     /// spilling out. Nested clips intersect with their parent.
     pub fn with_clip(&mut self, rect: Rectangle, f: impl FnOnce(&mut PaintCx<'a>)) {
         self.scene.push(DrawCommand::PushClip(self.placed(rect)));
+        // Remembered as well as emitted: the renderer's scissor cannot help a draw that goes into
+        // the **overlay band**, which starts unclipped on purpose (`Scene::begin_overlay`). A
+        // widget drawing there asks `clip()` and keeps itself inside by hand.
+        let outer = self.clip.replace(match self.clip {
+            Some(outer) => outer.intersection(rect).unwrap_or(Rectangle::new(
+                rect.loc,
+                Size::new(0.0, 0.0),
+            )),
+            None => rect,
+        });
         f(self);
+        self.clip = outer;
         self.scene.push(DrawCommand::PopClip);
+    }
+
+    /// **What is currently clipping this paint** — every open [`with_clip`](Self::with_clip)
+    /// intersected, in the widget's own layout coordinates. `None` means nothing does.
+    ///
+    /// For a widget that draws into the overlay band, where the renderer's scissor does not reach:
+    /// see [`paint_hint_label`](crate::widgets::paint_hint_label), which keeps a keycap inside the
+    /// dock its row lives in rather than letting it fall on the frame.
+    pub fn clip(&self) -> Option<Rectangle> {
+        self.clip
     }
 
     /// The active theme.

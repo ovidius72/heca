@@ -179,6 +179,36 @@ subtree; config binds the key per surface. The exposé already runs this end to 
 `heca.expose.pick`, `[[keys.surface]]` binds `pick = "s"`, and `s` letters its cards only. That is
 the answer whenever a picker would otherwise cover too much.
 
+### And a letter goes only where it can be SEEN
+
+There are two halves to that, and they live on opposite sides of the library/app line:
+
+| what hides a target | who asks | where |
+|---|---|---|
+| another surface in front, or the window's edge | the **app** | `resolve_hint_layers` — the coarse/fine rule above |
+| a **clipping ancestor** — a row scrolled past a sidebar's fold | the **library** | `hint::collect`, through `Component::clips_children` |
+
+The app cannot answer the second one: a row hidden by the sidebar's own fold is still inside the
+window, and its bounds are perfectly real — it simply is not drawn. The tree is where that answer
+is, and the framework already had a name for it. **Paint honours `clips_children`. Input honours it
+(`pointer::hit_test`). The picker was the one walk that never asked** — so `prefix+q` lettered rows
+past the fold, and their keycaps painted over the top bar and the status bar, because a cap goes
+into the overlay band and an overlay segment starts unclipped on purpose so a dropdown can escape a
+scroll region (Antonio, driving, 2026-08-23; F003/P082/T438).
+
+**Any overlap at all counts as visible**, so a row you can half see keeps its letter — *"a half
+visible pane row should have the letter to peek"* — and its keycap is deliberately **not** clipped
+to match: it is drawn whole so it stays readable. What stops a cap for a row nobody can see is
+candidacy, not clipping.
+
+**It filters the view, not the candidate.** A pane is shown in several places at once — the tiled
+area, the left sidebar, the right one — and the letter belongs to the *pane*. A row past the fold is
+simply not one of the places that can show it; the pane keeps its letter and its other views still
+wear it. That is the same rule the app already follows for a pane covered by a sidebar
+(`chrome/hint/letters.rs`), which is why `collect_hints` drops the candidate (it must not spend one
+of the 52) while `offer_hint_by_key` only declines to *write* (a withdrawal is never refused, or the
+keycap outlives the picker).
+
 ---
 
 ## 2d. ⭐ Identity — see `docs/widgets.md` § Identity

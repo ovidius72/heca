@@ -3,8 +3,30 @@
 //! draws it in its own paint.
 
 use crate::component::Component;
-use super::collect::{is_target, skip};
+use super::collect::{is_target, narrowed, out_of_view, skip};
 use crate::reactive::SignalUpdate;
+use heca_core::layout::Rectangle;
+
+/// **Hand `label` to `node`, unless nothing can see it there.**
+///
+/// The one place a letter is written, so the rule that a clipped-away view does not get one is
+/// stated once per walk rather than at each of the four places a letter is handed out.
+///
+/// **Withdrawal is never refused.** `None` takes a letter back and must reach a widget wherever it
+/// has scrolled to since it got one, or the keycap outlives the picker that put it up — the exact
+/// failure [`clear_hints`] exists to prevent.
+///
+/// This filters the **view, not the candidate**, which is the rule the app already follows for a
+/// pane covered by a sidebar (`chrome/hint/letters.rs`): the same pane is shown in several places,
+/// and the letter belongs to the pane. A row past the sidebar's fold simply is not one of the
+/// places that can show it; the pane keeps its letter and its other views still wear it.
+fn give(node: &dyn Component, label: &Option<String>, clip: Option<Rectangle>) -> bool {
+    if label.is_some() && out_of_view(node, clip) {
+        return false;
+    }
+    node.base().hint_label.set(label.clone());
+    true
+}
 
 /// **Offer the letter `label` to the hint target at `path`.** `None` withdraws it.
 ///
@@ -23,17 +45,20 @@ use crate::reactive::SignalUpdate;
 /// under the letters, which is not an error.
 pub fn offer_hint(root: &dyn Component, path: &[usize], label: Option<String>) -> bool {
     let mut node = root;
+    let mut clip = narrowed(None, root);
     for step in path {
         match node.base().children.get(*step) {
-            Some(child) => node = child.as_ref(),
+            Some(child) => {
+                node = child.as_ref();
+                clip = narrowed(clip, node);
+            }
             None => return false,
         }
     }
     if !is_target(node) {
         return false;
     }
-    node.base().hint_label.set(label);
-    true
+    give(node, &label, clip)
 }
 
 /// **Offer the letter `label` to the hint target declaring `key`.** `None` withdraws it.
@@ -69,6 +94,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         label: &Option<String>,
         enclosing: Option<&dyn Component>,
         declaring: Option<&dyn Component>,
+        clip: Option<Rectangle>,
     ) -> bool {
         if skip(node) {
             return false;
@@ -92,22 +118,35 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         let names_itself = node.base().key.as_deref() == Some(key)
             || node.base().scope_key.as_deref() == Some(key);
         if names_itself {
+            // **Nothing here can show it.** Asked before the search below, not inside it: the four
+            // steps exist to find *which widget draws this row's letter*, and one of them is the
+            // nearest target ENCLOSING the row — so a row past the sidebar's fold would otherwise
+            // hand its letter up to the workspace header, which is a wrong letter rather than no
+            // letter. The named thing is not visible in this tree, so this tree is not one of the
+            // places that can show it (F003/P082/T438).
+            if label.is_some() && out_of_view(node, clip) {
+                return false;
+            }
             // A declaration inside wins first (a dock names itself on the outside and declares the
             // pick within), then a declaration *enclosing* it, and only then anything merely
             // actionable inside. Same precedence in both directions: whoever DECLARED what a pick
             // does owns the letter — and the placement it drew with.
-            if label_nearest_matching(node, label, &|c: &dyn Component| c.base().hint.is_some()) {
+            if label_nearest_matching(node, label, clip, &|c: &dyn Component| {
+                c.base().hint.is_some()
+            }) {
                 return true;
             }
-            if let Some(outer) = declaring {
-                outer.base().hint_label.set(label.clone());
+            if let Some(outer) = declaring
+                && give(outer, label, clip)
+            {
                 return true;
             }
-            if label_nearest_matching(node, label, &|_: &dyn Component| true) {
+            if label_nearest_matching(node, label, clip, &|_: &dyn Component| true) {
                 return true;
             }
-            if let Some(outer) = enclosing {
-                outer.base().hint_label.set(label.clone());
+            if let Some(outer) = enclosing
+                && give(outer, label, clip)
+            {
                 return true;
             }
             // Named, but nothing anywhere around it says what a pick would do — so there is nothing
@@ -121,14 +160,15 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         //
         // `||` cannot be used to fold this either: it short-circuits the same way.
         let mut found = false;
+        let clip = narrowed(clip, node);
         for child in &node.base().children {
-            if walk(child.as_ref(), key, label, enclosing, declaring) {
+            if walk(child.as_ref(), key, label, enclosing, declaring, clip) {
                 found = true;
             }
         }
         found
     }
-    walk(root, key, &label, None, None)
+    walk(root, key, &label, None, None, None)
 }
 
 /// The nearest target in this subtree that `pick` accepts, labelled.
@@ -145,19 +185,20 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
 fn label_nearest_matching(
     node: &dyn Component,
     label: &Option<String>,
+    clip: Option<Rectangle>,
     pick: &dyn Fn(&dyn Component) -> bool,
 ) -> bool {
     if skip(node) {
         return false;
     }
-    if is_target(node) && pick(node) {
-        node.base().hint_label.set(label.clone());
+    if is_target(node) && pick(node) && give(node, label, clip) {
         return true;
     }
+    let clip = narrowed(clip, node);
     node.base()
         .children
         .iter()
-        .any(|c| label_nearest_matching(c.as_ref(), label, pick))
+        .any(|c| label_nearest_matching(c.as_ref(), label, clip, pick))
 }
 
 /// Withdraw every letter in this tree — what a host calls when the picker closes.
