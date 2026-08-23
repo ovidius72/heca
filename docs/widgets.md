@@ -3501,10 +3501,13 @@ that filter applied; a plugin's is the same behaviour scoped to its own panel.
 - **Construct**: `KeyHintGroup::new(child)`, or `KeyHintGroup::new_boxed(Box<dyn Component>)` for a
   subtree built dynamically (mirrors [`Parent::child_boxed`](#builder-traits)).
 - **Builders**:
-  - `.open_when(Signal<bool>)` — the **host-owned** open state. Set it from an action, which is how a
-    surface gives its picker a binding without any widget naming a key. Host-only. Binding it also
-    makes the group hold focus while open: holding focus *is* taking the keyboard, so there is no
-    gate to write and nothing to decline.
+  - `.opens_on("mypanel.pick")` — **the verb that opens it**, and the whole of what a picker costs
+    its author. The widget owns its open signal, holds the keyboard while it is up, and declares the
+    name; config binds the key to that name (`[[keys.surface]]`). Reach past it only when the host
+    already has the state — when something *other* than this verb also opens the picker.
+  - `.open_when(Signal<bool>)` — the **host-owned** open state, for that case. Host-only. Binding it
+    also makes the group hold focus while open: holding focus *is* taking the keyboard, so there is
+    no gate to write and nothing to decline.
   - `.letters(impl IntoIterator<Item = char>)` — **the letters this picker hands out, in order.**
     Defaults to `DEFAULT_LETTERS`. Host-only (an app's choice of alphabet, not data a described tree
     carries).
@@ -3535,13 +3538,12 @@ widget picker all spend letters in the same order.
 **Native:**
 
 ```rust
-let open = signal(false);          // the host flips this from an action
 let picker = KeyHintGroup::new(
     Flex::column()
         .child(Item::new("one").on_activate(|| choose(1)))
         .child(Item::new("two").on_activate(|| choose(2))),
 )
-.open_when(open)
+.opens_on("mypanel.pick")          // config binds the key to this name
 .letters("asdfghjkl".chars());     // optional — home row only, for a small panel
 ```
 
@@ -3549,7 +3551,15 @@ Note neither item declares anything to be pickable: both are actionable, so both
 [`.hintable`](#hintable-and-being-pickable).
 
 **Declarative** — a described tree opens a picker over its own subtree the same way, and binds the
-key through `[[keys.surface]]` on the action the component declares with `on_action`:
+key through `[[keys.surface]]` on the name it declares (F003/P082/T436):
+
+```json
+{ "kind": "KeyHintGroup",
+  "props": { "opens_on": "mypanel.pick" },
+  "children": [
+    { "kind": "Row", "events": { "hint": { "action": "docker.restart", "args": { "id": "web" } } } }
+  ] }
+```
 
 ```toml
 [[keys.surface]]
@@ -3557,8 +3567,16 @@ name = "mypanel"
 pick = "s"          # → mypanel.pick
 ```
 
-*(`WidgetKind` for `KeyHintGroup` and the declarative form of `on_action` are F003/P082/T436 — until
-that lands, a plugin can be picked but cannot own a picker.)*
+That is the whole of it: a string in the plugin's own tree and a key in the user's own config. No
+registry, no id to hold, no signal and no closure — which is why the picker is the *same* widget the
+exposé uses and not a cut-down copy of it.
+
+**Any node can declare a verb**, not just a picker: `on_action(name, intent)` is on the SDK's shared
+builder trait, because `ComponentExt::on_action` is on every widget natively. A described surface
+therefore owns verbs of its own instead of borrowing ones the app compiled in, and whichever node on
+screen declares the name is the one that runs — so a verb whose surface is not up resolves to
+nothing. A verb whose intent names *itself* is refused at realize time: it would resolve back to the
+same widget and re-post itself forever.
 
 
 ### FocusScope

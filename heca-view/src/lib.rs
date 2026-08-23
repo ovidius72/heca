@@ -71,6 +71,13 @@ pub enum WidgetKind {
     /// One selectable **option**: a `value` plus arbitrary composed content. The children of a
     /// [`Select`](WidgetKind::Select) / [`Tabs`](WidgetKind::Tabs) — and usable on its own.
     Choice,
+    /// **A picker over its own children**: open it and every pickable node beneath wears a letter,
+    /// typing one runs that node's `hint`. A transparent wrapper the rest of the time.
+    ///
+    /// `opens_on` names the verb that opens it (`"mypanel.pick"`), and config binds the key to that
+    /// name — so a described surface owns a picker on the same terms the exposé does, instead of
+    /// only contributing targets to heca's (`heca_grid_ui::widgets::KeyHintGroup`).
+    KeyHintGroup,
 
     // ── Leaves ──
     Label,
@@ -118,6 +125,7 @@ impl WidgetKind {
         WidgetKind::MarkerGroup,
         WidgetKind::Tabs,
         WidgetKind::Choice,
+        WidgetKind::KeyHintGroup,
         WidgetKind::Label,
         WidgetKind::Button,
         WidgetKind::IconButton,
@@ -167,25 +175,26 @@ impl WidgetKind {
             WidgetKind::MarkerGroup => 11,
             WidgetKind::Tabs => 12,
             WidgetKind::Choice => 13,
-            WidgetKind::Label => 14,
-            WidgetKind::Button => 15,
-            WidgetKind::IconButton => 16,
-            WidgetKind::Badge => 17,
-            WidgetKind::BadgeButton => 18,
-            WidgetKind::Tag => 19,
-            WidgetKind::Icon => 20,
-            WidgetKind::Input => 21,
-            WidgetKind::Select => 22,
-            WidgetKind::Toggle => 23,
-            WidgetKind::Checkbox => 24,
-            WidgetKind::StatusDot => 25,
-            WidgetKind::Gauge => 26,
-            WidgetKind::ScrollBar => 27,
-            WidgetKind::Alert => 28,
-            WidgetKind::Toast => 29,
-            WidgetKind::RailCell => 30,
-            WidgetKind::Item => 31,
-            WidgetKind::Separator => 32,
+            WidgetKind::KeyHintGroup => 14,
+            WidgetKind::Label => 15,
+            WidgetKind::Button => 16,
+            WidgetKind::IconButton => 17,
+            WidgetKind::Badge => 18,
+            WidgetKind::BadgeButton => 19,
+            WidgetKind::Tag => 20,
+            WidgetKind::Icon => 21,
+            WidgetKind::Input => 22,
+            WidgetKind::Select => 23,
+            WidgetKind::Toggle => 24,
+            WidgetKind::Checkbox => 25,
+            WidgetKind::StatusDot => 26,
+            WidgetKind::Gauge => 27,
+            WidgetKind::ScrollBar => 28,
+            WidgetKind::Alert => 29,
+            WidgetKind::Toast => 30,
+            WidgetKind::RailCell => 31,
+            WidgetKind::Item => 32,
+            WidgetKind::Separator => 33,
         }
     }
 }
@@ -736,7 +745,7 @@ pub type Events = BTreeMap<String, Intent>;
 /// [`Component`](heca_grid_ui::Component).
 ///
 /// # The model (SwiftUI/Flutter-style)
-/// A node is **four things, all owned by *this* node**:
+/// A node is **five things, all owned by *this* node**:
 /// - [`kind`](Self::kind) — which widget it is ([`WidgetKind`]).
 /// - [`props`](Self::props) — its **own** styling/content values ([`PropMap`] = `name → PropValue`).
 ///   Props are **per node**: `.prop("gap", …)` on a `Column` styles *the column*, not its children.
@@ -744,6 +753,10 @@ pub type Events = BTreeMap<String, Intent>;
 ///   node you called `.prop` on, i.e. the container.)
 /// - [`events`](Self::events) — its **own** event → [`Intent`] bindings. Behaviour is an action
 ///   **id** (+ args), never a Rust closure, so the tree stays serializable across the plugin boundary.
+/// - [`actions`](Self::actions) — **verbs it answers to by name**, each bound to an [`Intent`]. An
+///   event is fired *at* a node by what the user did to it; an action is a name a key binding, the
+///   palette or a script says out loud, and the node on screen that declares it is the one that
+///   runs (`heca_grid_ui::fire_action`).
 /// - [`children`](Self::children) — a plain **`Vec<ViewNode>`**, each a full node with its *own*
 ///   props / events / children. Composition is recursive: a child is styled exactly like its parent,
 ///   by putting props on *that child*.
@@ -838,6 +851,10 @@ pub type Events = BTreeMap<String, Intent>;
 /// | `ItemGroup` | `text` (header), `expanded` (Bool) + children (the rows) | `toggle` (carries the new `expanded`) |
 /// | `MarkerGroup` | `active` (Bool), `nav_selected` (Bool) + children | — (an indicator) |
 /// | `Grid` | `columns` / `rows` / `areas` (List of CSS-like strings); per-**child**: `area`, or `col`/`row`/`col_span`/`row_span` | — |
+/// | `KeyHintGroup` | `opens_on` (the **verb** that opens the picker) + children | — |
+///
+/// Every kind also takes a **`hint`** event (what a `prefix+/` pick does to it) and an **`actions`**
+/// map (verbs it answers to by name) — both universal, both read once for every kind.
 ///
 /// A **`"name"` prop** on a value widget (`Input`/`Toggle`/`Checkbox`) opts it into a submitted
 /// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`).
@@ -891,6 +908,20 @@ pub struct ViewNode {
     /// changed). The *only* way a node carries behaviour — an action id, not a closure.
     #[serde(default, skip_serializing_if = "Events::is_empty")]
     pub events: Events,
+    /// This node's **own** named verbs (`name` → [`Intent`]) — the declarative spelling of
+    /// `ComponentExt::on_action`, and how a described surface owns a verb of its own instead of
+    /// borrowing one the app already compiled in (F003/P082/T436).
+    ///
+    /// **Not the same thing as an event.** An event is fired *at* this node by something the user
+    /// did to it (`press`, `change`); an action is a name said out loud — by a key binding
+    /// (`[[keys.surface]]`), by the palette, over RPC — and answered by whichever node on screen
+    /// declares it. Reachability is the whole of the gate: a verb whose surface is not up resolves
+    /// to nothing.
+    ///
+    /// Namespace it the way a provider's actions are (`mypanel.reload`), because the binding names
+    /// exactly this string.
+    #[serde(default, skip_serializing_if = "Events::is_empty")]
+    pub actions: Events,
     /// Child nodes, in order. A **vector**, not a fixed slot: containers (`Column`/`Row`/`Card`/…)
     /// render them; leaves leave it empty. Each child is a full `ViewNode` with its own props/events.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -905,6 +936,7 @@ impl ViewNode {
             kind,
             props: PropMap::new(),
             events: Events::new(),
+            actions: Events::new(),
             children: Vec::new(),
         }
     }
@@ -958,6 +990,19 @@ impl ViewNode {
     /// Bind an event to an intent (e.g. `.on("press", Intent::new("close"))`).
     pub fn on(mut self, event: impl Into<String>, intent: Intent) -> Self {
         self.events.insert(event.into(), intent);
+        self
+    }
+
+    /// **Declare a verb this node answers to**, by name — `.on_action("mypanel.reload", …)`.
+    ///
+    /// The declarative `ComponentExt::on_action`: the node names the verb, config names the key.
+    ///
+    /// ```ignore
+    /// // [[keys.surface]] name = "mypanel" / reload = "r"   →   mypanel.reload
+    /// Panel::new().on_action("mypanel.reload", Intent::new("docker.refresh"))
+    /// ```
+    pub fn on_action(mut self, name: impl Into<String>, intent: Intent) -> Self {
+        self.actions.insert(name.into(), intent);
         self
     }
 

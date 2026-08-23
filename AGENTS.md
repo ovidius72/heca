@@ -798,9 +798,12 @@ let row = Row::new().on_activate(fire);
 KeyHint::new(row).on_hint(hint)
 ```
 
-The slot is `Base::hint`, universal; the **builder is on `KeyHint`**, because being
-pickable is something you opt a region into — so `Label::on_hint` is a method that never
-has to exist. The framework collects the declarations out of the laid-out tree
+The slot is `Base::hint`, universal, and so is the **builder**: `on_hint` is on
+`ComponentExt` (F003/P082/T432), so every widget takes one and `KeyHint` stays what it
+always was — an optional decorator for a region that is not a widget you can put a
+builder on. Being pickable is **not** what it turns on: anything actionable already
+wears a letter, and this says a pick does something *other* than a click.
+The framework collects the declarations out of the laid-out tree
 (`heca_grid_ui::collect_hints`) and runs one (`fire_hint`). Nothing is registered, so
 nothing has to be un-registered when a tree rebuilds; a candidate is a
 `chrome::HintTarget` (which tree + the path in it), valid for exactly as long as the
@@ -821,7 +824,14 @@ walk the chrome tree, every `state.pane_headers` tree and every visible layer. S
 - **The declarative half is the same declaration.** A described node binds a `hint`
   event to an `Intent` (`ViewNode::on_hint`), defaulting to its `press` — so every
   actionable described node is reachable by letter with nothing written, and a plugin's
-  row gets the identical picker.
+  row gets the identical picker. On **every** kind (F003/P082/T435).
+- **A surface owns a picker with one string, described or not** (F003/P082/T436).
+  `KeyHintGroup::opens_on("mypanel.pick")` natively, `"props": {"opens_on": …}` in a
+  described tree, and `[[keys.surface]] pick = "s"` binds the key to that name. The
+  widget owns its open signal and the keyboard it holds; a caller that assembles those
+  by hand owns a rule it can get half right. `on_action(name, intent)` is on the SDK's
+  shared builder trait for the same reason it is on `ComponentExt`: **any** node may
+  declare a verb, and whichever one is on screen answers it.
 - **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
   come from `pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>` (config's
   `[pane] title_actions` today; the documented **plugin seam** appends there later). The

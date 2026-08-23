@@ -41,7 +41,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
-use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
+use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
     Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
@@ -159,6 +159,36 @@ pub fn realize(
     }
     if let Some(PropValue::Bool(hintable)) = node.props.get("hintable") {
         realized.base_mut().hintable = *hintable;
+    }
+    // **The verbs this node answers to**, read once here for every kind, exactly like the hint.
+    //
+    // `ComponentExt::on_action` is on every widget, so this is universal too — a per-kind arm would
+    // be the same framework rule written thirty-three times. It is what gives a described
+    // **surface** a verb of its own: `[[keys.surface]] pick = "s"` names `mypanel.pick`, the host
+    // walks the visible trees for whoever declares that name (`fire_widget_action`), and this is
+    // where a described tree gets to be that whoever (F003/P082/T436).
+    //
+    // An **event** is fired at a node by what the user did to it; an **action** is a name said out
+    // loud. Different slots for that reason, and the same one door on the far side: `Base::actions`
+    // holds a native closure and this one alike.
+    for (name, carrier) in &node.actions {
+        // **A verb that names itself never runs.** The intent goes back through the router, which
+        // looks for a widget declaring that name — this one — and posts it again: a description
+        // spelling `"mypanel.pick": {"action": "mypanel.pick"}` would spin the event loop forever.
+        // Refusing it here is the only place that knows both names.
+        if carrier.action == *name {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] realize: action {name:?} fires an intent of its own name — ignored (it                  would resolve back to this widget and re-post itself forever)",
+            );
+            continue;
+        }
+        let emit = emit.clone();
+        let run = carrier.clone();
+        realized.base_mut().actions.push(heca_grid_ui::DeclaredAction {
+            name: name.clone(),
+            run: Box::new(move || emit(run.clone())),
+        });
     }
     realized
 }
@@ -387,6 +417,19 @@ fn realize_kind(
                 _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
             };
             Box::new(with_props(Overlay::new().panel_boxed(panel), node, theme))
+        }
+        // **A described picker** — the one thing a description could not have.
+        //
+        // Its children are what it letters, and it is a transparent wrapper, so several children
+        // are a column rather than a stack: unwrapped, that is what they already were. `opens_on`
+        // arrives through the generated property surface, so the verb is the widget's own builder
+        // and not a name repeated here.
+        WidgetKind::KeyHintGroup => {
+            let subtree: Box<dyn Component> = match node.children.len() {
+                1 => realize(&node.children[0], theme, emit, forms),
+                _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
+            };
+            Box::new(with_props(KeyHintGroup::new_boxed(subtree), node, theme))
         }
         WidgetKind::Scroll => {
             // `axes` reaches the widget through its own builder, so a declarative region can be
@@ -1718,6 +1761,7 @@ mod tests {
         check("Input", <Input as SetProp>::PROP_NAMES, "Input");
         check("Item", <Item as SetProp>::PROP_NAMES, "Item");
         check("ItemGroup", <ItemGroup as SetProp>::PROP_NAMES, "ItemGroup");
+        check("KeyHintGroup", <KeyHintGroup as SetProp>::PROP_NAMES, "KeyHintGroup");
         check("Label", <Label as SetProp>::PROP_NAMES, "Label");
         check("MarkerGroup", <MarkerGroup as SetProp>::PROP_NAMES, "MarkerGroup");
         check("Overlay", <Overlay as SetProp>::PROP_NAMES, "Overlay");
@@ -2723,6 +2767,12 @@ mod tests {
                 .prop("length", PropValue::Float(120.0))
                 .prop("orientation", PropValue::Text("vertical".into())),
 
+            // A picker: its children are what it letters, and one of them must be pickable for
+            // the picker to be worth anything — so the sample carries a hint, not a press.
+            WidgetKind::KeyHintGroup => node
+                .prop("opens_on", PropValue::Text("sample.pick".into()))
+                .child(ViewNode::new(WidgetKind::Label).text("target").on_hint(Intent::new("noop"))),
+
             // Host-only — see the coverage test.
             WidgetKind::ScrollBar => node,
         }
@@ -2798,6 +2848,97 @@ mod tests {
             fired.borrow()[0].args.get("id"),
             Some(&PropValue::Text("abc".into())),
             "and picking it fires the plugin's own intent, arguments and all",
+        );
+    }
+
+    /// **What a plugin actually writes to own a picker** — the SDK, end to end (F003/P082/T436).
+    ///
+    /// The last of the six. After T435 a plugin could be *picked*; this is the other half — opening
+    /// a picker of its own over its own panel, which heca's exposé has had since T427. Everything
+    /// here is a string in the plugin's own tree plus a key in the user's own config: no registry,
+    /// no id to hold, no signal, no closure.
+    #[test]
+    fn a_plugin_can_own_a_picker_from_the_sdk() {
+        use heca_view::build;
+        use heca_view::build::Parent as _;
+
+        let (emit, fired) = recording_emitter();
+        let node: ViewNode = build::KeyHintGroup::new()
+            .opens_on("mypanel.pick")
+            .child(build::Row::new().on_hint(Intent::new("docker.restart")))
+            .into();
+
+        let mut picker = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+
+        // 1. The verb is on screen, so the host's `[[keys.surface]] pick = "s"` can reach it —
+        //    by name, with no path to go stale when the tree is rebuilt.
+        assert_eq!(
+            heca_grid_ui::collect_actions(picker.as_ref()),
+            vec!["mypanel.pick".to_string()],
+        );
+        assert!(!heca_grid_ui::fire_action(picker.as_ref(), "heca.expose.pick"), "its own name only");
+
+        // 2. Running it opens the picker and letters what is beneath it.
+        assert!(heca_grid_ui::fire_action(picker.as_ref(), "mypanel.pick"));
+        picker.tick(0.0);
+        let row = &picker.base().children[0];
+        assert_eq!(
+            row.base().hint_label.get_untracked().as_deref(),
+            Some("a"),
+            "the plugin's own row wears the letter, and draws it itself",
+        );
+
+        // 3. And the letter runs the row's own intent, back out to the plugin.
+        picker.on_event_capture(&heca_grid_ui::Event::TextInput("a".to_string()));
+        assert_eq!(
+            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            vec!["docker.restart"],
+        );
+    }
+
+    /// **A described node declares verbs by name**, on any kind (F003/P082/T436).
+    ///
+    /// `ComponentExt::on_action` is universal natively, so this is read once for every kind rather
+    /// than wired per arm. It is the seam a **surface** has and a dock got from `Provider::actions`:
+    /// without it a described panel can only bind verbs the app already compiled in.
+    #[test]
+    fn a_described_node_answers_to_the_verb_it_declares() {
+        use heca_view::build;
+        use heca_view::build::Style as _;
+
+        let (emit, fired) = recording_emitter();
+        let node: ViewNode = build::Panel::new()
+            .on_action("mypanel.reload", Intent::new("docker.refresh"))
+            .into();
+
+        let panel = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert!(heca_grid_ui::fire_action(panel.as_ref(), "mypanel.reload"));
+        assert_eq!(
+            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            vec!["docker.refresh"],
+            "the verb the surface named fired the intent it was bound to",
+        );
+    }
+
+    /// **A verb that names itself never runs.** The router answers a name by looking for a widget
+    /// on screen declaring it, so `"mypanel.pick" -> Intent("mypanel.pick")` would find this widget
+    /// again and re-post itself forever — a description spinning the event loop.
+    ///
+    /// Refused where both names are known, which is here. `realize` is total for untrusted input:
+    /// the verb is simply not declared, and resolves to nothing.
+    #[test]
+    fn a_verb_that_fires_its_own_name_is_refused() {
+        use heca_view::build;
+        use heca_view::build::Style as _;
+
+        let node: ViewNode = build::Panel::new()
+            .on_action("mypanel.reload", Intent::new("mypanel.reload"))
+            .into();
+
+        let panel = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        assert!(
+            heca_grid_ui::collect_actions(panel.as_ref()).is_empty(),
+            "a self-naming verb is not declared at all, so nothing can reach it",
         );
     }
 

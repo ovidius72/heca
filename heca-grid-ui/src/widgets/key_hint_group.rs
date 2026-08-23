@@ -27,16 +27,25 @@
 //! ```
 //! use heca_grid_ui::prelude::*;
 //! use heca_grid_ui::widgets::{Flex, KeyHint, KeyHintGroup, Label, Row};
-//! use heca_grid_ui::reactive::signal;
 //!
 //! # fn choose(_: u32) {}
-//! let open = signal(false);          // the host flips this from an action
 //! let picker = KeyHintGroup::new(
 //!     Flex::column()
 //!         .child(KeyHint::new(Row::new().child(Label::new("one"))).on_hint(|| choose(1)))
 //!         .child(KeyHint::new(Row::new().child(Label::new("two"))).on_hint(|| choose(2))),
 //! )
-//! .open_when(open);
+//! .opens_on("mypanel.pick");   // config binds the key: [[keys.surface]] name = "mypanel"
+//! ```
+//!
+//! # …and the same picker, described
+//!
+//! A plugin has no signal to bind and no closure to hand over, so the declarative spelling is the
+//! whole of whether it can own a picker at all (F003/P082/T436):
+//!
+//! ```json
+//! { "kind": "KeyHintGroup",
+//!   "props": { "opens_on": "mypanel.pick" },
+//!   "children": [ { "kind": "Row", "events": { "hint": { "action": "docker.restart" } } } ] }
 //! ```
 
 use crate::component::{Base, Component};
@@ -86,7 +95,7 @@ pub struct KeyHintGroup {
 
 #[heca_grid_ui_macros::props]
 impl KeyHintGroup {
-    /// Wrap `child`. Bind the open state with [`open_when`](KeyHintGroup::open_when).
+    /// Wrap `child`. Name the verb that opens it with [`opens_on`](KeyHintGroup::opens_on).
     pub fn new(child: impl Component + 'static) -> Self {
         Self::wrap(Box::new(child))
     }
@@ -141,6 +150,37 @@ impl KeyHintGroup {
     pub fn letters(mut self, letters: impl IntoIterator<Item = char>) -> Self {
         self.letters = letters.into_iter().collect();
         self
+    }
+
+    /// **The verb that opens this picker** — the one line a picker costs.
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::{Flex, KeyHintGroup};
+    ///
+    /// let picker = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
+    /// ```
+    ///
+    /// ```toml
+    /// [[keys.surface]]
+    /// name = "mypanel"
+    /// pick = "s"          # -> mypanel.pick
+    /// ```
+    ///
+    /// **The widget names the verb; config names the key** — the same division
+    /// [`on_action`](crate::builders::ComponentExt::on_action) states, and the reason this is not a
+    /// key builder. It *is* `open_when` + `on_action` over the picker's own signal, said once here
+    /// rather than at every call site: a caller that assembles those three parts owns the rule that
+    /// an open picker holds the keyboard, and there is no signal to assemble from a description at
+    /// all (F003/P082/T436).
+    ///
+    /// Reach for [`open_when`](KeyHintGroup::open_when) instead only when the host already has the
+    /// state — when something *other* than this verb also opens it.
+    #[heca_grid_ui_macros::prop]
+    pub fn opens_on(self, action: impl Into<String>) -> Self {
+        use crate::builders::ComponentExt as _;
+        let open = self.open;
+        self.open_when(open).on_action(action, move || open.set(true))
     }
 
     /// Is the picker showing its letters?
@@ -449,6 +489,49 @@ mod tests {
         assert!(picks.borrow().is_empty());
         assert!(!g.is_open());
         assert_eq!(label_of(&g, 0), None);
+    }
+
+    /// **The verb opens it, and the widget owns both halves** (F003/P082/T436).
+    ///
+    /// This is the whole of what a picker costs its author: one string. The parts it replaces — a
+    /// signal, `open_when`, and an `on_action` closure that flips it — are three things a
+    /// description cannot carry and a plugin cannot write, which is why heca could have a picker
+    /// and nobody else could.
+    #[test]
+    fn the_declared_verb_opens_the_picker() {
+        let picks: Picks = Rc::new(RefCell::new(Vec::new()));
+        let row = |id: u32| {
+            let picks = picks.clone();
+            KeyHint::new(Row::new().child(Label::new(format!("row {id}"))))
+                .on_hint(move || picks.borrow_mut().push(id))
+        };
+        let mut g = KeyHintGroup::new(Flex::column().child(row(1)).child(row(2)))
+            .opens_on("mypanel.pick");
+
+        assert!(!g.is_open(), "closed until its verb is run");
+        assert!(!crate::fire_action(&g, "mypanel.other"), "and it answers to its own name only");
+
+        assert!(crate::fire_action(&g, "mypanel.pick"), "the tree declares the verb");
+        g.tick(0.0);
+        assert!(g.is_open());
+        assert_eq!(label_of(&g, 0).as_deref(), Some("a"), "and the letters are up");
+
+        g.on_event_capture(&Event::TextInput("a".to_string()));
+        assert_eq!(*picks.borrow(), vec![1]);
+        assert!(!g.is_open());
+    }
+
+    /// **An open picker holds the keyboard**, and that rule lives in the widget rather than at the
+    /// call site — `opens_on` is `open_when` + `on_action`, so it cannot be assembled half-right.
+    #[test]
+    fn the_declared_verb_also_takes_the_keyboard() {
+        let g = KeyHintGroup::new(Flex::column()).opens_on("mypanel.pick");
+        assert!(!g.base().focused.get_untracked(), "closed, focus is elsewhere");
+        assert!(crate::fire_action(&g, "mypanel.pick"));
+        assert!(
+            g.base().focused.get_untracked(),
+            "an open picker is the focus owner, or the letters it drew would go to the subtree",
+        );
     }
 
     /// **Closed, it is not there.** A picker that only lets its letters through while open is the

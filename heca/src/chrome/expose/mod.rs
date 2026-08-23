@@ -55,10 +55,9 @@ pub(crate) mod workspace_row;
 mod testing;
 
 use heca_core::layout::PaneId;
-use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::reactive::{signal, SignalUpdate};
 use heca_grid_ui::animation::Animation;
 use heca_grid_ui::widgets::{KeyHintGroup, Overlay, Surface};
 use heca_grid_ui::Component;
@@ -203,10 +202,8 @@ pub(crate) fn map(
     // letter — each drawn by the card itself, so it lands wherever the card is, at any nesting
     // depth. Typing one runs that card's own `on_hint`. Nothing host-side is involved: no input
     // mode, no host paint pass, no registry.
-    let picker_open = signal(false);
     let grid = KeyHintGroup::new(grid)
-        .open_when(picker_open)
-        .on_action(PICK_ACTION, move || picker_open.set(true))
+        .opens_on(PICK_ACTION)
         // The wrapper hugs its child, so the room the panel gives it has to be passed on
         // deliberately — the grid inside is a share of *this*, and a hugged wrapper would leave it
         // resolving a percentage of nothing (the same term the cards' `KeyHint` needs).

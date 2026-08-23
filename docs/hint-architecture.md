@@ -409,9 +409,24 @@ cross the boundary, so the declarative spelling is not a nicety, it is the featu
 `realize` wires it to `on_hint` firing the intent — the same two-spellings-one-slot pattern `press`
 and `change` already use. Both converge on `Base::hint`: one door, no second path to drift.
 
-**7. `KeyHintGroup` gets a `WidgetKind`, and `on_action` its declarative form.** Otherwise a plugin
-can contribute *targets* but still cannot own a *picker* — the gap just closed for native code and
-left open for everyone else.
+**7. `KeyHintGroup` gets a `WidgetKind`, and `on_action` its declarative form.** ✅ **DONE —
+F003/P082/T436.** Otherwise a plugin can contribute *targets* but still cannot own a *picker* — the
+gap just closed for native code and left open for everyone else.
+
+**What it landed as.** The picker's three native parts — a signal, `open_when` binding it, and an
+`on_action` closure that flips it — are one builder, `KeyHintGroup::opens_on("mypanel.pick")`. That
+is what made it declarable at all: static data can carry a *name*, and could never have carried the
+other two. The exposé says the same line now (`.opens_on(PICK_ACTION)`), so the described picker is
+the native one rather than a copy of it, and the rule that an open picker holds the keyboard lives
+inside the widget instead of at each call site.
+
+`on_action`'s declarative form is a node's **`actions`** map (`name → Intent`), read once in
+`realize` for every kind beside `hint`, `key` and `hintable` — universal, because
+`ComponentExt::on_action` is universal, and a per-kind arm would be the same framework rule written
+thirty-three times. An **event** is fired *at* a node by what the user did to it; an **action** is a
+name said out loud by a binding, the palette or a script, and answered by whoever on screen declares
+it. One refusal, at the only place that knows both names: a verb whose intent names *itself* is not
+declared, because it would resolve back to the same widget and re-post itself forever.
 
 ---
 

@@ -266,6 +266,33 @@ pub trait Style: Sized {
         self.prop("hintable", hintable)
     }
 
+    /// **Declare a verb this node answers to**, by name — the declarative
+    /// `heca_grid_ui::ComponentExt::on_action`.
+    ///
+    /// The node names the verb; config names the key. That division is the whole of it: a key
+    /// written into a description would be unrebindable, absent from the palette and unreachable
+    /// over RPC.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// // [[keys.surface]] name = "mypanel" / reload = "r"   →   mypanel.reload
+    /// let panel = Panel::new().on_action("mypanel.reload", Intent::new("docker.refresh"));
+    /// ```
+    ///
+    /// Universal, like [`key`](Style::key), because `on_action` is on every widget natively — this
+    /// is what lets a described **surface** own a verb instead of borrowing one the app compiled in
+    /// (F003/P082/T436). Whichever node on screen declares the name is the one that runs it, so a
+    /// verb whose surface is not up resolves to nothing, exactly as an unmounted provider's does.
+    ///
+    /// ⚠️ [`Toast`] has an inherent `on_action` of its own — the **event** its action button fires,
+    /// which takes an intent alone. Its arity differs, so the compiler says which you reached.
+    fn on_action(mut self, name: impl Into<String>, intent: Intent) -> Self {
+        self.node_mut().actions.insert(name.into(), intent);
+        self
+    }
+
     // ── Appearance ──
     /// Background colour: a theme token name (`"accent"`) or a literal (`"#ff8800"`).
     ///
@@ -500,6 +527,15 @@ builder!(
     Choice => Choice
 );
 
+builder!(
+    /// **A picker over its own children.** Open it and everything pickable beneath wears a letter;
+    /// typing one runs that node's `hint`. A transparent wrapper the rest of the time.
+    ///
+    /// [`opens_on`](KeyHintGroup::opens_on) is the whole of it — see there for why a picker needs
+    /// no key of its own and no state from the host.
+    KeyHintGroup => KeyHintGroup
+);
+
 impl Parent for VStack {}
 impl Parent for HStack {}
 impl Parent for Row {}
@@ -514,6 +550,7 @@ impl Parent for Overlay {}
 impl Parent for MarkerGroup {}
 impl Parent for Tabs {}
 impl Parent for Choice {}
+impl Parent for KeyHintGroup {}
 
 // ── Leaves ────────────────────────────────────────────────────────────────────────────────
 builder_text!(
@@ -646,6 +683,7 @@ with_event!(
     Panel { on_hint => "hint" }
     Surface { on_hint => "hint" }
     Overlay { on_hint => "hint" }
+    KeyHintGroup { on_hint => "hint" }
     MarkerGroup { on_hint => "hint" }
     Label { on_hint => "hint" }
     Badge { on_hint => "hint" }
@@ -1001,6 +1039,33 @@ impl RailCell {
     /// Show as the current one.
     pub fn active(self, on: bool) -> Self {
         self.prop("active", on)
+    }
+}
+
+impl KeyHintGroup {
+    /// **The verb that opens this picker** — one string, and the picker is yours.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// let panel = KeyHintGroup::new()
+    ///     .opens_on("mypanel.pick")
+    ///     .child(Row::new().on_hint(Intent::new("docker.restart")));
+    /// ```
+    ///
+    /// ```toml
+    /// [[keys.surface]]
+    /// name = "mypanel"
+    /// pick = "s"          # -> mypanel.pick
+    /// ```
+    ///
+    /// A picker is otherwise the one thing a description could not have: natively it is a signal,
+    /// an `open_when` binding it and an `on_action` closure that flips it — three things static
+    /// data cannot carry. The widget owns all three behind this name, so a described picker is the
+    /// native one and not a cut-down copy (F003/P082/T436).
+    pub fn opens_on(self, action: impl Into<String>) -> Self {
+        self.prop("opens_on", PropValue::Text(action.into()))
     }
 }
 
