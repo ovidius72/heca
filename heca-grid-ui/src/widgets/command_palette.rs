@@ -1144,10 +1144,19 @@ impl Component for CommandPalette {
     /// Layout just reset every row to its natural position and size: re-read the measured heights
     /// from it, then place the rows into the panel again.
     fn on_layout(&mut self) {
-        // The root fills the viewport, so this is the viewport — known one whole frame earlier than
-        // the paint that used to be the only source. Without it the first frame after the palette
-        // opens places its rows against a fallback panel and the text lands off the panel.
-        let size = self.base.bounds.size;
+        // **The viewport the engine was told to compute against**, which it records on every node
+        // (`Base::viewport`) — known one whole frame earlier than the paint that used to be the
+        // only source. Without it the first frame after the palette opens places its rows against a
+        // fallback panel and the text lands off the panel.
+        //
+        // It used to read its OWN bounds, on the assumption "the root fills the viewport". That
+        // holds when the palette is mounted as a full-size layer, as the app mounts it, and not
+        // when a host puts it in a column of overlays, as the showcase does — there its bounds are
+        // whatever the flex gave it, the panel is computed against the wrong box, and every row's
+        // text lands 76px above the row it belongs to while the icons and keycaps (painted from the
+        // panel, not placed) stay put (Antonio, driving, 2026-08-24). A widget must not infer the
+        // viewport from where it happens to be mounted; the framework already records it.
+        let size = self.base.viewport;
         if size.w > 0.0 && size.h > 0.0 && size.w.is_finite() && size.h.is_finite() {
             self.viewport.set(size);
         }
