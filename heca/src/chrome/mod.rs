@@ -24,7 +24,7 @@ pub(crate) mod hint;
 // The hint half of the chrome — declarations, the visibility rule, and who is lettering what.
 // Re-exported so call sites keep naming `crate::chrome::…` while the code lives where it belongs.
 pub(crate) use hint::{
-    active_hint_targets, clear_hint_letters, fire_hint, fire_widget_action, offer_hint_letters,
+    active_hint_targets, clear_hint_letters, fire_hint, fire_widget_action,
     target_identity,
     HintTarget,
 };
@@ -2327,7 +2327,16 @@ mod tests {
         let wanted = crate::chrome::hint::wanted_for_tests(&mode);
         assert_eq!(
             wanted,
-            vec![("workspaces".to_string(), 'a'), ("workspaces.2".to_string(), 'b')],
+            vec![
+                (
+                    crate::chrome::hint::Offer::ByKey("workspaces".to_string()),
+                    'a',
+                ),
+                (
+                    crate::chrome::hint::Offer::ByKey("workspaces.2".to_string()),
+                    'b',
+                ),
+            ],
         );
     }
 

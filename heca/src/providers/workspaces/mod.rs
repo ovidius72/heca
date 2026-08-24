@@ -1466,6 +1466,44 @@ mod tests {
         assert_eq!(signals.pane_active.len(), 1);
     }
 
+    /// **Every letter the picker offers can be found again after a rebuild** (F003/P082/T438).
+    ///
+    /// The picker addresses a target by path for the frame and by *identity* across frames, so the
+    /// two must be inverses **on the real sidebar tree**, not only on a fixture: `identity_of` names
+    /// the widget, `path_of` finds it again. If any target's identity resolves to a different path,
+    /// its letter silently lands on another row after the next rebuild — and the chrome tree is
+    /// rebuilt constantly.
+    #[test]
+    fn every_pick_target_in_the_sidebar_can_be_found_again_by_its_identity() {
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            move |_, _| {},
+        );
+        let store = store();
+        *store.workspaces.tree_mut() = tree();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let c = container(&p, &ctx);
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
+
+        let targets = heca_grid_ui::collect_hints(body.as_ref());
+        assert!(!targets.is_empty(), "the sidebar declares pick targets");
+        for (path, _) in &targets {
+            let Some(identity) = heca_grid_ui::identity_of(body.as_ref(), path) else {
+                continue; // nothing to name it by: the picker keeps the path, and says so
+            };
+            assert!(
+                heca_grid_ui::hint_targets_of(body.as_ref(), &identity).contains(path),
+                "{identity:?} resolves to a different widget than the one it names",
+            );
+        }
+    }
+
     /// **Our own rows stay keyed** (F003/P082/T444) — the test half of the identity rule.
     ///
     /// The sidebar is heca's biggest collection: workspaces holding columns holding panes, rebuilt

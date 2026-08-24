@@ -914,10 +914,11 @@ pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     );
 
     if !candidates.is_empty() {
-        // **Hand each region its letter; nothing here draws one.** The widget that declared the
-        // pick paints its own keycap, so it lands wherever that widget is — at any nesting depth,
-        // on any surface, including a plugin's (F003/P082/T427).
-        crate::chrome::offer_hint_letters(state, &candidates);
+        // **Entering the mode is the whole of it.** The letters are handed out by
+        // `sync_offered_letters`, every frame, exactly as every other pick mode's are — so the
+        // rules that live there apply here too: a view that becomes covered loses its letter, and a
+        // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
+        // outside all of it (F003/P082/T438).
         state.input_mode = InputMode::HintPick { candidates };
         state.needs_redraw = true;
     }

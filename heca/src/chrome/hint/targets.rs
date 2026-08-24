@@ -7,7 +7,7 @@
 use super::surfaces::{hint_surface_root, HintSurface, HintTarget};
 use super::visibility::{resolve_hint_layers, HintLayer};
 use crate::chrome::ChromeConfig;
-use heca_core::layout::{PaneId, Point, Rectangle, Size};
+use heca_core::layout::{Point, Rectangle, Size};
 
 /// Build the current surface stack (front → back) and resolve the reachable hint targets
 /// for the universal picker. **The one place hint visibility is decided.** The stack
@@ -203,7 +203,7 @@ fn visible_hint_targets(
     resolve_hint_layers(layers, viewport)
 }
 
-/// **Which panes could actually show a letter**, by the one visibility rule.
+/// **Which surfaces could actually show a letter right now**, by the one visibility rule.
 ///
 /// A pane scrolled behind a sidebar is still a pane, and a pick mode reading the SESSION happily
 /// letters it — so its keycap draws on top of the sidebar covering it (Antonio, driving,
@@ -214,15 +214,17 @@ fn visible_hint_targets(
 /// exactly one place — `resolve_hint_layers` — and a second copy would be one more thing to keep in
 /// step with the layer stack. It collapses entirely when the pick modes become the one picker
 /// (F011/P094/T457).
-pub(crate) fn visible_pane_targets(
+///
+/// **Surfaces, not pane ids.** It answered `HashSet<PaneId>` and the caller then had to decide what
+/// that meant for a pane's *header*, which is a different surface over the same pane — so the
+/// header was left ungated and kept a letter its pane had lost. A view is what can or cannot show a
+/// letter, so a view is what this names (F003/P082/T438).
+pub(crate) fn visible_hint_surfaces(
     state: &crate::app_state::AppState,
-) -> std::collections::HashSet<PaneId> {
+) -> std::collections::HashSet<HintSurface> {
     visible_hint_targets(state)
         .into_iter()
-        .filter_map(|(target, _)| match target.surface {
-            HintSurface::Pane(id) => Some(id),
-            _ => None,
-        })
+        .map(|(target, _)| target.surface)
         .collect()
 }
 
@@ -233,6 +235,6 @@ fn hints_of(
 ) -> Vec<(HintTarget, Rectangle)> {
     heca_grid_ui::collect_hints(root)
         .into_iter()
-        .map(|(path, bounds)| (HintTarget::new(surface, path), bounds))
+        .map(|(path, bounds)| (HintTarget::new(surface, root, path), bounds))
         .collect()
 }

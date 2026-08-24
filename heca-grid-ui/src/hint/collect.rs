@@ -10,7 +10,7 @@ use heca_core::layout::Rectangle;
 
 /// Should this subtree be enumerated? Hidden widgets have stale bounds and never
 /// receive input, so they're skipped (matching paint / event / drag resolution).
-pub(super) fn skip(c: &dyn Component) -> bool {
+pub(crate) fn skip(c: &dyn Component) -> bool {
     !c.base().visible.get_untracked() || c.base().style.layout.hidden
 }
 
@@ -28,7 +28,7 @@ pub(super) fn skip(c: &dyn Component) -> bool {
 /// **The same trade input makes**: a child placed deliberately *outside* its clipping ancestor — a
 /// dropdown panel extending past a scroll region — is judged by the clip like anything else. When
 /// that needs to change it changes for input too, in both walks, and not by a special case here.
-pub(super) fn narrowed(clip: Option<Rectangle>, node: &dyn Component) -> Option<Rectangle> {
+pub(crate) fn narrowed(clip: Option<Rectangle>, node: &dyn Component) -> Option<Rectangle> {
     if !node.clips_children() {
         return clip;
     }
@@ -58,7 +58,7 @@ pub(super) fn narrowed(clip: Option<Rectangle>, node: &dyn Component) -> Option<
 /// see it, so you can aim at it (Antonio, 2026-08-23: *"a half visible pane row should have the
 /// letter to peek"*). Its keycap is deliberately **not** clipped to match: the letter is drawn whole
 /// so it stays readable, which is the whole point of lettering a row you can only half see.
-pub(super) fn out_of_view(node: &dyn Component, clip: Option<Rectangle>) -> bool {
+pub(crate) fn out_of_view(node: &dyn Component, clip: Option<Rectangle>) -> bool {
     clip.is_some_and(|c| c.intersection(node.base().bounds).is_none())
 }
 
@@ -102,6 +102,34 @@ pub fn collect_hints(root: &dyn Component) -> Vec<(Vec<usize>, Rectangle)> {
     let mut out = Vec::new();
     hints_into(root, &mut Vec::new(), false, None, &mut out);
     out
+}
+
+/// **Every pick target in this tree that answers to `identity`** — a pick's address across frames.
+///
+/// A path is child indices: it lives one frame, and a rebuilt tree does not merely invalidate it,
+/// it makes it name a *different* widget. An identity ([`identity_of`](crate::identity_of)) outlives
+/// the tree, so everything holding on to a pick between frames holds the identity and asks this.
+///
+/// **It asks the collector, and that is the whole point.** Several nodes answer to one identity on
+/// purpose: `identity_of` resolves *through wrappers*, so a `KeyHint` around a keyed `Row` — and
+/// every container above it that wraps nothing else — all report the row's name. Answering "the
+/// first node with that name" hands back the outermost one, which is commonly the tree's own root:
+/// the letter is then offered to something that declared no pick, and nothing is lettered at all
+/// (F003/P082/T438). Asking [`collect_hints`] instead can only return a node the picker itself
+/// would have chosen, so offering and collecting cannot disagree.
+///
+/// **Every one of them, not the first.** One thing is commonly shown in several places at once — a
+/// pane listed in the left sidebar *and* the right one is two views of the same pane, and both wear
+/// its letter. Answering with the first match lettered one of them and left the other dark, which
+/// is a bug this codebase has already had once, from an `.any()` in the by-key walk
+/// (F003/P082/T431). A caller that wants one takes the first; a caller handing out a letter takes
+/// them all.
+pub fn hint_targets_of(root: &dyn Component, identity: &str) -> Vec<Vec<usize>> {
+    collect_hints(root)
+        .into_iter()
+        .map(|(path, _)| path)
+        .filter(|path| crate::identity_of(root, path).as_deref() == Some(identity))
+        .collect()
 }
 
 /// `declared_above` — is some ancestor already saying what a pick of this region does? See the

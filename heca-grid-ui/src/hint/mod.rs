@@ -23,8 +23,8 @@ mod offer;
 mod tests;
 
 pub use actions::{collect_actions, fire_action, DeclaredAction};
-pub use collect::collect_hints;
-pub(crate) use collect::is_target;
+pub use collect::{collect_hints, hint_targets_of};
+pub(crate) use collect::{is_target, narrowed, out_of_view, skip};
 pub use declaration::Hint;
 pub use fire::{fire_hint, hint_intent};
 pub use offer::{clear_hints, offer_hint, offer_hint_by_key};

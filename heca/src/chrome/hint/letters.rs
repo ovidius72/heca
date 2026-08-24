@@ -11,22 +11,54 @@
 //! plugin author had no way to add themselves to that match. Ownership has no such list.
 
 use crate::app_state::InputMode;
-use super::targets::visible_pane_targets;
-use heca_core::layout::PaneId;
+use super::surfaces::{HintSurface, HintTarget};
+use super::targets::visible_hint_surfaces;
 use crate::providers::workspaces::{column_key, pane_key, workspace_key};
 
-/// The targets this module has a letter on, by `key`. Withdrawal is exactly this set, which is
-/// what makes the rule ownership rather than "clear everything and hope".
+/// **A thing a picker asked to be lettered**, addressed the way that picker knows it.
+///
+/// Two spellings, because the two pickers genuinely know different things: a pick mode reads the
+/// **session** and knows *which pane* (an identity that outlives any tree), while the universal
+/// picker walks the **trees** and knows *which widget in which surface* (a path that lives one
+/// frame). Collapsing them is F011/P094/T457's business.
+///
+/// What they must NOT have is two lifecycles. `prefix+/` used to hand its letters out once, in
+/// `handle_hint_pick`, and nothing ever revisited them — so every rule this module enforces every
+/// frame (a covered view loses its letter; a withdrawal reaches every view) simply did not apply to
+/// it. One enum here, one loop below, one lifecycle for both (F003/P082/T438).
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) enum Offer {
+    /// By the identity the widget declares — `pane:7`, `ws:0/col:1`, a dock's id.
+    ByKey(String),
+    /// By the surface and path the picker collected it from.
+    ByPath(HintTarget),
+}
+
+impl Offer {
+    /// What this offer is **called**, for the plugin-facing `hint.changed`. A path-addressed offer
+    /// resolves to the same identity the picker remembers its letter by, so a plugin sees one
+    /// vocabulary whichever picker is up.
+    fn name(&self, state: &crate::app_state::AppState) -> String {
+        match self {
+            Offer::ByKey(key) => key.clone(),
+            Offer::ByPath(target) => super::surfaces::target_identity(state, target)
+                .unwrap_or_else(|| format!("{:?}", target.surface)),
+        }
+    }
+}
+
+/// The targets this module has a letter on. Withdrawal is exactly this set, which is what makes the
+/// rule ownership rather than "clear everything and hope".
 #[derive(Default, Debug)]
 pub(crate) struct OfferedLetters {
-    keys: Vec<String>,
+    offers: Vec<Offer>,
 }
 
 /// What the **current input mode** wants lettered, as `(key, letter)`.
 ///
 /// One place that knows how a mode's candidates become row identities, so a new pick mode is one
 /// arm here rather than a fifth signal list and a fifth projection.
-fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> Vec<(String, char)> {
+fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> Vec<(Offer, char)> {
     let mut out = Vec::new();
     if let Some(cands) = mode.candidates() {
         // **The focused pane is never a target**, even when the mode lists it: every one of these
@@ -35,23 +67,37 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
             cands
                 .iter()
                 .filter(|(_, id)| Some(*id) != active_pane)
-                .map(|(ch, id)| (pane_key(*id), *ch)),
+                .map(|(ch, id)| (Offer::ByKey(pane_key(*id)), *ch)),
         );
     }
     if let Some(cands) = mode.ws_candidates() {
-        out.extend(cands.iter().map(|(ch, ws)| (workspace_key(*ws), *ch)));
+        out.extend(
+            cands
+                .iter()
+                .map(|(ch, ws)| (Offer::ByKey(workspace_key(*ws)), *ch)),
+        );
     }
     if let Some(cands) = mode.col_candidates() {
         out.extend(
             cands
                 .iter()
-                .map(|(ch, ws, col)| (column_key(*ws, *col), *ch)),
+                .map(|(ch, ws, col)| (Offer::ByKey(column_key(*ws, *col)), *ch)),
         );
     }
     // A dock names itself with `scope_key` rather than `key` — a container's identity, not a
     // row's — and `offer_hint_by_key` matches either, so this is the same one line as the rest.
     if let Some(cands) = mode.dock_candidates() {
-        out.extend(cands.iter().map(|(ch, id)| (id.clone(), *ch)));
+        out.extend(cands.iter().map(|(ch, id)| (Offer::ByKey(id.clone()), *ch)));
+    }
+    // **The universal picker is a mode like any other.** Its candidates carry a surface and a path
+    // rather than an identity, which is the only difference — and the reason it used to live
+    // outside this loop, handing its letters out once and never looking again.
+    if let InputMode::HintPick { candidates } = mode {
+        out.extend(
+            candidates
+                .iter()
+                .map(|(ch, target)| (Offer::ByPath(target.clone()), *ch)),
+        );
     }
     out
 }
@@ -63,31 +109,31 @@ fn wanted(mode: &InputMode, active_pane: Option<heca_core::layout::PaneId>) -> V
 /// Returns whether anything changed, so the caller can decide to repaint.
 pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
     let wanted = wanted(&state.input_mode, state.focused_pane);
-    // **Which pane shells could actually show a letter.** Computed ONCE per pass, not per key: it
+    // **Which views could actually show a letter.** Computed ONCE per pass, not per key: it
     // resolves the whole surface stack.
-    let visible_panes = if wanted.is_empty() {
+    let visible = if wanted.is_empty() {
         std::collections::HashSet::new()
     } else {
-        visible_pane_targets(state)
+        visible_hint_surfaces(state)
     };
     let mut changed = false;
 
     // Withdraw first, so a target that keeps its letter across a mode change is not briefly cleared.
-    let stale: Vec<String> = state
+    let stale: Vec<Offer> = state
         .offered_letters
         .borrow()
-        .keys
+        .offers
         .iter()
-        .filter(|k| !wanted.iter().any(|(want, _)| want == *k))
+        .filter(|o| !wanted.iter().any(|(want, _)| want == *o))
         .cloned()
         .collect();
-    for key in &stale {
-        offer_in_every_tree(state, key, None, &visible_panes);
+    for offer in &stale {
+        offer_in_every_tree(state, offer, None, &visible);
         changed = true;
     }
 
-    for (key, ch) in &wanted {
-        if offer_in_every_tree(state, key, Some(ch.to_string()), &visible_panes) {
+    for (offer, ch) in &wanted {
+        if offer_in_every_tree(state, offer, Some(ch.to_string()), &visible) {
             changed = true;
         }
     }
@@ -100,27 +146,51 @@ pub(crate) fn sync_offered_letters(state: &crate::app_state::AppState) -> bool {
     // Change-guarded, like every other chrome event: this runs every frame and the common case is
     // that nothing is picking.
     let mut offered = state.offered_letters.borrow_mut();
-    let next: Vec<String> = wanted.iter().map(|(k, _)| k.clone()).collect();
-    if offered.keys != next {
+    let next: Vec<Offer> = wanted.iter().map(|(o, _)| o.clone()).collect();
+    if offered.offers != next {
         state
             .chrome_state
             .events()
             .emit(crate::chrome::ChromeEvent::HintLettersChanged {
-                letters: wanted.iter().map(|(k, ch)| (*ch, k.clone())).collect(),
+                letters: wanted
+                    .iter()
+                    .map(|(o, ch)| (*ch, o.name(state)))
+                    .collect(),
             });
     }
-    offered.keys = next;
+    offered.offers = next;
     changed
 }
 
-/// Offer `label` to whichever retained tree declares `key`. Front to back, so a surface in
-/// front shadows one behind it — the nearest declaration wins, as everywhere else.
+/// Offer `label` to whatever shows this offer. Front to back, so a surface in front shadows one
+/// behind it — the nearest declaration wins, as everywhere else.
 fn offer_in_every_tree(
     state: &crate::app_state::AppState,
-    key: &str,
+    offer: &Offer,
     label: Option<String>,
-    visible_panes: &std::collections::HashSet<PaneId>,
+    visible: &std::collections::HashSet<HintSurface>,
 ) -> bool {
+    // **What this view gets this pass** — the letter when it can be seen, a *withdrawal* when it
+    // cannot. Every view's label goes through here, so no loop below can decide on its own.
+    let for_view = |surface: HintSurface| label_for(&label, visible.contains(&surface));
+
+    // **A path names one view already**, so there is nothing to search: the surface it was
+    // collected from is the surface that shows it, and the same visibility question is asked of it
+    // as of every other view.
+    let key = match offer {
+        Offer::ByKey(key) => key.as_str(),
+        Offer::ByPath(target) => {
+            let Some((root, paths)) = super::surfaces::resolve(state, target) else {
+                return false;
+            };
+            let label = for_view(target.surface.clone());
+            let mut offered = false;
+            for path in &paths {
+                offered |= heca_grid_ui::offer_hint(root, path, label.clone());
+            }
+            return offered;
+        }
+    };
     for layer in state.layers.visible_front_to_back() {
         if heca_grid_ui::offer_hint_by_key(layer.root(), key, label.clone()) {
             return true;
@@ -135,27 +205,52 @@ fn offer_in_every_tree(
     if let Some(tree) = state.chrome_tree.as_ref() {
         offered |= heca_grid_ui::offer_hint_by_key(&tree.root, key, label.clone());
     }
-    // **A pane scrolled behind a sidebar is skipped — the pane, not the pick.** Its keycap draws on
+    // **A pane behind a sidebar loses its letter — the pane, not the pick.** Its keycap draws on
     // the overlay layer, so it would land on top of the very thing covering it (Antonio, driving,
     // 2026-08-19). Its sidebar row is a second view of the same pane and IS visible, so it still
     // wears the letter and the pane stays reachable — which is why this filters the VIEW rather
     // than the candidate. Visibility is asked of `resolve_hint_layers`, never re-derived here.
+    //
+    // The header is the same pane's other view and is asked the same question. It used to be asked
+    // none at all, because the answer arrived as a set of pane *ids* and only the shell loop knew
+    // what to do with it.
     for (pane_id, shell) in state.panes.iter() {
-        if !visible_panes.contains(pane_id) {
-            continue;
-        }
-        offered |= heca_grid_ui::offer_hint_by_key(&shell.root, key, label.clone());
+        offered |= heca_grid_ui::offer_hint_by_key(
+            &shell.root,
+            key,
+            for_view(HintSurface::Pane(*pane_id)),
+        );
     }
-    for header in state.pane_headers.values() {
-        offered |= heca_grid_ui::offer_hint_by_key(&header.root, key, label.clone());
+    for (pane_id, header) in state.pane_headers.iter() {
+        offered |= heca_grid_ui::offer_hint_by_key(
+            &header.root,
+            key,
+            for_view(HintSurface::PaneHeader(*pane_id)),
+        );
     }
     offered
+}
+
+/// **What one view gets this pass**: the letter when it can be seen, and a **withdrawal** when it
+/// cannot.
+///
+/// The whole of the rule, named because getting it wrong is invisible. This was a `continue` — a
+/// view that could not show a letter was *skipped* — and skipping is not withdrawing: it leaves
+/// whatever was written last. A pane lettered while visible and then covered kept its keycap, drawn
+/// over the sidebar covering it, until the picker closed and `clear_hint_letters` swept every tree.
+///
+/// Nothing on screen shows the difference while a picker opens and closes over a still layout,
+/// which is why it survived the fix that was supposed to cover it: **resizing the window** grows
+/// the panes until they slide under the sidebar, and the letters stayed behind (Antonio, driving,
+/// 2026-08-24).
+fn label_for(label: &Option<String>, visible: bool) -> Option<String> {
+    label.clone().filter(|_| visible)
 }
 
 /// [`wanted`] for a test in another module — the mapping is the interesting part and belongs to
 /// this file, so its assertions live wherever the case is clearest rather than being re-derived.
 #[cfg(test)]
-pub(crate) fn wanted_for_tests(mode: &InputMode) -> Vec<(String, char)> {
+pub(crate) fn wanted_for_tests(mode: &InputMode) -> Vec<(Offer, char)> {
     wanted(mode, None)
 }
 
@@ -163,6 +258,25 @@ pub(crate) fn wanted_for_tests(mode: &InputMode) -> Vec<(String, char)> {
 mod tests {
     use super::*;
     use heca_core::layout::PaneId;
+
+    /// **A view that cannot be seen has its letter taken BACK, not skipped** (F003/P082/T438).
+    ///
+    /// The difference is invisible while a picker opens and closes over a still layout, and it is
+    /// the whole bug: `continue` leaves the label the view already wears. Resizing the window grew
+    /// the panes until they slid under the sidebar, and their keycaps stayed there, drawn over it.
+    #[test]
+    fn an_unseen_view_is_withdrawn_from_rather_than_left_alone() {
+        let letter = Some("a".to_string());
+        assert_eq!(label_for(&letter, true).as_deref(), Some("a"), "seen: it wears the letter");
+        assert_eq!(
+            label_for(&letter, false),
+            None,
+            "unseen: a withdrawal, never 'leave whatever is there'",
+        );
+        // A withdrawal reaches every view, seen or not — or the keycap outlives the picker.
+        assert_eq!(label_for(&None, true), None);
+        assert_eq!(label_for(&None, false), None);
+    }
 
     /// **A mode's candidates become row identities, in one place.** A new pick mode is an arm in
     /// `wanted`, not a fifth signal list, a fifth projection and a fifth thing to remember.
@@ -174,8 +288,8 @@ mod tests {
         assert_eq!(
             wanted(&mode, None),
             vec![
-                (pane_key(PaneId(7)), 'a'),
-                (pane_key(PaneId(9)), 'b'),
+                (Offer::ByKey(pane_key(PaneId(7))), 'a'),
+                (Offer::ByKey(pane_key(PaneId(9))), 'b'),
             ],
         );
     }
@@ -199,7 +313,7 @@ mod tests {
         };
         assert_eq!(
             wanted(&mode, Some(PaneId(1))),
-            vec![(pane_key(PaneId(2)), 's')],
+            vec![(Offer::ByKey(pane_key(PaneId(2))), 's')],
         );
     }
     /// **`hint.changed` fires when the lettering changes, and not otherwise** — the event a plugin

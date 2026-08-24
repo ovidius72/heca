@@ -35,14 +35,50 @@ pub(crate) enum HintSurface {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct HintTarget {
     pub(crate) surface: HintSurface,
-    /// Child indices from the surface's root down to the declaring widget.
+    /// Child indices from the surface's root down to the declaring widget — the address **this
+    /// frame**. See [`resolve`]: it is the shortcut, not the address.
     pub(crate) path: Vec<usize>,
+    /// **What the widget is called** (`heca_grid_ui::identity_of`), taken when the target was
+    /// collected. `None` for a widget with no key and no name to derive one from.
+    ///
+    /// This is the durable half. A path is child indices, so a rebuilt tree does not merely
+    /// invalidate it — it makes it name *something else*, which is worse. Everything that has to
+    /// find this widget again goes through the identity first (F003/P082/T438).
+    pub(crate) identity: Option<String>,
 }
 
 impl HintTarget {
-    pub(super) fn new(surface: &HintSurface, path: Vec<usize>) -> Self {
-        Self { surface: surface.clone(), path }
+    pub(super) fn new(surface: &HintSurface, root: &dyn heca_grid_ui::Component, path: Vec<usize>) -> Self {
+        Self {
+            identity: heca_grid_ui::identity_of(root, &path),
+            surface: surface.clone(),
+            path,
+        }
     }
+}
+
+/// **Where this target is right now** — its surface's root and its current path in it.
+///
+/// The identity first, the stored path only when the widget has no identity at all. A path is the
+/// address *this frame*: the tree behind a surface is rebuilt whenever its content changes — a
+/// window resize rebuilds the exposé — and the same indices then name a different widget. That is
+/// how a letter offered before a resize came back pointing at the wrong card, and how the keystroke
+/// it was waiting for ran nothing.
+///
+/// One resolver, so **offering a letter and running the pick agree by construction**. They are the
+/// two halves of one gesture and they used to resolve the target separately.
+pub(crate) fn resolve<'a>(
+    state: &'a crate::app_state::AppState,
+    target: &HintTarget,
+) -> Option<(&'a dyn heca_grid_ui::Component, Vec<Vec<usize>>)> {
+    let root = hint_surface_root(state, &target.surface)?;
+    let paths = match &target.identity {
+        // **Every place it is shown**, not the first: one pane is listed in both sidebars, and both
+        // views wear its letter (F003/P082/T431 had this exact bug from an `.any()`).
+        Some(id) => heca_grid_ui::hint_targets_of(root, id),
+        None => vec![target.path.clone()],
+    };
+    (!paths.is_empty()).then_some((root, paths))
 }
 
 /// The retained tree a [`HintSurface`] names, or `None` when it is gone.
@@ -101,11 +137,10 @@ fn hint_surface_root_mut<'a>(
 /// Prefixed by the surface, because two surfaces may each hold a `pane:7` and they are not the same
 /// pickable thing.
 pub(crate) fn target_identity(
-    state: &crate::app_state::AppState,
+    _state: &crate::app_state::AppState,
     target: &HintTarget,
 ) -> Option<String> {
-    let root = hint_surface_root(state, &target.surface)?;
-    let within = heca_grid_ui::identity_of(root, &target.path)?;
+    let within = target.identity.clone()?;
     let surface = match &target.surface {
         HintSurface::Chrome => "chrome".to_string(),
         HintSurface::Pane(id) => format!("pane:{}", id.0),
@@ -118,33 +153,18 @@ pub(crate) fn target_identity(
 /// Run what a pick does to the widget behind `target`. `false` when its tree is gone or was rebuilt
 /// under the letters.
 pub(crate) fn fire_hint(state: &mut crate::app_state::AppState, target: &HintTarget) -> bool {
-    let path = target.path.clone();
+    // Resolved the same way the letter was offered — through [`resolve`], so the keystroke runs the
+    // widget the letter is actually sitting on even if the tree was rebuilt under it.
+    // Running it acts on one widget — the first view, since they are views of one thing — while
+    // offering the letter reaches all of them.
+    let Some((_, paths)) = resolve(state, target) else {
+        return false;
+    };
+    let Some(path) = paths.into_iter().next() else {
+        return false;
+    };
     hint_surface_root_mut(state, &target.surface)
         .is_some_and(|root| heca_grid_ui::fire_hint(root, &path))
-}
-
-/// **Hand each picked region its letter.** The whole of the host's drawing half — there is no
-/// drawing half.
-///
-/// The widget that declared the pick draws its own keycap, which is the only way the letter lands
-/// where the region it names is: a host painting the caps itself has to guess which scene, and
-/// which half of it, that widget painted into, and a `Scene` defers overlay segments to a
-/// frame-final band ordered by nesting depth. Caps painted into the base draw under every overlay;
-/// caps painted at depth 1 draw under anything nested deeper. Both look exactly like "the picker
-/// does nothing", and no test can see either — which is what made the exposé's letters invisible
-/// while every other part of the picker was correct (F003/P082/T427).
-///
-/// A plugin's surface therefore needs nothing from here: it declares a hint, gets offered a letter,
-/// and its own paint puts that letter over its own widget, at whatever depth it lives.
-pub(crate) fn offer_hint_letters(
-    state: &crate::app_state::AppState,
-    candidates: &[(char, HintTarget)],
-) {
-    for (label, target) in candidates {
-        if let Some(root) = hint_surface_root(state, &target.surface) {
-            heca_grid_ui::offer_hint(root, &target.path, Some(label.to_string()));
-        }
-    }
 }
 
 /// **Run an action a widget on screen declares**, if any does (F003/P082/T427).
