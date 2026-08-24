@@ -2851,6 +2851,151 @@ mod tests {
         );
     }
 
+    /// **Nothing paints outside the box it was given** — every kind, at every width
+    /// (F003/P082/T438).
+    ///
+    /// The rule `components/mod.rs` already states for anything sized by its container — *lay it out
+    /// in a box and assert it never exceeds it* — asked of the **whole vocabulary** rather than one
+    /// composition at a time. It walks `WidgetKind::ALL`, so a kind added next month is covered
+    /// with nobody remembering, and a plugin's tree is covered by construction: it is built from
+    /// these kinds.
+    ///
+    /// **Base layer only.** The overlay band exists precisely for things that must escape their
+    /// box — a dropdown panel opened inside a scroll region, a hint keycap on a half-visible row —
+    /// so asserting there would forbid the feature. What must stay inside is the widget's own
+    /// picture.
+    ///
+    /// The failure it exists for is invisible to every "was this drawn?" assertion: a name that is
+    /// drawn *somewhere*, across its neighbour.
+    #[test]
+    fn no_kind_paints_outside_the_box_it_is_given() {
+        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
+        use heca_core::layout::Size;
+
+        /// Kinds that still put content past their edge, each with what does it. **An entry here
+        /// is a defect, not a licence** — the rule is `NO_HINT`'s: keep it short, and never add one
+        /// to make the test pass. Every one of these is a leading icon or drag handle placed before
+        /// the text without the row's own width being consulted.
+        const KNOWN_ESCAPES: &[(&str, &str)] = &[
+            ("ItemGroup", "the disclosure caret and its gap are placed before the header text"),
+            ("DockFrame", "drag handle + caret + gap: at 60px the title starts AT the right edge"),
+            ("Toast", "the severity icon's column is a constant, so it survives any squeeze"),
+            ("Item", "the leading slot is placed before the label, whatever room is left"),
+        ];
+
+        let theme = Theme::default();
+        let mut escapes: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            if KNOWN_ESCAPES.iter().any(|(k, _)| *k == format!("{kind:?}")) {
+                continue;
+            }
+            // Down to 24px: narrower than that is below a single control's own minimum (an icon
+            // plus its padding), where "stay inside the box" stops being a meaningful request.
+            for box_w in [400.0f64, 120.0, 60.0, 24.0] {
+                // A parent that hands it a definite width: a kind sized as a share has nothing to
+                // be a share *of* at the root of a layout.
+                let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
+                let mut root = realize(
+                    &node,
+                    &theme,
+                    &noop_emitter(),
+                    &mut FormBindings::default(),
+                );
+                root.base_mut().style.layout.width = heca_grid_ui::Length::Px(box_w as f32);
+                LayoutEngine::new().compute(root.as_mut(), Size::new(box_w, 200.0));
+
+                let mut scene = Scene::new();
+                {
+                    let mut cx = PaintCx::new(&mut scene, &theme);
+                    root.paint(&mut cx);
+                }
+                // **Honour the clip stack**: a draw scissored to a clip that is itself inside the
+                // window cannot escape it — that is what the clip is for. Ignoring them reports a
+                // scrolling page's content, which is exactly the case where overflow is the feature.
+                let mut clips: Vec<heca_core::layout::Rectangle> = Vec::new();
+                for cmd in scene.base_layer().iter() {
+                    match cmd {
+                        heca_grid_ui::DrawCommand::PushClip(r) => {
+                            let inner = clips.last().and_then(|c: &heca_core::layout::Rectangle| c.intersection(*r)).unwrap_or(*r);
+                            clips.push(inner);
+                            continue;
+                        }
+                        heca_grid_ui::DrawCommand::PopClip => {
+                            clips.pop();
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    let (what, rect) = match cmd {
+                        DrawCommand::Text(t) if t.text.is_empty() => continue,
+                        DrawCommand::Text(t) => (format!("text {:?}", t.text), t.rect),
+                        DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
+                        _ => continue,
+                    };
+                    // A box squeezed to nothing paints nothing, wherever its origin ended up.
+                    if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
+                        continue;
+                    }
+                    let Some(rect) = clips.last().map_or(Some(rect), |c| c.intersection(rect)) else {
+                        continue; // entirely scissored away
+                    };
+                    let right = rect.loc.x + rect.size.w;
+                    if rect.loc.x < -0.5 || right > box_w + 0.5 {
+                        escapes.push(format!(
+                            "{kind:?} at {box_w}px: {what} spans {:.0}..{:.0}",
+                            rect.loc.x, right,
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(escapes.is_empty(), "these draw outside their box:\n{}", escapes.join("\n"));
+    }
+
+    /// **A widget with content never renders as nothing** — every kind, with room to spare.
+    ///
+    /// The other half, and the one that caught the first attempt at fixing the first: a label that
+    /// may shrink to zero *does*, in a parent that sizes to its minimum, and a `Card`'s title
+    /// vanished outright. "Nothing drawn" is a worse answer than "drawn too wide", and no test
+    /// anywhere asserted against it.
+    #[test]
+    fn no_kind_with_content_renders_as_nothing() {
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
+        use heca_core::layout::Size;
+
+        let theme = Theme::default();
+        let mut silent: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            if kind == WidgetKind::ScrollBar {
+                continue; // host-only: `realize` refuses it outright, by design
+            }
+            if kind == WidgetKind::Overlay {
+                // A **closed** surface draws nothing, and a described `Overlay` starts closed
+                // unless it says `opened`. That is the widget working, not a silent one.
+                continue;
+            }
+            let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
+            let mut root = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
+            root.base_mut().style.layout.width = heca_grid_ui::Length::Px(400.0);
+            LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 200.0));
+
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                root.paint(&mut cx);
+            }
+            if scene.is_empty() {
+                silent.push(format!("{kind:?}"));
+            }
+        }
+        assert!(
+            silent.is_empty(),
+            "these draw nothing at all despite having content:\n{}",
+            silent.join("\n"),
+        );
+    }
+
     /// **What a plugin actually writes to own a picker** — the SDK, end to end (F003/P082/T436).
     ///
     /// The last of the six. After T435 a plugin could be *picked*; this is the other half — opening
