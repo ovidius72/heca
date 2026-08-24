@@ -334,6 +334,9 @@ impl KeyHint {
         // Hug the child so the wrapper's bounds match it (overlay positions off them).
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
+        // …and transparent to layout as well, or a child sized as a share resolves it against
+        // this wrapper and quietly becomes its content size instead.
+        crate::component::wrap_transparently(&mut base, child.as_ref());
         // Column direction so the single child stretches to the wrapper's full width
         // (cross-axis, default `Align::Stretch`). This keeps the wrapper transparent
         // to a stretching parent: a wide list row fills its column instead of

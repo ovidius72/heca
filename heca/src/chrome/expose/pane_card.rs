@@ -11,7 +11,7 @@ use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Justify, Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, KeyHint, Label, Row};
+use heca_grid_ui::widgets::{Flex, GridCell, HintPlacement, KeyHint, Row};
 use heca_grid_ui::Component;
 
 /// The `key` of a pane's box — the row's one identity, so the cursor, the right-click target
@@ -189,7 +189,26 @@ impl PaneCard<'_> {
                 Flex::column()
                     .align(Align::Center)
                     .gap(2.0)
-                    .child(Label::new(self.name.to_string()))
+                    // **A card is a share of the strip, so its content absorbs the squeeze** —
+                    // which is how a widget asks for it here (`Style::flex_shrink`: nothing shrinks
+                    // unless it says so). Without it the block keeps its natural width, the card
+                    // cannot be narrower than the longest path inside it, and a narrow window drew
+                    // every card's text across its neighbours.
+                    .shrink(1.0)
+                    .max_width(Length::Pct(1.0))
+                    // The name as every surface shows it — and it stays inside the card, however
+                    // narrow the window makes it (`components::PaneName`).
+                    .child(
+                        crate::components::PaneName {
+                            text: self.name,
+                            color: theme.colors.foreground,
+                            bold: false,
+                            font_scale: 1.0,
+                            theme,
+                        }
+                        .build()
+                        .widget,
+                    )
                     .child(folder.widget)
             });
         // **Type a letter to jump to any card** (F003/P082/T427). One line on the widget, which is
@@ -294,6 +313,65 @@ mod tests {
     use crate::chrome::expose::testing::{actions, callbacks, lay_out, theme};
     use heca_grid_ui::event::Event;
     use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+
+    /// **A card keeps everything it draws inside itself**, at every width the map can squeeze it to
+    /// (F003/P082/T438).
+    ///
+    /// This is the test the components rules ask of anything sized by its container — *lay it out
+    /// in a box and assert it never exceeds it* — and its absence is why narrowing the window made
+    /// every card's name paint across its neighbours until three of them were one smear.
+    #[test]
+    fn a_card_draws_nothing_outside_itself_however_narrow_it_gets() {
+        for box_w in [400.0, 160.0, 80.0, 40.0, 16.0] {
+            let (cb, _sink) = callbacks();
+            let theme = theme();
+            let (row, _cell) = PaneCard {
+                pane_id: PaneId(7),
+                folder: Some("~/projects/heca"),
+                name: "editor",
+                active: false,
+                previous: false,
+                ws_idx: 0,
+                col_idx: 0,
+                next: None,
+                theme: &theme,
+                cb: &cb,
+            }
+            .build();
+            // The card is a **share** of the strip it sits in (`Pct`), so it is laid out inside a
+            // parent that gives it one — as the map does. At the root of a layout a percentage has
+            // nothing to be a percentage of.
+            use heca_grid_ui::builders::{LayoutExt as _, Parent as _};
+            let strip = heca_grid_ui::widgets::Flex::row()
+                .width(heca_grid_ui::Length::Px(box_w as f32))
+                .child(row);
+            let root = lay_out(strip, box_w, 200.0);
+            if box_w == 80.0 {
+                fn dump(n: &dyn heca_grid_ui::Component, d: usize) {
+                    eprintln!("{:i$}{:?}", "", n.base().bounds, i = d * 2);
+                    for c in &n.base().children { dump(c.as_ref(), d + 1); }
+                }
+                dump(root.as_ref(), 0);
+            }
+            let mut scene = heca_grid_ui::Scene::new();
+            root.paint(&mut heca_grid_ui::PaintCx::new(&mut scene, &theme));
+
+            for cmd in scene.iter() {
+                if let heca_grid_ui::DrawCommand::Text(t) = cmd
+                    // An empty run paints nothing; a card too small for even one character has
+                    // cut its text away entirely, which is the right answer at that size.
+                    && !t.text.is_empty()
+                {
+                    assert!(
+                        t.rect.loc.x + t.rect.size.w <= box_w + 0.5,
+                        "at {box_w}px the card drew {:?} out to {}",
+                        t.text,
+                        t.rect.loc.x + t.rect.size.w,
+                    );
+                }
+            }
+        }
+    }
 
     /// **A card says where its pane is**, with the same line the sidebar's row uses — so the map
     /// and the dock describe a pane the same way. Nothing to show is nothing drawn: `model` folds
@@ -440,8 +518,10 @@ mod tests {
         let card = inner.bounds;
         let label = inner.children[0].base().bounds;
         let slack = (label.loc.x - card.loc.x) - ((card.loc.x + card.size.w) - (label.loc.x + label.size.w));
+        // One pixel of asymmetry is centred: a 49px label in a 200px card has 75.5px either side,
+        // and boxes are whole pixels.
         assert!(
-            slack.abs() < 1.0,
+            slack.abs() <= 1.0,
             "the name sits in the middle: label {label:?} in card {card:?}",
         );
         // The signal the cell was handed is the card's own: lighting it focuses the card.

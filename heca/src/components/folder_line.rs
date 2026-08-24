@@ -2,9 +2,9 @@
 
 use heca_grid_ui::builders::{LayoutExt, Parent};
 use heca_grid_ui::reactive::Signal;
-use heca_grid_ui::style::Align;
+use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Flex, Glyph, Icon, Label, Visibility};
+use heca_grid_ui::widgets::{Ellipsis, Flex, Glyph, Icon, Label, Visibility};
 
 /// Gap between the folder glyph and the path, and the glyph's size — the line's own proportions,
 /// not the caller's.
@@ -44,14 +44,28 @@ impl FolderLine<'_> {
     pub(crate) fn build(self) -> BuiltFolderLine {
         // Readable, matching the sibling git-branch line: `muted` is too dim for a primary piece of
         // information about a pane, which is what "where am I" is.
+        // **Cut from the FRONT, so the tail survives**: `~/projects/heca` says less than
+        // `…/projects/heca`, and a path's last components are the ones that tell two panes apart.
+        // Without it the line keeps its natural width and takes its whole card with it — a card
+        // 80px wide drew a 120px path, pushing the name out with it (Antonio, driving, 2026-08-24).
+        // Here rather than at each surface, for the same reason the line itself is here.
         let label = Label::new(self.path.unwrap_or_default())
             .color(self.theme.colors.foreground)
-            .font_scale(self.font_scale);
+            .font_scale(self.font_scale)
+            .truncate(Ellipsis::Start);
         let text = label.text_signal();
         let widget = Visibility::new(
             Flex::row()
                 .align(Align::Center)
                 .gap(GAP)
+                // Never wider than what holds it — see `PaneName`. The line is commonly centred,
+                // and a centred child is sized by its content unless it says otherwise.
+                .max_width(Length::Pct(1.0))
+                // **This line absorbs the squeeze**, which is how a widget asks for it here
+                // (`Style::flex_shrink`: nothing shrinks unless it says so). A path is the longest
+                // thing on a card and the first that should give way — without this the line keeps
+                // its natural width and takes the card with it.
+                .shrink(1.0)
                 .child(
                     Icon::new(Glyph::Folder)
                         .size(ICON)

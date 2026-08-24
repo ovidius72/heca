@@ -15,7 +15,10 @@ impl Visibility {
     /// Wrap `child` and show it initially when `visible` is `true`.
     pub fn new(child: impl Component + 'static, visible: bool) -> Self {
         let mut base = Base::new();
-        base.children.push(Box::new(child));
+        let child: Box<dyn Component> = Box::new(child);
+        // Transparent to layout as well as to paint: see `component::wrap_transparently`.
+        crate::component::wrap_transparently(&mut base, child.as_ref());
+        base.children.push(child);
         let visible = signal(visible);
         let mut this = Self {
             base,

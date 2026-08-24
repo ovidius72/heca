@@ -82,5 +82,7 @@
 //! [`WidgetModel`]: crate::chrome::WidgetModel
 
 pub(crate) mod folder_line;
+pub(crate) mod pane_name;
 
 pub(crate) use folder_line::FolderLine;
+pub(crate) use pane_name::PaneName;

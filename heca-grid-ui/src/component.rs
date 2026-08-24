@@ -1146,6 +1146,39 @@ pub struct PaintCx<'a> {
     clip: Option<Rectangle>,
 }
 
+/// **Make a wrapper transparent to layout** — the sizing half of "transparent".
+///
+/// A wrapper that decorates without changing the picture ([`KeyHint`](crate::widgets::KeyHint),
+/// [`Visibility`](crate::widgets::Visibility), [`FocusScope`](crate::widgets::FocusScope),
+/// [`KeyHintGroup`](crate::widgets::KeyHintGroup)) hugs its child, so its bounds are the child's —
+/// which is what the decoration is positioned off. Hugging alone is not transparency:
+///
+/// - a child sized as a **share** (`Length::Pct`) resolves that percentage against its parent, and
+///   its parent is now the wrapper. A hugged wrapper is `Auto`, so the share resolves against
+///   nothing and silently falls back to the child's **content** size — the widget stops being a
+///   share and becomes as wide as its text;
+/// - the same for a `max_width` a child sets to keep itself inside its container.
+///
+/// That is why the exposé's cards would not shrink with the window: each card asked for 100% of a
+/// wrapper that asked for 100% of nothing, so a card stayed as wide as the path inside it and every
+/// card's text ran across its neighbours (Antonio, driving, 2026-08-24). `expose/mod.rs` already
+/// carried a hand-written workaround — "the room the panel gives it has to be passed on
+/// deliberately" — which is one call site fixing a rule that belongs here.
+///
+/// Adopting whatever the child declares keeps the chain unbroken, and a child that hugs still hugs,
+/// because then there is nothing to adopt.
+pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
+    let child = child.base().style.layout;
+    if !matches!(child.width, crate::style::Length::Auto) {
+        base.style.layout.width = child.width;
+    }
+    if !matches!(child.height, crate::style::Length::Auto) {
+        base.style.layout.height = child.height;
+    }
+    base.style.layout.max_width = base.style.layout.max_width.or(child.max_width);
+    base.style.layout.max_height = base.style.layout.max_height.or(child.max_height);
+}
+
 /// Scale every colour in a draw command by `a`, leaving its geometry alone.
 ///
 /// Written out per command rather than as a blanket "multiply anything colour-shaped", because the

@@ -85,16 +85,30 @@ impl PaneRow<'_> {
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
         let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
-        let active_title_label = Label::new(info.title.clone())
-            .color(theme.colors.accent)
-            .bold(true);
-        let active_title_signal = active_title_label.text_signal();
+        // The pane's name, the same line the exposé's card shows — and it cuts rather than spilling
+        // when the sidebar is narrow (`components::PaneName`).
+        let active_name = crate::components::PaneName {
+            text: &info.title,
+            color: theme.colors.accent,
+            bold: true,
+            font_scale: 1.0,
+            theme,
+        }
+        .build();
+        let active_title_label = active_name.widget;
+        let active_title_signal = active_name.text;
         let active_title = Visibility::new(active_title_label, active);
         let active_title_visible = active_title.visible_signal();
-        let inactive_title_label = Label::new(info.title.clone())
-            .color(theme.colors.foreground)
-            .bold(true);
-        let inactive_title_signal = inactive_title_label.text_signal();
+        let inactive_name = crate::components::PaneName {
+            text: &info.title,
+            color: theme.colors.foreground,
+            bold: true,
+            font_scale: 1.0,
+            theme,
+        }
+        .build();
+        let inactive_title_label = inactive_name.widget;
+        let inactive_title_signal = inactive_name.text;
         let inactive_title = Visibility::new(inactive_title_label, !active);
         let inactive_title_visible = inactive_title.visible_signal();
         let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);

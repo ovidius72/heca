@@ -32,17 +32,28 @@ const UNDERLINE_OFFSET_RATIO: f32 = 0.42;
 /// box centre).
 const STRIKE_OFFSET_RATIO: f32 = 0.06;
 
-/// Which end of a label is cut when the text does not fit its box.
+/// **What a label does when its text does not fit its box.**
 ///
-/// Two, because the two kinds of text read from opposite ends: a **label** is identified by its
-/// beginning (`Move focus to the column…`), a **path** by its end (`…/projects/heca/src`). Cutting
-/// a path at the tail throws away the only part anyone reads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, heca_grid_ui_macros::PropName)]
+/// Two ways to cut, because the two kinds of text read from opposite ends: a **label** is identified
+/// by its beginning (`Move focus to the column…`), a **path** by its end (`…/projects/heca/src`).
+/// Cutting a path at the tail throws away the only part anyone reads.
+///
+/// And [`None`](Ellipsis::None), which is the *opt-out*: keep the natural width and overflow. It
+/// used to be the default, and nobody chose it — it was what the field held before truncation
+/// existed. The result was that every author who might ever be squeezed had to know to ask for
+/// cutting, and the ones who did not shipped text drawn across its neighbours (F003/P082/T438).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, heca_grid_ui_macros::PropName)]
 pub enum Ellipsis {
-    /// Keep the head, cut the tail: `Move focus to the col…`.
+    /// Keep the head, cut the tail: `Move focus to the col…`. **The default**, because most text is
+    /// identified by how it starts.
+    #[default]
     End,
-    /// Keep the tail, cut the head: `…/heca/src`.
+    /// Keep the tail, cut the head: `…/heca/src`. What a path wants.
     Start,
+    /// **Do not cut**: keep the natural width and paint outside the box if it does not fit. For the
+    /// rare case where the text is what should size its container — and it is then *asked for*,
+    /// rather than being what you get by forgetting.
+    None,
 }
 
 /// A text label. Its content is a [`Signal`], so updating it marks the label
@@ -70,9 +81,10 @@ pub struct Label {
     underline: Signal<bool>,
     /// A rule through the text — drawn by this widget, not shaped.
     strikethrough: Signal<bool>,
-    /// Cut the text to its box instead of overflowing it. `None` (the default) is the historical
-    /// behaviour: the label keeps its natural width and a container that cannot hold it overflows.
-    truncate: Option<Ellipsis>,
+    /// What this label does when its text does not fit — [`Ellipsis::End`] unless the caller says
+    /// otherwise. **Not an `Option`**: [`Ellipsis::None`] *is* "do not cut", so there is one way to
+    /// say it rather than two that can disagree.
+    truncate: Ellipsis,
     /// Reflow the text onto as many lines as its width needs. Wins over
     /// [`truncate`](Self::truncate) when both are set.
     ///
@@ -111,7 +123,7 @@ impl Label {
             italic: signal(false),
             underline: signal(false),
             strikethrough: signal(false),
-            truncate: None,
+            truncate: Ellipsis::End,
             wrap: signal(false),
             marks: signal(Vec::new()),
             mark_color: None,
@@ -121,22 +133,26 @@ impl Label {
         label
     }
 
-    /// Cut the text to fit its box, with the ellipsis at `mode`'s end.
+    /// **Which end is lost** when the text does not fit — or [`Ellipsis::None`] to keep the natural
+    /// width and overflow instead.
     ///
-    /// **Two halves, and the second is the one that makes it work.** Cutting at paint time is only
-    /// reached if the layout can hand the label *less* than its natural width, so a truncating label
-    /// also declares itself shrinkable (`flex_shrink = 1.0`, `min_width = 0`). Without that it keeps
-    /// its full measured width and simply overflows — the same trap `flex_grow` had: a size that
-    /// cannot shrink does not participate in the squeeze.
+    /// Cutting is the default, so this is here to choose the *end*: a path wants
+    /// [`Start`](Ellipsis::Start), everything else reads from its head.
+    ///
+    /// It used to do two more things — set `flex_shrink = 1` and force `min_width = 0` — because
+    /// the cut is only reachable if the layout can hand the label less than its natural width, and
+    /// nothing shrank by default while a label's "how narrow can you get?" answer was its longest
+    /// word. Both are gone: shrinking is the default now, and the label answers that question
+    /// honestly as **one character**. Forcing the floor to zero was the sledgehammer, and it cost a
+    /// `Card` its title — a label whose floor is nothing resolves to nothing and draws no text at
+    /// all (F003/P082/T438).
     ///
     /// The cut uses the **same** monospace cell the measure does ([`MONO_ADVANCE_RATIO`]), so the
     /// text ends exactly where the box does, and it is recomputed from the current bounds at every
     /// paint — a resize re-cuts with no rebuild.
     #[heca_grid_ui_macros::prop]
     pub fn truncate(mut self, mode: Ellipsis) -> Self {
-        self.truncate = Some(mode);
-        self.base.style.layout.flex_shrink = Some(1.0);
-        self.base.style.layout.min_width = Some(Length::Px(0.0));
+        self.truncate = mode;
         self.remeasure();
         self
     }
@@ -265,9 +281,17 @@ impl Label {
             chars.iter().enumerate().map(|(i, &c)| (c, Some(i))).collect()
         };
         let chars: Vec<char> = text.chars().collect();
-        let Some(mode) = self.truncate else {
+        let mode = self.truncate;
+        if mode == Ellipsis::None {
             return vec![whole(&chars)];
-        };
+        }
+        // **No box yet is not an empty box.** Bounds are zero until the layout pass fills them in,
+        // and cutting to a zero-width box draws nothing at all — so a tree painted before it is laid
+        // out would come out blank rather than merely mis-sized. Degenerate geometry means "no
+        // answer yet" here exactly as it does in the picker's visibility rules (F003/P082/T438).
+        if self.base.bounds.size.w <= 0.0 {
+            return vec![whole(&chars)];
+        }
         if chars.len() <= cells {
             return vec![whole(&chars)];
         }
@@ -287,6 +311,8 @@ impl Label {
                         .chain((from..chars.len()).map(|i| (chars[i], Some(i))))
                         .collect()
                 }
+                // Unreachable: returned above.
+                Ellipsis::None => whole(&chars),
             },
         };
         vec![cut]
@@ -451,7 +477,7 @@ impl Component for Label {
             self.base.style.layout.height = Length::Auto;
             return;
         }
-        if self.truncate.is_some() {
+        if self.truncate != Ellipsis::None {
             // **No definite width either.** A fixed natural width cannot be taken away on the cross
             // axis of a column, so a cutting label put in one simply overflowed its container and
             // never cut at all. `auto` + the measure path lets the box it is given decide, which is
@@ -469,7 +495,7 @@ impl Component for Label {
     /// [`wrap`](Label::wrap)); every other case is sized by `remeasure` above.
     fn measure_text(&self) -> Option<crate::layout::TextMeasure> {
         let wrap = self.wrap.get_untracked();
-        (wrap || self.truncate.is_some()).then(|| crate::layout::TextMeasure {
+        (wrap || self.truncate != Ellipsis::None).then(|| crate::layout::TextMeasure {
             text: self.text.get_untracked(),
             font: self.base.font,
             wrap,

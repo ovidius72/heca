@@ -86,6 +86,9 @@ impl FocusScope {
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
         base.style.layout.direction = Direction::Column;
+        // …and transparent to layout as well, or a child sized as a share resolves it against this
+        // wrapper and quietly becomes its content size (`component::wrap_transparently`).
+        crate::component::wrap_transparently(&mut base, child.as_ref());
         base.children.push(child);
         Self {
             base,

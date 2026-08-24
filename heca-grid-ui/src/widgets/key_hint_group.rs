@@ -113,6 +113,9 @@ impl KeyHintGroup {
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
         base.style.layout.direction = Direction::Column;
+        // …and transparent to layout as well (`component::wrap_transparently`), so a picker over a
+        // subtree sized as a share does not turn that share into a content size.
+        crate::component::wrap_transparently(&mut base, child.as_ref());
         base.children.push(child);
         Self { base, open: signal(false), seen: false, letters: DEFAULT_LETTERS.chars().collect() }
     }
@@ -195,11 +198,19 @@ impl KeyHintGroup {
 
     /// Every hint declaration beneath this group, in document order — **not including itself**, so
     /// a group nested in another group is a target of the outer one only through its children.
+    ///
+    /// **Clipped-away descendants are not targets**, by the same rule the global picker follows: a
+    /// row scrolled past a `ScrollRegion`'s fold has real bounds and simply is not drawn, so a
+    /// letter there would be spent on something nobody can see and its keycap would land on
+    /// whatever covers it (F003/P082/T438). The rule is `hint::collect`'s, not a copy — this walk
+    /// had its own inlined "skip hidden" test and would have needed a second inlined clip test
+    /// beside it.
     fn targets(&self) -> Vec<Vec<usize>> {
         let mut out = Vec::new();
+        let clip = crate::hint::narrowed(None, self);
         for (i, child) in self.base.children.iter().enumerate() {
             let mut here = vec![i];
-            collect(child.as_ref(), &mut here, &mut out);
+            collect(child.as_ref(), &mut here, clip, &mut out);
         }
         out
     }
@@ -232,16 +243,22 @@ impl KeyHintGroup {
     }
 }
 
-fn collect(node: &dyn Component, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
-    if !node.base().visible.get_untracked() || node.base().style.layout.hidden {
+fn collect(
+    node: &dyn Component,
+    path: &mut Vec<usize>,
+    clip: Option<crate::Rectangle>,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if crate::hint::skip(node) {
         return;
     }
-    if node.base().hint.is_some() {
+    if node.base().hint.is_some() && !crate::hint::out_of_view(node, clip) {
         out.push(path.clone());
     }
+    let clip = crate::hint::narrowed(clip, node);
     for (i, child) in node.base().children.iter().enumerate() {
         path.push(i);
-        collect(child.as_ref(), path, out);
+        collect(child.as_ref(), path, clip, out);
         path.pop();
     }
 }
@@ -532,6 +549,40 @@ mod tests {
             g.base().focused.get_untracked(),
             "an open picker is the focus owner, or the letters it drew would go to the subtree",
         );
+    }
+
+    /// **A picker does not letter what its own subtree has scrolled away** (F003/P082/T438).
+    ///
+    /// The same rule the global picker follows, and the same code — this walk used to carry its own
+    /// inlined copy of "skip hidden", which is precisely how it would have ended up with a second
+    /// inlined copy of the clip test beside it.
+    #[test]
+    fn a_picker_skips_what_its_subtree_has_scrolled_out_of_view() {
+        use crate::builders::LayoutExt as _;
+        use crate::widgets::ScrollRegion;
+        use crate::LayoutEngine;
+        use heca_core::layout::Size as CoreSize;
+
+        let picks: Picks = Rc::new(RefCell::new(Vec::new()));
+        let rows = (0..6).fold(Flex::column(), |c, i| {
+            let picks = picks.clone();
+            c.child(
+                KeyHint::new(Row::new().height(Length::Px(40.0)).child(Label::new("row")))
+                    .on_hint(move || picks.borrow_mut().push(i)),
+            )
+        });
+        let region = ScrollRegion::new()
+            .width(Length::Px(200.0))
+            .height(Length::Px(100.0))
+            .child(rows);
+
+        let open = signal(false);
+        let mut g = KeyHintGroup::new(region).open_when(open);
+        LayoutEngine::new().compute(&mut g, CoreSize::new(200.0, 100.0));
+
+        let all = g.targets().len();
+        assert!(all < 6, "six rows, a 100px viewport: {all} of them cannot all be visible");
+        assert!(all > 0, "the rows still in view are still targets");
     }
 
     /// **Closed, it is not there.** A picker that only lets its letters through while open is the
