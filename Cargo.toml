@@ -14,3 +14,18 @@ rust-version = "1.85"
 winit = "0.30"
 wgpu = "25"
 pollster = "0.4"
+
+# --- build-speed profile -------------------------------------------------
+# This workspace is disk-bound, not CPU-bound: incremental dev builds split
+# each crate into 256 codegen units, and cargo never garbage-collects the
+# stale .o files they leave behind. They had reached 946k files / 68 GB.
+[profile.dev]
+debug = "line-tables-only"   # backtraces still carry file:line, far less data
+incremental = false          # the .o explosion; check/clippy never needed it
+
+[profile.dev.package."*"]
+debug = false                # no debug info for the ~500 third-party crates
+
+[profile.test]
+debug = "line-tables-only"
+incremental = false

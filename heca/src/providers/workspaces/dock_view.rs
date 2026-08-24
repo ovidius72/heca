@@ -111,10 +111,10 @@ mod tests {
             .build(&seams, &mut reg)
         };
 
-        let declared = testing::declared_nav_keys(&root);
+        let declared = testing::declared_keys(&root);
         for ws_idx in [0, 1] {
             assert!(
-                declared.contains(&super::super::workspace_nav_key(ws_idx)),
+                declared.contains(&super::super::workspace_key(ws_idx)),
                 "workspace {ws_idx} has no frame: {declared:?}",
             );
         }

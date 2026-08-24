@@ -26,6 +26,10 @@ pub(crate) struct ExposePane {
     pub(crate) name: String,
     /// Is this the focused pane of its workspace?
     pub(crate) active: bool,
+    /// **Where the pane is** — its working directory, already home-relative, or `None` when the
+    /// backend never reported one. Plain text by the time it reaches a card: `register` resolves it
+    /// from `AppState`, so the components below stay testable without a window.
+    pub(crate) folder: Option<String>,
     /// The pane's **resolved** height in layout pixels, read from `Column::pane_sizes` for the same
     /// reason [`ExposeColumn::width`] is read from `column_widths`: the layout already decided it,
     /// and a second calculation here would be a second answer that can disagree.
@@ -53,6 +57,8 @@ pub(crate) struct ExposeColumn {
 pub(crate) struct ExposeFloating {
     pub(crate) pane_id: PaneId,
     pub(crate) name: String,
+    /// Where the pane is — see [`ExposePane::folder`]. A float is a pane like any other here.
+    pub(crate) folder: Option<String>,
     /// Is this the workspace's active pane? A float carries the flag itself
     /// (`FloatingPane::is_active`) because it is not in a column and so has no
     /// `active_pane_idx` to be compared against.
@@ -98,7 +104,15 @@ pub(crate) struct ExposeWorkspace {
 /// `name_of` resolves a pane's display name; the caller passes it because the one name composer
 /// (`pane_info_view`) needs the programs config and the live runtime, neither of which belongs in
 /// a geometry function.
-pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layout::Pane) -> String) -> Vec<ExposeWorkspace> {
+/// `name_of` composes a pane's display name (through `pane_info_view`, the one name composer, so a
+/// pane reads the same here as in the sidebar and its header). `folders` is `[settings]
+/// pane_show_cwd` — read once by `register` and applied here, so a card is handed a folder or it is
+/// not, and no component below carries a flag it only passes on.
+pub(crate) fn model(
+    session: &Session,
+    mut name_of: impl FnMut(&heca_core::layout::Pane) -> String,
+    folders: bool,
+) -> Vec<ExposeWorkspace> {
     session
         .workspaces
         .iter()
@@ -125,6 +139,13 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
                         .map(|(pane_idx, pane)| ExposePane {
                             pane_id: pane.id,
                             name: name_of(pane),
+                            // **"Turned off" and "there is none" are the same absence.** The
+                            // setting is read once, here, rather than carried down four components
+                            // as a flag every one of them would have to pass on untouched.
+                            folder: folders
+                                .then_some(pane.runtime.cwd.as_deref())
+                                .flatten()
+                                .map(crate::chrome::home_relative_path),
                             active: pane_idx == col.active_pane_idx
                                 && col_idx == scrolling.active_column_idx,
                             // The layout's resolved height, which already accounts for
@@ -163,6 +184,10 @@ pub(crate) fn model(session: &Session, mut name_of: impl FnMut(&heca_core::layou
                     .map(|f| ExposeFloating {
                         pane_id: f.pane.id,
                         name: name_of(&f.pane),
+                        folder: folders
+                            .then_some(f.pane.runtime.cwd.as_deref())
+                            .flatten()
+                            .map(crate::chrome::home_relative_path),
                         active: f.is_active,
                         // Viewport-relative → strip-relative. See the field's own note.
                         x: f.position.x + view_x,
@@ -194,7 +219,7 @@ mod tests {
     #[test]
     fn a_row_carries_the_real_column_widths_and_the_strip_it_scrolls() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
 
         assert_eq!(rows.len(), s.workspaces.len(), "one row per workspace");
         assert_eq!(rows[0].name, "Editing");
@@ -228,7 +253,7 @@ mod tests {
         let (h, gaps) = (ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
         ws.scrolling.columns[0].move_pane_boundary(0, 120.0, h, gaps);
 
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let stacked = &rows[0].columns[0].panes;
         assert_eq!(stacked.len(), 2, "two panes share the first column");
         assert!(
@@ -263,7 +288,7 @@ mod tests {
         let anchor = s.workspaces[0].scrolling.column_x(1);
         assert!(anchor > 0.0, "the second column starts somewhere other than 0: {anchor}");
 
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let f = &rows[0].floating[0];
         assert_eq!(f.pane_id, PaneId(9));
         assert_eq!(

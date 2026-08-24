@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{DrawCommand, ScanlineCmd};
 use heca_grid_ui::{Component, Event, LayoutEngine, Panel, PaintCx, Point, RawPointer, RawPointerKind, Rectangle, Scene, Size};
-use heca_grid_ui::widgets::{ContextMenu, KeyCap, Menu, NfGlyph, NfIcon};
+use heca_grid_ui::widgets::{ContextMenu, KeyCap, Menu, NfGlyph, NfIcon, Overlay};
 use heca_view::build::{self, Parent as _, Style as _};
 use heca_view::{Intent, PropValue, ViewNode};
 use heca_view_realize::{realize, FormBindings, IntentEmitter};
@@ -503,6 +503,30 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .corner(ToastCorner::TopRight)
         .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
         .on_action(|id| println!("[showcase] toast {id} action"));
+
+    // An **animated surface** (F003/P082/T459): the same `Overlay` every layer is, declaring how
+    // it arrives and leaves in one builder — which is the whole capability. Opening zooms it in
+    // and dissolving rides the shrink on the way out, the exposé's own gesture; the surface stays
+    // on screen, inert, until that gesture has played out. Click the scrim to dismiss it.
+    //
+    // Drive it to see the three things tests cannot check: that the movement reads as one gesture,
+    // that nothing flashes at the end of the exit, and that the surface is gone the frame it
+    // finishes rather than lingering faintly.
+    let animated = Overlay::new()
+        .animation(Animation::ZoomFade)
+        .panel_size(Length::Px(420.0), Length::Px(220.0));
+    let animated_open = animated.open_signal();
+    let (open_it, dismiss_it) = (animated_open, animated_open);
+    let animated = animated
+        .panel(
+            Flex::column()
+                .gap(10.0)
+                .padding(20.0)
+                .child(Label::new("ANIMATED SURFACE"))
+                .child(Label::new("Zoom in; on the way out the dissolve rides the shrink."))
+                .child(Button::secondary("CLOSE").on_click(move || dismiss_it.set(false))),
+        )
+        .on_outside_click(move || dismiss_it.set(false));
 
     // Dialog (T009 / BUG B): the widget is hosted in the OVERLAY layer above the
     // page scroll — never in-flow inside scrolled content, where taffy would center
@@ -1353,10 +1377,19 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // (see `dialog` above the page) — only its trigger sits in the scrolled page.
         .child(caption("Dialog"))
         .child(
-            Flex::row().gap(12.0).align(Align::Center).child(
-                Button::destructive("DELETE PANE (DIALOG)…")
-                    .on_click(move || dialog_open.set(true)),
-            ),
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(
+                    Button::destructive("DELETE PANE (DIALOG)…")
+                        .on_click(move || dialog_open.set(true)),
+                )
+                // The bare animated `Overlay` — one builder, `.animation(..)`, and nothing else
+                // wired: no registry, no id, no host pass.
+                .child(
+                    Button::secondary("ANIMATED SURFACE…")
+                        .on_click(move || open_it.set(true)),
+                ),
         )
         // Pane frame variants: three Panes side-by-side showing None, Bordered,
         // and Bracketed modes. Each has a background + border so the decoration
@@ -2095,6 +2128,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // first; everything here paints after (= over) the page.
     let overlays = Flex::column()
         .child(dialog)
+        .child(animated)
         // The right-click context menu overlays at the cursor when open.
         .child(menu)
         // The toast stack overlays a corner (presentation only; app owns the list).
@@ -3131,4 +3165,103 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Wait);
     let mut app = App::default();
     event_loop.run_app(&mut app).expect("run");
+}
+
+#[cfg(test)]
+mod sweeps {
+    use super::*;
+
+    /// **The catalog stays inside its window, at every width** (F003/P082/T438).
+    ///
+    /// The same invariant `heca-view-realize` asks of every `WidgetKind`, asked here of the real
+    /// thing: the showcase is every widget in a **real composition**, with real text, which is
+    /// where the failures actually live — a synthetic sample of a `Card` says `TITLE`, while the
+    /// catalog's says what a card's title really looks like.
+    ///
+    /// **Base layer only**: the overlay band exists for what must escape its box (a dropdown, a
+    /// hint keycap), so asserting there would forbid the feature.
+    #[test]
+    // Five places remain, all the same shape as the per-kind sweep's allowlist: a leading icon or
+    // handle placed before the text without the row's width being consulted. Attributing them to
+    // widgets needs the class-3 pass (F003/P082/T438); the sweep is committed **ignored** rather
+    // than allowlisted, because an anonymous rect cannot carry an honest reason next to it.
+    #[ignore = "5 known class-3 escapes: leading icons pushing content past the edge"]
+    fn the_catalog_paints_nothing_outside_the_window_it_is_given() {
+        let mut escapes: Vec<String> = Vec::new();
+        for w in [1400.0f64, 900.0, 600.0, 320.0] {
+            let theme = Theme::default();
+            let ctl = ThemeCtl {
+                glow: signal(GlowLevel::default()),
+                radius: signal(6.0),
+                border: signal(1.0),
+                font: signal(theme.font_size),
+                intensity: signal(Intensity::default()),
+                overlay_frame: signal(FrameStyle::default()),
+                size: signal(WidgetSize::Normal),
+                zoom: signal(1.0),
+                theme_idx: signal(0),
+            };
+            let mut built = build_ui(&theme, ctl);
+            // **Give the page the window**, as the event loop does (see `resize`): a root left at
+            // `Auto` sizes to its own content, and then its clip is the content rather than the
+            // viewport — the page clips nothing and every measurement below is meaningless.
+            built.ui.base_mut().style.layout.width = Length::Px(w as f32);
+            built.ui.base_mut().style.layout.height = Length::Px(900.0);
+            LayoutEngine::new().compute(&mut built.ui, Size::new(w, 900.0));
+
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(w, 900.0));
+                built.ui.paint(&mut cx);
+            }
+            // **Honour the clip stack**: a draw scissored to a clip that is itself inside the
+            // window cannot escape it — that is what the clip is for. Ignoring them reports a
+            // scrolling page's content, which is exactly the case where overflow is the feature.
+            let mut clips: Vec<heca_core::layout::Rectangle> = Vec::new();
+            for cmd in scene.base_layer().iter() {
+                match cmd {
+                    heca_grid_ui::DrawCommand::PushClip(r) => {
+                        let inner = clips.last().and_then(|c: &heca_core::layout::Rectangle| c.intersection(*r)).unwrap_or(*r);
+                        clips.push(inner);
+                        continue;
+                    }
+                    heca_grid_ui::DrawCommand::PopClip => {
+                        clips.pop();
+                        continue;
+                    }
+                    _ => {}
+                }
+                let (what, rect) = match cmd {
+                    heca_grid_ui::DrawCommand::Text(t) if t.text.is_empty() => continue,
+                    heca_grid_ui::DrawCommand::Text(t) => {
+                        (format!("text {:?}", t.text), t.rect)
+                    }
+                    heca_grid_ui::DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
+                    _ => continue,
+                };
+                // A box squeezed to nothing paints nothing, wherever its origin ended up.
+                    if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
+                        continue;
+                    }
+                    let Some(rect) = clips.last().map_or(Some(rect), |c| c.intersection(rect)) else {
+                        continue; // entirely scissored away
+                    };
+                    let right = rect.loc.x + rect.size.w;
+                if rect.loc.x < -0.5 || right > w + 0.5 {
+                    escapes.push(format!(
+                        "{w}px: {what} spans {:.0}..{:.0}",
+                        rect.loc.x, right,
+                    ));
+                }
+            }
+        }
+        escapes.sort();
+        escapes.dedup();
+        assert!(
+            escapes.is_empty(),
+            "the catalog draws outside its window ({} places):\n{}",
+            escapes.len(),
+            escapes.join("\n"),
+        );
+    }
 }

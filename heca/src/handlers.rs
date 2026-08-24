@@ -118,7 +118,7 @@ pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
     //
     // F003/P085/T352 put the release here, reasoning that "the keyboard goes to the pane". That is
     // not a property of a pane getting focus — it is a property of *what the user asked for*, and
-    // this handler cannot tell the two apart. `Space` (peek) focuses a pane and deliberately keeps
+    // this handler cannot tell the two apart. `Space` (hint) focuses a pane and deliberately keeps
     // the keyboard on the dock; the rule fired anyway and `j`/`k` stopped working.
     //
     // Every way out is now explicit at the site that means it: the component's activate-and-leave
@@ -773,12 +773,47 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     handle_close_pane_by_id(state, &WmAction::ClosePaneById { pane_id });
 }
 
+/// **Every pane, each keeping the letter it had last time** — the stable half of a pane pick.
+///
+/// `collect_all_pane_candidates` orders the panes and applies the 52 cap; the letters it hands out
+/// are its *index*, which is the defect: anything appearing earlier in the list shifts every letter
+/// after it, so splitting a column renumbers panes you were aiming at. Antonio, driving,
+/// 2026-08-17: *"i want to expand a pane, prefix+/ and `k` appears on that icon... Then I want to
+/// collapse. prefix+/ and `j` appears on that button, while I was expecting `k`."*
+///
+/// So the order comes from there and the LETTERS come from [`assign_letters`], keyed by the pane's
+/// own identity — the same function and the same remembered map `prefix+/` uses. One assignment
+/// rule for both pickers, which is the whole point of F011/P094/T451.
+fn pane_candidates_with_stable_letters(state: &mut AppState) -> Vec<(char, PaneId)> {
+    let panes: Vec<PaneId> = collect_all_pane_candidates(&state.session)
+        .into_iter()
+        .map(|(_, id)| id)
+        .collect();
+    let identities: Vec<Option<String>> = panes
+        .iter()
+        .map(|id| Some(crate::chrome::pane_key(*id)))
+        .collect();
+    let letters = assign_letters(&identities, &state.remembered_letters);
+    // Merged, not rebuilt: a pane that is off screen keeps its letter for when it comes back.
+    state.remembered_letters.extend(
+        identities
+            .iter()
+            .zip(letters.iter())
+            .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
+    );
+    panes
+        .into_iter()
+        .zip(letters)
+        .filter_map(|(id, ch)| ch.map(|ch| (ch, id)))
+        .collect()
+}
+
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSelect { candidates };
         state.needs_redraw = true;
@@ -796,18 +831,94 @@ pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
 /// Enter the universal picker (`prefix+/`): assign a letter to every region on screen that said
 /// what a pick does to it (document order) and show a keycap over each; the next keypress runs that
 /// region's declaration. No-ops if nothing on screen declares one.
+/// **Hand out the letters, giving each target back the one it had last time** (F003/P082/T445).
+///
+/// `identities` is one entry per target, in document order — `None` for a target with no identity to
+/// remember it by. `remembered` is what each identity wore when the picker last opened.
+///
+/// Two passes, and the order is the whole point:
+///
+/// 1. every target that had a letter and is still here **keeps it**;
+/// 2. the rest fill the gaps from the shared alphabet, in order.
+///
+/// Without the first pass the letter is simply the target's index, so anything appearing earlier in
+/// the tree shifts every letter after it — expand a pane and the button you were aiming at moves
+/// from `k` to `j`.
+///
+/// A pure function of plain data so the rule is testable without a window (the shape
+/// `surface_action` and `dock_focus_outcome` use). Returns one letter per target, `None` past the
+/// end of the alphabet — 52 targets, one keystroke each, never a longer one.
+pub(crate) fn assign_letters(
+    identities: &[Option<String>],
+    remembered: &std::collections::HashMap<String, char>,
+) -> Vec<Option<char>> {
+    let mut out: Vec<Option<char>> = vec![None; identities.len()];
+    let mut taken: std::collections::HashSet<char> = std::collections::HashSet::new();
+
+    for (i, id) in identities.iter().enumerate() {
+        if let Some(id) = id
+            && let Some(&ch) = remembered.get(id)
+            && taken.insert(ch)
+        {
+            out[i] = Some(ch);
+        }
+    }
+
+    // **The gaps, in order.** A target new since last time takes the first letter nobody kept, so
+    // adding one costs one letter rather than renaming everything after it.
+    let mut free = heca_grid_ui::widgets::DEFAULT_LETTERS
+        .chars()
+        .filter(|c| !taken.contains(c));
+    for slot in out.iter_mut() {
+        if slot.is_none() {
+            *slot = free.next();
+        }
+    }
+    out
+}
+
 pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
     // Which targets are reachable is decided by the layered surface compositor — one rule
     // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
-    // See `chrome::active_peek_targets` and `docs/surface-compositor.md`.
-    let candidates: Vec<(char, crate::chrome::PeekTarget)> = crate::chrome::active_peek_targets(state)
+    // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
+    let targets: Vec<crate::chrome::HintTarget> = crate::chrome::active_hint_targets(state)
         .into_iter()
-        .enumerate()
-        .filter_map(|(i, (target, _))| {
-            crate::app::selection::candidate_letter(i).map(|ch| (ch, target))
-        })
+        .map(|(target, _)| target)
         .collect();
+    // **What each target is called**, so it can be given the letter it had last time (T445). The
+    // path a target is addressed by lives one frame; the identity outlives the tree.
+    let identities: Vec<Option<String>> = targets
+        .iter()
+        .map(|t| crate::chrome::target_identity(state, t))
+        .collect();
+    let letters = assign_letters(&identities, &state.remembered_letters);
+
+    let candidates: Vec<(char, crate::chrome::HintTarget)> = targets
+        .into_iter()
+        .zip(letters.iter())
+        .filter_map(|(target, ch)| ch.map(|ch| (ch, target)))
+        .collect();
+
+    // **Merged, not rebuilt.** A target that is off screen keeps its letter for when it comes back:
+    // zoom in far enough that only one pane is visible and the rest stop being targets
+    // (`chrome::hint` counts a target only if it lies in the viewport), so rebuilding from what is
+    // on screen made every pane take a fresh letter on the way back (Antonio, driving, 2026-08-18).
+    //
+    // A remembered entry for an absent target blocks nothing: the "already taken" set holds only the
+    // letters handed out *this* round, so a present target always wins the letter it asks for.
+    state.remembered_letters.extend(
+        identities
+            .iter()
+            .zip(letters.iter())
+            .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
+    );
+
     if !candidates.is_empty() {
+        // **Entering the mode is the whole of it.** The letters are handed out by
+        // `sync_offered_letters`, every frame, exactly as every other pick mode's are — so the
+        // rules that live there apply here too: a view that becomes covered loses its letter, and a
+        // withdrawal reaches every view. Handing them out once from here is what left `prefix+/`
+        // outside all of it (F003/P082/T438).
         state.input_mode = InputMode::HintPick { candidates };
         state.needs_redraw = true;
     }
@@ -818,7 +929,7 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
             candidates,
@@ -833,7 +944,7 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
             candidates,
@@ -1311,7 +1422,7 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = crate::collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {
             candidates,
@@ -1326,7 +1437,7 @@ pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
         focus_navigable_dock(state);
         return;
     }
-    let candidates = crate::collect_all_pane_candidates(&state.session);
+    let candidates = pane_candidates_with_stable_letters(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {
             candidates,
@@ -1602,9 +1713,39 @@ pub fn handle_clear_search_ranking(state: &mut AppState, action: &WmAction) {
     crate::search_state::forget(state, scope.as_deref(), crate::search_state::Forget::Ranking);
 }
 
+/// What a request aimed at the dock `mount` should do, given who holds the keyboard.
+///
+/// A pure function of plain data so the one rule that separates `focus` from `toggle` is testable
+/// without a window, and lives in one place instead of once per handler (the shape
+/// `surface_action` uses for key resolution, F003/P082/T428).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DockFocus {
+    /// Give it the keyboard.
+    Take,
+    /// It already has the keyboard, and this gesture means "give it back".
+    Release,
+    /// It already has the keyboard, and this gesture does not mean anything else.
+    Nothing,
+}
+
+pub(crate) fn dock_focus_outcome(focused: Option<&str>, mount: &str, toggling: bool) -> DockFocus {
+    match (focused == Some(mount), toggling) {
+        (true, true) => DockFocus::Release,
+        (true, false) => DockFocus::Nothing,
+        (false, _) => DockFocus::Take,
+    }
+}
+
+/// Focus a dock, or open the pick when none is named.
+///
+/// **It only focuses.** Aiming it at the dock that already has the keyboard does nothing — the
+/// release is [`handle_toggle_dock`], which is what `global_focus` binds. Until F003/P082/T444 the
+/// toggle lived here, so *every* caller inherited it: a click inside a focused dock released it, and
+/// so did an RPC `focus-dock`. See [`WmAction::ToggleDock`].
 pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
-    let WmAction::FocusDock { dock } = action else {
-        return;
+    let dock = match action {
+        WmAction::FocusDock { dock } => dock,
+        _ => return,
     };
     if let Some(dock) = dock {
         // `dock` names a **placement or a component** (F003/P086/T363): a `global_focus` written
@@ -1623,11 +1764,10 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
             eprintln!("[heca] focus_dock: no container mounted under id or component '{dock}'");
             return;
         };
-        // Aimed at the dock that already has it: this is the way back out. One key both takes the
-        // keyboard and gives it back, so a binding to a named dock is a toggle rather than a
-        // one-way door the user has to remember a second key to leave (F003/P085/T352).
-        if focused.as_deref() == Some(mount.as_str()) {
-            handle_unfocus_dock(state, &WmAction::UnfocusDock);
+        // **Idempotent on purpose** — a click inside the dock, an RPC call and the command palette
+        // all mean "focus it", and none of them mean "and release it if it already is". The release
+        // is `ToggleDock` (F003/P082/T444).
+        if dock_focus_outcome(focused.as_deref(), &mount, false) == DockFocus::Nothing {
             return;
         }
         // Show the region it sits in. Focusing a container the user cannot see is a promise
@@ -1648,6 +1788,38 @@ pub fn handle_focus_dock(state: &mut AppState, action: &WmAction) {
     }
     state.input_mode = InputMode::DockPick { candidates };
     state.needs_redraw = true;
+}
+
+/// **Focus a dock, or give the keyboard back if it already has it** — one key in and out.
+///
+/// This is what `global_focus` binds (`prefix+e` in, `prefix+e` out), so a binding to a named dock
+/// is not a one-way door the user has to remember a second key to leave (F003/P085/T352). `Esc` is
+/// the other way out, and both are deliberate.
+///
+/// **The toggle lives here and not in [`handle_focus_dock`]** because it belongs to the *gesture*,
+/// not to the verb: pressing a key again plainly means "undo that", while a click, an RPC call and a
+/// palette entry all mean "focus it" and nothing more. With the toggle inside `FocusDock`, every one
+/// of those released a dock by asking to focus it (F003/P082/T444).
+pub fn handle_toggle_dock(state: &mut AppState, action: &WmAction) {
+    let WmAction::ToggleDock { dock } = action else {
+        return;
+    };
+    if let Some(dock) = dock {
+        let focused = state.chrome_state.focused_container();
+        let last = state.chrome_state.last_focused_container();
+        if let Some(mount) = crate::chrome::placement_for(
+            &state.chrome_host,
+            dock,
+            focused.as_deref(),
+            last.as_deref(),
+        ) && dock_focus_outcome(focused.as_deref(), &mount, true) == DockFocus::Release
+        {
+            handle_unfocus_dock(state, &WmAction::UnfocusDock);
+            return;
+        }
+    }
+    // Anything else — not focused, or no dock named — is the plain focus, pick included.
+    handle_focus_dock(state, &WmAction::FocusDock { dock: dock.clone() });
 }
 
 /// Give the keyboard back to the focused pane: chrome focus is released (F003/P085/T352).
@@ -2950,5 +3122,130 @@ mod open_link_tests {
         ] {
             assert!(!link_scheme_allowed(url), "should reject {url}");
         }
+    }
+}
+
+#[cfg(test)]
+mod dock_focus_tests {
+    use super::{dock_focus_outcome, DockFocus};
+
+    /// **`FocusDock` only focuses.** Asking to focus the dock that already has the keyboard does
+    /// nothing — it does not hand it back.
+    ///
+    /// The toggle lived inside `FocusDock` until F003/P082/T444, so *everything* that asked to focus
+    /// a dock inherited it: a click inside a focused dock released it, and so did an RPC
+    /// `focus-dock` and the command palette. `aim_keyboard_at_click` carried an `if` to work around
+    /// it, which is a rule in a call site rather than in the model.
+    #[test]
+    fn focusing_a_dock_that_already_has_the_keyboard_does_nothing() {
+        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", false), DockFocus::Nothing);
+    }
+
+    /// **`ToggleDock` hands it back** — `prefix+e` in, `prefix+e` out. The toggle belongs to the
+    /// gesture: pressing a key again plainly means "undo that", while a click never does.
+    #[test]
+    fn toggling_a_dock_that_already_has_the_keyboard_gives_it_back() {
+        assert_eq!(dock_focus_outcome(Some("workspaces"), "workspaces", true), DockFocus::Release);
+    }
+
+    /// Both take it when the dock does not have it — that half is the same gesture either way.
+    #[test]
+    fn either_way_a_dock_without_the_keyboard_takes_it() {
+        assert_eq!(dock_focus_outcome(None, "workspaces", false), DockFocus::Take);
+        assert_eq!(dock_focus_outcome(None, "workspaces", true), DockFocus::Take);
+        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", false), DockFocus::Take);
+        assert_eq!(dock_focus_outcome(Some("notes"), "workspaces", true), DockFocus::Take);
+    }
+}
+
+#[cfg(test)]
+mod letter_memory_tests {
+    use super::assign_letters;
+    use std::collections::HashMap;
+
+    fn ids(names: &[&str]) -> Vec<Option<String>> {
+        names.iter().map(|n| Some((*n).to_string())).collect()
+    }
+
+    fn remember(pairs: &[(&str, char)]) -> HashMap<String, char> {
+        pairs.iter().map(|(n, c)| ((*n).to_string(), *c)).collect()
+    }
+
+    /// With nothing remembered, letters go out in order — the home row first.
+    #[test]
+    fn a_first_pick_hands_out_the_alphabet_in_order() {
+        let got = assign_letters(&ids(&["a", "b", "c"]), &HashMap::new());
+        assert_eq!(got, vec![Some('a'), Some('s'), Some('d')]);
+    }
+
+    /// ⭐ **The report.** Antonio, 2026-08-17: *"I want to expand a pane, prefix+/ and `k` appears on
+    /// that icon… then I want to collapse. prefix+/ and `j` appears on that button, while I was
+    /// expecting `k`."*
+    ///
+    /// A target appearing **earlier in the tree** used to shift every letter after it, because the
+    /// letter was the index. Now the newcomer takes a spare and everyone else keeps theirs.
+    #[test]
+    fn a_new_target_in_front_does_not_move_anyone_elses_letter() {
+        let before = assign_letters(&ids(&["expand", "close"]), &HashMap::new());
+        assert_eq!(before, vec![Some('a'), Some('s')]);
+
+        let remembered = remember(&[("expand", 'a'), ("close", 's')]);
+        let after = assign_letters(&ids(&["status", "expand", "close"]), &remembered);
+
+        assert_eq!(
+            after,
+            vec![Some('d'), Some('a'), Some('s')],
+            "expand keeps `a` and close keeps `s`; the newcomer takes the first free letter"
+        );
+    }
+
+    /// Reopening on an unchanged screen gives exactly the same letters — the plainest form of the
+    /// promise, and the one a user notices first.
+    #[test]
+    fn reopening_an_unchanged_screen_gives_the_same_letters() {
+        let first = assign_letters(&ids(&["one", "two", "three"]), &HashMap::new());
+        let remembered = remember(&[("one", 'a'), ("two", 's'), ("three", 'd')]);
+        assert_eq!(assign_letters(&ids(&["one", "two", "three"]), &remembered), first);
+    }
+
+    /// A target that has gone releases its letter, and the next newcomer may take it — the memory
+    /// is rebuilt from what is on screen, so it cannot leak the pool away.
+    #[test]
+    fn a_departed_targets_letter_returns_to_the_pool() {
+        let remembered = remember(&[("gone", 'a'), ("stays", 's')]);
+        let got = assign_letters(&ids(&["stays", "new"]), &remembered);
+        assert_eq!(
+            got,
+            vec![Some('s'), Some('a')],
+            "`stays` keeps `s`, and `a` is free again for the newcomer"
+        );
+    }
+
+    /// A remembered letter is never handed to two targets: whoever asks first keeps it, the other
+    /// takes a free one. Two identical identities are a bug elsewhere, not a reason to double-book.
+    #[test]
+    fn one_letter_never_goes_to_two_targets() {
+        let remembered = remember(&[("dup", 'a')]);
+        let got = assign_letters(&ids(&["dup", "dup"]), &remembered);
+        assert_eq!(got, vec![Some('a'), Some('s')]);
+    }
+
+    /// A target with no identity cannot be remembered, but still gets a letter — it just gets a
+    /// fresh one each time.
+    #[test]
+    fn a_target_without_an_identity_still_gets_a_letter() {
+        let got = assign_letters(&[None, Some("keyed".into())], &remember(&[("keyed", 'a')]));
+        assert_eq!(got, vec![Some('s'), Some('a')]);
+    }
+
+    /// Past the alphabet a target gets **no letter**, never a longer one (§2a: one keystroke,
+    /// always; 52 is the cap).
+    #[test]
+    fn past_the_alphabet_a_target_gets_no_letter() {
+        let names: Vec<String> = (0..60).map(|i| format!("t{i}")).collect();
+        let ids: Vec<Option<String>> = names.iter().cloned().map(Some).collect();
+        let got = assign_letters(&ids, &HashMap::new());
+        assert_eq!(got.iter().filter(|c| c.is_some()).count(), 52);
+        assert!(got[52..].iter().all(|c| c.is_none()));
     }
 }

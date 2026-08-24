@@ -386,7 +386,7 @@ fn every_routing_container_passes_the_whole_vocabulary_through() {
         ),
         (
             "Overlay",
-            probe_in(|p| Box::new(Overlay::new().panel(Flex::column().child(p)).open(true))),
+            probe_in(|p| Box::new(Overlay::new().panel(Flex::column().child(p)).opened(true))),
         ),
         (
             "Dialog",

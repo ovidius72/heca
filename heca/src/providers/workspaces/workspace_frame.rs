@@ -11,11 +11,10 @@
 
 use super::seams::{DockRegistries, DockSeams};
 use super::{
-    column_group::ColumnGroup, pane_row::PaneRow, row_peek, workspace_nav_key, workspace_row_items,
+    column_group::ColumnGroup, pane_row::PaneRow, row_hint, workspace_key, workspace_row_items,
     ChromeDragItem, WorkspaceEntry, MENU_WORKSPACE,
 };
 use heca_grid_ui::builders::{ComponentExt, LayoutExt, Parent};
-use heca_grid_ui::reactive::signal;
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::widgets::{Badge, DockFrame, Flex, HintPlacement, KeyHint};
 
@@ -60,7 +59,7 @@ impl WorkspaceFrame<'_> {
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!seams.ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {
-                emit(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx });
+                emit.fire(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx });
             })
             .header(
                 Flex::row()
@@ -75,11 +74,11 @@ impl WorkspaceFrame<'_> {
         dock = dock.active(active_ws);
         dock = dock.nav_selected(false);
         // **The row's one identity, declared like every other row's.** A pane card and a column
-        // both call `nav_key`, and `nav_key_at` — which is how a right-click finds out what it
+        // both call `key`, and `key_at` — which is how a right-click finds out what it
         // landed on — reads exactly that. The workspace header pushed its key into the signal list
         // and never told the widget, so the hit-test found nothing there: right-clicking a pane or
         // a column opened its menu, a workspace opened none (Antonio, 2026-08-05).
-        dock = dock.nav_key(workspace_nav_key(ws_idx));
+        dock = dock.key(workspace_key(ws_idx));
         // The workspace row's own menu, declared like the other two. The bug in the comment above
         // is the reason this phase exists: a menu resolved from a *position* needs a declaration
         // nobody remembers to write, and this one is the declaration itself.
@@ -105,7 +104,7 @@ impl WorkspaceFrame<'_> {
         reg.signals.ws_previous.push((ws_idx, dock.previous_state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            workspace_nav_key(ws_idx),
+            workspace_key(ws_idx),
             dock.nav_state(),
         ));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
@@ -133,15 +132,12 @@ impl WorkspaceFrame<'_> {
         // it. The keycap is tinted `warning` (not accent) so a workspace target reads
         // distinctly from a pane target. The hint signal is driven each frame in
         // `sync_chrome_signals` from the active pick candidates.
-        let ws_hint = signal::<Option<String>>(None);
-        reg.signals.ws_hint.push((ws_idx, ws_hint));
         KeyHint::new(dock)
-            .hint(ws_hint)
             // **What `prefix+/` does to this row** — the cursor lands on the workspace header
             // and the dock keeps the keyboard, exactly as it does on a pane row.
-            .on_peek(crate::chrome::fires(
+            .on_hint(crate::chrome::picks(
                 seams.mount,
-                row_peek(workspace_nav_key(ws_idx)),
+                row_hint(workspace_key(ws_idx)),
                 seams.emit,
             ))
             .color(theme.colors.warning)
@@ -176,12 +172,12 @@ mod tests {
             .build(&seams, &mut reg)
         };
 
-        let declared = testing::declared_nav_keys(&frame);
+        let declared = testing::declared_keys(&frame);
         for expected in [
-            workspace_nav_key(0),
-            super::super::column_nav_key(0, 0),
-            super::super::pane_nav_key(PaneId(1)),
-            super::super::pane_nav_key(PaneId(9)),
+            workspace_key(0),
+            super::super::column_key(0, 0),
+            super::super::pane_key(PaneId(1)),
+            super::super::pane_key(PaneId(9)),
         ] {
             assert!(
                 declared.contains(&expected),

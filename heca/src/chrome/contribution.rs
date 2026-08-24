@@ -42,7 +42,7 @@ pub type BuildBody = Box<dyn Fn(&ChromeCtx<'_>, &mut BuildCx<'_>) -> WidgetModel
 /// item id per draggable/droppable row, and a signal per value that changes without a
 /// structural rebuild. Those registries are owned by the host, so the build has to borrow them
 /// mutably. (A **pickable** row needs nothing here: it declares what a `prefix+/` pick does on
-/// itself with `KeyHint::on_peek`, and the framework collects the declaration out of the laid-out
+/// itself with `KeyHint::on_hint`, and the framework collects the declaration out of the laid-out
 /// tree — which is what a plugin row could never do through a host-private registry.)
 ///
 /// They are passed as an explicit `&mut` parameter rather than hidden behind interior
@@ -72,13 +72,13 @@ pub struct BuildCx<'a> {
 //   `PaneId` / `ws_idx` / `col_idx` (`pane_active`, `col_active`, `ws_active`, `pane_hint`,
 //   `ws_hint`, `col_hint`, `pane_info`), so a Docker dock has nowhere to register a value that
 //   updates without a rebuild. `row_nav` shows the shape the rest wants: keyed by
-//   `(mount, nav_key)`, which any component can name.
+//   `(mount, key)`, which any component can name.
 // - **`drag` (`DragItemRegistry`) is workspace-shaped** for the same reason: `ChromeDragItem` is a
 //   closed `Pane | Column | Workspace`, which is why the phase lists "a Docker row cannot be
 //   dragged or dropped at all".
 //
 // Both are the phase's own open rows, not this task's: T367's contract is `ChromeCtx`. Whoever
-// takes them should follow `row_nav` — a row already declares one identity (`nav_key`), and that is
+// takes them should follow `row_nav` — a row already declares one identity (`key`), and that is
 // the key both registries want.
 
 

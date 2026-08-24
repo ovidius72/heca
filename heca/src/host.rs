@@ -126,7 +126,7 @@ impl<'a> StateView<'a> {
         self.state.focused_container()
     }
 
-    /// **This placement's** cursor: the row that declared `nav_key`, or `None`.
+    /// **This placement's** cursor: the row that declared `key`, or `None`.
     ///
     /// Keyed by mount id like the scroll offset and the keyboard target, so two placements of one
     /// container answer independently.

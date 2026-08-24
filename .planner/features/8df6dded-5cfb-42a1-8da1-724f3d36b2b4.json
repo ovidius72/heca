@@ -5,6 +5,7 @@
   "priority": 0,
   "name": "🎨 Theme System",
   "description": "Migrazione completa a `heca-theme`: crate standalone, temi bundled (`grid_tron`, `mocha`, `latte`), migrazione di `heca-config`, `heca-grid-ui` e app principale, rimozione dei colori hardcoded e migrazione del chrome hand-drawn verso widget grid-ui. Completata.",
+  "descriptionUpdatedAt": "2026-07-01T18:08:37.398Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",

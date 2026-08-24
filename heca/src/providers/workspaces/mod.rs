@@ -173,6 +173,26 @@ impl Provider for WorkspacesContainerProvider {
         // Chrome state: the cursor is not the pane layout, so these stay reachable while a floating
         // pane is active — the dock is still there to be driven.
         let cursor = ActionPolicy::Global;
+        // **A verb that ends by FOCUSING A PANE cannot be `Global`**, however harmless its first
+        // half looks (F003/P082/T432). `peek_selected` and `activate_selected` both move the cursor
+        // *and then* activate the row, and both were declared beside the pure cursor verbs because
+        // the cursor half is what you notice.
+        //
+        // `Global` is the one policy no domain refuses, so with a floating pane active the picker
+        // offered a letter on every sidebar row naming a pane: pressing one moved the cursor while
+        // the pane focus was refused underneath (`blocked intent from Provider`) — a letter that
+        // half worked, which is worse than one that does nothing (Antonio, driving 2026-08-21).
+        //
+        // This is the declaration telling the truth about itself, which is the *only* input the
+        // picker's filter takes. That filter knows nothing about panes, rows or workspaces, and it
+        // must not: it asks each candidate what it does and asks the policy about the answer. An
+        // action that misdescribes itself is the one thing no mechanism can correct.
+        //
+        // `SourceDependent` is the existing answer for "it depends what you are aiming at". With no
+        // introspectable `WmAction` behind a name-keyed verb the router takes its conservative
+        // branch while floating and refuses it; in `Container` and `Tiled` it is permitted, so
+        // `Space` from inside the dock and `prefix+/` over an ordinary layout are untouched.
+        let reaches_a_pane = ActionPolicy::SourceDependent;
         // Everything that acts on **the row the cursor is on**, which is only a question worth
         // asking while this dock has the keyboard (F003/P086/T371). They declared `TiledOnly`, which
         // was true but not the point: it blocked them while floating and left them reachable from
@@ -207,9 +227,9 @@ impl Provider for WorkspacesContainerProvider {
                 "Activate Row",
                 "Expand a structural row, or focus the pane under the cursor and leave the dock.",
                 Some(Glyph::CaretRight),
-                cursor,
+                reaches_a_pane,
             ),
-            // **A peek can be aimed.** It acts on the cursor by default; the universal picker
+            // **A hint can be aimed.** It acts on the cursor by default; the universal picker
             // passes the nav key of the row whose letter was chosen, so `prefix+/` lands on *that*
             // row rather than wherever the cursor happened to be. Optional, because every other
             // caller — the keybinding, the palette, RPC — means "the row I am on".
@@ -223,10 +243,10 @@ impl Provider for WorkspacesContainerProvider {
                 }],
                 ..act(
                     PEEK_SELECTED,
-                    "Peek Row",
+                    "Hint Row",
                     "Focus what the cursor points at without leaving the dock.",
                     Some(Glyph::Search),
-                    cursor,
+                    reaches_a_pane,
                 )
             },
             act(
@@ -296,7 +316,7 @@ impl Provider for WorkspacesContainerProvider {
             tree.flat_items
                 .iter()
                 .map(|row| row.selection())
-                .find(|sel| selection_nav_key(*sel) == key)
+                .find(|sel| selection_key(*sel) == key)
         };
         let Some(selection) = selection else {
             return;
@@ -314,13 +334,13 @@ impl Provider for WorkspacesContainerProvider {
             ACTIVATE_SELECTED => self.activate(cx, Activate::AndLeave),
             PEEK_SELECTED => {
                 // Aimed, when the caller named a row (`prefix+/`): move the cursor onto it first,
-                // through this component's own key→row resolution, and the peek then acts on it
+                // through this component's own key→row resolution, and the hint then acts on it
                 // like any other. A bad or stale key leaves the cursor alone rather than failing —
                 // the row it named is simply not there any more.
                 if let Some(PropValue::Text(key)) = args.args.get("key") {
                     self.cursor_moved(key, cx);
                 }
-                // **A peek leaves you ON that row, in the dock** — so it has to *take* the keyboard,
+                // **A hint leaves you ON that row, in the dock** — so it has to *take* the keyboard,
                 // not merely refrain from releasing it. Written as one rule for every caller: from
                 // `Space` the dock already has it and this is a no-op; from `prefix+/`, the palette
                 // or RPC the keyboard was elsewhere, and without this the cursor moved somewhere the
@@ -329,7 +349,7 @@ impl Provider for WorkspacesContainerProvider {
                 //
                 // **Guarded, because `focus_dock` aimed at the dock that already holds the keyboard
                 // is the way back out** (`handle_focus_dock`) — dispatching it unconditionally would
-                // make every peek from inside the dock release the keyboard instead.
+                // make every hint from inside the dock release the keyboard instead.
                 if cx.state().focused_container().as_deref() != Some(cx.mount()) {
                     let mount = cx.mount().to_string();
                     cx.dispatch(
@@ -450,7 +470,7 @@ impl WorkspacesContainerProvider {
                     "focus_pane",
                     PropMap::from([("pane_id".to_string(), PropValue::Int(pane_id.0 as i64))]),
                 );
-                // Activating a leaf hands the keyboard back; peeking keeps it here.
+                // Activating a leaf hands the keyboard back; hinting keeps it here.
                 if matches!(mode, Activate::AndLeave) {
                     cx.dispatch("unfocus_dock", PropMap::new());
                 }
@@ -597,7 +617,7 @@ impl WorkspacesContainerProvider {
             state.workspaces().set_nav_selection(selection);
             selection
         };
-        cx.set_selected(selection.map(selection_nav_key));
+        cx.set_selected(selection.map(selection_key));
     }
 }
 
@@ -678,18 +698,19 @@ fn build_body(ctx: &ChromeCtx<'_>, bx: &mut BuildCx<'_>) -> WidgetModel {
 // changes is not a cursor. Positions therefore never appear in a key that has an id available.
 
 /// `pane:<id>` — a pane card, tiled or floating.
-pub(crate) fn pane_nav_key(pane: PaneId) -> String {
-    format!("pane:{}", pane.0)
-}
+///
+/// **The pane declares this, not the row.** A sidebar row showing a pane is a *view* of it, so it
+/// reads the pane's own identity rather than spelling a second copy (F011/P094/T451).
+pub(crate) use crate::chrome::pane_key;
 
 /// `ws:<idx>` — a workspace header.
-pub(crate) fn workspace_nav_key(ws_idx: usize) -> String {
+pub(crate) fn workspace_key(ws_idx: usize) -> String {
     format!("ws:{ws_idx}")
 }
 
 /// `col:<ws>:<idx>` — a column group. Positional because a column has no id of its own; it is
 /// re-derived on rebuild like every other column reference in the app.
-pub(crate) fn column_nav_key(ws_idx: usize, col_idx: usize) -> String {
+pub(crate) fn column_key(ws_idx: usize, col_idx: usize) -> String {
     format!("col:{ws_idx}:{col_idx}")
 }
 
@@ -712,7 +733,7 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 // A workspace row declares **no click**: a `DockFrame`'s own header owns its press (the disclosure
 // caret folds the section), and nothing forces a kind to declare a gesture it does not have. It
 // used to carry `focus_workspace` here purely so the `prefix+/` picker had an intent to register —
-// which is what pointing one declaration at two gestures looks like from the other side. Its peek
+// which is what pointing one declaration at two gestures looks like from the other side. Its hint
 // says the same thing and more (`peek_selected` also lands the cursor on the row), so the
 // stand-in is gone.
 
@@ -722,13 +743,13 @@ fn pane_row_press(pane_id: PaneId) -> Intent {
 /// pick means *look at that one*, so it moves the cursor onto the picked row and brings its pane to
 /// the front **without leaving the dock** — this component's own `peek_selected`, aimed at a row by
 /// its nav key instead of the cursor. Antonio, 2026-08-07: *"i want it to focus the cursor in the
-/// peeked letter and is good if the pane gets active"*.
+/// hinted letter and is good if the pane gets active"*.
 ///
 /// Pointing one intent at both gestures is precisely the bug this replaces: commit `e712d70`
 /// (2026-07-30) made the row's hint target fire the row's *click*, and `prefix+/` on a sidebar row
 /// started activating the pane and leaving the sidebar.
-fn row_peek(nav_key: String) -> Intent {
-    Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(nav_key))
+fn row_hint(key: String) -> Intent {
+    Intent::new(PEEK_SELECTED).arg("key", PropValue::Text(key))
 }
 
 /// The nav key naming the row a [`SidebarSelection`] points at.
@@ -736,12 +757,12 @@ fn row_peek(nav_key: String) -> Intent {
 /// The bridge between the domain-typed selection this container still keeps and the generic cursor
 /// every row's outline now reads. It goes away with the selection itself (F003/P085/T356) — until
 /// then it is the single conversion point, so the two cannot drift.
-pub(crate) fn selection_nav_key(selection: crate::chrome::SidebarSelection) -> String {
+pub(crate) fn selection_key(selection: crate::chrome::SidebarSelection) -> String {
     use crate::chrome::SidebarSelection as S;
     match selection {
-        S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_nav_key(pane_id),
-        S::Column { ws_idx, col_idx } => column_nav_key(ws_idx, col_idx),
-        S::Workspace { ws_idx } => workspace_nav_key(ws_idx),
+        S::Pane { pane_id } | S::FloatingPane { pane_id, .. } => pane_key(pane_id),
+        S::Column { ws_idx, col_idx } => column_key(ws_idx, col_idx),
+        S::Workspace { ws_idx } => workspace_key(ws_idx),
     }
 }
 
@@ -775,7 +796,7 @@ pub(crate) fn container_items() -> Vec<DropdownItem> {
 fn row_at_key(tree: &WorkspaceTree, key: &str) -> Option<WorkspaceRow> {
     tree.flat_items
         .iter()
-        .find(|row| selection_nav_key(row.selection()) == key)
+        .find(|row| selection_key(row.selection()) == key)
         .cloned()
 }
 
@@ -895,9 +916,9 @@ mod tests {
     use heca_grid_ui::theme::Theme as GuiTheme;
     use std::rc::Rc;
 
-    /// **Every row kind declares its own `nav_key` on the widget.**
+    /// **Every row kind declares its own `key` on the widget.**
     ///
-    /// `nav_key_at` — how a right-click finds out what it landed on — reads `Base::nav_key` and
+    /// `key_at` — how a right-click finds out what it landed on — reads `Base::key` and
     /// nothing else. The workspace header pushed its key into the cursor-signal list and never told
     /// the widget, so the hit-test found nothing at that row: right-clicking a pane or a column
     /// opened its menu and a workspace opened none (Antonio, 2026-08-05). Pushing the key to the
@@ -907,7 +928,7 @@ mod tests {
     /// Note what this test no longer needs: a `ChromeCtx`, and therefore a window. The dock is
     /// components now, so it is built from its seams (F006/P032/T429).
     #[test]
-    fn every_row_kind_carries_a_nav_key_the_hit_test_can_find() {
+    fn every_row_kind_carries_a_key_the_hit_test_can_find() {
         let tree = testing::tree();
         let mut fx = testing::Fixture::default();
         let root = {
@@ -920,11 +941,11 @@ mod tests {
             .build(&seams, &mut reg)
         };
 
-        let declared = testing::declared_nav_keys(&root);
+        let declared = testing::declared_keys(&root);
         for expected in [
-            workspace_nav_key(0),
-            column_nav_key(0, 0),
-            pane_nav_key(PaneId(1)),
+            workspace_key(0),
+            column_key(0, 0),
+            pane_key(PaneId(1)),
         ] {
             assert!(
                 declared.contains(&expected),
@@ -1071,7 +1092,7 @@ mod tests {
         );
     }
 
-    /// Activating a leaf asks the host to focus the pane **and** to hand the keyboard back; peeking
+    /// Activating a leaf asks the host to focus the pane **and** to hand the keyboard back; hinting
     /// asks only for the focus. Both go out as queued intents — a component never mutates app state.
     #[test]
     fn activating_a_row_asks_the_host_rather_than_acting() {
@@ -1088,7 +1109,7 @@ mod tests {
         let asked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
         assert!(
             !asked.contains(&"unfocus_dock".to_string()),
-            "peek keeps the keyboard on the dock: {asked:?}",
+            "hint keeps the keyboard on the dock: {asked:?}",
         );
     }
 
@@ -1105,7 +1126,7 @@ mod tests {
         let mut cx = ProviderCx::new("workspaces", store.clone());
 
         // The fixture's rows are the workspace and its one pane; aim at the pane.
-        let pane_key = pane_nav_key(PaneId(1));
+        let pane_key = pane_key(PaneId(1));
         p.cursor_moved(&pane_key, &mut cx);
 
         assert!(
@@ -1147,14 +1168,14 @@ mod tests {
     /// The `Space` regression, pinned at the only level a unit test can reach (F003/P086/T364).
     ///
     /// The two verbs differ by **one queued intent** and nothing else: activate asks for
-    /// `unfocus_dock`, peek does not. F003/P085/T352 instead made the *host* release container focus
-    /// inside `handle_focus_pane`, so peek's `focus_pane` released it too and `j`/`k` stopped. That
+    /// `unfocus_dock`, hint does not. F003/P085/T352 instead made the *host* release container focus
+    /// inside `handle_focus_pane`, so hint's `focus_pane` released it too and `j`/`k` stopped. That
     /// rule is gone; whether the keyboard leaves is decided here, by what the user asked for.
     ///
     /// The end of the story — the keyboard actually staying on the dock — needs an `AppState`, which
     /// cannot be built without a window. The user drives that half in the app.
     #[test]
-    fn peek_and_activate_differ_only_by_the_release_they_ask_for() {
+    fn hint_and_activate_differ_only_by_the_release_they_ask_for() {
         let store = store_with_tree("workspaces");
         let p = WorkspacesContainerProvider::new();
 
@@ -1172,19 +1193,19 @@ mod tests {
         );
 
         p.perform(PEEK_SELECTED, &Intent::new(PEEK_SELECTED), &mut cx);
-        let peeked: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
+        let hinted: Vec<String> = cx.drain().into_iter().map(|i| i.action).collect();
         assert!(
-            peeked.contains(&"focus_pane".to_string()),
-            "peek still brings the pane to the front: {peeked:?}",
+            hinted.contains(&"focus_pane".to_string()),
+            "hint still brings the pane to the front: {hinted:?}",
         );
         assert!(
-            !peeked.contains(&"unfocus_dock".to_string()),
-            "…and asks for no release, so j/k keep working: {peeked:?}",
+            !hinted.contains(&"unfocus_dock".to_string()),
+            "…and asks for no release, so j/k keep working: {hinted:?}",
         );
         assert_eq!(
             store.focused_container(),
             Some("workspaces".to_string()),
-            "peek leaves the container holding the keyboard",
+            "hint leaves the container holding the keyboard",
         );
 
         p.perform(ACTIVATE_SELECTED, &Intent::new(ACTIVATE_SELECTED), &mut cx);
@@ -1196,14 +1217,14 @@ mod tests {
         );
     }
 
-    /// **An aimed peek lands on the row that was picked, not on the cursor** (F004/P084/T399).
+    /// **An aimed hint lands on the row that was picked, not on the cursor** (F004/P084/T399).
     ///
     /// This is the half `prefix+/` needs: the picker knows which letter was chosen, so it names
-    /// that row by its nav key and the peek acts there. Without the argument the verb could only
+    /// that row by its nav key and the hint acts there. Without the argument the verb could only
     /// ever mean "the row I am already on", which is why the picker used to be pointed at the
     /// row's *click* instead — and that click leaves the sidebar.
     #[test]
-    fn a_peek_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
+    fn a_hint_can_be_aimed_at_a_row_by_key_and_moves_the_cursor_there() {
         let store = store_with_tree("workspaces");
         let p = WorkspacesContainerProvider::new();
         let mut cx = ProviderCx::new("workspaces", store.clone());
@@ -1217,7 +1238,7 @@ mod tests {
             None => panic!("the fixture has a pane row"),
         };
         let aimed = Intent::new(PEEK_SELECTED)
-            .arg("key", PropValue::Text(pane_nav_key(pane_id)));
+            .arg("key", PropValue::Text(pane_key(pane_id)));
         p.perform(PEEK_SELECTED, &aimed, &mut cx);
 
         assert!(
@@ -1231,17 +1252,17 @@ mod tests {
         assert!(
             fired.contains(&"focus_pane".to_string())
                 && !fired.contains(&"unfocus_dock".to_string()),
-            "…and it peeks it: the pane comes forward, the dock keeps the keyboard: {fired:?}",
+            "…and it hints it: the pane comes forward, the dock keeps the keyboard: {fired:?}",
         );
     }
 
-    /// **A peek from outside the dock takes the keyboard.** Landing the cursor on a row is only
+    /// **A hint from outside the dock takes the keyboard.** Landing the cursor on a row is only
     /// worth anything if `j`/`k` then move it, so the verb asks for the dock — once, and only when
     /// the dock does not already have it, because `focus_dock` aimed at the focused dock is the way
     /// back out and would release instead. Antonio, driving `prefix+/` on 2026-08-10: *"it
     /// activates the pane but the keyboard goes to the terminal"*.
     #[test]
-    fn a_peek_from_outside_the_dock_asks_for_the_keyboard_and_from_inside_does_not() {
+    fn a_hint_from_outside_the_dock_asks_for_the_keyboard_and_from_inside_does_not() {
         let p = WorkspacesContainerProvider::new();
 
         // Nothing holds chrome focus (the keyboard is in a pane).
@@ -1272,7 +1293,7 @@ mod tests {
     /// A key naming a row that is not there leaves the cursor alone rather than failing — a tree
     /// rebuilt under the letters is not an error.
     #[test]
-    fn an_aimed_peek_with_a_stale_key_leaves_the_cursor_where_it_was() {
+    fn an_aimed_hint_with_a_stale_key_leaves_the_cursor_where_it_was() {
         let store = store_with_tree("workspaces");
         let p = WorkspacesContainerProvider::new();
         let mut cx = ProviderCx::new("workspaces", store.clone());
@@ -1416,7 +1437,7 @@ mod tests {
         // registries.
         let p = WorkspacesContainerProvider::new();
         let theme = GuiTheme::default();
-        let emit: ChromeIntentEmitter = Rc::new(|_| {});
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let store = store();
         // The model is the component's own, read off its state — not handed in by the host.
         *store.workspaces.tree_mut() = tree();
@@ -1440,9 +1461,105 @@ mod tests {
         // Pick targets: the pane card and the workspace dock each declared what `prefix+/` does to
         // it. A column declares none — it only carries a pick-letter signal, stamped when it is a
         // *destination* for a move/swap.
-        assert_eq!(heca_grid_ui::collect_peeks(body.as_ref()).len(), 2);
+        assert_eq!(heca_grid_ui::collect_hints(body.as_ref()).len(), 2);
         // The active pane's card bound its `active` signal for per-frame updates.
         assert_eq!(signals.pane_active.len(), 1);
+    }
+
+    /// **Every letter the picker offers can be found again after a rebuild** (F003/P082/T438).
+    ///
+    /// The picker addresses a target by path for the frame and by *identity* across frames, so the
+    /// two must be inverses **on the real sidebar tree**, not only on a fixture: `identity_of` names
+    /// the widget, `path_of` finds it again. If any target's identity resolves to a different path,
+    /// its letter silently lands on another row after the next rebuild — and the chrome tree is
+    /// rebuilt constantly.
+    #[test]
+    fn every_pick_target_in_the_sidebar_can_be_found_again_by_its_identity() {
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            move |_, _| {},
+        );
+        let store = store();
+        *store.workspaces.tree_mut() = tree();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let c = container(&p, &ctx);
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
+
+        let targets = heca_grid_ui::collect_hints(body.as_ref());
+        assert!(!targets.is_empty(), "the sidebar declares pick targets");
+        for (path, _) in &targets {
+            let Some(identity) = heca_grid_ui::identity_of(body.as_ref(), path) else {
+                continue; // nothing to name it by: the picker keeps the path, and says so
+            };
+            assert!(
+                heca_grid_ui::hint_targets_of(body.as_ref(), &identity).contains(path),
+                "{identity:?} resolves to a different widget than the one it names",
+            );
+        }
+    }
+
+    /// **Our own rows stay keyed** (F003/P082/T444) — the test half of the identity rule.
+    ///
+    /// The sidebar is heca's biggest collection: workspaces holding columns holding panes, rebuilt
+    /// whenever anything about a pane changes. Every level declares a `key`, so the keyboard
+    /// cursor, the right-click target, the drag identity and the picker's remembered letter all
+    /// survive a rebuild. Stop declaring one at any level and the rows fall back to a **derived**
+    /// identity — their name — and this fixture is built so that fallback is not enough: two panes
+    /// in a column are both called `zsh`, and both workspaces are built the same way, which is the
+    /// everyday case and not a contrived one.
+    ///
+    /// Nothing fails when the keys go. The letters just move under whoever is driving, which is
+    /// what happened to the pane-header buttons (F011/P094/T451) and what nothing caught. That is
+    /// why this assertion exists rather than a behavioural one.
+    #[test]
+    fn every_row_of_the_real_sidebar_tree_is_keyed_even_when_two_panes_share_a_name() {
+        use super::testing::pane;
+        use heca_core::layout::PaneId;
+
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let store = store();
+
+        // Two workspaces, each with a column of two identically-named panes — nothing here can be
+        // told apart by its content, so only a declared key can tell it apart at all.
+        let twins = |ws_idx: usize| WorkspaceEntry {
+            ws_idx,
+            name: format!("ws{ws_idx}"),
+            custom_name: None,
+            collapsed: false,
+            state: SidebarItemState::None,
+            columns: vec![ColumnEntry {
+                col_idx: 0,
+                panes: vec![pane(PaneId(1), "zsh"), pane(PaneId(2), "zsh")],
+                collapsed: false,
+            }],
+            floating_panes: Vec::new(),
+        };
+        let mut model = WorkspaceTree::new();
+        model.workspaces.push(twins(0));
+        model.workspaces.push(twins(1));
+        *store.workspaces.tree_mut() = model;
+
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let c = container(&p, &ctx);
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
+
+        let ambiguous = heca_grid_ui::nav::ambiguous_identities(body.as_ref());
+        assert!(
+            ambiguous.is_empty(),
+            "a collection in heca's own sidebar lost its keys: {ambiguous:#?}",
+        );
     }
 
     /// **A row's gesture is a NAME** (F003/P086/T365) — an action id plus arguments, so a menu
@@ -1464,7 +1581,9 @@ mod tests {
         let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit: ChromeIntentEmitter = {
             let fired = fired.clone();
-            Rc::new(move |intent| fired.borrow_mut().push(intent))
+            ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
         };
         let store = store();
         *store.workspaces.tree_mut() = tree();
@@ -1475,11 +1594,11 @@ mod tests {
         let mut signals = ChromeSignals::default();
         let mut drag = DragItemRegistry::default();
         let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
-        let body = (c.build)(&ctx, &mut bx);
+        let mut body = (c.build)(&ctx, &mut bx);
 
         // Every pick declaration in the built body, run in document order.
-        for (path, _) in heca_grid_ui::collect_peeks(body.as_ref()) {
-            assert!(heca_grid_ui::fire_peek(body.as_ref(), &path));
+        for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
+            assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
         }
         let declared: Vec<(String, Option<PropValue>)> = fired
             .borrow()
@@ -1526,7 +1645,9 @@ mod tests {
             let fired: Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
             let emit: ChromeIntentEmitter = {
                 let fired = fired.clone();
-                Rc::new(move |intent| fired.borrow_mut().push(intent))
+                ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
             };
             let store = store();
             *store.workspaces.tree_mut() = tree();
@@ -1536,9 +1657,9 @@ mod tests {
             let mut signals = ChromeSignals::default();
             let mut drag = DragItemRegistry::default();
             let mut bx = BuildCx::new(mount, &mut signals, &mut drag);
-            let body = (c.build)(&ctx, &mut bx);
-            for (path, _) in heca_grid_ui::collect_peeks(body.as_ref()) {
-                assert!(heca_grid_ui::fire_peek(body.as_ref(), &path));
+            let mut body = (c.build)(&ctx, &mut bx);
+            for (path, _) in heca_grid_ui::collect_hints(body.as_ref()) {
+                assert!(heca_grid_ui::fire_hint(body.as_mut(), &path));
             }
             let seats: Vec<PropValue> = fired
                 .borrow()
@@ -1577,6 +1698,6 @@ mod tests {
 
         assert!(body.base().children.is_empty());
         assert!(drag.items().is_empty());
-        assert!(heca_grid_ui::collect_peeks(body.as_ref()).is_empty());
+        assert!(heca_grid_ui::collect_hints(body.as_ref()).is_empty());
     }
 }

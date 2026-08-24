@@ -16,9 +16,9 @@
 //! not an app type, so this mapper can live and be called below `heca` (F003/P017/T009). What an
 //! intent means is the host's business; the app wraps it as `InteractionIntent::View`.
 //!
-//! The universal picker (`prefix+/`) needs no seam at all: a node's `peek` event (defaulting to its
-//! `press`) is written straight into the widget's own `Base::peek` slot, and the framework collects
-//! the declarations out of the laid-out tree ([`collect_peeks`](heca_grid_ui::collect_peeks)). There
+//! The universal picker (`prefix+/`) needs no seam at all: a node's `hint` event (defaulting to its
+//! `press`) is written straight into the widget's own `Base::hint` slot, and the framework collects
+//! the declarations out of the laid-out tree ([`collect_hints`](heca_grid_ui::collect_hints)). There
 //! used to be a `HintTargets` registry sink here, mirroring a host-side registry that mapped an
 //! opaque id back to a `pub(crate)` app enum — two doors onto one feature, and the plugin-facing
 //! one was the second-class half.
@@ -41,7 +41,7 @@
 use std::rc::Rc;
 
 use heca_grid_ui::reactive::{Signal, SignalGet};
-use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, Label, LayoutExt, MarkerGroup, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
+use heca_grid_ui::{Action, Alert, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Choice, Component, DockFrame, Flex, Gauge, Glyph, Grid, Icon, IconButton, Input, Item, ItemGroup, KeyHintGroup, Label, LayoutExt, MarkerGroup, Overlay, Panel, PropInput, RailCell, Row as GridRow, ScrollRegion, Select, Separator, SetProp, SignalData, StatusDot, Surface, Tabs, Tag, Theme, Toast, ToastSeverity, Toggle, Track, WidgetSize};
 
 use heca_view::{
     Intent, PropMap, PropValue, ViewNode, ViewSize, ViewVariant, WidgetKind,
@@ -126,16 +126,69 @@ pub fn realize(
     }
     // **What a leader-key pick does to this node**, read once here for every kind, like style.
     //
-    // Written into the widget's own [`Base::peek`] slot rather than through a wrapper. The native
-    // authoring surface for a peek is `KeyHint::on_peek` — a builder on a wrapper, so that
-    // `Label::on_peek` never has to exist — and the declarative authoring surface is this event.
-    // Two authoring models, one slot, and the framework's collector sees no difference between
-    // them: that is what makes a described row and a native row equally pickable. A wrapper here
-    // would be a second widget in the tree that the description never asked for, sitting between a
-    // node and its parent with its own layout.
-    if let Some(carrier) = peek_intent(node) {
+    // Written into the widget's own [`Base::hint`] slot. The native authoring surface is
+    // `ComponentExt::on_hint` — on every widget since F003/P082/T432 — and the declarative one is
+    // this event. Two authoring models, one slot, and the framework's collector sees no difference
+    // between them: that is what makes a described row and a native row equally pickable. A wrapper
+    // here would be a second widget in the tree that the description never asked for, sitting
+    // between a node and its parent with its own layout.
+    //
+    // **The intent travels with the closure**, not only inside it: a host cannot ask its policy
+    // about an opaque `Fn()`, and a candidate whose action would be refused must not be offered a
+    // letter (F003/P082/T432). A plugin's row therefore gets the same filtering heca's own rows do,
+    // with nothing extra declared — which is the whole point of one slot.
+    if let Some(carrier) = hint_intent(node) {
         let emit = emit.clone();
-        realized.base_mut().peek = Some(Box::new(move || emit(carrier.clone())));
+        let run = carrier.clone();
+        realized.base_mut().hint = Some(heca_grid_ui::hint::Hint::of(carrier, move || {
+            emit(run.clone())
+        }));
+    }
+    // **Who this node is**, read once here for every kind, exactly like style and the hint above.
+    //
+    // It cannot be a per-kind property: `key` is `ComponentExt::key` natively — on *every* widget,
+    // because a collection can be built from any of them — so there is no widget whose builder
+    // surface it belongs to. Reading it here is the same statement, and it means a described row
+    // and a native row land in the **same** `Base::key` slot: the keyboard cursor, the right-click
+    // target, the drag identity and the picker's remembered letter all read that one string and
+    // cannot tell the two authoring paths apart.
+    //
+    // `hintable` rides along for the same reason — universal on `Base`, so universal here.
+    if let Some(key) = node.declared_key() {
+        realized.base_mut().key = Some(key.to_string());
+    }
+    if let Some(PropValue::Bool(hintable)) = node.props.get("hintable") {
+        realized.base_mut().hintable = *hintable;
+    }
+    // **The verbs this node answers to**, read once here for every kind, exactly like the hint.
+    //
+    // `ComponentExt::on_action` is on every widget, so this is universal too — a per-kind arm would
+    // be the same framework rule written thirty-three times. It is what gives a described
+    // **surface** a verb of its own: `[[keys.surface]] pick = "s"` names `mypanel.pick`, the host
+    // walks the visible trees for whoever declares that name (`fire_widget_action`), and this is
+    // where a described tree gets to be that whoever (F003/P082/T436).
+    //
+    // An **event** is fired at a node by what the user did to it; an **action** is a name said out
+    // loud. Different slots for that reason, and the same one door on the far side: `Base::actions`
+    // holds a native closure and this one alike.
+    for (name, carrier) in &node.actions {
+        // **A verb that names itself never runs.** The intent goes back through the router, which
+        // looks for a widget declaring that name — this one — and posts it again: a description
+        // spelling `"mypanel.pick": {"action": "mypanel.pick"}` would spin the event loop forever.
+        // Refusing it here is the only place that knows both names.
+        if carrier.action == *name {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] realize: action {name:?} fires an intent of its own name — ignored (it                  would resolve back to this widget and re-post itself forever)",
+            );
+            continue;
+        }
+        let emit = emit.clone();
+        let run = carrier.clone();
+        realized.base_mut().actions.push(heca_grid_ui::DeclaredAction {
+            name: name.clone(),
+            run: Box::new(move || emit(run.clone())),
+        });
     }
     realized
 }
@@ -350,6 +403,33 @@ fn realize_kind(
         WidgetKind::Panel => {
             let panel = with_props(Panel::new().title(text_of(node)), node, theme);
             attach_children(Box::new(panel), node, theme, emit, forms)
+        }
+        // **A described surface** — the same widget the exposé is, raised from data.
+        //
+        // Its children are its panel: one child is the panel itself, several are stacked into one,
+        // because an `Overlay` centres and decorates exactly one. `animation_named` and `blocking`
+        // arrive through the generated property surface, so how a described surface comes and goes
+        // is the widget's own builder and not a list repeated here — `"animation": "zoom_fade"`
+        // names the same gesture native code names.
+        WidgetKind::Overlay => {
+            let panel: Box<dyn Component> = match node.children.len() {
+                1 => realize(&node.children[0], theme, emit, forms),
+                _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
+            };
+            Box::new(with_props(Overlay::new().panel_boxed(panel), node, theme))
+        }
+        // **A described picker** — the one thing a description could not have.
+        //
+        // Its children are what it letters, and it is a transparent wrapper, so several children
+        // are a column rather than a stack: unwrapped, that is what they already were. `opens_on`
+        // arrives through the generated property surface, so the verb is the widget's own builder
+        // and not a name repeated here.
+        WidgetKind::KeyHintGroup => {
+            let subtree: Box<dyn Component> = match node.children.len() {
+                1 => realize(&node.children[0], theme, emit, forms),
+                _ => attach_children(Box::new(Flex::column()), node, theme, emit, forms),
+            };
+            Box::new(with_props(KeyHintGroup::new_boxed(subtree), node, theme))
         }
         WidgetKind::Scroll => {
             // `axes` reaches the widget through its own builder, so a declarative region can be
@@ -629,13 +709,13 @@ fn press_intent(node: &ViewNode) -> Option<Intent> {
 
 /// **What a leader-key pick (`prefix+/`) does to this node.**
 ///
-/// `peek` when the node declares one, otherwise `press` — so every actionable node stays reachable
+/// `hint` when the node declares one, otherwise `press` — so every actionable node stays reachable
 /// by letter for free (the "everything is an action" rule), and a node that wants a pick to mean
 /// something *else* than a click says so. That difference is the whole reason the two are separate
 /// events: heca's own sidebar row activates the pane and leaves on a click, and stays in the
-/// sidebar on a peek. Pointing one intent at both is what made `prefix+/` leave the sidebar.
-fn peek_intent(node: &ViewNode) -> Option<Intent> {
-    node.intent("peek").or_else(|| node.intent("press")).cloned()
+/// sidebar on a hint pick. Pointing one intent at both is what made `prefix+/` leave the sidebar.
+fn hint_intent(node: &ViewNode) -> Option<Intent> {
+    node.intent("hint").or_else(|| node.intent("press")).cloned()
 }
 
 /// The node's `"change"` intent as a carrier (value widgets — input/toggle/checkbox). Not a pick
@@ -1063,46 +1143,12 @@ fn glyph_prop(node: &ViewNode) -> Option<Glyph> {
 /// NB: this is a **curated stopgap of ~35 icons**. The complete app iconset + a generated
 /// name↔`Glyph` mapping (so this can't drift from the enum) is tracked as `plugin-task-ui-8`.
 fn glyph_from_name(name: &str) -> Option<Glyph> {
-    let g = match name {
-        "folder" => Glyph::Folder,
-        "folder_open" => Glyph::FolderOpen,
-        "file" => Glyph::File,
-        "file_code" => Glyph::FileCode,
-        "git_branch" => Glyph::GitBranch,
-        "git_commit" => Glyph::GitCommit,
-        "git_merge" => Glyph::GitMerge,
-        "git_pull_request" => Glyph::GitPullRequest,
-        "terminal" => Glyph::Terminal,
-        "gear" => Glyph::Gear,
-        "search" => Glyph::Search,
-        "close" => Glyph::Close,
-        "check" => Glyph::Check,
-        "caret_right" => Glyph::CaretRight,
-        "caret_down" => Glyph::CaretDown,
-        "play" => Glyph::Play,
-        "pause" => Glyph::Pause,
-        "stop" => Glyph::Stop,
-        "warning" => Glyph::Warning,
-        "warning_circle" => Glyph::WarningCircle,
-        "info" => Glyph::Info,
-        "circle" => Glyph::Circle,
-        "lightning" => Glyph::Lightning,
-        "list" => Glyph::List,
-        "sidebar" => Glyph::Sidebar,
-        "dots_three_vertical" => Glyph::DotsThreeVertical,
-        "arrow_right" => Glyph::ArrowRight,
-        "arrow_line_left" => Glyph::ArrowLineLeft,
-        "arrow_line_right" => Glyph::ArrowLineRight,
-        "plus" => Glyph::Plus,
-        "minus" => Glyph::Minus,
-        "square_split_vertical" => Glyph::SquareSplitVertical,
-        "x_square" => Glyph::XSquare,
-        "frame_corners" => Glyph::FrameCorners,
-        "cards" => Glyph::Cards,
-        "trash" => Glyph::Trash,
-        _ => return None,
-    };
-    Some(g)
+    // **Looked up, not listed.** This was a hand-written `match` of 36 arms beside a `Glyph::ALL`
+    // of 52, so sixteen glyphs — `caret_left`, `pencil`, `x_circle`, `folder_simple_plus` and the
+    // rest — could not be named from a description at all and silently rendered nothing. A second
+    // copy of a mapping drifts; `Glyph::name` is the one source and a new glyph cannot compile
+    // without joining it (F003/P082/T444).
+    Glyph::ALL.iter().copied().find(|g| g.name() == name)
 }
 
 /// The `"variant"` prop mapped to the grid-ui [`ButtonVariant`].
@@ -1166,11 +1212,52 @@ mod tests {
     /// **What the framework's picker will find in a realized tree**, in document order: one path
     /// per node that declared what a pick does to it. There is no registry to interrogate any more
     /// — the declarations are in the tree, so the tests read them from the tree.
-    fn peeks(root: &dyn Component) -> Vec<Vec<usize>> {
-        heca_grid_ui::collect_peeks(root)
+    fn hints(root: &dyn Component) -> Vec<Vec<usize>> {
+        heca_grid_ui::collect_hints(root)
             .into_iter()
             .map(|(path, _)| path)
             .collect()
+    }
+
+    /// **A described surface arrives and leaves exactly as a native one does** (F003/P082/T459).
+    ///
+    /// The declarative half of `Overlay::animation`: a plugin that can only send JSON names a
+    /// built-in and gets the same gesture native code gets — one door, two spellings. The surface
+    /// then holds itself on screen for the whole of its exit, which is the behaviour that makes an
+    /// animated dismissal possible at all.
+    #[test]
+    fn a_described_overlay_names_how_it_arrives_and_leaves() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let mut forms = FormBindings::default();
+        let theme = Theme::default();
+
+        let node = ViewNode::new(WidgetKind::Overlay)
+            .prop("animation", PropValue::Text("zoom_fade".into()))
+            .prop("opened", PropValue::Bool(true))
+            .child(ViewNode::new(WidgetKind::Label).text("MAP"));
+        let mut surface = realize(&node, &theme, &emit, &mut forms);
+
+        assert!(surface.presence().is_some(), "a described overlay is a surface a host can drive");
+        surface.hide();
+        assert!(
+            surface.presence().is_some_and(|p| p.is_leaving()),
+            "the named animation plays on the way out",
+        );
+        let mut frames = 0;
+        while surface.tick(1.0 / 60.0) && frames < 600 {
+            frames += 1;
+        }
+        assert!(frames > 1, "it played rather than cutting: {frames} frames");
+        assert!(!surface.presence().is_some_and(|p| p.is_leaving()), "and then it is gone");
+
+        // Untrusted input stays total: an unknown name leaves the surface with its default.
+        let unknown = ViewNode::new(WidgetKind::Overlay)
+            .prop("animation", PropValue::Text("supernova".into()))
+            .child(ViewNode::new(WidgetKind::Label).text("MAP"));
+        let mut cut = realize(&unknown, &theme, &emit, &mut forms);
+        cut.open();
+        cut.hide();
+        assert!(!cut.presence().is_some_and(|p| p.is_leaving()), "a cut, not a panic");
     }
 
     /// A confirm-dialog-shaped tree: a column with a message label + a row of two action
@@ -1219,14 +1306,14 @@ mod tests {
         assert_eq!(row.base().children.len(), 2, "row: two buttons");
     }
 
-    /// Every actionable node (a `"press"` binding) declares exactly one peek carrying the node's
+    /// Every actionable node (a `"press"` binding) declares exactly one hint carrying the node's
     /// own intent — so the picker fires the identical action a click would. Non-actionable nodes
     /// declare nothing.
     #[test]
-    fn actionable_nodes_declare_the_peek_their_click_would_fire() {
+    fn actionable_nodes_declare_the_hint_their_click_would_fire() {
         let (emit, fired) = recording_emitter();
-        let root = realize(&confirm_tree(), &Theme::default(), &emit, &mut FormBindings::default());
-        let found = peeks(root.as_ref());
+        let mut root = realize(&confirm_tree(), &Theme::default(), &emit, &mut FormBindings::default());
+        let found = hints(root.as_ref());
         assert_eq!(
             found.len(),
             2,
@@ -1235,26 +1322,26 @@ mod tests {
         // Document order: the row is the column's second child, Cancel its first.
         assert_eq!(found, vec![vec![1, 0], vec![1, 1]]);
         for path in &found {
-            assert!(heca_grid_ui::fire_peek(root.as_ref(), path));
+            assert!(heca_grid_ui::fire_hint(root.as_mut(), path));
         }
         let actions: Vec<String> = fired.borrow().iter().map(|i| i.action.clone()).collect();
         assert_eq!(actions, vec!["confirm_cancel", "confirm_ok"]);
     }
 
-    /// **A pick is not a click.** A node that declares its own `peek` fires *that*, not its
+    /// **A pick is not a click.** A node that declares its own `hint` fires *that*, not its
     /// `press` — which is the whole reason the two are separate events: heca's sidebar row
-    /// activates the pane and leaves on a click, and stays in the sidebar on a peek.
+    /// activates the pane and leaves on a click, and stays in the sidebar on a hint pick.
     #[test]
-    fn a_declared_peek_wins_over_the_press() {
+    fn a_declared_hint_wins_over_the_press() {
         let (emit, fired) = recording_emitter();
         let node = ViewNode::new(WidgetKind::Row)
             .on_press(Intent::new("activate_and_leave"))
-            .on_peek(Intent::new("peek_and_stay"));
-        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
-        assert!(heca_grid_ui::fire_peek(row.as_ref(), &[]));
+            .on_hint(Intent::new("hint_and_stay"));
+        let mut row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert!(heca_grid_ui::fire_hint(row.as_mut(), &[]));
         assert_eq!(
             fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
-            vec!["peek_and_stay"],
+            vec!["hint_and_stay"],
         );
     }
 
@@ -1288,7 +1375,7 @@ mod tests {
         assert_eq!(column[0].base().children.len(), 2, "row: icon + label");
 
         // The button is still one pick target, whatever it composes.
-        assert_eq!(peeks(button.as_ref()), vec![Vec::<usize>::new()], "the button, not its content");
+        assert_eq!(hints(button.as_ref()), vec![Vec::<usize>::new()], "the button, not its content");
     }
 
     /// A **childless** Button node falls back to the scalar sugar — `text` (+ an optional leading
@@ -1674,8 +1761,10 @@ mod tests {
         check("Input", <Input as SetProp>::PROP_NAMES, "Input");
         check("Item", <Item as SetProp>::PROP_NAMES, "Item");
         check("ItemGroup", <ItemGroup as SetProp>::PROP_NAMES, "ItemGroup");
+        check("KeyHintGroup", <KeyHintGroup as SetProp>::PROP_NAMES, "KeyHintGroup");
         check("Label", <Label as SetProp>::PROP_NAMES, "Label");
         check("MarkerGroup", <MarkerGroup as SetProp>::PROP_NAMES, "MarkerGroup");
+        check("Overlay", <Overlay as SetProp>::PROP_NAMES, "Overlay");
         check("Panel", <Panel as SetProp>::PROP_NAMES, "Panel");
         check("RailCell", <RailCell as SetProp>::PROP_NAMES, "RailCell");
         check("Row", <GridRow as SetProp>::PROP_NAMES, "Row");
@@ -1970,6 +2059,75 @@ mod tests {
         assert!(w.base().style.visual.fill.is_none(), "the bad one was dropped, not fatal");
     }
 
+    /// **A described key lands in the very slot a native `.key(..)` writes.** That is the whole of
+    /// the declarative half of the identity rule: one slot, so the keyboard cursor, the right-click
+    /// target, the drag identity and the picker's remembered letter cannot tell a described row
+    /// from a native one.
+    #[test]
+    fn a_described_key_lands_in_the_widgets_own_slot() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let node = ViewNode::new(WidgetKind::Row)
+            .key("pane:7")
+            .on_press(Intent::new("focus_pane"));
+
+        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert_eq!(row.base().key.as_deref(), Some("pane:7"));
+    }
+
+    /// It is read **generically, for every kind** — not in one arm. A key belongs to no widget in
+    /// particular, because a collection can be built from any of them.
+    #[test]
+    fn every_kind_carries_a_described_key() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        for kind in [
+            WidgetKind::Row,
+            WidgetKind::Item,
+            WidgetKind::Button,
+            WidgetKind::Card,
+            WidgetKind::Label,
+            WidgetKind::VStack,
+        ] {
+            let node = ViewNode::new(kind).key("k");
+            let w = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            assert_eq!(w.base().key.as_deref(), Some("k"), "{kind:?} dropped its key");
+        }
+    }
+
+    /// A node that declares nothing carries nothing — its identity is derived from its content, and
+    /// an empty string would be a name that collides with every other empty one.
+    #[test]
+    fn a_node_with_no_key_declares_none() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let node = ViewNode::new(WidgetKind::Row).on_press(Intent::new("focus_pane"));
+        let row = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert_eq!(row.base().key, None);
+    }
+
+    /// `hintable` rides the same generic pass — universal on `Base`, so universal here. Being
+    /// pickable is not opt-in, so the only thing a description has to say is "not me".
+    #[test]
+    fn a_node_can_keep_itself_out_of_the_picker() {
+        let emit: IntentEmitter = Rc::new(|_| {});
+        let node = ViewNode::new(WidgetKind::Button)
+            .text("×")
+            .prop("hintable", PropValue::Bool(false))
+            .on_press(Intent::new("close"));
+
+        let w = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert!(!w.base().hintable);
+        assert!(
+            realize(
+                &ViewNode::new(WidgetKind::Button).on_press(Intent::new("close")),
+                &Theme::default(),
+                &emit,
+                &mut FormBindings::default(),
+            )
+            .base()
+            .hintable,
+            "the default is pickable — a node says only \"not me\"",
+        );
+    }
+
     /// **A described `Row` is the interactive widget, not a box.** Click it and its intent fires;
     /// press Enter on it and the same intent fires; it takes one hint target so `prefix+/` reaches
     /// it; and it holds whatever content it was given.
@@ -1998,7 +2156,7 @@ mod tests {
 
         assert_eq!(row.base().children.len(), 2, "it holds its composed content");
         assert!(row.base().focusable, "an actionable row is focusable");
-        assert_eq!(peeks(row.as_ref()), vec![Vec::<usize>::new()], "one pick target: the row itself");
+        assert_eq!(hints(row.as_ref()), vec![Vec::<usize>::new()], "one pick target: the row itself");
 
         let b = row.base().bounds;
         // A click is a press and the release that completes it — pressing and dragging off the row
@@ -2028,7 +2186,7 @@ mod tests {
             .child(ViewNode::new(WidgetKind::Label).text("just content"));
         let row = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         assert!(!row.base().focusable);
-        assert!(peeks(row.as_ref()).is_empty());
+        assert!(hints(row.as_ref()).is_empty());
         assert_eq!(row.base().children.len(), 1, "it still holds its content");
     }
 
@@ -2040,7 +2198,7 @@ mod tests {
         let node = ViewNode::new(WidgetKind::Grid);
         let realized = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         assert_eq!(realized.base().children.len(), 0);
-        assert!(peeks(realized.as_ref()).is_empty(), "an empty fallback declares no peek");
+        assert!(hints(realized.as_ref()).is_empty(), "an empty fallback declares no hint");
     }
 
     // ── Options (Choice / Select / Tabs) ──
@@ -2260,7 +2418,7 @@ mod tests {
 
         let markers = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
         assert_eq!(markers.base().children.len(), 2, "the two realized rows");
-        assert!(peeks(markers.as_ref()).is_empty(), "an indicator is not a pick target");
+        assert!(hints(markers.as_ref()).is_empty(), "an indicator is not a pick target");
     }
 
     // ── Grid (tracks / areas / placement) ──
@@ -2555,7 +2713,8 @@ mod tests {
             | WidgetKind::Grid
             | WidgetKind::MarkerGroup
             | WidgetKind::ItemGroup
-            | WidgetKind::DockFrame => node
+            | WidgetKind::DockFrame
+            | WidgetKind::Overlay => node
                 .text("TITLE")
                 .child(ViewNode::new(WidgetKind::Label).text("child")),
 
@@ -2608,6 +2767,12 @@ mod tests {
                 .prop("length", PropValue::Float(120.0))
                 .prop("orientation", PropValue::Text("vertical".into())),
 
+            // A picker: its children are what it letters, and one of them must be pickable for
+            // the picker to be worth anything — so the sample carries a hint, not a press.
+            WidgetKind::KeyHintGroup => node
+                .prop("opens_on", PropValue::Text("sample.pick".into()))
+                .child(ViewNode::new(WidgetKind::Label).text("target").on_hint(Intent::new("noop"))),
+
             // Host-only — see the coverage test.
             WidgetKind::ScrollBar => node,
         }
@@ -2659,6 +2824,392 @@ mod tests {
         }
     }
 
+    /// **What a plugin actually writes** — the SDK, end to end (F003/P082/T435).
+    ///
+    /// A plugin cannot hand us a Rust function, so without a declarative spelling it can draw a row
+    /// and never make that row pickable. The JSON is not a convenience, it is the feature.
+    ///
+    /// The kind here is a `Label` on purpose: nothing about it is clickable, `realize` wires no
+    /// `press` for it, and it is still a perfectly good thing to point at — which is why a hint is
+    /// enough on its own to make a node a target.
+    #[test]
+    fn a_plugin_can_make_anything_pickable_from_the_sdk() {
+        use heca_view::build;
+
+        let (emit, fired) = recording_emitter();
+        let node: ViewNode = build::Label::new("nginx")
+            .on_hint(Intent::new("docker.reveal").arg("id", PropValue::Text("abc".into())))
+            .into();
+
+        let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert_eq!(hints(widget.as_ref()), vec![Vec::<usize>::new()], "the label is a target");
+        assert!(heca_grid_ui::fire_hint(widget.as_mut(), &[]));
+        assert_eq!(
+            fired.borrow()[0].args.get("id"),
+            Some(&PropValue::Text("abc".into())),
+            "and picking it fires the plugin's own intent, arguments and all",
+        );
+    }
+
+    /// **Nothing paints outside the box it was given** — every kind, at every width
+    /// (F003/P082/T438).
+    ///
+    /// The rule `components/mod.rs` already states for anything sized by its container — *lay it out
+    /// in a box and assert it never exceeds it* — asked of the **whole vocabulary** rather than one
+    /// composition at a time. It walks `WidgetKind::ALL`, so a kind added next month is covered
+    /// with nobody remembering, and a plugin's tree is covered by construction: it is built from
+    /// these kinds.
+    ///
+    /// **Base layer only.** The overlay band exists precisely for things that must escape their
+    /// box — a dropdown panel opened inside a scroll region, a hint keycap on a half-visible row —
+    /// so asserting there would forbid the feature. What must stay inside is the widget's own
+    /// picture.
+    ///
+    /// The failure it exists for is invisible to every "was this drawn?" assertion: a name that is
+    /// drawn *somewhere*, across its neighbour.
+    #[test]
+    fn no_kind_paints_outside_the_box_it_is_given() {
+        use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Theme};
+        use heca_core::layout::Size;
+
+        /// Kinds that still put content past their edge, each with what does it. **An entry here
+        /// is a defect, not a licence** — the rule is `NO_HINT`'s: keep it short, and never add one
+        /// to make the test pass. Every one of these is a leading icon or drag handle placed before
+        /// the text without the row's own width being consulted.
+        const KNOWN_ESCAPES: &[(&str, &str)] = &[
+            ("ItemGroup", "the disclosure caret and its gap are placed before the header text"),
+            ("DockFrame", "drag handle + caret + gap: at 60px the title starts AT the right edge"),
+            ("Toast", "the severity icon's column is a constant, so it survives any squeeze"),
+            ("Item", "the leading slot is placed before the label, whatever room is left"),
+        ];
+
+        let theme = Theme::default();
+        let mut escapes: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            if KNOWN_ESCAPES.iter().any(|(k, _)| *k == format!("{kind:?}")) {
+                continue;
+            }
+            // Down to 24px: narrower than that is below a single control's own minimum (an icon
+            // plus its padding), where "stay inside the box" stops being a meaningful request.
+            for box_w in [400.0f64, 120.0, 60.0, 24.0] {
+                // A parent that hands it a definite width: a kind sized as a share has nothing to
+                // be a share *of* at the root of a layout.
+                let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
+                let mut root = realize(
+                    &node,
+                    &theme,
+                    &noop_emitter(),
+                    &mut FormBindings::default(),
+                );
+                root.base_mut().style.layout.width = heca_grid_ui::Length::Px(box_w as f32);
+                LayoutEngine::new().compute(root.as_mut(), Size::new(box_w, 200.0));
+
+                let mut scene = Scene::new();
+                {
+                    let mut cx = PaintCx::new(&mut scene, &theme);
+                    root.paint(&mut cx);
+                }
+                // **Honour the clip stack**: a draw scissored to a clip that is itself inside the
+                // window cannot escape it — that is what the clip is for. Ignoring them reports a
+                // scrolling page's content, which is exactly the case where overflow is the feature.
+                let mut clips: Vec<heca_core::layout::Rectangle> = Vec::new();
+                for cmd in scene.base_layer().iter() {
+                    match cmd {
+                        heca_grid_ui::DrawCommand::PushClip(r) => {
+                            let inner = clips.last().and_then(|c: &heca_core::layout::Rectangle| c.intersection(*r)).unwrap_or(*r);
+                            clips.push(inner);
+                            continue;
+                        }
+                        heca_grid_ui::DrawCommand::PopClip => {
+                            clips.pop();
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    let (what, rect) = match cmd {
+                        DrawCommand::Text(t) if t.text.is_empty() => continue,
+                        DrawCommand::Text(t) => (format!("text {:?}", t.text), t.rect),
+                        DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
+                        _ => continue,
+                    };
+                    // A box squeezed to nothing paints nothing, wherever its origin ended up.
+                    if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
+                        continue;
+                    }
+                    let Some(rect) = clips.last().map_or(Some(rect), |c| c.intersection(rect)) else {
+                        continue; // entirely scissored away
+                    };
+                    let right = rect.loc.x + rect.size.w;
+                    if rect.loc.x < -0.5 || right > box_w + 0.5 {
+                        escapes.push(format!(
+                            "{kind:?} at {box_w}px: {what} spans {:.0}..{:.0}",
+                            rect.loc.x, right,
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(escapes.is_empty(), "these draw outside their box:\n{}", escapes.join("\n"));
+    }
+
+    /// **A widget with content never renders as nothing** — every kind, with room to spare.
+    ///
+    /// The other half, and the one that caught the first attempt at fixing the first: a label that
+    /// may shrink to zero *does*, in a parent that sizes to its minimum, and a `Card`'s title
+    /// vanished outright. "Nothing drawn" is a worse answer than "drawn too wide", and no test
+    /// anywhere asserted against it.
+    #[test]
+    fn no_kind_with_content_renders_as_nothing() {
+        use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Theme};
+        use heca_core::layout::Size;
+
+        let theme = Theme::default();
+        let mut silent: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            if kind == WidgetKind::ScrollBar {
+                continue; // host-only: `realize` refuses it outright, by design
+            }
+            if kind == WidgetKind::Overlay {
+                // A **closed** surface draws nothing, and a described `Overlay` starts closed
+                // unless it says `opened`. That is the widget working, not a silent one.
+                continue;
+            }
+            let node = ViewNode::new(WidgetKind::VStack).child(sample_node(kind));
+            let mut root = realize(&node, &theme, &noop_emitter(), &mut FormBindings::default());
+            root.base_mut().style.layout.width = heca_grid_ui::Length::Px(400.0);
+            LayoutEngine::new().compute(root.as_mut(), Size::new(400.0, 200.0));
+
+            let mut scene = Scene::new();
+            {
+                let mut cx = PaintCx::new(&mut scene, &theme);
+                root.paint(&mut cx);
+            }
+            if scene.is_empty() {
+                silent.push(format!("{kind:?}"));
+            }
+        }
+        assert!(
+            silent.is_empty(),
+            "these draw nothing at all despite having content:\n{}",
+            silent.join("\n"),
+        );
+    }
+
+    /// **What a plugin actually writes to own a picker** — the SDK, end to end (F003/P082/T436).
+    ///
+    /// The last of the six. After T435 a plugin could be *picked*; this is the other half — opening
+    /// a picker of its own over its own panel, which heca's exposé has had since T427. Everything
+    /// here is a string in the plugin's own tree plus a key in the user's own config: no registry,
+    /// no id to hold, no signal, no closure.
+    #[test]
+    fn a_plugin_can_own_a_picker_from_the_sdk() {
+        use heca_view::build;
+        use heca_view::build::Parent as _;
+
+        let (emit, fired) = recording_emitter();
+        let node: ViewNode = build::KeyHintGroup::new()
+            .opens_on("mypanel.pick")
+            .child(build::Row::new().on_hint(Intent::new("docker.restart")))
+            .into();
+
+        let mut picker = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+
+        // 1. The verb is on screen, so the host's `[[keys.surface]] pick = "s"` can reach it —
+        //    by name, with no path to go stale when the tree is rebuilt.
+        assert_eq!(
+            heca_grid_ui::collect_actions(picker.as_ref()),
+            vec!["mypanel.pick".to_string()],
+        );
+        assert!(!heca_grid_ui::fire_action(picker.as_ref(), "heca.expose.pick"), "its own name only");
+
+        // 2. Running it opens the picker and letters what is beneath it.
+        assert!(heca_grid_ui::fire_action(picker.as_ref(), "mypanel.pick"));
+        picker.tick(0.0);
+        let row = &picker.base().children[0];
+        assert_eq!(
+            row.base().hint_label.get_untracked().as_deref(),
+            Some("a"),
+            "the plugin's own row wears the letter, and draws it itself",
+        );
+
+        // 3. And the letter runs the row's own intent, back out to the plugin.
+        picker.on_event_capture(&heca_grid_ui::Event::TextInput("a".to_string()));
+        assert_eq!(
+            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            vec!["docker.restart"],
+        );
+    }
+
+    /// **A described node declares verbs by name**, on any kind (F003/P082/T436).
+    ///
+    /// `ComponentExt::on_action` is universal natively, so this is read once for every kind rather
+    /// than wired per arm. It is the seam a **surface** has and a dock got from `Provider::actions`:
+    /// without it a described panel can only bind verbs the app already compiled in.
+    #[test]
+    fn a_described_node_answers_to_the_verb_it_declares() {
+        use heca_view::build;
+        use heca_view::build::Style as _;
+
+        let (emit, fired) = recording_emitter();
+        let node: ViewNode = build::Panel::new()
+            .on_action("mypanel.reload", Intent::new("docker.refresh"))
+            .into();
+
+        let panel = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        assert!(heca_grid_ui::fire_action(panel.as_ref(), "mypanel.reload"));
+        assert_eq!(
+            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            vec!["docker.refresh"],
+            "the verb the surface named fired the intent it was bound to",
+        );
+    }
+
+    /// **A verb that names itself never runs.** The router answers a name by looking for a widget
+    /// on screen declaring it, so `"mypanel.pick" -> Intent("mypanel.pick")` would find this widget
+    /// again and re-post itself forever — a description spinning the event loop.
+    ///
+    /// Refused where both names are known, which is here. `realize` is total for untrusted input:
+    /// the verb is simply not declared, and resolves to nothing.
+    #[test]
+    fn a_verb_that_fires_its_own_name_is_refused() {
+        use heca_view::build;
+        use heca_view::build::Style as _;
+
+        let node: ViewNode = build::Panel::new()
+            .on_action("mypanel.reload", Intent::new("mypanel.reload"))
+            .into();
+
+        let panel = realize(&node, &Theme::default(), &noop_emitter(), &mut FormBindings::default());
+        assert!(
+            heca_grid_ui::collect_actions(panel.as_ref()).is_empty(),
+            "a self-naming verb is not declared at all, so nothing can reach it",
+        );
+    }
+
+    /// **T432's rule holds for a described tree too**: a pick acts on the widget it named and on
+    /// nothing else, so a plugin's nested pickable rows behave exactly like heca's own.
+    ///
+    /// Without it a plugin composing a pickable card out of pickable rows would fire both and land
+    /// the user on the card — and would have to hand-write the DOM's `e.target !== e.currentTarget`
+    /// guard, which it has no way to express at all.
+    #[test]
+    fn a_described_pick_lands_on_the_node_it_named_and_not_its_container() {
+        use heca_view::build;
+
+        let (emit, fired) = recording_emitter();
+        use heca_view::build::Parent as _;
+        let node: ViewNode = build::Card::new("Containers")
+            .on_hint(Intent::new("the_card"))
+            .child(build::Label::new("row").on_hint(Intent::new("the_row")))
+            .into();
+
+        let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+        let inner = hints(widget.as_ref())
+            .into_iter()
+            .find(|p| !p.is_empty())
+            .expect("the nested label is its own target");
+        assert!(heca_grid_ui::fire_hint(widget.as_mut(), &inner));
+        assert_eq!(
+            fired.borrow().iter().map(|i| i.action.clone()).collect::<Vec<_>>(),
+            vec!["the_row"],
+            "the card it sits in must not answer for it",
+        );
+    }
+
+    /// **Anything a widget can be given in Rust, a description must be able to ask for.**
+    ///
+    /// The runtime half: a `hint` written into a node of **any** kind survives `realize` and is
+    /// found by the picker. `on_hint` is on `ComponentExt` (F003/P082/T432), so natively *every*
+    /// widget can be told what a pick does to it; this holds the described side to the same reach.
+    ///
+    /// `ScrollBar` is the one exception, and the same one everywhere else: it is host-only, its
+    /// state is a live host signal, and `realize` refuses it rather than producing a dead control.
+    #[test]
+    fn a_hint_written_into_any_kind_is_found_by_the_picker() {
+        let mut unreachable: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            if kind == WidgetKind::ScrollBar {
+                continue;
+            }
+            let (emit, fired) = recording_emitter();
+            let node = sample_node(kind).on_hint(Intent::new("picked"));
+            let mut widget = realize(&node, &Theme::default(), &emit, &mut FormBindings::default());
+            if !heca_grid_ui::fire_hint(widget.as_mut(), &[]) {
+                unreachable.push(format!("{kind:?} (no hint declaration on the realized widget)"));
+                continue;
+            }
+            if fired.borrow().iter().all(|i| i.action != "picked") {
+                unreachable.push(format!("{kind:?} (declared a hint that fired something else)"));
+            }
+        }
+        assert!(
+            unreachable.is_empty(),
+            "a `hint` event written into these kinds does not reach the picker, so a plugin can \
+             draw them but never make them pickable: {unreachable:#?}",
+        );
+    }
+
+    /// **The same reach, through the typed SDK.**
+    ///
+    /// The raw `ViewNode` form is the wire; `heca_view::build` is what an author actually writes,
+    /// and it is hand-written — so the thing that keeps it honest is a guard, exactly as
+    /// [`every_widget_property_is_reachable_from_the_sdk`] does for properties. A capability that
+    /// exists on the wire and not in the SDK is one nobody will find.
+    ///
+    /// It reads the SDK's source rather than calling it, because *"does a method exist"* is not a
+    /// question a running test can ask — the same technique, for the same reason.
+    ///
+    /// ⚠️ **Written red on purpose** (F003/P082/T434): `on_hint` sits on seven kinds today. It is
+    /// **F003/P082/T435** that makes it pass, by extending the `with_event!` table. Written
+    /// afterwards this test would only describe what was built, which protects nothing.
+    #[test]
+    fn every_kind_can_be_given_a_hint_from_the_sdk() {
+        /// Kinds with no `on_hint`, each with the reason. An entry here is a capability an author
+        /// cannot reach — keep it short, and never add one to make the test pass.
+        const NO_HINT: &[(&str, &str)] = &[(
+            "ScrollBar",
+            "host-only: its state is live host signals, and `realize` refuses it outright",
+        )];
+
+        let sdk = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../heca-view/src/build.rs"),
+        )
+        .expect("the SDK source is where it is expected");
+
+        // `with_event!` is the one table that gives a builder its event setters, so this asks the
+        // table rather than looking for a method: `Row { on_press => "press", on_hint => "hint" }`.
+        let events = {
+            let start = sdk.find("with_event!(").expect("the SDK binds its events in one table");
+            let rest = &sdk[start..];
+            let end = rest.find("\n);").unwrap_or(rest.len());
+            rest[..end].to_string()
+        };
+
+        let mut missing: Vec<String> = Vec::new();
+        for &kind in WidgetKind::ALL {
+            let name = format!("{kind:?}");
+            if NO_HINT.iter().any(|(k, _)| *k == name) {
+                continue;
+            }
+            let declares = events
+                .lines()
+                .filter(|l| l.trim_start().starts_with(&format!("{name} {{")))
+                .any(|l| l.contains("on_hint"));
+            if !declares {
+                missing.push(name);
+            }
+        }
+
+        assert!(
+            missing.is_empty(),
+            "these kinds take a hint natively (`ComponentExt::on_hint` is on every widget) but \
+             cannot be given one through the typed SDK, so an author writing them can draw a \
+             thing and never make it pickable: {missing:#?}\n\nAdd `on_hint => \"hint\"` to the \
+             kind's `with_event!` row, or add it to NO_HINT with the reason.",
+        );
+    }
+
     /// Glyph names resolve to their `Glyph`; unknown names are `None` (no icon), never a panic.
     #[test]
     fn glyph_from_name_resolves_known_and_rejects_unknown() {
@@ -2694,14 +3245,14 @@ mod tests {
     /// A `"change"` binding (value widgets) fires the intent but is NOT a pick target (a value
     /// change isn't a gesture a letter can stand for); a `"press"` binding (Item) is.
     #[test]
-    fn change_binding_declares_no_peek_but_press_does() {
+    fn change_binding_declares_no_hint_but_press_does() {
         let input = realize(
             &ViewNode::new(WidgetKind::Input).on("change", Intent::new("q_changed")),
             &Theme::default(),
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert!(peeks(input.as_ref()).is_empty(), "a change binding is not a pick target");
+        assert!(hints(input.as_ref()).is_empty(), "a change binding is not a pick target");
 
         let item = realize(
             &ViewNode::new(WidgetKind::Item)
@@ -2711,7 +3262,7 @@ mod tests {
             &noop_emitter(),
             &mut FormBindings::default(),
         );
-        assert_eq!(peeks(item.as_ref()), vec![Vec::<usize>::new()], "an actionable Item is");
+        assert_eq!(hints(item.as_ref()), vec![Vec::<usize>::new()], "an actionable Item is");
     }
 
     /// A value widget with a `"name"` prop is bound into the form; `collect()` reads its current

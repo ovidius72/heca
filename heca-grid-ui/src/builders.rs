@@ -439,7 +439,7 @@ impl<F: Fn() -> crate::widgets::ContextMenu> IntoContextMenu for F {
 /// One trait, blanket-implemented for every [`Component`], holding the builders that are true of
 /// all of them: what happens to a widget ([`on_click`](ComponentExt::on_click),
 /// [`on_key`](ComponentExt::on_key), [`context_menu`](ComponentExt::context_menu)), who it is
-/// ([`nav_key`](ComponentExt::nav_key)), and what it does in a drag
+/// ([`key`](ComponentExt::key)), and what it does in a drag
 /// ([`draggable`](ComponentExt::draggable), [`drop_target`](ComponentExt::drop_target)).
 ///
 /// It was four traits — `ComponentExt`, `ComponentExt`, `ComponentExt`, `ComponentExt` — split by nothing but the order
@@ -469,8 +469,8 @@ pub trait ComponentExt: Component + Sized {
     /// drag identity. The string is **opaque to the library** — only the component that wrote it
     /// and the host routing back to that component ever interpret it — and it must be stable across
     /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
-    fn nav_key(mut self, key: impl Into<String>) -> Self {
-        self.base_mut().nav_key = Some(key.into());
+    fn key(mut self, key: impl Into<String>) -> Self {
+        self.base_mut().key = Some(key.into());
         self
     }
 
@@ -488,6 +488,18 @@ pub trait ComponentExt: Component + Sized {
     /// Register `f` for `kind`. It receives an [`EventCx`](crate::event::EventCx) and consumes the
     /// event only if it calls [`stop_propagation`](crate::event::EventCx::stop_propagation).
     fn on(mut self, kind: crate::event::EventKind, f: impl FnMut(&mut crate::event::EventCx<'_>) + 'static) -> Self {
+        // **Wiring an action is what makes a widget pickable** (F003/P082/T441). Set here, in the one
+        // place every generic listener goes through, rather than repeated in `on_click`,
+        // `on_double_click`, `on_key_down` and `on_key_up` — a rule in four call sites is a rule in
+        // the wrong place.
+        //
+        // Right-click and middle-click are deliberately absent: a right-click opens a context menu
+        // rather than doing the thing, so it should not spend one of the 52 letters (Antonio,
+        // 2026-08-17).
+        use crate::event::EventKind as K;
+        if matches!(kind, K::Click | K::DoubleClick | K::Key) {
+            self.base_mut().activatable = true;
+        }
         self.base_mut()
             .handlers
             .get_or_insert_with(Default::default)
@@ -701,13 +713,109 @@ pub trait ComponentExt: Component + Sized {
     ///
     /// Nothing else is needed: no row identity, no path string, no registered builder, no
     /// host-side hit test, no `Shift+F10` handling, and no anchor — the framework picks that from
-    /// what triggered the menu. Universal, like `nav_key`, so an `Icon` and a plugin's own widget
+    /// what triggered the menu. Universal, like `key`, so an `Icon` and a plugin's own widget
     /// carry one on the same terms as a `Row`. See [`crate::menu`] for bubbling and the host sink.
     ///
     /// **A value or a closure** — see [`IntoContextMenu`]. Either way the menu is realized when it
     /// is triggered, so a composed row's subtree is built fresh for each opening.
     fn context_menu(mut self, menu: impl IntoContextMenu + 'static) -> Self {
         self.base_mut().context_menu = Some(Box::new(move || menu.build()));
+        self
+    }
+
+    /// **Declare an action this widget answers to, by name.**
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::{KeyHintGroup, Flex};
+    /// use heca_grid_ui::reactive::{signal, SignalUpdate};
+    ///
+    /// let open = signal(false);
+    /// let picker = KeyHintGroup::new(Flex::column())
+    ///     .open_when(open)
+    ///     .on_action("mypanel.pick", move || open.set(true));
+    /// ```
+    ///
+    /// The name is namespaced by whoever declares it, exactly as a provider's actions are, and a
+    /// binding names it the same way:
+    ///
+    /// ```toml
+    /// [[keys.surface]]
+    /// name = "mypanel"
+    /// pick = "s"          # → mypanel.pick
+    /// ```
+    ///
+    /// **The widget names the action; config names the key.** A key written into a widget would be
+    /// unrebindable, absent from the palette and unreachable over RPC — the thing AGENTS § 2
+    /// forbids.
+    ///
+    /// This is what lets a **layer** own a verb. A dock declares its actions through `Provider`;
+    /// an overlay had no such seam, so it could only bind verbs the app had already compiled in.
+    /// See [`Base::actions`](crate::component::Base::actions).
+    /// **Keep this widget out of the picker**, however actionable it is.
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::Button;
+    ///
+    /// // A close button on every row would eat a letter each, for the one gesture nobody picks.
+    /// let b = Button::new("×").hintable(false);
+    /// ```
+    ///
+    /// **The opt-out exists because being pickable is not opt-in.** Anything you can act on — a
+    /// click, a double click, a key — wears a letter with nothing declared, so the only thing left
+    /// to say is "not me". `hintable(true)` is the default and changes nothing; a widget nobody can
+    /// act on has nothing for a letter to run.
+    ///
+    /// Letters are scarce (52 in one picker, one keystroke each), so this is how a dense surface
+    /// keeps them for the targets that matter.
+    #[heca_grid_ui_macros::prop]
+    fn hintable(mut self, yes: bool) -> Self {
+        self.base_mut().hintable = yes;
+        self
+    }
+
+    /// **What a pick does to this widget, when that differs from acting on it.**
+    ///
+    /// Being pickable is **not** what this turns on — anything actionable already wears a letter,
+    /// and picking it does what clicking it does (F003/P082/T441). This is the **override**:
+    ///
+    /// ```
+    /// use heca_grid_ui::prelude::*;
+    /// use heca_grid_ui::widgets::Row;
+    ///
+    /// // A click activates the pane and leaves the sidebar; a pick looks at it and stays.
+    /// let row = Row::new().on_activate(|| { /* focus_pane */ }).on_hint(|| { /* peek_selected */ });
+    /// ```
+    ///
+    /// **It fires in the target phase only** — when *this* widget is the one picked, never when a
+    /// pick from a child passes through on the way up. A pane that is itself pickable and holds
+    /// pickable rows would otherwise fire both and land you on the pane, and every such container
+    /// would hand-write the DOM's `e.target !== e.currentTarget` guard — N copies of a framework
+    /// rule, which by our own rule means the API is missing. This deliberately diverges from
+    /// [`on_click`](ComponentExt::on_click): clicking a child of a clickable box **is** clicking the
+    /// box, because the pointer is over both, while picking a row is **not** picking the pane — a
+    /// pick is nominal, not spatial.
+    ///
+    /// **To watch picks from your children instead**, listen for the bubbled event:
+    /// `.on(EventKind::Hint, |e| …)`. It sees which widget was picked and can
+    /// [`stop_propagation`](crate::event::EventCx::stop_propagation); it declares nothing and gets
+    /// no letter of its own.
+    ///
+    /// **Say what it is, where you can.** `f` may be a plain closure, or a
+    /// [`Hint`](crate::hint::Hint) carrying the [`Intent`](heca_view::Intent) the act *is* — which
+    /// is what lets a host ask its own policy about a candidate before spending a letter on it. The
+    /// app's `fires` and `realize` both hand over the pair; nothing else has to.
+    fn on_hint(mut self, f: impl Into<crate::hint::Hint>) -> Self {
+        self.base_mut().hint = Some(f.into());
+        self
+    }
+
+    fn on_action(mut self, name: impl Into<String>, f: impl Fn() + 'static) -> Self {
+        self.base_mut().actions.push(crate::hint::DeclaredAction {
+            name: name.into(),
+            run: Box::new(f),
+        });
         self
     }
 

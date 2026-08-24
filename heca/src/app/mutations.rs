@@ -21,17 +21,22 @@ fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
     match kind {
         MutationKind::Layout | MutationKind::Focus | MutationKind::Config => {
             sync_focus(state);
-            // **Structure and the frame it is drawn in — never focus.** What makes a layer stale is
-            // a pane, column or workspace appearing or going, or the window changing shape
-            // underneath it. Not the focus moving, which happens constantly and would rebuild the
-            // whole map (and reset the cursor inside it) on every keystroke.
+            // **Structure — and only structure.** What makes a layer stale is a pane, column or
+            // workspace appearing or going. Not the focus moving, which happens constantly and
+            // would rebuild the whole map (and reset the cursor inside it) on every keystroke —
+            // and, since F003/P082/T420, **not the window changing shape either**.
             //
-            // `Config` covers the window resize (`app/events.rs`, `WindowEvent::Resized`) and
-            // `prefix+Shift+r`. The exposé resolves its zoom from the room it has when it is
-            // **built**, so a layer that is not rebuilt keeps the zoom for the old window: resizing
-            // with the map up did nothing at all until the map was closed and reopened (Antonio,
-            // driving, 2026-08-12).
-            if matches!(kind, MutationKind::Layout | MutationKind::Config) {
+            // `Config` used to rebuild too, because the exposé resolved a zoom from the room it had
+            // when it was *built*, so an un-rebuilt layer kept the old window's zoom (Antonio,
+            // driving, 2026-08-12). That zoom is gone: the map is **shares** now, and a share
+            // re-lays-out for free at any size — there is nothing left for a rebuild to recompute.
+            //
+            // Rebuilding on resize is not merely wasted work, it is destructive: a rebuild throws
+            // the widget tree away, and with it everything living *in* the tree — every hint letter
+            // currently offered, and the open state of a picker the user has up. Dragging the
+            // window edge with the map open therefore blanked its letters on the first frame of the
+            // drag (Antonio, driving, 2026-08-24). A resize now re-lays-out what is already there.
+            if matches!(kind, MutationKind::Layout) {
                 refresh_visible_layers(state);
             }
             state.needs_redraw = true;

@@ -175,21 +175,8 @@ pub struct LayoutOptions {
     pub always_center_single_column: bool,
     /// Default width for new columns.
     pub default_column_width: Option<ColumnWidth>,
-    /// **The largest** the overview draws things, as a fraction of life size — niri's
-    /// `overview { zoom }`.
-    ///
-    /// **Everything is drawn at real size times the resolved zoom**, which is what makes the map a
-    /// map: a workspace row is the viewport's shape, a column keeps its real proportion of the
-    /// screen, and a strip scrolled past one screen really is wider than its row.
-    ///
-    /// ⚠️ **The exposé no longer reads it** (F003/P082/T420). The map is built out of *shares* of
-    /// the window — a column is a percentage of the widest row, a pane a `grow` weight — so there
-    /// is no scale to cap: it fits by construction, at every window size. What still reads this is
-    /// the core's own `Session::overview_zoom`, which drives `workspace_geometries` in overview
-    /// mode.
-    pub overview_scale: f64,
-    /// The scale the overview **opens from**, relative to [`overview_scale`](Self::overview_scale)
-    /// — it animates out of this and back into it on the way out. `1.0` means no animation.
+    /// The scale the exposé **opens from**, relative to its own map size — it animates out of this
+    /// and back into it on the way out. `1.0` means no animation.
     ///
     /// Here beside the scale it animates from rather than as a constant in the surface, for the
     /// same reason the scale itself is: a value the user sets belongs where the layout keeps its
@@ -211,7 +198,6 @@ impl Default for LayoutOptions {
             always_center_single_column: false,
             default_column_width: Some(ColumnWidth::Proportion(0.5)),
             // niri's defaults: zoom 0.5, gap a tenth of a screen.
-            overview_scale: 0.5,
             overview_zoom_from: 0.8,
             overview_gap: 0.1,
             // **Off by default: an exposé shows everything.** A floor sounds prudent and is not —

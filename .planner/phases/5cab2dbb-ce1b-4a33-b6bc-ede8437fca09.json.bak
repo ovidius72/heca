@@ -138,9 +138,14 @@
   "createdAt": "2026-07-01T18:09:59.861Z",
   "updatedAt": "2026-08-11T22:09:22.071Z",
   "handoff": "",
-  "handoffUpdatedAt": "2026-08-13T12:12:25.512Z",
+  "handoffUpdatedAt": "2026-08-13T12:23:39.514Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-18T15-51-50-598Z.md",
+      "clearedAt": "2026-08-18T15:51:50.598Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/5cab2dbb-ce1b-4a33-b6bc-ede8437fca09-2026-08-13T12-23-39-509Z.md",
       "clearedAt": "2026-08-13T12:23:39.509Z",

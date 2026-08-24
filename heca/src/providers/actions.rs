@@ -110,7 +110,7 @@ pub(crate) fn bind_provider_keybindings(
 /// the right one pointing somewhere else is the model disagreeing with itself.
 ///
 /// Done here, after the component has written its own, rather than by teaching the render to read a
-/// shared cursor: the projection is deliberately keyed by `(mount, nav_key)` so that a component
+/// shared cursor: the projection is deliberately keyed by `(mount, key)` so that a component
 /// which *does* keep per-placement cursors still gets them, and that must not be special-cased for
 /// one component.
 ///
@@ -294,7 +294,7 @@ fn route_to_owner(state: &mut AppState, intent: &Intent) {
 /// ⚠️ **The `@` is what keeps it out of the way, and it is not decoration.** This was spelled
 /// `"dock"` for a few hours and collided with the real `dock` argument of the built-in `focus_dock`
 /// action: the dispatch path stripped it as an address, `focus_dock` was left with no dock named,
-/// and a peek that meant "focus THIS seat" opened the **dock picker** instead — a second set of
+/// and a hint that meant "focus THIS seat" opened the **dock picker** instead — a second set of
 /// letters over every dock, and picking one toggled the focus away again. An action argument is a
 /// plain identifier, so a leading `@` cannot be one (F004/P084/T409 follow-up).
 pub(crate) const SEAT_ARG: &str = "@seat";

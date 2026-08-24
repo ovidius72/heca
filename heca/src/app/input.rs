@@ -92,6 +92,13 @@ pub(crate) fn handle_keyboard_input(
         &keymaps.triggers,
     );
     let input_mode = state.input_mode.clone();
+    // **A picker is waiting for one letter, and a modifier is not it.** Every pick mode ends on the
+    // next key — picked, wrong key, or Esc — so reaching for Shift to type a capital would cancel
+    // the picker before the letter arrived. Asked once here rather than inside each mode's handler:
+    // there are seven of them, and guarding them one at a time reached three.
+    if input_mode.awaits_pick_letter() && crate::app::keyboard::is_modifier_key(ctx.logical_key) {
+        return;
+    }
     match input_mode {
         InputMode::Normal => {
             if ctx.is_prefix {
@@ -157,18 +164,8 @@ pub(crate) fn handle_keyboard_input(
                 // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
                 // e.g. Shift+click mouse selection works after scrolling
                 // with direct bindings.
-                let is_modifier_only = ctx.key_text.is_empty()
-                    && matches!(
-                        ctx.logical_key,
-                        Key::Named(
-                            NamedKey::Shift
-                                | NamedKey::Control
-                                | NamedKey::Alt
-                                | NamedKey::Super
-                                | NamedKey::Hyper
-                                | NamedKey::Meta
-                        )
-                    );
+                let is_modifier_only =
+                    ctx.key_text.is_empty() && crate::app::keyboard::is_modifier_key(ctx.logical_key);
                 if !is_modifier_only {
                     backend.scroll_to_bottom();
                 }
@@ -563,7 +560,7 @@ fn handle_pane_select_mode(
 ) {
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -588,7 +585,7 @@ fn handle_follow_link_mode(
     let candidates = candidates.to_vec();
     // Any key exits the overlay; a matching letter opens its link. Esc just exits.
     state.input_mode = InputMode::Normal;
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some(hint) = candidates.iter().find(|h| h.label == ch)
     {
@@ -608,23 +605,27 @@ fn handle_follow_link_mode(
 /// pick does to it; any other key / Esc just exits. Mirrors [`handle_follow_link_mode`].
 ///
 /// **The host resolves nothing.** There is no registry to look an id up in and no intent to route
-/// here: the region declared the behaviour itself (`KeyHint::on_peek`, or a described node's `peek`
+/// here: the region declared the behaviour itself (`KeyHint::on_hint`, or a described node's `hint`
 /// event), and running it emits whatever that region emits — which is how a plugin's row gets the
 /// same picker the app's own rows have. A target whose tree was rebuilt under the letters simply
 /// answers `false`.
 fn handle_hint_pick_mode(
     _registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, crate::chrome::PeekTarget)],
+    candidates: &[(char, crate::chrome::HintTarget)],
     ctx: KeyInputContext<'_>,
 ) {
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    // The letters come down however this ends — picked, wrong key, or Esc. Withdrawn before the
+    // pick runs, because running it may tear the tree down and a keycap must not outlive the mode
+    // that put it up.
+    crate::chrome::clear_hint_letters(state);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        crate::chrome::fire_peek(state, target);
+        crate::chrome::fire_hint(state, target);
     }
     state.needs_redraw = true;
 }
@@ -639,7 +640,7 @@ fn handle_pane_swap_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     let current_id = state.focused_pane;
     if let Some(ch) = typed
         && let Some(current_id) = current_id
@@ -690,7 +691,7 @@ fn handle_pane_take_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -720,7 +721,7 @@ fn handle_workspace_pick_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, target_ws)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -765,7 +766,7 @@ fn handle_column_pick_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, ws_idx, col_idx)) = candidates.iter().find(|(c, _, _)| *c == ch)
     {
@@ -798,7 +799,7 @@ fn handle_dock_pick_mode(
     let candidates = candidates.to_vec();
     state.input_mode = InputMode::Normal;
 
-    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key, ctx.is_shift);
     if let Some(ch) = typed
         && let Some((_, dock)) = candidates.iter().find(|(c, _)| *c == ch)
     {
@@ -973,11 +974,42 @@ mod tests {
             surface_action(&surface, &modes, &components, &KeyCombo::parse("x")).is_some(),
             "the map's own delete key resolves in its own layer",
         );
+        // A key neither the map nor the `layer` floor claims. (Not `q` — that is the floor's, and
+        // key matching is case-insensitive on the name, so `Q` is the same key.)
         assert_eq!(
-            surface_action(&surface, &modes, &components, &KeyCombo::parse("Q")),
+            surface_action(&surface, &modes, &components, &KeyCombo::parse("w")),
             None,
             "and a key it does not claim falls through to the global map",
         );
+    }
+
+    /// **A way out of an overlay is declared once, for every layer** — in the `layer` floor, not in
+    /// each surface's own entry and not in the global map.
+    ///
+    /// The global map is the fallback for what nothing in front claimed, so a key there is taken
+    /// from the program in the pane whether or not an overlay is up. `close_overlay` shipped as a
+    /// global `q`, and `:q` in vim stopped at the colon — in every terminal, always (Antonio,
+    /// driving, 2026-08-20). Declared here it exists only while a layer holds the keyboard, which
+    /// is the same thing tmux's key tables do.
+    #[test]
+    fn closing_an_overlay_is_a_layer_key_never_a_global_one() {
+        let (modes, components) = defaults();
+        let layer = FocusedSurface::Layer {
+            name: Some("heca.expose".to_string()),
+        };
+        for key in ["q", "Ctrl+q"] {
+            assert_eq!(
+                surface_action(&layer, &modes, &components, &KeyCombo::parse(key)),
+                Some(crate::keymap::ActionRef::Builtin(WmAction::CloseOverlay { overlay: None })),
+                "{key} closes the overlay in front of you",
+            );
+            // …and in the scrolling area nobody claims it, which is what sends it to the program.
+            assert_eq!(
+                surface_action(&FocusedSurface::Panes, &modes, &components, &KeyCombo::parse(key)),
+                None,
+                "{key} belongs to the pane when no overlay is up",
+            );
+        }
     }
 
     /// A dock is consulted at two names, **placement before component**, so narrowing one seating

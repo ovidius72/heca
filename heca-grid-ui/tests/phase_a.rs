@@ -148,20 +148,29 @@ fn label_truncates_to_its_box_at_the_end_it_was_given() {
     // Degenerate boxes still say something rather than panicking.
     assert_eq!(drawn(Label::new(path).truncate(Ellipsis::End), 1.0), "…");
 
-    // **The default is untouched.** No truncate ⇒ the full string is drawn even in a tiny box, and
-    // the label keeps its natural width (it does not opt into shrinking).
-    assert_eq!(drawn(Label::new(path), 10.0), path);
+    // **Cutting is the default** (F003/P082/T438): a label nobody said anything to still stays
+    // inside its box, which is what makes it safe for an author who has never read this file.
+    let by_default = drawn(Label::new(path), 10.0);
+    assert!(
+        by_default.starts_with("projects") && by_default.ends_with('…'),
+        "unset means Ellipsis::End: {by_default:?}",
+    );
+    // …and the opt-out is the way back to overflowing, said out loud.
+    assert_eq!(drawn(Label::new(path).truncate(Ellipsis::None), 10.0), path);
     let plain = Label::new(path);
     assert!(
         plain.base().style.layout.flex_shrink.is_none()
             && plain.base().style.layout.min_width.is_none(),
-        "an ordinary label must not become shrinkable",
+        "a label declares neither: shrinking is the engine's default and its floor is its own \
+         min-content answer",
     );
+    // **A cutting label declares nothing about sizing any more**, and does not need to: the engine
+    // shrinks by default, and the label's own "how narrow can you get?" answer — one character — is
+    // its floor. Forcing that floor to zero is what cost a `Card` its title.
     let cut = Label::new(path).truncate(Ellipsis::End);
-    assert_eq!(cut.base().style.layout.flex_shrink, Some(1.0));
     assert!(
-        cut.base().style.layout.min_width.is_some(),
-        "a truncating label must be allowed below its content width, or it just overflows",
+        cut.base().style.layout.flex_shrink.is_none()
+            && cut.base().style.layout.min_width.is_none(),
     );
 }
 
@@ -202,13 +211,21 @@ fn a_truncating_label_shrinks_inside_a_container_that_is_too_narrow() {
         "…and cut its text to it: {drawn:?}",
     );
 
-    // The untruncating default is unchanged: it keeps its natural width and overflows, exactly as
-    // every existing label in the app does today.
-    let (w_plain, plain) = paint_in_row(Label::new(text));
-    assert_eq!(plain, text, "an ordinary label still draws its whole string");
+    // The opt-out keeps its natural width and overflows — which is now something a caller asks for
+    // rather than what they get by saying nothing (F003/P082/T438).
+    let (w_plain, plain) = paint_in_row(Label::new(text).truncate(Ellipsis::None));
+    assert_eq!(plain, text, "opted out, it draws its whole string whatever box it is given");
+    // Its **box** does not exceed the row, whatever it opts out of: shrinking is the engine's
+    // default and nothing is wider than what holds it (`max-width: 100%`, applied in the layout
+    // pass). Opting out of the *cut* is a statement about the text, not a licence for the box —
+    // the text simply paints past its own edge, which is what asking not to be cut means.
+    let (w_rigid, rigid) = paint_in_row(
+        Label::new(text).truncate(Ellipsis::None).shrink(0.0),
+    );
+    assert_eq!(rigid, text, "still whole");
     assert!(
-        w_plain > 120.5,
-        "…and still keeps its natural width ({w_plain}px), so no existing layout moves",
+        w_rigid <= 120.5 && w_plain <= 120.5,
+        "neither box exceeds the 120px row ({w_rigid}px, {w_plain}px)",
     );
 }
 
@@ -331,7 +348,9 @@ fn a_wrapping_label_hard_breaks_a_word_too_long_for_the_line() {
 #[test]
 fn a_plain_label_is_untouched_by_the_measure_path() {
     use heca_grid_ui::style::Length as L;
-    let plain = Label::new("some text");
+    // The label that stays out of the measure path is the one that opted OUT of cutting: it reports
+    // one fixed width and has nothing to answer (F003/P082/T438 made cutting the default).
+    let plain = Label::new("some text").truncate(Ellipsis::None);
     assert!(
         matches!(plain.base().style.layout.height, L::Px(_)),
         "a plain label still reports its own height, not `auto`",
@@ -575,8 +594,11 @@ fn label_decorations_follow_the_text_run_not_the_box() {
         })
         .expect("the underline is painted");
     let bounds = label.base().bounds;
+    // Within a pixel: the *box* is whole pixels (a text measure rounds up, because half a character
+    // is not drawable), while the glyph run underneath it is not — two characters of an 8.1px cell
+    // are 16.2 in a 17px box.
     assert!(
-        (rule.size.w - run_w).abs() < 0.5,
+        (rule.size.w - run_w).abs() <= 1.0,
         "the rule is as wide as the two-character run ({run_w}), not the 300px box: {}",
         rule.size.w,
     );
@@ -3326,7 +3348,10 @@ fn key_hint_overlays_letter_only_when_set() {
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
-            w.paint(&mut cx);
+            // `paint_child`, not `w.paint`: the framework draws the hint letter for whatever it is
+            // handed, which is what lets any widget carry one instead of only a `KeyHint`
+            // (F003/P082/T431). Calling `paint` directly is painting *around* the framework.
+            heca_grid_ui::paint_child(w, &mut cx);
         }
         let mut texts = Vec::new();
         let mut icons = 0usize;
@@ -3353,6 +3378,46 @@ fn key_hint_overlays_letter_only_when_set() {
     let (texts, icons) = paint(&mut wrapped);
     assert!(icons >= 2, "child icon still paints under the keycap");
     assert!(texts.iter().any(|t| t == "a"), "keycap letter paints while hint is Some");
+}
+
+/// **A widget that is not a `KeyHint` gets its letter drawn too** (F003/P082/T431).
+///
+/// This is the whole point of moving the drawing into `paint_child`: being pickable stopped
+/// depending on being wrapped. Before it, only `KeyHint::paint` knew how to draw a cap, so any
+/// widget that wanted one had to be put inside a wrapper — and a plugin's widget could not be
+/// pickable at all without knowing that.
+#[test]
+fn any_widget_carrying_a_letter_gets_a_keycap_not_only_key_hint() {
+    use heca_grid_ui::{FontRole, Label};
+
+    let letter: Signal<Option<String>> = signal(None);
+    // A plain `Label` — no `KeyHint` anywhere in this tree.
+    let mut plain = Label::new("nvim");
+    plain.base_mut().hint_label = letter;
+
+    let caps = |w: &mut Label| -> Vec<String> {
+        LayoutEngine::new().compute(w, Size::new(120.0, 40.0));
+        let theme = Theme::default();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            heca_grid_ui::paint_child(w, &mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) if t.font == FontRole::Text => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    assert!(!caps(&mut plain).iter().any(|t| t == "b"), "no letter while none is offered");
+
+    letter.set(Some("b".to_string()));
+    let texts = caps(&mut plain);
+    assert!(texts.iter().any(|t| t == "b"), "the framework draws the letter over a bare Label");
+    assert!(texts.iter().any(|t| t == "nvim"), "and the widget's own content still paints");
 }
 
 #[test]
@@ -5597,7 +5662,7 @@ fn a_blocking_overlay_reports_a_key_its_panel_ignored_as_unhandled() {
     let grid = CardGrid::new()
         .row(vec![vec![GridCell::new("a", lit)]], Flex::row().child(Label::new("a")))
         .on_dismiss(move || d.set(true));
-    let mut overlay = Overlay::new().blocking(true).panel(grid).open(true);
+    let mut overlay = Overlay::new().blocking(true).panel(grid).opened(true);
 
     // A raw key the panel has no use for: the overlay must NOT claim it, or the keymap stops here.
     let handled = heca_grid_ui::dispatch(

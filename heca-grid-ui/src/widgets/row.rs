@@ -60,6 +60,8 @@ pub struct Row {
     /// Override for the hover/active highlight color. Defaults to the row's own
     /// background (a stronger tint of the same hue), else the theme accent.
     highlight: Option<Color>,
+    /// Overrides the theme's row-scale previous mark — see [`Row::previous_tint`].
+    previous_tint: Option<Color>,
     /// "Needs attention" pulse + the host-owned request signal that fires it.
     attention: Attention,
     attention_req: Option<Signal<bool>>,
@@ -90,6 +92,7 @@ impl Row {
             flash: Flash::new(),
             on_activate: None,
             highlight: None,
+            previous_tint: None,
             attention: Attention::new(),
             attention_req: None,
             attention_color: None,
@@ -106,10 +109,25 @@ impl Row {
         self
     }
 
+    /// The colour of the **"you were just here"** mark, overriding the theme's row-scale
+    /// `previous_background`.
+    ///
+    /// The pair with [`highlight`](Row::highlight), and it exists for the same reason: the theme's
+    /// default is tuned for a **row in a list**, and the same tint on a much larger surface reads
+    /// differently. A theme lifts a row 0.42 of the way from its surface to its accent and a
+    /// *container* only 0.13 — area changes how a lift reads, so a caller drawing something
+    /// container-sized says so here rather than living with a mark that shouts.
+    #[heca_grid_ui_macros::prop]
+    pub fn previous_tint(mut self, c: Color) -> Self {
+        self.previous_tint = Some(c);
+        self
+    }
+
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
+        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // interactive rows are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
@@ -276,7 +294,7 @@ impl Component for Row {
         // **"You were just here"** — painted first, so selection and cursor land on top of it and
         // it only shows on a row that has neither.
         if self.previous.get_untracked() {
-            cx.rect(sel, previous_bg, None, sel_radius, None);
+            cx.rect(sel, self.previous_tint.unwrap_or(previous_bg), None, sel_radius, None);
         }
         if active {
             // **Selected is a FILLED PANEL, and it carries no border.**
@@ -365,7 +383,7 @@ impl Component for Row {
 
         // Content.
         for child in &self.base.children {
-            child.paint(cx);
+            crate::component::paint_child(child.as_ref(), cx);
         }
 
         if self.interactive() && !disabled {

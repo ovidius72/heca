@@ -265,6 +265,7 @@ impl Button {
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
         self.on_click = Some(Box::new(f));
+        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self
     }
 
@@ -309,7 +310,7 @@ impl Button {
         };
         cx.with_content_color(color, |cx| {
             for child in &self.base.children {
-                child.paint(cx);
+                crate::component::paint_child(child.as_ref(), cx);
             }
         });
     }

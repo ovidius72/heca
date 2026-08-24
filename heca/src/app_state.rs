@@ -126,10 +126,10 @@ pub enum InputMode {
     /// Universal leader/vimium **picker** (entered with `prefix+/`): every region that said what a
     /// pick does to it gets a letter (a keycap stamped over its bounds), and the next keypress runs
     /// that region's own declaration. Each candidate carries a
-    /// [`PeekTarget`](crate::chrome::PeekTarget) — the tree it lives in and its path in it, valid
+    /// [`HintTarget`](crate::chrome::HintTarget) — the tree it lives in and its path in it, valid
     /// for exactly as long as the letters are up. Any other key / Esc exits.
     HintPick {
-        candidates: Vec<(char, crate::chrome::PeekTarget)>,
+        candidates: Vec<(char, crate::chrome::HintTarget)>,
     },
 }
 
@@ -187,6 +187,41 @@ impl InputMode {
             | InputMode::PaneSwap { candidates, .. }
             | InputMode::PaneTake { candidates, .. } => Some(candidates),
             _ => None,
+        }
+    }
+
+    /// **Is a letter picker up, waiting for one keystroke?**
+    ///
+    /// The family, named once. Every one of these modes ends on the next key — picked, wrong key,
+    /// or Esc — which means a modifier being held would end it too: reaching for Shift to type a
+    /// capital is *part of* pressing that letter, and the picker would vanish before the letter
+    /// arrived.
+    ///
+    /// **Exhaustive on purpose — no wildcard.** Adding an `InputMode` variant does not compile until
+    /// it is classified here, which is the same technique `action_policy()` uses for `WmAction` and
+    /// for the same reason. Asking the question per handler first put the guard in three of eight
+    /// modes; writing it as a `matches!` list then left `DockPick` out on the day it was written,
+    /// and nothing failed — a wildcard answers `false` for whatever nobody listed, silently. A
+    /// compile error is the only form of this rule that cannot be forgotten.
+    pub fn awaits_pick_letter(&self) -> bool {
+        match self {
+            // A letter is on screen and the next keystroke chooses one.
+            InputMode::PaneSelect { .. }
+            | InputMode::PaneSwap { .. }
+            | InputMode::PaneTake { .. }
+            | InputMode::WorkspacePick { .. }
+            | InputMode::ColumnPick { .. }
+            | InputMode::DockPick { .. }
+            | InputMode::FollowLink { .. }
+            | InputMode::HintPick { .. } => true,
+            // Everything else reads keys for something other than picking a letter, or reads none.
+            InputMode::Normal
+            | InputMode::Prefix
+            | InputMode::Chord { .. }
+            | InputMode::Mode { .. }
+            | InputMode::Selection
+            | InputMode::ConfirmDelete
+            | InputMode::Search => false,
         }
     }
 
@@ -704,6 +739,16 @@ pub struct AppState {
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
+    /// **Retained per-pane shells**, keyed by pane — the frame around whatever app runs inside,
+    /// and the widget that carries the pane's identity and its pick letter. Built/positioned each
+    /// frame by `chrome::sync_panes`, painted through `heca_grid_ui::paint_child` (which is what
+    /// draws the letter).
+    ///
+    /// Retained rather than rebuilt in paint: the picker writes a letter into the tree when it
+    /// opens and reads it back a keystroke later, so a tree that does not outlive the frame cannot
+    /// carry one — which is why the pane letters used to be stamped by a host paint pass
+    /// (F011/P094/T451).
+    pub panes: HashMap<PaneId, crate::chrome::RetainedPane>,
     /// Retained per-pane info-bar headers (segment `Tag` + action `IconButton`s),
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
@@ -802,6 +847,27 @@ pub struct AppState {
     /// Only consulted while the map is **already up**. Opening it fresh still starts at the
     /// workspace you are standing in, which is what the memory above is for.
     pub expose_cursor_ws: Option<usize>,
+    /// **Which targets the host currently has a keycap on**, by the identity they declare
+    /// (F003/P082/T427).
+    ///
+    /// The whole of the letter-ownership rule: `chrome::hint` withdraws exactly what it offered and
+    /// never clears a label somebody else set, so the universal picker, a surface's own
+    /// `KeyHintGroup` and the move/swap/take modes cannot erase one another. It replaced four
+    /// per-widget signal lists projected every frame, which wrote `None` over every offered letter
+    /// and needed a host-mode check to stop — a check a plugin could never add itself to.
+    pub offered_letters: std::cell::RefCell<crate::chrome::hint::OfferedLetters>,
+    /// **Which letter each pick target wore last time** — so it wears the same one again
+    /// (F003/P082/T445).
+    ///
+    /// Keyed by the target's identity rather than its path, because a path lives one frame. Rebuilt
+    /// on every pick from what is actually on screen, so a target that has gone releases its letter
+    /// instead of holding one nobody can reach.
+    ///
+    /// Antonio, driving, 2026-08-17: *"I want to expand a pane, prefix+/ and `k` appears on that
+    /// icon… then I want to collapse. prefix+/ and `j` appears on that button, while I was expecting
+    /// `k`."* The letter was the target's **index**, so anything appearing earlier in the tree
+    /// shifted every letter after it.
+    pub remembered_letters: std::collections::HashMap<String, char>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.

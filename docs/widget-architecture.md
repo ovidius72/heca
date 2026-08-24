@@ -58,7 +58,7 @@ adds no capability — it is ergonomics and type-safety over the same data, exac
 **Layer 1 — `ViewNode` (description).** A serializable node: `kind` (the closed `WidgetKind`
 vocabulary), `props` (scalars, semantic enums, and appearance — a colour is a hex literal or a
 theme token **name**, resolved by `realize` against the theme the tree is built with), `events`
-(`press` / `peek` / `change` / `toggle` / `action` / `dismiss` → an `Intent` = action id + args,
+(`press` / `hint` / `change` / `toggle` / `action` / `dismiss` → an `Intent` = action id + args,
 **never a closure**), and `children` (`Vec<ViewNode>`, recursive). This is what a WASM plugin ships
 over the boundary, what RPC can send, and what native code authors when it wants a declarative body
 (modals, menus, panels).
@@ -72,7 +72,7 @@ over the boundary, what RPC can send, and what native code authors when it wants
 neither layer has to. Both authoring paths converge on the **same retained tree**.
 
 It used to own a third thing — a **hint registry** — and that is gone (F004/P084/T399, 2026-08-11).
-A pickable node now writes its own `peek` behaviour into the widget's `Base::peek` slot, and the
+A pickable node now writes its own `hint` behaviour into the widget's `Base::hint` slot, and the
 framework collects the declarations out of the laid-out tree. There is no sink to hand in, nothing
 to un-register, and nothing a plugin cannot reach. **When a bridge grows a registry parameter, that
 is the smell**: it means the capability behind it is host-private.

@@ -57,8 +57,8 @@ fn choose_alpha_mode(
 /// The layout's options, read from config — **the one place that mapping lives**.
 ///
 /// Called at startup *and* on every `prefix+Shift+r`, because a setting the user can edit and only
-/// the startup path reads is a setting that silently does not reload: `overview_zoom`,
-/// `overview_gap` and `overview_zoom_from` were all read once and never again, so changing them and
+/// the startup path reads is a setting that silently does not reload: `overview_gap` and
+/// `overview_zoom_from` were both read once and never again, so changing them and
 /// reloading appeared to do nothing at all (Antonio, 2026-08-11).
 pub(crate) fn layout_options_from(
     app_config: &AppConfig,
@@ -71,7 +71,6 @@ pub(crate) fn layout_options_from(
                 .effective_pane_gap(&app_config.theme) as f64,
             always_center_single_column: app_config.config.settings.always_center_single_column,
             // Clamped like niri's, so a typo in a config file cannot produce a map at 4000% or 0%.
-            overview_scale: app_config.config.settings.overview_zoom.clamp(0.05, 0.75),
             overview_zoom_from: app_config.config.settings.overview_zoom_from.clamp(0.2, 4.0),
             overview_gap: app_config.config.settings.overview_gap.clamp(0.0, 1.0),
             center_focused_column: match app_config.config.settings.center_focused_column {
@@ -439,6 +438,7 @@ pub(crate) async fn init_state(
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
         chrome_tree: None,
+        panes: std::collections::HashMap::new(),
         pane_headers: std::collections::HashMap::new(),
         layers: crate::chrome::LayerRegistry::default(),
         overlays: crate::chrome::OverlayHost::default(),
@@ -461,6 +461,8 @@ pub(crate) async fn init_state(
         last_visited_pane_per_ws: vec![None; ws_count],
         expose_cursor_per_ws: vec![None; ws_count],
         expose_cursor_ws: None,
+        offered_letters: Default::default(),
+        remembered_letters: Default::default(),
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,

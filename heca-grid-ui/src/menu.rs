@@ -25,11 +25,11 @@
 //! 1. implement `context_path(key, ctx)` mapping a row key to a menu-id string;
 //! 2. register a builder for that id;
 //! 3. build the items;
-//! 4. declare `.nav_key(..)` on the row — because the host resolved "what did you right-click"
-//!    from a *position*, and read the answer off `Base::nav_key`.
+//! 4. declare `.key(..)` on the row — because the host resolved "what did you right-click"
+//!    from a *position*, and read the answer off `Base::key`.
 //!
 //! Step 4 is the one nobody would think of, and it is the one that was missing: a workspace header
-//! pushed its key into a signal and never called `.nav_key(..)`, so right-clicking a workspace
+//! pushed its key into a signal and never called `.key(..)`, so right-clicking a workspace
 //! opened **nothing** while panes and columns worked. No error, no failing test. The design was the
 //! bug — and its root cause was that a press carried no button, so a right-click could not reach a
 //! widget at all and the app had to reconstruct the target from geometry.
@@ -143,8 +143,8 @@ pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) 
 ///
 /// **"Where the keyboard is" has two spellings and this is the one place that knows both.**
 /// [`Base::focused`](crate::Base::focused) is real keyboard focus — a text field has it, a list row
-/// does not — while a container tracks *its* cursor as the `nav_key` of the row it sits on, the
-/// same declaration [`nav_key_at`](crate::nav::nav_key_at) reads for the mouse. Asking only about
+/// does not — while a container tracks *its* cursor as the `key` of the row it sits on, the
+/// same declaration [`key_at`](crate::nav::key_at) reads for the mouse. Asking only about
 /// `focused` found nothing in a chrome tree and `prefix+>` opened nothing at all; asking only about
 /// the cursor would miss a genuinely focused widget (a plugin's input). So `cursor` is tried first
 /// and focus second — and a caller passes what it knows rather than writing the fallback again.
@@ -153,7 +153,7 @@ pub(crate) fn open_declared_at(root: &dyn Component, path: &[usize], at: Point) 
 /// in this order" rule beside them. Two spellings of one question, in two places (F004/P084/T399).
 pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
     let path = cursor
-        .and_then(|key| nav_key_path(root, key))
+        .and_then(|key| key_path(root, key))
         .or_else(|| focused_path(root));
     let Some(path) = path else {
         return false;
@@ -168,10 +168,10 @@ pub fn open_for_keyboard(root: &dyn Component, cursor: Option<&str>) -> bool {
     }
 }
 
-/// The path to the widget that declared `nav_key`.
-fn nav_key_path(root: &dyn Component, nav_key: &str) -> Option<Vec<usize>> {
+/// The path to the widget that declared `key`.
+fn key_path(root: &dyn Component, key: &str) -> Option<Vec<usize>> {
     fn walk(node: &dyn Component, want: &str, at: &mut Vec<usize>) -> bool {
-        if node.base().nav_key.as_deref() == Some(want) {
+        if node.base().key.as_deref() == Some(want) {
             return true;
         }
         for (i, child) in node.base().children.iter().enumerate() {
@@ -184,7 +184,7 @@ fn nav_key_path(root: &dyn Component, nav_key: &str) -> Option<Vec<usize>> {
         false
     }
     let mut path = Vec::new();
-    walk(root, nav_key, &mut path).then_some(path)
+    walk(root, key, &mut path).then_some(path)
 }
 
 /// Build the menu declared by the innermost widget at or above `path`.

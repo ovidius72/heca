@@ -558,7 +558,24 @@ pub enum WmAction {
     ///   of the optional argument rather than needing a second action.
     ///
     /// The target is a **container id**, never a side: a dock is focused wherever it is seated.
+    ///
+    /// **It focuses, and only focuses.** Asking to focus a dock that already has the keyboard is a
+    /// no-op, not a release — see [`ToggleDock`](Self::ToggleDock) for the gesture that wants both.
     FocusDock {
+        dock: Option<crate::chrome::ContainerId>,
+    },
+
+    /// Focus a dock, or **give the keyboard back** if it already has it — the `global_focus`
+    /// gesture: `prefix+e` in, `prefix+e` out (F003/P082/T444).
+    ///
+    /// **The toggle belongs to the binding, not to the action.** It lived inside `FocusDock` until
+    /// now, which meant everything that asked to *focus* a dock inherited it: a click inside an
+    /// already-focused dock released it, and so did an RPC `focus-dock` or the command palette. The
+    /// one caller that noticed carried a guard for it (`aim_keyboard_at_click`), which is a rule in
+    /// a call site rather than in the model.
+    ///
+    /// An action should do one thing. If the name says *focus*, it focuses; a toggle says so.
+    ToggleDock {
         dock: Option<crate::chrome::ContainerId>,
     },
 
@@ -670,6 +687,10 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_right" => Some(WmAction::SidebarRight),
         // Bare: no dock named ⇒ pick one by letter. `dock = "…"` goes through `build_action`.
         "focus_dock" => Some(WmAction::FocusDock { dock: None }),
+        // The same, and back out again if it already has the keyboard — what `global_focus` binds.
+        // Separate from `focus_dock` so a click, an RPC call and the palette cannot release a dock
+        // by asking to focus it (F003/P082/T444).
+        "toggle_dock" => Some(WmAction::ToggleDock { dock: None }),
         "unfocus_dock" => Some(WmAction::UnfocusDock),
         // Chrome region show/hide (sidebar-fu-6) — mounted-gate, unbound by default.
         "show_left_sidebar" => Some(WmAction::ShowLeftSidebar),
@@ -1041,6 +1062,9 @@ pub fn build_action(
         "focus_dock" => Some(WmAction::FocusDock {
             dock: get_string(args, "dock"),
         }),
+        "toggle_dock" => Some(WmAction::ToggleDock {
+            dock: get_string(args, "dock"),
+        }),
 
         "show_layer" => Some(WmAction::ShowLayer {
             name: get_string(args, "name"),
@@ -1111,7 +1135,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::NextPane
         | WmAction::PrevPane => 0,
         // Chrome focus is navigation: low priority so it does not override focus bindings.
-        WmAction::FocusDock { .. } | WmAction::UnfocusDock => 0,
+        WmAction::FocusDock { .. } | WmAction::ToggleDock { .. } | WmAction::UnfocusDock => 0,
         WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed

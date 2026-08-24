@@ -90,7 +90,10 @@ impl Tooltip {
         // Hug the child so the wrapper's bounds match it (hover + anchor use them).
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
-        base.children.push(Box::new(child));
+        let child: Box<dyn Component> = Box::new(child);
+        // …and transparent to layout as well (`component::wrap_transparently`).
+        crate::component::wrap_transparently(&mut base, child.as_ref());
+        base.children.push(child);
         let text = signal(text.into());
         Self {
             base,

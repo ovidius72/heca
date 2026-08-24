@@ -19,7 +19,7 @@
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx, paint_child};
-use crate::reactive::{Signal, SignalGet, signal};
+use crate::reactive::{Signal, SignalGet};
 use crate::scene::{Glow, TextAlign, TextStyle};
 use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -41,6 +41,31 @@ pub enum HintPlacement {
     /// top edge rather than the target's vertical center. Pair with
     /// [`offset_y`](KeyHint::offset_y) to drop it onto the header line.
     TopRight,
+    /// Pinned just inside the **top-left**, centred within a shallow band from the target's top
+    /// edge — for a large target (a card in the exposé, a content pane) where the letter should
+    /// stay out of the way of what the target shows and never sit on its border.
+    ///
+    /// This is what the universal picker drew for every large target before the letters became the
+    /// widget's own to place, and it is the reason it exists as a variant: the rule was real, it
+    /// just lived in a host paint pass where no call site could ask for it (F003/P082/T427).
+    TopLeft,
+}
+
+/// **How a widget's hint keycap is drawn.**
+///
+/// These four knobs were private fields on [`KeyHint`], which is why a letter could only be drawn
+/// by wrapping a widget in one. They live on [`Base`] now, so the framework draws the cap for *any*
+/// widget carrying a letter and a widget places its own (F003/P082/T431).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HintStyle {
+    /// Where the cap sits over the target.
+    pub placement: HintPlacement,
+    /// Explicit cap font size (logical px); otherwise derived from the resolved font.
+    pub size: Option<f32>,
+    /// Cap colour override; defaults to the theme `accent`, glow included.
+    pub color: Option<Color>,
+    /// Extra vertical nudge applied after placement — positive moves it down.
+    pub offset_y: f64,
 }
 
 /// Keycap font size as a fraction of the wrapped component's resolved font.
@@ -52,6 +77,20 @@ const PAD_Y_FRAC: f32 = 0.22;
 const TOP_INSET: f64 = 2.0;
 /// Inset of a `CenterRight` keycap from the target's right edge (logical px).
 const RIGHT_INSET: f64 = 6.0;
+/// Keycap font for a **compact** target, as a multiple of the inherited font — smaller, so the chip
+/// stays proportional to the little button it captions.
+const HINT_COMPACT_MUL: f32 = 0.85;
+/// A target no bigger than this on **both** axes cannot hold a cap without hiding its own content,
+/// so the cap goes beside it. In units of the inherited font, so it follows a font change.
+const HINT_COMPACT_MAX_MUL: f32 = 2.4;
+/// The air between a compact target and its caption.
+const HINT_ADJACENT_GAP: f64 = 2.0;
+/// The band from a large target's top edge that a [`HintPlacement::TopLeft`] cap is centred in, in
+/// units of the inherited font — roughly one list row, so a tall card gets its letter on the top
+/// line rather than floating in the middle of the picture.
+const HINT_BAND_MUL: f32 = 2.8;
+/// Inset from a target's left edge, so the cap sits just inside it rather than on its border.
+const LEFT_INSET: f64 = 2.0;
 /// Per-glyph advance estimate (fraction of font) for sizing the keycap to its text.
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
 /// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
@@ -254,62 +293,30 @@ fn paint_keycap_content(
     }
 }
 
-/// A transparent wrapper that overlays a glowing key letter on its child while a
-/// host-driven pick/jump hint is active.
+/// A transparent wrapper that carries a hint letter on behalf of a **region** — a group of widgets,
+/// or something that is not a widget you can put a builder on.
+///
+/// It no longer *draws* the letter: [`paint_child`](crate::component::paint_child) does that for
+/// every widget carrying one, so a widget can be pickable on its own and this is a decorator you
+/// reach for when there is nothing to hang the declaration on (F003/P082/T431).
 pub struct KeyHint {
     base: Base,
-    /// Host-owned hint text: `Some(s)` overlays the keycap; `None` hides it.
-    hint: Signal<Option<String>>,
-    placement: HintPlacement,
-    /// Explicit keycap font size (px); otherwise derived from the resolved font.
-    size: Option<f32>,
-    /// Keycap color override; defaults to the theme `accent`. Lets a host tint a
-    /// different *kind* of target distinctly (e.g. workspace vs pane) while keeping
-    /// `KeyHint` itself target-agnostic.
-    color: Option<Color>,
-    /// Extra vertical nudge (logical px) applied to the keycap after placement —
-    /// positive moves it down. Used to drop a `TopCenter` cap onto a target's header
-    /// row (e.g. align with a workspace dock's title) instead of its very top edge.
-    offset_y: f64,
 }
 
 #[heca_grid_ui_macros::props]
 impl KeyHint {
 
-    /// **What a pick of this letter does.**
-    ///
-    /// ```
-    /// use heca_grid_ui::prelude::*;
-    /// use heca_grid_ui::widgets::KeyHint;
-    ///
-    /// # let row_id = 7u64;
-    /// # fn cursor_to(_: u64) {}
-    /// let row = KeyHint::new(Row::new().child(Label::new("nvim")))
-    ///     .on_peek(move || cursor_to(row_id));
-    /// ```
-    ///
-    /// **It goes on the wrapper, not on every widget.** Being pickable is something you opt a
-    /// region into — you were already wrapping it to show the letter — so `Label::on_peek` is a
-    /// method that never has to exist, and you can read off the tree what is reachable. (A context
-    /// menu is the other shape on purpose: a menu is *about* a widget, so it is a slot any widget
-    /// carries; a peek is *aimed at* a region you chose to make reachable.)
-    ///
-    /// **It replaces an id and a registry.** A hint target used to be `hints.register(intent)`
-    /// followed by `.hint_target(id)` — three things a caller had to know (that a registry exists,
-    /// that they must pre-register, and a host-private intent type), and a plugin could construct
-    /// none of them. That made `prefix+/` a shipped feature a plugin could only have a
-    /// second-class version of, which RULE ZERO in `AGENTS.md` forbids. The framework collects
-    /// these out of the tree ([`hint::collect_peeks`](crate::hint::collect_peeks)), hands out the
-    /// letters, draws them, and runs this one when it is picked.
-    ///
-    /// **A pick is not a click.** They are different gestures and a region may answer them
-    /// differently: heca's sidebar row activates the pane on a click and *stays in the sidebar* on
-    /// a peek. Pointing one intent at both is what made `prefix+/` leave the sidebar.
-    #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a closure")]
-    pub fn on_peek(mut self, f: impl Fn() + 'static) -> Self {
-        self.base.peek = Some(Box::new(f));
-        self
-    }
+    // `on_hint` is **not here any more** (F003/P082/T432). It is
+    // [`ComponentExt::on_hint`](crate::builders::ComponentExt::on_hint), on every widget — so a
+    // `KeyHint::new(row).on_hint(…)` call still reads exactly the same, and a widget that can carry
+    // the declaration itself no longer has to be wrapped to say what a pick does to it.
+    //
+    // Having it here put the two facts about a target on two different nodes: a row named itself
+    // and the wrapper around it carried the pick, while a mounted dock named itself outside and
+    // declared the pick within. Which one was on top depended on how the tree was built, so the
+    // code matching a letter to an action had to search both up and down — and searching one way
+    // only is why sidebar letters kept failing with no error.
+
     /// Wrap `child`. Bind the hint text with [`hint`](KeyHint::hint).
     pub fn new(child: impl Component + 'static) -> Self {
         Self::wrap(Box::new(child))
@@ -327,53 +334,53 @@ impl KeyHint {
         // Hug the child so the wrapper's bounds match it (overlay positions off them).
         base.style.layout.width = Length::Auto;
         base.style.layout.height = Length::Auto;
+        // …and transparent to layout as well, or a child sized as a share resolves it against
+        // this wrapper and quietly becomes its content size instead.
+        crate::component::wrap_transparently(&mut base, child.as_ref());
         // Column direction so the single child stretches to the wrapper's full width
         // (cross-axis, default `Align::Stretch`). This keeps the wrapper transparent
         // to a stretching parent: a wide list row fills its column instead of
         // shrinking to content width, while a hugged square target is unaffected.
         base.style.layout.direction = Direction::Column;
         base.children.push(child);
-        Self {
-            base,
-            hint: signal(None),
-            placement: HintPlacement::default(),
-            size: None,
-            color: None,
-            offset_y: 0.0,
-        }
+        Self { base }
     }
 
     /// Bind the **host-owned** hint signal. The app sets `Some(letter)` when a
     /// pick/jump mode opens (from key **or** RPC) and clears it on exit.
     #[heca_grid_ui_macros::host_only("bound to a live host signal, which static data cannot drive")]
     pub fn hint(mut self, hint: Signal<Option<String>>) -> Self {
-        self.hint = hint;
+        self.base.hint_label = hint;
         self
     }
 
     /// The hint signal (e.g. to set/clear it directly).
+    ///
+    /// It **is** [`Base::hint_label`], not a second signal beside it: the universal picker offers a
+    /// letter through the base slot and a host mode (pane-select, swap) sets the same one, so the
+    /// two cannot show different letters over one target.
     pub fn hint_signal(&self) -> Signal<Option<String>> {
-        self.hint
+        self.base.hint_label
     }
 
     /// Where the keycap sits over the target (default [`HintPlacement::TopCenter`]).
     #[heca_grid_ui_macros::prop]
     pub fn placement(mut self, placement: HintPlacement) -> Self {
-        self.placement = placement;
+        self.base.hint_style.placement = placement;
         self
     }
 
     /// Explicit keycap font size in logical px (overrides the font-derived size).
     #[heca_grid_ui_macros::prop]
     pub fn size(mut self, px: f32) -> Self {
-        self.size = Some(px);
+        self.base.hint_style.size = Some(px);
         self
     }
 
     /// Override the keycap color (default: theme `accent`). The glow follows it too.
     #[heca_grid_ui_macros::prop]
     pub fn color(mut self, c: Color) -> Self {
-        self.color = Some(c);
+        self.base.hint_style.color = Some(c);
         self
     }
 
@@ -382,31 +389,155 @@ impl KeyHint {
     /// row (e.g. align with a workspace dock's title).
     #[heca_grid_ui_macros::prop]
     pub fn offset_y(mut self, px: f64) -> Self {
-        self.offset_y = px;
+        self.base.hint_style.offset_y = px;
         self
     }
 
-    fn hint_font(&self) -> f32 {
-        self.size.unwrap_or(self.base.font * HINT_FONT_MUL)
-    }
+}
 
-    /// The keycap rect for `text` within the target `b`, per placement.
-    fn keycap_rect(&self, b: Rectangle, text: &str) -> Rectangle {
-        let Size { w, h } = keycap_size(self.hint_font(), text);
-        let (x, y) = match self.placement {
-            HintPlacement::TopCenter => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + TOP_INSET),
-            HintPlacement::Center => (
-                b.loc.x + (b.size.w - w) / 2.0,
-                b.loc.y + (b.size.h - h) / 2.0,
-            ),
-            HintPlacement::CenterRight => (
-                b.loc.x + b.size.w - w - RIGHT_INSET,
-                b.loc.y + (b.size.h - h) / 2.0,
-            ),
-            HintPlacement::TopRight => (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + TOP_INSET),
-        };
-        Rectangle::new(Point::new(x, y + self.offset_y), Size::new(w, h))
+/// The cap font for a target of `bounds` at inherited `font`, under `style`.
+fn hint_font(font: f32, style: &HintStyle, bounds: Rectangle) -> f32 {
+    if style.size.is_none() && is_compact(bounds, font) {
+        // A small target gets a small cap, or the chip is wider than the thing it labels.
+        return font * HINT_COMPACT_MUL;
     }
+    style.size.unwrap_or(font * HINT_FONT_MUL)
+}
+
+/// **Is this target too small to hold a keycap without hiding what it labels?**
+///
+/// An icon button is; a card, a row or a dock is not. The threshold is in units of the
+/// inherited font rather than pixels, so it follows a font-size change like everything else.
+///
+/// The compact case is the *widget's* business, and that is the point: it used to live in a host
+/// paint pass that measured every target's bounds and chose a placement for it. A host deciding how
+/// a widget it has never seen should look is the same mistake as a host deciding where that widget
+/// paints (F003/P082/T427).
+fn is_compact(bounds: Rectangle, font: f32) -> bool {
+    let max = (font * HINT_COMPACT_MAX_MUL) as f64;
+    bounds.size.w > 0.0 && bounds.size.w <= max && bounds.size.h <= max
+}
+
+/// The keycap rect for `text` within the target `b`, per `style`.
+fn keycap_rect(b: Rectangle, font: f32, style: &HintStyle, text: &str, viewport: Size) -> Rectangle {
+    let Size { w, h } = keycap_size(hint_font(font, style, b), text);
+    // **A target too small to cover goes beside it, not over it.** Centred just below, so the
+    // icon stays fully visible with its letter as a caption; flipped above when below would
+    // fall off the bottom of the viewport.
+    if style.size.is_none() && is_compact(b, font) {
+        let x = b.loc.x + (b.size.w - w) / 2.0;
+        let below = b.loc.y + b.size.h + HINT_ADJACENT_GAP;
+        let y = if below + h <= viewport.h {
+            below
+        } else {
+            b.loc.y - h - HINT_ADJACENT_GAP
+        };
+        return Rectangle::new(Point::new(x, y + style.offset_y), Size::new(w, h));
+    }
+    let (x, y) = match style.placement {
+        HintPlacement::TopCenter => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + TOP_INSET),
+        HintPlacement::Center => (
+            b.loc.x + (b.size.w - w) / 2.0,
+            b.loc.y + (b.size.h - h) / 2.0,
+        ),
+        HintPlacement::CenterRight => (
+            b.loc.x + b.size.w - w - RIGHT_INSET,
+            b.loc.y + (b.size.h - h) / 2.0,
+        ),
+        HintPlacement::TopRight => (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + TOP_INSET),
+        HintPlacement::TopLeft => {
+            // Centred within a shallow band from the top edge, so a tall card gets its letter
+            // on the top line rather than floating in the middle of the picture.
+            let band = b.size.h.min((font * HINT_BAND_MUL) as f64);
+            (b.loc.x + LEFT_INSET, b.loc.y + (band - h) / 2.0)
+        }
+    };
+    Rectangle::new(Point::new(x, y + style.offset_y), Size::new(w, h))
+}
+
+/// **Draw `c`'s hint letter, if it is carrying one.** Called by
+/// [`paint_child`](crate::component::paint_child) for *every* widget, right after the widget has
+/// painted itself — which is what lets any widget be pickable without being wrapped in a
+/// [`KeyHint`] (F003/P082/T431).
+///
+/// The two rules that were learned the hard way, and are the reason this is one function rather
+/// than something each widget does:
+///
+/// - **The viewport is the PAINT context's**, not `Base::viewport`. The latter is written per
+///   *tree* by the layout pass, so inside a pane header it is the header's own box — a few dozen
+///   pixels tall. Reading it there made every compact cap "not fit below", flip above, and get
+///   clipped by the pane frame (Antonio, driving, 2026-08-14).
+/// - **The cap is nudged, never cut.** A row half past a sidebar's fold is still a target — you can
+///   see it, so you can aim at it — and its letter is drawn **whole** so it stays readable (Antonio,
+///   2026-08-23: *"a half visible pane row should have the letter to peek"*). Clipping it would make
+///   it unreadable, so instead it is moved inside the visible part of its own row —
+///   [`fit_into_view`] — and dropped when that part is too small to hold it. What stops a cap for a
+///   row nobody can see at all is **candidacy**, one level up: [`hint::collect`](crate::hint) drops
+///   a target outside its clipping ancestors, so the letter is never handed out.
+/// - **Into the OVERLAY band**, so nothing painted after this widget covers its letter. Drawing it
+///   inline puts the cap at this widget's position in the paint order and every sibling drawn later
+///   sits on top: a top-bar button's letter disappeared under the sidebar frame beside it, and a
+///   card's under the next card (same session). `with_overlay` keeps the cap in **this widget's
+///   own scene**, nested exactly as deep as the widget is — the property the whole fix rests on,
+///   since a plugin's overlay-nested picker then lands above its own content with nothing
+///   host-side to teach.
+/// **Keep the cap inside the part of its row you can actually see.**
+///
+/// A row half past a sidebar's fold keeps its letter — you can see it, so you can aim at it — but
+/// the cap is placed relative to the row's *whole* box, so for a row that is nine tenths below the
+/// fold that lands on the dock's frame, outside the sidebar entirely (Antonio, driving, 2026-08-23:
+/// *"letter should not overlap the parent DockView"*). The renderer cannot stop it: the cap is drawn
+/// into the overlay band, which starts unclipped so a dropdown can escape a scroll region.
+///
+/// So it is nudged — never cut — into `bounds ∩ clip`, **the visible part of its own row**, not
+/// merely into the clip: pushing it anywhere in the viewport would park it over the row above,
+/// beside that row's own letter, naming something it does not name.
+///
+/// `None` when the visible sliver is too small to hold the cap. There is nowhere honest to put it
+/// then, so nothing is drawn.
+fn fit_into_view(
+    cap: Rectangle,
+    bounds: Rectangle,
+    clip: Option<Rectangle>,
+) -> Option<Rectangle> {
+    let Some(clip) = clip else {
+        return Some(cap);
+    };
+    let room = bounds.intersection(clip)?;
+    if room.size.w < cap.size.w || room.size.h < cap.size.h {
+        return None;
+    }
+    let x = cap
+        .loc
+        .x
+        .clamp(room.loc.x, room.loc.x + room.size.w - cap.size.w);
+    let y = cap
+        .loc
+        .y
+        .clamp(room.loc.y, room.loc.y + room.size.h - cap.size.h);
+    Some(Rectangle::new(Point::new(x, y), cap.size))
+}
+
+pub(crate) fn paint_hint_label(c: &dyn Component, cx: &mut PaintCx) {
+    let base = c.base();
+    if !base.visible.get_untracked() {
+        return;
+    }
+    let Some(text) = base.hint_label.get_untracked() else {
+        return;
+    };
+    if text.is_empty() {
+        return;
+    }
+    let style = base.hint_style;
+    let cap = keycap_rect(base.bounds, base.font, &style, &text, cx.viewport());
+    let Some(cap) = fit_into_view(cap, base.bounds, cx.clip()) else {
+        return;
+    };
+    let font = hint_font(base.font, &style, base.bounds);
+    cx.with_overlay(|cx| {
+        paint_keycap(cx, cap, &text, font, style.color, KeycapVariant::Filled);
+    });
 }
 
 impl Component for KeyHint {
@@ -417,26 +548,16 @@ impl Component for KeyHint {
         &mut self.base
     }
 
+    /// Just the wrapped, still-interactive child. **The letter is not drawn here** — `paint_child`
+    /// draws it for every widget that carries one, this wrapper included, so being pickable stopped
+    /// depending on being wrapped (F003/P082/T431).
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
         }
-        // The wrapped, still-interactive child first.
         for child in &self.base.children {
             paint_child(child.as_ref(), cx);
         }
-
-        // Keycap overlay — only while the host has set a hint.
-        let Some(text) = self.hint.get_untracked() else {
-            return;
-        };
-        if text.is_empty() {
-            return;
-        }
-        // An explicit `.color()` overrides the default theme accent (fill + glow)
-        // so a host can tint a different kind of target distinctly.
-        let cap = self.keycap_rect(self.base.bounds, &text);
-        paint_keycap(cx, cap, &text, self.hint_font(), self.color, KeycapVariant::Filled);
     }
 }
 
@@ -447,6 +568,55 @@ impl Parent for KeyHint {}
 #[cfg(test)]
 mod tests {
     use super::keycap_size;
+
+    use super::fit_into_view;
+    use heca_core::layout::{Point, Rectangle, Size};
+
+    fn rect(x: f64, y: f64, w: f64, h: f64) -> Rectangle {
+        Rectangle::new(Point::new(x, y), Size::new(w, h))
+    }
+
+    /// **Nothing clipping it, nothing to do** — the cap stays exactly where its placement put it.
+    #[test]
+    fn an_unclipped_cap_is_left_where_it_was_placed() {
+        let cap = rect(180.0, 10.0, 20.0, 20.0);
+        assert_eq!(fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), None), Some(cap));
+        // …and so is one whose row is fully inside the clip.
+        assert_eq!(
+            fit_into_view(cap, rect(0.0, 0.0, 200.0, 40.0), Some(rect(0.0, 0.0, 200.0, 400.0))),
+            Some(cap),
+        );
+    }
+
+    /// **A row nine tenths past the fold keeps its letter, inside the dock** (F003/P082/T438).
+    ///
+    /// The cap is centred in the row's whole box, which for a row cut to a 25px sliver at the
+    /// bottom of a sidebar lands on the dock's frame. It moves up into the sliver instead — and
+    /// stays whole, because a cut letter cannot be read.
+    #[test]
+    fn a_cap_moves_into_the_visible_sliver_of_its_row() {
+        let row = rect(0.0, 375.0, 200.0, 40.0); // 25px of it is above the fold at y=400
+        let clip = rect(0.0, 0.0, 200.0, 400.0);
+        let cap = rect(174.0, 385.0, 20.0, 20.0); // centred in the row: 5px of it hangs out
+
+        let fitted = fit_into_view(cap, row, Some(clip)).expect("25px of row holds a 20px cap");
+        assert_eq!(fitted.size, cap.size, "whole, never cut");
+        assert!(
+            fitted.loc.y + fitted.size.h <= clip.loc.y + clip.size.h,
+            "and inside the dock: {fitted:?}",
+        );
+        assert!(fitted.loc.y >= row.loc.y, "still within its own row, not the one above");
+    }
+
+    /// **Too little of the row left to hold a letter, so none is drawn.** Nudging it any further
+    /// would park it over the row above, beside that row's own letter, naming something else.
+    #[test]
+    fn a_cap_with_no_room_left_is_not_drawn() {
+        let row = rect(0.0, 392.0, 200.0, 40.0); // only 8px visible
+        let clip = rect(0.0, 0.0, 200.0, 400.0);
+        let cap = rect(174.0, 402.0, 20.0, 20.0);
+        assert_eq!(fit_into_view(cap, row, Some(clip)), None);
+    }
 
     #[test]
     fn keycap_size_is_positive_and_grows_with_text() {

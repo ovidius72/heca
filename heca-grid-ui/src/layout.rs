@@ -147,24 +147,66 @@ impl LayoutEngine {
         c.base_mut().font = resolved;
         // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
         // container takes its padding from the theme instead of a hand-computed value.
+        //
+        // **Rounded to whole pixels, and that is what makes air look even.** A token is a fraction
+        // of the font (`Xs` is a quarter of it), so it lands on halves at most sizes — and the two
+        // sides of a boundary between siblings then round in different directions. Percentage-sized
+        // siblings put the air in their padding rather than a gap (a gap is added *outside* a
+        // percentage and overflows it), so every boundary in such a row is made of two paddings, and
+        // half a pixel each side became a gap of 6, 7 or 8 where all of them should have been 7.
+        // Measured across fourteen equal columns of the exposé; uniform once the token resolves to a
+        // whole pixel. A widget's own padding moves by at most half a pixel, which is under what the
+        // screen can draw; the rhythm between siblings is the thing an eye actually reads.
         {
             let s = &mut c.base_mut().style.layout;
             if let Some(sp) = s.pad_spacing_x {
-                s.padding_x = Some(resolved * sp.scale());
+                s.padding_x = Some((resolved * sp.scale()).round());
             }
             if let Some(sp) = s.pad_spacing_y {
-                s.padding_y = Some(resolved * sp.scale());
+                s.padding_y = Some((resolved * sp.scale()).round());
             }
             if let Some(sp) = s.gap_spacing {
-                s.gap = resolved * sp.scale();
+                s.gap = (resolved * sp.scale()).round();
             }
         }
         c.remeasure();
         let style = c.taffy_style();
+        // **A viewport's content does not give way — that is what a viewport is for.**
+        //
+        // Shrinking is the default (flexbox's), so an item too big for its line is squeezed to fit.
+        // Inside a **clipping** container that is precisely wrong: a 600px column in a 100px scroll
+        // region would be squashed to 100 and there would be nothing left to scroll. `clips_children`
+        // is the framework's existing name for "my content may exceed me", and it is the one place
+        // that knows it — asked here so any viewport widget, including one nobody has written yet,
+        // gets the rule without declaring it (F003/P082/T438).
+        let content_may_overflow = c.clips_children();
+        // A percentage needs something to be a percentage **of**. Against a parent that hugs its
+        // content there is no basis, and capping there is meaningless — worse, it resolves to
+        // nothing and takes the child with it, which is what emptied the showcase's command
+        // palette: that widget positions its own rows in a pass with no definite width
+        // (F003/P082/T438).
+        let caps_children = !matches!(c.base().style.layout.width, crate::style::Length::Auto);
         let child_count = c.base().children.len();
         let mut child_nodes = Vec::with_capacity(child_count);
         for i in 0..child_count {
             let child = &mut c.base_mut().children[i];
+            {
+                let s = &mut child.base_mut().style.layout;
+                if content_may_overflow {
+                    s.flex_shrink = s.flex_shrink.or(Some(0.0));
+                } else if caps_children {
+                    // **Nothing is wider than what holds it** — CSS's `max-width: 100%`, applied
+                    // where the invariant lives rather than inside each widget that happens to
+                    // carry a design width. `Alert` is 360px, `Toast` 320, `Input` 240: in a
+                    // narrower panel they painted straight through its border and out the other
+                    // side, at *every* window size, because an intrinsic width never consults the
+                    // box it was given (F003/P082/T438).
+                    //
+                    // Not inside a viewport: there, exceeding the box is the point, and the clip
+                    // plus the scrollbar are how you reach the rest.
+                    s.max_width = s.max_width.or(Some(crate::style::Length::Pct(1.0)));
+                }
+            }
             // Children inherit this node's effective variant unless they chose their own.
             child_nodes.push(self.build(child.as_mut(), size));
         }
@@ -236,9 +278,22 @@ fn measure_text_node(
         (None, AvailableSpace::Definite(w)) => w as f64,
         // "How wide would you like to be?" — one line.
         (None, AvailableSpace::MaxContent) => natural,
-        // "How narrow can you get without overflowing?" — the longest word, since that is the one
-        // thing wrapping cannot break down further (a longer-than-a-line word is hard-broken, so it
-        // never sets the floor).
+        // "How narrow can you get without overflowing?"
+        //
+        // **A cutting label can get down to one character — that is what cutting is, and where it
+        // stops.** Answering with its longest word made it its own container's floor: a card whose
+        // folder line reads `~/projects/heca` could not be laid out narrower than that path, so the
+        // card overflowed its box and every card in a narrow window drew across its neighbours.
+        //
+        // One character rather than **zero**: `min_width: auto` means "my floor is whatever I
+        // answered here", so answering zero is saying *my floor is nothing* — and a box resolved to
+        // nothing holds no characters and draws no text, which is how a `Card` lost its title
+        // outright. Text with something to say is never silent; at its narrowest it is `…`
+        // (F003/P082/T438).
+        (None, AvailableSpace::MinContent) if !ctx.wrap => cell,
+        // A **wrapping** label is the case the longest word belongs to: wrapping cannot break a word
+        // down further, so that word is a real floor (a longer-than-a-line word is hard-broken, so
+        // it never sets one).
         (None, AvailableSpace::MinContent) => {
             ctx.text
                 .split_whitespace()
@@ -258,7 +313,14 @@ fn measure_text_node(
     taffy::Size {
         // Never wider than the text actually is: a short label in a wide box keeps its own width,
         // so `align` still has room to place it — the same measure a non-wrapping label reports.
-        width: width.min(natural) as f32,
+        //
+        // **Rounded UP, because half a character is not a character.** Six cells of 8.1px want
+        // 48.6px; reporting that gets a box floored to 48, and a cutting label then finds itself
+        // one cell short of its own text and draws `edit…` where `editor` fits. `mono_cells` keeps
+        // half a pixel of slack for exactly this, and half a pixel is not enough — the loss is up
+        // to a whole one. The measure is the place to fix it: a box that cannot hold the text it
+        // was measured for is wrong before anyone looks at it (F003/P082/T438).
+        width: width.min(natural).ceil() as f32,
         height: line * lines as f32,
     }
 }

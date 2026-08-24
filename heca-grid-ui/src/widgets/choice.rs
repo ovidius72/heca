@@ -138,6 +138,7 @@ impl Choice {
     #[heca_grid_ui_macros::host_only("behaviour crosses as an Intent, never a callback")]
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
+        self.base.activatable = true; // and pickable — a letter runs this (Base::activatable)
         self.base.focusable = true; // interactive options are focusable (Component::focusable)
         self.base.one_click_target = true; // and one click target (Base::one_click_target)
         self
@@ -205,7 +206,7 @@ impl Component for Choice {
         let content_color = if selected { accent } else { foreground };
         cx.with_content_color(content_color, |cx| {
             for child in &self.base.children {
-                child.paint(cx);
+                crate::component::paint_child(child.as_ref(), cx);
             }
         });
 

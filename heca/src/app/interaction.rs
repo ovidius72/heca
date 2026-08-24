@@ -385,7 +385,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SidebarLeft
         // **Taking** chrome focus, likewise. This was `Global`, justified as "unlike `SidebarFocus`,
         // which enters a nav mode that moves pane focus". That stopped being true when
-        // `sidebar_focus` was retired: a focused container's own `activate`/`peek` move pane focus,
+        // `sidebar_focus` was retired: a focused container's own `activate`/`hint` move pane focus,
         // and they are reached through this (F003/P085/T356). It also matches the two lines below —
         // a sidebar cannot even be toggled while floating, so being able to focus and drive one was
         // the stranger half.
@@ -394,6 +394,7 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // two apart needs to know whether *this* dock is `keyboard_navigable`, and `policy_allows`
         // only receives the session — the widening tracked as F003/P086/T371.
         | WmAction::FocusDock { .. }
+        | WmAction::ToggleDock { .. }
         | WmAction::SidebarRight
         | WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
@@ -1085,9 +1086,7 @@ pub(crate) fn dispatch_view_intent(
 
     // 1. Built-in. Parameterized variants are built from the intent's args (`build_action`, the same
     //    constructor a config binding uses); unit variants come straight from the name.
-    let builtin = crate::input::build_action(&intent.action, &args)
-        .or_else(|| crate::input::action_from_name(&intent.action));
-    if let Some(action) = builtin {
+    if let Some(action) = builtin_of(&intent.action, &args) {
         dispatch_action(state, registry, source, &action);
         return IntentOutcome::Ran;
     }
@@ -1106,7 +1105,24 @@ pub(crate) fn dispatch_view_intent(
         return IntentOutcome::MissingArgs;
     }
 
-    // 2. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
+    // 2. **A widget on screen declares it** (F003/P082/T427). Between the built-ins and the
+    //    provider catalog, because a surface's own verb is the more specific thing the name means
+    //    while that surface is up — the same nearest-declaration rule keys and menus follow.
+    //
+    //    This is the seam a **layer** has and used not to: a dock declares its actions through
+    //    `Provider::actions`, while an overlay could only bind verbs the app had already compiled
+    //    in. It is why the exposé's picker had to borrow the built-in `hint_pick`, and why a plugin
+    //    could contribute targets to heca's picker but never open one of its own.
+    //
+    //    Reachability *is* the gate here, and deliberately so: a widget-declared action is found
+    //    only by walking the **visible** trees, so an unmounted surface's verb resolves to nothing
+    //    exactly as an unmounted provider's does. It needs no policy of its own because it cannot
+    //    be reached when its surface is not on screen.
+    if crate::chrome::fire_widget_action(state, &intent.action) {
+        return IntentOutcome::Ran;
+    }
+
+    // 3. Name-keyed (provider/plugin), routed by its DECLARED policy — the same `policy_allows` the
     //    built-in path reaches through `route_action`, so a plugin action is judged by identical
     //    rules.
     let Some(policy) = state.action_catalog.policy(&intent.action) else {
@@ -1147,6 +1163,63 @@ pub(crate) fn dispatch_view_intent(
         return IntentOutcome::NotRunnable;
     }
     IntentOutcome::Ran
+}
+
+/// **The `WmAction` a view-intent name means**, built from its args exactly as a `config.toml`
+/// binding is.
+///
+/// Extracted so that *running* an intent and *judging* one resolve it the same way. Two copies of
+/// this line would be two answers to "what does this name mean", and the one nobody exercises is
+/// the one that drifts.
+fn builtin_of(
+    name: &str,
+    args: &std::collections::HashMap<String, String>,
+) -> Option<WmAction> {
+    crate::input::build_action(name, args).or_else(|| crate::input::action_from_name(name))
+}
+
+/// **Would this intent be allowed to run right now?** — asked *before* a picker spends a letter on
+/// it (F003/P082/T432).
+///
+/// A picker that offers letters which do nothing is a broken picker. With a floating pane active,
+/// `prefix+/` lettered every pane and every sidebar row naming one, and pressing a letter did
+/// nothing at all, because `ActionPolicy` correctly refuses a `FocusPane` that does not target the
+/// active float. This is that refusal, asked one moment earlier.
+///
+/// It is deliberately the **same three arms** [`dispatch_view_intent`] resolves, in the same order,
+/// and it shares [`builtin_of`] with it so the two cannot disagree about what a name means:
+///
+/// 1. a **built-in** → judged by [`route_interaction`], the one gate every surface goes through;
+/// 2. a **name-keyed** action → judged by its declared policy, the same [`policy_allows`] call the
+///    dispatcher makes;
+/// 3. anything else → **allowed**. A verb declared by a widget on screen has no policy of its own
+///    (reachability is its gate — it cannot be found when its surface is not visible), and a name
+///    nothing knows is not this function's to refuse. `true` here means *"nothing to ask"*, never
+///    *"permitted"*: withholding letters from everything the policy cannot see would be a worse
+///    picker than the one this fixes.
+pub(crate) fn view_intent_allowed(
+    state: &AppState,
+    source: InteractionSource,
+    intent: &ViewIntent,
+) -> bool {
+    let mut args = intent_args_as_strings(intent);
+    args.remove(crate::providers::SEAT_ARG);
+    if let Some(action) = builtin_of(&intent.action, &args) {
+        return matches!(
+            route_interaction(state, source, InteractionIntent::ActivateAction(action)),
+            RouteDecision::Allow(_)
+        );
+    }
+    match state.action_catalog.policy(&intent.action) {
+        Some(policy) => policy_allows(
+            &state.session,
+            domain_for(state, source),
+            source,
+            policy,
+            None,
+        ),
+        None => true,
+    }
 }
 
 /// What became of a dispatched intent — the answer a **scripted** caller needs (F003/P086/T372).
@@ -1382,6 +1455,40 @@ mod tests {
                 decision,
             );
         }
+    }
+
+    /// **The chain a `prefix+/` candidate is judged by, end to end** (F003/P082/T432).
+    ///
+    /// Antonio, driving 2026-08-18: with a floating pane active, `prefix+/` lettered every pane and
+    /// every sidebar row naming one, and pressing a letter did **nothing**. This is why — and now
+    /// it is asked one moment earlier, so the letter is never offered.
+    ///
+    /// The test walks the real links: the intent a pane declares → the `WmAction` it resolves to →
+    /// the routing decision. `view_intent_allowed` is the same three steps with an `AppState` to
+    /// supply the domain, which a test cannot build (it needs a window), so the pure half is held
+    /// here and the pane's half of the declaration is held by
+    /// `chrome::pane::shell::tests::the_pane_says_what_picking_it_would_do`.
+    #[test]
+    fn a_pick_that_would_be_refused_resolves_to_a_refused_action() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        // What `PaneShell` declares — the same name and argument, built the same way a config
+        // binding is.
+        let args = std::collections::HashMap::from([("pane_id".to_string(), "99".to_string())]);
+        let action = builtin_of("focus_pane", &args).expect("focus_pane is a built-in");
+        assert_eq!(action, WmAction::FocusPane { pane_id: PaneId(99) });
+
+        let decision = route_in_domain(
+            &session,
+            session_domain(&session),
+            InteractionSource::Keyboard,
+            InteractionIntent::ActivateAction(action),
+        );
+        assert!(
+            matches!(decision, RouteDecision::Block),
+            "a pane that is not the active float cannot be focused, so its letter would do nothing"
+        );
     }
 
     /// Intent variants are blocked when floating.
@@ -1852,7 +1959,7 @@ mod tests {
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
         // **Taking** chrome focus is tiled-only; **releasing** it is always allowed. A focused
-        // container's own `activate`/`peek` move pane focus and are reached through the first, so it
+        // container's own `activate`/`hint` move pane focus and are reached through the first, so it
         // must not open while a float owns the domain — but a way out that can be blocked is not a
         // way out (F003/P085/T356).
         assert_eq!(

@@ -292,6 +292,13 @@ not move the pane behind the map — except for actions that are app-level in ev
 of the **action**, not of the binding, because the same action is reached from a key, a menu entry,
 the palette, a button and RPC.
 
+A **way out** of a surface is declared once for every surface of that kind, not per surface: the
+`[[keys.mode]] name = "layer"` block is the floor every overlay answers (`Escape`, plus `q` and
+`Ctrl+q` as shipped), and `name = "focus"` is the same thing for a focused dock. Declared there they
+exist **only while that kind of surface holds the keyboard**, so the program running in a pane keeps
+those keys — `:q` still quits vim, and `Ctrl+q` still reaches readline. That is what makes them
+different from the global `[keys]` map, which is consulted whether or not anything is in front.
+
 > `[[keys.component]]` is the older spelling of this block and still works unchanged — the two are
 > read as one list. New entries should use `[[keys.surface]]`.
 

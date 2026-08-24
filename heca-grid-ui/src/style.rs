@@ -478,9 +478,17 @@ pub struct Layout {
     /// Maximum height — see [`max_width`](Style::max_width).
     pub max_height: Option<Length>,
     pub flex_grow: f32,
-    /// Flex shrink factor. `None` ⇒ `0.0`: widgets use explicit sizes and a flex
-    /// container must never squish them. A widget that *should* absorb the
-    /// squeeze (again, a scroll viewport) opts in with `Some(1.0)`.
+    /// Flex shrink factor. `None` ⇒ **`1.0`**, as flexbox has it: an item gives way when its line
+    /// is too small, and a widget that must **not** be squeezed opts out with `Some(0.0)`.
+    ///
+    /// It was `0.0` — "widgets use explicit sizes and a flex container must never squish them" —
+    /// which inverted the rarer case onto every author. Nothing gave way unless someone remembered
+    /// to ask, so a composition simply kept its content width and overflowed whatever held it: one
+    /// defect wearing many faces (a card wider than the strip it is a share of, a folder path
+    /// pushing a name out of its card, three cards' text drawn over each other in a narrow window),
+    /// and the reason `Label::truncate` had to switch shrinking on before its own cut could ever be
+    /// reached. Held honest by the two sweeps in `heca-view-realize`: nothing paints outside its
+    /// box, and a widget keeps its natural size when there is room (F003/P082/T438).
     pub flex_shrink: Option<f32>,
 
     /// Overall size variant — scales font + intrinsic padding together. Composes
@@ -709,7 +717,7 @@ impl Layout {
             flex_grow: self.flex_grow,
             // Widgets use explicit Px sizes; never let a flex container squish them
             // — unless the widget opts in (a scroll viewport must absorb the squeeze).
-            flex_shrink: self.flex_shrink.unwrap_or(0.0),
+            flex_shrink: self.flex_shrink.unwrap_or(1.0),
             // Child placement when this component sits in a Grid (else Auto).
             grid_column: grid_line(self.grid_cell.map(|c| (c.col, c.col_span))),
             grid_row: grid_line(self.grid_cell.map(|c| (c.row, c.row_span))),

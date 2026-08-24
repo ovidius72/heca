@@ -8,6 +8,7 @@
 
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
+use crate::hint::DeclaredAction;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{
     Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, ScanlineCmd, Scene, Shadow, TextAlign,
@@ -185,19 +186,19 @@ pub struct Base {
     ///
     /// Unlike [`drag_source`](Self::drag_source) — a registry slot the app hands out — this is a
     /// string the component chose about *itself*, so it
-    /// survives a tree rebuild. Universal opt-in via [`ComponentExt::nav_key`](crate::builders::ComponentExt::nav_key);
-    /// enumerated by [`nav::collect_nav_keys`](crate::nav::collect_nav_keys) and hit-tested by
-    /// [`nav::nav_key_at`](crate::nav::nav_key_at). Opaque here — nothing in this library parses it.
-    pub nav_key: Option<String>,
+    /// survives a tree rebuild. Universal opt-in via [`ComponentExt::key`](crate::builders::ComponentExt::key);
+    /// enumerated by [`nav::collect_keys`](crate::nav::collect_keys) and hit-tested by
+    /// [`nav::key_at`](crate::nav::key_at). Opaque here — nothing in this library parses it.
+    pub key: Option<String>,
     /// **Which enclosing region this subtree belongs to** — a panel, a dock, a tab group, whatever
     /// the host calls the thing that holds rows. Universal opt-in via
     /// [`ComponentExt::scope_key`](crate::builders::ComponentExt::scope_key); hit-tested by
-    /// [`nav::scope_at`](crate::nav::scope_at). Opaque here, exactly like `nav_key`.
+    /// [`nav::scope_at`](crate::nav::scope_at). Opaque here, exactly like `key`.
     ///
-    /// A *separate* field rather than a flavour of `nav_key` because the two answer different
-    /// questions about the same point: `nav_key` says which **row**, this says which **region
+    /// A *separate* field rather than a flavour of `key` because the two answer different
+    /// questions about the same point: `key` says which **row**, this says which **region
     /// containing rows**, and a host commonly wants both from one press. Folding them together would
-    /// also make a region turn up in `collect_nav_keys` as a steppable row, which it is not.
+    /// also make a region turn up in `collect_keys` as a steppable row, which it is not.
     pub scope_key: Option<String>,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
@@ -224,7 +225,7 @@ pub struct Base {
     pub handlers: Option<Box<Handlers>>,
     /// **The context menu this widget carries**, built fresh each time it is triggered.
     ///
-    /// A universal slot like [`nav_key`](Self::nav_key) and [`drag_source`](Self::drag_source), so
+    /// A universal slot like [`key`](Self::key) and [`drag_source`](Self::drag_source), so
     /// an `Icon`, a `Label` and a plugin's own widget carry one on the same terms as a `Row`. A
     /// right-click, or the host's `open_context_menu` action, walks **outwards** to the nearest
     /// widget that has one — see [`crate::menu`] for the whole model. Written with
@@ -240,17 +241,87 @@ pub struct Base {
     /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
     /// widget, opened by a right-click or the keyboard action.
     pub context_menu: Option<Box<dyn Fn() -> crate::widgets::ContextMenu>>,
-    /// **What a leader-key pick does to this region** — written with
-    /// [`KeyHint::on_peek`](crate::widgets::KeyHint::on_peek), the wrapper that draws the letter.
+    /// **What a leader-key pick does to this widget, when that differs from acting on it** —
+    /// written with [`on_hint`](crate::builders::ComponentExt::on_hint), on any widget.
     ///
-    /// The whole of the capability: a wrapped region carrying one is offered a letter by the
-    /// picker, and picking that letter runs it. There is no id to register, no registry to reach,
-    /// and no host type in the closure.
+    /// It is the **override**, not the switch. Being pickable is not opt-in: anything actionable is
+    /// offered a letter and picking it does what clicking it does (F003/P082/T441). This says a pick
+    /// does something *else* — heca's sidebar row activates the pane and leaves the sidebar on a
+    /// click, and stays in the sidebar on a pick.
     ///
-    /// The slot lives here so the collector stays one uniform walk, but **the builder is on the
-    /// wrapper, not on every widget**: being pickable is something you opt a region into, so
-    /// `Label::on_peek` is a method that never has to exist.
-    pub peek: Option<Box<dyn Fn()>>,
+    /// There is no id to register and no registry to reach; the declaration lives on the widget and
+    /// the collector reads it out of the laid-out tree.
+    ///
+    /// **The builder is on every widget** (F003/P082/T432). It used to be on
+    /// [`KeyHint`](crate::widgets::KeyHint) alone, which put the two facts about a target — who it
+    /// is and what picking it does — on two different nodes, and which of them was on top depended
+    /// on how the tree was built. That is why the matching code had to search both up and down, and
+    /// why sidebar letters kept failing with no error. `KeyHint` stays as a decorator for a
+    /// **region that is not a widget you can put a builder on**, and nothing else.
+    pub hint: Option<crate::hint::Hint>,
+    /// **May this widget be offered a letter at all?** `true` for everything, until a caller says
+    /// otherwise with [`hintable(false)`](crate::builders::ComponentExt::hintable).
+    ///
+    /// It exists because being pickable is **not** opt-in: anything actionable gets a letter, so the
+    /// only thing left to say is "not me". Setting it `true` does nothing — a widget nobody can act
+    /// on has nothing for a letter to run (F003/P082/T441).
+    pub hintable: bool,
+    /// **Can the user act on this widget — click it, or activate it from the keyboard?**
+    ///
+    /// Set by whichever builder wires the action up, whatever it is called: the generic
+    /// [`on_click`](crate::builders::ComponentExt::on_click) /
+    /// [`on_double_click`](crate::builders::ComponentExt::on_double_click) /
+    /// [`on_key_down`](crate::builders::ComponentExt::on_key_down) /
+    /// [`on_key_up`](crate::builders::ComponentExt::on_key_up), and the widgets that keep their own
+    /// callback instead — `Button::on_click`, `Row::on_activate`, and the six like them.
+    ///
+    /// **It is a field and not a question asked of the handler list**, because the answer is not in
+    /// the handler list. Eight widgets store their action in a private field of their own, so
+    /// `Handlers::has(Click)` is `false` for a `Button` — the single case that matters most. And the
+    /// two spellings (`on_click`, `on_activate`) mean the same thing, so no set of `EventKind`s
+    /// names it either. One flag, set where the action is wired, is the only thing a walk over the
+    /// tree can read (F003/P082/T441).
+    pub activatable: bool,
+    /// **The letter currently offered for [`hint`](Self::hint)** — `Some("a")` while a picker is
+    /// open, `None` otherwise. Set by the host through
+    /// [`offer_hint`](crate::hint::offer_hint); drawn by the widget that declared the hint.
+    ///
+    /// **It lives beside the declaration on purpose, and this is load-bearing.** The letter has to
+    /// be drawn *by the widget*, in the widget's own paint, because that is the only way it lands
+    /// in the same place on screen as the thing it labels. A host that walks the trees and paints
+    /// the caps itself has to guess which scene — and which **half** of it — the declaring widget
+    /// ended up in, and it will guess wrong: a `Scene` defers overlay segments to a frame-final
+    /// band ordered by nesting depth, so caps painted into the base draw *under* any overlay, and
+    /// caps painted at depth 1 draw under anything nested deeper. Both failures are invisible in
+    /// every test and look exactly like "the picker does nothing".
+    ///
+    /// A plugin's surface therefore gets the picker right by construction: it declares a hint, the
+    /// framework offers it a letter, and its own paint puts that letter wherever the widget is.
+    /// There is nothing host-side to teach about the plugin's layering (F003/P082/T427).
+    pub hint_label: Signal<Option<String>>,
+    /// **How this widget's letter is drawn** — where it sits, its size, its colour.
+    ///
+    /// These were private fields on [`KeyHint`](crate::widgets::KeyHint), which is why a letter
+    /// could only appear by wrapping a widget in one. Here, the framework draws the cap for any
+    /// widget carrying a letter and each one places its own (F003/P082/T431).
+    pub hint_style: crate::widgets::HintStyle,
+    /// **Actions this widget declares by name** — what a binding, a menu entry or a script can ask
+    /// it to do (F003/P082/T427).
+    ///
+    /// The counterpart of [`hint`](Self::hint): a hint says what a *pick* does to this region, an
+    /// action says what a *named verb* does to it. Written with
+    /// [`on_action`](crate::builders::ComponentExt::on_action).
+    ///
+    /// **It exists so a surface can own a verb without being a `Provider`.** A dock declares its
+    /// actions through the provider trait; a *layer* — an overlay, a plugin's panel — had no such
+    /// seam at all, so it could only bind verbs the app had already compiled in. That is why the
+    /// exposé's picker had to borrow the built-in `hint_pick`, and why a plugin could contribute
+    /// targets to heca's picker but never open one of its own.
+    ///
+    /// The name is the whole address: the host finds the declaring widget by walking the retained
+    /// trees, exactly as it finds a hint. Nothing is registered, so nothing has to be
+    /// un-registered when a tree is rebuilt.
+    pub actions: Vec<DeclaredAction>,
     /// Whether [`Event::Mount`] has been delivered. Set by the first layout pass that sees this
     /// widget — the first moment it is both in a live tree and laid out.
     pub(crate) mounted: Cell<bool>,
@@ -278,14 +349,19 @@ impl Base {
             children: Vec::new(),
             drag_source: None,
             drop_target: None,
-            nav_key: None,
+            key: None,
             scope_key: None,
             font: 15.0,
             viewport: Size::new(f64::MAX, f64::MAX),
             pointer: crate::pointer::PointerState::new(),
             handlers: None,
             context_menu: None,
-            peek: None,
+            hint: None,
+            hintable: true,
+            activatable: false,
+            hint_label: crate::reactive::signal(None),
+            hint_style: crate::widgets::HintStyle::default(),
+            actions: Vec::new(),
             mounted: Cell::new(false),
             needs_paint: Cell::new(true),
         }
@@ -427,6 +503,61 @@ pub trait Component {
     /// steal the key). Default `None`.
     fn shortcut(&self) -> Option<char> {
         None
+    }
+
+    /// **This surface's arrival and exit, if it has one** — the seam a host drives.
+    ///
+    /// A widget that can appear and disappear embeds a [`Presence`](crate::animation::Presence)
+    /// and returns it here; everything else keeps the default `None` and is a *cut*, which costs
+    /// nothing and needs no special case anywhere.
+    ///
+    /// It exists beside [`base`](Self::base) because a host that **mounts** surfaces — the layer
+    /// stack, a plugin panel host — has to do three things to a surface without knowing which
+    /// widget it is: keep it mounted while its exit is still playing
+    /// ([`Presence::is_leaving`](crate::animation::Presence::is_leaving)), paint it as its
+    /// animation says ([`Presence::frame`](crate::animation::Presence::frame)), and — when the
+    /// surface is **rebuilt** with fresh content — carry the gesture across to the new tree by
+    /// swapping this value, so an arrival already played does not play again.
+    ///
+    /// It is deliberately **not** recursive: a surface is the root of what was mounted, not
+    /// something to be hunted for in a subtree. A widget that *composes* an
+    /// [`Overlay`](crate::widgets::Overlay) (a [`Dialog`](crate::widgets::Dialog)) forwards this to
+    /// the overlay it composes if it wants a host to drive it.
+    fn presence(&self) -> Option<&crate::animation::Presence> {
+        None
+    }
+
+    /// The mutable half of [`presence`](Self::presence) — see there. Both, for the same reason
+    /// [`base`](Self::base) and [`base_mut`](Self::base_mut) are both there.
+    fn presence_mut(&mut self) -> Option<&mut crate::animation::Presence> {
+        None
+    }
+
+    /// **Put this surface on screen.**
+    ///
+    /// Safe to call at any time: a surface already up is not re-arrived, and one already on its way
+    /// out is not resurrected. Both rules live in [`Presence`](crate::animation::Presence), so no
+    /// caller repeats them. With no animation declared it is simply up.
+    ///
+    /// Default: nothing to open.
+    fn open(&mut self) {}
+
+    /// **Dismiss this surface.**
+    ///
+    /// With an animation declared this *begins* the exit — the surface is gone when
+    /// [`Presence::is_leaving`](crate::animation::Presence::is_leaving) says the gesture has played
+    /// out, which is what lets a host keep painting it while it goes. With none, it is simply gone.
+    ///
+    /// Default: nothing to hide.
+    fn hide(&mut self) {}
+
+    /// Open it if it is closed, dismiss it if it is open. The default reads
+    /// [`presence`](Self::presence), so a surface gets it for free.
+    fn toggle(&mut self) {
+        match self.presence().is_some_and(crate::animation::Presence::is_open) {
+            true => self.hide(),
+            false => self.open(),
+        }
     }
 
     /// Whether this component currently has an **open overlay** (e.g. a `Select`
@@ -575,6 +706,15 @@ pub trait Component {
     /// clickable where it *would* have been: its bounds are real, it simply isn't drawn. Paint
     /// already honours the clip; this is the same rule for input, in the one place that walks the
     /// tree rather than in each clipping widget's own gate.
+    ///
+    /// **Three walks ask it now**, and each one that forgets shows the same defect from a different
+    /// angle: paint (the clip itself), input ([`hit_test`](crate::pointer::hit_test) — a row past
+    /// the fold is not clickable) and the **picker** ([`hint`](crate::hint) — a row past the fold
+    /// gets no letter). The picker was the one that did not, and its symptom was keycaps for
+    /// scrolled-away sidebar rows painted over the top bar and the status bar, because a cap goes
+    /// into the overlay band and an overlay segment starts unclipped on purpose (F003/P082/T438).
+    ///
+    /// If you are adding a fourth walk over the tree, it asks this too.
     fn clips_children(&self) -> bool {
         false
     }
@@ -790,7 +930,7 @@ pub(crate) fn focus_path(node: &dyn Component) -> Option<Vec<usize>> {
 /// The alternative — letting an intent descend into the target's subtree — was tried and taken out.
 /// It made a whole region answer for a capability nobody in it had claimed, so two widgets that both
 /// handled one intent was not an error, and reading the tree could not tell you where a key landed.
-fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
+pub(crate) fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Handled {
     if node.on_event_capture(ev) == Handled::Yes {
         return Handled::Yes;
     }
@@ -820,11 +960,48 @@ fn deliver_to_path(node: &mut dyn Component, path: &[usize], ev: &Event) -> Hand
         if from_subtree == Handled::Yes {
             return Handled::Yes;
         }
+    } else if matches!(ev, Event::Hint(_)) {
+        // **A pick acts on the widget it named, and on nothing else** (F003/P082/T432). This is the
+        // target phase, and it is the only place a widget's own declaration runs — what continues
+        // up the chain is the *event*, which is the delegation seam.
+        //
+        // The divergence from a click is deliberate: clicking a child of a clickable box **is**
+        // clicking the box, because the pointer is over both, while picking a row is **not** picking
+        // the pane that holds it. A pick is nominal, not spatial. Without this, a pickable pane
+        // holding pickable rows fires both and you land on the pane — and every such container would
+        // hand-write the DOM's `e.target !== e.currentTarget` guard, which is N copies of a rule
+        // that belongs here.
+        run_pick(node);
     }
     if node.base_mut().run_handlers(ev) == Handled::Yes {
         return Handled::Yes;
     }
     node.on_event(ev)
+}
+
+/// **Do to `node` what picking it means**, in two cases and in this order (F003/P082/T441):
+///
+/// 1. it **declared** what a pick does ([`Base::hint`]) — run that. The override, for a region that
+///    answers a pick differently from a click: heca's sidebar row activates the pane and leaves on a
+///    click, and stays in the sidebar on a pick.
+/// 2. otherwise **act on it as a click would**, because that is what a letter over an ordinary
+///    button promises. Delivered as a real [`Event::Click`] at the widget's centre, through the
+///    handlers it already registered — never a second path that could drift from what the mouse
+///    does.
+fn run_pick(node: &mut dyn Component) {
+    if let Some(hint) = &node.base().hint {
+        hint.run();
+        return;
+    }
+    if !crate::hint::is_target(node) {
+        return;
+    }
+    // The centre, so a handler reading the position lands inside the widget it was aimed at.
+    let b = node.base().bounds;
+    let at = heca_core::layout::Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let click = Event::Click(crate::event::PointerEvent::at(at).with_target_bounds(b));
+    node.base_mut().run_handlers(&click);
+    node.on_event(&click);
 }
 
 /// Capture down, children last-first, bubble up — for the events that are addressed to everything
@@ -875,11 +1052,22 @@ pub(crate) fn reveal_target_in(children: &[Box<dyn Component>]) -> Option<Rectan
 /// bespoke paint loops (e.g. [`Pane`](crate::widgets::Pane),
 /// [`DockFrame`](crate::widgets::DockFrame)) reuse this so a collapsed body/group
 /// never bleeds onto the rest of the tree.
-pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
+///
+/// **It also draws the child's hint letter**, if it is carrying one (F003/P082/T431). That is here,
+/// and not in each widget, for the reason the hidden check is: it is the one place every container
+/// already funnels its children through, so a letter appears over *any* widget — a plugin's
+/// included — with nothing to opt into and no wrapper to remember. Before this, only
+/// [`KeyHint`](crate::widgets::KeyHint) could draw one, so being pickable meant being wrapped.
+///
+/// **No host pass may paint a keycap.** One that walks the trees itself has to guess which scene,
+/// and which half of it, the declaring widget ended up in — and it guesses wrong invisibly. See
+/// [`key_hint::paint_hint_label`](crate::widgets::key_hint::paint_hint_label).
+pub fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
     if c.base().style.layout.hidden {
         return;
     }
     c.paint(cx);
+    crate::widgets::key_hint::paint_hint_label(c, cx);
 }
 
 /// Translate a component's whole subtree by `(dx, dy)` — bounds only, no re-layout.
@@ -947,6 +1135,48 @@ pub struct PaintCx<'a> {
     scale: f32,
     /// The fixed point the scale shrinks toward, already in scene coordinates.
     scale_origin: Point,
+    /// The clip currently in force — every open [`with_clip`](Self::with_clip) intersected, in the
+    /// same space the callers passed (a widget's own layout coordinates, before
+    /// [`placed`](Self::placed)), so a value read off `Base::bounds` can be compared with it
+    /// directly. `None` is *"nothing clips this"*.
+    ///
+    /// Read by [`clip`](Self::clip) — a widget that draws into the **overlay band** needs it,
+    /// because that band starts unclipped and geometry alone would let a keycap land outside the
+    /// dock it belongs to (F003/P082/T438).
+    clip: Option<Rectangle>,
+}
+
+/// **Make a wrapper transparent to layout** — the sizing half of "transparent".
+///
+/// A wrapper that decorates without changing the picture ([`KeyHint`](crate::widgets::KeyHint),
+/// [`Visibility`](crate::widgets::Visibility), [`FocusScope`](crate::widgets::FocusScope),
+/// [`KeyHintGroup`](crate::widgets::KeyHintGroup)) hugs its child, so its bounds are the child's —
+/// which is what the decoration is positioned off. Hugging alone is not transparency:
+///
+/// - a child sized as a **share** (`Length::Pct`) resolves that percentage against its parent, and
+///   its parent is now the wrapper. A hugged wrapper is `Auto`, so the share resolves against
+///   nothing and silently falls back to the child's **content** size — the widget stops being a
+///   share and becomes as wide as its text;
+/// - the same for a `max_width` a child sets to keep itself inside its container.
+///
+/// That is why the exposé's cards would not shrink with the window: each card asked for 100% of a
+/// wrapper that asked for 100% of nothing, so a card stayed as wide as the path inside it and every
+/// card's text ran across its neighbours (Antonio, driving, 2026-08-24). `expose/mod.rs` already
+/// carried a hand-written workaround — "the room the panel gives it has to be passed on
+/// deliberately" — which is one call site fixing a rule that belongs here.
+///
+/// Adopting whatever the child declares keeps the chain unbroken, and a child that hugs still hugs,
+/// because then there is nothing to adopt.
+pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
+    let child = child.base().style.layout;
+    if !matches!(child.width, crate::style::Length::Auto) {
+        base.style.layout.width = child.width;
+    }
+    if !matches!(child.height, crate::style::Length::Auto) {
+        base.style.layout.height = child.height;
+    }
+    base.style.layout.max_width = base.style.layout.max_width.or(child.max_width);
+    base.style.layout.max_height = base.style.layout.max_height.or(child.max_height);
 }
 
 /// Scale every colour in a draw command by `a`, leaving its geometry alone.
@@ -1045,6 +1275,7 @@ impl<'a> PaintCx<'a> {
             opacity: 1.0,
             scale: 1.0,
             scale_origin: Point::new(0.0, 0.0),
+            clip: None,
         }
     }
 
@@ -1201,8 +1432,29 @@ impl<'a> PaintCx<'a> {
     /// spilling out. Nested clips intersect with their parent.
     pub fn with_clip(&mut self, rect: Rectangle, f: impl FnOnce(&mut PaintCx<'a>)) {
         self.scene.push(DrawCommand::PushClip(self.placed(rect)));
+        // Remembered as well as emitted: the renderer's scissor cannot help a draw that goes into
+        // the **overlay band**, which starts unclipped on purpose (`Scene::begin_overlay`). A
+        // widget drawing there asks `clip()` and keeps itself inside by hand.
+        let outer = self.clip.replace(match self.clip {
+            Some(outer) => outer.intersection(rect).unwrap_or(Rectangle::new(
+                rect.loc,
+                Size::new(0.0, 0.0),
+            )),
+            None => rect,
+        });
         f(self);
+        self.clip = outer;
         self.scene.push(DrawCommand::PopClip);
+    }
+
+    /// **What is currently clipping this paint** — every open [`with_clip`](Self::with_clip)
+    /// intersected, in the widget's own layout coordinates. `None` means nothing does.
+    ///
+    /// For a widget that draws into the overlay band, where the renderer's scissor does not reach:
+    /// see [`paint_hint_label`](crate::widgets::paint_hint_label), which keeps a keycap inside the
+    /// dock its row lives in rather than letting it fall on the frame.
+    pub fn clip(&self) -> Option<Rectangle> {
+        self.clip
     }
 
     /// The active theme.

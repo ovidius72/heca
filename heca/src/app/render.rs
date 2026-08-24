@@ -205,6 +205,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // below (`scene_view` borrows `state.compositor`), so render can paint them
     // read-only and `mouse.rs` can dispatch pointer events into them.
     crate::chrome::sync_pane_headers(state);
+    // The retained per-pane shells — the frame, the pane's identity and its pick letter. Same
+    // moment and same reason as the headers: built before the GPU borrow so render can paint them
+    // read-only (F011/P094/T451).
+    crate::chrome::sync_panes(state);
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
@@ -700,8 +704,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     border_color: bcolor,
                     border_width: pane_border_width,
                     border_radius: pane_border_radius,
-                    content_inset: pane_content_inset,
-                    is_active: pane.is_active,
                 },
             );
         }
@@ -911,8 +913,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     border_color: fborder,
                     border_width: pane_border_width,
                     border_radius: pane_border_radius,
-                    content_inset: pane_content_inset,
-                    is_active: pane.is_active,
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
@@ -948,50 +948,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // `scene_view` borrow ended at its last use before the mouse:: calls above).
     let scene_view = state.compositor.scene_view();
 
-    if let Some(candidates) = state.input_mode.candidates() {
-        let letter_size = 48.0f32;
-        let label_color = [1.0, 0.9, 0.3, 0.9];
-        for (ch, target_id) in candidates {
-            if Some(*target_id) == active_pane_id {
-                continue;
-            }
-            let mut found = false;
-            for (pane_id, rect) in &pane_positions {
-                if *pane_id == *target_id {
-                    let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-                    let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-                    let pw = rect.size.w as f32;
-                    let ph = rect.size.h as f32;
-                    let lx = px + (pw - letter_size * 0.6) / 2.0;
-                    let ly = py + (ph - letter_size) / 2.0;
-                    let label = ch.to_string();
-                    state
-                        .text_renderer
-                        .queue_text(&label, lx, ly, letter_size, label_color);
-                    found = true;
-                    break;
-                }
-            }
-            if !found && let Some(ws) = state.session.active_workspace() {
-                for float in &ws.floating_panes {
-                    if float.pane.id == *target_id {
-                        let fx = float.position.x as f32 + pane_area.loc.x as f32;
-                        let fy = float.position.y as f32 + pane_area.loc.y as f32;
-                        let fw = float.size.w as f32;
-                        let fh = float.size.h as f32;
-                        let lx = fx + (fw - letter_size * 0.6) / 2.0;
-                        let ly = fy + (fh - letter_size) / 2.0;
-                        let label = ch.to_string();
-                        state
-                            .text_renderer
-                            .queue_text(&label, lx, ly, letter_size, label_color);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
     state
         .primitive_renderer
         .render(&state.device, scene_view, &mut encoder);
@@ -1008,12 +964,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals, drag_items) = crate::chrome::build_chrome_root(state, chrome);
+        let (root, signals, drag_items, intent_source) =
+            crate::chrome::build_chrome_root(state, chrome);
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
             root,
             sig: chrome_sig,
             signals,
             drag_items,
+            intent_source,
         });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
@@ -1116,15 +1074,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
             );
         }
     }
-    // The universal picker's keycaps (`prefix+/`), painted into the **layer** scene so they sit
-    // above every layer rather than beneath them. They used to go into the chrome scene, which is
-    // flushed before this pass: while the exposé was up the letters were drawn under the map and
-    // could not be seen, though the targets they named were live and answering (F003/P082/T416).
-    // A letter over a surface the user cannot see is not pickable in any useful sense.
+    // **The picker's keycaps are NOT painted here, and must never be.** Each is drawn by the widget
+    // that declared the pick, in that widget's own paint (`heca_grid_ui::offer_hint`).
     //
-    // Which targets are eligible is `chrome::active_peek_targets`' answer, not this pass's — here
-    // the letters only have to end up on top of what they are labelling.
-    crate::chrome::paint_peek_letters(state, &mut layer_scene, w, h, &chrome_theme);
+    // Twice now a host pass tried to draw them and put them somewhere the user could not see: first
+    // into the chrome scene, flushed before the layers, so the letters sat under the exposé
+    // (F003/P082/T416); then into this scene's **base**, while an `Overlay`-rooted layer paints
+    // into an overlay segment deferred to a later band — under the map again, at the right
+    // coordinates (F003/P082/T427). A host cannot know which half of which scene a widget it has
+    // never seen paints into, so it must not try.
     if !layer_scene.is_empty() {
         render_chrome(
             &mut state.grid_renderer,

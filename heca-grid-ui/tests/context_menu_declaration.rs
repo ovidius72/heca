@@ -2,8 +2,8 @@
 //!
 //! Getting a menu onto a row used to take four things, three of them invisible: a `context_path`
 //! mapping a row key to a menu-id string, a builder registered for that id, the items themselves,
-//! and — the one nobody would think of — a `.nav_key(..)` on the row, because the host resolved
-//! "what did you right-click" from a *position* and read the answer off `Base::nav_key`. A
+//! and — the one nobody would think of — a `.key(..)` on the row, because the host resolved
+//! "what did you right-click" from a *position* and read the answer off `Base::key`. A
 //! workspace header had the first three and not the fourth: right-clicking it opened nothing while
 //! panes and columns worked, with no error and no failing test.
 //!
@@ -556,11 +556,11 @@ fn an_open_menu_mounted_as_a_layer_root_answers_dismiss_and_a_quick_pick() {
     assert!(dismissed.get(), "Dismiss reached the menu");
 }
 
-/// **`on_peek` is one line on the wrapper you were already using**, and the framework does the rest: it finds the widgets
+/// **`on_hint` is one line on the wrapper you were already using**, and the framework does the rest: it finds the widgets
 /// that declared one, and running a pick runs the closure the author wrote — no id, no registry,
 /// no host type at the call site (F004/P084/T399).
 #[test]
-fn a_peek_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
+fn a_hint_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
     let picked = Rc::new(RefCell::new(Vec::<&'static str>::new()));
     let (a, b) = (picked.clone(), picked.clone());
     let mut root = Flex::column()
@@ -569,7 +569,7 @@ fn a_peek_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
             heca_grid_ui::widgets::KeyHint::new(
                 Row::new().width(Length::Px(200.0)).height(Length::Px(20.0)),
             )
-            .on_peek(move || a.borrow_mut().push("first")),
+            .on_hint(move || a.borrow_mut().push("first")),
         )
         .child(
             heca_grid_ui::widgets::KeyHint::new(
@@ -578,19 +578,19 @@ fn a_peek_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
                     .height(Length::Px(20.0))
                     .child(Label::new("nested")),
             )
-            .on_peek(move || b.borrow_mut().push("second")),
+            .on_hint(move || b.borrow_mut().push("second")),
         )
         // A widget that declares nothing is not a target.
         .child(Row::new().width(Length::Px(200.0)).height(Length::Px(20.0)));
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 60.0));
 
-    let targets = heca_grid_ui::hint::collect_peeks(&root);
+    let targets = heca_grid_ui::hint::collect_hints(&root);
     assert_eq!(targets.len(), 2, "only the widgets that declared one: {targets:?}");
     assert!(targets[0].1.size.h > 0.0, "each carries the rect its letter goes over");
 
-    assert!(heca_grid_ui::hint::fire_peek(&root, &targets[1].0));
+    assert!(heca_grid_ui::hint::fire_hint(&mut root, &targets[1].0));
     assert_eq!(*picked.borrow(), vec!["second"], "the pick ran the closure that row was built with");
 
     // A path into a tree that no longer has that widget is not an error.
-    assert!(!heca_grid_ui::hint::fire_peek(&root, &[99]));
+    assert!(!heca_grid_ui::hint::fire_hint(&mut root, &[99]));
 }

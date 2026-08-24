@@ -65,7 +65,7 @@ impl Component for Card {
             );
         }
         for child in &self.base.children {
-            child.paint(cx);
+            crate::component::paint_child(child.as_ref(), cx);
         }
     }
 }

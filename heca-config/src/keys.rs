@@ -13,6 +13,14 @@ pub enum BindingValue {
     Many(Vec<String>),
 }
 
+/// An empty binding — what a `#[derive(Default)]` config struct holding one starts at, and what
+/// [`keys`](BindingValue::keys) answers as "no combos" rather than one blank combo.
+impl Default for BindingValue {
+    fn default() -> Self {
+        Self::Single(String::new())
+    }
+}
+
 impl BindingValue {
     pub fn keys(&self) -> Vec<&str> {
         match self {
@@ -146,9 +154,16 @@ impl CommandKeybindConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModeBindingConfig {
     pub action: String,
-    /// The key(s) for this binding. Also accepts `key` (singular) for convenience.
+    /// The key(s) for this binding — one combo, several comma-separated, or a list. Also accepts
+    /// `key` (singular) for convenience.
+    ///
+    /// The **same** [`BindingValue`] every other binding table takes, so one action reached by two
+    /// keys is one entry wherever it is written: `keys = ["q", "Ctrl+q"]` here reads exactly as it
+    /// does in `[keys]` or `[[keys.surface]]`. It was a bare `String` until 2026-08-21, which meant
+    /// a mode block needed a whole repeated `[[keys.mode.bindings]]` per key — the same capability
+    /// spelled two ways in two tables (Antonio: *"why not `keys = ["q", "Ctrl+q"]`?"*).
     #[serde(alias = "key")]
-    pub keys: String,
+    pub keys: BindingValue,
     /// Arguments for parameterized actions.
     /// e.g. `args = { target = "column", axis = "x", amount = "50" }`
     /// → WmAction::Resize { target: Column, axis: X, amount: 50.0 }
@@ -318,7 +333,7 @@ args = { command = "lazydocker" }
         assert_eq!(docker.bindings["stop_selected"].keys(), vec!["s"]);
         assert_eq!(docker.bind.len(), 1);
         assert_eq!(docker.bind[0].action, "spawn_command");
-        assert_eq!(docker.bind[0].keys, "t");
+        assert_eq!(docker.bind[0].keys.keys(), vec!["t"]);
         assert_eq!(docker.bind[0].args["command"], "lazydocker");
         assert!(docker.unbind["s"]);
     }

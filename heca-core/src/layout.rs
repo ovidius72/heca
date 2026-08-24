@@ -1,8 +1,8 @@
-//! heca layout engine — NIRI-inspired scrollable tiling with workspaces and overview.
+//! heca layout engine — NIRI-inspired scrollable tiling with workspaces.
 //!
 //! This module implements the core layout system:
 //!
-//! - **`session`**: Top-level `Session` managing workspaces, overview, and workspace switching
+//! - **`session`**: Top-level `Session` managing workspaces and workspace switching
 //! - **`workspace`**: `Workspace` containing a `ScrollingSpace` + floating panes
 //! - **`scrolling`**: `ScrollingSpace` — horizontal scrolling columns (NIRI's core innovation)
 //! - **`column`**: `Column` containing `Pane`s arranged vertically
@@ -21,9 +21,8 @@
 //!     │   │   ├── Column 2: [Pane b, Pane c]  ← vertical stack
 //!     │   │   └── Column 3: [Pane d]
 //!     │   └── floating: Vec<FloatingPane>
-//!     ├── Workspace 2
-//!     │   └── ...
-//!     └── overview: zoomed-out thumbnails ← expose view
+//!     └── Workspace 2
+//!         └── ...
 //! ```
 //!
 //! ## NIRI Key Concepts Preserved
@@ -44,7 +43,7 @@ pub mod workspace;
 
 pub use column::{Column, Pane};
 pub use scrolling::ScrollingSpace;
-pub use session::{OverviewState, Session, WorkspaceSwitch};
+pub use session::{Session, WorkspaceSwitch};
 pub use types::*;
 pub use view_offset::ViewOffset;
 pub use workspace::{FocusDomain, Workspace};

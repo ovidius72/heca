@@ -38,7 +38,7 @@ impl ContextPath {
 /// other.
 ///
 /// **Two arms, and the second one is generic** (F003/P086/T365). A row is named the way its
-/// component named it — the container it is in and the `nav_key` the row declared — and nothing
+/// component named it — the container it is in and the `key` the row declared — and nothing
 /// else. It used to carry three workspace-shaped variants filled with facts the *host* had
 /// resolved (a pane's column, a workspace's custom name), which is why a Docker row could not be
 /// right-clicked at all: there was no variant for it and no way to add one without the host
@@ -318,7 +318,7 @@ pub(crate) fn menu_from_items(
             .danger(it.danger)
             .enabled(it.enabled)
             .on_click(move || {
-                emit_e(crate::app::interaction::InteractionIntent::View(intent.clone()))
+                emit_e.fire(crate::app::interaction::InteractionIntent::View(intent.clone()))
             });
         if let Some(glyph) = catalog.icon(&it.id) {
             row = row.icon(glyph);

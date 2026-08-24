@@ -147,7 +147,7 @@ fn a_dialog_delivers_the_whole_pointer_set_to_its_body() {
 #[test]
 fn an_overlay_delivers_the_whole_pointer_set_to_its_panel() {
     let (probe, seen, bounds) = Probe::new();
-    let overlay = Overlay::new().panel(probe).open(true);
+    let overlay = Overlay::new().panel(probe).opened(true);
     assert_full_set("Overlay", Box::new(overlay), &seen, &bounds);
 }
 

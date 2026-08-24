@@ -169,18 +169,56 @@ pub(crate) fn normalize_key_text(
 }
 
 /// Resolve a typed letter candidate from key text or physical key fallback.
-pub(crate) fn typed_candidate_char(key_text: &str, physical_key: &PhysicalKey) -> Option<char> {
+pub(crate) fn typed_candidate_char(
+    key_text: &str,
+    physical_key: &PhysicalKey,
+    shift: bool,
+) -> Option<char> {
+    // **Case is significant.** One picker hands out 52 letters — `a`-`z` then `A`-`Z` — so folding
+    // everything to lowercase makes the capitals unreachable: the letter is drawn on screen and
+    // pressing it matches nothing. It only stayed hidden while pickers never had more than 26
+    // targets at once.
     key_text
         .chars()
         .next()
         .or_else(|| match physical_key {
+            // The physical fallback (macOS `Ctrl+letter` gives a control char, so `key_text` is
+            // empty) names a key, not a character, so the shift state decides its case.
             PhysicalKey::Code(code) => {
                 let s = format!("{:?}", code);
-                s.strip_prefix("Key").and_then(|n| n.chars().next())
+                s.strip_prefix("Key").and_then(|n| n.chars().next()).map(|c| {
+                    if shift {
+                        c.to_ascii_uppercase()
+                    } else {
+                        c.to_ascii_lowercase()
+                    }
+                })
             }
             _ => None,
         })
-        .map(|c| c.to_ascii_lowercase())
+}
+
+/// **Is this key press just a modifier being held?**
+///
+/// Asked in two unrelated places for two unrelated reasons — a letter picker must not treat Shift
+/// as "a wrong key" and cancel itself, and the terminal must not snap to the live bottom when you
+/// merely reach for a modifier. Two copies of one question is a missing function, so this is it.
+///
+/// Read off the **logical** key: a modifier is a named key, and naming physical codes would have to
+/// list left and right variants of everything and would still miss whatever a layout calls its own.
+pub(crate) fn is_modifier_key(logical_key: &Key) -> bool {
+    matches!(
+        logical_key,
+        Key::Named(
+            NamedKey::Shift
+                | NamedKey::Control
+                | NamedKey::Alt
+                | NamedKey::Super
+                | NamedKey::Hyper
+                | NamedKey::Meta
+                | NamedKey::CapsLock
+        )
+    )
 }
 
 /// Convert a configured prefix combo to the literal bytes that should be
@@ -315,20 +353,44 @@ mod tests {
     use heca_core::backend::BackendKeyCode;
     use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 
+    /// **The typed text wins, and its case is kept.** A picker hands out `a`-`z` then `A`-`Z`, so
+    /// folding to lowercase makes every capital unreachable — drawn on screen, matching nothing.
     #[test]
-    fn typed_candidate_char_prefers_key_text() {
+    fn typed_candidate_char_prefers_key_text_and_keeps_its_case() {
         assert_eq!(
-            typed_candidate_char("Q", &PhysicalKey::Code(KeyCode::KeyA)),
+            typed_candidate_char("Q", &PhysicalKey::Code(KeyCode::KeyA), true),
+            Some('Q')
+        );
+        assert_eq!(
+            typed_candidate_char("q", &PhysicalKey::Code(KeyCode::KeyA), false),
             Some('q')
         );
     }
 
+    /// The physical fallback (macOS `Ctrl+letter` empties `key_text`) names a KEY, not a character,
+    /// so the shift state decides its case.
     #[test]
     fn typed_candidate_char_falls_back_to_physical_key() {
         assert_eq!(
-            typed_candidate_char("", &PhysicalKey::Code(KeyCode::KeyZ)),
+            typed_candidate_char("", &PhysicalKey::Code(KeyCode::KeyZ), false),
             Some('z')
         );
+        assert_eq!(
+            typed_candidate_char("", &PhysicalKey::Code(KeyCode::KeyZ), true),
+            Some('Z')
+        );
+    }
+
+    /// A modifier being held is not a key a picker should answer — it is part of pressing the
+    /// letter that follows.
+    #[test]
+    fn a_modifier_press_is_not_a_candidate_key() {
+        use super::is_modifier_key;
+        use winit::keyboard::{Key, NamedKey};
+        assert!(is_modifier_key(&Key::Named(NamedKey::Shift)));
+        assert!(is_modifier_key(&Key::Named(NamedKey::Control)));
+        assert!(!is_modifier_key(&Key::Named(NamedKey::Escape)));
+        assert!(!is_modifier_key(&Key::Character("a".into())));
     }
 
     #[test]

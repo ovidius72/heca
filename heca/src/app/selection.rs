@@ -5,19 +5,17 @@
 
 use heca_core::layout::{PaneId, Session};
 
-/// Extended alphabet for pane candidate labels (52 chars).
-pub(crate) const PANE_CANDIDATE_LIMIT: usize = 52;
-const CANDIDATE_ALPHABET: &[char] = &[
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
-    't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
-    'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-];
+/// How many targets one pick can letter — the length of the alphabet, not a second number.
+pub(crate) const PANE_CANDIDATE_LIMIT: usize = heca_grid_ui::widgets::DEFAULT_LETTERS.len();
 
-/// The candidate label for the `idx`-th item in a letter pick (a–z, A–Z), or
-/// `None` past the 52-label cap. Shared so every pick (panes, columns, follow-link)
-/// draws from one alphabet.
+/// The candidate label for the `idx`-th item in a letter pick, or `None` past the cap.
+///
+/// **One alphabet for every pick in the app** — panes, columns, docks, follow-link — and it is the
+/// *library's*, so a widget picker (`KeyHintGroup`) and a host pick hand out the same letters in the
+/// same order. The app kept its own 52-entry copy until F003/P082/T433; two copies of one decision
+/// is how home-row ordering would have had to be applied twice.
 pub(crate) fn candidate_letter(idx: usize) -> Option<char> {
-    CANDIDATE_ALPHABET.get(idx).copied()
+    heca_grid_ui::widgets::DEFAULT_LETTERS.chars().nth(idx)
 }
 
 pub(crate) fn has_pane_candidate_overflow(session: &Session) -> bool {
@@ -45,18 +43,17 @@ pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, PaneI
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
-                if candidates.len() >= PANE_CANDIDATE_LIMIT {
+                // Running out of letters *is* the cap — no second number to keep in step.
+                let Some(ch) = candidate_letter(candidates.len()) else {
                     return candidates;
-                }
-                let ch = CANDIDATE_ALPHABET[candidates.len()];
+                };
                 candidates.push((ch, pane.id));
             }
         }
         for float in &ws.floating_panes {
-            if candidates.len() >= PANE_CANDIDATE_LIMIT {
+            let Some(ch) = candidate_letter(candidates.len()) else {
                 return candidates;
-            }
-            let ch = CANDIDATE_ALPHABET[candidates.len()];
+            };
             candidates.push((ch, float.pane.id));
         }
     }
@@ -74,9 +71,9 @@ pub(crate) fn collect_workspace_candidates(session: &Session) -> Vec<(char, usiz
         .iter()
         .enumerate()
         .filter(|(ws_idx, _)| *ws_idx != active)
-        .take(PANE_CANDIDATE_LIMIT)
-        .enumerate()
-        .map(|(letter_idx, (ws_idx, _))| (CANDIDATE_ALPHABET[letter_idx], ws_idx))
+        // Zipping the alphabet caps the list at its length, so the cap cannot drift from it.
+        .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
+        .map(|((ws_idx, _), ch)| (ch, ws_idx))
         .collect()
 }
 
@@ -95,9 +92,8 @@ pub(crate) fn collect_column_candidates(session: &Session) -> Vec<(char, usize, 
                 .enumerate()
                 .map(move |(col_idx, _)| (ws_idx, col_idx))
         })
-        .take(PANE_CANDIDATE_LIMIT)
-        .enumerate()
-        .map(|(i, (ws_idx, col_idx))| (CANDIDATE_ALPHABET[i], ws_idx, col_idx))
+        .zip(heca_grid_ui::widgets::DEFAULT_LETTERS.chars())
+        .map(|((ws_idx, col_idx), ch)| (ch, ws_idx, col_idx))
         .collect()
 }
 

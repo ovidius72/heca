@@ -19,14 +19,13 @@ use std::rc::Rc;
 
 use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{Menu, MenuAnchor, MenuItem, ContextMenu};
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, Point};
+use heca_grid_ui::{Button, ButtonVariant, Component, ComponentExt as _, Dialog, Point};
 
 use heca_view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerBand, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, ContextTarget, FormBindings, LayerId, LayerKind};
 use crate::host::App;
 use crate::providers::ChromeCtx;
 use crate::actions::ActionRegistry;
-use crate::app::events::AppEvent;
 use crate::app::interaction::{InteractionIntent, InteractionSource};
 use heca_view::Intent;
 use crate::app_state::AppState;
@@ -207,7 +206,7 @@ pub(crate) fn open_modal(
     // router's old blanket "a modal blocks everything" gave, said as a property of the overlay.
     state.layers.insert(
         id.0,
-        LayerBand::Modal,
+        state.layers.current(),
         LayerKind::OnDemand,
         true,
         true,
@@ -227,13 +226,15 @@ pub(crate) fn open_modal(
 /// keeps the node beside the realized tree so a theme reload or a plugin update can re-realize from
 /// the description rather than from whatever the tree has become.
 ///
-/// `band`, `modal` and `covers_content` are the caller's: a plugin panel over the scrolling area is
-/// `Overlay` + `covers_content: true` + not modal, a rich dialog is `Modal` + both. **No occluder is
-/// passed** — `active_peek_targets` reads it from the realized tree's laid-out bounds, which is the
-/// invariant this path must not break.
+/// `parent`, `modal` and `covers_content` are the caller's. `parent` is **what opened this** —
+/// pass `state.layers.current()` for a panel raised from wherever the user is, so it sits above
+/// that surface and goes with it; pass `None` for a surface that belongs to the base context. A
+/// plugin panel over the scrolling area is `covers_content: true` and not modal; a rich dialog is
+/// both. **No occluder is passed** — `active_hint_targets` reads it from the realized tree's
+/// laid-out bounds, which is the invariant this path must not break.
 pub(crate) fn open_view_layer(
     state: &mut AppState,
-    band: LayerBand,
+    parent: Option<LayerId>,
     kind: LayerKind,
     modal: bool,
     covers_content: bool,
@@ -247,14 +248,17 @@ pub(crate) fn open_view_layer(
     // nothing of `InteractionIntent`, so the carrier is put on here.
     let view_emit: super::IntentEmitter = {
         let emit = emit.clone();
-        Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+        Rc::new(move |intent| emit.fire(InteractionIntent::View(intent)))
     };
     let theme = super::chrome_gui_theme(state);
     let mut forms = FormBindings::default();
+    // The identity rule's declarative half, said once per description rather than per realize —
+    // this node is realized again on every theme reload (F003/P082/T444).
+    super::identity::report_unkeyed_description("view layer", &node);
     let realized = super::realize(&node, &theme, &view_emit, &mut forms);
     let id = state
         .layers
-        .add_view(id, band, kind, modal, covers_content, node, realized);
+        .add_view(id, parent, kind, modal, covers_content, node, realized);
     state.needs_redraw = true;
     id
 }
@@ -362,7 +366,7 @@ impl DropdownSpec {
 fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
     state.layers.insert(
         id.0,
-        LayerBand::Overlay,
+        state.layers.current(),
         LayerKind::OnDemand,
         true,
         true,
@@ -381,11 +385,8 @@ fn insert_menu_layer(state: &mut AppState, id: OverlayId, panel: ContextMenu) {
 /// component declared. A menu that named itself nothing is simply itself.
 pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuAnchor) -> OverlayId {
     let id = OverlayId(state.layers.reserve_id());
-    let event_proxy = state.event_proxy.clone();
     let source = InteractionSource::MouseContent;
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
-    });
+    let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     // Rows other components added to this menu — only if it named itself.
     let mut ctx = ctx;
@@ -400,8 +401,8 @@ pub(crate) fn present_menu(state: &mut AppState, ctx: ContextMenu, anchor: MenuA
     let dismiss = emit.clone();
     let panel = anchor
         .open(ctx)
-        .after_select(move || after(closing.clone()))
-        .on_dismiss(move || dismiss(close.clone()));
+        .after_select(move || after.fire(closing.clone()))
+        .on_dismiss(move || dismiss.fire(close.clone()));
 
     insert_menu_layer(state, id, panel);
     state.needs_redraw = true;
@@ -439,7 +440,7 @@ fn merge_contributions(
         let emit_e = emit.clone();
         let mut entry = MenuItem::new()
             .label(item.label.clone())
-            .on_click(move || emit_e(carrier.clone()))
+            .on_click(move || emit_e.fire(carrier.clone()))
             .danger(item.danger)
             .enabled(item.enabled);
         if let Some(glyph) = state.action_catalog.icon(&item.id) {
@@ -458,10 +459,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
     let id = OverlayId(state.layers.reserve_id());
     let source = spec.source;
 
-    let event_proxy = state.event_proxy.clone();
-    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
-        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
-    });
+    let emit = ChromeIntentEmitter::new(&state.event_proxy, source);
 
     // **The same builder every declared menu uses.** A dropdown has no declaring widget — the host
     // builds the rows and anchors it — but *how a menu is built* must not depend on that, or the
@@ -483,14 +481,14 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         .child(items)
         .anchor(spec.anchor)
         .centered(spec.centered)
-        .on_dismiss(move || emit_dismiss(dismiss_close.clone()))
+        .on_dismiss(move || emit_dismiss.fire(dismiss_close.clone()))
         // **A chosen entry takes the layer down too, not just a dismissal.** An entry dispatches
         // its own `Intent` now (one builder for every menu), so nothing else resolves this overlay
         // — it used to be `SubmitOverlay`, intercepted by the completion below. Without this the
         // panel hid itself while the layer stayed registered: still modal, still holding the
         // keyboard, so every keybinding was dead until `Escape` (Antonio, 2026-08-07 —
         // "`prefix+>` then float/unfloat makes it unstable, keybindings don't work").
-        .after_select(move || emit_after(close.clone()))
+        .after_select(move || emit_after.fire(close.clone()))
         .open(true);
 
     // A menu **captures input and demands a choice**, so it covers for policy purposes even though
@@ -526,8 +524,9 @@ fn build_modal_root(
     let body = {
         let view_emit: super::IntentEmitter = {
             let emit = emit.clone();
-            Rc::new(move |intent| emit(InteractionIntent::View(intent)))
+            Rc::new(move |intent| emit.fire(InteractionIntent::View(intent)))
         };
+        super::identity::report_unkeyed_description("modal body", &spec.body);
         super::realize(&spec.body, theme, &view_emit, forms)
     };
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
@@ -542,8 +541,8 @@ fn build_modal_root(
             action: action.id.clone(),
         });
         let emit = emit.clone();
-        let fire = move || emit(carrier.clone());
-        let peek = fire.clone();
+        let fire = move || emit.fire(carrier.clone());
+        let hint = fire.clone();
         let button = Button::new(action.label.clone())
             .variant(variant)
             .on_click(fire);
@@ -558,7 +557,7 @@ fn build_modal_root(
         // Tooltip + live shortcut from the action id — the one centralized path. The pick
         // declaration goes on the wrapper around the button, where the letter is drawn.
         dialog = dialog.action(super::action_tooltip(
-            heca_grid_ui::widgets::KeyHint::new(button).on_peek(peek),
+            heca_grid_ui::widgets::KeyHint::new(button).on_hint(hint),
             &action.id,
             &action.label,
             shortcuts,
@@ -571,7 +570,7 @@ fn build_modal_root(
     Box::new(
         dialog
             .dismissible(spec.dismissible)
-            .on_dismiss(move || emit_dismiss(close.clone()))
+            .on_dismiss(move || emit_dismiss.fire(close.clone()))
             .open(true),
     )
 }
@@ -605,7 +604,7 @@ mod tests {
     use heca_view::PropValue;
 
     fn noop_emit() -> ChromeIntentEmitter {
-        Rc::new(|_| {})
+        ChromeIntentEmitter::of(InteractionSource::MouseContent, |_, _| {})
     }
 
     #[test]
@@ -661,14 +660,16 @@ mod tests {
         let fired: std::rc::Rc<std::cell::RefCell<Vec<InteractionIntent>>> = Default::default();
         let emit: ChromeIntentEmitter = {
             let fired = fired.clone();
-            Rc::new(move |intent| fired.borrow_mut().push(intent))
+            ChromeIntentEmitter::of(InteractionSource::MouseContent, move |_, intent| {
+                fired.borrow_mut().push(intent)
+            })
         };
-        let root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
+        let mut root = build_modal_root(&spec, id, &heca_grid_ui::Theme::default(), &emit, &shortcuts, &mut FormBindings::default());
 
-        let targets = heca_grid_ui::collect_peeks(root.as_ref());
+        let targets = heca_grid_ui::collect_hints(root.as_ref());
         assert_eq!(targets.len(), 2, "two actions → two pick targets");
         for (offset, action_id) in [(0, "cancel"), (1, "confirm")] {
-            assert!(heca_grid_ui::fire_peek(root.as_ref(), &targets[offset].0));
+            assert!(heca_grid_ui::fire_hint(root.as_mut(), &targets[offset].0));
             let intent = fired.borrow().last().cloned().unwrap();
             assert!(
                 matches!(

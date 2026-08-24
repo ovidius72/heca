@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Run clippy (or test) only on the workspace members that actually changed.
+#
+#   scripts/lint-changed.sh              # clippy the changed crates
+#   scripts/lint-changed.sh test         # test the changed crates
+#   scripts/lint-changed.sh clippy main  # diff against a different base
+#
+# Falls back to the whole workspace only if it cannot work out the base.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+CMD="${1:-clippy}"
+BASE="${2:-main}"
+
+# Every path git reports as touched: committed since the merge-base, staged,
+# and unstaged. A crate counts as changed if any of them lands inside it.
+changed_paths() {
+  local mb
+  if mb=$(git merge-base HEAD "$BASE" 2>/dev/null); then
+    git diff --name-only "$mb"...HEAD
+  fi
+  git diff --name-only HEAD
+  git diff --name-only --cached
+  git ls-files --others --exclude-standard
+}
+
+# name<TAB>relative-dir for each workspace member, longest dir first so that a
+# nested member wins over its parent.
+members=$(cargo metadata --no-deps --format-version 1 \
+  | python3 -c '
+import json, os, sys
+root = os.getcwd()
+for pkg in json.load(sys.stdin)["packages"]:
+    d = os.path.relpath(os.path.dirname(pkg["manifest_path"]), root)
+    print(pkg["name"] + chr(9) + d)
+' | awk -F'\t' '{print length($2)"\t"$0}' | sort -rn | cut -f2-)
+
+pkgs=$(changed_paths | sort -u | while read -r f; do
+  [ -n "$f" ] || continue
+  while IFS=$'\t' read -r name dir; do
+    if [ "$dir" = "." ] || [ "${f#"$dir"/}" != "$f" ]; then
+      echo "$name"; break
+    fi
+  done <<< "$members"
+done | sort -u)
+
+# A change to the root manifest or a lockfile affects everything.
+all_changed=$(changed_paths | sort -u)
+if grep -qE '^(Cargo\.toml|Cargo\.lock|rust-toolchain.*)$' <<< "$all_changed"; then
+  echo "root manifest changed -> whole workspace"
+  pkgs=$(cut -f1 <<< "$members" | sort -u)
+fi
+
+if [ -z "$pkgs" ]; then
+  echo "no workspace crate changed against '$BASE' -- nothing to do."
+  exit 0
+fi
+
+args=(); while read -r p; do args+=(-p "$p"); done <<< "$pkgs"
+echo "==> cargo $CMD ${args[*]} --all-targets"
+[ -n "${DRY_RUN:-}" ] && exit 0
+exec cargo "$CMD" "${args[@]}" --all-targets

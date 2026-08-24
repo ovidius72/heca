@@ -75,12 +75,6 @@ fn default_auto_scroll_edge() -> bool {
     true
 }
 
-/// Default overview zoom: `0.5`, niri's — half life size, where a workspace row is half the
-/// screen and about one and a half rows are on screen at once.
-fn default_overview_zoom() -> f64 {
-    0.5
-}
-
 /// Default gap between overview rows: a tenth of a screen height, niri's.
 fn default_overview_gap() -> f64 {
     0.1
@@ -95,8 +89,8 @@ fn default_overview_gap() -> f64 {
 ///
 /// Both readings are defensible and this is the one Antonio chose after driving them (2026-08-11):
 /// pulling back read as falling in from somewhere, even softened to 1.3, while growing in reads as
-/// the map opening. `1 / overview_zoom` (2.0 at the default) is the literal niri reading — the cards
-/// start at exactly life size — and overshoots badly: the outer rows begin off-screen.
+/// the map opening. Starting the cards at exactly life size — niri's literal reading — overshoots
+/// badly: the outer rows begin off-screen.
 fn default_overview_zoom_from() -> f64 {
     0.8
 }
@@ -268,13 +262,6 @@ pub struct SettingsConfig {
     /// When focusing a column re-centres the view: `never` | `on_overflow` | `always`.
     #[serde(default)]
     pub center_focused_column: CenterFocusedColumn,
-    /// Zoom of the workspace thumbnails in overview mode, as a fraction of life size (niri's
-    /// `overview.zoom`). Clamped to `0.05..=0.75`.
-    ///
-    /// ⚠️ **The exposé does not read it** (F003/P082/T420): the map is built out of shares of the
-    /// window, so it fits by construction and has no scale to set.
-    #[serde(default = "default_overview_zoom")]
-    pub overview_zoom: f64,
     /// Gap between workspace rows in the exposé, as a fraction of a screen height.
     #[serde(default = "default_overview_gap")]
     pub overview_gap: f64,
@@ -386,7 +373,6 @@ impl Default for SettingsConfig {
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
             center_focused_column: CenterFocusedColumn::default(),
-            overview_zoom: default_overview_zoom(),
             overview_zoom_from: default_overview_zoom_from(),
             overview_gap: default_overview_gap(),
             shell_integration: default_shell_integration(),

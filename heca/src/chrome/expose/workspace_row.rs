@@ -121,6 +121,7 @@ impl WorkspaceRow<'_> {
                 pane_id: float.pane_id,
                 name: &float.name,
                 active: float.active,
+                folder: float.folder.as_deref(),
                 previous: self.previous == Some(float.pane_id),
                 ws_idx: ws.ws_idx,
                 // A float has no column, so the letter that deletes a column names the last one —
@@ -160,12 +161,12 @@ impl WorkspaceRow<'_> {
 mod tests {
     use super::*;
     use crate::chrome::expose::model::{ExposeColumn, ExposeFloating, ExposePane};
-    use crate::chrome::expose::pane_card::pane_nav_key;
+    use crate::chrome::expose::pane_card::pane_key;
     use crate::chrome::expose::testing::{callbacks, card_of, lay_out, theme};
     use heca_core::layout::PaneId;
 
     fn pane(id: u64, h: f64) -> ExposePane {
-        ExposePane { pane_id: PaneId(id), name: format!("p{id}"), active: false, height: h }
+        ExposePane { pane_id: PaneId(id), name: format!("p{id}"), folder: None, active: false, height: h }
     }
 
     fn workspace(widths: &[f64], floats: Vec<ExposeFloating>) -> ExposeWorkspace {
@@ -216,8 +217,8 @@ mod tests {
         let ws = workspace(&[400.0, 200.0], vec![]);
         // Measured against a map twice as wide as this workspace: the row must then take half.
         let root = row(&ws, 1200.0, 1200.0, 600.0);
-        let wide = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the wide column's card");
-        let narrow = card_of(root.as_ref(), &pane_nav_key(PaneId(2))).expect("the narrow one's");
+        let wide = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the wide column's card");
+        let narrow = card_of(root.as_ref(), &pane_key(PaneId(2))).expect("the narrow one's");
         assert!(
             (wide.size.w / narrow.size.w - 2.0).abs() < 0.15,
             "twice the width is drawn twice as wide: {wide:?} vs {narrow:?}",
@@ -236,7 +237,7 @@ mod tests {
     fn a_row_narrower_than_the_map_is_centred_in_it() {
         let ws = workspace(&[400.0], vec![]);
         let root = row(&ws, 1600.0, 1600.0, 600.0);
-        let card = card_of(root.as_ref(), &pane_nav_key(PaneId(1))).expect("the only card");
+        let card = card_of(root.as_ref(), &pane_key(PaneId(1))).expect("the only card");
         let mid = card.loc.x + card.size.w / 2.0;
         assert!((mid - 800.0).abs() < 4.0, "centred across a 1600 map, got {mid}: {card:?}");
     }
@@ -253,6 +254,7 @@ mod tests {
             &[800.0],
             vec![ExposeFloating {
                 pane_id: PaneId(9),
+                folder: None,
                 name: "float".into(),
                 active: false,
                 x: 200.0,
@@ -264,7 +266,7 @@ mod tests {
         // Extent 800 wide by 600 tall, drawn into exactly that box, so the fractions come out as
         // the model's own numbers and a wrong axis cannot hide behind a coincidence.
         let root = row(&ws, 800.0, 800.0, 600.0);
-        let f = card_of(root.as_ref(), &pane_nav_key(PaneId(9))).expect("the float's card");
+        let f = card_of(root.as_ref(), &pane_key(PaneId(9))).expect("the float's card");
         // The strip fills the box here (extent == widest == the width given), so its own origin is
         // the box's and the float's fractions come out as the model's own numbers.
         assert!(
@@ -292,6 +294,7 @@ mod tests {
             &[800.0],
             vec![ExposeFloating {
                 pane_id: PaneId(9),
+                folder: None,
                 name: "float".into(),
                 active: false,
                 x: 100.0,
@@ -302,8 +305,8 @@ mod tests {
         );
         let a = row(&plain, 800.0, 800.0, 600.0);
         let b = row(&with_float, 800.0, 800.0, 600.0);
-        let before = card_of(a.as_ref(), &pane_nav_key(PaneId(1))).expect("without");
-        let after = card_of(b.as_ref(), &pane_nav_key(PaneId(1))).expect("with");
+        let before = card_of(a.as_ref(), &pane_key(PaneId(1))).expect("without");
+        let after = card_of(b.as_ref(), &pane_key(PaneId(1))).expect("with");
         assert!(
             (before.loc.x - after.loc.x).abs() < 1.0
                 && (before.loc.y - after.loc.y).abs() < 1.0
@@ -322,6 +325,7 @@ mod tests {
             &[400.0],
             vec![ExposeFloating {
                 pane_id: PaneId(9),
+                folder: None,
                 name: "float".into(),
                 active: false,
                 x: 600.0,
@@ -332,10 +336,43 @@ mod tests {
         );
         assert_eq!(extent(&ws), 800.0, "the float reaches to 800, past the 400-wide strip");
         let root = row(&ws, 800.0, 800.0, 600.0);
-        let f = card_of(root.as_ref(), &pane_nav_key(PaneId(9))).expect("the float");
+        let f = card_of(root.as_ref(), &pane_key(PaneId(9))).expect("the float");
         assert!(
             f.loc.x + f.size.w <= 801.0,
             "and it still lands inside the row: {f:?}",
+        );
+    }
+
+    /// **The air between the cards is the same everywhere** (Antonio, driving, 2026-08-13: *"the
+    /// only thing i see here is the different gap between the first 3/4 card at the top and the
+    /// last"*).
+    ///
+    /// A column's width is a percentage of the map's extent, so its boundaries land on fractional
+    /// pixels; the air between two columns is made of **two paddings**, one from each. When a
+    /// spacing token resolves to half a pixel the two sides round in opposite directions and the
+    /// gap comes out 6, 7 or 8 where every one should be 7 — a 14% variation on a 7px gap, which is
+    /// exactly the size of thing an eye reads as an uneven rhythm without being able to name it.
+    ///
+    /// Fixed in `heca-grid-ui`'s layout pass, where a spacing token now resolves to a whole pixel.
+    /// This asserts the property rather than the value, so it holds if the token or the font moves.
+    #[test]
+    fn the_air_between_the_columns_is_the_same_everywhere() {
+        let widths: Vec<f64> = vec![300.0; 14];
+        let ws = workspace(&widths, vec![]);
+        let extent: f64 = widths.iter().sum();
+        let root = row(&ws, extent, 1900.0, 600.0);
+
+        let mut edges = Vec::new();
+        for i in 0..widths.len() {
+            let c = card_of(root.as_ref(), &pane_key(PaneId(i as u64 + 1)))
+                .unwrap_or_else(|| panic!("card {i} of the row"));
+            edges.push((c.loc.x, c.loc.x + c.size.w));
+        }
+        let gaps: Vec<f64> = edges.windows(2).map(|w| w[1].0 - w[0].1).collect();
+        let first = gaps[0];
+        assert!(
+            gaps.iter().all(|g| (g - first).abs() < 0.01),
+            "the cards do not sit on an even rhythm: {gaps:?}",
         );
     }
 }

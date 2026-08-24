@@ -18,7 +18,7 @@
 //! state means adding both lines, and this is the file where that is visible.
 
 use super::seams::{DockRegistries, DockSeams};
-use super::{pane_nav_key, pane_row_items, pane_row_press, row_peek, PaneEntry, MENU_PANE};
+use super::{pane_key, pane_row_items, pane_row_press, row_hint, PaneEntry, MENU_PANE};
 use crate::chrome::{
     alpha_u8, home_relative_path, pane_info_view, runtime_snapshot, truncate_sidebar_git_branch,
     ChromeDragItem, PaneInfoSignals, RepaintWatch, CARD_META_FONT_SCALE,
@@ -85,16 +85,30 @@ impl PaneRow<'_> {
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
         let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
-        let active_title_label = Label::new(info.title.clone())
-            .color(theme.colors.accent)
-            .bold(true);
-        let active_title_signal = active_title_label.text_signal();
+        // The pane's name, the same line the exposé's card shows — and it cuts rather than spilling
+        // when the sidebar is narrow (`components::PaneName`).
+        let active_name = crate::components::PaneName {
+            text: &info.title,
+            color: theme.colors.accent,
+            bold: true,
+            font_scale: 1.0,
+            theme,
+        }
+        .build();
+        let active_title_label = active_name.widget;
+        let active_title_signal = active_name.text;
         let active_title = Visibility::new(active_title_label, active);
         let active_title_visible = active_title.visible_signal();
-        let inactive_title_label = Label::new(info.title.clone())
-            .color(theme.colors.foreground)
-            .bold(true);
-        let inactive_title_signal = inactive_title_label.text_signal();
+        let inactive_name = crate::components::PaneName {
+            text: &info.title,
+            color: theme.colors.foreground,
+            bold: true,
+            font_scale: 1.0,
+            theme,
+        }
+        .build();
+        let inactive_title_label = inactive_name.widget;
+        let inactive_title_signal = inactive_name.text;
         let inactive_title = Visibility::new(inactive_title_label, !active);
         let inactive_title_visible = inactive_title.visible_signal();
         let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);
@@ -203,31 +217,21 @@ impl PaneRow<'_> {
         // Optional cwd row (folder icon + home-relative path), stacked between the name and
         // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
         // row's visibility follows `[settings] pane_show_cwd` and whether the pane has a cwd.
+        // **One shape, shared with the exposé's card** (`components::FolderLine`): the map and the
+        // dock must not describe the same pane two different ways. The signals come back because a
+        // cwd changes without a rebuild — a `cd` updates the path in place, and
+        // `[settings] pane_show_cwd` turns the line on and off the same way.
         let cwd_path = runtime.as_ref().and_then(|rt| rt.cwd.clone());
-        let show_cwd = ws_state.pane_show_cwd() && cwd_path.is_some();
-        let cwd_text = cwd_path
-            .as_deref()
-            .map(home_relative_path)
-            .unwrap_or_default();
-        // Readable, matching the sibling git-branch row (which colors its label
-        // `foreground`); `muted` was too dim for a primary info row.
-        let cwd_label = Label::new(cwd_text)
-            .color(theme.colors.foreground)
-            .font_scale(CARD_META_FONT_SCALE);
-        let cwd_signal = cwd_label.text_signal();
-        let cwd_row = Visibility::new(
-            Flex::row()
-                .align(Align::Center)
-                .gap(6.0)
-                .child(
-                    Icon::new(Glyph::Folder)
-                        .size(12.0)
-                        .color(theme.colors.foreground),
-                )
-                .child(cwd_label),
-            show_cwd,
-        );
-        let cwd_visible_signal = cwd_row.visible_signal();
+        let cwd_text = cwd_path.as_deref().map(home_relative_path);
+        let cwd = crate::components::FolderLine {
+            path: cwd_text.as_deref(),
+            show: ws_state.pane_show_cwd(),
+            font_scale: CARD_META_FONT_SCALE,
+            theme,
+        }
+        .build();
+        let show_cwd = ws_state.pane_show_cwd() && cwd_text.is_some();
+        let (cwd_row, cwd_signal, cwd_visible_signal) = (cwd.widget, cwd.text, cwd.visible);
         // The pane's identity row (status dots + program icon + name) — shared by every card
         // layout so the cwd and git rows just stack beneath it in one column.
         let name_row = Flex::row()
@@ -277,8 +281,8 @@ impl PaneRow<'_> {
             .nav_selected(false)
             // The row's ONE identity: the cursor and (later) drag read this single declaration
             // (F003/P085/T354). **The right-click no longer does** — the menu is declared below, on
-            // this widget, so a row that forgets `nav_key` still opens its menu (F004/P084/T395).
-            .nav_key(pane_nav_key(pane_id))
+            // this widget, so a row that forgets `key` still opens its menu (F004/P084/T395).
+            .key(pane_key(pane_id))
             // **This row's menu, built where this row's data is.** No `context_path`, no registered
             // builder, no menu-id string: the entries capture `pane_id` from the loop that is already
             // drawing it. Built at trigger time, so "Use process name" appears exactly when there is a
@@ -308,16 +312,13 @@ impl PaneRow<'_> {
             .push((pane_id, card.previous_state()));
         reg.signals.row_nav.push((
             seams.mount.to_string(),
-            pane_nav_key(pane_id),
+            pane_key(pane_id),
             card.nav_state(),
         ));
-        // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
-        // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
-        // events/focus/drag straight through — so the card stays a drag source + target
-        // and clickable. The hint signal is driven each frame in `sync_chrome_signals`
-        // from the active `InputMode` candidates (keyboard logic stays the source of truth).
-        let hint = signal(None);
-        reg.signals.pane_hint.push((pane_id, hint));
+        // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this pane's
+        // letter over it. `KeyHint` is transparent — it hugs the child and routes events, focus and
+        // drag straight through — so the card stays a drag source and target, and clickable. **The
+        // letter is offered by key** (`chrome::hint`) and drawn by the widget itself.
         reg.signals.pane_info.push((
             pane_id,
             PaneInfoSignals {
@@ -347,14 +348,13 @@ impl PaneRow<'_> {
         ));
         let (watch, _repaint) = RepaintWatch::new(
             KeyHint::new(card)
-                .hint(hint)
                 // **What `prefix+/` does to this row**, declared right where its letter is drawn: move
                 // the cursor here and bring the pane to the front, staying in the sidebar. Nothing is
                 // registered and no id leaves this line — which is the only reason a plugin's row could
                 // ever have the same picker (RULE ZERO, F004/P084/T399).
-                .on_peek(crate::chrome::fires(
+                .on_hint(crate::chrome::picks(
                     seams.mount,
-                    row_peek(pane_nav_key(pane_id)),
+                    row_hint(pane_key(pane_id)),
                     seams.emit,
                 ))
                 .placement(HintPlacement::CenterRight),
@@ -402,13 +402,12 @@ mod tests {
             fx.signals
                 .row_nav
                 .iter()
-                .any(|(m, k, _)| m == "left" && k == &pane_nav_key(PaneId(7))),
+                .any(|(m, k, _)| m == "left" && k == &pane_key(PaneId(7))),
             "the cursor outline is per placement, so it is keyed by mount",
         );
-        assert!(
-            fx.signals.pane_hint.iter().any(|(p, _)| *p == PaneId(7)),
-            "the pick letter is driven each frame from the active InputMode",
-        );
+        // The pick letter is **not** a signal this component registers any more: it is offered by
+        // the row's own `key` (`chrome::hint`) and drawn by the widget, so what this component
+        // owes is the identity — asserted above through `row_nav` — and nothing else.
     }
 
     /// A row declares the one identity everything else reads — the cursor, the drag, the
@@ -427,7 +426,7 @@ mod tests {
         };
 
         assert!(
-            testing::declared_nav_keys(&row).contains(&pane_nav_key(PaneId(9))),
+            testing::declared_keys(&row).contains(&pane_key(PaneId(9))),
             "a float carries the same identity a tiled card does",
         );
     }

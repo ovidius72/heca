@@ -36,8 +36,9 @@
 //! size. There is no fit to compute, nothing to cap, and nothing to scroll: a picture built out of
 //! shares of the window cannot overflow it.
 //!
-//! **The zoom *effect* is a different thing and stays**: `LayerRegistry::set_zoom` plays the map's
-//! open animation over any layer, a plugin's included.
+//! **The zoom *effect* is a different thing and stays** — it is declared on the surface itself
+//! ([`Overlay::animation`](heca_grid_ui::widgets::Overlay::animation)) and plays over any surface,
+//! a plugin's included. A paint transform is not a size: nothing is measured again.
 //!
 //! Panes are drawn as **boxes** for now: a border, the pane's name and its icon. A real snapshot
 //! needs a scene primitive `heca-grid-ui` does not have (its vocabulary is `Rect`, `Text`, `Icon`,
@@ -57,24 +58,25 @@ use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Length, Spacing};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Overlay, Surface};
+use heca_grid_ui::animation::Animation;
+use heca_grid_ui::widgets::{KeyHintGroup, Overlay, Surface};
 use heca_grid_ui::Component;
 
 pub(crate) use expose_grid::ExposeGrid;
 pub(crate) use model::{model, ExposeWorkspace};
 pub(crate) use pane_card::{DispatchAction, ExposeCallbacks, ExposeDeleteKeys};
 
-/// How long the map takes to dissolve when it is dismissed, in seconds.
-const FADE_OUT: f32 = 0.14;
-/// How long the map takes to zoom out to its map size when it opens, in seconds.
-///
-/// niri's own overview animation is in this range; long enough to read as one picture pulling back
-/// and short enough that `prefix+Tab` never feels like waiting.
-const ZOOM_IN: f32 = 0.2;
-
 /// The surface name the map registers under, and the one a `[[keys.surface]]` entry addresses. One
 /// constant so the layer, the config entry and the key lookup cannot drift apart.
 pub(crate) const SURFACE: &str = "expose";
+
+/// **The map's own picker, declared on the widget** (F003/P082/T427).
+///
+/// The action a `[[keys.surface]] heca.expose` entry binds as `pick`. It is the map's, not the
+/// app's: the surface declares the verb, the widget answers it, and config chooses the key. Before
+/// this the map had to borrow the built-in `hint_pick` — the only picker there was — which is why a
+/// plugin's overlay could contribute targets to heca's picker and never open one of its own.
+pub(crate) const PICK_ACTION: &str = "heca.expose.pick";
 
 /// **A share of the parent's height**, expressed the only way flexbox actually divides a box.
 ///
@@ -110,7 +112,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             let intent = args.iter().fold(heca_view::Intent::new(action), |i, (k, v)| {
                 i.arg(*k, heca_view::PropValue::Int(*v))
             });
-            emit(crate::app::interaction::InteractionIntent::View(intent));
+            emit.fire(crate::app::interaction::InteractionIntent::View(intent));
         })
     };
     // Moving the map's highlight is its own intent — the same one `CardGrid::on_move` sends when
@@ -119,7 +121,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
     let cursor_to: std::rc::Rc<dyn Fn(PaneId)> = {
         let emit = emit.clone();
         std::rc::Rc::new(move |pane_id: PaneId| {
-            emit(crate::app::interaction::InteractionIntent::ExposeCursor { pane_id });
+            emit.fire(crate::app::interaction::InteractionIntent::ExposeCursor { pane_id });
         })
     };
     let choose: std::rc::Rc<dyn Fn(PaneId)> = {
@@ -133,14 +135,14 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
             // The middle step is the one that is invisible until it is missing. `focus_pane`
             // changes which pane is *active* and deliberately nothing else — it does not release
             // container focus, because whether the keyboard should follow is a property of what
-            // the user asked for, not of a pane being focused (a peek focuses without leaving).
+            // the user asked for, not of a pane being focused (a hint focuses without leaving).
             // Without it the map focused the right pane and the keyboard stayed where it was, so
             // choosing a card looked like it had done nothing at all.
-            emit(crate::app::interaction::InteractionIntent::FocusPaneThenAction {
+            emit.fire(crate::app::interaction::InteractionIntent::FocusPaneThenAction {
                 pane_id,
                 action: Box::new(crate::input::WmAction::UnfocusDock),
             });
-            emit(crate::app::interaction::InteractionIntent::ActivateAction(
+            emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
                 crate::input::WmAction::CloseOverlay { overlay: None },
             ));
         })
@@ -150,7 +152,7 @@ pub(super) fn callbacks(emit: super::ChromeIntentEmitter, keys: ExposeDeleteKeys
     let dismiss: std::rc::Rc<dyn Fn()> = {
         let emit = emit.clone();
         std::rc::Rc::new(move || {
-            emit(crate::app::interaction::InteractionIntent::ActivateAction(
+            emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
                 crate::input::WmAction::CloseOverlay { overlay: None },
             ));
         })
@@ -196,9 +198,34 @@ pub(crate) fn map(
     }
     .build();
 
+    // **The picker is a widget, and the map declares it.** Open it and every card beneath wears a
+    // letter — each drawn by the card itself, so it lands wherever the card is, at any nesting
+    // depth. Typing one runs that card's own `on_hint`. Nothing host-side is involved: no input
+    // mode, no host paint pass, no registry.
+    let grid = KeyHintGroup::new(grid)
+        .opens_on(PICK_ACTION)
+        // The wrapper hugs its child, so the room the panel gives it has to be passed on
+        // deliberately — the grid inside is a share of *this*, and a hugged wrapper would leave it
+        // resolving a percentage of nothing (the same term the cards' `KeyHint` needs).
+        .width(Length::Pct(1.0))
+        .height(Length::Pct(1.0));
+
     Box::new(
         Overlay::new()
             .blocking(true)
+            // **The map names how it comes and goes, exactly as a plugin's surface would.**
+            //
+            // It opens by pulling back, the way niri's overview does — the same session seen from
+            // further away, rather than a different picture arriving. Antonio: *"The animation in
+            // niri is zoom-in/out not fade."* Going, the shrink leads and the dissolve rides it,
+            // which is what `ZoomFade` **is**: the gesture is defined once, in the library, so no
+            // surface composes it out of parts and none of them can drift.
+            //
+            // How far back is `[settings] overview_zoom_from`, not a constant here. Starting the
+            // cards at exactly life size is the truest reading and overshoots — at 2× the outer
+            // rows begin off-screen and rush in. The setting defaults to a gentler value, and a
+            // user who wants the literal reading sets 2.0.
+            .animation(Animation::ZoomFade.from(geometry.overview_zoom_from as f32))
             .panel_size(Length::Pct(1.0), Length::Pct(1.0))
             // **The panel is the frost's tint, not a lid.** The host stamps the blurred frame
             // under this layer (`LayerBackdrop::Frosted`), so the surface here is the background
@@ -212,7 +239,11 @@ pub(crate) fn map(
                     .pad_all(Spacing::Md)
                     .child(grid),
             )
-            .open(true),
+            // **Closed until the stack shows it**, which is what plays the arrival: `ShowLayer`
+            // rebuilds the map and then shows the layer, and showing states that the surface is
+            // open. A rebuild while it is already up carries the gesture over from the tree it
+            // replaces, so nothing replays.
+            .opened(false),
     )
 }
 
@@ -286,16 +317,24 @@ fn open_on(
 pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::LayerId> {
     let name = super::layers::layer_name(super::layers::HOST_OWNER, SURFACE)?;
     let programs = state.programs.clone();
-    let rows = model(&state.session, |pane| {
-        super::pane_info_view(
-            &programs,
-            &pane.title,
-            pane.custom_name.as_deref(),
-            Some(&pane.runtime),
-            false,
-        )
-        .title
-    });
+    // **Where each pane is, if the user asked for it** — `[settings] pane_show_cwd`, the same
+    // setting the sidebar's rows follow, read here because this is the file that may touch
+    // `AppState`. Off ⇒ the model simply carries no folder, and nothing below has a flag to pass on.
+    let folders = state.chrome_state.workspaces.pane_show_cwd();
+    let rows = model(
+        &state.session,
+        |pane| {
+            super::pane_info_view(
+                &programs,
+                &pane.title,
+                pane.custom_name.as_deref(),
+                Some(&pane.runtime),
+                false,
+            )
+            .title
+        },
+        folders,
+    );
     let theme = super::chrome_gui_theme(state);
     // **The map's own id, so its intents say the map made them.** Stamped `Keyboard` before, which
     // was indistinguishable from `prefix+j` typed at the session behind the map — and once the
@@ -335,7 +374,7 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     let id = state.layers.add_named(
         id,
         name.clone(),
-        super::LayerBand::Overlay,
+        None,
         super::LayerKind::OnDemand,
         // Modal: it takes the keyboard while it is up.
         true,
@@ -350,25 +389,9 @@ pub(crate) fn register(state: &mut crate::app_state::AppState) -> Option<super::
     // The map floats **over** the session, so the session has to still be there underneath — but
     // legibly out of focus. A flat fill made it a different screen; the blur makes it a lens.
     state.layers.set_backdrop(id, super::LayerBackdrop::Frosted);
-    // **Choosing a pane does not make the map vanish.** It dissolves while the app comes back into
-    // focus behind it, so the eye follows one picture becoming another instead of being cut to a
-    // different screen. A full-screen surface disappearing between two frames reads as a glitch.
-    // ⚠️ **The dissolve is NOT delayed behind the zoom.** Tried 2026-08-11 so the shrink would
-    // play before the surface went; the layer is retired when the *fade* finishes, so waiting left
-    // the cards on screen after the map had gone (Antonio, driving). If the two are ever to be
-    // sequenced, the layer's lifetime has to follow the whole exit, not the fade alone.
-    state.layers.set_fade_out(id, FADE_OUT);
-    // **It opens by pulling back, the way niri's overview does** — the same session seen from
-    // further away, rather than a different picture arriving. Antonio: *"The animation in niri is
-    // zoom-in/out not fade."*
-    //
-    // How far back is `[settings] overview_zoom_from`, not a constant here: `1 / overview_zoom`
-    // would start the cards at exactly life size, which is the truest reading and overshoots — at
-    // 2× the outer rows begin off-screen and rush in. The setting defaults to a gentler 1.3, and a
-    // user who wants the literal reading sets 2.0.
-    state
-        .layers
-        .set_zoom(id, ZOOM_IN, state.session.options.overview_zoom_from as f32);
+    // **The animation is declared on the surface, in `map`** — one builder on the widget, exactly
+    // what a plugin writes. It used to be two `pub(crate)` calls on the registry here, holding a
+    // `LayerId` and knowing the sequencing rule; a plugin could reach none of it (F003/P082/T459).
     if was_visible {
         state.layers.show(id);
     }
@@ -387,13 +410,19 @@ mod tests {
         start: Option<PaneId>,
     ) -> (Box<dyn Component>, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
         let s = session();
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
         let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
         let sink = seen.clone();
         let emit: super::super::ChromeIntentEmitter =
-            std::rc::Rc::new(move |intent| sink.borrow_mut().push(format!("{intent:?}")));
+            super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, move |_, intent| {
+                sink.borrow_mut().push(format!("{intent:?}"))
+            });
         let mut root = map(&rows, &theme, emit, start, &LayoutOptions::default(), &shipped_keys(), None);
+        // **Shown, as the layer stack shows it.** The map is built closed and opened by whoever
+        // mounts it (`LayerRegistry::show`), which is also what plays its arrival — so a test that
+        // never opens it is testing a surface nobody has raised.
+        root.open();
         heca_grid_ui::LayoutEngine::new()
             .compute(root.as_mut(), heca_grid_ui::Size::new(1900.0, 1200.0));
         (root, seen)
@@ -523,10 +552,11 @@ mod tests {
     #[test]
     fn a_row_carries_no_workspace_label() {
         let s = session();
-        let rows = model(&s, |p| p.title.clone());
+        let rows = model(&s, |p| p.title.clone(), false);
         let theme = GuiTheme::default();
-        let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
         let mut root = map(&rows, &theme, emit, None, &LayoutOptions::default(), &shipped_keys(), None);
+        root.open(); // as the layer stack shows it — see `built`
 
         // What is *drawn*, not what the tree holds — the question is whether a workspace name ever
         // reaches the screen.
@@ -638,9 +668,9 @@ mod tests {
     fn the_assembled_map_stays_inside_the_window() {
         for (w, h) in [(1280.0, 800.0), (1900.0, 1200.0), (800.0, 600.0)] {
             let s = session();
-            let rows = model(&s, |p| p.title.clone());
+            let rows = model(&s, |p| p.title.clone(), false);
             let theme = GuiTheme::default();
-            let emit: super::super::ChromeIntentEmitter = std::rc::Rc::new(|_| {});
+            let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
             let mut root =
                 map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
             heca_grid_ui::LayoutEngine::new()
@@ -653,7 +683,7 @@ mod tests {
                     && drawn.loc.y + drawn.size.h <= h + 1.0,
                 "in {w}x{h} the cards reach {drawn:?}",
             );
-            let card = card_of(root.as_ref(), &pane_card::pane_nav_key(PaneId(1)))
+            let card = card_of(root.as_ref(), &pane_card::pane_key(PaneId(1)))
                 .expect("the first pane's card");
             assert!(
                 card.size.h > h * 0.3,
@@ -661,6 +691,50 @@ mod tests {
             );
         }
     }
+
+    /// **The map declares its own picker, and its cards declare their own picks** (F003/P082/T427).
+    ///
+    /// Both halves, because either alone is silent: an action nothing declares is a no-op that
+    /// looks exactly like a typo, and a picker over cards that declare nothing shows no letters.
+    #[test]
+    fn the_map_owns_its_picker_and_every_card_is_a_target() {
+        let s = session();
+        let rows = model(&s, |p| p.title.clone(), false);
+        let theme = GuiTheme::default();
+        let emit: super::super::ChromeIntentEmitter = super::super::ChromeIntentEmitter::of(crate::app::interaction::InteractionSource::Keyboard, |_, _| {});
+        let mut root =
+            map(&rows, &theme, emit, Some(PaneId(1)), &LayoutOptions::default(), &shipped_keys(), None);
+        heca_grid_ui::LayoutEngine::new()
+            .compute(root.as_mut(), heca_grid_ui::Size::new(1280.0, 800.0));
+
+        assert!(
+            heca_grid_ui::collect_actions(root.as_ref()).contains(&PICK_ACTION.to_string()),
+            "the map declares its own pick action, rather than borrowing the app's",
+        );
+        assert_eq!(
+            heca_grid_ui::collect_hints(root.as_ref()).len(),
+            2,
+            "one pick target per card in the fixture's session",
+        );
+    }
+
+    /// **The shipped config binds the map's own action**, not a built-in it borrowed. A name that
+    /// no widget declares binds fine, dispatches, and does nothing — indistinguishable from a typo —
+    /// so the file and the declaration are held together here.
+    #[test]
+    fn the_shipped_defaults_bind_the_maps_own_pick_action() {
+        let config = heca_config::theme::KeysConfig::default();
+        let entry = config
+            .surfaces()
+            .find(|e| e.name == "heca.expose")
+            .expect("the map has a [[keys.surface]] entry");
+        let short = PICK_ACTION
+            .strip_prefix("heca.expose.")
+            .expect("the action is namespaced by its surface");
+        assert!(
+            entry.bindings.contains_key(short),
+            "`{short}` is bound in the shipped defaults: {:?}",
+            entry.bindings.keys().collect::<Vec<_>>(),
+        );
+    }
 }
-
-

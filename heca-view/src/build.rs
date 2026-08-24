@@ -44,7 +44,8 @@
 
 use crate::{
     Intent, PropMap, PropValue, ViewAlign, ViewEllipsis, ViewGlyph, ViewJustify, ViewLabelSide, ViewMarker,
-    ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity, ViewSize,
+    ViewAnimation, ViewNode, ViewOrientation, ViewRevealAlign, ViewScrollAxes, ViewSeverity,
+    ViewSize,
     ViewTextAlign, ViewVariant,
     WidgetKind,
 };
@@ -218,6 +219,78 @@ pub trait Style: Sized {
     /// Take the node out of layout and paint entirely.
     fn hidden(self, hidden: bool) -> Self {
         self.prop("hidden", hidden)
+    }
+
+    // ── Identity ──
+    /// **This node's identity, when it is one of a collection you are iterating** — React's `key`,
+    /// meaning exactly what it means there.
+    ///
+    /// It is on this trait, not on one builder, for the reason `ComponentExt::key` is on every
+    /// widget: a collection can be built from any kind, so the identity of an item cannot belong to
+    /// a particular one. `realize` reads it once for every kind and writes it into the widget's own
+    /// slot, so a described row is identified exactly as a native row is — the cursor, the
+    /// right-click target, the drag identity and the picker's remembered letter all read that one
+    /// string.
+    ///
+    /// **Two cases, and only two:**
+    ///
+    /// | what you are building | what you write |
+    /// |---|---|
+    /// | anything at all — a button, an icon, a card | **nothing** |
+    /// | an item in a collection you are iterating | **`.key(…)`** — the item's own id, from your data |
+    ///
+    /// Everything else gets an identity anyway, derived from its content. What derivation cannot do
+    /// is tell apart several nodes that read the same, and that is what iterating produces — so
+    /// this is required in a collection and nowhere else.
+    ///
+    /// **You never count.** A key is never a position and never a counter: an index is the one
+    /// thing that changes when the list changes, which is what identity exists to survive. If you
+    /// are reaching for a counter, the key is wrong.
+    ///
+    /// ```ignore
+    /// for pane in &column.panes {
+    ///     Row::new().key(pane.id).on_press(Intent::new("focus_pane").arg("pane_id", pane.id))
+    /// }
+    /// ```
+    fn key(self, key: impl Into<String>) -> Self {
+        self.prop("key", PropValue::Text(key.into()))
+    }
+
+    /// Keep this node **out of the picker**, however actionable it is. Default `true`.
+    ///
+    /// The declarative spelling of `ComponentExt::hintable`. Being pickable is not opt-in — a node
+    /// with a `press` wears a letter with nothing written — so the only thing left to say is "not
+    /// me". Letters are scarce (52, one keystroke each), and a close button on every row of a long
+    /// list would spend one apiece.
+    fn hintable(self, hintable: bool) -> Self {
+        self.prop("hintable", hintable)
+    }
+
+    /// **Declare a verb this node answers to**, by name — the declarative
+    /// `heca_grid_ui::ComponentExt::on_action`.
+    ///
+    /// The node names the verb; config names the key. That division is the whole of it: a key
+    /// written into a description would be unrebindable, absent from the palette and unreachable
+    /// over RPC.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// // [[keys.surface]] name = "mypanel" / reload = "r"   →   mypanel.reload
+    /// let panel = Panel::new().on_action("mypanel.reload", Intent::new("docker.refresh"));
+    /// ```
+    ///
+    /// Universal, like [`key`](Style::key), because `on_action` is on every widget natively — this
+    /// is what lets a described **surface** own a verb instead of borrowing one the app compiled in
+    /// (F003/P082/T436). Whichever node on screen declares the name is the one that runs it, so a
+    /// verb whose surface is not up resolves to nothing, exactly as an unmounted provider's does.
+    ///
+    /// ⚠️ [`Toast`] has an inherent `on_action` of its own — the **event** its action button fires,
+    /// which takes an intent alone. Its arity differs, so the compiler says which you reached.
+    fn on_action(mut self, name: impl Into<String>, intent: Intent) -> Self {
+        self.node_mut().actions.insert(name.into(), intent);
+        self
     }
 
     // ── Appearance ──
@@ -430,6 +503,17 @@ builder!(
     DockFrame => DockFrame
 );
 builder!(
+    /// **A surface over the page**: a scrim, a panel holding the children, and how it arrives and
+    /// leaves ([`animation`](Overlay::animation)).
+    ///
+    /// ```ignore
+    /// Overlay::new()
+    ///     .animation(ViewAnimation::ZoomFade)
+    ///     .child(Panel::new().title("MAP").child(Label::new("…")))
+    /// ```
+    Overlay => Overlay
+);
+builder!(
     /// A row of column/pane markers.
     MarkerGroup => MarkerGroup
 );
@@ -443,6 +527,15 @@ builder!(
     Choice => Choice
 );
 
+builder!(
+    /// **A picker over its own children.** Open it and everything pickable beneath wears a letter;
+    /// typing one runs that node's `hint`. A transparent wrapper the rest of the time.
+    ///
+    /// [`opens_on`](KeyHintGroup::opens_on) is the whole of it — see there for why a picker needs
+    /// no key of its own and no state from the host.
+    KeyHintGroup => KeyHintGroup
+);
+
 impl Parent for VStack {}
 impl Parent for HStack {}
 impl Parent for Row {}
@@ -453,9 +546,11 @@ impl Parent for Panel {}
 impl Parent for Surface {}
 impl Parent for ItemGroup {}
 impl Parent for DockFrame {}
+impl Parent for Overlay {}
 impl Parent for MarkerGroup {}
 impl Parent for Tabs {}
 impl Parent for Choice {}
+impl Parent for KeyHintGroup {}
 
 // ── Leaves ────────────────────────────────────────────────────────────────────────────────
 builder_text!(
@@ -541,24 +636,63 @@ with_text!(
 );
 
 with_event!(
-    // `peek` beside `press` on every actionable kind: **a leader-key pick is its own gesture**, and
-    // a row that answers it differently has to be able to say so. Left unbound it falls back to
-    // `press`, so an actionable node stays reachable by letter with nothing written.
-    Row { on_press => "press", on_peek => "peek" }
-    Button { on_press => "press", on_peek => "peek" }
-    IconButton { on_press => "press", on_peek => "peek" }
-    BadgeButton { on_press => "press", on_peek => "peek" }
-    Item { on_press => "press", on_peek => "peek" }
-    RailCell { on_press => "press", on_peek => "peek" }
-    Choice { on_press => "press", on_peek => "peek" }
-    Input { on_change => "change" }
-    Toggle { on_change => "change" }
-    Checkbox { on_change => "change" }
-    Select { on_change => "change" }
-    Tabs { on_change => "change" }
-    ItemGroup { on_toggle => "toggle" }
-    DockFrame { on_toggle => "toggle" }
-    Toast { on_action => "action", on_dismiss => "dismiss" }
+    // **`hint` is on every kind, because `on_hint` is on every widget.**
+    //
+    // Natively a hint is `ComponentExt::on_hint` — universal, on `Base`, no widget opts in
+    // (F003/P082/T432) — and `realize` writes a node's `hint` event into that same slot for every
+    // kind, in the common path rather than a per-kind arm. The SDK offered it on seven kinds, so an
+    // author writing a `Label`, a `Card` or a `Panel` could draw the thing and never make it
+    // pickable, while the very same tree written as a raw `ViewNode` could. That is the drift
+    // `every_kind_can_be_given_a_hint_from_the_sdk` was written red to catch (F003/P082/T434).
+    //
+    // A hint is enough on its own: a node carrying one **is** a pick target, whether or not it can
+    // be clicked (`heca_grid_ui::hint::is_target` — `hintable && (hint.is_some() || actionable)`).
+    // So this is not "hint beside press"; it is a capability of every node, listed here because
+    // this table is where a builder gets its event setters.
+    //
+    // `press` stays on the kinds `realize` actually wires a click for — that is a per-kind arm, and
+    // a `press` on a `Separator` would be a setter that silently does nothing.
+    //
+    // `ScrollBar` is absent from this table and from the SDK entirely: host-only, its state is live
+    // host signals, and `realize` refuses it outright rather than render a dead control.
+    Row { on_press => "press", on_hint => "hint" }
+    Button { on_press => "press", on_hint => "hint" }
+    IconButton { on_press => "press", on_hint => "hint" }
+    BadgeButton { on_press => "press", on_hint => "hint" }
+    Item { on_press => "press", on_hint => "hint" }
+    RailCell { on_press => "press", on_hint => "hint" }
+    Choice { on_press => "press", on_hint => "hint" }
+    Input { on_change => "change", on_hint => "hint" }
+    Toggle { on_change => "change", on_hint => "hint" }
+    Checkbox { on_change => "change", on_hint => "hint" }
+    Select { on_change => "change", on_hint => "hint" }
+    Tabs { on_change => "change", on_hint => "hint" }
+    ItemGroup { on_toggle => "toggle", on_hint => "hint" }
+    DockFrame { on_toggle => "toggle", on_hint => "hint" }
+    Toast { on_action => "action", on_dismiss => "dismiss", on_hint => "hint" }
+
+    // The kinds whose only event is the pick. Nothing here is clickable through a description —
+    // `realize` wires no `press` for them — but every one of them can be *picked*, and several
+    // want to be: a `Card` standing for a thing, a `Panel` heading a plugin's section, a `Label`
+    // that is the only handle on a row.
+    VStack { on_hint => "hint" }
+    HStack { on_hint => "hint" }
+    Grid { on_hint => "hint" }
+    Card { on_hint => "hint" }
+    Scroll { on_hint => "hint" }
+    Panel { on_hint => "hint" }
+    Surface { on_hint => "hint" }
+    Overlay { on_hint => "hint" }
+    KeyHintGroup { on_hint => "hint" }
+    MarkerGroup { on_hint => "hint" }
+    Label { on_hint => "hint" }
+    Badge { on_hint => "hint" }
+    Tag { on_hint => "hint" }
+    Icon { on_hint => "hint" }
+    StatusDot { on_hint => "hint" }
+    Gauge { on_hint => "hint" }
+    Alert { on_hint => "hint" }
+    Separator { on_hint => "hint" }
 );
 
 // ── The per-kind properties ───────────────────────────────────────────────────────────────
@@ -817,6 +951,15 @@ impl Row {
     pub fn highlight(self, colour: &str) -> Self {
         self.prop("highlight", PropValue::Color(colour.to_string()))
     }
+    /// The colour of the **"you were just here"** mark, overriding the theme's row-scale
+    /// `previous_background`.
+    ///
+    /// The pair with [`highlight`](Row::highlight), for the same reason: the theme's default is
+    /// tuned for a row in a list, and the same tint on a much larger surface reads differently —
+    /// area changes how a lift reads. A token name or a literal.
+    pub fn previous_tint(self, colour: &str) -> Self {
+        self.prop("previous_tint", PropValue::Color(colour.to_string()))
+    }
     /// The colour of the attention pulse.
     pub fn attention_color(self, colour: &str) -> Self {
         self.prop("attention_color", PropValue::Color(colour.to_string()))
@@ -899,10 +1042,58 @@ impl RailCell {
     }
 }
 
+impl KeyHintGroup {
+    /// **The verb that opens this picker** — one string, and the picker is yours.
+    ///
+    /// ```
+    /// use heca_view::build::*;
+    /// use heca_view::Intent;
+    ///
+    /// let panel = KeyHintGroup::new()
+    ///     .opens_on("mypanel.pick")
+    ///     .child(Row::new().on_hint(Intent::new("docker.restart")));
+    /// ```
+    ///
+    /// ```toml
+    /// [[keys.surface]]
+    /// name = "mypanel"
+    /// pick = "s"          # -> mypanel.pick
+    /// ```
+    ///
+    /// A picker is otherwise the one thing a description could not have: natively it is a signal,
+    /// an `open_when` binding it and an `on_action` closure that flips it — three things static
+    /// data cannot carry. The widget owns all three behind this name, so a described picker is the
+    /// native one and not a cut-down copy (F003/P082/T436).
+    pub fn opens_on(self, action: impl Into<String>) -> Self {
+        self.prop("opens_on", PropValue::Text(action.into()))
+    }
+}
+
 impl Panel {
     /// The heading above the rule.
     pub fn title(self, text: impl Into<String>) -> Self {
         self.prop("title", PropValue::Text(text.into()))
+    }
+}
+
+impl Overlay {
+    /// **How it arrives and leaves.** Unset, it cuts.
+    ///
+    /// These are the built-ins. An animation nobody named is a Rust type handed to
+    /// `heca_grid_ui::Overlay::animation`, which is what a plugin writing its own curve uses —
+    /// static data cannot carry a live object, so it names one instead.
+    pub fn animation(self, animation: ViewAnimation) -> Self {
+        self.prop("animation", animation)
+    }
+    /// Modal (the default): a dimming scrim, and outside input swallowed. Off, outside input falls
+    /// through to the page — a light-dismiss popover.
+    pub fn blocking(self, on: bool) -> Self {
+        self.prop("blocking", PropValue::Bool(on))
+    }
+    /// Whether it starts up. A surface **born** open is already there and plays no arrival; one
+    /// that *becomes* open arrives.
+    pub fn opened(self, on: bool) -> Self {
+        self.prop("opened", PropValue::Bool(on))
     }
 }
 

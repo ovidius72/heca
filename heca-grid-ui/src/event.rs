@@ -321,6 +321,25 @@ pub struct DragEvent {
     pub side: crate::drag::DropSide,
 }
 
+/// **Which widget a pick landed on** — what a delegating ancestor needs, and nothing more.
+///
+/// A pick is *nominal*, not spatial: it names a widget rather than a point, so this carries the
+/// picked widget's own identity ([`Base::key`](crate::component::Base::key)) rather than a cursor
+/// position. The bounds ride along because that is what a container wants in order to scroll the
+/// picked row into view or draw over it — the same thing
+/// [`Event::target_bounds`](Event::target_bounds) answers for a pointer event.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HintEvent {
+    /// The picked widget's [`key`](crate::builders::ComponentExt::key), when it declares one.
+    ///
+    /// `None` is ordinary — most widgets need no key (an ordinary button, an icon), and one is
+    /// required only for an item in a collection. A delegating container that iterates a collection
+    /// is exactly the case that has one.
+    pub key: Option<String>,
+    /// The picked widget's laid-out rect, as the letter was drawn over it.
+    pub bounds: Rectangle,
+}
+
 /// An event delivered to the component tree.
 ///
 /// **Two halves.** [`Raw`](Self::Raw) is the host's input, resolved by
@@ -361,6 +380,18 @@ pub enum Event {
     /// (field-first), so typing is never stolen. See [`WidgetIntent`] and
     /// `docs/widgets.md`.
     Widget(WidgetIntent),
+    /// **A letter from a picker resolved to a widget** — the pick, as an event.
+    ///
+    /// It travels the same walk everything else does: capture down the picked widget's ancestor
+    /// chain, the target, then back up, with `stop_propagation` ending it. There is no second
+    /// dispatch path for picks.
+    ///
+    /// **The widget's own [`on_hint`](crate::builders::ComponentExt::on_hint) fires in the target
+    /// phase only** — a pane that is pickable *and* holds pickable rows must not answer for a row.
+    /// What bubbles is this event, which is the **delegation** seam: an ancestor listening with
+    /// `.on(EventKind::Hint, …)` sees which widget was picked and may take the pick from it. That
+    /// ancestor declares nothing and gets no letter of its own.
+    Hint(HintEvent),
 
     // ──────────────────── resolved pointer (framework → widget) ────────────────────
     /// A button went down on this widget (or a descendant). Consuming it makes this widget the
@@ -607,6 +638,7 @@ impl Event {
             Self::TextInput(_) => EventKind::TextInput,
             Self::ModifiersChanged(_) => EventKind::ModifiersChanged,
             Self::Widget(_) => EventKind::Widget,
+            Self::Hint(_) => EventKind::Hint,
             Self::PointerDown(_) => EventKind::PointerDown,
             Self::PointerUp(_) => EventKind::PointerUp,
             Self::PointerMove(_) => EventKind::PointerMove,
@@ -703,6 +735,8 @@ pub enum EventKind {
     TextInput,
     ModifiersChanged,
     Widget,
+    /// A picker's letter resolved to a widget — see [`Event::Hint`].
+    Hint,
     PointerDown,
     PointerUp,
     PointerMove,
