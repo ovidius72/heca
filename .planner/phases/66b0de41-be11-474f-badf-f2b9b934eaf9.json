@@ -26,7 +26,8 @@
     "1c359f48-7df4-4d73-80e1-0a6552dd1846",
     "bbd49c69-6b48-41cd-9bb9-4b95ef1cd53d",
     "f28d24ba-d38b-4333-8ba7-a91698a7ae7f",
-    "2b99d64d-2c7d-4d11-831f-c94a72aea714"
+    "2b99d64d-2c7d-4d11-831f-c94a72aea714",
+    "7d906da8-2cf2-4359-8b85-3519931aa24c"
   ],
   "tasks": [
     {
@@ -184,10 +185,35 @@
       "completedAt": "",
       "createdAt": "2026-08-21T11:28:37.817Z",
       "updatedAt": "2026-08-21T11:28:37.817Z"
+    },
+    {
+      "id": "7d906da8-2cf2-4359-8b85-3519931aa24c",
+      "phaseId": "66b0de41-be11-474f-badf-f2b9b934eaf9",
+      "number": 469,
+      "shortId": "YTS3T",
+      "priority": 5,
+      "shortName": "commandpalette-composes-instea",
+      "title": "CommandPalette composes instead of computing — put-and-use, like every other widget",
+      "status": "planned",
+      "description": "Antonio, 2026-08-24, after the showcase's palette rendered with empty rows while the app's was correct: \"another sign we are not using the widget and component pattern to build things.\"\n\nTHE TARGET — the line an author writes, anywhere, including a plugin:\n\n  let cp = CommandPalette::new().items(...);\n  // later, from anywhere:\n  button.on_click(move || cp.open());\n  // or, bound to a key / reachable over RPC, with no host code:\n  CommandPalette::new().items(...).opens_on(\"palette.open\")\n\nSame shape as every other surface. Nothing to wire, nothing to position, no host pass.\n\nWHERE IT IS NOW\n- heca-grid-ui/src/widgets/command_palette.rs (1363 lines) — already ONE widget in the library. This is NOT a duplication problem: the app (heca/src/chrome/palette.rs:360) and the showcase (heca-renderer/examples/showcase.rs:319) both call CommandPalette::new(). heca/src/chrome/palette.rs's 758 lines are host wiring (which commands exist, how one dispatches), not a second palette.\n- The defect is that the widget COMPUTES ITS OWN GEOMETRY. command_palette.rs:733 writes `child.base_mut().bounds = target` after calling `crate::component::shift_subtree(child, dx, dy)` (:725-733), and it anchors itself against PaintCx::viewport (see :998, :1303 writing `q.base_mut().bounds`). visible_rows (:588) decides how many rows fit by measuring.\n- Consequence, observed: a widget that positions itself renders whatever its host's layout pass happens to hand it. The app lays it out inside a definite window and it is correct; the showcase lays it out in its own detached overlay pass (showcase.rs:2737-2741) and the rows came out empty with two labels drawn over the input. It is also why a framework-level rule (max-width: 100%, layout.rs) landed on one host and not the other — see F003/P082/T438.\n\nWHAT IT VIOLATES (Antonio, 2026-08-24, stating the principles he wants applied)\n- SRP / Separation of Concerns: one 1363-line widget owns filtering, selection, row composition, layout, placement, panel sizing, keyboard handling and open state. Each of those has a different reason to change.\n- Composition over inheritance/bespoke: placement, clipping and scrolling are already widgets in this library, and the palette re-implements all three.\n- DRY: Overlay already owns \"centred over the page, capped to the viewport, arrives and leaves\" (Presence + Animation, open()/hide()/toggle()); ScrollRegion already owns clip + scroll + ensure_visible. The palette is a second implementation of both.\n\nTHE SPLIT\n1. Rows become a real composition — a column of rows inside a ScrollRegion, laid out by the engine. Delete the manual pass: no shift_subtree, no writing bounds. This is the bulk of the work.\n2. Placement moves to Overlay (heca-grid-ui/src/widgets/overlay/): the palette becomes a panel inside one, so \"centred, capped, animated in and out\" is asked for rather than reimplemented. Its open/close verbs then come from the vocabulary that already exists — open() / hide() / toggle(), the same one F003/P082/T436 gave KeyHintGroup via opens_on(action_name), which is exactly the pseudocode above and already works end to end for the exposé.\n3. Scrolling and \"keep the selected row visible\" become ScrollRegion::ensure_visible instead of visible_rows arithmetic.\n4. What legitimately STAYS the widget's own: fuzzy filtering, the match marks, reflowing the selected row's description, cursor movement. That is behaviour, not geometry. Split it further per SRP: the filter should be a pure function over items (testable with no widget at all), separate from the view that renders its result.\n\nEDGE CASES / WHAT MUST NOT REGRESS\n- The reflow of the selected row's description IS the selection's visual: the row grows and the rows below slide down (command_palette.rs, and Label::wrap's doc). It changes the label's MEASURE, so it must survive the move to engine-driven layout.\n- Keycap rows: one per binding, stacked, in a column reserved across the list.\n- [settings] command_palette_size (560/700/1000px, 6/8/12 rows) currently feeds panel_size; under Overlay this becomes the panel's own size, not a row count the widget computes.\n- The palette must still hold the keyboard while open and dismiss through [keys.widgets], as every other modal widget does.\n\nWHEN IT IS DONE\n- The same picture in the app, the showcase and a plugin's panel, because none of them positions it.\n- It falls under the two sweeps added by F003/P082/T438 automatically (nothing paints outside its box; content never renders as nothing), so \"the palette paints outside its box\" becomes a test failure rather than a screenshot.\n- The file is well under the 400-line aim; command_palette.rs at 1363 is itself over the AGENTS.md threshold and this split is what brings it down.",
+      "descriptionUpdatedAt": "2026-08-24T13:52:59.568Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-24T13:52:59.526Z",
+      "updatedAt": "2026-08-24T14:06:34.930Z"
     }
   ],
   "createdAt": "2026-07-30T13:27:19.410Z",
-  "updatedAt": "2026-08-21T11:28:37.817Z",
+  "updatedAt": "2026-08-24T14:06:34.930Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
