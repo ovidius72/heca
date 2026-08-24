@@ -1,7 +1,6 @@
 # heca — Agent Guide
 
 > Everything an AI coding agent needs to work effectively on the heca project.
-> Last updated: 2026-06-15
 
 ---
 
@@ -20,8 +19,8 @@ reinventing something, and it will be rejected.
    the showcase — do not go by memory, including your own from earlier in the session.
 2. **If none exists — which planner task covers it?** Search the planner (`planner-task-list`,
    grep the phases) for the *pieces*, not just the feature you were asked for. Quote the id. Half of
-   what looks unbuilt is already planned, sometimes with the design decided (`NfIcon` was P029/T090,
-   with the font choice already settled in P074/T273).
+   what looks unbuilt is already planned, sometimes with the design decided in a task of its own —
+   `NfIcon` was planned long before it was built, with the font choice already settled elsewhere.
 3. **If neither — it is a proposal, not a commit.** Say what and why, get the OK, then build it. And
    **file it in the planner**, not in a prose list: this file's own "open gaps" section is how
    `Label` truncation stayed open long enough for FOUR separate hand-rolled truncations to be
@@ -51,7 +50,7 @@ reinventing something, and it will be rejected.
 offset, or an event-forwarding `match` inside a widget or the app. Every one of those is some
 existing widget's job. Stop and answer the three questions.
 
-### 0b. WIDGET vs COMPONENT — where a thing lives, and how it is built (F011)
+### 0b. WIDGET vs COMPONENT — where a thing lives, and how it is built
 
 **Widget** — `heca-grid-ui`. Primitive, generic, self-contained, complete on its own: `Input`,
 `Label`, `Item`, `Row`, `ItemGroup`, `ScrollRegion`, `Choice`, `Button`, `Icon`, `KeyHint`. Put it in
@@ -64,7 +63,7 @@ a tree and it works, with **no host wiring**. A UI library also ships composed o
 that justifies leaving the library. A composition that binds none of them is a widget in the wrong
 crate — move it down, don't keep it up here.
 
-**Where a component lives — beside the surface that uses it** (Antonio, 2026-08-12):
+**Where a component lives — beside the surface that uses it**:
 
 ```
 heca/src/chrome/<surface>/          ← the surface's own components, one file each
@@ -73,7 +72,7 @@ heca/src/chrome/<surface>/          ← the surface's own components, one file e
 └── <thing>_card.rs, <thing>_row.rs   the components
 ```
 
-It moves up to **`heca/src/components/`** (F011, `P087/T373`) the day a **second** surface needs it —
+It moves up to **`heca/src/components/`** the day a **second** surface needs it —
 DRY applied when the duplication is real, not when it is predicted. Until something is shared, a
 global folder only puts distance between a component and its only caller.
 
@@ -136,7 +135,7 @@ the moment it goes to `heca/src/components/` — not a moment earlier, and never
 
 § 0b says *what* a component is and *where* it lives. This says **how to build one**. It is a
 recipe: follow it in order. The worked example throughout is the **exposé**
-(`heca/src/chrome/expose/`, F003/P082/T420) — the first surface built this way and the one to read
+(`heca/src/chrome/expose/`) — the first surface built this way and the one to read
 if a rule below is unclear.
 
 **A surface is a folder, not a function.** One file per component, smallest first, exactly the way a
@@ -436,6 +435,7 @@ Ctrl+B → e    Enter sidebar navigation mode
 Ctrl+B → w    Create workspace + pane
 Ctrl+B → Shift+w  Rename workspace
 Ctrl+B → Shift+c  Rename active column
+Ctrl+B → Ctrl+c   Move pane to picked column (overlay letters)
 Ctrl+B → $    Rename active pane/tab
 Ctrl+B → i    Toggle focus (local, same workspace)
 Ctrl+B → Shift+i  Toggle focus (global, cross-workspace)
@@ -447,7 +447,7 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 
 **Key rules:**
 
-- **A key acts on the surface in front of you** (F003/P082/T428). Three surfaces, front to back — a
+- **A key acts on the surface in front of you**. Three surfaces, front to back — a
   **layer** (the exposé, a modal, a menu, a plugin's), a focused **dock**, and `heca.panes` (the
   scrolling area) — and exactly one holds the keyboard. One resolution order, for every key:
 
@@ -461,6 +461,21 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
   `close_overlay` came to eat it while a dock was focused, closing nothing because no overlay was
   up. The rule lives in `app/input.rs::surface_action` (pure, unit-tested) with `focused_surface`
   reducing `AppState` to it; the floors are asserted in `registry::assert_escape_floor`.
+- **The sidebar's own keys are SETTLED — do not casually re-decide them.**
+  - Sidebar navigation is **selection-driven**.
+  - `j`/`k` and `Up`/`Down` move the sidebar cursor **only**. Main scrolling/focus state does
+    **not** auto-follow it.
+  - `h`/`l` and `Left`/`Right` are tree-navigation keys on structural rows.
+  - Activating a pane / floating-pane leaf (`Enter`, `Right`, `l`, or a second click) focuses the
+    leaf and hands the keyboard back to it. `Space` **peeks** — it focuses the pane and keeps the
+    keyboard on the container.
+  - `Esc` exits the sidebar and focuses contextual content.
+  - Mutation keys are sidebar-only.
+  - Global prefix collapse actions act on the **active main-view state**, never on the sidebar
+    selection.
+  - A sidebar collapse is a **UI-tree** collapse, never a compositor/layout one.
+  - Expand / collapse / toggle should exist as explicit action families for RPC, even when only the
+    toggle gets a default binding.
 - Prefix mode is intentional (like tmux), NOT a bug. This avoids conflicts with hosted apps.
 - The prefix key is **configurable** via `prefix = "ctrl+b"` in config.toml.
 - All keybingings should be configurable in config.toml.
@@ -607,7 +622,7 @@ User input → InteractionIntent → route_interaction() → RouteDecision
 
 **Rule: every `WmAction` variant MUST be classified in `action_policy()`.** The match is exhaustive (no wildcard) and verified by the `action_policy_covers_all_variants` test. Adding a `WmAction` without classifying it = compile error.
 
-**Two axes, not one (F003/P086/T371).** `ActionPolicy` says *what kind of act this is*; **`Domain`**
+**Two axes, not one.** `ActionPolicy` says *what kind of act this is*; **`Domain`**
 says *what owns the screen right now*. The domain has **four** states, computed in `domain_for()`
 from the whole `AppState` and handed to the (still pure, still unit-tested) router:
 
@@ -639,7 +654,7 @@ in.
 
 **Floating-domain policy:** when `FocusDomain::Floating` is active, only `FocusedPaneLocal` + `Global` actions pass from `Keyboard`/`MouseContent`/`MouseLeftSidebar`. Everything else is blocked. The only escape from floating is `prefix+f` (Float toggle) or `ClosePane`.
 
-**`Global` vs `AlwaysAllowed` — do NOT conflate.** `AlwaysAllowed` is a misnomer: the router *blocks* it when floating. `Global` is the only policy that is truly always allowed. Use `Global` for app-level actions with **zero layout impact** that must stay reachable while floating (e.g. `ReloadConfig`). The hot-reload bug (config/style only applied on full restart, not on `prefix+Shift+r`, whenever a floating pane was active) was exactly `ReloadConfig` being mis-classified as `AlwaysAllowed` — fixed 2026-06-18 by moving it to `Global`.
+**`Global` vs `AlwaysAllowed` — do NOT conflate.** `AlwaysAllowed` is a misnomer: the router *blocks* it when floating. `Global` is the only policy that is truly always allowed. Use `Global` for app-level actions with **zero layout impact** that must stay reachable while floating (e.g. `ReloadConfig`). The hot-reload bug (config/style only applied on full restart, not on `prefix+Shift+r`, whenever a floating pane was active) was exactly `ReloadConfig` being mis-classified as `AlwaysAllowed` — fixed by moving it to `Global`.
 
 **Interaction sources:** `Keyboard`, `MouseContent`, `MouseLeftSidebar` (future: `MouseRightSidebar`, `MouseTopMenu`, `MouseStatusBar`, `Rpc`). Source matters for `SourceDependent` actions and for future chrome sources that may allow `AlwaysAllowed` actions even while floating.
 
@@ -789,7 +804,7 @@ row = row.child(action_tooltip(button, action_name, label, &state.action_shortcu
 - Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
 
 **2. KeyHint (vimium-style `prefix+/` pick)** — declare **what a pick does** on the
-wrapper that draws the letter. One line, no id, no registry (F004/P084/T399):
+wrapper that draws the letter. One line, no id, no registry:
 
 ```rust
 let fire = crate::chrome::fires(pane_row_press(pane_id), emit);   // the click
@@ -799,7 +814,7 @@ KeyHint::new(row).on_hint(hint)
 ```
 
 The slot is `Base::hint`, universal, and so is the **builder**: `on_hint` is on
-`ComponentExt` (F003/P082/T432), so every widget takes one and `KeyHint` stays what it
+`ComponentExt`, so every widget takes one and `KeyHint` stays what it
 always was — an optional decorator for a region that is not a widget you can put a
 builder on. Being pickable is **not** what it turns on: anything actionable already
 wears a letter, and this says a pick does something *other* than a click.
@@ -824,8 +839,8 @@ walk the chrome tree, every `state.pane_headers` tree and every visible layer. S
 - **The declarative half is the same declaration.** A described node binds a `hint`
   event to an `Intent` (`ViewNode::on_hint`), defaulting to its `press` — so every
   actionable described node is reachable by letter with nothing written, and a plugin's
-  row gets the identical picker. On **every** kind (F003/P082/T435).
-- **A surface owns a picker with one string, described or not** (F003/P082/T436).
+  row gets the identical picker. On **every** kind.
+- **A surface owns a picker with one string, described or not**.
   `KeyHintGroup::opens_on("mypanel.pick")` natively, `"props": {"opens_on": …}` in a
   described tree, and `[[keys.surface]] pick = "s"` binds the key to that name. The
   widget owns its open signal and the keyboard it holds; a caller that assembles those
@@ -1062,8 +1077,8 @@ single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
 
 ### ⭐⭐ RULE ZERO — A CAPABILITY IS ONE BUILDER ON THE WIDGET
 
-**Antonio, 2026-08-07: *"I want everything we build to be available for whoever wants to build a
-plugin or contribute to the project. THIS IS THE FIRST MOST IMPORTANT RULE."*** It outranks
+**Everything built here must be available to whoever wants to write a plugin or contribute to the
+project. THIS IS THE FIRST MOST IMPORTANT RULE.** It outranks
 everything below it, including the architecture section.
 
 **The test — apply it BEFORE writing any capability. Write the line a *plugin author* would type:**
@@ -1080,7 +1095,7 @@ ceremony around a missing API. The framework owns everything behind the builder:
 dispatch, drawing. The declarative path then maps the same builder to an `Intent` (as `on_press`
 already is), so a plugin writes the identical line. **One door, never two.**
 
-**The worked example, live in this repo (`prefix+/`) — FIXED by F004/P084/T399:**
+**The worked example, live in this repo (`prefix+/`) — now fixed:**
 
 ```rust
 // ✅ now — one line, on the widget
@@ -1105,7 +1120,7 @@ rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Bas
   has **no name a plugin can say**. Give it one; do not reach for the private enum.
 - **Never add a second path beside one that exists.** Two paths over one input cannot stay
   identical, and nothing fails when they drift — the tests exercise one, the user sees the other.
-  On 2026-08-07 this produced two row builders, two quick-pick loops, two menu shapes (a hand-written
+  In one session this produced two row builders, two quick-pick loops, two menu shapes (a hand-written
   `Clone` that dropped the panel's own style) and two keyboard lookups, all in one session, all
   found by Antonio by eye against a green suite.
 - A rule a **caller** has to remember (assign the letters, pick an anchor, choose a lookup) belongs
@@ -1115,7 +1130,7 @@ rule exists to forbid. `HintTargetRegistry`, `HintTargets`, `HintTargetId`, `Bas
   thing is meant to be used.
 
 This is what made `.context_menu()` replace `context_path` + a builder registry + a `key` nobody
-remembered (F004/P084/T395). When you touch a capability, check its neighbours for the same shape.
+remembered. When you touch a capability, check its neighbours for the same shape.
 
 ---
 
@@ -1123,7 +1138,7 @@ remembered (F004/P084/T395). When you touch a capability, check its neighbours f
 
 **heca's UI is a declarative, compositional tree — the same shape SwiftUI/Flutter use — and this is the target architecture for EVERY widget.** Two layers, one shape:
 
-- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop (changed 2026-07-26)** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
+- **`ViewNode`** (`heca/src/chrome/view.rs`) — the **serializable declarative model**: `ViewNode { kind: WidgetKind, props: Map<name, PropValue>, events: { press|change → Intent }, children: Vec<ViewNode> }`. `WidgetKind` is the **closed vocabulary of the WHOLE library** (containers `VStack`/`HStack`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`/`Surface`/`Overlay`/`ItemGroup`/`DockFrame`/`MarkerGroup`; leaves `Label`/`Button`/`IconButton`/`Badge`/`BadgeButton`/`Tag`/`Icon`/`Input`/`Select`/`Toggle`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`/`Tabs`). **Styling IS a prop** — the `Theme` gives the default and code may override it with a string; the old "styling is not a prop" rule is dead. See [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). **Behaviour is an `Intent`** (action id + args) — never a closure — so it serializes for native code, RPC, and WASM plugins alike.
 - **`realize(&ViewNode, …) -> Box<dyn Component>`** (`heca/src/chrome/realize.rs`) — the recursive host mapper: build the `heca-grid-ui` widget for `kind`, resolve props against `Theme`, wire events to intents, recurse `children`, attach via `.child(...)`. It **translates**; it never re-implements layout/paint/focus.
 
 **THE RULE (mandatory, every task): a widget's content is COMPOSED from child components — the very tree `realize` produces — never hand-drawn in `paint`.** A widget draws its own *chrome* (background/border/glow/focus ring, from `Theme`); its *content* (labels, icons, rows) must be child `Component`s laid out by the engine, so that:
@@ -1155,7 +1170,7 @@ heca (app)  ──depends on──▶  heca-grid-ui (library)      # NEVER the r
 | What type is a slot / child? | **`impl Component`** — any widget. **Never** narrow it to a closed `Icon\|Label` enum. |
 | How does a **realized** subtree enter a widget? | Via a **`*_boxed` setter**: `realize` returns `Box<dyn Component>`, which is not itself `Component`, so it cannot go through `Parent::child`. `Dialog::body_boxed(Box<dyn Component>)` is the precedent. |
 | How does behaviour cross the plugin boundary? | As an **`Intent`** (action id + args), never a callback. Click, KeyHint pick, and RPC all fire the same intent. |
-| Is styling a prop? | **YES — changed 2026-07-26.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** **Built 2026-07-27 (F003/P017/T7):** `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. **Correction (F003/P011/T018, same day):** T7 said "the whole of `Visual`" and that was not yet true — `border` and `glow` are structs, and a property value could only be a scalar, so neither could be written from a description no matter what serde derives the types carried. Nothing tested them, so nothing failed. `PropValue::Map` carries a named group of values and makes the claim true; a colour nested in one is still a theme token. **Adding serde to a type is not the same as being able to author it — check the value channel.** Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
+| Is styling a prop? | **YES.** The `Theme` gives the default; code may override it with a string (`"#ff8800"` or a theme name like `"muted"`). Set nothing and you follow the theme, which is what most widgets should do — a literal colour will not follow a theme reload, and that is the author's trade to make. **The old rule ("NO — the host resolves the pixels") is dead; do not restore it.** `Visual` (fill, border, glow, radius, font size) serializes and merges through the same generic path as `Layout`; a token name resolves against the theme the tree is built with, and a theme reload rebuilds the trees, so the token follows. `border` and `glow` are **structs**, so a scalar property value could not carry them however serde was derived — `PropValue::Map` carries a named group of values, and a colour nested in one is still a theme token. Nothing tested that gap, so nothing failed while it was open: **adding serde to a type is not the same as being able to author it — check the value channel.** Full model: [`docs/chrome-and-ui.md`](docs/chrome-and-ui.md). |
 
 **Both authoring paths converge on the same retained tree — that is the whole point:**
 
@@ -1174,8 +1189,8 @@ Button::destructive("Delete")
     .on_click(move || emit(intent))
 ```
 
-> ⚠️ **`P084(F004)/T400` — THREE QUARTERS BUILT (2026-08-10).** Antonio: *"I want transparent APIs… always prefer
-> common and well known APIs."* Delivery follows focus and bubbles (`takes_raw_keys` and
+> ⚠️ **THREE QUARTERS BUILT.** The API is meant to be transparent — always prefer common, well
+> known shapes. Delivery follows focus and bubbles (`takes_raw_keys` and
 > `takes_text_input` **deleted**); nobody routes their own subtree (`routes_own_subtree`
 > **deleted**); **one handler spelling** carrying the event *and* `stop_propagation()`, with nothing
 > consumed for you. **Still to build:** `bounds === what is drawn === what is clickable` —
@@ -1184,7 +1199,7 @@ Button::destructive("Delete")
 > ghosted the screen and stole hit targets. Doing it properly means the floating panels become
 > **real placed children**. **Do not add a new self-describing predicate.**
 
-**SETTLED — the input model (F004/P084/T394, 2026-08-06; keyboard half rebuilt by T400, 2026-08-10):**
+**SETTLED — the input model:**
 
 - **A host builds ONE pointer event**, `Event::Raw(RawPointer)`, carrying the **button** and the
   **modifiers**. The framework resolves it once — hit-test, hover, press/release pairing, click
@@ -1215,7 +1230,7 @@ Button::destructive("Delete")
 - Full model: [`docs/widgets.md` → the event model](docs/widgets.md); the rules are held by
   `heca-grid-ui/tests/pointer_routing.rs` and `tests/pointer_delivery.rs`.
 
-**SETTLED — the menu model (F004/P084/T395, decided by Antonio 2026-08-07):**
+**SETTLED — the menu model:**
 
 Four names, and there is no fifth. **The panel is `ContextMenu`'s own body, not a separate type** —
 inventing a `MenuPanel` for it was rejected outright.
@@ -1320,7 +1335,7 @@ above. A widget landed with thin docs, or documented for only one audience, is u
 
 The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widgets and project app state into them** — it must not invent visual primitives or hardcode styling inline.
 
-**Why this is non-negotiable (a real mistake made 2026-06-15):** the sidebar column "marker bar" + pane cards were built as inline `Flex`/`Surface` composition in `heca/src/chrome.rs` with hardcoded widths/alphas/colors (e.g. `Surface::new().width(Length::Px(3.0))…with_alpha(90)`, `theme.accent.with_alpha(28)`). Result: they do **not** inherit `Base` props, do **not** read font/theme/colors from config, **ignore** the `[appearance]` transparency, and have **no** consistent active/inactive border/width/radius — silently breaking theming, font changes, and transparency, and bloating the codebase with un-reusable, untested one-offs. Always build the widget properly in `heca-grid-ui` instead. The ad-hoc `.frameless()` added to `DockFrame` is the kind of unplanned escape-hatch to avoid; widget options must be deliberate + theme-driven.
+**Why this is non-negotiable (a real mistake, and it shipped):** the sidebar column "marker bar" + pane cards were built as inline `Flex`/`Surface` composition in `heca/src/chrome.rs` with hardcoded widths/alphas/colors (e.g. `Surface::new().width(Length::Px(3.0))…with_alpha(90)`, `theme.accent.with_alpha(28)`). Result: they do **not** inherit `Base` props, do **not** read font/theme/colors from config, **ignore** the `[appearance]` transparency, and have **no** consistent active/inactive border/width/radius — silently breaking theming, font changes, and transparency, and bloating the codebase with un-reusable, untested one-offs. Always build the widget properly in `heca-grid-ui` instead. The ad-hoc `.frameless()` added to `DockFrame` is the kind of unplanned escape-hatch to avoid; widget options must be deliberate + theme-driven.
 
 ### Using the widgets
 
@@ -1686,180 +1701,6 @@ See `niri-compatibility-review.md` for full details. Key issues:
 | `Monitor` | (not implemented) | heca is single-window; monitor = output is future |
 
 ---
-
-## Session Addendum — 2026-06-09
-
-Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactoring`. PR #36 ready to merge.
-
-### Work completed
-
-**Track 1 — Rust code hygiene (PR #34, merged):**
-
-- Remove dead `mouse/drop.rs`, clean `InputMode::Chord` allow
-- Descriptive messages to 4 `unreachable!()` calls
-- `Rectangle` type instead of `(f32,f32,f32,f32)` tuples
-- Chrome constants (`DEFAULT_TAB_BAR_HEIGHT`, `DEFAULT_STATUS_BAR_HEIGHT`) into `chrome.rs`
-- Split 163-line `on_cursor_moved()` into 4 named helpers
-- Extract mouse release handlers into `mouse/release.rs`
-
-**Track 2 — Surface-agnostic DnD (PR #36, open):**
-
-- `heca-grid-ui/src/drag/` framework types (5 files, 430+ lines):
-  - `DragSurfaceId` (enum), `DragItemId` (newtype), `DragContext` (per-surface state), `SurfaceDragPhase` (state machine)
-  - `rubberband()` math with unit tests
-- **⚠️ SUPERSEDED (2026-06-15) — generic DnD refactor (WS-A):** the framework is now
-  **domain-neutral + generic over an app payload `P`**: `DragContext<P>` /
-  `SurfaceDragState<P>` / `DragPhase<P>` (was `SurfaceDragPhase`); `DragItemKind`/`DragItem`
-  removed (payload lives in the app's `AppDragPayload`). Added universal `DragExt`
-  (`.draggable`/`.drop_target`), tree-geometry `drag::resolve_at`/`source_at`
-  (`DropHit`/`DropSide`), and `PaintCx::drag_ghost`/`drop_indicator`. **Docs:
-  `docs/widgets.md` §"Drag and drop"; design: `dnd-framework-refactor-plan.md`.** Never
-  put pane/workspace/column concepts in the `drag` module.
-- App integration: replace `DragState` with `DragContext` + `InteractiveMovePhase` (13 files)
-- Enum dispatch: `mouse/target.rs` — compiler exhaustiveness when adding surfaces
-- `mouse/surface_left.rs` — left sidebar handler; deleted `sidebar.rs`/`sidebar_drop.rs` (528 lines removed)
-- `mouse/interactive.rs` — content-area drag extracted; `drag.rs` shrinks 45%
-- Render: `Option<DragItemId>` instead of raw `usize`
-- Dispatch wired into app: `mouse.rs` + `release.rs` route through `target::surface_*()`
-- 3 Rust skill findings fixed (private field, redundant clear, `_pane_id` rename)
-
-**DnD plan files deleted** — `.planning/dnd-*.md` and `.planning/refactoring-and-dnd-plan.md` removed.
-
-### Remaining in original refactoring plan
-
-- Phase 3.2: `handle_swap_param()` still needs delegation to shared helpers (partial progress)
-- Phase 3.3: Reduce cross-file ad hoc search logic — not started
-- Phase 4-10: Not started beyond what Track 1/2 incidentally touched
-
-### Next start point
-
-The refactoring track (Phases 0–10) is **complete**. All checklist items are done.
-See `.planning/interaction-policy-plan.md` for remaining intent-routing work (Phase B/C).
-See `docs/chrome-and-ui.md` for the future chrome/plugin architecture.
-
-## Session Addendum — 2026-06-05
-
-This addendum captures important project-specific rules and outcomes established during the current refactor session. Treat these as active working rules unless the user explicitly overrides them.
-
-### Workflow rules for future phases
-
-- Work **solo** by default — do not use intercom/subagent delegation unless the user explicitly asks for it again.
-- **Before each new phase or major sub-phase, use the `/grill-me` skill** to acquire as much missing behavioral/product detail as possible before implementing.
-- Before starting a new phase slice, explicitly read:
-  - `AGENTS.md`
-  - all directly affected code files
-- **Pull/rebase from `origin/main` before starting each new task or phase slice.**
-- Keep work in **small, behavior-preserving slices** with clean commits.
-- After each meaningful slice, update:
-  - `session-resume-handoff.md`
-  - `.planning/STATE.md`
-- when the user gives you hint or observation mark them in the agent-rules.md file (create if needed):
-  - record what the user want you to do and what not to do
-  - record important things to remember
-  - try to follow coding standard and best practices and if you get scolted ask the user solutions and how they want to be implemented. Write in the file the user choice so you remeber next times.
-  
-### Action-system rules reinforced in this session
-
-For any new app behavior that should be user-visible or scriptable:
-
-- add a `WmAction` variant
-- add `action_from_name()` mapping
-- update `action_priority()` explicitly
-- register the handler in `build_registry()`
-- add metadata in `ActionRegistry::ALL` when user-facing
-- make it bindable from config when appropriate
-
-Do **not** introduce ad hoc behavior that bypasses the action system when the feature should be reachable from:
-
-- keyboard
-- mouse/UI
-- RPC / future RPC
-
-### Sidebar Phase 1.5 semantic rules already settled
-
-These were clarified in detail with `/grill-me`; do not casually re-decide them:
-
-- Sidebar mode is **selection-driven**.
-- `j/k` and `Up/Down` move sidebar cursor only.
-- Main scrolling/focus state does **not** auto-follow sidebar cursor movement.
-- `h/l` and `Left/Right` are tree-navigation keys on structural rows.
-- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and hands the keyboard back to it (`Space` hints — it focuses the pane and keeps the keyboard on the container).
-- `Esc` exits sidebar mode and focuses contextual content.
-- Sidebar-mode mutation keys are sidebar-only.
-- Global prefix collapse actions use **active main-view state**, not sidebar selection.
-- Sidebar collapse in current 1.5 work is **UI-tree collapse only**, not compositor/layout collapse.
-- Explicit expand/collapse/toggle action families should exist when preparing for future RPC friendliness, even if only toggle variants get default bindings initially.
-
-### Important reference files
-
-Planning / rules:
-
-- `docs/chrome-and-ui.md`
-- `session-resume-handoff.md`
-- `.planning/STATE.md`
-- `.planning/ROADMAP.md`
-- `.planning/interaction-policy-plan.md`
-
-Default keybinding reference:
-
-- `keybindings.default.toml`
-- `README.md`
-
-Sidebar/action implementation files:
-
-- `heca/src/input.rs`
-- `heca/src/actions.rs`
-- `heca/src/app/registry.rs`
-- `heca/src/app/input.rs`
-- `heca/src/handlers.rs`
-- `heca/src/mouse.rs`
-- `heca/src/mouse/sidebar.rs`
-- `heca/src/mouse/hit_test.rs`
-- `heca/src/sidebar/model.rs`
-- `heca/src/sidebar/hit_test.rs`
-- `heca/src/sidebar/render.rs`
-- `heca/src/sidebar/tests.rs`
-
-Current `heca-config` split reference:
-
-- `heca-config/src/color.rs`
-- `heca-config/src/settings.rs`
-- `heca-config/src/keys.rs`
-- `heca-config/src/loader.rs`
-- `heca-config/src/theme.rs`
-- `heca-config/src/defaults.rs`
-
-### Work completed in this session
-
-Already completed:
-
-- `heca-config` Phase 1.4 split work:
-  - `color.rs`
-  - `settings.rs`
-  - `keys.rs`
-  - `loader.rs`
-  - `defaults.rs`
-  - slimmed `theme.rs`
-- Sidebar Phase 1.5 completed slices so far:
-  - `1.5.1` normalize sidebar navigation contract
-  - `1.5.2` add sidebar-only mutation keymap
-  - `1.5.3` make sidebar actions selection-driven
-  - `1.5.4` add mouse semantics for entering/exiting sidebar mode
-  - `1.5.5` add disclosure hit targets and visual symbols for workspace + column rows
-
-### Planned incoming phases / slices
-
-Immediate remaining 1.5 work:
-
-- `1.5.6` global sidebar-tree collapse action family
-- `1.5.7` preserve public config/action surface for future RPC work
-- `1.5.8` add/update focused sidebar tests
-- `1.5.9` update docs/defaults
-
-After that:
-
-- proceed to sidebar intent routing (Phase B/C in `.planning/interaction-policy-plan.md`)
-- future chrome/plugin architecture work is planned in `docs/chrome-and-ui.md`
 
 ## Workflow Rules for Future Phases
 

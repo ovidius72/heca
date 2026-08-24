@@ -309,7 +309,7 @@ a closed [`Overlay`](#overlay) returns `None`, which takes its whole subtree out
 reach while leaving it laid out. It is the input twin of `damage_bounds`, for the same reason: what
 a widget draws, what it damages and where it can be clicked are three questions.
 
-> These two are still here, and T400 means to remove them: a floating widget should *place* itself
+> These two are still here, and are meant to go: a floating widget should *place* itself
 > (bake its offset into its own bounds) rather than describe a second rect. The first attempt at
 > that overwrote `base.bounds` in `on_layout`, which fights every other reader of bounds — paint,
 > damage, placement — and produced ghosting and stray hit targets. Doing it properly means the
@@ -387,7 +387,7 @@ which made every event kind depend on that container forwarding it correctly, fo
 
 **There are no exceptions left.** `Select`, `Dialog`, `Overlay`, `CommandPalette`, `ContextMenu` and
 `FocusScope` each used to declare `routes_own_subtree` and walk their own children for the events
-that have no position to route by. That predicate is **gone** (F004/P084/T400): keys route by focus,
+that have no position to route by. That predicate is **gone**: keys route by focus,
 which is the same statement said in the vocabulary the rest of the framework already used, so there
 is nothing left for those widgets to gate. **No container forwards any event any more.**
 `tests/pointer_delivery.rs` mounts a probe inside each container and fails if a pointer kind goes
@@ -544,7 +544,7 @@ let row = Row::new()
 `EventCx` answers `event()`, `pointer()`, `drag()`, `pos()`, `modifiers()` — and
 `stop_propagation()`.
 
-> **Nothing is consumed for you** (changed in F004/P084/T400 — the DOM's rule). The named builders
+> **Nothing is consumed for you** (the DOM's rule). The named builders
 > used to consume the event whether or not you wanted it, so anything that needed to *watch* a click
 > without claiming it had to drop to the differently-shaped `.on(kind, |cx| …)`, which was the only
 > form able to say `stop_propagation`. Two spellings over one input; now there is one. **A handler
@@ -600,7 +600,7 @@ takes no argument and there is no event to carry.
 |--------|--------|
 | `.hintable(bool)` | Keep this widget **out of the picker**, however actionable it is. Default `true`. |
 
-**Being pickable is not opt-in** (F003/P082/T441). A widget you can act on — a click, a double click,
+**Being pickable is not opt-in**. A widget you can act on — a click, a double click,
 a key — is offered a letter by `prefix+/` and by any enclosing [`KeyHintGroup`](#keyhintgroup) with
 nothing declared, and picking it does what clicking it does. So the only thing left to say is
 "not me":
@@ -614,14 +614,14 @@ nothing for the letter to run.
 
 **And a widget nobody can see gets no letter.** A target scrolled out of a clipping ancestor — a
 sidebar row past the fold — is dropped by the candidacy walk, through the same
-`Component::clips_children` that paint and input already honour (F003/P082/T438). Nothing to write:
+`Component::clips_children` that paint and input already honour. Nothing to write:
 put a widget in a `ScrollRegion` and its letters follow the fold. **A row you can half see keeps
 its letter**, and the keycap is drawn whole rather than cut, so you can still read what to press.
 
 | what you write | what happens |
 |---|---|
 | nothing | actionable → gets a letter; picking it does what clicking it does |
-| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget since F003/P082/T432 — it was a `KeyHint` builder before |
+| `.on_hint(…)` | gets a letter; picking it does **this** instead (heca's sidebar row: a click leaves the sidebar, a pick stays). On **every** widget — it was a `KeyHint` builder before |
 | `.hintable(false)` | never gets a letter, however actionable it is |
 
 **"Actionable" is `Base::activatable`**, set wherever an action is wired: once in `ComponentExt::on`
@@ -644,10 +644,9 @@ dense surface keeps them for the targets that matter.
 |--------|--------|
 | `.key(impl Into<String>)` | The identity of **this item**, when it is one of a collection you are iterating. |
 
-> **`key` replaced `nav_key`** (F003/P082/T444, decided 2026-08-17, renamed in `0a06ef5`). The
-> declarative form and the enforcement landed with the rest of T444. `scope_key` is **still here**:
+> **`key` replaced `nav_key`** — do not reintroduce the old name. `scope_key` is **still here**:
 > folding it into `key` turned out to change behaviour — see the note at the end of
-> [Nesting](#nesting-is-structure-not-a-second-concept) — and it moved to its own task.
+> [Nesting](#nesting-is-structure-not-a-second-concept) — and it is tracked in the planner.
 
 #### The rule: two cases, and only two
 
@@ -668,9 +667,8 @@ That is the whole surface. No role to declare, no region to name, nothing to rem
 widget.
 
 **Why the old names went.** `nav_key` and `scope_key` described *how the framework used the string*
-rather than what it was, so a developer adding a widget had no reason to guess either existed.
-Antonio, 2026-08-17: *"i don't want plugin authors or developers to have to add this strange and
-confusing name… if i were a developer adding a button i will forget to add that."*
+rather than what it was, so a developer adding a widget had no reason to guess either existed. A
+plugin author should not have to carry a strange, confusing name they will forget to add.
 
 #### `key` is React's `key`, and means the same thing
 
@@ -681,8 +679,7 @@ navigation — a pane's git status changing is enough — and a cursor, a letter
 that resets every rebuild is not one.
 
 **You never count.** `key` is never a position and never a counter; it comes from the data you are
-already iterating. Antonio, 2026-08-17: *"what does it mean `pane:7`? Should the developer count the
-number of panes they are adding?"* No. If you are reaching for a counter the key is wrong — an index
+already iterating. A key like `pane:7` should never mean "count the panes you are adding". If you are reaching for a counter the key is wrong — an index
 is exactly the thing that changes when the list changes, which is what identity is for.
 
 **Where it is required:** in a collection, and nowhere else — the same rule React uses, and the same
@@ -1452,10 +1449,6 @@ The heading is a real `Label` child, created up front and hidden until a title i
 works whether it is applied before or after the children, which is what a description needs since
 properties are applied after children are attached.
 
-> Until F003/P017/T008 there was **no** `Panel` widget: `WidgetKind::Panel` realized to a bare
-> `Surface`, which has no title. The published plugin examples showed `Panel::new().title("Hello")`
-> against it, and nothing in the docs let a reader tell that the title did not exist.
-
 ### Pane
 
 A generic container for sidebars/panels with three **frame modes** (`PaneFrame`),
@@ -1692,8 +1685,7 @@ vector, nothing to keep in sync with the children.
 
 ### ScrollRegion
 
-An embeddable **scroll viewport**: children laid out at their natural size (the
-layout engine never shrinks them, so they overflow), clipped to the region's own
+An embeddable **scroll viewport**: children laid out at their natural size (the layout engine never shrinks them, so they overflow), clipped to the region's own
 bounds. The visible window is the `ScrollRegion` itself; content beyond it is
 clipped (`PushClip`). It is a **dumb viewport** — it owns no selection state;
 selection/cursor is the host container's concern, and the region just scrolls
@@ -1756,8 +1748,7 @@ content shifted past the edge with no scrollbar to bring it back.
   across 16, so 9px of lane sat on the row beside it and one pixel belonged to two widgets. A host
   cannot arbitrate that: a press there was both "grab the thumb" and "start dragging this row", and
   the workaround (let whichever widget consumes the press win) stopped rows being draggable at all.
-  If you add a hit area wider than what your widget drew, widen the reservation with it
-  (F003/P085/T368).
+  If you add a hit area wider than what your widget drew, widen the reservation with it.
 - **The bar takes layout space, it is not drawn over content.** When an axis overflows, the region
   reserves the bar's lane as padding on that side, so a child is laid out **beside** the bar and
   keeps its rounded corner. Clipping alone was not enough and looked wrong: a card laid out full
@@ -1781,7 +1772,7 @@ content shifted past the edge with no scrollbar to bring it back.
   underlying app (terminal/editor), so the widget must not swallow them. Keyboard
   scrolling is a **host** concern — the app dispatches **prefix-gated, configurable
   scroll actions** (`WmAction` → `ActionRegistry`, RPC-ready) that call
-  `scroll_to`/`scroll_by`/`ensure_visible`. (App action layer: F003/P011/T012.)
+  `scroll_to`/`scroll_by`/`ensure_visible`.
 - **Whole-page scroll**: size a `.both()` region to the window and put the page
   inside it — that IS the page scroll (the showcase does exactly this; no manual
   bounds-shifting). Lay the page child at its **natural width** (don't stretch it:
@@ -1866,8 +1857,8 @@ relative to siblings, which a container cannot see and should not have to.
 > `flex: 1 1 0`); then the free space is the whole region, and the two measure 296px
 > each. `Layout` has no `flex_basis`, so that zero is written as a height today.
 > **Do not copy that into new code** — expressing a proportion by writing a fixed
-> measure is wrong, and **P052(F004)/T350** exists to give the library one `share(n)`
-> setter with the trio behind it.
+> measure is wrong. Giving the library one `share(n)` setter with the trio behind it
+> is tracked in the planner.
 
 ### Using one — the whole surface
 
@@ -2391,8 +2382,7 @@ tallest tab + the band" without anyone computing a height.
   in place.
 - **Builders**: `.selected(index)` (initial, clamped — call it **after** the tabs), `.font_size(f32)`
   (else inherits), `.on_change(impl Fn(Action))`, plus `LayoutExt`.
-- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` (the
-  selected tab's [text summary](#component-trait)).
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> String` (the selected tab's [text summary](#component-trait)).
 - **Emits**: `"tab-change"` / `SignalData::Usize` (the index — unchanged).
 - **Keys** (`widget-keys-config`): navigation is host-configured, not hardcoded. As a **horizontal**
   selector the widget moves selection on the semantic `Event::Widget(WidgetIntent::{ItemPrevious,
@@ -2756,12 +2746,10 @@ Enter/Space, **and** to a KeyHint target, so `prefix+/` reaches the row like any
 node. With no `press` intent the row is deliberately inert: not focusable, no hover — a described
 row that nothing can activate should not look like a control.
 
-> **`Row` is not `HStack`.** Until F003/P017/T6, `WidgetKind::Row` meant the plain horizontal box
-> and this widget had no declarative spelling at all. The boxes are now `HStack` / `VStack`, and
-> `Row` means the same thing in the model as it does in `heca-grid-ui`. `.highlight(Color)` and
-> `.attention_color(Color)` are still host-only; they become props with F003/P017/T7.
+> **`Row` is not `HStack`.** The plain horizontal and vertical boxes are `HStack` / `VStack`;
+> `Row` means the same thing in the model as it does in `heca-grid-ui` — the selectable row.
 
-> **A native row's click is a NAME too (F003/P086/T365).** `.on_activate` takes a closure, so it is
+> **A native row's click is a NAME too.** `.on_activate` takes a closure, so it is
 > tempting for host code to write one that does the thing directly — and then that gesture is
 > reachable from the click and from nowhere else: not the `prefix+/` picker, not a menu entry, not a
 > keybinding, not RPC, and never a plugin. **A component declares its rows' gestures as `Intent`s,
@@ -2774,7 +2762,7 @@ row that nothing can activate should not look like a control.
 > node.on_hint(intent)                            row.on_hint(picks(mount, intent, emit))
 > ```
 >
-> **The click and the pick are two declarations, not one** (F004/P084/T399). A click on a sidebar
+> **The click and the pick are two declarations, not one**. A click on a sidebar
 > row means *go there and leave*; a `prefix+/` pick means *look at that one* and stays in the dock.
 > Serving both from one intent is what made the picker walk out of the sidebar. A described node
 > that binds only `press` still gets a pick for free — `hint` falls back to it.
@@ -3178,8 +3166,7 @@ ViewNode::new(WidgetKind::ItemGroup)
     .child(ViewNode::new(WidgetKind::Item).text("lib.rs"));
 ```
 
-Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the
-group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
+Props `realize` reads: `text` (header), `expanded` (Bool, default `true`). Children: the rows (the group's own header is prepended by the widget). Event: **`toggle`** — the intent carries the state it
 moved to in `args["expanded"]`, so one binding tells you which way it went.
 
 ### MarkerGroup
@@ -3235,8 +3222,7 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace),
   `.nav_selected(bool)` (a hollow accent **border** marking the sidebar-nav cursor on a
   workspace frame — distinct from the filled active wash).
-- **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the
-  wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
+- **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
   the look in place without rebuilding the tree.
 
 > **The drag-handle grip is drawn but wired to nothing.** If you see it on a workspace header in
@@ -3245,17 +3231,13 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 >
 > - the frame as a **container** — drag the whole dock into another chrome region. The actions for
 >   this already exist (`chrome.container.move_to_region` and friends); only the mouse surface is
->   missing. **`P079(F004)`**, task `J5592` ("DockFrame gets the drag handle it was specified with").
+>   missing.
 > - the frame as a **row inside** a container — reorder it in the list. heca mounts one frameless
->   `DockFrame` per workspace row, so this is the drag the grip actually sits beside.
->   **`P030(F006)`** (app-05, workspace drag-to-reorder), which still needs its own action and drop
->   logic.
+>   `DockFrame` per workspace row, so this is the drag the grip actually sits beside. This one still
+>   needs its own action and drop logic.
 >
-> The grip is left in place deliberately as a placeholder for those two (user, 2026-07-30).
->
-> **Phase ids in prose are worth distrusting.** Phase numbers are global, not per-feature — F004's
-> phases are `P019`, `P052`, `P079` — so a hand-written `F004/P009` names nothing. Every id in this
-> paragraph came from asking the planner; do the same rather than inferring one.
+> Both are tracked in the planner, and the grip is left in place deliberately as a placeholder for
+> them.
 
 **Native:**
 
@@ -3308,8 +3290,7 @@ Per the chrome plan's *read-via-signals, write-via-actions* rule, it reacts to a
 - **Accessors / intents**: `.mode_signal() -> Signal<RegionMode>` (binding point — share it with
   rail-aware Docks before `.dock(...)`), `.toggle()` (flip Expanded ⇄ CollapsedRail).
 - **`RegionMode`**: `Expanded`, `CollapsedRail` (thin icon rail), `Hidden` (`display: none`). The
-  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the
-  collapsed rail was dropped — see [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md)).
+  library supports all three; **the heca app currently uses only `Expanded` and `Hidden`** (the collapsed rail was dropped — see [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md)).
 
 ```rust
 let sidebar = ChromeRegion::vertical().expanded_size(320.0).rail_size(64.0)
@@ -3333,7 +3314,7 @@ publish/pull mechanism [content color](#scene--drawcommand--paintcx-for-building
 Hover and active already have their own lit chrome, so they do not double it, and the glyph keeps
 ownership of the halo's *reach* — only it knows how big it is.
 
-> **Not currently mounted in the app (2026-07-11).** The heca sidebar collapsed rail was dropped
+> **Not currently mounted in the app.** The heca sidebar collapsed rail was dropped
 > (a region is Expanded ⇄ Hidden), so nothing in the app builds `RailCell`s today. It remains a
 > supported library widget, reserved for a future generic Provider icon rail — see
 > [`../docs/sidebar-provider-modes.md`](../docs/sidebar-provider-modes.md) §4. If a future rail needs
@@ -3375,9 +3356,8 @@ A **transparent wrapper that carries a hint letter on behalf of a region** — a
 something that is not a widget you can put a builder on. It is transparent to focus, layout and
 events (the wrapped widget stays clickable and focusable); it only adds a declaration.
 
-> ⚠️ **It no longer draws the letter, and it is no longer how a widget becomes pickable.** Both
-> changed on 2026-08-17 (F003/P082/T431 and T441). Reach for it only when there is nothing to hang a
-> declaration on.
+> ⚠️ **It no longer draws the letter, and it is no longer how a widget becomes pickable.** Reach
+> for it only when there is nothing to hang a declaration on.
 
 **What replaced it, and why.** Two rules used to live here and now live in the framework:
 
@@ -3400,13 +3380,16 @@ with no downcasting.
   (`TopCenter` for compact square targets | `Center` for large panes | `CenterRight`
   for wide list rows — keycap pinned to the right edge | `TopRight` for tall targets like a
   workspace dock — right-aligned but anchored to the top edge, pair with `.offset_y` to land
-  on the header row),
+  on the header row | `TopLeft` for a large target whose picture the letter must stay clear of —
+  a card in the exposé, a content pane — pinned just inside the top-left and centred within a
+  shallow band from the top edge, so it lands on the card's top line rather than floating in the
+  middle of it),
   `.size(px)`, `.color(Color)` (override the keycap tint — default theme `accent`; lets a
   host distinguish target *kinds*, e.g. workspace picks tinted `warning` vs pane picks),
   `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
   tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
   child row fills its column instead of shrinking to content width.
-  **`on_hint` is no longer here** (F003/P082/T432) — it is
+  **`on_hint` is no longer here** — it is
   [`ComponentExt::on_hint`](#componentext--what-every-widget-gets), on every widget, so the two
   facts about a target (who it is, and what picking it does) stop living on two different nodes.
   A `KeyHint::new(row).on_hint(…)` call reads exactly the same; what changed is that a widget which
@@ -3455,7 +3438,7 @@ nothing to ask about and is always offered. **Nothing is
 registered** — a target is addressed by its path for exactly as long as the letters are up, so there
 is no allocator to keep in step with three rebuild cadences and nothing to un-register. This
 replaced an opaque `HintTargetId` the host mapped back to a `pub(crate)` enum, which a plugin could
-not construct (F004/P084/T399).
+not construct.
 
 #### Standalone keycap — `paint_keycap` / `keycap_size` / `KeycapVariant`
 
@@ -3534,8 +3517,7 @@ asdfghjklbceimnopqrtuvwxyzASDFGHJKLBCEIMNOPQRTUVWXYZ
 **Home row first**, so the targets a picker finds first get the keys your fingers rest on; lower case
 before capitals because they are one keystroke on every layout. **One letter per pick, always, and 52
 is the cap** — past the end of the sequence a target simply gets no letter. Two-key sequences were
-raised and refused (Antonio, 2026-08-17: *"typing 2 letters is not an option. always 1. stay with
-52."*): anything needing more than 52 at once is a picker covering too much, and the answer is a
+raised and refused — one letter, always, and 52 is the cap: anything needing more than 52 at once is a picker covering too much, and the answer is a
 smaller picker, never a longer keystroke.
 
 The app reads the same constant, so `prefix+/`, the pane / column / workspace / dock picks and a
@@ -3557,7 +3539,7 @@ Note neither item declares anything to be pickable: both are actionable, so both
 [`.hintable`](#hintable-and-being-pickable).
 
 **Declarative** — a described tree opens a picker over its own subtree the same way, and binds the
-key through `[[keys.surface]]` on the name it declares (F003/P082/T436):
+key through `[[keys.surface]]` on the name it declares:
 
 ```json
 { "kind": "KeyHintGroup",
@@ -3628,7 +3610,7 @@ elsewhere is worse than no ring.
 - **Routing**: none of its own. `.focus(sig)` binds that signal to `Base::focused`, and the
   framework delivers keyboard events to the focus owner's chain — so an unfocused scope is simply
   not on the path, and the focused one is, with nothing gated, declined or forwarded. It used to
-  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone (T400).
+  claim `routes_own_subtree` and skip the walk per event kind; that predicate is gone.
 - **Theme**: the outline is [`PaintCx::focus_ring`] — the same primitive every control's ring uses,
   at `focus_border_width`, offset outside the bounds like a CSS `outline`. A theme with
   `show_focus_border = false` hides this one too: whether focus outlines are drawn is the theme's
@@ -3727,7 +3709,7 @@ row.child(action_tooltip(KeyHint::new(button).on_hint(hint), "close", "Close", &
 
 ### Overlay
 
-The **base overlay surface** every overlay widget shares (T009 overlay rework): a
+The **base overlay surface** every overlay widget shares: a
 viewport-filling, centering layer that decorates its single **panel** child with the common
 overlay chrome — optional dimming scrim, drop shadow, theme surface fill, and the bracket
 reticle. **Blocking is a property of this layer, not a per-widget reimplementation**: a
@@ -4076,7 +4058,7 @@ Centering is real taffy layout, owned by the composed [`Overlay`](#overlay) (it 
 viewport and centers the panel), so every descendant gets true bounds (which the hint picker +
 hit-testing need).
 
-**Nested overlays work** (T009 step 4): a [`Select`](#select) opened inside the body composites
+**Nested overlays work**: a [`Select`](#select) opened inside the body composites
 **above** the dialog's action buttons (its dropdown records a deeper scene segment) and captures
 hover/wheel/keys over them — the dialog offers pointer moves, `Scroll`, and the semantic
 `Widget*` intents to an overlay-active descendant first, so `Dismiss` closes the *dropdown* (not
@@ -4089,7 +4071,7 @@ the dialog) and `Activate` commits its row.
 > in-flow `.child(...)` of a scrolled column instead, its box is that slot and the panel centers
 > off-screen once the page scrolls (and a self-recentering `on_layout` cannot fix it — inside a
 > scrolled subtree bounds are in scrolled-tree coordinates, not screen coordinates; this was
-> tried and reverted, see F003/P011/T009 BUG B).
+> tried and reverted).
 
 - **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
@@ -4111,8 +4093,7 @@ the dialog) and `Activate` commits its row.
       .body(ScrollRegion::new().child(long_list))       // only this scrolls
       .action(Button::secondary("Cancel"))
   ```
-  A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the
-  nested-overlay routing from the T009 rework), so overlay-in-scrolled-overlay is supported.
+  A [`Select`](#select) inside a scrolled body still composites **above** the action buttons (the nested-overlay routing above), so overlay-in-scrolled-overlay is supported.
 - **Accessor**: `.open_signal() -> Signal<bool>`.
 
 ```rust
@@ -4502,8 +4483,8 @@ either and a description can set it with **no change to the mapper**.
 
 #### Appearance: the theme is the default, not a wall
 
-Changed 2026-07-27. `Visual` used to be deliberately unserializable, so appearance was unreachable
-from a description by construction. It is now an ordinary property, on every widget.
+Appearance is an ordinary property, on every widget. `Visual` used to be deliberately
+unserializable, putting it out of a description's reach by construction; it no longer is.
 
 **Set nothing and you follow the theme** — which is what most widgets should do. That is not a new
 behaviour bolted on: `fill` / `border` / `glow` are `Option`, and `radius` / `font_size` use a
@@ -4823,9 +4804,7 @@ treats it like a built-in: it has a label and an icon, it shows up in menus and 
 be bound in `config.toml`, and it is judged by the same interaction policy.
 
 Metadata and handler live in two places for a borrow reason, not a design one: an action handler is
-`fn(&mut AppState, …)` and gets no registry, so **metadata** must be reachable from `AppState` (the
-`ActionCatalog`) while the **handler** table must be borrowable alongside `&mut AppState` (the
-`ActionRegistry`). One call registers both.
+`fn(&mut AppState, …)` and gets no registry, so **metadata** must be reachable from `AppState` (the `ActionCatalog`) while the **handler** table must be borrowable alongside `&mut AppState` (the `ActionRegistry`). One call registers both.
 
 ```rust
 use crate::actions::{
