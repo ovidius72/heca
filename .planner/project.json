@@ -53,8 +53,8 @@
     "TOML"
   ],
   "tools": [],
-  "contentLanguage": "Italian",
-  "chatLanguage": "Italian",
+  "contentLanguage": "English",
+  "chatLanguage": "English",
   "workflowRules": {
     "beforePhaseStart": [],
     "beforeTaskStart": [],

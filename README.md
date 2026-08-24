@@ -168,7 +168,7 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Swap and focus | `m` | Overlay letters; swap panes (follow to destination) |
 | Move column to workspace | `c` | Overlay letters on workspaces; press letter to move the active column there |
 | Move pane to workspace | `g` | Overlay letters on workspaces; press letter to move the active pane there |
-| Move pane to column | `Shift+C` | Overlay letters on columns (any workspace); press letter to stack the active pane into that column |
+| Move pane to column | `Ctrl+C` | Overlay letters on columns (any workspace); press letter to stack the active pane into that column |
 
 ### Resize
 
@@ -220,6 +220,7 @@ mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0
 | Create workspace | `w` | Create new workspace with a pane |
 | Rename workspace | `Shift+W` | Rename the **active** workspace (a focused container's cursor row has its own key — see below) |
 | Rename pane | `$` | Rename the **focused** pane (likewise) |
+| Rename column | `Shift+C` | Rename the **active** column (likewise) |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Give the keyboard to the workspaces dock |
@@ -608,9 +609,10 @@ swap_pane = "prefix+Shift+q"
 swap_and_focus_pane = "prefix+m"
 move_column_to_workspace_pick = "prefix+c"
 move_pane_to_workspace_pick = "prefix+g"
-move_pane_to_column_pick = "prefix+Shift+c"
+move_pane_to_column_pick = "prefix+Ctrl+c"
 rename_workspace = "prefix+Shift+w"
 rename_pane = "prefix+$"
+rename_column = "prefix+Shift+c"
 ```
 
 ### Config File Format
