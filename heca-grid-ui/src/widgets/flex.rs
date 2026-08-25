@@ -72,28 +72,39 @@ impl Component for Flex {
         if self.base.style.layout.direction != Direction::Row {
             return;
         }
-        // Where a child's baseline sits, measured down from the top of its own box.
-        let offset = |c: &Box<dyn Component>| -> Option<f64> {
-            let b = c.base();
-            // Only a leaf that measures its own text has a baseline to speak of; a container's is
-            // whatever its children work out among themselves.
-            c.measure_text()?;
-            let line = (b.font * crate::font::MONO_LINE_RATIO) as f64;
-            let ascent = (b.font * crate::font::MONO_LINE_RATIO * crate::font::BASELINE_RATIO) as f64;
-            Some((b.bounds.size.h - line) / 2.0 + ascent)
-        };
+        // **Look through wrappers.** A child is rarely the text itself: it is a `Visibility`, a
+        // `KeyHint`, a `Tooltip` — transparent things whose whole point is that they behave as the
+        // widget inside them. Asking only the direct child "are you text?" makes every wrapped run
+        // invisible to this pass, which is exactly how the sidebar's `(program)` suffix went on
+        // being misaligned while a two-bare-label test said it was fixed.
+        fn text_leaf(c: &dyn Component) -> Option<&dyn Component> {
+            if c.measure_text().is_some() {
+                return Some(c);
+            }
+            c.base().children.iter().find_map(|k| text_leaf(k.as_ref()))
+        }
+        // Where that text's baseline falls, in the row's own coordinates.
+        fn baseline_of(c: &dyn Component) -> Option<f64> {
+            let leaf = text_leaf(c)?.base();
+            let line = (leaf.font * crate::font::MONO_LINE_RATIO) as f64;
+            let ascent =
+                (leaf.font * crate::font::MONO_LINE_RATIO * crate::font::BASELINE_RATIO) as f64;
+            Some(leaf.bounds.loc.y + (leaf.bounds.size.h - line) / 2.0 + ascent)
+        }
         let deepest = self
             .base
             .children
             .iter()
-            .filter_map(|c| offset(c).map(|o| o + c.base().bounds.loc.y))
+            .filter_map(|c| baseline_of(c.as_ref()))
             .fold(f64::NEG_INFINITY, f64::max);
         if !deepest.is_finite() {
             return;
         }
         for child in self.base.children.iter_mut() {
-            let Some(own) = offset(child) else { continue };
-            let dy = deepest - (child.base().bounds.loc.y + own);
+            let Some(own) = baseline_of(child.as_ref()) else {
+                continue;
+            };
+            let dy = deepest - own;
             if dy.abs() > 0.01 {
                 crate::component::shift_subtree(child.as_mut(), 0.0, dy);
             }
@@ -110,4 +121,91 @@ pub type Container = Flex;
 /// Construct a vertical container.
 pub fn container() -> Flex {
     Flex::column()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builders::Parent;
+    use crate::widgets::{Label, Visibility};
+    use crate::{Component, LayoutEngine};
+    use heca_core::layout::Size;
+
+    /// Where a run's baseline falls, read the way [`Flex::on_layout`] reads it.
+    fn baseline(c: &dyn Component) -> Option<f64> {
+        fn leaf(c: &dyn Component) -> Option<&dyn Component> {
+            if c.measure_text().is_some() {
+                return Some(c);
+            }
+            c.base().children.iter().find_map(|k| leaf(k.as_ref()))
+        }
+        let b = leaf(c)?.base();
+        let line = (b.font * crate::font::MONO_LINE_RATIO) as f64;
+        let ascent = (b.font * crate::font::MONO_LINE_RATIO * crate::font::BASELINE_RATIO) as f64;
+        Some(b.bounds.loc.y + (b.bounds.size.h - line) / 2.0 + ascent)
+    }
+
+    fn laid_out(row: Flex) -> Flex {
+        let mut row = row;
+        LayoutEngine::new()
+            .base_font(14.0)
+            .compute(&mut row, Size::new(400.0, 100.0));
+        row
+    }
+
+    /// **Two runs at different sizes sit on one baseline** — the thing no box alignment can do.
+    #[test]
+    fn text_runs_of_different_sizes_share_a_baseline() {
+        let row = laid_out(
+            Flex::row()
+                .child(Label::new("NAME").bold(true))
+                .child(Label::new("(zsh)").font_scale(0.8))
+                .child(Label::new("tiny").font_scale(0.6)),
+        );
+        let mut seen = row.base().children.iter().filter_map(|c| baseline(c.as_ref()));
+        let first = seen.next().expect("the row has text in it");
+        for other in seen {
+            assert!(
+                (other - first).abs() < 0.01,
+                "baselines drifted: {first} vs {other}",
+            );
+        }
+    }
+
+    /// **…including a run inside a transparent wrapper**, which is the case that actually occurs:
+    /// a widget is rarely bare, it is wrapped in a `Visibility` / `KeyHint` / `Tooltip` whose whole
+    /// point is to behave as the thing inside it. Asking only the direct child "are you text?" made
+    /// every wrapped run invisible to the pass, so the row it was written for stayed misaligned
+    /// while a two-bare-label test reported success.
+    #[test]
+    fn a_wrapped_text_run_shares_the_baseline_too() {
+        let row = laid_out(
+            Flex::row()
+                .child(Label::new("fafdsa").bold(true))
+                .child(Visibility::new(Label::new("(zsh)").font_scale(0.8), true)),
+        );
+        let name = baseline(row.base().children[0].as_ref()).expect("the name is text");
+        let wrapped = baseline(row.base().children[1].as_ref()).expect("the wrapper holds text");
+        assert!(
+            (name - wrapped).abs() < 0.01,
+            "a wrapped run did not join the baseline: {name} vs {wrapped}",
+        );
+    }
+
+    /// Aligning baselines must never make the row taller — a run only moves down into space a
+    /// taller sibling already claimed.
+    #[test]
+    fn sharing_a_baseline_does_not_grow_the_row() {
+        let tall = laid_out(Flex::row().child(Label::new("NAME").bold(true))).base().bounds.size.h;
+        let mixed = laid_out(
+            Flex::row()
+                .child(Label::new("NAME").bold(true))
+                .child(Label::new("(zsh)").font_scale(0.8)),
+        )
+        .base()
+        .bounds
+        .size
+        .h;
+        assert_eq!(tall, mixed, "the row grew to fit a baseline shift");
+    }
 }
