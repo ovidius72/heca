@@ -62,6 +62,15 @@ pub const MONO_ADVANCE_RATIO: f32 = 0.6;
 /// Approximate line height as a fraction of font size (Phase-A measure only).
 pub const MONO_LINE_RATIO: f32 = 1.4;
 
+/// Where a run's **baseline** sits inside its line box, as a fraction of the line height.
+///
+/// The renderer centres a run's line box in the rect it is given and puts the baseline an ascent
+/// below the top of that box, so this is the one number the layout side needs in order to line two
+/// runs of *different sizes* up on a shared baseline — see [`Flex`](crate::widgets::Flex), which is
+/// the only thing that reads it. Both the line height and the ascent scale with the font, so
+/// centring two boxes can never make their baselines meet; only shifting by the difference can.
+pub const BASELINE_RATIO: f32 = 0.78;
+
 /// How many monospace cells fit in `width`.
 ///
 /// **The slack is not cosmetic, and half a pixel is not enough of it.** Two different roundings bite
