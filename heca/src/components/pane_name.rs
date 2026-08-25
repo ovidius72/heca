@@ -27,8 +27,10 @@ use heca_grid_ui::Color;
 pub(crate) struct PaneName<'a> {
     /// The name to show.
     pub(crate) text: &'a str,
-    /// Which colour this surface gives it — the active row's accent, a card's foreground.
-    pub(crate) color: Color,
+    /// Which colour this surface gives it, or `None` to **inherit** — which is what a name inside
+    /// a selectable row should do, so it follows selection with no second copy built for the other
+    /// state (F003/P082/T480). A surface that genuinely owns the colour still passes one.
+    pub(crate) color: Option<Color>,
     /// Names are shown bold everywhere they are shown; a caller that wants otherwise says so.
     pub(crate) bold: bool,
     /// Size relative to the surrounding text. `1.0` is the surface's own size.
@@ -49,9 +51,13 @@ impl PaneName<'_> {
         // **Cut at the end**: a name's beginning is what tells two panes apart (`server`/`serverb`),
         // so the tail is the half to lose. A path would want the other end — that is `FolderLine`'s
         // decision to make, not this one's.
-        let mut widget = Label::new(self.text)
-            .color(self.color)
-            .bold(self.bold)
+        let mut widget = Label::new(self.text).bold(self.bold);
+        // Unset means inherit the enclosing control's state colour, which is what lets one name
+        // follow selection instead of one name existing per state.
+        if let Some(c) = self.color {
+            widget = widget.color(c);
+        }
+        let mut widget = widget
             .truncate(Ellipsis::End)
             // **Never wider than what holds it.** A *centred* child is sized by its content and is
             // free to overflow its container — which is how the exposé's cards, whose column
@@ -77,7 +83,7 @@ mod tests {
     fn built(text: &str) -> BuiltPaneName {
         PaneName {
             text,
-            color: GuiTheme::default().colors.foreground,
+            color: Some(GuiTheme::default().colors.foreground),
             bold: true,
             font_scale: 1.0,
             theme: &GuiTheme::default(),

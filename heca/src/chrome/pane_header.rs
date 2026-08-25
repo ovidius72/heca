@@ -32,10 +32,10 @@ pub(crate) struct PaneInfoView {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PaneInfoSignals {
     pub(crate) icon: Signal<Glyph>,
-    pub(crate) title_active: Signal<String>,
-    pub(crate) title_inactive: Signal<String>,
-    pub(crate) title_active_visible: Signal<bool>,
-    pub(crate) title_inactive_visible: Signal<bool>,
+    /// The pane's name. **One signal, because there is one name** — its colour follows the
+    /// row's selected state through the inherited content colour, so no second copy exists to
+    /// keep in step (F003/P082/T480).
+    pub(crate) title: Signal<String>,
     /// The dimmed `(process)` suffix text beside a renamed pane's name (e.g. `(nvim)`),
     /// or empty when hidden. Signal-driven so a rename toggles it live without a tree
     /// rebuild (renames update signals, they don't rebuild the sidebar card).

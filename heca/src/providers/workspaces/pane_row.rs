@@ -85,32 +85,24 @@ impl PaneRow<'_> {
         let press = crate::chrome::fires(seams.mount, pane_row_press(pane_id), seams.emit);
         let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
         let icon_signal = icon_widget.glyph_signal();
-        // The pane's name, the same line the exposé's card shows — and it cuts rather than spilling
-        // when the sidebar is narrow (`components::PaneName`).
-        let active_name = crate::components::PaneName {
+        // The pane's name — ONE label, not one per colour. Its colour follows the row's selected
+        // state through the content colour the `Row` publishes each paint, which unstyled labels
+        // inherit; a caller that wants its own says so with `.color(..)`.
+        //
+        // It used to be built twice, once accent and once foreground, stacked in a column with one
+        // hidden — so the visible name sat at the top of that stack when selected and the bottom
+        // when not, and never shared a line with the `(program)` suffix beside it (F003/P082/T480).
+        // And it cuts rather than spilling when the sidebar is narrow (`components::PaneName`).
+        let name = crate::components::PaneName {
             text: &info.title,
-            color: theme.colors.accent,
+            color: None,
             bold: true,
             font_scale: 1.0,
             theme,
         }
         .build();
-        let active_title_label = active_name.widget;
-        let active_title_signal = active_name.text;
-        let active_title = Visibility::new(active_title_label, active);
-        let active_title_visible = active_title.visible_signal();
-        let inactive_name = crate::components::PaneName {
-            text: &info.title,
-            color: theme.colors.foreground,
-            bold: true,
-            font_scale: 1.0,
-            theme,
-        }
-        .build();
-        let inactive_title_label = inactive_name.widget;
-        let inactive_title_signal = inactive_name.text;
-        let inactive_title = Visibility::new(inactive_title_label, !active);
-        let inactive_title_visible = inactive_title.visible_signal();
+        let title_label = name.widget;
+        let title_signal = name.text;
         let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);
         let idle_dot_visible = idle_dot.visible_signal();
         let running_dot =
@@ -203,16 +195,22 @@ impl PaneRow<'_> {
             .unwrap_or_default();
         // `foreground` (not `muted`) so it's readable on every theme; it still reads as
         // secondary next to the accent + bold name (regular weight, smaller scale).
+        // Smaller and dimmer than the name it follows — secondary by design. The two runs sit on
+        // one shared baseline because `Flex` puts them there; a row of text at two sizes is the
+        // framework's problem, not this call site's.
         let process_hint_label = Label::new(process_hint_text)
-            .color(theme.colors.foreground)
+            .color(theme.colors.muted)
             .font_scale(CARD_META_FONT_SCALE);
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
         let process_hint_visible = process_hint.visible_signal();
+        // The name and the dimmed `(program)` suffix are two runs on one line, centred on each
+        // other — CSS's `align-items: center`. Measured: the name's box is 18 tall and the
+        // suffix's 14, and centring puts both mid-lines on the same pixel.
         let title_area = Flex::row()
             .align(Align::Center)
-            .gap(4.0)
-            .child(Flex::column().child(active_title).child(inactive_title))
+            .gap_spacing(heca_grid_ui::style::Spacing::Sm)
+            .child(title_label)
             .child(process_hint);
         // Optional cwd row (folder icon + home-relative path), stacked between the name and
         // git rows. Signal-driven like the git branch: the path updates live on `cd`, and the
@@ -283,6 +281,37 @@ impl PaneRow<'_> {
             // (F003/P085/T354). **The right-click no longer does** — the menu is declared below, on
             // this widget, so a row that forgets `key` still opens its menu (F004/P084/T395).
             .key(pane_key(pane_id))
+            // **What a CLICK does to this row: put the container's cursor on it.** Declared
+            // here, where the row already knows which row it is, instead of being recovered
+            // afterwards by hit-testing a rectangle (AGENTS.md § 0c — reach for a handler).
+            //
+            // Two intents, in order, because they are two acts: focus the dock, then move its
+            // cursor. Events are queued and processed in order, so the dock is
+            // `Domain::Container` by the time `cursor_to` runs, which is what its
+            // `ActionPolicy::ContainerFocused` requires. Same shape as a pane-header button
+            // that emits `FocusPane` before an action aimed at the focused pane.
+            //
+            // It does NOT activate the row — a click on the card already does that through the
+            // card's own `on_activate`. A pick is a third, separate declaration — the `on_hint`
+            // below — because a click, an activation and a pick are three different acts.
+            .on_click({
+                let emit = seams.emit.clone();
+                let mount = seams.mount.to_string();
+                let key = pane_key(pane_id);
+                move |_| {
+                    emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
+                        crate::input::WmAction::FocusDock {
+                            dock: Some(mount.clone()),
+                        },
+                    ));
+                    emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
+                        crate::input::WmAction::CursorTo {
+                            mount: mount.clone(),
+                            key: key.clone(),
+                        },
+                    ));
+                }
+            })
             // **This row's menu, built where this row's data is.** No `context_path`, no registered
             // builder, no menu-id string: the entries capture `pane_id` from the loop that is already
             // drawing it. Built at trigger time, so "Use process name" appears exactly when there is a
@@ -323,10 +352,7 @@ impl PaneRow<'_> {
             pane_id,
             PaneInfoSignals {
                 icon: icon_signal,
-                title_active: active_title_signal,
-                title_inactive: inactive_title_signal,
-                title_active_visible: active_title_visible,
-                title_inactive_visible: inactive_title_visible,
+                title: title_signal,
                 process_hint: process_hint_signal,
                 process_hint_visible,
                 cwd: cwd_signal,
