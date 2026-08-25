@@ -195,11 +195,13 @@ impl PaneRow<'_> {
             .unwrap_or_default();
         // `foreground` (not `muted`) so it's readable on every theme; it still reads as
         // secondary next to the accent + bold name (regular weight, smaller scale).
-        // Smaller and dimmer than the name it follows — secondary by design. The two runs sit on
-        // one shared baseline because `Flex` puts them there; a row of text at two sizes is the
-        // framework's problem, not this call site's.
+        // Smaller than the name it follows, and `foreground` — NOT `muted`, which is unreadable
+        // against the row's selected fill on this theme. The size difference and the parentheses
+        // are what make it read as secondary. The two runs sit on one shared baseline because
+        // `Flex` puts them there; a row of text at two sizes is the framework's problem, not this
+        // call site's.
         let process_hint_label = Label::new(process_hint_text)
-            .color(theme.colors.muted)
+            .color(theme.colors.foreground)
             .font_scale(CARD_META_FONT_SCALE);
         let process_hint_signal = process_hint_label.text_signal();
         let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
