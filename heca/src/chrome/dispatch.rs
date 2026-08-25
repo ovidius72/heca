@@ -1,8 +1,7 @@
 //! **Pointer and widget-intent dispatch into the retained chrome trees.**
 //!
 //! One place that feeds real input to the chrome root, the per-pane header trees and the pane
-//! viewports, plus the hit-test answers a caller needs about *what* is under a point
-//! (`container_at`, `key_at`).
+//! viewports.
 //!
 //! Split out of `chrome/mod.rs`. Nothing here is new; the passes are unchanged.
 
@@ -304,25 +303,7 @@ pub(crate) fn chrome_dispatch_cancelled(state: &mut crate::app_state::AppState, 
     }
 }
 
-/// Which container a point is inside, or `None` when it is outside every one (F003/P086/T365).
-///
-/// Read off the **retained tree's real laid-out bounds**, so it costs nothing to keep in step with
-/// what is on screen and works for any container — a plugin's included — without the host knowing
-/// anything about it.
-pub(crate) fn container_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
-    let tree = state.chrome_tree.as_ref()?;
-    heca_grid_ui::nav::scope_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
-}
 
-/// Which **row** a point is on, by the nav key its component gave it — `None` when the point is on
-/// no row (F003/P086/T365).
-///
-/// Read off the retained tree's real laid-out bounds, the same walk the right-click target and the
-/// drag source use, so all three agree about what a point is pointing at.
-pub(crate) fn key_at(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<String> {
-    let tree = state.chrome_tree.as_ref()?;
-    heca_grid_ui::key_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))
-}
 
 /// Feed a pointer-release into the retained chrome tree, so a gesture that started there can end.
 ///

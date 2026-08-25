@@ -517,6 +517,11 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         // **Releasing** chrome focus is always allowed, in every domain. It is the way back to the
         // main region, and a way out that can be blocked is not a way out — the same reason `Esc`
         // is a guarantee rather than a default (F003/P086/T363).
+        // **The container-cursor family** — permitted only while a dock is being driven
+        // (`Domain::Container`), which is what keeps "put the cursor on that row" out of the
+        // command palette and RPC while nobody is in a dock. A click on a row emits
+        // [`WmAction::FocusDock`] first, so the domain is `Container` by the time this runs.
+        WmAction::CursorTo { .. } => ActionPolicy::ContainerFocused,
         WmAction::UnfocusDock => ActionPolicy::Global,
         // Horizontal scroll reaches a chrome container's scroll area only — chrome state, no pane
         // layout impact — so it stays reachable while a floating pane is active, unlike the vertical

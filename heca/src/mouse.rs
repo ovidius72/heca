@@ -111,39 +111,6 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
     );
 }
 
-/// **A click inside a container focuses it; one outside every container releases** — and it moves
-/// that container's cursor to the row it landed on (F003/P086/T365).
-///
-/// Resolved from the retained tree's real bounds, so it works for any container — a plugin's
-/// included — with nothing declared, and it is the generic form of the release the content path
-/// used to do on its own (F003/P086/T364): "no container under the point" covers a pane, the top
-/// bar and empty space alike.
-///
-/// Shared by both buttons: a right-click aims the keyboard exactly as a left-click does, so the
-/// menu it opens describes the row the keyboard is now on.
-fn aim_keyboard_at_click(state: &mut AppState, pos: (f32, f32)) {
-    match crate::chrome::container_at(state, pos) {
-        Some(container) => {
-            // No guard needed: `FocusDock` only focuses, and focusing the dock that already has the
-            // keyboard is a no-op. It used to toggle, so this call site carried an `if` to stop a
-            // click inside a focused dock from releasing it — a rule in a call site rather than in
-            // the model, and the reason `ToggleDock` exists (F003/P082/T444).
-            crate::handlers::handle_focus_dock(
-                state,
-                &WmAction::FocusDock { dock: Some(container.clone()) },
-            );
-            // **The cursor and the click are the same thing.** Click row 5 and `j` must go to row
-            // 6 — so the press moves the container's cursor, not just the highlight. A press that
-            // lands on no row leaves the cursor alone: clicking a container's padding is not a
-            // request to move it.
-            if let Some(key) = crate::chrome::key_at(state, pos) {
-                crate::providers::move_provider_cursor(state, &container, &key);
-            }
-        }
-        None => crate::handlers::handle_unfocus_dock(state, &WmAction::UnfocusDock),
-    }
-}
-
 /// Sync the current drag mode with modifier state changes.
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
@@ -209,7 +176,6 @@ pub fn on_mouse_input(
             // click on a scrollbar thumb is still a click *in* that container and must focus it.
             // Each of the branches below returns early, so doing this later would mean repeating it
             // in every one of them and still missing the paths that consume.
-            aim_keyboard_at_click(state, pos);
 
             // Right sidebar chrome click (e.g. the collapse toggle). The right sidebar
             // has no drag surface yet (app-task-21); dispatch the press into the retained
@@ -401,7 +367,6 @@ pub fn on_mouse_input(
         // mode to restore afterwards, and moving focus first would have rewritten what it captured.
         // Nothing is restored any more, so the constraint went with it.
         (MouseButton::Right, ElementState::Pressed) => {
-            aim_keyboard_at_click(state, pos);
             // **The widget gets the right-click first.** It carries its button now, so a widget
             // that declares `on_right_click` owns its own menu and the host never has to work out
             // what was under the cursor on its behalf. Only when nothing claims it does the app's

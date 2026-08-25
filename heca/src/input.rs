@@ -604,6 +604,26 @@ pub enum WmAction {
     /// from RPC and a menu too, not only from a key nothing else can rebind.
     UnfocusDock,
 
+    /// **Put a mounted container's cursor on the row named by `key`.**
+    ///
+    /// A core action, not a provider's: every container has a cursor, so a plugin's rows move it
+    /// by naming this — nothing is declared by the widget. It is what a click on a row means, the
+    /// generic form of `providers::move_provider_cursor`.
+    ///
+    /// It moves the cursor and does **nothing else**: it does not activate the row, focus a pane,
+    /// or hand the keyboard anywhere. A *pick* does those (`workspaces.peek_selected`), and
+    /// serving both gestures from one declaration is the bug that made `prefix+/` walk out of the
+    /// sidebar.
+    ///
+    /// A caller that wants the cursor moved in a dock that does not yet hold the keyboard emits
+    /// [`FocusDock`](Self::FocusDock) first: the events are queued and processed in order, so the
+    /// dock is `Domain::Container` by the time this runs, which is what
+    /// [`ActionPolicy::ContainerFocused`] requires.
+    CursorTo {
+        mount: crate::chrome::ContainerId,
+        key: String,
+    },
+
     // ── Overlay control (parameterized) — plugin-ui, §2.7.2 ──
     // "Everything is an action": an overlay (modal/dropdown) is confirmed or dismissed by
     // dispatching an action carrying the overlay's id. The `OverlayHost` injects the id into
@@ -868,6 +888,10 @@ pub fn build_action(
     args: &std::collections::HashMap<String, String>,
 ) -> Option<WmAction> {
     match name {
+        "cursor_to" => Some(WmAction::CursorTo {
+            mount: args.get("mount")?.clone(),
+            key: args.get("key")?.clone(),
+        }),
         "focus_pane" => Some(WmAction::FocusPane {
             pane_id: PaneId(get_u64(args, "pane_id")?),
         }),
@@ -1135,7 +1159,10 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::NextPane
         | WmAction::PrevPane => 0,
         // Chrome focus is navigation: low priority so it does not override focus bindings.
-        WmAction::FocusDock { .. } | WmAction::ToggleDock { .. } | WmAction::UnfocusDock => 0,
+        WmAction::FocusDock { .. }
+        | WmAction::ToggleDock { .. }
+        | WmAction::UnfocusDock
+        | WmAction::CursorTo { .. } => 0,
         WmAction::CollapseCurrentWorkspace
         | WmAction::ExpandCurrentWorkspace
         | WmAction::ToggleCurrentWorkspaceCollapsed

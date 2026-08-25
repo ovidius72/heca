@@ -617,6 +617,25 @@ impl ActionRegistry {
             args: &[],
         },
         ActionDescriptor {
+            name: "cursor_to",
+            label: "Move Container Cursor",
+            description: "Put a mounted container's cursor on a named row. Moves the cursor and nothing else.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[
+                ArgDescriptor::required(
+                    "mount",
+                    ArgKind::Text,
+                    "Id of the mounted container whose cursor moves.",
+                ),
+                ArgDescriptor::required(
+                    "key",
+                    ArgKind::Text,
+                    "Identity of the row the cursor moves to.",
+                ),
+            ],
+        },
+        ActionDescriptor {
             name: "focus_dock",
             label: "Focus Dock",
             description: "Give chrome keyboard focus to a dock — press a letter to pick one, or name it.",

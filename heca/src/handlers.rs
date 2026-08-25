@@ -1008,6 +1008,18 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     }
 }
 
+/// **Move a mounted container's cursor to the row named by `key`** — the generic form of a click
+/// on a row, and of any other gesture that means "the cursor belongs here now".
+///
+/// It moves the cursor and nothing else. Activating the row, focusing a pane or handing the
+/// keyboard back are separate acts with separate names; a gesture that wants one of those says so.
+pub fn handle_cursor_to(state: &mut AppState, action: &WmAction) {
+    let WmAction::CursorTo { mount, key } = action else {
+        return;
+    };
+    crate::providers::move_provider_cursor(state, mount, key);
+}
+
 /// Apply a rename to `target`: an empty `new_name` clears the custom override (the item goes
 /// back to its default / process-tracked name). Searches all workspaces so a by-id pane rename
 /// works regardless of the active workspace.

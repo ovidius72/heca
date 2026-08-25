@@ -106,9 +106,34 @@ fn focus_and_pick(
     // widget that consumes it — resolves back to this container (`nav::scope_at`,
     // F003/P086/T365). It goes here because this is the one place the host already wraps every
     // mount, so a container gets click-to-focus with nothing declared, a plugin's included.
+    // **A click anywhere inside this container focuses it** — declared as a handler on the wrapper
+    // the host already puts round every mount, so a container gets click-to-focus with nothing
+    // written, a plugin's included. It bubbles: a click on a row runs the row's handler first and
+    // then this one, and a click on the container's padding reaches only this one — which is the
+    // rule "clicking a container's padding is not a request to move the cursor", free, instead of
+    // read off a second geometric hit-test (AGENTS.md § 0c).
+    //
+    // No guard: `FocusDock` only focuses, and focusing the dock that already has the keyboard is a
+    // no-op. `ToggleDock` carries the toggle.
+    let focus_scope = match ctx.emit_intent() {
+        Some(emit) => {
+            let emit = emit.clone();
+            let id = container.to_string();
+            FocusScope::new(picked).on_click(move |_| {
+                emit.fire(crate::app::interaction::InteractionIntent::ActivateAction(
+                    crate::input::WmAction::FocusDock {
+                        dock: Some(id.clone()),
+                    },
+                ));
+            })
+        }
+        None => FocusScope::new(picked),
+    };
     Box::new(
-        FocusScope::new(picked)
+        focus_scope
             .focus(ctx.state().container_keyboard_target(container))
+            // Still declared: `offer_hint_by_key` matches it so the DOCK PICK can letter this
+            // container (`chrome/hint/letters.rs`). It is no longer read by any hit-test.
             .scope_key(container),
     )
 }

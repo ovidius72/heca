@@ -555,6 +555,25 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         }),
         // …and the way back: the keyboard returns to the focused pane.
         "unfocus-dock" => Ok(WmAction::UnfocusDock),
+        // Put a container's cursor on a named row. Both arguments are REQUIRED — a cursor move
+        // with no target is not a cursor move, and an omitted mount would silently pick nothing.
+        "cursor-to" => {
+            let mount = parts
+                .next()
+                .ok_or_else(|| RpcError::MissingArgument {
+                    cmd: "cursor-to".into(),
+                    arg: "mount".into(),
+                })?
+                .to_string();
+            let key = parts
+                .next()
+                .ok_or_else(|| RpcError::MissingArgument {
+                    cmd: "cursor-to".into(),
+                    arg: "key".into(),
+                })?
+                .to_string();
+            Ok(WmAction::CursorTo { mount, key })
+        }
         // Forget a search memory. The scope is optional in the same way: omitted, every search
         // surface is forgotten.
         "clear-search-history" => Ok(WmAction::ClearSearchHistory {

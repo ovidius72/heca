@@ -81,32 +81,6 @@ pub fn key_at(root: &dyn Component, point: Point) -> Option<String> {
         .filter(|_| root.base().bounds.contains(point))
 }
 
-/// The **innermost scope** under `point` — which enclosing region a press landed in.
-///
-/// The twin of [`key_at`] one level up: that answers *which row*, this answers *which region
-/// containing rows*. A host commonly needs both from one press — heca focuses the chrome container
-/// and moves its cursor to the clicked row.
-///
-/// Same walk, for the same reason: children last-added-first, descended into before the parent is
-/// tested, so a scope nested inside another resolves to the inner one. `None` means the point is
-/// outside every scope, which is a real answer a host acts on.
-///
-/// Deliberately independent of whether a widget *consumed* the press: a click on a scrollbar thumb
-/// is still a click inside the region that holds it.
-pub fn scope_at(root: &dyn Component, point: Point) -> Option<String> {
-    if skip(root) {
-        return None;
-    }
-    for child in root.base().children.iter().rev() {
-        if let Some(id) = scope_at(child.as_ref(), point) {
-            return Some(id);
-        }
-    }
-    root.base()
-        .scope_key
-        .clone()
-        .filter(|_| root.base().bounds.contains(point))
-}
 
 /// **What to call the widget at `path`, whether or not anyone named it** (F003/P082/T444).
 ///
@@ -389,54 +363,7 @@ mod tests {
         root
     }
 
-    /// A container wrapping rows: the press resolves to the **innermost** container, and to nothing
-    /// at all outside every one — which is what releases chrome focus (F003/P086/T365).
-    #[test]
-    fn a_press_resolves_to_the_innermost_container_it_landed_in() {
-        let mut root = Flex::column();
-        root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
 
-        let mut dock = Flex::column().scope_key("workspaces");
-        dock.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        dock.base_mut()
-            .children
-            .push(at(Surface::new().key("pane:7"), 0.0, 20.0));
-        // A container seated inside another — the inner one owns the point.
-        let mut inner = Flex::column().scope_key("notes");
-        inner.base_mut().bounds = Rectangle::new(Point::new(0.0, 20.0), Size::new(100.0, 20.0));
-        dock.base_mut().children.push(Box::new(inner));
-        root.base_mut().children.push(Box::new(dock));
-
-        assert_eq!(
-            scope_at(&root, Point::new(50.0, 10.0)),
-            Some("workspaces".to_string()),
-        );
-        assert_eq!(
-            scope_at(&root, Point::new(50.0, 30.0)),
-            Some("notes".to_string()),
-            "the innermost container wins, as the deepest row does",
-        );
-        assert_eq!(
-            scope_at(&root, Point::new(50.0, 80.0)),
-            None,
-            "outside every container — this is what releases focus",
-        );
-    }
-
-    /// A press on a widget that would consume it is still a press *in* that container.
-    #[test]
-    fn a_consumed_press_still_names_its_container() {
-        let mut dock = Flex::column().scope_key("workspaces");
-        dock.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
-        // Stand-in for a scrollbar thumb: a child with no container of its own.
-        dock.base_mut()
-            .children
-            .push(at(Surface::new(), 0.0, 40.0));
-        assert_eq!(
-            scope_at(&dock, Point::new(50.0, 20.0)),
-            Some("workspaces".to_string()),
-        );
-    }
 
     #[test]
     fn collects_declared_rows_in_document_order() {

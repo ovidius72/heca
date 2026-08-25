@@ -1082,6 +1082,13 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
     registry.register(&WmAction::SidebarRight, handle_sidebar_right);
     registry.register(&WmAction::FocusDock { dock: None }, handle_focus_dock);
+    registry.register(
+        &WmAction::CursorTo {
+            mount: String::new(),
+            key: String::new(),
+        },
+        handle_cursor_to,
+    );
     registry.register(&WmAction::ToggleDock { dock: None }, handle_toggle_dock);
     registry.register(
         &WmAction::ClearSearchHistory { scope: None },
