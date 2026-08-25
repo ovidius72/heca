@@ -4,6 +4,10 @@
 
 ---
 
+## CODING STANDARD AND PRINCIPLES TO FOLLOW WHEN WRITING CODE
+
+Code reusability and splitting principles guide how you break software into small, independent pieces. The core goal is to write modular logic that is easy to maintain, test, and reuse without creating messy dependencies.Core Code Reusability PrinciplesDRY (Don't Repeat Yourself): Keep a single source of truth for every piece of knowledge or logic. Avoid copying and pasting identical code blocks.The Rule of Three: Wait until you repeat a piece of code three times before you try to abstract it. Premature abstraction adds unwanted complexity.Composition over Inheritance: Build complex behavior by combining small, distinct objects or functions rather than creating deep class hierarchies.Code Splitting and Modularity PrinciplesSingle Responsibility Principle (SRP): Give each function, class, or module one clear job so it has only one reason to change.Separation of Concerns: Divide your program into distinct layers, such as user interface, business logic, and data storage.Interface Segregation: Create small, targeted interfaces so that components only depend on the specific methods they actually use.Strategies for Effective SplittingSplit Action from Context: Separate core operations from connection states, parameters, or environment configurations.Split Action from State: Separate functions that modify data states from functions that only read or use the state.Keep Boundaries Clear: Ensure modules communicate through well-defined inputs and outputs rather than sharing global variables.
+
 ## ⛔ STOP — read this before writing code (the mistakes that get work rejected)
 
 These are made over and over. **Violating any = redo.**
@@ -28,7 +32,7 @@ reinventing something, and it will be rejected.
 
 **And two rules that hold whatever those answers were:**
 
-4. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what
+1. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what
    someone has to hold in their head to change it safely. **Aim under 400 lines; above 600, stop
    and agree a split** before adding to it. Those numbers come from this codebase, not from taste:
    components written to § 0b-bis land at 150–450 on their own (`chrome/expose/` is 149 / 282 /
@@ -39,7 +43,7 @@ reinventing something, and it will be rejected.
    host wiring with a component. This applies to code you are only passing through: when you meet an
    oversized file while fixing something else, **say so and agree the split first** — a large file
    quietly reorganised is a diff nobody can review.
-5. **Write it for the next caller, not for this one.** Every widget, component and function will be
+2. **Write it for the next caller, not for this one.** Every widget, component and function will be
    used by another developer, another agent, or a plugin — and none of them should have to make the
    same fix or build the same thing twice. So **centralise the logic**: a second copy of a rule is
    the bug, not the copy you are about to write. And a capability must be reachable from all three
@@ -1737,12 +1741,3 @@ See `niri-compatibility-review.md` for full details. Key issues:
 7. **NEVER add `#[allow(dead_code)]` without a clear reason.** Remove dead code instead. If a lint must be suppressed, add a `//` comment explaining why right above the attribute.
 8. **After every task, run `cargo clippy --workspace --all-targets --all-features` and fix all warnings.** The codebase must stay clippy-clean. Use `cargo clippy --fix` for auto-fixable issues.
 9. **Load `/Users/antonio/.agents/skills/rust/SKILL.md` and run a formal review against its rules before EVERY commit.** This is non-negotiable. Then run clippy, then commit. Never skip this.
-
-### When Reviewing
-
-1. Check for BSP tree references that should be NIRI scrolling columns.
-2. Verify `update_all_column_widths()` isn't called unnecessarily.
-3. **Verify no registry bypasses** — all state changes go through `registry.execute()`.
-4. Check prefix mode passes real modifier state, not hardcoded `false`.
-5. Verify column widths are stored per-column, not normalized.
-6. Check `action_priority()` explicitly matches all variants.
