@@ -381,10 +381,21 @@ impl Component for Row {
             }
         }
 
-        // Content.
-        for child in &self.base.children {
-            crate::component::paint_child(child.as_ref(), cx);
-        }
+        // Content, under the row's **state color** — published once per paint and inherited by any
+        // unstyled `Label`/`Icon` inside, exactly as [`Item`] does it.
+        //
+        // Without this a caller that wants its text to follow selection has to colour the text
+        // itself, and since a colour is fixed at build time that means building the content TWICE
+        // — one copy per state — and showing one. heca's sidebar pane row did precisely that, and
+        // the two copies had to be stacked, so the name and the `(program)` suffix beside it never
+        // shared a line (F003/P082/T480). A control owns its content's state colour; a caller that
+        // wants its own says so with `.color(..)`, which still wins.
+        let content_color = if active { accent } else { foreground };
+        cx.with_content_color(content_color, |cx| {
+            for child in &self.base.children {
+                crate::component::paint_child(child.as_ref(), cx);
+            }
+        });
 
         if self.interactive() && !disabled {
             cx.flash(b, self.flash.amount() * 0.5, 0.0);
