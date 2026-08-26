@@ -84,8 +84,21 @@ impl Component for Flex {
             c.base().children.iter().find_map(|k| text_leaf(k.as_ref()))
         }
         // Where that text's baseline falls, in the row's own coordinates.
+        //
+        // **Only text that is actually inside the child counts.** A widget that positions its own
+        // content puts some of it *outside* its box — an open `Select`'s option rows hang below the
+        // trigger in a panel — and that text is not on this row's line. Without this check the hunt
+        // found the last row of an open dropdown, called it the line's deepest baseline, and
+        // dropped every label beside the select 40px to meet it: neighbours laid out below the row
+        // they belong to, drawing over whatever was under them (F003/P096/T483).
         fn baseline_of(c: &dyn Component) -> Option<f64> {
             let leaf = text_leaf(c)?.base();
+            let (own, box_) = (leaf.bounds, c.base().bounds);
+            let inside = own.loc.y >= box_.loc.y - 0.5
+                && own.loc.y + own.size.h <= box_.loc.y + box_.size.h + 0.5;
+            if !inside {
+                return None;
+            }
             let line = (leaf.font * crate::font::MONO_LINE_RATIO) as f64;
             let ascent =
                 (leaf.font * crate::font::MONO_LINE_RATIO * crate::font::BASELINE_RATIO) as f64;

@@ -30,6 +30,16 @@ reinventing something, and it will be rejected.
    `Label` truncation stayed open long enough for FOUR separate hand-rolled truncations to be
    written around it. A gap in a doc is never scheduled. A gap in the planner gets done.
 
+   ⛔ **Filing is not yours to decide — ASK FIRST, every time.** Creating a feature, a phase or a
+   task puts work on the board and moves what else gets done; that is the maintainer's call, and
+   "the planner is where gaps belong" is about *where* agreed work is written down, never a licence
+   to write it there yourself. This applies most to the tempting case: a real defect you tripped
+   over while doing something else. **Propose it** — what it is, what it costs, what it blocks, and
+   which task, phase or feature you think it should become — **and agree it together before
+   creating anything.** The same holds for editing a feature's or phase's scope, or for
+   re-prioritising anything. What you may do without asking is keep the task you are *already
+   working on* honest: its own description, its checklist, its status.
+
 **And two rules that hold whatever those answers were:**
 
 1. **One file, one thing — and the line count is the smoke alarm, not the rule.** A file is what

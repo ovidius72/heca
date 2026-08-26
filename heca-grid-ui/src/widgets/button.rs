@@ -428,18 +428,29 @@ impl Component for Button {
             on_danger,
             ia,
         ) = {
+            // **The hue a container published, if it published one** — a button composed inside a
+            // severity-toned card follows the card, the way a `Label`'s ink already follows its
+            // content colour. `None` unless a container asked, which is everywhere today, so a
+            // button on its own is the theme accent exactly as before (F003/P096/T484).
+            let tone = cx.control_tone();
             let t = cx.theme();
+            let accent = tone.unwrap_or(t.colors.accent);
             (
                 t.colors.surface,
-                t.colors.accent,
-                t.colors.glow,
+                accent,
+                tone.unwrap_or(t.colors.glow),
+                // **Destructive is not re-toned.** Its colour is what the variant *means*, not
+                // decoration a parent may restyle — a Delete inside a warning-toned panel is still
+                // a Delete. Same reasoning that keeps `Badge::danger` red inside a coloured parent.
                 t.colors.danger,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.border,
                 t.colors.border_width,
                 t.colors.control_radius(),
-                t.colors.on(t.colors.accent),
+                // The label on a *filled* button has to contrast with the fill it actually gets,
+                // which is the effective hue and not necessarily the theme accent.
+                t.colors.on(accent),
                 t.colors.on(t.colors.danger),
                 t.colors.interaction,
             )

@@ -171,7 +171,10 @@ impl Component for IconButton {
             let t = cx.theme();
             (t.colors.accent, t.colors.glow, t.colors.control_radius(), t.colors.border_width, t.focus_border_width, t.colors.interaction)
         };
-        let tone = self.tone.unwrap_or(accent);
+        // **Own tone → the tone a container published → the theme accent** — the same chain a
+        // `Label`'s ink follows, applied to chrome. `None` unless a container asked (nothing does
+        // by default), so a button on its own looks exactly as it did (F003/P096/T484).
+        let tone = self.tone.or_else(|| cx.control_tone()).unwrap_or(accent);
         let p = self.progress.clamp(0.0, 1.0);
         let b = self.base.bounds;
         let radius = ctrl_radius.min((b.size.h / 2.0) as f32);

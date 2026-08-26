@@ -13,6 +13,7 @@ mod column_group;
 mod dock_view;
 mod model;
 mod pane_row;
+pub(crate) use pane_row::dot_status;
 mod seams;
 mod workspace_frame;
 

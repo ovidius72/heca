@@ -40,6 +40,39 @@ fn widgets_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src/widgets")
 }
 
+/// **Every widget source, however it is filed.** A widget family is a folder with one file per
+/// member (`overlay/`, `toast/`), and a walk that read only the top level would quietly stop
+/// checking a widget the day it was split into one — which is the moment its property surface is
+/// most likely to drift. `widgets/mod.rs` is skipped because it only re-exports; a family's own
+/// `mod.rs` is that family's widget and is read like any other file.
+fn widget_sources() -> Vec<(String, String)> {
+    fn walk(dir: &Path, top: bool, out: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(dir).expect("widgets dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                walk(&path, false, out);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            if top && name == "mod.rs" {
+                continue;
+            }
+            // Name a family member by its folder, so a failure says `toast/stack.rs`.
+            let label = match path.parent().filter(|_| !top).and_then(|p| p.file_name()) {
+                Some(folder) => format!("{}/{name}", folder.to_string_lossy()),
+                None => name,
+            };
+            out.push((label, std::fs::read_to_string(&path).expect("read widget source")));
+        }
+    }
+    let mut out = Vec::new();
+    walk(&widgets_dir(), true, &mut out);
+    out
+}
+
 /// `pub fn name(mut self, ..) -> Self` — the builder shape. Accessors taking `&self` are not part
 /// of the property surface and are ignored.
 fn is_builder(line: &str) -> bool {
@@ -85,16 +118,7 @@ fn every_builder_bearing_widget_has_a_generated_property_surface() {
     let excused: BTreeSet<&str> = NO_SURFACE_REQUIRED.iter().map(|(t, _)| *t).collect();
     let mut missing = Vec::new();
 
-    for entry in std::fs::read_dir(widgets_dir()).expect("widgets dir") {
-        let path = entry.expect("dir entry").path();
-        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-            continue;
-        }
-        if path.file_name().and_then(|n| n.to_str()) == Some("mod.rs") {
-            continue;
-        }
-        let src = std::fs::read_to_string(&path).expect("read widget source");
-        let file = path.file_name().unwrap().to_string_lossy().to_string();
+    for (file, src) in widget_sources() {
         for (ty, annotated) in impl_blocks_with_builders(&src) {
             if !annotated && !excused.contains(ty.as_str()) {
                 missing.push(format!("  {ty} ({file})"));
@@ -117,13 +141,7 @@ fn every_builder_bearing_widget_has_a_generated_property_surface() {
 /// silently excuse a *different* widget later if the name were reused.
 #[test]
 fn every_exception_still_names_a_real_type() {
-    let mut sources = String::new();
-    for entry in std::fs::read_dir(widgets_dir()).expect("widgets dir") {
-        let path = entry.expect("dir entry").path();
-        if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-            sources.push_str(&std::fs::read_to_string(&path).expect("read widget source"));
-        }
-    }
+    let sources: String = widget_sources().into_iter().map(|(_, src)| src).collect();
     let stale: Vec<&str> = NO_SURFACE_REQUIRED
         .iter()
         .map(|(t, _)| *t)

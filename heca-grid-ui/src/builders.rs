@@ -243,6 +243,16 @@ pub trait LayoutExt: Component + Sized {
     /// `flex_grow` distributes only *positive* free space, so growing alone never divides a region:
     /// a child keeps its content size and the row overflows. A true share is grow + a zero base
     /// size + this (CSS `flex: 1 1 0`).
+    /// **Let children that do not fit start a new line** (CSS `flex-wrap: wrap`).
+    ///
+    /// Off by default: most rows are a slot, a label and a slot, where a second line would be
+    /// nonsense. Turn it on for a row of *peers* — a set of action buttons, a tag list — where
+    /// the alternative when the box gets narrow is squeezing every one of them to an ellipsis.
+    fn wrap(mut self, wrap: bool) -> Self {
+        self.base_mut().style.layout.wrap = wrap;
+        self
+    }
+
     fn shrink(mut self, s: f32) -> Self {
         self.base_mut().style.layout.flex_shrink = Some(s);
         self
@@ -469,6 +479,17 @@ pub trait ComponentExt: Component + Sized {
     /// drag identity. The string is **opaque to the library** — only the component that wrote it
     /// and the host routing back to that component ever interpret it — and it must be stable across
     /// tree rebuilds, which is what lets a cursor survive one. See [`crate::nav`].
+    /// **Let the pointer pass through this widget** — it draws, but it is not a target, and nor is
+    /// anything inside it (CSS `pointer-events: none`).
+    ///
+    /// For decoration that stands in for something else: an echo of a value shown inside the
+    /// control that owns it. Without it the echo hovers and clicks in its own right, and the
+    /// control ends up wearing two highlights.
+    fn pointer_transparent(mut self, transparent: bool) -> Self {
+        self.base_mut().pointer_transparent = transparent;
+        self
+    }
+
     fn key(mut self, key: impl Into<String>) -> Self {
         self.base_mut().key = Some(key.into());
         self

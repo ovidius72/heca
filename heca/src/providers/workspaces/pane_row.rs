@@ -103,16 +103,11 @@ impl PaneRow<'_> {
         .build();
         let title_label = name.widget;
         let title_signal = name.text;
-        let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);
-        let idle_dot_visible = idle_dot.visible_signal();
-        let running_dot =
-            Visibility::new(StatusDot::online(), info.status == ProcessStatus::Running);
-        let running_dot_visible = running_dot.visible_signal();
-        let success_dot =
-            Visibility::new(StatusDot::online(), info.status == ProcessStatus::Success);
-        let success_dot_visible = success_dot.visible_signal();
-        let error_dot = Visibility::new(StatusDot::error(), info.status == ProcessStatus::Error);
-        let error_dot_visible = error_dot.visible_signal();
+        // **One pip that changes what it says**, not one pip per state hidden behind the others.
+        // The row is retained, so the host rewrites the status signal when a process changes
+        // (F003/P096/T483).
+        let status_dot = StatusDot::new(dot_status(info.status));
+        let status_signal = status_dot.status_signal();
         let branch_label_widget = Label::new(truncate_sidebar_git_branch(
             info.git_branch.as_deref().unwrap_or_default(),
         ))
@@ -237,15 +232,7 @@ impl PaneRow<'_> {
         let name_row = Flex::row()
             .align(Align::Center)
             .gap(8.0)
-            .child(
-                Flex::row()
-                    .align(Align::Center)
-                    .width(Length::Px(12.0))
-                    .child(idle_dot)
-                    .child(running_dot)
-                    .child(success_dot)
-                    .child(error_dot),
-            )
+            .child(status_dot)
             .child(Flex::row().align(Align::Center).child(icon_widget))
             .child(title_area);
         // One column: the name row, then the optional cwd and git rows (each 2px-indented and
@@ -359,10 +346,7 @@ impl PaneRow<'_> {
                 process_hint_visible,
                 cwd: cwd_signal,
                 cwd_visible: cwd_visible_signal,
-                status_idle_visible: idle_dot_visible,
-                status_running_visible: running_dot_visible,
-                status_success_visible: success_dot_visible,
-                status_error_visible: error_dot_visible,
+                status: status_signal,
                 git_visible: git_visible_signal,
                 git_branch: branch_signal,
                 git_branch_display: branch_display_signal,
@@ -388,6 +372,18 @@ impl PaneRow<'_> {
                 .placement(HintPlacement::CenterRight),
         );
         watch
+    }
+}
+
+/// **What a running process looks like as a pip.** The app's process states and the library's dot
+/// states are two vocabularies — one about a shell, one about a colour — and this is the single
+/// place they meet, so a new process state is mapped once rather than wherever a dot is built.
+pub(crate) fn dot_status(status: ProcessStatus) -> heca_grid_ui::DotStatus {
+    match status {
+        ProcessStatus::Running => heca_grid_ui::DotStatus::Online,
+        ProcessStatus::Success => heca_grid_ui::DotStatus::Online,
+        ProcessStatus::Error => heca_grid_ui::DotStatus::Error,
+        ProcessStatus::Idle => heca_grid_ui::DotStatus::Offline,
     }
 }
 

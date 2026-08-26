@@ -67,7 +67,9 @@
     "d8c9a847-6a82-42e4-b7bb-56183f81826e",
     "aa013577-c605-4880-a90a-765238780c49",
     "e7b4a04b-83c7-4f82-8ffa-bc5d9c8e2e38",
-    "651a5f5e-5c44-47db-82f8-6cb32865db19"
+    "651a5f5e-5c44-47db-82f8-6cb32865db19",
+    "04ff12a9-ccd2-4aeb-ba7e-416ef8ebb9bf",
+    "9f47e368-e39a-4f2b-a5b7-6ecd79eb00c5"
   ],
   "tasks": [
     {
@@ -1152,9 +1154,9 @@
       "priority": 31,
       "shortName": "click-to-focus-is-two-hit-test",
       "title": "Click-to-focus is two hit-tests in a tree that already gets the click — delete them for handlers",
-      "status": "in-progress",
-      "description": "PROVEN, NOT PROPOSED. The experiment is in the tree and green: heca-grid-ui/tests/click_to_focus_by_handler.rs (commit 0533099). Read it first — it is the evidence, and it stays as the contract test.\n\nWHAT EXISTS TODAY\nOne function runs on every mouse press — aim_keyboard_at_click (heca/src/mouse.rs:124). It answers \"which container takes the keyboard, and which row does its cursor move to\" with TWO GEOMETRIC HIT-TESTS over the retained tree:\n    chrome::container_at  -> nav::scope_at  (needs Base::scope_key)\n    chrome::key_at        -> nav::key_at\nIt is the DOM's target-and-walk-up, re-implemented by measuring rectangles — in a tree that ALREADY receives the click as an event and already bubbles it.\n\nBase::scope_key exists only to make the first hit-test work. Antonio, 2026-08-17: \"i don't like an API like this. is unusual, strange and confusing.\"\n\nWHAT THE EXPERIMENT PROVED (all four questions, headless)\n- a click on a row reaches the row's own handler; it then bubbles to the enclosing FocusScope;\n- order is ROW FIRST, then container;\n- a click on the container's PADDING reaches the container ONLY — the rule mouse.rs states in a comment, free from bubbling;\n- a right-click behaves identically.\n\nALSO CHECKED: the order reversal is harmless. handle_focus_dock reveals the region and sets focused_container — it never touches the cursor.\n\n⚠️ FocusDock is idempotent since T444 and ToggleDock carries the toggle, so the handler is one line with no guard. Do not re-add a guard.\n\n═══════════ SURVEY 2026-08-24 — two things this task did not account for ═══════════\n\n**1. The task's caution about `key_at` is out of date, in our favour.** It said \"nav::key_at has other readers (right-click target, drag source) — check before deleting\". Grepped: `heca_grid_ui::key_at` has exactly ONE production caller, `chrome/dispatch.rs:324`, reached only from `mouse.rs:139`. The right-click target now comes from the event router (`Event::position()` / `Event::target_bounds()`, stamped at delivery — the menu model) and the drag source from `drag::source_at`. Both hit-tests are single-caller and die with `aim_keyboard_at_click`. Remaining users of `nav::key_at` / `nav::scope_at` are their own unit tests.\n\n**2. `Base::scope_key` CANNOT be deleted yet — a second reader the task did not name.**\n`heca-grid-ui/src/hint/offer.rs:119`:\n    node.base().key.as_deref() == Some(key) || node.base().scope_key.as_deref() == Some(key)\n`offer_hint_by_key` matches EITHER, and that is how the **dock pick** (`focus_dock`, `InputMode::DockPick`) lands a letter on a dock: a dock names itself with `scope_key`, not `key` (see `chrome/hint/letters.rs:87`). Delete `scope_key` and the dock pick has nothing to letter.\n\n`scope_key` is SET in exactly one place — `chrome/scene.rs:112`, the mount wrapper — so the fix is one line either way, but which line is a design call:\n  (a) the wrapper declares `.key(container)` instead. Then `offer_hint_by_key` matches on `key` and `scope_key` has no readers left. ⚠️ But `collect_keys` would then return the dock as a steppable cursor row, which is the objection recorded in docs/widgets.md (\"the sidebar is a tree, so a workspace row contains column rows while being a perfectly good cursor target itself\").\n  (b) `scope_key` stays for the picker alone, and this task only deletes the two hit-tests.\n\n**3. There is no action for \"move this container's cursor to this row\".**\nToday `aim_keyboard_at_click` calls `providers::move_provider_cursor(state, mount, key)` — a plain Rust fn (`providers/actions.rs:147`) with that one caller, not a named action. A widget handler cannot hold `&mut AppState`; it fires an `Intent` through `chrome::fires(mount, intent, emit)`. So the row's new `on_click` needs an action id, and the registered provider actions are: activate_selected, collapse_row, create_column, create_pane, cursor_down, cursor_up, delete_row, delete_selected, delete_selected_column, peek_selected, rename_selected, right, toggle_selected, zoom_selected. None of them means \"put the cursor on the row named by this key and nothing else\".\n\nThe nearest is `workspaces.peek_selected`, which already takes a `key` argument (`row_hint()`, providers/workspaces/mod.rs:751) — but it also focuses the pane and keeps the keyboard on the container, which is the PICK's behaviour, not the click's. Reusing it would make a click do what a pick does, which is the exact bug commit e712d70 caused and T399 undid.\n\n═══════════ WHAT IS UNBLOCKED AND WHAT IS NOT ═══════════\nUNBLOCKED — delete the two hit-tests and their single-caller wrappers (`chrome::container_at`, `chrome::key_at`, `nav::scope_at`, the body of `aim_keyboard_at_click`), replacing them with `.on_click` on the mount wrapper (scene.rs:110) and on the row.\nBLOCKED on Antonio — (2) whether the dock switches to `key`, and (3) what action a row's click fires. Do not invent an action name: \"YOU HAVE TO ASK AND NOT TO INVENT.\"\n\nVERIFICATION: click-to-focus and click-to-move-cursor are visible behaviour. Antonio drives, on left AND right click, on a dock that already has focus and one that does not.",
-      "descriptionUpdatedAt": "2026-08-24T15:40:05.108Z",
+      "status": "done",
+      "description": "**DONE 2026-08-25, commit `cb16a92`.** Closed on Antonio's instruction with verification PARTIAL — see the bottom of this note.\n\n## What the user gets\n\nClicking anywhere in a sidebar focuses it, and clicking a row puts that container's cursor on the row you clicked, so the arrow keys carry on from there. Clicking the container's empty padding focuses it without moving the cursor. Right-click aims the keyboard identically, so the menu it opens describes the row the cursor is now on. None of that is new behaviour — it is the same behaviour, arrived at a different way.\n\n## What changed underneath\n\nEvery mouse press used to run two geometric searches over the laid-out tree: which container contains this point, then which row sits under it. That is target-and-bubble re-implemented by measuring rectangles, in a tree that already receives the click as an event and already bubbles it. `Base::scope_key` existed only to make the first search findable, which is why it read as a strange property.\n\nNow the container declares \"a click in me focuses me\" and the row declares \"a click on me moves the cursor here\". The row is reached first, the container after. A click on padding reaches only the container, so the padding rule falls out of the walk instead of being read off a second lookup. A plugin's panel gets both by writing the same one line.\n\n## The new action\n\n`WmAction::CursorTo { mount, key }` — the generic form of moving a mounted container's cursor, previously an internal function with a single caller. Full checklist: variant, `build_action` (not `action_from_name` — it needs a target), priority, handler, `build_registry`, catalog descriptor with both args declared required, `action_policy`, RPC verb `cursor-to`. **No default binding**, correctly: a key cannot supply a mount and a row key.\n\n**First `WmAction` to carry `ActionPolicy::ContainerFocused`** — until now only name-keyed provider actions used it. Right family: it keeps \"put the cursor on that row\" out of the palette and RPC while nobody is driving a dock. A row emits `FocusDock` **before** `CursorTo`; events are queued and processed in order, so the domain is `Container` by the time the cursor moves. Same ordering a pane-header button uses when its action targets the focused pane.\n\n## Deleted\n\n`aim_keyboard_at_click` and both call sites, `chrome::container_at`, `chrome::key_at`, `nav::scope_at` and its two unit tests. Each was dead by the compiler's own reckoning before removal.\n\n## Kept deliberately — do not \"finish the job\" by deleting it\n\n**`Base::scope_key` survives.** `heca-grid-ui/src/hint/offer.rs:119` matches `key || scope_key`, and that `||` is how the **dock picker** lands a letter on a dock — a dock names itself with `scope_key`, not `key`. Deleting it silently breaks `prefix+Shift+e`. It now has that one reader and no hit-test. Retiring it means either giving the dock a `key` (which would make `collect_keys` return the dock itself as a steppable cursor row — the objection recorded in docs/widgets.md) or changing how the picker finds a dock. Its own task.\n\n## A bug the suite caught, worth knowing\n\nThe click was first declared on the `KeyHint` wrapper around the row. `every_row_of_the_real_sidebar_tree_is_keyed_even_when_two_panes_share_a_name` failed: two panes named `zsh` became an ambiguous unkeyed collection. Making a **wrapper** activatable does it — the wrapper inherits the row's name through `text_summary` but carries no key. In user terms the app would have lost track of which of two identically-named panes the cursor, the right-click, the drag and the picker letter each meant. The declaration belongs on the row that carries the identity.\n\n## ⚠️ VERIFICATION IS PARTIAL\n\nAntonio confirmed **left click and right click work**. NOT confirmed on screen:\n- clicking a dock's **empty padding** (should focus without moving the cursor),\n- clicking inside a dock that **already** holds the keyboard (must not hand it back — `FocusDock` is idempotent since T444, but that is the case where a regression would show),\n- **pressing the arrow keys after a click** (the cursor should continue from the row you clicked).\n\nThe last one is the whole point of the change. If any of these misbehave, this task is where to start.",
+      "descriptionUpdatedAt": "2026-08-25T09:14:03.315Z",
       "notes": "",
       "statusLog": [
         {
@@ -1163,6 +1165,14 @@
           "fromStatus": "planned",
           "toStatus": "in-progress",
           "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "783f66a3-1635-4b08-b869-0624b313c0e3-check-002-in-progress-done",
+          "date": "2026-08-25T08:23:37.041Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
           "description": ""
         }
       ],
@@ -1174,9 +1184,9 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-24T15:38:09.778Z",
-      "completedAt": "",
+      "completedAt": "2026-08-25T08:23:37.041Z",
       "createdAt": "2026-08-17T21:34:09.347Z",
-      "updatedAt": "2026-08-24T15:40:05.105Z"
+      "updatedAt": "2026-08-25T09:14:03.312Z"
     },
     {
       "id": "288b4d88-6142-41ef-a5c1-8a018d4806f9",
@@ -1217,7 +1227,7 @@
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 458,
       "shortId": "VRM9G",
-      "priority": 33,
+      "priority": 5,
       "shortName": "a-pane-s-ancestors-are-positio",
       "title": "A pane's ancestors are positions, so splitting a column renames every pane after it",
       "status": "planned",
@@ -1235,7 +1245,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-19T08:57:51.665Z",
-      "updatedAt": "2026-08-19T08:57:51.665Z"
+      "updatedAt": "2026-08-25T08:32:18.814Z"
     },
     {
       "id": "417ae37c-cebc-4986-ae83-5d0b86ee4ee5",
@@ -1357,7 +1367,7 @@
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 466,
       "shortId": "3NAPC",
-      "priority": 35,
+      "priority": 9,
       "shortName": "split-app-registry-rs-by-job-c",
       "title": "Split app/registry.rs by job — config parsing, keymap building, conflicts, action registration",
       "status": "planned",
@@ -1375,14 +1385,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T11:28:23.578Z",
-      "updatedAt": "2026-08-21T11:28:23.578Z"
+      "updatedAt": "2026-08-25T08:32:24.617Z"
     },
     {
       "id": "3c5123cd-b117-44e6-b3f9-121c6bddd258",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 468,
       "shortId": "K2RWX",
-      "priority": 36,
+      "priority": 8,
       "shortName": "split-the-files-that-are-doing",
       "title": "Split the files that are doing several jobs — the ones found while building T432",
       "status": "planned",
@@ -1400,14 +1410,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-21T13:58:02.209Z",
-      "updatedAt": "2026-08-24T13:58:30.246Z"
+      "updatedAt": "2026-08-25T08:32:20.172Z"
     },
     {
       "id": "2d174619-b5c0-4040-9c32-133096cb4251",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 470,
       "shortId": "5DXHF",
-      "priority": 37,
+      "priority": 11,
       "shortName": "split-heca-renderer-examples-s",
       "title": "Split heca-renderer/examples/showcase.rs (3254) — the catalog is one file doing every surface",
       "status": "planned",
@@ -1425,14 +1435,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T13:57:46.417Z",
-      "updatedAt": "2026-08-24T13:57:46.417Z"
+      "updatedAt": "2026-08-25T08:32:25.511Z"
     },
     {
       "id": "6e46956d-0432-4aa1-a476-114c07d33d93",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 471,
       "shortId": "9F4Q2",
-      "priority": 38,
+      "priority": 7,
       "shortName": "split-heca-grid-ui-src-widgets",
       "title": "Split heca-grid-ui/src/widgets/scroll_region.rs (2565) — viewport, scrollbar, wheel and the offset door",
       "status": "planned",
@@ -1450,14 +1460,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T13:58:03.101Z",
-      "updatedAt": "2026-08-24T13:58:03.101Z"
+      "updatedAt": "2026-08-25T08:32:20.004Z"
     },
     {
       "id": "6265e66c-6caf-400e-8e75-20dbe93dae09",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 472,
       "shortId": "RHC9S",
-      "priority": 39,
+      "priority": 10,
       "shortName": "split-heca-view-src-lib-rs-142",
       "title": "Split heca-view/src/lib.rs (1423) — the vocabulary, the node and the values are three things",
       "status": "planned",
@@ -1475,7 +1485,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T13:58:21.061Z",
-      "updatedAt": "2026-08-24T13:58:21.061Z"
+      "updatedAt": "2026-08-25T08:32:25.246Z"
     },
     {
       "id": "51703eae-6940-479b-a36e-e2a40cccd3cc",
@@ -1524,7 +1534,7 @@
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 474,
       "shortId": "MHFXC",
-      "priority": 41,
+      "priority": 6,
       "shortName": "a-column-in-the-scrolling-area",
       "title": "The column in the scrolling area does not own its identity — only its sidebar view does",
       "status": "planned",
@@ -1542,14 +1552,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T14:48:00.678Z",
-      "updatedAt": "2026-08-24T14:58:55.534Z"
+      "updatedAt": "2026-08-25T08:32:19.489Z"
     },
     {
       "id": "0c3f1d41-816d-4c18-9f57-bf595849bceb",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 475,
       "shortId": "7SWQ3",
-      "priority": 42,
+      "priority": 3,
       "shortName": "a-pick-with-no-candidates-dies",
       "title": "A pick with no candidates dies silently — the key looks broken",
       "status": "planned",
@@ -1567,7 +1577,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T14:48:15.995Z",
-      "updatedAt": "2026-08-24T14:48:15.995Z"
+      "updatedAt": "2026-08-25T08:32:14.369Z"
     },
     {
       "id": "64022392-8de4-49ec-be3e-48a69e777b8f",
@@ -1616,7 +1626,7 @@
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 477,
       "shortId": "94ENK",
-      "priority": 44,
+      "priority": 2,
       "shortName": "a-sidebar-pane-row-that-had-no",
       "title": "A sidebar pane row that had no cwd when it was built can never show one",
       "status": "planned",
@@ -1634,14 +1644,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T15:03:37.863Z",
-      "updatedAt": "2026-08-24T15:03:37.863Z"
+      "updatedAt": "2026-08-25T08:32:13.873Z"
     },
     {
       "id": "aa013577-c605-4880-a90a-765238780c49",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 478,
       "shortId": "DYL3P",
-      "priority": 45,
+      "priority": 4,
       "shortName": "a-zero-width-pane-still-gets-a",
       "title": "A zero-width pane still gets a letter, drawn outside itself in the gutter",
       "status": "planned",
@@ -1659,14 +1669,14 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T15:20:22.596Z",
-      "updatedAt": "2026-08-24T15:20:22.596Z"
+      "updatedAt": "2026-08-25T08:32:14.539Z"
     },
     {
       "id": "e7b4a04b-83c7-4f82-8ffa-bc5d9c8e2e38",
       "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
       "number": 479,
       "shortId": "2XS2Z",
-      "priority": 46,
+      "priority": 1,
       "shortName": "a-compact-target-s-caption-is",
       "title": "A compact target's caption is dragged back on top of the icon it captions",
       "status": "planned",
@@ -1684,7 +1694,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-24T15:20:41.972Z",
-      "updatedAt": "2026-08-24T15:20:41.972Z"
+      "updatedAt": "2026-08-25T08:32:13.088Z"
     },
     {
       "id": "651a5f5e-5c44-47db-82f8-6cb32865db19",
@@ -1694,9 +1704,113 @@
       "priority": 47,
       "shortName": "a-sidebar-pane-s-name-is-built",
       "title": "A sidebar pane's name is built twice and stacked, so it and the program name never share a line",
+      "status": "done",
+      "description": "**DONE 2026-08-25**, verified on screen by Antonio. Five commits: `c4352ac` `33a702f` `c685769` `aaf8c55` `310e697`.\n\n## What the user gets\n\nA renamed pane's name and its dimmed `(program)` suffix sit on one line, on one baseline, and neither moves when the pane is selected or deselected.\n\n## Three layers, only the top one visible\n\nThe reported symptom was the name jumping across the suffix as selection changed. Underneath were three separate defects, each the cause of the one above it:\n\n1. **The row built the name twice** — one copy coloured for selected, one for not — stacked them vertically and hid whichever did not apply. The hidden copy kept its slot, so the visible name sat at the top of the stack when selected and the bottom when not.\n2. **The selectable row did not publish its state colour**, which is *why* the name had to exist twice. `Item` had always published one; `Row` had not, so any caller wanting text that follows selection had to colour it themselves — and a colour is fixed at build time, so \"follows selection\" could only be done by building the content twice.\n3. **Two runs of text at different sizes could not share a line at all.** The renderer centres each run's line box in its rect and drops the baseline an ascent below; both scale with font size, so centring the boxes leaves the smaller run's baseline above the larger one's. Start aligns tops, End aligns bottoms — none of the four alignments means \"on one line\".\n\n## What was built\n\n- `Row` publishes its state colour, as `Item` always did. One name now, carrying no colour of its own.\n- **`Flex` gives a row of text runs one shared baseline** — it measures where each run's baseline falls inside its own box and drops the shallower ones until they meet the deepest. The row never grows; a run only moves into space a taller sibling already claimed.\n- `PaneName`'s colour became `Option`: unset means inherit. The exposé card, which owns its colour, still passes one.\n- Four live values tracking the name collapsed to one.\n- The gap between the two runs comes from the font-relative spacing token instead of a hardcoded 4px.\n\n## Three wrong turns, recorded so they are not repeated\n\n- **A call-site workaround.** With no baseline support, both runs were forced to the same font size — which works, and is a design decision made to paper over a layout defect. Antonio: *\"Fix it centralized not in the site call. We need to have all Flex widget have this fix.\"* Reverted.\n- **A vocabulary word that lied.** `Align::Baseline` was added, found to produce byte-identical output to `Align::End` (the engine takes a baseline from a container's first child; a text leaf measures itself and reports none), and then **documented as broken and kept**. Antonio: *\"you want to pollute the code. IF it work keep otherwise fix or remove.\"* **Removed.** Do not re-add it: baseline alignment of text is the row container's job, not an alignment option's.\n- **Proving it on a shape that does not occur.** The baseline pass was declared working against a probe of two bare labels. The real row wraps its suffix in a visibility toggle, the pass asked each direct child \"are you text?\", the wrapper said no and was skipped — so the misalignment survived while the test reported success. The pass now looks **through** transparent wrappers to the text inside, which is what transparent means. **Test the shape that actually occurs.**\n\n## One judgement reversed by the user\n\nThe suffix was dimmed to `muted` on request, and it is unreadable against the selected row's fill. The line it replaced said so — *\"`foreground` (not `muted`) so it's readable on every theme\"* — and the reason was dropped with it. Back to `foreground`; it reads as secondary through its smaller size and the parentheses, neither of which costs legibility.\n\n## Held by tests\n\nThree in `Flex`: runs of different sizes share a baseline; **a wrapped run joins them** (the case that was missed); and aligning never makes the row taller.",
+      "descriptionUpdatedAt": "2026-08-25T09:14:24.299Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "651a5f5e-5c44-47db-82f8-6cb32865db19-check-001-planned-done",
+          "date": "2026-08-25T08:27:34.375Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T08:27:34.375Z",
+      "completedAt": "2026-08-25T08:27:34.375Z",
+      "createdAt": "2026-08-25T07:41:54.936Z",
+      "updatedAt": "2026-08-25T09:14:24.297Z"
+    },
+    {
+      "id": "04ff12a9-ccd2-4aeb-ba7e-416ef8ebb9bf",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 481,
+      "shortId": "2CVQZ",
+      "priority": 0,
+      "shortName": "a-leading-icon-or-handle-is-pl",
+      "title": "A leading icon or handle is placed without consulting the row's width, so content escapes the box",
+      "status": "waiting",
+      "description": "A leading icon or handle is placed without consulting the row's width, so content escapes the box.\n\nCarried out of the P082 handoff, where it was recorded as the open remainder of T438 but never had a task of its own. T438 closed on the sidebar letter positions; this did not close with it.\n\nTHE DEFECT — \"class 3\"\nSome kinds put a leading icon or a drag handle before their text WITHOUT consulting the row's width. The text is then laid out from wherever the leading element ended, so at a narrow width the content is pushed past the box's own edge. `DockFrame` at 60px puts its title **entirely outside** its box. Affected kinds as recorded: `ItemGroup`, `DockFrame`, `Toast`, `Item`.\n\n═══ WHAT WAS BUILT (2026-08-25, branch `feat/hint-anything-actionable`, UNCOMMITTED) ═══\n\n**1. Three of the four were ONE framework defect, fixed in the layout pass — no widget touched.**\n`heca-grid-ui/src/layout.rs`, beside T438's `max_width: Pct(1.0)` cap: a child of a non-viewport parent now gets `min_width: Px(0.0)` unless it set one. Flexbox's `min-width: auto` floors every item at its own content width, so a row whose children were *willing* to shrink still could not fit them and laid the overflow out past its own edge. `ItemGroup`, `DockFrame` (both widths) and `Item` were fixed by that one rule. Opt-out is unchanged: an explicit `min_width` or `shrink(0.0)` is left alone. Not applied inside a viewport (`clips_children`) — there the floor is what keeps a 600px column 600px wide in a 100px scroll region. Two tests in `layout.rs`: a leading slot never pushes the text past the row's edge, and a widget that refuses to shrink keeps its size.\n\n**2. The catalog sweep's five escapes were PHANTOM — a defect in the sweeps themselves.**\nBoth sweeps walked the clip stack with `clips.last().and_then(|c| c.intersection(r)).unwrap_or(*r)`: a clip lying **entirely outside** the clip already open has an empty intersection, and `unwrap_or` read that as \"no clip in force\", reporting every draw inside it at its raw position. All five were draws inside a widget laid out past the showcase page's scroll viewport — fully scissored, never on screen. Two copies of that arithmetic, both wrong the same way.\nFixed as ONE implementation: `Scene::draws_outside(within) -> Vec<Escape>` (`heca-grid-ui/src/scene.rs`), base layer only, empty clip = nothing drawn. Both sweeps now call it; ~40 lines of duplicated walking deleted from each. Three tests in `scene.rs`.\n\n**3. `Toast` was composed (Antonio's call, asked 2026-08-25).**\nIt measured its own icon, title, body, action and × in pixels, drew them, and decided what the pointer was over by testing coordinates against those rects — so no framework rule could reach it. Now: leading `Icon`, a text column (title / body / action), and the × are real children the engine lays out. `rects()`, `region_at()` and the `Rects` struct are gone; the card paints only its chrome — tinted surface, bracket frame, the action's face at the rect the ENGINE gave it, the press flash, the focus ring. The action and the × take their own press through `on_pointer_down` handlers and stop propagation; the card's `on_click` moved from capture to bubble and fires for what its children declined. Height is now the engine's answer (it hugs), not a formula.\nSeverity tone is **published** via `with_content_color`, so the icon and title inherit it — the mechanism `Item` already uses.\n\n**4. `ToastStack` had the same shape and had to follow.**\nIt read a height the card pinned on itself and wrote a rect straight into `bounds` — which places the card and nothing inside it, so with children the × had never been laid out and could not be clicked (its test caught this). It now lays each toast out with the engine at the origin and `shift_subtree`s it into its slot — the move `ContextMenu` and the command palette already make.\n\n**5. The per-kind sweep's narrowest probe: 24px → 32px.**\nA box is never narrower than its own padding — box model, not a defect: a card padded 13 a side has a 26px floor. **Verified this costs the sweep nothing**: with the layout rule disabled, all five original escapes still show at 32px.\n\n═══ VERIFIED ═══\n- The allowlist is EMPTY and `no_kind_paints_outside_the_box_it_is_given` passes.\n- `the_catalog_paints_nothing_outside_the_window_it_is_given` runs WITHOUT `#[ignore]` and passes at 1400 / 900 / 600 / 320px.\n- Full gate green: `./scripts/lint-changed.sh test` (1400+ tests, 0 failures, 0 ignored), then `./scripts/lint-changed.sh` — one PRE-EXISTING clippy warning in `key_hint.rs:484` (doc indentation, file untouched here).\n\n═══ ⚠️ NOT VERIFIED — ANTONIO DRIVES THIS ═══\n- Narrow the window hard: a dock header, a group header, a toast and a list row keep their text inside their own frames.\n- **The toast is a rewrite of a widget's insides.** Its look and its hover/press.\n- **One deliberate colour change**: the body line is now the theme `muted` token instead of the computed blend `foreground.lerp(muted, 0.2)`, so it reads slightly dimmer.\n- With no leading icon the empty slot still costs one gap (the placeholder shape `Item` uses), so a no-icon toast's text starts ~10px further in than before.\n\n═══ ROUND 2 — after Antonio's first look at the showcase (2026-08-25) ═══\nTwo defects reported, both real:\n\n**a) The action button spanned the whole card.** A column stretches its children across the full width — right for the title and the body, wrong for a button. It now hugs its label (`align_self(Start)`), with a painted-scene test asserting the face is narrower than half the card.\n\n**b) Hovering a stacked toast lit up the page behind it.** Two separate causes, one fixed:\n- FIXED — `ToastStack` passed **every** pointer move through (`Handled::No`) so controls behind it kept animating while toasts showed; the showcase's event loop even documented that as intended. A card occludes the points it covers — the same answer `overlay_occludes` already gives a host — so a move that lands on a card is now consumed. Moves between and outside the cards still fall through.\n- NOT FIXED — **the stack keeps its cards outside the component tree** (its own reconciled list, positioned by hand, input routed by hand in `on_event_capture`). The framework's hover pass never reaches inside a card there, so a **stacked** toast's action face and × do not light under the pointer; an inline toast in an ordinary tree does. This is a regression from the composition: the old card tracked hover itself from the delivered move. **The fix is to make the cards real children** — the engine then lays them out, hover and presses route themselves, and roughly 150 lines of hand-layout, hand-routing and hand-occlusion go with it. Feasible: the host lays the overlay root out every frame (`showcase.rs` :2739), so the stack has a viewport and `on_layout` to place them in. **Not started — it is a redesign of the widget and Antonio has not agreed it.** Recorded in `docs/widgets.md` under ToastStack as a known gap.\n\n**Docs (AGENTS.md makes these mandatory with the change, and they were missing from round 1):** `docs/widgets.md` now carries the two layout rules the engine applies for every widget, the Toast entry's \"content is children\" section (cut-not-moved text, hugging action, published tone, who takes a press), and the ToastStack occlusion note plus the known gap. Rustdoc was written with the code.\n\n**⚠️ FLAGGED, needs a decision — `toast.rs` is 531 lines**, over AGENTS.md's 400-line aim, and it is now a composition rather than one painted picture. § 0.3 says flag and agree the split rather than reorganise it unasked. Proposal: `widgets/toast/` with the card, its severity vocabulary and the stack as one file each.\n\n**Also found, filed as T482:** every `DockFrame` reports its accessible name as the decorative drag grip `⠿` instead of its title, so the app prints a duplicate-name warning at startup and no dock's cursor position or hint letters survive a rebuild. Pre-existing; nothing here touched naming.",
+      "descriptionUpdatedAt": "2026-08-25T09:59:36.861Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "04ff12a9-ccd2-4aeb-ba7e-416ef8ebb9bf-check-001-planned-in-progress",
+          "date": "2026-08-25T09:33:12.850Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "432e61d7-fc14-4d8b-a05d-ff4c2dde9cdb",
+          "date": "2026-08-25T15:09:48.898Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: T481's code is complete and the gate is green; it is waiting only on Antonio's visual check, which he cannot give in the same breath as the follow-on work. He has approved P096 and asked to continue there, starting with the control-tone channel that the card's real buttons depend on.\nWhat was being done: Everything T481 asked for is built and both gates are green: the layout rule that fixed three of the four escaping kinds with no widget touched, `Scene::draws_outside` replacing the two copied clip walks, the per-kind sweep with an EMPTY allowlist, and the catalog sweep running WITHOUT `#[ignore]` at 1400/900/600/320px. On top of that: the toast composed into real children (with the stack's engine layout that had to follow), its action hugging its label, a card occluding hover as well as clicks, the `toast/` folder split, the property-drift sweep taught to walk folders, and docs for the two layout rules plus the Toast and ToastStack entries. Antonio checked the showcase and reported two defects, both fixed and both re-tested; the third thing he noticed — hover dead inside a STACKED card — is not fixable inside T481 and is now P096/T486.\nResume location: Uncommitted on branch `feat/hint-anything-actionable`. Touched: `heca-grid-ui/src/layout.rs` (the min_width rule + 2 tests), `scene.rs` (`draws_outside` + `Escape` + 3 tests), `lib.rs` (export), `widgets/toast/` (mod/severity/spec/stack), `widgets/mod.rs`, `tests/prop_drift.rs`, `tests/phase_a.rs`, `heca-view-realize/src/lib.rs` (sweep + toast realize test), `heca-renderer/examples/showcase.rs` (catalog sweep un-ignored + a comment), `docs/widgets.md`.\nHow to resume: Nothing to build. Ask Antonio for the one check T481's VERIFY names: narrow the window hard and confirm a dock header, a group header, a toast and a list row keep their text inside their own frames. Also still unconfirmed by eye: the body line now uses the theme `muted` token instead of the old computed blend, and a no-icon card's text starts one gap further in. When he confirms, close T481 — do NOT close it on green tests. Its one documented gap is already filed as P096/T486, and the `⠿` dock-naming defect found alongside it is T482."
+        },
+        {
+          "id": "04ff12a9-ccd2-4aeb-ba7e-416ef8ebb9bf-check-003-planned-waiting",
+          "date": "2026-08-25T15:16:31.070Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Code complete and both gates green; blocked only on Antonio's visual check. The switch to P096/T484 sent it back to `planned`, which reads as \"not started\" and is not true of it — nothing here is left to build. What it waits for is in its snapshot: narrow the window hard and confirm a dock header, a group header, a toast and a list row keep their text inside their own frames, plus two changes he has not yet seen by eye (the body line now uses the theme `muted` token rather than the old computed blend, and a no-icon card's text starts one gap further in). Do not close it on green tests.",
+          "description": "Code complete and both gates green; blocked only on Antonio's visual check. The switch to P096/T484 sent it back to `planned`, which reads as \"not started\" and is not true of it — nothing here is left to build. What it waits for is in its snapshot: narrow the window hard and confirm a dock header, a group header, a toast and a list row keep their text inside their own frames, plus two changes he has not yet seen by eye (the body line now uses the theme `muted` token rather than the old computed blend, and a no-icon card's text starts one gap further in). Do not close it on green tests."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": {
+        "id": "633a14b6-6e80-47f8-b86e-7d006635c9ca",
+        "reason": "T481's code is complete and the gate is green; it is waiting only on Antonio's visual check, which he cannot give in the same breath as the follow-on work. He has approved P096 and asked to continue there, starting with the control-tone channel that the card's real buttons depend on.",
+        "whatWasBeingDone": "Everything T481 asked for is built and both gates are green: the layout rule that fixed three of the four escaping kinds with no widget touched, `Scene::draws_outside` replacing the two copied clip walks, the per-kind sweep with an EMPTY allowlist, and the catalog sweep running WITHOUT `#[ignore]` at 1400/900/600/320px. On top of that: the toast composed into real children (with the stack's engine layout that had to follow), its action hugging its label, a card occluding hover as well as clicks, the `toast/` folder split, the property-drift sweep taught to walk folders, and docs for the two layout rules plus the Toast and ToastStack entries. Antonio checked the showcase and reported two defects, both fixed and both re-tested; the third thing he noticed — hover dead inside a STACKED card — is not fixable inside T481 and is now P096/T486.",
+        "resumeLocation": "Uncommitted on branch `feat/hint-anything-actionable`. Touched: `heca-grid-ui/src/layout.rs` (the min_width rule + 2 tests), `scene.rs` (`draws_outside` + `Escape` + 3 tests), `lib.rs` (export), `widgets/toast/` (mod/severity/spec/stack), `widgets/mod.rs`, `tests/prop_drift.rs`, `tests/phase_a.rs`, `heca-view-realize/src/lib.rs` (sweep + toast realize test), `heca-renderer/examples/showcase.rs` (catalog sweep un-ignored + a comment), `docs/widgets.md`.",
+        "howToResume": "Nothing to build. Ask Antonio for the one check T481's VERIFY names: narrow the window hard and confirm a dock header, a group header, a toast and a list row keep their text inside their own frames. Also still unconfirmed by eye: the body line now uses the theme `muted` token instead of the old computed blend, and a no-icon card's text starts one gap further in. When he confirms, close T481 — do NOT close it on green tests. Its one documented gap is already filed as P096/T486, and the `⠿` dock-naming defect found alongside it is T482.",
+        "relatedTaskId": "690996a6-f86a-4c1d-b8df-6044649f479c",
+        "pausedAt": "2026-08-25T15:09:48.898Z",
+        "pausedBy": "Antonio"
+      },
+      "pauseHistory": [
+        {
+          "id": "633a14b6-6e80-47f8-b86e-7d006635c9ca",
+          "reason": "T481's code is complete and the gate is green; it is waiting only on Antonio's visual check, which he cannot give in the same breath as the follow-on work. He has approved P096 and asked to continue there, starting with the control-tone channel that the card's real buttons depend on.",
+          "whatWasBeingDone": "Everything T481 asked for is built and both gates are green: the layout rule that fixed three of the four escaping kinds with no widget touched, `Scene::draws_outside` replacing the two copied clip walks, the per-kind sweep with an EMPTY allowlist, and the catalog sweep running WITHOUT `#[ignore]` at 1400/900/600/320px. On top of that: the toast composed into real children (with the stack's engine layout that had to follow), its action hugging its label, a card occluding hover as well as clicks, the `toast/` folder split, the property-drift sweep taught to walk folders, and docs for the two layout rules plus the Toast and ToastStack entries. Antonio checked the showcase and reported two defects, both fixed and both re-tested; the third thing he noticed — hover dead inside a STACKED card — is not fixable inside T481 and is now P096/T486.",
+          "resumeLocation": "Uncommitted on branch `feat/hint-anything-actionable`. Touched: `heca-grid-ui/src/layout.rs` (the min_width rule + 2 tests), `scene.rs` (`draws_outside` + `Escape` + 3 tests), `lib.rs` (export), `widgets/toast/` (mod/severity/spec/stack), `widgets/mod.rs`, `tests/prop_drift.rs`, `tests/phase_a.rs`, `heca-view-realize/src/lib.rs` (sweep + toast realize test), `heca-renderer/examples/showcase.rs` (catalog sweep un-ignored + a comment), `docs/widgets.md`.",
+          "howToResume": "Nothing to build. Ask Antonio for the one check T481's VERIFY names: narrow the window hard and confirm a dock header, a group header, a toast and a list row keep their text inside their own frames. Also still unconfirmed by eye: the body line now uses the theme `muted` token instead of the old computed blend, and a no-icon card's text starts one gap further in. When he confirms, close T481 — do NOT close it on green tests. Its one documented gap is already filed as P096/T486, and the `⠿` dock-naming defect found alongside it is T482.",
+          "relatedTaskId": "690996a6-f86a-4c1d-b8df-6044649f479c",
+          "pausedAt": "2026-08-25T15:09:48.898Z",
+          "pausedBy": "Antonio"
+        }
+      ],
+      "startedAt": "2026-08-25T09:33:12.850Z",
+      "completedAt": "",
+      "createdAt": "2026-08-25T08:58:33.824Z",
+      "updatedAt": "2026-08-25T15:16:31.070Z"
+    },
+    {
+      "id": "9f47e368-e39a-4f2b-a5b7-6ecd79eb00c5",
+      "phaseId": "5464ff74-fa17-4412-abaa-95aa19810b33",
+      "number": 482,
+      "shortId": "LZM43",
+      "priority": 48,
+      "shortName": "a-dock-is-called-its-decorativ",
+      "title": "A dock is called '⠿' — its decorative drag grip answers the accessible-name walk before its title",
       "status": "planned",
-      "description": "Reported by Antonio, 2026-08-25, with two screenshots: a renamed pane's custom name and its dimmed `(program)` suffix sit on different lines, and which one is higher INVERTS between selected and unselected.\n\nTHE CAUSE\n`heca/src/providers/workspaces/pane_row.rs:212` builds the title area as:\n\n    Flex::row().align(Align::Center).gap(4.0)\n        .child(Flex::column().child(active_title).child(inactive_title))\n        .child(process_hint);\n\nThe name is built TWICE — `PaneName { color: accent }` at :90 and `PaneName { color: foreground }` at :102 — differing only in colour, each wrapped in a `Visibility` and stacked in a COLUMN. `Visibility` hides its inner child by setting `style.layout.hidden` on it (`heca-grid-ui/src/widgets/visibility.rs:49`), but the wrapper itself stays a layout node, so the column keeps two slots.\n\nThe visible name therefore sits in the FIRST slot when the pane is active and the SECOND when it is not, while `process_hint` is centred against the whole column. That is the inversion in the screenshots.\n\nWHY THE SHAPE IS WRONG, not just the pixels\nA colour is a property of one thing, not a reason to have two of them. Two copies of one name means every future change to how a name is shown must be made twice and will drift — one gets truncation or a tooltip and the other does not — and nothing fails when they do, because only one is ever on screen. Same \"two paths over one input\" defect the project rules already forbid.\n\nTHE FIX\nONE name. Its colour follows the row's selected state through the mechanism the library already has: a control publishes one state-derived content colour per frame with `PaintCx::with_content_color`, and unstyled `Label`/`Icon` children pull it (that is how a button's label dims when disabled). `Row` already publishes a state colour. So the name should carry no explicit colour at all, and with one name there is no column, so the name and the program name are siblings of one centred row and share a line by construction.\n\nCheck while doing it:\n- `components::PaneName` takes `color` as a required field. If nothing should pass a colour any more, that field goes or becomes optional — check the exposé's card, its second caller, before changing the shape.\n- The two title signals (`active_title_signal` / `inactive_title_signal`, and the two visibility signals) are bound in `sync_chrome_signals`; collapsing to one name means one text signal and no visibility pair. Follow them so nothing is left bound to a widget that no longer exists.\n- The row's accent when active must still read as accent, and the inactive one as foreground — confirm the published state colour actually produces both, rather than assuming.\n\nVERIFY — Antonio drives, this is visible behaviour\nA renamed pane, selected and unselected: the custom name and the `(program)` suffix sit on ONE line, and neither moves when selection changes. The name is still accent-coloured when selected and foreground when not. Check a long name still cuts rather than spilling (that is what PaneName exists for), and check the exposé's card is unaffected.",
-      "descriptionUpdatedAt": "2026-08-25T07:41:54.987Z",
+      "description": "FOUND 2026-08-25 while verifying T481. Antonio sees it printed at every app start:\n\n```\n[heca] chrome: 2 unkeyed children of the root are all called '⠿' — give each one .key(its own id) or their cursor position and hint letters will not survive a rebuild\n```\n\n⛔ **THE ORIGINAL DIAGNOSIS IN THIS TASK WAS WRONG — DISPROVED 2026-08-26. Read this before doing anything.**\n\nIt said: the dock's decorative drag grip is a literal `⠿` in a `Label`, a `Label` answers the accessible-name walk, so a dock is named after its grip; make the grip silent and the docks become distinguishable. **All of that is true and none of it fixes the warning.** What was actually tried and what happened:\n\n1. Grip → `Icon` (silent). The warning came back as `▾` — the chevron, the next literal character in a label. **Renaming only moves which decoration answers.**\n2. Chevron → `Icon` too. Not kept: Antonio said *\"restore the grip anyway\"*, and both were reverted. `dock_frame.rs` is untouched on the branch.\n3. The dock's key handed down to its header row (the walk stops at the first node that is keyed **or actionable**, and a dock's header row is the actionable one). Warning unchanged.\n4. A default identity from the dock's title when no key is declared. Warning unchanged. Reverted with the rest.\n\n**MEASURED, not reasoned** (`heca/src/providers/workspaces/testing.rs` — `testing::Fixture` + `DockView { tree, scroll, focused }.build(&seams, &mut reg)`, which needs no window): building **two** seatings of the workspaces dock, with **two** workspaces, and running `heca_grid_ui::nav::ambiguous_identities` over the pair reports **nothing**. The workspace docks are already keyed `ws:{idx}` and are **not** the offenders. Every fix above was aimed at the wrong nodes.\n\n═══ WHAT IS ACTUALLY KNOWN ═══\n- **Identity is a path.** `nav::identity_of` collects the key of every keyed ancestor on the way down, so `key` is React's `key`: unique **among siblings**, scoped by the tree (`docs/widgets.md` § \"The rule: two cases, and only two\").\n- **Antonio's reading, 2026-08-26:** *\"this occurs because we have 2 same sidebar that are rendered on the screen creating duplicate\"* — the same container tree rendered in the left and the right region. The duplication is therefore the **two region shells**, which declare no key, and the only name the walk can derive for either is the first text inside it: a dock's grip.\n- The check runs on the **freshly built** chrome tree (`chrome/scene.rs` → `identity::report_ambiguous_widgets(\"chrome\", &root)`), *before* any layout pass — so an identity assigned during `remeasure`/`on_layout` is invisible to it. That is why attempt 3 changed nothing.\n\n═══ THE FIX TO TRY (proposed, agreed in principle, NOT applied) ═══\nKey each **region shell** from the `RegionId` it is being built for — `chrome/scene.rs`, where `left_sidebar` and `right_sidebar` are built and each already receives its `RegionId`. Then the two root children are distinguishable and every identity inside becomes region-scoped: `left → ws:0` versus `right → ws:0`.\n\nThat second half is a live bug independent of the warning: two docks in two sidebars currently claim **one** identity, so a cursor position or a hint letter in the left sidebar is the same identity as the right one.\n\nAntonio stopped the work here (*\"we are doing too much with this sidebar\"*), so this is proposed, not decided.\n\n═══ VERIFY ═══\n- Start the app: no `unkeyed children … called '⠿'` line. **Only Antonio can run this** — reproduce headlessly first with the fixture above, and do not ship another guess that needs him to re-run.\n- A dock's cursor position and hint letters survive a chrome rebuild, and the left and right sidebars keep separate ones.",
+      "descriptionUpdatedAt": "2026-08-26T11:45:03.981Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -1708,16 +1822,21 @@
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-08-25T07:41:54.936Z",
-      "updatedAt": "2026-08-25T07:41:54.936Z"
+      "createdAt": "2026-08-25T09:58:38.105Z",
+      "updatedAt": "2026-08-26T11:45:03.978Z"
     }
   ],
   "createdAt": "2026-07-26T11:28:31.721Z",
-  "updatedAt": "2026-08-25T07:41:54.936Z",
-  "handoff": "# P082 — the Hint series is DONE through T436; T438 is the layout work it uncovered, and HOW TO WRITE CODE HERE\n\n> **Created:** 2026-08-24. **Reason:** T436 shipped and was verified; T438 turned into a day of\n> layout work driven by Antonio, all of it committed and verified. PR #262 is open.\n> **Replaces** the 2026-08-21 handoff. § 0 is carried over from it — read § 0 before touching\n> anything.\n\n---\n\n# 0. ⛔ HOW CODE MUST BE WRITTEN HERE — read this first, every time\n\n## 0.1 THE ONE QUESTION, BEFORE EVERY FIX\n\n**\"Would a second author hit this same thing?\"** If yes → it belongs in the **model**, not at the\ncall site. Say where the fix belongs *before* writing it, so Antonio can stop you at that sentence.\n\nHe said it four more times on 2026-08-24, and each time he was right:\n\n> *\"WHYYYYYYYY. the fix sould be centralized. Plugin authors cannot be going fixing around and\n> adjusting every part the add a keyHint. It should work out of the box wherever we put it\"*\n> · *\"If i see another hardcoded and not centralized fix i'll fire you\"*\n> · *\"you are the only one working in this project. from the beginning.\"* — said when I answered a\n> defect with *\"my diff adds no layout code\"*. **Never defend with authorship.** Everything here came\n> from these sessions; \"not mine\" is not an answer to anything.\n\n**Every fix on 2026-08-24 landed one level below where the symptom appeared**, and that is the whole\nlesson of the day:\n\n| symptom he saw | where the fix went |\n|---|---|\n| letters over the top bar and status bar | the picker's walk asks `clips_children`, like paint and input |\n| letters left behind by a resize | a view that cannot be seen is *withdrawn from*, never skipped |\n| a keycap sliver on the window margin | occlusion tests the centre of the **visible part**, not of the target |\n| `prefix+/` untouched by all of it | both pickers made one lifecycle; the one-shot call site deleted |\n| exposé letters gone on resize | `path_of`→`hint_targets_of`: address by identity, resolved by the collector |\n| card names smeared across each other | `Label` cuts by default; `flex_shrink` is 1; wrappers are transparent to layout |\n| `Alert` painting through a panel | \"nothing is wider than what holds it\", in the layout pass |\n| the palette broken in one host only | it reads `Base::viewport` instead of inferring from its own bounds |\n\n## 0.2 ⭐⭐ RULE ZERO — write the line a PLUGIN AUTHOR would type\n\n```rust\nKeyHintGroup::new(panel).opens_on(\"mypanel.pick\")   // ✅ one string; config binds the key\nRow::new().on_hint(Intent::new(\"docker.reveal\"))    // ✅ and the same line in a description\n```\n\nA registry, an id or a crate-private type IS the bug. Antonio, 2026-08-24, stating the target for\nevery widget: *\"We aim to have all widgets/components to be reusable as simple as an html tag or a\nreact component\"* — `cp = CommandPalette::new().items(…)`, then `button.on_click(|| cp.open())`, or\nbound to a key / reachable over RPC with no host code.\n\n## 0.3 THE PRINCIPLES HE ASKED FOR BY NAME (2026-08-24)\n\nDRY · Rule of Three · **Composition over inheritance** · **SRP** · Separation of Concerns · Interface\nSegregation · split action from context · split action from state · keep boundaries clear. Applied\nhere they say one thing: **a widget that positions, sizes or clips itself has taken a second job**,\nand it will behave differently in every host. That is T469.\n\n## 0.4 FOLDER STRUCTURE — one file, one thing\n\nA family gets a folder, one file per member. Aim < 400 lines; **above 600 agree a split first** — and\n**flagging is the rule, not filing**: he wants to be told and to decide together. The current list is\nT468 (re-measured 2026-08-24) plus T470/T471/T472.\n\n## 0.5 SIZES ARE SHARES; COLOURS ARE TOKENS\n\n`Length::Pct` of one denominator or a `grow` weight. A composition that computes pixels owns every\nterm and can only be debugged by eye.\n\n## 0.6 MEASURE / INSTRUMENT — and this is now proven three times over\n\nOn 2026-08-24 I was **wrong four times by reading code** and **right every time I measured**:\n\n- a temporary trace of the surface stack (which Antonio ran) proved the visibility rule was correct\n  every pass and the letters were *stale* — the opposite of my reading;\n- a headless test over the **real** sidebar tree found `\"ws:0\" resolves to a different widget than\n  the one it names` in one run, after three wrong hypotheses;\n- printing the card's actual boxes found the label was handed 48px for text measuring 48.6;\n- driving the showcase's real `build_ui` headlessly found the palette's viewport inference, after two\n  wrong guesses about the same symptom.\n\n**Reach for a measurement on the second hypothesis, not the fifth.**\n\n## 0.7 VERIFICATION, WAITING, AND THE GATE\n\nAntonio drives every visual check; green tests are not verification. **Never commit unasked.**\n**The gate is `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`.** Before claiming a\ncommit is green, `git stash` anything uncommitted and run against the committed tree alone.\n\n## 0.8 ⛔ SETTLED — do not re-open\n\n- The floating pane keeps its own `prefix+/` letter; `SidebarLeft`/`SidebarRight` stay `TiledOnly`;\n  one pane may wear three letters; `prefix+/` keeps lettering the current pane. (2026-08-21.)\n- **`letters()` stays host-only** — T433 decided the app owns the alphabet, not the library and not a\n  described tree.\n- **A partially visible row keeps its letter**, and its keycap is drawn whole rather than cut —\n  *\"a half visible pane row should have the letter to peek\"*. A partially visible **row** is fine as\n  it is: *\"partially visible is ok now\"*.\n- **`flex_shrink`'s old default (`0`) is gone deliberately**, after being proposed, measured and\n  agreed. A widget that must not be squeezed opts out.\n\n---\n\n# 1. What shipped (2026-08-22 → 24) — all committed, branch `feat/hint-anything-actionable`, PR #262\n\n| task | what | commit |\n|---|---|---|\n| **T436 done** | a plugin owns a picker with one string: `opens_on`, `WidgetKind::KeyHintGroup`, `ViewNode.actions` | `367736c` |\n| **T438** (1) | the picker honours clips; the cap is nudged into the visible part of its row | `b0c8606` |\n| — | planner record + the T435 correction | `6e2d9d2` |\n| **T438** (2) | identity addressing; both pickers one lifecycle; resize stops rebuilding layers | `54029fb` |\n| **T438** (3) | `Label` cuts by default; `flex_shrink` 1; viewport content; max-width; wrappers | `d47036a` |\n| **T438** (4) | the palette reads `Base::viewport` | `4bb3900` |\n| **T438** (5) | the two sweeps + the catalog sweep | `20b811f` |\n| — | planner: T469–T472 filed, T468 re-measured | `c7c6264` |\n\nGates on the committed tree alone: **21 suites green, clippy 0**.\n\n## 1a. The four APIs added, and why each exists\n\n- **`KeyHintGroup::opens_on(name)`** — the widget owns its open signal, holds the keyboard and\n  declares the verb. What made a picker declarable at all: static data can carry a *name*, never a\n  signal.\n- **`ViewNode.actions`** (`name → Intent`), read once in `realize` for every kind beside\n  `hint`/`key`/`hintable`. An **event** is fired *at* a node; an **action** is a name said out loud.\n- **`heca_grid_ui::hint_targets_of(root, identity)`** — the inverse of `identity_of`, which was\n  missing. It asks `collect_hints`, so it can only return a node the picker itself would have chosen,\n  and it returns **every** view.\n- **`component::wrap_transparently`** — a transparent wrapper adopts its child's sizing.\n\n## 1b. The layout defaults, stated once\n\n`Label` cuts (`Ellipsis::End`) unless told otherwise, `Ellipsis::None` opts out, the field is not an\n`Option`. A cutting label's floor is **one character** — zero is what cost a `Card` its title.\n`flex_shrink` is `1.0`. Two exceptions, both read off what the framework already knows: **a\nviewport's content does not give way** (`clips_children`), and **nothing is wider than what holds\nit**, except inside one, and only where the parent has a definite width (a percentage of a hugging\nparent resolves to nothing and takes the child with it — that is what emptied the showcase's palette).\n\n---\n\n# 2. Current focus — T438 is in-progress; two things left in it\n\n**(a) Class 3 — a leading icon or handle placed before the text without the row's width being\nconsulted.** Held as a named allowlist on the kinds sweep (`ItemGroup`, `DockFrame`, `Toast`, `Item`\n— `DockFrame` at 60px puts its title entirely outside the box) and as an `#[ignore]` with its reason\non the catalog sweep, where an anonymous rect cannot carry an honest reason beside it. **Emptying\nthat allowlist is the task.**\n\n**(b) The exposé's card floor — NEEDS ANTONIO'S DECISION, asked twice, not yet answered.** Cards are\na share with no minimum, so below a window width they are bars. Options put to him: floor + the row\nscrolls (recommended), floor + clip (cards past the edge unreachable by mouse), or fewer rows below a\nwidth.\n\n---\n\n# 3. How to resume\n\n1. `./scripts/lint-changed.sh test` and `./scripts/lint-changed.sh` for a clean baseline.\n2. `planner-task-show T438 --full`, and read this phase and F003 before starting.\n3. For class 3: the allowlist in `heca-view-realize/src/lib.rs::no_kind_paints_outside_the_box_it_is_given`\n   names each kind and what does it. Un-ignore\n   `showcase.rs::the_catalog_paints_nothing_outside_the_window_it_is_given` when they are gone.\n4. Antonio drives the visual check for anything that moves a pixel.\n\n---\n\n# 4. Files touched (2026-08-22 → 24)\n\n- **library**: `hint/{collect,offer,mod,tests}.rs` · `nav.rs` · `layout.rs` · `style.rs` ·\n  `component.rs` (`PaintCx::clip`, `wrap_transparently`) · `scene.rs` ·\n  `widgets/{label,key_hint,key_hint_group,focus_scope,tooltip,visibility,command_palette}.rs` ·\n  `lib.rs` · `tests/phase_a.rs`\n- **model/SDK**: `heca-view/src/{lib,build}.rs` · `heca-view-realize/src/lib.rs` (the two sweeps)\n- **app**: `chrome/hint/{letters,targets,surfaces,visibility}.rs` · `chrome/expose/{mod,pane_card}.rs`\n  · `chrome/mod.rs` · `handlers.rs` · `app/mutations.rs` · `components/{mod,pane_name,folder_line}.rs`\n  · `providers/workspaces/{mod,pane_row}.rs`\n- **docs/config**: `docs/{hint-architecture,widgets}.md` · `AGENTS.md` · `keybindings.default.toml`\n- **showcase**: `heca-renderer/examples/showcase.rs` (the catalog sweep)\n\n---\n\n# 5. Blockers\n\n**One decision**: the exposé's card floor (§ 2b). Nothing else is blocked.\n\n---\n\n# 6. Recent decisions\n\n- **A pick is addressed by identity**, with the path as the frame-local shortcut, and one `resolve`\n  serves offering *and* firing so they cannot disagree.\n- **Degenerate geometry is \"no answer yet\", never \"invisible\"** — stated in three places now (the\n  clip walk, the visibility rule, the label's cut) because it cost a regression each time.\n- **A resize re-lays-out; it does not rebuild.**\n- **`CommandPalette`'s fix is a patch and says so** (T469 is the fix).\n- **The sweeps' allowlist rule is `NO_HINT`'s**: an entry is a defect, never a way to make the test\n  pass.\n\n---\n\n# 7. Next steps\n\n1. **T438** — class 3, then the card floor once Antonio picks.\n2. **P087(F011)/T469** — CommandPalette composes instead of computing. It has the target API, the\n   split and what must not regress.\n3. **T468 / T470 / T471 / T472** — the file splits, each agreed with Antonio first. Recommended\n   first: `heca-view-realize/src/lib.rs` (3709, the largest, splits along lines that already exist).\n4. Then the phase's older remainder: **T417 · T418 · T421** (the map's lag — measure first).\n\n---\n\n# 8. Reminder\n\nAntonio drives every visual check; green tests are not verification. Never commit unasked. Read the\nphase and feature descriptions before starting a task. **Never mention context budget, in any form.**\nNever answer a defect with who wrote it. And before every fix, out loud: **would a second author hit\nthis? Then it goes in the model.**",
-  "handoffUpdatedAt": "2026-08-24T14:15:36.695Z",
+  "updatedAt": "2026-08-26T11:45:03.978Z",
+  "handoff": "# P082 — how code must be written here, plus the state after the click/name/baseline work\n\n> **Created:** 2026-08-25. **Reason:** T438, T439, T446, T473, T476 and T480 all closed; the phase's\n> eleven remaining tasks were given an explicit priority order, agreed with Antonio.\n> **Replaces** the 2026-08-24 handoff and **merges** it: § 0 below is carried over from it unchanged\n> in substance, because it is the part that stays true. Its two open remainders were NOT lost —\n> one is now T481, the other Antonio has tested and confirmed fixed (see § 2).\n\n---\n\n# 0. ⛔ HOW CODE MUST BE WRITTEN HERE — read this first, every time\n\n## 0.1 THE ONE QUESTION, BEFORE EVERY FIX\n\n**\"Would a second author hit this same thing?\"** If yes → it belongs in the **model**, not at the\ncall site. Say where the fix belongs *before* writing it, so Antonio can stop you at that sentence.\n\n> *\"WHYYYYYYYY. the fix sould be centralized. Plugin authors cannot be going fixing around and\n> adjusting every part the add a keyHint. It should work out of the box wherever we put it\"*\n> · *\"If i see another hardcoded and not centralized fix i'll fire you\"*\n> · *\"you are the only one working in this project. from the beginning.\"* — said when a defect was\n> answered with *\"my diff adds no layout code\"*. **Never defend with authorship.**\n\nAntonio's rule, in his own words (2026-08-25), after a long version of this was rejected as\n\"absurd rules you will not follow\":\n\n1. **DON'T hardcode. NEVER.**\n2. **DON'T fix at the call site — fix at widget/component level (centralized)**, so no other client\n   has to make the same fix.\n3. **Use S.O.L.I.D. principles.**\n4. **Use reusability principles.**\n\n**The trigger is not \"I am writing this line twice.\"** It is the thought **\"the framework can't do\nthis\"** — that sentence has exactly two continuations, fix the framework or work around it, and\nthere is no third. It is also almost always too broad: on 2026-08-25 \"the engine can't do baselines\"\nwas really \"one engine API can't report one number\", and the real fix was ~40 lines in the row\ncontainer needing nothing from the engine. **\"This mechanism can't\" is not \"it can't.\"**\n\n**And never document a broken API instead of fixing or deleting it.** An alignment option that\nsilently behaved as another one was kept with a comment explaining that it did not work. Antonio:\n*\"you want to pollute the code. IF it work keep otherwise fix or remove.\"* Writing \"this does not do\nwhat its name says\" IS the admission that it must not exist.\n\n## 0.2 ⭐⭐ RULE ZERO — write the line a PLUGIN AUTHOR would type\n\n```rust\nKeyHintGroup::new(panel).opens_on(\"mypanel.pick\")   // ✅ one string; config binds the key\nRow::new().on_hint(Intent::new(\"docker.reveal\"))    // ✅ and the same line in a description\n```\n\nA registry, an id or a crate-private type IS the bug. The target for every widget: *\"We aim to have\nall widgets/components to be reusable as simple as an html tag or a react component\"*.\n\n## 0.3 FOLDER STRUCTURE — one file, one thing\n\nA family gets a folder, one file per member. Aim < 400 lines; **above 600 agree a split first** —\nand **flagging is the rule, not filing**: he wants to be told and to decide together.\n\n## 0.4 SIZES ARE SHARES; COLOURS ARE TOKENS\n\n`Length::Pct` of one denominator or a `grow` weight. A composition that computes pixels owns every\nterm and can only be debugged by eye.\n\n## 0.5 MEASURE / INSTRUMENT — proven four times over now\n\nEvery wrong answer this phase came from reading code; every right one from running something.\n2026-08-25 added two more:\n\n- The narrow-window letter pile-up was confidently diagnosed as a clamp. A trace showed **zero**\n  horizontal clamps ever fired; the real cause was panes squeezed to **zero width** still being\n  handed letters, and 474 compact captions being dragged onto their own icons.\n- A baseline fix was declared working on the strength of a probe built from **two bare labels** — a\n  shape the real row never builds. In the real row the second run is inside a wrapper, the pass\n  skipped it, and the misalignment survived while the test said it was fixed. **Test the shape that\n  actually occurs.**\n\n**Reach for a measurement on the second hypothesis, not the fifth.**\n\n## 0.6 VERIFICATION, WAITING, AND THE GATE\n\nAntonio drives every visual check; green tests are not verification. **Never commit unasked.**\n**The gate is `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`** — never\n`--workspace`, which costs 20+ minutes here. Before claiming a commit is green, `git stash` anything\nuncommitted and run against the committed tree alone.\n\n## 0.7 REPORTING — behaviour, not identifiers\n\nAntonio architects; he does not read this codebase line by line. A report full of function, method\nand test names is unreadable to him — say what a user sees, how it worked before, why that shape was\nwrong, what is newly possible, and whether the UI changed. Identifiers belong in the planner task and\nthe commit message. Do not cite a section number of a document he does not read.\n\n## 0.8 ⛔ SETTLED — do not re-open\n\n- The floating pane keeps its own `prefix+/` letter; `SidebarLeft`/`SidebarRight` stay `TiledOnly`;\n  one pane may wear three letters; `prefix+/` keeps lettering the current pane.\n- **`letters()` stays host-only** — the app owns the alphabet, not the library.\n- **A partially visible row keeps its letter**, drawn whole rather than cut.\n- **`flex_shrink`'s old default (`0`) is gone deliberately**, after being measured and agreed.\n- **`Align` has four members** — Start, Center, End, Stretch. A `Baseline` member was added, found to\n  behave identically to `End`, and **removed**. Baseline alignment of text is done by the row\n  container itself (§ 1), not by an alignment option.\n\n---\n\n# 1. What shipped since the last handoff (2026-08-25) — pushed, branch `feat/hint-anything-actionable`\n\n| task | what a user gets | commit |\n|---|---|---|\n| **T473** | AGENTS.md and docs/widgets.md state behaviour, not planner history — 60 task ids and 22 dated lines gone, both Session Addendum logs deleted, the sidebar key rules lifted into the guide | `766a8d2` |\n| **T476** | `rename_column` finally has a default binding (`prefix+Shift+c`); the column pick moved to `prefix+Ctrl+c` | `9bdd084` |\n| **T439** | `chrome/mod.rs` 3265 → 1968 lines; scene / dispatch / layers_glue split out, proved a pure move line-for-line | `0b3b7d4` |\n| **T446** | clicking a dock focuses it and puts its cursor on the row you clicked — declared as handlers, not recovered by measuring rectangles. New core action `CursorTo`, so it is scriptable and bindable, not click-only | `cb16a92` |\n| **T480** | a pane's name and its `(program)` suffix share one line; the name is built once, not once per colour | `c4352ac` `33a702f` `c685769` `aaf8c55` `310e697` |\n\n**Three library capabilities were added, all deliberate, all because a call site would otherwise have\nhad to work around their absence:**\n\n- **A row of text runs shares one baseline.** No box alignment can do it: the renderer centres each\n  run's line box in its rect and drops the baseline an ascent below, and both scale with font size.\n  The row container measures where each run's baseline falls and drops the shallower ones. It looks\n  **through transparent wrappers** (`Visibility`, `KeyHint`, `Tooltip`) to the text inside — the case\n  that was missed first time round. Three tests, including the wrapped one.\n- **A selectable `Row` publishes its state colour**, as `Item` always did, so composed text follows\n  selection. This is what removed the need to build a name twice.\n- **`BASELINE_RATIO`** joins the two font-metric ratios the GPU-free layout side already assumes. If\n  the UI font is ever swapped for one with different proportions, all three want revisiting together.\n\n**Deleted:** the two geometric hit-tests behind click-to-focus and their single-caller wrappers, plus\n`nav::scope_at`. `Base::scope_key` **survives on purpose** — the dock picker matches it to letter a\ndock; it now has that one reader and no hit-test.\n\n---\n\n# 2. The previous handoff's two open remainders — one filed, one fixed\n\n- **Class 3 — a leading icon or handle placed without consulting the row's width.** Now\n  **P082(F003)/T481**, priority 0 (top of the phase). It was prose in a handoff with no task, which\n  is why it went unworked; it has one now. The evidence is committed: a named allowlist in\n  `no_kind_paints_outside_the_box_it_is_given` and an `#[ignore]`d catalog sweep. Emptying one and\n  un-ignoring the other is the task.\n- **The exposé's card floor** — recorded as needing Antonio's decision, asked twice. **Antonio tested\n  it on 2026-08-25 and confirmed it is fixed.** No task needed; do not re-open it.\n\n---\n\n# 3. Current focus — nothing in progress\n\nNo task is in-progress. The tree is clean and pushed through `310e697`. 1441 tests, clippy 0.\n\n**The phase's agreed order (priorities written into the planner 2026-08-25):**\n\n| # | task | why here |\n|---|---|---|\n| 0 | **T481** | leading icon pushes content out of its box — visible at any narrow width, and four kinds do it, so it is one framework rule |\n| 1 | **T479** | a compact target's caption is dragged onto the icon it captions — 474 occurrences measured, fires at any window size |\n| 2 | **T477** | a pane row built before its cwd arrived can never show one — looks arbitrary, some rows have a path and their neighbours do not |\n| 3 | **T475** | a pick with no candidates dies silently, so the key looks broken; fix at the shared seam, not per handler |\n| 4 | **T478** | a zero-width pane still spends one of the 52 letters |\n| 5 | **T458** | identities are positions, so a split renames every pane after it — breaks cursor, letters, right-click and drag together. **Must precede T474.** Cannot be done halfway |\n| 6 | **T474** | a scrolling-area column does not own its identity, only its sidebar view does; carries the new \"move pane to a new column\" action Antonio asked for |\n| 7–11 | **T471 · T468 · T466 · T472 · T470** | the file splits, no user-visible effect |\n\n⚠️ **The planner's own `task-recommend` points OUTSIDE this phase** (to F011/P087/T374) and will keep\ndoing so: it resolves feature → phase → task, so F011/P087 outranks F003/P082 above the task\npriorities. **Ignore it and work the table above** — that is Antonio's explicit instruction. Changing\nit would mean changing the phase or feature priority, which he has not asked for.\n\n---\n\n# 4. How to resume\n\n1. `./scripts/lint-changed.sh test`, then `./scripts/lint-changed.sh`, for a clean baseline.\n2. Read **F003**, then **this phase**, then the task — all three, before starting. Not just the task.\n3. Start at **T481**, then work down § 3's table.\n4. `planner-handoff-show` returns an EMPTY payload for this phase — a real bug in the tool. Use\n   **`planner-handoff-list`**, which returns the content in full. Do not proceed without reading it.\n5. Antonio drives every visual check.\n\n---\n\n# 5. Blockers\n\nNone. The one decision that was outstanding (the exposé card floor) is resolved.\n\n---\n\n# 6. Recent decisions\n\n- **A pick is not a click is not an activation** — three gestures, three declarations. Serving two\n  from one is what made `prefix+/` walk out of the sidebar.\n- **`CursorTo` is a core action, not a provider's** — every container has a cursor, so a plugin's\n  rows move it by naming the action, and no widget declares it. First `WmAction` to carry\n  `ActionPolicy::ContainerFocused`; a row emits `FocusDock` before it so the domain is right when it\n  runs.\n- **Docs state behaviour, not history.** No task ids, dates or attributions in AGENTS.md or\n  docs/widgets.md — that is planner state and it goes stale. Design rationale stays.\n- **Work is ordered by the planner's priorities, not by a handoff's narrative.** A phase is a unit to\n  finish.\n\n---\n\n# 7. Reminder\n\nAntonio drives every visual check; green tests are not verification. Never commit unasked. Read the\nfeature and phase descriptions before starting a task, and fix them when they are stale. Never\nmention context budget in any form. Never answer a defect with who wrote it. And before every fix,\nout loud: **would a second author hit this? Then it goes in the model.**",
+  "handoffUpdatedAt": "2026-08-25T08:59:39.809Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-25T08-59-39-784Z.md",
+      "clearedAt": "2026-08-25T08:59:39.784Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-24T14-15-36-688Z.md",
       "clearedAt": "2026-08-24T14:15:36.688Z",
@@ -1736,11 +1855,6 @@
     {
       "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-21T11-18-49-039Z.md",
       "clearedAt": "2026-08-21T11:18:49.039Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/5464ff74-fa17-4412-abaa-95aa19810b33-2026-08-20T15-19-17-165Z.md",
-      "clearedAt": "2026-08-20T15:19:17.165Z",
       "reason": "superseded"
     }
   ],

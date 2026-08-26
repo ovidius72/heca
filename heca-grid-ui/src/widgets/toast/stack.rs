@@ -14,15 +14,15 @@
 //!
 //! Input contract: it reports [`overlay_active`](Component::overlay_active) while
 //! it has toasts, so the host routes pointer/keys to it first (see
-//! [`FocusManager`](crate::focus::FocusManager)); it **consumes** only clicks that
-//! land on a toast and passes everything else through (`Handled::No`), so toasts
-//! never block the UI behind them.
+//! [`FocusManager`](crate::focus::FocusManager)); it **consumes** what lands on a card — a click
+//! or a move, because a card occludes the points it covers — and passes everything else through
+//! (`Handled::No`), so toasts block only the strip of UI they actually cover.
 
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{Signal, SignalGet};
 use crate::style::Length;
-use crate::widgets::{Glyph, Toast, ToastSeverity};
+use crate::widgets::{Toast, ToastCorner, ToastSpec};
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -43,85 +43,6 @@ fn union(a: Rectangle, b: Rectangle) -> Rectangle {
     let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
     let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
     Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
-}
-
-/// Which viewport corner the stack anchors to (and the direction it grows).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ToastCorner {
-    #[default]
-    TopRight,
-    TopLeft,
-    BottomRight,
-    BottomLeft,
-}
-
-#[heca_grid_ui_macros::props]
-impl ToastCorner {
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
-    fn is_right(self) -> bool {
-        matches!(self, ToastCorner::TopRight | ToastCorner::BottomRight)
-    }
-    #[heca_grid_ui_macros::host_only("carries no value — a property needs one; the equivalent is an explicit setting")]
-    fn is_top(self) -> bool {
-        matches!(self, ToastCorner::TopRight | ToastCorner::TopLeft)
-    }
-}
-
-/// A single notification the host wants shown — plain data (no callbacks). The
-/// host owns these in a `Signal<Vec<ToastSpec>>`; the stack renders them.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ToastSpec {
-    /// Stable identity — used to reconcile widgets across frames and reported
-    /// back by `on_dismiss`/`on_action`.
-    pub id: u64,
-    pub severity: ToastSeverity,
-    pub icon: Option<Glyph>,
-    pub title: String,
-    pub body: Option<String>,
-    /// Inline action button label, if any.
-    pub action: Option<String>,
-    /// Whether the × dismiss affordance is shown.
-    pub dismissible: bool,
-}
-
-impl ToastSpec {
-    /// A new info spec with `id` + `title`. Chain the setters for the rest.
-    pub fn new(id: u64, title: impl Into<String>) -> Self {
-        Self {
-            id,
-            severity: ToastSeverity::Info,
-            icon: None,
-            title: title.into(),
-            body: None,
-            action: None,
-            dismissible: true,
-        }
-    }
-    #[heca_grid_ui_macros::prop]
-    pub fn severity(mut self, s: ToastSeverity) -> Self {
-        self.severity = s;
-        self
-    }
-    #[heca_grid_ui_macros::prop]
-    pub fn icon(mut self, g: Glyph) -> Self {
-        self.icon = Some(g);
-        self
-    }
-    #[heca_grid_ui_macros::prop]
-    pub fn body(mut self, b: impl Into<String>) -> Self {
-        self.body = Some(b.into());
-        self
-    }
-    #[heca_grid_ui_macros::prop]
-    pub fn action(mut self, label: impl Into<String>) -> Self {
-        self.action = Some(label.into());
-        self
-    }
-    #[heca_grid_ui_macros::prop]
-    pub fn dismissible(mut self, on: bool) -> Self {
-        self.dismissible = on;
-        self
-    }
 }
 
 /// A cached toast widget + its transient animation state, keyed by spec id.
@@ -207,16 +128,21 @@ impl ToastStack {
             t = t.icon(g);
         }
         if let Some(b) = &spec.body {
-            t = t.body(b.clone());
+            t = t.body_text(b.clone());
         }
         if let Some(label) = &spec.action {
             let cb = self.on_action.clone();
             let id = spec.id;
-            t = t.action(label.clone(), move || {
-                if let Some(f) = &cb {
-                    f(id);
-                }
-            });
+            // **The stack builds the control, not the card and not the host.** Every app
+            // notification's action then looks the same, and the card only decides where it sits
+            // and what hue it takes.
+            t = t.action(
+                crate::widgets::Button::outline(label.clone()).on_click(move || {
+                    if let Some(f) = &cb {
+                        f(id);
+                    }
+                }),
+            );
         }
         t = t.dismissible(spec.dismissible);
         if spec.dismissible {
@@ -295,20 +221,28 @@ impl ToastStack {
 
     /// Measure + position every cached toast into its slot (with the slide-in
     /// offset applied). Shared by `paint` and `event` so hit-testing matches.
+    ///
+    /// **Each toast is laid out by the engine, then moved** — the card's content is children, and
+    /// assigning the card a rect places the card and nothing inside it. It used to read a height
+    /// the card pinned on itself and write a rect straight into its bounds, which left every
+    /// child at the origin with no size: the × could not be clicked because, as far as the tree
+    /// was concerned, it had never been placed (F003/P082/T481). Laying out at the origin and
+    /// shifting the whole subtree is the move a `ContextMenu` and the command palette already
+    /// make when they place themselves.
     fn layout(&self) {
         let mut entries = self.entries.borrow_mut();
         let font = self.base.font;
-        // Measure each toast's height from its resolved font.
+        // Measure each toast by laying it out in its own width: a card that hugs its content is
+        // as tall as the engine makes it, which is the only place the body line and the action
+        // row are actually accounted for.
         let heights: Vec<f32> = entries
             .iter_mut()
             .map(|e| {
-                e.toast.base_mut().font = font;
                 e.toast.base_mut().style.layout.width = Length::Px(TOAST_W);
-                e.toast.remeasure();
-                match e.toast.base().style.layout.height {
-                    Length::Px(h) => h,
-                    _ => font,
-                }
+                crate::layout::LayoutEngine::new()
+                    .base_font(font)
+                    .compute(&mut e.toast, Size::new(TOAST_W as f64, f64::MAX));
+                e.toast.base().bounds.size.h as f32
             })
             .collect();
         let slots = self.slots(&heights);
@@ -317,8 +251,12 @@ impl ToastStack {
         for (e, slot) in entries.iter_mut().zip(slots) {
             let off = (1.0 - e.enter) * (TOAST_W + self.margin);
             let dx = if right { off as f64 } else { -(off as f64) };
-            e.toast.base_mut().bounds =
-                Rectangle::new(Point::new(slot.loc.x + dx, slot.loc.y), slot.size);
+            let at = e.toast.base().bounds.loc;
+            crate::component::shift_subtree(
+                &mut e.toast,
+                slot.loc.x + dx - at.x,
+                slot.loc.y - at.y,
+            );
         }
     }
 }

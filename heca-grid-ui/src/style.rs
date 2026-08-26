@@ -512,6 +512,14 @@ pub struct Layout {
     /// takes no space and paints nothing. Used by collapsible containers
     /// (e.g. [`ItemGroup`](crate::widgets::ItemGroup)) to fold rows away.
     pub hidden: bool,
+    /// **Children that do not fit on one line start another** (CSS `flex-wrap: wrap`).
+    ///
+    /// A row of controls is the case: three buttons in a card narrower than their sum have to go
+    /// somewhere, and the alternatives are both wrong — squeezing every button until its label is
+    /// an ellipsis, or laying the overflow out past the edge. `false` (one line) stays the default,
+    /// because for most rows — a leading slot, a label and a trailing slot — a second line would be
+    /// nonsense (F003/P096/T483).
+    pub wrap: bool,
     /// Placement when this component is a child of a [`Grid`](crate::widgets::Grid).
     /// `None` ⇒ grid auto-placement. Set by `Grid::cell`/`Grid::area`.
     pub grid_cell: Option<GridCell>,
@@ -579,6 +587,7 @@ impl Default for Layout {
             // Not explicitly chosen ⇒ the layout pass may replace it with the parent's variant.
             size_explicit: false,
             hidden: false,
+            wrap: false,
             grid_cell: None,
             placement: None,
         }
@@ -713,6 +722,11 @@ impl Layout {
             max_size: Size {
                 width: self.max_width.map_or_else(auto, Length::to_taffy),
                 height: self.max_height.map_or_else(auto, Length::to_taffy),
+            },
+            flex_wrap: if self.wrap {
+                taffy::FlexWrap::Wrap
+            } else {
+                taffy::FlexWrap::NoWrap
             },
             flex_grow: self.flex_grow,
             // Widgets use explicit Px sizes; never let a flex container squish them

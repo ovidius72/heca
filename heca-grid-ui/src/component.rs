@@ -165,6 +165,16 @@ pub struct Base {
     /// Only the primary button, and only while enabled. Other buttons pass straight through to
     /// whatever wants them.
     pub one_click_target: bool,
+    /// **The pointer passes straight through this widget** (CSS `pointer-events: none`).
+    ///
+    /// For content that is *decoration standing in for something else*: a `Select`'s chosen option
+    /// is echoed inside the closed trigger, and while it stands there it is not an option you can
+    /// pick — the trigger is the control. Left as a target it hovered on its own, so the text lit
+    /// up and the chevron beside it did not: one control wearing two highlights.
+    ///
+    /// It is about **input, not paint** — the widget still draws — and it applies to the whole
+    /// subtree, because a decoration's children are decoration too.
+    pub pointer_transparent: bool,
     /// Explicit Tab-order index (like HTML `tabindex`). Focusables with an index
     /// are visited first in ascending order; those without (`None`) follow in
     /// tree position order. Set via [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
@@ -345,6 +355,7 @@ impl Base {
             focusable: false,
             focus_barrier: false,
             one_click_target: false,
+            pointer_transparent: false,
             tab_index: None,
             children: Vec::new(),
             drag_source: None,
@@ -1124,6 +1135,10 @@ pub struct PaintCx<'a> {
     /// The **inherited content color** for the subtree currently being painted — see
     /// [`with_content_color`](Self::with_content_color). `None` at the root.
     content_color: Option<Color>,
+    /// The inherited **control tone** for the subtree currently being painted — see
+    /// [`with_control_tone`](Self::with_control_tone). `None` at the root, and `None` almost
+    /// everywhere: a container has to say it wants the controls inside it to follow its hue.
+    control_tone: Option<Color>,
     content_glow: Option<Glow>,
     /// Translation applied to every draw emitted through this context — see
     /// [`with_translate`](Self::with_translate). `(0, 0)` normally: a widget paints at its bounds.
@@ -1177,6 +1192,12 @@ pub fn wrap_transparently(base: &mut Base, child: &dyn Component) {
     }
     base.style.layout.max_width = base.style.layout.max_width.or(child.max_width);
     base.style.layout.max_height = base.style.layout.max_height.or(child.max_height);
+    // **Whether it may be squeezed is the content's answer too.** Everything gives way by default,
+    // so a wrapper around something that refuses — a `StatusDot`, whose circle has no narrower
+    // version — gave way in its place, and the dot was drawn as a 3px sliver inside a box that had
+    // shrunk around it. The wrapper has no opinion of its own; it *is* the widget inside it
+    // (F003/P096/T483).
+    base.style.layout.flex_shrink = base.style.layout.flex_shrink.or(child.flex_shrink);
 }
 
 /// Scale every colour in a draw command by `a`, leaving its geometry alone.
@@ -1270,6 +1291,7 @@ impl<'a> PaintCx<'a> {
             theme,
             viewport: Size::new(f64::MAX, f64::MAX),
             content_color: None,
+            control_tone: None,
             content_glow: None,
             offset: (0.0, 0.0),
             opacity: 1.0,
@@ -1500,6 +1522,37 @@ impl<'a> PaintCx<'a> {
     /// `theme.colors.foreground`).
     pub fn content_color(&self) -> Option<Color> {
         self.content_color
+    }
+
+    /// Paint the closure's subtree with `tone` as the **inherited control tone** — the *chrome*
+    /// counterpart of [`with_content_color`](Self::with_content_color).
+    ///
+    /// Content colour is ink: it reaches text and glyphs. This reaches a control's own
+    /// **chrome** — a [`Button`](crate::widgets::Button)'s border and hover fill, an
+    /// [`IconButton`](crate::widgets::IconButton)'s hover tint — which is otherwise the theme
+    /// accent and nothing else. A composition that has a hue of its own needs both: a
+    /// notification card is severity-toned, and a `Retry` inside a *danger* card cannot be blue.
+    ///
+    /// **Why a second channel rather than widening the first**: `Item`, `Row`, `Choice`,
+    /// `ContextMenu`, `CommandPalette` and `Select` all publish a content colour today, and every
+    /// button composed inside one would have silently restyled. This one starts empty — nothing
+    /// publishes it — so a control looks exactly as it did unless a container asks otherwise
+    /// (F003/P096/T484).
+    ///
+    /// The tone is a **theme token resolved by the publisher at paint**, never a colour stored at
+    /// build time, so a theme reload re-tones what is already on screen. Nesting restores the
+    /// outer value on exit.
+    pub fn with_control_tone(&mut self, tone: Color, f: impl FnOnce(&mut PaintCx<'a>)) {
+        let previous = self.control_tone.replace(tone);
+        f(self);
+        self.control_tone = previous;
+    }
+
+    /// The inherited control tone, if a container published one via
+    /// [`with_control_tone`](Self::with_control_tone). A control resolves its hue as: **its own
+    /// explicit tone → this → the theme accent.**
+    pub fn control_tone(&self) -> Option<Color> {
+        self.control_tone
     }
 
     /// Paint the closure's subtree with `glow` as the **inherited content glow** — the

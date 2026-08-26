@@ -990,11 +990,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .child(
             Flex::column()
                 .gap(10.0)
-                .child(Toast::success("Build succeeded").body("12 crates compiled in 4.2s"))
+                .child(Toast::success("Build succeeded").body_text("12 crates compiled in 4.2s"))
                 .child(
                     Toast::danger("Connection lost")
-                        .body("Reconnecting to the grid…")
-                        .action("Retry", click("toast-retry"))
+                        .body_text("Reconnecting to the grid…")
+                        // Two actions, each a real Button: the card places them and publishes its
+                        // severity, so they tone themselves — and `prefix+/` letters them with
+                        // nothing declared.
+                        .action(Button::outline("Retry").on_click(click("toast-retry")))
+                        .action(Button::ghost("Details").on_click(click("toast-details")))
                         .on_dismiss(click("toast-dismiss")),
                 )
                 // A clickable card with no body — the inline "notification row" case.
@@ -2907,8 +2911,8 @@ impl ApplicationHandler for App {
                 // decorated window's edges) — don't override it.
                 // Route hover through grid-ui: the overlay LAYER gets first dibs but
                 // only swallows it if it consumes it (an input-grabbing Dialog/palette
-                // returns Yes so items behind don't hover; the ToastStack returns No so
-                // buttons behind it still hover/animate while toasts show), otherwise
+                // returns Yes so items behind don't hover; the ToastStack returns Yes only for
+                // the strip its cards actually cover), otherwise
                 // it falls to the page tree (whose own overlay scan covers an open
                 // Select dropdown) and then the widget under the cursor.
                 let ev = Event::Raw(state.raw(RawPointerKind::Moved, PointerButton::Left));
@@ -3179,13 +3183,11 @@ mod sweeps {
     /// catalog's says what a card's title really looks like.
     ///
     /// **Base layer only**: the overlay band exists for what must escape its box (a dropdown, a
-    /// hint keycap), so asserting there would forbid the feature.
+    /// hint keycap), so asserting there would forbid the feature. Both that and the clip
+    /// arithmetic come from `Scene::draws_outside` — this sweep and the per-kind one each had
+    /// their own copy, and both read a clip lying outside the clip already open as "no clip",
+    /// which is what produced the five phantom escapes it was ignored for (F003/P082/T481).
     #[test]
-    // Five places remain, all the same shape as the per-kind sweep's allowlist: a leading icon or
-    // handle placed before the text without the row's width being consulted. Attributing them to
-    // widgets needs the class-3 pass (F003/P082/T438); the sweep is committed **ignored** rather
-    // than allowlisted, because an anonymous rect cannot carry an honest reason next to it.
-    #[ignore = "5 known class-3 escapes: leading icons pushing content past the edge"]
     fn the_catalog_paints_nothing_outside_the_window_it_is_given() {
         let mut escapes: Vec<String> = Vec::new();
         for w in [1400.0f64, 900.0, 600.0, 320.0] {
@@ -3214,46 +3216,11 @@ mod sweeps {
                 let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(w, 900.0));
                 built.ui.paint(&mut cx);
             }
-            // **Honour the clip stack**: a draw scissored to a clip that is itself inside the
-            // window cannot escape it — that is what the clip is for. Ignoring them reports a
-            // scrolling page's content, which is exactly the case where overflow is the feature.
-            let mut clips: Vec<heca_core::layout::Rectangle> = Vec::new();
-            for cmd in scene.base_layer().iter() {
-                match cmd {
-                    heca_grid_ui::DrawCommand::PushClip(r) => {
-                        let inner = clips.last().and_then(|c: &heca_core::layout::Rectangle| c.intersection(*r)).unwrap_or(*r);
-                        clips.push(inner);
-                        continue;
-                    }
-                    heca_grid_ui::DrawCommand::PopClip => {
-                        clips.pop();
-                        continue;
-                    }
-                    _ => {}
-                }
-                let (what, rect) = match cmd {
-                    heca_grid_ui::DrawCommand::Text(t) if t.text.is_empty() => continue,
-                    heca_grid_ui::DrawCommand::Text(t) => {
-                        (format!("text {:?}", t.text), t.rect)
-                    }
-                    heca_grid_ui::DrawCommand::Rect(r) => ("rect".to_string(), r.rect),
-                    _ => continue,
-                };
-                // A box squeezed to nothing paints nothing, wherever its origin ended up.
-                    if rect.size.w <= 0.0 || rect.size.h <= 0.0 {
-                        continue;
-                    }
-                    let Some(rect) = clips.last().map_or(Some(rect), |c| c.intersection(rect)) else {
-                        continue; // entirely scissored away
-                    };
-                    let right = rect.loc.x + rect.size.w;
-                if rect.loc.x < -0.5 || right > w + 0.5 {
-                    escapes.push(format!(
-                        "{w}px: {what} spans {:.0}..{:.0}",
-                        rect.loc.x, right,
-                    ));
-                }
-            }
+            let window = heca_core::layout::Rectangle::new(
+                heca_core::layout::Point::default(),
+                Size::new(w, 900.0),
+            );
+            escapes.extend(scene.draws_outside(window).iter().map(|e| format!("{w}px: {e}")));
         }
         escapes.sort();
         escapes.dedup();

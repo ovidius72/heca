@@ -46,10 +46,10 @@ pub(crate) struct PaneInfoSignals {
     /// pane updates the path live, mirroring the git-branch row.
     pub(crate) cwd: Signal<String>,
     pub(crate) cwd_visible: Signal<bool>,
-    pub(crate) status_idle_visible: Signal<bool>,
-    pub(crate) status_running_visible: Signal<bool>,
-    pub(crate) status_success_visible: Signal<bool>,
-    pub(crate) status_error_visible: Signal<bool>,
+    /// What the row's status pip shows. **One signal, not one dot per state**: the row keeps a
+    /// single `StatusDot` and rewrites what it is, instead of building four and toggling four
+    /// booleans to reveal one (F003/P096/T483).
+    pub(crate) status: Signal<heca_grid_ui::DotStatus>,
     pub(crate) git_visible: Signal<bool>,
     pub(crate) git_branch: Signal<String>,
     pub(crate) git_branch_display: Signal<String>,

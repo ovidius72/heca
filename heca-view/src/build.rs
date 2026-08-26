@@ -915,9 +915,22 @@ impl Toast {
     pub fn icon(self, glyph: ViewGlyph) -> Self {
         self.prop("icon", glyph)
     }
-    /// The supporting line under the title.
-    pub fn body(self, text: impl Into<String>) -> Self {
-        self.prop("body", PropValue::Text(text.into()))
+    /// The supporting line under the title — the common body, said in one string.
+    ///
+    /// A body that is more than a line of text is composed instead: give the card children in the
+    /// `body` slot and they become its body.
+    pub fn body_text(self, text: impl Into<String>) -> Self {
+        self.prop("body_text", PropValue::Text(text.into()))
+    }
+    /// Whether it starts on screen. A described card that is closed takes no space until something
+    /// opens it.
+    pub fn opened(self, open: bool) -> Self {
+        self.prop("opened", open)
+    }
+    /// Where the card sits in the box that holds it: `"top-right"` (the default), `"top-left"`,
+    /// `"top-center"`, `"bottom-right"`, `"bottom-left"`, `"bottom-center"`.
+    pub fn position(self, position: impl Into<String>) -> Self {
+        self.prop("position", PropValue::Text(position.into()))
     }
     /// Whether it can be dismissed.
     pub fn dismissible(self, on: bool) -> Self {

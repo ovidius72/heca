@@ -302,23 +302,11 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             sigs.cwd_visible.set(cwd_visible);
             changed = true;
         }
-        for (signal, visible) in [
-            (sigs.status_idle_visible, next.status == ProcessStatus::Idle),
-            (
-                sigs.status_running_visible,
-                next.status == ProcessStatus::Running,
-            ),
-            (
-                sigs.status_success_visible,
-                next.status == ProcessStatus::Success,
-            ),
-            (
-                sigs.status_error_visible,
-                next.status == ProcessStatus::Error,
-            ),
-        ] {
-            if signal.get_untracked() != visible {
-                signal.set(visible);
+        let status = crate::providers::workspaces::dot_status(next.status);
+        {
+            let signal = sigs.status;
+            if signal.get_untracked() != status {
+                signal.set(status);
                 changed = true;
             }
         }

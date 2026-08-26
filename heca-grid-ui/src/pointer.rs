@@ -376,7 +376,10 @@ pub fn hit_test(root: &dyn Component, pos: Point) -> Option<Path> {
 /// Hidden and invisible subtrees have stale bounds and take no input — the same filter paint,
 /// focus and drag resolution use.
 fn skip(c: &dyn Component) -> bool {
-    !c.base().visible.get_untracked() || c.base().style.layout.hidden
+    !c.base().visible.get_untracked()
+        || c.base().style.layout.hidden
+        // Decoration the pointer passes through — see `Base::pointer_transparent`.
+        || c.base().pointer_transparent
 }
 
 // ─────────────────────────────── hover ───────────────────────────────

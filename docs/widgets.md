@@ -836,6 +836,22 @@ distinction here. The declarative boundary just falls on the same line.
 `width`/`height` (`Length`), min/max sizes, `flex_grow`, `flex_shrink`, `hidden`, `grid_cell`,
 `size`. `to_taffy()` lives here, because these are the fields it reads.
 
+**Two rules the layout pass applies for you, so no widget has to.** A child of a container that is
+*not* a scroll viewport gets, unless it said otherwise:
+
+- **`max_width: 100%` — nothing is wider than what holds it.** A widget carrying a design width
+  (`Alert` 360, `Toast` 320, `Input` 240) is capped against the box it was given instead of painting
+  through its parent's border.
+- **`min_width: 0` — giving way is not optional once the row is out of room.** Flexbox otherwise
+  floors every item at its own content width, so a row whose children *are* willing to shrink still
+  cannot fit them and lays the overflow past its own edge — which is how a leading icon, a caret or
+  a drag handle pushed a title clean outside its frame at narrow widths.
+
+A widget that must keep its size still says so — an explicit `min_width`, or `flex_shrink(0.0)` —
+and both rules leave it alone. Inside a **viewport** (anything that clips its children) neither
+applies: there, exceeding the box is the feature, and the floor is what keeps a 600px column 600px
+wide in a 100px scroll region.
+
 **`Style.visual` — appearance.** `fill`, `border`, `glow`, `radius`, `font_size`, `font_scale`.
 A description may **never** set these: it carries semantic intent (a variant, a `size`, a colour
 *name*) and the host resolves the pixels from the `Theme`
@@ -2853,11 +2869,33 @@ Tiny glowing status dot in a semantic color (display-only).
 
 - **Construct**: `StatusDot::new(DotStatus)` or `StatusDot::{online,warning,error,offline}()`.
 - **`DotStatus`**: `Online` (success), `Warning`, `Error` (danger), `Offline` (muted, no glow).
+- **Builders**: `.status(Signal<DotStatus>)` — drive it from state the host already keeps.
+- **Change it**: `dot.set(DotStatus::Warning)` — the pip changes in place, nothing rebuilt.
+- **Signals**: `.status_signal()` — the same value `set` writes, for a host that binds rather than calls.
 
 ```rust
 Flex::row().gap(8.0).align(Align::Center)
     .child(StatusDot::online()).child(Label::new("UPLINK"));
 ```
+
+**One dot that changes, not one dot per state.** A retained tree — the sidebar's pane rows — writes
+the status into the signal when a process changes. Building one dot per state and revealing one of
+them costs a slot four times too wide and four signals to keep in step, and it only ever looked
+right because the hidden ones were being squeezed to nothing by a row out of room.
+
+```rust
+let dot = StatusDot::new(DotStatus::Idle);
+dot.set(DotStatus::Warning);               // say it directly…
+dot.set(DotStatus::Error);
+
+let status = dot.status_signal();          // …or bind the signal the host already keeps
+status.set(DotStatus::Online);
+```
+
+**It never gives way.** Everything shrinks by default (see the two layout rules above), which is
+right for text and for a card carrying a design width and wrong for a circle: squeezing one axis of
+a dot flattens it rather than making it smaller. So it declares `flex_shrink(0.0)` for itself, and a
+transparent wrapper around it inherits that refusal.
 
 ### Separator
 
@@ -2931,6 +2969,23 @@ sidebar. Severity maps to theme tokens, never literals.
 - **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` (×),
   `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
   Enter/Space activates).
+- **Signals**: `.title_signal() -> Signal<String>` — the title child owns the text; set the signal
+  to retitle a live card.
+
+**Its content is children, and the engine places them.** The card paints only its own chrome — the
+tinted surface, the bracket frame, the action's face, the press flash, the focus ring — while the
+leading icon, the text column (title / body / action) and the × are real components laid out by the
+layout engine. It measured and placed them itself until F003/P082/T481, and a card squeezed
+narrower than its own icon column then laid its title out past its right edge, because a constant
+column cannot consult the width the card was actually given. What follows from that:
+
+- **Narrow it and the text is cut, not moved.** The title and body carry an end ellipsis.
+- **The action button hugs its label**; the title and body fill the column.
+- **The severity tone is published, not painted on**: the icon and the title inherit it (the same
+  mechanism `Item` uses for its row colour), so anything composed into the card follows it. The
+  body line is the theme `muted` token, and the × is `muted` at rest, `foreground` under the pointer.
+- **The action and the × take their own press** and stop it there; `on_click` fires for a press they
+  declined, which is what "the whole card" means.
 
 **Native:**
 
@@ -4423,10 +4478,19 @@ owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached [
 widgets by **id** (each keeps its hover/flash state), corner-anchors them on the overlay layer,
 slides new ones in, routes events to the toast under the cursor, and reports
 `on_dismiss(id)`/`on_action(id)` back — the host then removes the id (which reflows the rest). It is
-overlay-active only while it has toasts, and **passes through** clicks that miss every toast.
+overlay-active only while it has toasts, and **passes through** what misses every toast.
 Its `overlay_occludes(pos)` reports the **cards'** rects (not the whole corner), so a host gate
 like "right-click opens the page menu" skips points a toast covers while staying live elsewhere
 (see [`Component` trait](#component-trait)).
+
+**A card occludes hover too.** A pointer *move* over a card is consumed, so controls behind it stop
+lighting up while a toast is over them; moves between and outside the cards still fall through, and
+a button next to the stack keeps hovering as it always did (F003/P082/T481).
+
+⚠️ **Known gap** — the stack keeps its cards outside the component tree (they live in its own
+reconciled list, and it routes input to them by hand), so the framework's hover pass never reaches
+*inside* a card here: a stacked toast's action face and × do not light under the pointer, though an
+inline `Toast` in an ordinary tree does. The fix is to make the cards real children; it is not done.
 
 - **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
   `.gap(px)`, `.margin(px)`.
