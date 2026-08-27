@@ -140,6 +140,33 @@ pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
 
 // ── Layout ──
 
+/// Announce a freshly created pane — F009/T493, the first real producer on the public
+/// [`Notification`](crate::notification::Notification) builder.
+///
+/// Every user-initiated creation path (horizontal / vertical split, add-to-column, new
+/// workspace, spawn-command) calls this once, so the message and the decision to raise it live
+/// in one place rather than five. A just-spawned pane has no name until the user renames it
+/// (`pane_name` is empty by design), so it is identified by its id — the same monotonic id the
+/// pane selector and RPC use.
+///
+/// Carries a **Focus** action: its [`Intent`](heca_view::Intent) is `focus_pane` keyed to this
+/// id, so a `prefix+/` pick (or a click, once the toast layer is wired for the pointer — F009/
+/// T207) moves focus to the new pane and dismisses the toast.
+fn announce_pane_created(pane_id: u64) {
+    use crate::notification::{Notification, NotificationAction};
+    use heca_view::{Intent, PropValue};
+
+    Notification::info(format!("Pane {pane_id} created"))
+        .action(
+            NotificationAction::new(
+                "Focus",
+                Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64)),
+            )
+            .dismiss_after(true),
+        )
+        .send();
+}
+
 pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
@@ -152,6 +179,7 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
@@ -173,6 +201,7 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {
@@ -1319,6 +1348,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 /// Add a new column to a specific workspace (sidebar right-click context menu).
@@ -1595,6 +1625,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
         state.expose_cursor_per_ws.push(None);
     }
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 /// Open the rename dialog for workspace `ws_idx`, pre-filled with its current name. Shared by
@@ -2276,6 +2307,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
         create_command_backend_for_state(state, cols, rows, command),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 // ── Mode ──

@@ -171,8 +171,8 @@
       "shortName": "toast-pass-through",
       "title": "Validate ToastStack overlay pass-through",
       "status": "planned",
-      "description": "Verificare che click fuori dai toast passi all'UI sottostante; dismiss e action consumano solo sui card/affordance. Verificare inoltre che `covers_content: false` funzioni davvero: con un toast visibile, `prefix+Enter` e le altre azioni `Global` devono restare disponibili — il layer non deve mettere l'app in `Domain::Overlay` (che permetterebbe solo azioni Global, bloccando tutto il resto).",
-      "descriptionUpdatedAt": "2026-08-26T15:37:00.166Z",
+      "description": "⚠️ MISLABELLED — this is MISSING IMPLEMENTATION, not a validation task. Verified 2026-08-27: the toast stack is a LayerKind::Persistent non-modal layer and the app has NO pointer-input pass for ordinary layers (heca/src/chrome/layers_glue.rs runs rebuild/layout/paint only; dispatch_modal_pointer only touches top_modal). The ToastStack receives ZERO pointer events — the × never closes it, action buttons never fire, and hover falls through to the pane beneath because the toast never gets to claim its strip. The ToastStack WIDGET is correct (returns Handled::Yes only for the strip its cards cover; proven in the showcase). The fix is the one-tree input architecture: phase P097(F009), tasks T494 (layer roots become tree children) + T495 (modal becomes a swallowing node). This task's original text below is still the acceptance check once that lands.\n\nORIGINAL: Verificare che click fuori dai toast passi all'UI sottostante; dismiss e action consumano solo sui card/affordance. Verificare inoltre che `covers_content: false` funzioni davvero: con un toast visibile, `prefix+Enter` e le altre azioni `Global` devono restare disponibili — il layer non deve mettere l'app in `Domain::Overlay`.\n\nRESOLUTION: fold this into P097(F009)/T500 (the regression pass) — it becomes the toast section of that checklist. Keep this task as the pointer to that work, or close it as superseded by T494/T495/T500.",
+      "descriptionUpdatedAt": "2026-08-27T19:42:06.725Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -185,7 +185,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:51:52.451Z",
-      "updatedAt": "2026-08-26T15:37:00.165Z",
+      "updatedAt": "2026-08-27T19:42:06.724Z",
       "sessionInfo": []
     },
     {
@@ -238,7 +238,7 @@
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-08-27T14:07:34.818Z",
+  "updatedAt": "2026-08-27T19:42:06.724Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",

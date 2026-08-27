@@ -150,6 +150,24 @@ show_top_bar = true    # the tab bar
 show_bottom_bar = true # the status bar
 
 # ─────────────────────────────────────────────────────────────────────────────
+[settings.notification_system]
+# ─────────────────────────────────────────────────────────────────────────────
+# In-app toast notifications (pane created, config reloaded, …).
+
+# Where a notification goes:
+#   "app"    (default) the in-app toast stack
+#   "system" OS / desktop notifications — RESERVED, falls back to "app" until the
+#            OS backend is built
+#   "none"   no notifications at all
+mode = "app"
+
+# How long a notification stays on screen before it dismisses itself, in
+# milliseconds. Applies to every notification that auto-dismisses; one a
+# producer marks sticky (e.g. an error you must acknowledge) ignores this, and
+# a notification that sets its own lifetime still wins.
+auto_dismiss_ms = 4000
+
+# ─────────────────────────────────────────────────────────────────────────────
 [confirm]
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-action confirmation prompts, keyed by action name. `true` pops a

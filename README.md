@@ -914,6 +914,14 @@ pane_show_cwd = false         # Show each pane's cwd as a row in the sidebar car
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
+
+[settings.notification_system]
+mode = "app"                  # "app" (in-app toast stack) | "system" (OS notifications —
+                              # reserved, falls back to "app" until the backend exists) |
+                              # "none" (no notifications at all)
+auto_dismiss_ms = 4000        # How long an in-app toast stays before dismissing itself (ms).
+                              # A notification a producer marks sticky, or one with its own
+                              # lifetime, ignores this. Applies on prefix+Shift+r.
 ```
 
 ### Confirmation prompts

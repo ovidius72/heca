@@ -259,6 +259,12 @@ impl HecaApp {
             state.show_right_sidebar = self.app_config.config.settings.show_right_sidebar;
             state.show_top_bar = self.app_config.config.settings.show_top_bar;
             state.show_bottom_bar = self.app_config.config.settings.show_bottom_bar;
+            state.notifications.set_auto_dismiss(std::time::Duration::from_millis(
+                self.app_config.config.settings.notification_system.auto_dismiss_ms,
+            ));
+            state.notifications.set_mode(
+                self.app_config.config.settings.notification_system.mode,
+            );
             state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);
@@ -406,10 +412,9 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 state.window.request_redraw();
             }
             AppEvent::RaiseNotification { draft } => {
-                // The one place `Instant::now()` is read for a raised notification — the host's
-                // clock, on the event loop's own turn, never the caller's (F009/T493).
-                let _ = state.notifications.push(draft, std::time::Instant::now());
-                state.needs_redraw = true;
+                // `notification::raise` is the host's clock, on the event loop's own turn, never
+                // the caller's (F009/T493) — shared with the name-keyed `notify` action.
+                crate::notification::raise(state, draft);
                 state.window.request_redraw();
             }
         }

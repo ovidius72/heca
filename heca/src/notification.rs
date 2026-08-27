@@ -202,8 +202,10 @@ pub enum NotificationLifetime {
 }
 
 impl Default for NotificationLifetime {
-    /// Default lifetime is 5 s of auto-dismiss (matches the `Info` severity
-    /// default; see [`default_lifetime_for_severity`]).
+    /// Auto-dismiss. The duration here is a placeholder — the host rewrites it to
+    /// `[settings.notification_system] auto_dismiss_ms` at the runtime boundary
+    /// ([`NotificationRuntime::push`]) for every draft that did not opt out with
+    /// [`NotificationDraft::sticky`].
     fn default() -> Self {
         Self::Auto(std::time::Duration::from_secs(5))
     }
@@ -273,6 +275,20 @@ impl NotificationLifecycle {
     pub fn expires(&self) -> bool {
         matches!(self.lifetime, NotificationLifetime::Auto(_))
     }
+
+    /// Replace the auto-dismiss duration **only if** this lifecycle auto-dismisses.
+    /// A `Sticky` lifecycle is returned unchanged. This is how the host applies the
+    /// configured `[settings.notification_system] auto_dismiss_ms` to a notification
+    /// that did not opt out with `.sticky()`.
+    pub(crate) fn with_auto_duration(self, duration: std::time::Duration) -> Self {
+        match self.lifetime {
+            NotificationLifetime::Auto(_) => Self {
+                lifetime: NotificationLifetime::Auto(duration),
+                ..self
+            },
+            NotificationLifetime::Sticky => self,
+        }
+    }
 }
 
 impl Default for NotificationLifecycle {
@@ -282,22 +298,12 @@ impl Default for NotificationLifecycle {
     }
 }
 
-/// Default lifetime per severity, used by T190's severity mapping and by the
-/// `NotificationDraft` builder (T192). Lower severity stays longer; error-level
-/// and sticky-by-default severities stay until dismissed.
-///
-/// Kept here (not in config) because it is domain semantics, not user-tunable
-/// presentation. The user can override per-notification via the builder.
-pub fn default_lifetime_for_severity(severity: NotificationSeverity) -> NotificationLifetime {
-    match severity {
-        // Errors and warnings are sticky — the user should acknowledge them.
-        NotificationSeverity::Error | NotificationSeverity::Warning => NotificationLifetime::Sticky,
-        // Success is a transient confirmation; auto-dismiss after 4 s.
-        NotificationSeverity::Success => NotificationLifetime::Auto(std::time::Duration::from_secs(4)),
-        // Info is the most common, transient; 5 s (the type default).
-        NotificationSeverity::Info => NotificationLifetime::Auto(std::time::Duration::from_secs(5)),
-    }
-}
+// Notifications do NOT vary their lifetime by severity (F009/T503). Severity is tone,
+// not importance: every notification auto-dismisses after `[settings.notification_system]
+// auto_dismiss_ms`, and a producer that needs one to persist (an error to acknowledge, a
+// long-running status) opts in explicitly with `NotificationDraft::sticky()`. An earlier
+// `default_lifetime_for_severity` mapping (Error/Warning -> Sticky) was designed but never
+// wired, and was removed rather than wired.
 
 /// Canonical app-owned notification severity.
 ///
@@ -898,7 +904,12 @@ impl NotificationStore {
     /// New entries first join the pending FIFO and are then promoted into every
     /// vacant stable slot, oldest first. Promotion starts an auto-dismiss timer
     /// from `now`; queued entries have no expiry.
-    pub fn push(
+    ///
+    /// **Not public API** (`pub(crate)`, F009/T493): the deterministic `(draft, now)`
+    /// primitive lifecycle tests drive, never a door a producer or plugin author reaches.
+    /// The only public raise path is [`Notification::send`], which funnels through
+    /// [`raise`].
+    pub(crate) fn push(
         &mut self,
         draft: NotificationDraft,
         now: Instant,
@@ -1365,25 +1376,62 @@ pub struct NotificationRuntime {
     store: NotificationStore,
     /// The retained projection `ToastStack` renders. Read-only outside this module.
     pub visible_toasts: heca_grid_ui::reactive::Signal<Vec<ToastSpec>>,
+    /// The configured default auto-dismiss delay (`[settings.notification_system]
+    /// auto_dismiss_ms`). Applied to every accepted draft whose lifecycle still
+    /// auto-dismisses — a `.sticky()` draft, and one with its own explicit lifetime
+    /// via `.lifecycle(..)`, are unaffected. Re-applied on config reload
+    /// ([`set_auto_dismiss`](Self::set_auto_dismiss)).
+    auto_dismiss: std::time::Duration,
+    /// Delivery mode (`[settings.notification_system] mode`). `None` suppresses every
+    /// raise; `App` and `System` both deliver to the in-app toast stack today (the OS
+    /// backend that would make `System` distinct is not built). Re-applied on reload.
+    mode: heca_config::settings::NotificationSystem,
 }
 
 impl NotificationRuntime {
-    pub fn new(history_limit: usize) -> Self {
+    pub fn new(
+        history_limit: usize,
+        auto_dismiss: std::time::Duration,
+        mode: heca_config::settings::NotificationSystem,
+    ) -> Self {
         Self {
             store: NotificationStore::new(history_limit),
             visible_toasts: heca_grid_ui::reactive::signal(Vec::new()),
+            auto_dismiss,
+            mode,
         }
+    }
+
+    /// Apply a new delivery mode (`prefix+Shift+r` reload path).
+    pub(crate) fn set_mode(&mut self, mode: heca_config::settings::NotificationSystem) {
+        self.mode = mode;
+    }
+
+    /// Whether notifications are suppressed entirely (`mode = "none"`).
+    pub(crate) fn suppressed(&self) -> bool {
+        matches!(self.mode, heca_config::settings::NotificationSystem::None)
+    }
+
+    /// Apply a new configured auto-dismiss delay — the `prefix+Shift+r` reload path.
+    /// Only affects notifications raised afterwards; anything already visible keeps
+    /// the deadline it was promoted with.
+    pub(crate) fn set_auto_dismiss(&mut self, auto_dismiss: std::time::Duration) {
+        self.auto_dismiss = auto_dismiss;
     }
 
     /// Accept a draft, stamping `now` itself. **Not public.** The only public raise door is
     /// [`Notification::send`] — this is the deterministic primitive it (and tests) call into.
     /// A producer or a plugin author must never reach this directly: they cannot anyway (the
     /// field is host-private), and this is what keeps it that way on purpose.
+    ///
+    /// The configured [`auto_dismiss`](Self::auto_dismiss) delay is applied here, at the
+    /// runtime boundary, so the store stays a pure `(draft, now)` primitive.
     pub(crate) fn push(
         &mut self,
-        draft: NotificationDraft,
+        mut draft: NotificationDraft,
         now: Instant,
     ) -> Result<NotificationStorePush, NotificationStoreError> {
+        draft.lifecycle = draft.lifecycle.with_auto_duration(self.auto_dismiss);
         let result = self.store.push(draft, now);
         self.sync_visible_toasts();
         result
@@ -1556,11 +1604,14 @@ pub fn register_notify_action(
             if let Some(heca_view::PropValue::Text(key)) = intent.args.get("dedup_key") {
                 draft = draft.dedup_key(key.clone());
             }
-            let _ = state.notifications.push(draft, Instant::now());
-            state.needs_redraw = true;
+            raise(state, draft);
         })),
     )
 }
+
+/// The callback [`Notification::send`] posts a draft through, once the host installs it via
+/// [`install_notification_sink`].
+type NotificationSink = Box<dyn Fn(NotificationDraft)>;
 
 std::thread_local! {
     /// Host-installed hook `Notification::send` posts a draft through — the notification
@@ -1570,13 +1621,34 @@ std::thread_local! {
     /// crate-private `NotificationRuntime::push` on the event loop's own turn — never the
     /// caller's. A no-op until installed (e.g. in a headless test), so `Notification::send` is
     /// always safe to call.
-    static NOTIFICATION_SINK: std::cell::RefCell<Option<Box<dyn Fn(NotificationDraft)>>> =
+    static NOTIFICATION_SINK: std::cell::RefCell<Option<NotificationSink>> =
         const { std::cell::RefCell::new(None) };
 }
 
 /// Install the callback [`Notification::send`] posts a draft through. Call once, at startup.
 pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
     NOTIFICATION_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+}
+
+/// The host accepting a draft into the store — F009/T493.
+///
+/// **The one place `Instant::now()` is read for a raised notification, and the only non-test
+/// caller of the crate-private [`NotificationRuntime::push`].** Both raise doors converge here:
+///
+/// - [`Notification::send`] → the installed sink → `AppEvent::RaiseNotification` → this, on the
+///   event loop's own turn;
+/// - the name-keyed `notify` action (RPC / keybinding / WASM plugin) → this, from its handler.
+///
+/// A producer never reaches `push` directly: this is what keeps the caller's clock and the
+/// store's internal verb off the public surface.
+pub(crate) fn raise(state: &mut crate::app_state::AppState, draft: NotificationDraft) {
+    // `[settings.notification_system] mode = "none"` — drop it here, before it reaches the
+    // store, so nothing queues and no timer is scheduled.
+    if state.notifications.suppressed() {
+        return;
+    }
+    let _ = state.notifications.push(draft, Instant::now());
+    state.needs_redraw = true;
 }
 
 /// **The raise capability — the one public door.** A native producer and a plugin author type
@@ -2086,23 +2158,20 @@ mod tests {
     }
 
     #[test]
-    fn default_lifetime_for_severity_maps_each_variant() {
-        assert_eq!(
-            default_lifetime_for_severity(NotificationSeverity::Error),
-            NotificationLifetime::Sticky
-        );
-        assert_eq!(
-            default_lifetime_for_severity(NotificationSeverity::Warning),
-            NotificationLifetime::Sticky
-        );
-        assert_eq!(
-            default_lifetime_for_severity(NotificationSeverity::Success),
-            NotificationLifetime::Auto(std::time::Duration::from_secs(4))
-        );
-        assert_eq!(
-            default_lifetime_for_severity(NotificationSeverity::Info),
-            NotificationLifetime::Auto(std::time::Duration::from_secs(5))
-        );
+    fn severity_does_not_change_the_default_lifetime() {
+        // F009/T503: severity is tone, not importance — every severity gets the same
+        // auto-dismiss default; a producer opts into sticky explicitly.
+        for severity in [
+            NotificationSeverity::Info,
+            NotificationSeverity::Success,
+            NotificationSeverity::Warning,
+            NotificationSeverity::Error,
+        ] {
+            let n = NotificationDraft::new("x")
+                .severity(severity)
+                .build(NotificationId::from_raw(1), Instant::now());
+            assert_eq!(n.lifecycle, NotificationLifecycle::default());
+        }
     }
 
     #[test]
@@ -2181,6 +2250,118 @@ mod tests {
         let json = r#"{"label":"Open","intent":{"action":"open_log"},"variant":"not_a_real_variant","dismiss_after":false}"#;
         let action: NotificationAction = serde_json::from_str(json).unwrap();
         assert_eq!(action.variant, heca_grid_ui::widgets::ButtonVariant::default());
+    }
+
+    // -- the public raise door (T493) -----------------------------------
+
+    #[test]
+    fn notification_send_hands_the_exact_draft_through_the_installed_sink() {
+        // `Notification::…send()` is the whole public raise surface. Everything below it is
+        // sealed: `NotificationRuntime::push` and `NotificationStore::push` are `pub(crate)`
+        // (no producer or plugin can name them), `NotificationRuntime`'s `store` field is
+        // private, and `raise` — the only caller of `push` outside these tests — is
+        // `pub(crate)` too. So the one way a draft reaches the store is the sink installed
+        // here, and this pins what crosses it.
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let captured: Rc<RefCell<Vec<NotificationDraft>>> = Rc::new(RefCell::new(Vec::new()));
+        let sink = captured.clone();
+        install_notification_sink(move |draft| sink.borrow_mut().push(draft));
+
+        Notification::success("Build finished")
+            .body("3 warnings in heca-grid-ui")
+            .dedup_key("build")
+            .action(
+                NotificationAction::new("View log", Intent::new("open_pane_log"))
+                    .variant(heca_grid_ui::widgets::ButtonVariant::Ghost),
+            )
+            .send();
+
+        let drafts = captured.borrow();
+        assert_eq!(drafts.len(), 1, "one send, one draft on the sink");
+
+        let built = drafts[0]
+            .clone()
+            .build(NotificationId::from_raw(1), Instant::now());
+        assert_eq!(built.title, "Build finished");
+        assert_eq!(built.severity, NotificationSeverity::Success);
+        assert_eq!(built.body.as_deref(), Some("3 warnings in heca-grid-ui"));
+        assert_eq!(built.dedup_key.as_deref(), Some("build"));
+        assert_eq!(built.actions.len(), 1);
+        assert_eq!(built.actions[0].intent.action, "open_pane_log");
+        assert_eq!(
+            built.actions[0].variant,
+            heca_grid_ui::widgets::ButtonVariant::Ghost
+        );
+    }
+
+    #[test]
+    fn notification_send_is_inert_until_a_sink_is_installed() {
+        // A `.send()` before startup installs the sink — or in any headless test — is simply
+        // dropped, never a panic. This is what lets a producer call `Notification::send`
+        // unconditionally.
+        Notification::info("no sink here").send();
+    }
+
+    // -- configured auto-dismiss + delivery mode ([settings.notification_system]) --
+
+    fn test_runtime(auto_ms: u64) -> NotificationRuntime {
+        NotificationRuntime::new(
+            50,
+            std::time::Duration::from_millis(auto_ms),
+            heca_config::settings::NotificationSystem::App,
+        )
+    }
+
+    #[test]
+    fn runtime_applies_the_configured_auto_dismiss_to_a_default_draft() {
+        let now = Instant::now();
+        let mut runtime = test_runtime(2500);
+        runtime.push(NotificationDraft::info("hi"), now).unwrap();
+        // The visible notification's deadline is `now + configured`, not the type default.
+        assert_eq!(
+            runtime.next_expiry(),
+            Some(now + std::time::Duration::from_millis(2500))
+        );
+    }
+
+    #[test]
+    fn runtime_leaves_a_sticky_draft_alone() {
+        let now = Instant::now();
+        let mut runtime = test_runtime(2500);
+        runtime
+            .push(
+                NotificationDraft::warning("careful").lifecycle(NotificationLifecycle::sticky()),
+                now,
+            )
+            .unwrap();
+        assert_eq!(runtime.next_expiry(), None);
+    }
+
+    #[test]
+    fn set_auto_dismiss_affects_only_notifications_raised_afterwards() {
+        let now = Instant::now();
+        let mut runtime = test_runtime(1000);
+        runtime.push(NotificationDraft::info("first"), now).unwrap();
+        runtime.set_auto_dismiss(std::time::Duration::from_millis(9000));
+        // The already-visible first notification keeps its `now + 1s` deadline.
+        assert_eq!(
+            runtime.next_expiry(),
+            Some(now + std::time::Duration::from_millis(1000))
+        );
+    }
+
+    #[test]
+    fn mode_none_suppresses_and_mode_change_is_live() {
+        use heca_config::settings::NotificationSystem;
+        let mut runtime = test_runtime(4000);
+        assert!(!runtime.suppressed());
+        runtime.set_mode(NotificationSystem::None);
+        assert!(runtime.suppressed());
+        // `system` is reserved and delivers like `app` for now — not suppressed.
+        runtime.set_mode(NotificationSystem::System);
+        assert!(!runtime.suppressed());
     }
 
     // -- ToastSpec projection (T193) --------------------------------------

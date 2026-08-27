@@ -487,9 +487,15 @@ pub(crate) async fn init_state(
         pending_reload: false,
         window_focused: true,
         current_cursor: winit::window::CursorIcon::Default,
-        // TODO(F009/T186,T191): read from `[settings].notification_system` once the config
-        // schema for it lands; 50 is a placeholder retention depth, not a considered default.
-        notifications: crate::notification::NotificationRuntime::new(50),
+        // `[settings.notification_system]` config (F009/T186/T187/T191); the history depth
+        // of 50 is still a placeholder pending its own knob.
+        notifications: crate::notification::NotificationRuntime::new(
+            50,
+            std::time::Duration::from_millis(
+                app_config.config.settings.notification_system.auto_dismiss_ms,
+            ),
+            app_config.config.settings.notification_system.mode,
+        ),
         notification_pick_open: heca_grid_ui::reactive::signal(false),
         notification_layer_id: None,
     });
