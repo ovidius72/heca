@@ -58,6 +58,8 @@ pub(crate) use dispatch::{
 };
 mod layers_glue;
 pub(crate) use layers_glue::{layout_layers, paint_layers, rebuild_named_layer};
+mod notification_layer;
+pub(crate) use notification_layer::mount_notification_stack;
 mod host;
 /// The identity rule's reporting half (F003/P082/T444) — see the module docs.
 mod identity;

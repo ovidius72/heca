@@ -3,24 +3,35 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 63,
   "shortId": "K928J",
-  "priority": 8,
+  "priority": 7,
   "slug": "notification-07-os-backend",
   "title": "notification-07: OS/System Notification Backend",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
-  "summary": "Backend OS notifications differito.",
-  "description": "Fase differita per backend desktop notification via trait dedicato e spike `notify-rust` su Linux/macOS/Windows. Non implementare prima che il backend in-app sia stabile.",
+  "discussedAt": "2026-08-27T09:19:48.549Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Backend OS notifications, differito.",
+  "description": "SystemNotificationBackend trait, spike notify-rust su Linux/macOS/Windows, fallback su fallimento del backend di sistema.",
+  "descriptionUpdatedAt": "2026-08-27T09:19:48.548Z",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "goals": [
+    "Backend desktop notification via un trait dedicato, dietro il config mode \"system\" — solo dopo che il backend in-app e stabile."
+  ],
+  "nonGoals": [
+    "Implementare prima che il backend in-app (P055-P062) sia stabile e in uso."
+  ],
+  "dependencies": [
+    "Tutto il resto di F009 deve essere stabile prima di questa fase."
+  ],
   "dependsOn": [],
-  "risks": [],
+  "risks": [
+    "notify-rust ha comportamento/permessi diversi per piattaforma; da verificare con gli spike prima di committarsi al trait."
+  ],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Deliberatamente non iniziato — fase differita."
+  ],
   "taskIds": [
     "3a993014-82fb-4551-b976-dc0d4662e145",
     "3dad3770-2179-42ee-928d-3efb03db615f",
@@ -39,6 +50,7 @@
       "title": "Spike notify-rust on Linux",
       "status": "planned",
       "description": "Validare freedesktop/D-Bus notifications, app name/icon e supporto actions; deferred.",
+      "descriptionUpdatedAt": "2026-07-03T22:53:21.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -46,10 +58,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-07-03T22:53:21.680Z",
+      "sessionInfo": []
     },
     {
       "id": "3dad3770-2179-42ee-928d-3efb03db615f",
@@ -61,6 +76,7 @@
       "title": "Spike notify-rust on macOS",
       "status": "planned",
       "description": "Validare Notification Center permissions/app identity e failure behavior; deferred.",
+      "descriptionUpdatedAt": "2026-07-03T22:53:21.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -68,10 +84,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-07-03T22:53:21.680Z",
+      "sessionInfo": []
     },
     {
       "id": "6c14b330-693e-49c7-9616-5b4be2699d06",
@@ -83,6 +102,7 @@
       "title": "Decide fallback behavior for system backend failures",
       "status": "planned",
       "description": "Definire fallback sicuro verso in-app senza loop ricorsivi quando il backend system fallisce; deferred.",
+      "descriptionUpdatedAt": "2026-07-03T22:53:21.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -90,10 +110,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-07-03T22:53:21.680Z",
+      "sessionInfo": []
     },
     {
       "id": "b3db9297-e0e9-4fb1-a40f-0a188c238ffe",
@@ -105,6 +128,7 @@
       "title": "Define SystemNotificationBackend trait",
       "status": "planned",
       "description": "Definire trait backend OS notifications separato dallo store e dai producer; deferred.",
+      "descriptionUpdatedAt": "2026-07-03T22:53:21.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -112,10 +136,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-07-03T22:53:21.680Z",
+      "sessionInfo": []
     },
     {
       "id": "fbfdf381-38e2-4391-8501-0e22ba975548",
@@ -127,6 +154,7 @@
       "title": "Spike notify-rust on Windows",
       "status": "planned",
       "description": "Validare Windows toast app identity requirements e fallback behavior; deferred.",
+      "descriptionUpdatedAt": "2026-07-03T22:53:21.680Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -134,16 +162,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:53:21.680Z",
-      "updatedAt": "2026-07-03T22:53:21.680Z"
+      "updatedAt": "2026-07-03T22:53:21.680Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-03T22:50:20.127Z",
-  "updatedAt": "2026-07-27T11:40:15.533Z",
+  "updatedAt": "2026-08-27T09:42:12.350Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
 }

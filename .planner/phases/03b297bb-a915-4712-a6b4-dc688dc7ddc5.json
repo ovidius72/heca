@@ -3,24 +3,34 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 55,
   "shortId": "6AMV9",
-  "priority": 2,
+  "priority": 6,
   "slug": "notification-06-routing-producers",
   "title": "notification-06: Routing + Additional Producers",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
-  "summary": "Choke point `notify`, routing per app/system/none e producer aggiuntivi.",
-  "description": "Aggiungere un helper/router unico per emettere notifiche secondo `[settings].notification_system`; implementare comportamento `none`, definire fallback v1 per `system`, e aggiungere backlog producer per pane exit, spawn failure, provider/plugin error e agent events.",
+  "discussedAt": "2026-08-27T09:19:18.567Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Choke point notify, routing per app/system/none e producer aggiuntivi.",
+  "description": "Azione notify (register_dynamic, args title/body/severity/dedup_key), comportamento none, fallback v1 per system, producer per pane exit/spawn failure/provider-plugin error/agent events/azione rifiutata.",
+  "descriptionUpdatedAt": "2026-08-27T09:19:18.567Z",
   "notes": "",
-  "goals": [],
-  "nonGoals": [],
-  "dependencies": [],
+  "goals": [
+    "Un unico modo per RPC/keybinding/plugin di generare una notifica dall'esterno di Rust (l'azione name-keyed notify), piu i producer applicativi che la useranno internamente."
+  ],
+  "nonGoals": [
+    "Argomento action-button su notify in v1: scelta di scope (nessun ArgKind per un Intent annidato), non limite del widget."
+  ],
+  "dependencies": [
+    "heca/src/actions.rs register_dynamic/ActionMeta (gia esistenti, non serve heca-grid-ui)."
+  ],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "T491 notify registrata name-keyed, verificata con cargo check (fatto)",
+    "producer pane-exit/spawn-failure/provider-error/agent-events/declined-action (non iniziati)"
+  ],
   "taskIds": [
     "25a3e40a-1bea-433b-9499-14e37faddd13",
     "46aefbb4-8ad0-4440-a951-ec249b507662",
@@ -29,7 +39,8 @@
     "9fb188aa-1ff7-4963-aa66-1f6bc09888ee",
     "c0385fb4-5921-4161-8346-9af8ae1530ac",
     "d90411b0-50c8-42cf-8d85-645686a17c44",
-    "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c"
+    "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c",
+    "28af6ba2-3f6a-471b-a5ad-e8b3377794d5"
   ],
   "tasks": [
     {
@@ -42,6 +53,7 @@
       "title": "Add AppState notify/router helper",
       "status": "planned",
       "description": "Creare un choke point unico per emissione notifiche, preferibilmente `AppState::notify`, evitando match manuali nei producer.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -49,10 +61,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "46aefbb4-8ad0-4440-a951-ec249b507662",
@@ -64,6 +79,7 @@
       "title": "Implement none notification mode",
       "status": "planned",
       "description": "Quando `notification_system = \"none\"`, sopprimere i producer non critici del piano senza sopprimere stderr/debug logs.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -71,10 +87,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "7073c9d2-c610-43e3-9f0a-7537f644bc42",
@@ -86,6 +105,7 @@
       "title": "Add pane exited notification producer",
       "status": "planned",
       "description": "Producer backlog: notificare uscita backend pane con severity info/warning, focus action opzionale e dedup `pane.exited:<pane_id>`.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -93,10 +113,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "750b8ef0-b707-4693-a58d-21511d60f882",
@@ -108,6 +131,7 @@
       "title": "Define v1 behavior for system notification mode",
       "status": "planned",
       "description": "Decidere e implementare comportamento deterministico per `notification_system = \"system\"` prima del backend OS; raccomandato fallback in-app con warning una tantum.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -115,10 +139,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "9fb188aa-1ff7-4963-aa66-1f6bc09888ee",
@@ -130,6 +157,7 @@
       "title": "Add provider/plugin error notification producer",
       "status": "planned",
       "description": "Producer backlog: notificare errori provider/plugin con dedup `provider.error:<provider_id>` evitando spam per-frame.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -137,10 +165,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "c0385fb4-5921-4161-8346-9af8ae1530ac",
@@ -152,6 +183,7 @@
       "title": "Park future agent event notifications",
       "status": "planned",
       "description": "Tracciare producer futuri per agent waiting/completed/sidecar disconnected, gated su agent integration model; non implementare in v1.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -159,10 +191,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "d90411b0-50c8-42cf-8d85-645686a17c44",
@@ -174,6 +209,7 @@
       "title": "Add spawn command failed notification producer",
       "status": "planned",
       "description": "Producer backlog: notificare failure di SpawnCommand/future spawn-pane come sticky danger, dopo che gli handler espongono il risultato errore.",
+      "descriptionUpdatedAt": "2026-07-03T22:52:52.635Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -181,10 +217,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-03T22:52:52.635Z",
-      "updatedAt": "2026-07-03T22:52:52.635Z"
+      "updatedAt": "2026-07-03T22:52:52.635Z",
+      "sessionInfo": []
     },
     {
       "id": "a21e7e5e-a8f4-482a-90d9-8ca55003cb6c",
@@ -194,8 +233,9 @@
       "priority": 8,
       "shortName": "a-declined-action-says-so-the",
       "title": "A declined action says so — the producer for \"nothing happened, and here is why\"",
-      "status": "waiting",
+      "status": "planned",
       "description": "An action that runs but **declines** currently vanishes. From a keypress that is tolerable; from the command palette, where the user deliberately picked the entry out of a list, it reads as a broken command.\n\n## The report that produced this task (2026-07-30)\n\nThe maintainer chose **Move Column Up** in the palette and nothing happened. The action is not dead: `handle_move_column_up` (`heca/src/handlers.rs:356`) moves the active column **to the workspace above** and returns early when `current_ws == 0`; `handle_move_column_down` :370 does the same at the last workspace. Correct behaviour, invisible outcome.\n\nIt is not one action. The same silent early return is everywhere a precondition can fail:\n- no workspace above/below (`move_column_up` / `move_column_down`, `move_pane_*`),\n- nothing under the cursor (a component's `perform` returns `Handled::No` — `heca/src/providers/mod.rs` documents \"a silent decline is a real answer, not an error\"),\n- no link under the caret (`open_link_at_caret`), no selection (`copy_selection`), no scrollback to page through,\n- a component action whose owner is not mounted (`IntentOutcome::NotRunnable`), one the domain refuses (`IntentOutcome::Blocked`), and one called without its required arguments (`IntentOutcome::MissingArgs`, added F003/P085/T358) — those three are already **named outcomes** on the dispatch path and today only reach a `#[cfg(debug_assertions)] eprintln!`.\n\n## What to build here\n\nA notification producer on the dispatch path: when an intent resolves to `Blocked`, `NotRunnable` or `MissingArgs`, or a handler declines, raise a low-severity notification saying which action and why. `dispatch_view_intent` (`heca/src/app/interaction.rs`) already computes exactly those outcomes and throws them away for every caller but RPC — that is the seam, and it needs no new plumbing.\n\nThe gap to close is the **handler** case: an early `return` inside `handle_move_column_up` is invisible to the dispatcher. Either handlers gain a way to report a decline (a return value, or a `cx`-style sink), or the well-known preconditions are checked before dispatch. That choice is this task's real content — do not paper over it by special-casing the two column actions.\n\n## The related, deliberately separate question\n\n**Prevention, not just reporting**: an optional `can_perform(&self, id) -> bool` would let the palette render an entry *disabled* rather than let it be chosen and then decline. `DropdownItem` already carries an `enabled` flag, so the menu half exists. That was deferred in F003/P085/T358 (\"Do not build it now\") and belongs with the palette work, not here — this task is about telling the user what happened, not about greying entries out.\n\n## Behaviors to preserve\n\nA decline is **not an error** and must not read as one: severity low, no modal, no sound. Silence stays correct for a keypress that repeats (holding `j` at the end of a list must not spray toasts) — rate-limit or suppress repeats of the same action, which is the store's job (`notification-02`), not a special case here.",
+      "descriptionUpdatedAt": "2026-07-30T15:08:21.918Z",
       "notes": "",
       "statusLog": [
         {
@@ -205,6 +245,14 @@
           "toStatus": "waiting",
           "title": "Antonio, 2026-08-04: this is to be worked **in its place inside F009**, not pulled forward as a standalone bug fix. It lives in P055 — \"notification-06: Routing + Additional Producers\" — which is the sixth phase of the Notification System, and F009 is entirely unstarted (0/60 tasks). A producer that says \"the action was declined, and here is why\" has nothing to produce *into* until the model, the store, the toast rendering and the routing exist (P061 → P056 → P060 → P059 → P062 → P055).",
           "description": "Antonio, 2026-08-04: this is to be worked **in its place inside F009**, not pulled forward as a standalone bug fix. It lives in P055 — \"notification-06: Routing + Additional Producers\" — which is the sixth phase of the Notification System, and F009 is entirely unstarted (0/60 tasks). A producer that says \"the action was declined, and here is why\" has nothing to produce *into* until the model, the store, the toast rendering and the routing exist (P061 → P056 → P060 → P059 → P062 → P055).\n\nThe underlying complaint stays valid and is the reason the task exists: `move_column_up` on the first workspace moves the column to the workspace above, returns early, and tells the user nothing — it reads as \"the key does nothing\". Do not fix that with an ad-hoc message; it is the first customer of the notification producer, which is the whole point of filing it here."
+        },
+        {
+          "id": "15f75d71-523a-465e-bd2a-9466d227445f",
+          "date": "2026-08-27T09:41:32.095Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "waiting → planned",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -237,14 +285,65 @@
       ],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-30T15:08:21.918Z",
-      "updatedAt": "2026-08-04T19:20:08.688Z"
+      "updatedAt": "2026-08-27T09:41:34.252Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "28af6ba2-3f6a-471b-a5ad-e8b3377794d5",
+      "phaseId": "03b297bb-a915-4712-a6b4-dc688dc7ddc5",
+      "number": 491,
+      "shortId": "4B6SS",
+      "priority": 9,
+      "shortName": "add-name-keyed-notify-action-t",
+      "title": "Add name-keyed `notify` action — the raise capability",
+      "status": "done",
+      "description": "Raising a notification today is `state.notifications.push(NotificationDraft, now)` (heca/src/notification.rs, ported from origin/feature/notification-system@ceade1e) — a private Rust method on AppState's store. No plugin, RPC caller, or keybinding can reach it; only dismiss (NotificationDismissOne/All/Last, P059) is a real registered action. This closes that asymmetry.\n\nWhat exists to build on: `register_dynamic(registry, catalog, meta, handler)` at heca/src/actions.rs:418, `unregister_dynamic` at heca/src/actions.rs:471 — the name-keyed action path documented in docs/widgets.md:4863 \"Registering a custom (name-keyed) action\". AGENTS.md:1554 \"Adding New Actions\", the paragraph after step 11: a name-keyed action skips steps 1-4/8 (no WmAction variant, no action_from_name/build_action/priority/ActionRegistry::ALL descriptor).\n\nRegister `notify` via register_dynamic — NOT a WmAction variant. A future WASM plugin can only ever dispatch by name, never add an enum variant, and \"any plugin can raise a notification\" is the point of this action.\n\nDeclared args (ArgSpec, pattern at docs/widgets.md:4897):\n- title: Text, required\n- body: Text, optional\n- severity: Enum (info|success|warning|danger), optional, default info\n- dedup_key: Text, optional\n\nHandler builds a NotificationDraft from the args (NotificationDraft::new(title).body(..).severity(..).dedup_key(..)) and calls state.notifications.push(draft, Instant::now()).\n\nNo action-button argument in v1 — deliberate scope, not a widget limitation: ToastSpec/ToastAction already support several typed actions per card (T487, landed on heca-4b's side), but there is no ArgKind for a nested Intent, so an RPC caller or a keybinding has no typed way to say \"and run this other action with these args\" as one argument value. A Rust-internal caller that wants a button uses NotificationDraft::action(label, intent) directly with a real Intent it already holds — unaffected by this task.\n\nActionPolicy: Global (app-level, no layout impact, must keep working while a floating pane is up) — cross-check against T213.\n\nEdge cases: wire RPC parser support in heca/src/rpc.rs same as any other action; a default keybinding is optional (raising a static notification via keybinding is an unusual use case — command palette + RPC are the primary doors).\n\n---\n**Completion summary:**\nSHIPPED: register_notify_action(registry, catalog) in heca/src/notification.rs, called once from HecaApp::resumed() in main.rs (after providers::register_provider_actions). Registered via register_dynamic — no WmAction variant. Args: title(Text,required)/body(Text,optional)/severity(Enum,optional,default info)/dedup_key(Text,optional). Handler builds a NotificationDraft and calls state.notifications.push. ActionPolicy::Global. Added NotificationSeverity: EnumArg+FromStr (accepts info/success/warning/danger/error) for the severity arg's declared vocabulary. CORRECTION to this task's own \"edge cases\" text: no rpc.rs changes needed — confirmed the generic `action <name> key=val` RPC verb (heca/src/rpc.rs parse_rpc) already reaches any declared action generically, built-in or name-keyed, with zero per-action code. No default keybinding, by design (command palette + RPC are the doors). VERIFICATION: cargo check -p heca clean. NOT verified: never actually invoked yet (no running app). FILES: heca/src/notification.rs, heca/src/main.rs.",
+      "descriptionUpdatedAt": "2026-08-27T09:58:05.035Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "28af6ba2-3f6a-471b-a5ad-e8b3377794d5-check-001-planned-in-progress",
+          "date": "2026-08-27T09:57:53.627Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "28af6ba2-3f6a-471b-a5ad-e8b3377794d5-check-002-in-progress-done",
+          "date": "2026-08-27T09:58:05.033Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "SHIPPED: register_notify_action(registry, catalog) in heca/src/notification.rs, called once from HecaApp::resumed() in main.rs (after providers::register_provider_actions). Registered via register_dynamic — no WmAction variant. Args: title(Text,required)/body(Text,optional)/severity(Enum,optional,default info)/dedup_key(Text,optional). Handler builds a NotificationDraft and calls state.notifications.push. ActionPolicy::Global. Added NotificationSeverity: EnumArg+FromStr (accepts info/success/warning/danger/error) for the severity arg's declared vocabulary. CORRECTION to this task's own \"edge cases\" text: no rpc.rs changes needed — confirmed the generic `action <name> key=val` RPC verb (heca/src/rpc.rs parse_rpc) already reaches any declared action generically, built-in or name-keyed, with zero per-action code. No default keybinding, by design (command palette + RPC are the doors). VERIFICATION: cargo check -p heca clean. NOT verified: never actually invoked yet (no running app). FILES: heca/src/notification.rs, heca/src/main.rs."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T09:57:53.627Z",
+      "completedAt": "2026-08-27T09:58:05.033Z",
+      "createdAt": "2026-08-26T15:37:26.570Z",
+      "updatedAt": "2026-08-27T09:58:05.033Z",
+      "sessionInfo": [
+        {
+          "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+          "createdAt": "2026-08-27T09:57:53.542Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-07-03T22:50:20.125Z",
-  "updatedAt": "2026-08-04T19:20:08.688Z",
+  "updatedAt": "2026-08-27T09:58:05.033Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
@@ -257,6 +356,28 @@
       "toStatus": "waiting",
       "title": "draft → waiting",
       "description": ""
+    },
+    {
+      "id": "666958e2-0c62-4186-93d8-f9d6cb6001b2",
+      "date": "2026-08-27T09:41:32.156Z",
+      "fromStatus": "waiting",
+      "toStatus": "planned",
+      "title": "waiting → planned",
+      "description": ""
+    },
+    {
+      "id": "a56f6fc5-98dd-45a6-b9b9-532c75bbac37",
+      "date": "2026-08-27T09:57:53.648Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "e690000f-0866-4593-8bca-546d0618bf1b",
+      "createdAt": "2026-08-27T09:57:53.542Z"
     }
   ]
 }

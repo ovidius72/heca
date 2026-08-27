@@ -140,6 +140,33 @@ pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
 
 // ── Layout ──
 
+/// Announce a freshly created pane — F009/T493, the first real producer on the public
+/// [`Notification`](crate::notification::Notification) builder.
+///
+/// Every user-initiated creation path (horizontal / vertical split, add-to-column, new
+/// workspace, spawn-command) calls this once, so the message and the decision to raise it live
+/// in one place rather than five. A just-spawned pane has no name until the user renames it
+/// (`pane_name` is empty by design), so it is identified by its id — the same monotonic id the
+/// pane selector and RPC use.
+///
+/// Carries a **Focus** action: its [`Intent`](heca_view::Intent) is `focus_pane` keyed to this
+/// id, so a `prefix+/` pick (or a click, once the toast layer is wired for the pointer — F009/
+/// T207) moves focus to the new pane and dismisses the toast.
+fn announce_pane_created(pane_id: u64) {
+    use crate::notification::{Notification, NotificationAction};
+    use heca_view::{Intent, PropValue};
+
+    Notification::info(format!("Pane {pane_id} created"))
+        .action(
+            NotificationAction::new(
+                "Focus",
+                Intent::new("focus_pane").arg("pane_id", PropValue::Int(pane_id as i64)),
+            )
+            .dismiss_after(true),
+        )
+        .send();
+}
+
 pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
@@ -152,6 +179,7 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
@@ -173,6 +201,7 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {
@@ -1319,6 +1348,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
         create_terminal_backend_for_state(state, cols, rows),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 /// Add a new column to a specific workspace (sidebar right-click context menu).
@@ -1595,6 +1625,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
         state.expose_cursor_per_ws.push(None);
     }
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 /// Open the rename dialog for workspace `ws_idx`, pre-filled with its current name. Shared by
@@ -2276,6 +2307,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
         create_command_backend_for_state(state, cols, rows, command),
     );
     after_layout_change(state);
+    announce_pane_created(next_id);
 }
 
 // ── Mode ──
@@ -2784,6 +2816,64 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
     state.pending_reload = true;
+}
+
+// ── Notifications (F009) ──
+
+/// Dismiss one notification by id — the toast's own × (a real, automatically-pickable
+/// `Button`), or RPC/a plugin naming a specific id. No default keybinding: a keypress cannot
+/// supply an id.
+pub fn handle_notification_dismiss_one(state: &mut AppState, action: &WmAction) {
+    let WmAction::NotificationDismissOne { notification_id } = action else {
+        return;
+    };
+    let id = crate::notification::NotificationId::from_raw(*notification_id);
+    state.notifications.dismiss_one(id, std::time::Instant::now());
+    state.needs_redraw = true;
+}
+
+/// Dismiss every currently visible notification — no on-screen control; reachable from the
+/// command palette, a keybinding, and RPC.
+pub fn handle_notification_dismiss_all(state: &mut AppState, _action: &WmAction) {
+    state.notifications.dismiss_all(std::time::Instant::now());
+    state.needs_redraw = true;
+}
+
+/// Dismiss the first eligible visible notification in stable toast order.
+pub fn handle_notification_dismiss_last(state: &mut AppState, _action: &WmAction) {
+    state.notifications.dismiss_last(std::time::Instant::now());
+    state.needs_redraw = true;
+}
+
+/// Toggle the scoped picker over the visible toast actions/×, in addition to (never instead
+/// of) their global `prefix+/` letters. `KeyHintGroup::open_when` reads this signal directly.
+pub fn handle_notification_pick(state: &mut AppState, _action: &WmAction) {
+    use heca_grid_ui::reactive::{SignalGet, SignalUpdate};
+    let open = state.notification_pick_open.get_untracked();
+    state.notification_pick_open.set(!open);
+    state.needs_redraw = true;
+}
+
+/// Resolve `ToastStack::on_action(id, key)` (relayed as this action by the mount, since a
+/// notification's real Intent cannot be known until the notification exists — see
+/// chrome::notification_layer) into the notification's real `Intent` and fire it through the
+/// same layer_emitter the mount built, landing on the event loop's next turn.
+pub fn handle_notification_action_relay(state: &mut AppState, action: &WmAction) {
+    let WmAction::NotificationActionRelay { notification_id, key } = action else {
+        return;
+    };
+    let id = crate::notification::NotificationId::from_raw(*notification_id);
+    let Some((intent, dismiss_after)) = state.notifications.action_and_dismiss_after_for_visible(id, key) else {
+        return;
+    };
+    if let Some(layer_id) = state.notification_layer_id {
+        let emit = crate::chrome::layer_emitter(&state.event_proxy, layer_id);
+        emit.fire(crate::app::interaction::InteractionIntent::View(intent));
+    }
+    if dismiss_after {
+        state.notifications.dismiss_one(id, std::time::Instant::now());
+        state.needs_redraw = true;
+    }
 }
 
 /// Resolve a [`FontZoomStep`] into a signed point delta using the configured step

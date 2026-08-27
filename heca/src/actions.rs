@@ -1433,6 +1433,50 @@ impl ActionRegistry {
             icon: Some(Glyph::Gear),
             args: &[],
         },
+        // ── Notifications (F009) ──
+        ActionDescriptor {
+            name: "notification_dismiss_one",
+            label: "Dismiss Notification",
+            description: "Dismiss a visible notification by id, when its lifecycle permits it.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[ArgDescriptor::required("id", ArgKind::Int, "The notification's runtime id.")],
+        },
+        ActionDescriptor {
+            name: "notification_dismiss_all",
+            label: "Dismiss All Notifications",
+            description: "Dismiss every currently visible notification.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "notification_dismiss_last",
+            label: "Dismiss Last Notification",
+            description: "Dismiss the first eligible visible notification in stable toast order.",
+            category: ActionCategory::Chrome,
+            icon: Some(Glyph::XSquare),
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "notification_pick",
+            label: "Pick Notification Action",
+            description: "Open a scoped picker over the visible toast actions/dismiss affordances, in addition to their global prefix+/ letters.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[],
+        },
+        ActionDescriptor {
+            name: "notification_action_relay",
+            label: "Run Notification Action",
+            description: "Internal: the toast's inline action button cannot carry its own Intent (the notification, and therefore the Intent, does not exist yet when the button is built at mount time), so it names this relay by id + key instead — an address, not a smuggled closure — and the relay resolves it against the store and dispatches it. Not meant to be bound directly.",
+            category: ActionCategory::Chrome,
+            icon: None,
+            args: &[
+                ArgDescriptor::required("id", ArgKind::Int, "The notification's runtime id."),
+                ArgDescriptor::required("key", ArgKind::Text, "The action's key (its own intent name)."),
+            ],
+        },
         // ── Scrollback (host terminal viewport) ──
         ActionDescriptor {
             name: "scrollback_page_up",

@@ -153,6 +153,54 @@ fn default_show_chrome_region() -> bool {
     true
 }
 
+/// Default auto-dismiss delay for an in-app notification, in milliseconds (4 s).
+fn default_notification_auto_dismiss_ms() -> u64 {
+    4000
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  NotificationSystemConfig
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Where a raised notification is delivered.
+///
+/// `system` is **reserved** — the OS-notification backend is not built, so it falls back to
+/// `app` until it lands. `none` suppresses every notification (nothing is raised at all).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationSystem {
+    /// In-app toast stack. **The default.**
+    #[default]
+    App,
+    /// OS / desktop notifications. Reserved — falls back to `App` until the backend exists.
+    System,
+    /// No notifications at all.
+    None,
+}
+
+/// `[settings.notification_system]` — how in-app toast notifications behave.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NotificationSystemConfig {
+    /// Where a notification is delivered: `app` (default) / `system` (reserved) / `none`.
+    #[serde(default)]
+    pub mode: NotificationSystem,
+    /// How long a notification stays on screen before it dismisses itself, in
+    /// milliseconds. Applies to every notification that auto-dismisses; one a
+    /// producer marks sticky ignores it, and a per-notification lifetime override
+    /// still wins. Default: 4000.
+    #[serde(default = "default_notification_auto_dismiss_ms")]
+    pub auto_dismiss_ms: u64,
+}
+
+impl Default for NotificationSystemConfig {
+    fn default() -> Self {
+        Self {
+            mode: NotificationSystem::default(),
+            auto_dismiss_ms: default_notification_auto_dismiss_ms(),
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -344,6 +392,10 @@ pub struct SettingsConfig {
     /// Show the bottom bar (status bar). `false` fully hides it (zero height).
     #[serde(default = "default_show_chrome_region", alias = "show-bottom-bar")]
     pub show_bottom_bar: bool,
+
+    /// `[settings.notification_system]` — in-app toast notification behaviour.
+    #[serde(default, alias = "notification-system")]
+    pub notification_system: NotificationSystemConfig,
     // Destructive-action confirmation moved to the generic `[confirm]` table
     // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
 }
@@ -388,6 +440,7 @@ impl Default for SettingsConfig {
             show_right_sidebar: default_show_chrome_region(),
             show_top_bar: default_show_chrome_region(),
             show_bottom_bar: default_show_chrome_region(),
+            notification_system: NotificationSystemConfig::default(),
         }
     }
 }
@@ -468,5 +521,31 @@ mod tests {
     fn test_terminal_foreground_override_parses() {
         let s: SettingsConfig = toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
         assert!(s.terminal_foreground.is_some());
+    }
+
+    #[test]
+    fn test_notification_system_defaults_and_override() {
+        // Absent section → default mode app, 4 s.
+        let s = SettingsConfig::default();
+        assert_eq!(s.notification_system.mode, NotificationSystem::App);
+        assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
+
+        // `[settings.notification_system]` as a subtable overrides both.
+        let s: SettingsConfig = toml::from_str(
+            "[notification_system]\nmode = \"none\"\nauto_dismiss_ms = 8000\n",
+        )
+        .expect("notification_system subtable should parse");
+        assert_eq!(s.notification_system.mode, NotificationSystem::None);
+        assert_eq!(s.notification_system.auto_dismiss_ms, 8000);
+
+        // `system` parses (reserved — the host falls it back to app).
+        let s: SettingsConfig =
+            toml::from_str("[notification_system]\nmode = \"system\"\n").unwrap();
+        assert_eq!(s.notification_system.mode, NotificationSystem::System);
+
+        // The subtable is optional; unrelated settings still parse without it.
+        let s: SettingsConfig = toml::from_str("mouse = false\n").unwrap();
+        assert_eq!(s.notification_system.mode, NotificationSystem::App);
+        assert_eq!(s.notification_system.auto_dismiss_ms, 4000);
     }
 }

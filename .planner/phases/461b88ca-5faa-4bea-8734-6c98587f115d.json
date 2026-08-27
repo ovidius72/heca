@@ -3,24 +3,31 @@
   "featureId": "fc19894f-c2aa-4ed1-81f3-24d82670dbae",
   "number": 57,
   "shortId": "SGTXU",
-  "priority": 7,
+  "priority": 8,
   "slug": "notification-09-tests-docs",
   "title": "notification-09: Tests + Documentation",
-  "discussedAt": "",
-  "contextReady": false,
-  "contextReadyReason": "",
+  "discussedAt": "2026-08-27T09:19:37.772Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
   "summary": "Copertura test e documentazione utente/planner.",
-  "description": "Aggiungere test per adapter, store lifecycle, dedup, config parsing, reload producer e dispatch azioni; documentare il sistema notifiche in README e aggiornare docs/widgets solo se cambiano widget grid-ui.",
+  "description": "Test store lifecycle, config parsing notification_system, toast action dispatch, model conversion, dedup, reload smoke tests; sezione README.",
+  "descriptionUpdatedAt": "2026-08-27T09:19:37.772Z",
   "notes": "",
-  "goals": [],
+  "goals": [
+    "Test per adapter/store/lifecycle/dedup/config/reload/dispatch, e documentazione utente (README) del sistema notifiche."
+  ],
   "nonGoals": [],
-  "dependencies": [],
+  "dependencies": [
+    "Aspetta che il mount (P060) e il config schema (T186/T191) esistano prima dei test che li coprono."
+  ],
   "dependsOn": [],
   "risks": [],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
-  "completionCriteria": [],
+  "completionCriteria": [
+    "Non ancora iniziato."
+  ],
   "taskIds": [
     "0b00bffd-412b-4557-8f78-efa680f56a3c",
     "107ae543-0959-4d93-a867-fcfa7293be3b",
@@ -42,6 +49,7 @@
       "title": "Store lifecycle unit tests",
       "status": "planned",
       "description": "Test push, dismiss per id esatto, auto-dismiss expiry, sticky non scade, next_expiry.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -49,10 +57,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "107ae543-0959-4d93-a867-fcfa7293be3b",
@@ -64,6 +75,7 @@
       "title": "Update planner backlog with notification plan",
       "status": "planned",
       "description": "Copiare il piano notifiche approvato in BACKLOG.md sotto nuova sezione Notification System, con fasi, task e cross-ref agli originali (F*.P*.T*).",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -71,10 +83,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "963b15c4-eb41-4f99-b1f2-0f9ee61665fb",
@@ -86,6 +101,7 @@
       "title": "Config parsing tests for notification_system",
       "status": "planned",
       "description": "Test parsing dei tre modi (app/system/none), default mancante e unknown value con serde error.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -93,10 +109,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "9ce48992-789d-4ec2-ab17-29ff4c09fe65",
@@ -108,6 +127,7 @@
       "title": "Toast action dispatch test",
       "status": "planned",
       "description": "Verificare che NotificationAction event dispatchi WmAction tramite registry/policy path, non handler diretto.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -115,10 +135,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "a18c6869-fa10-4528-a93e-143cf816b94b",
@@ -130,6 +153,7 @@
       "title": "Add README notification system section",
       "status": "planned",
       "description": "Documentare in README: cosa sono le notifiche, come configurare backend, v1 usa in-app toasts, OS planned, azioni usano action registrate.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -137,10 +161,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "b4d18180-bcb3-487d-8de8-324425c64408",
@@ -152,6 +179,7 @@
       "title": "Model conversion tests",
       "status": "planned",
       "description": "Test AppNotification → ToastSpec: solo titolo, titolo+body, severity mapping, action label mapping.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -159,10 +187,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "cdbd9e92-f3ad-4c64-bb1e-7bb04c6af9ef",
@@ -174,6 +205,7 @@
       "title": "Reload config success/failure smoke tests",
       "status": "planned",
       "description": "Test che reload config producer emetta notifiche corrette senza GPU/window; estrarre reload logic in funzione testabile se necessario.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -181,10 +213,13 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     },
     {
       "id": "d6be5a7c-a8e4-47cf-961b-bea43e90e686",
@@ -196,6 +231,7 @@
       "title": "Dedup unit tests",
       "status": "planned",
       "description": "Test dedup: stessa chiave mantiene stesso id, body/title update, timeout resetta, notifica senza chiave non deduplica.",
+      "descriptionUpdatedAt": "2026-07-04T07:02:06.289Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -203,16 +239,21 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-04T07:02:06.289Z",
-      "updatedAt": "2026-07-04T07:02:06.289Z"
+      "updatedAt": "2026-07-04T07:02:06.289Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-07-03T22:50:20.126Z",
-  "updatedAt": "2026-07-27T11:40:15.533Z",
+  "updatedAt": "2026-08-27T09:42:12.447Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
-  "handoffHistory": []
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
 }
