@@ -1505,6 +1505,65 @@ mod tests {
         }
     }
 
+    /// **No two pick targets in the sidebar answer to the same name** (Antonio, 2026-08-27:
+    /// `prefix+/`, Esc, `prefix+/` and the sidebar letters have moved, with nothing touched).
+    ///
+    /// A remembered letter is looked up by identity, so two targets sharing one identity both ask
+    /// for the same letter. The first takes it, the second is refused and draws a fresh one — and
+    /// the remember step then writes the loser's letter into the map, so the next opening trades
+    /// them back. The letters oscillate forever and nothing fails.
+    ///
+    /// A target with **no** identity is the same defect by another route: it can never be
+    /// remembered, so it takes a fresh letter every time.
+    #[test]
+    fn no_two_pick_targets_in_the_sidebar_share_an_identity() {
+        let p = WorkspacesContainerProvider::new();
+        let theme = GuiTheme::default();
+        let emit: ChromeIntentEmitter = ChromeIntentEmitter::of(
+            crate::app::interaction::InteractionSource::Keyboard,
+            move |_, _| {},
+        );
+        let store = store();
+        *store.workspaces.tree_mut() = tree();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let ctx = ChromeCtx::for_build(crate::host::App::new(&store), &theme, &emit, &catalog);
+        let c = container(&p, &ctx);
+        let mut signals = ChromeSignals::default();
+        let mut drag = DragItemRegistry::default();
+        let mut bx = BuildCx::new("workspaces", &mut signals, &mut drag);
+        let body = (c.build)(&ctx, &mut bx);
+
+        let targets = heca_grid_ui::collect_hints(body.as_ref());
+        assert!(!targets.is_empty(), "the sidebar declares pick targets");
+
+        let mut seen: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
+        let mut anonymous = 0usize;
+        for (i, (path, _)) in targets.iter().enumerate() {
+            match heca_grid_ui::identity_of(body.as_ref(), path) {
+                Some(identity) => seen.entry(identity).or_default().push(i),
+                None => anonymous += 1,
+            }
+        }
+
+        let mut collisions: Vec<_> = seen
+            .iter()
+            .filter(|(_, which)| which.len() > 1)
+            .map(|(id, which)| format!("{id:?} claimed by {} targets", which.len()))
+            .collect();
+        collisions.sort();
+        assert!(
+            collisions.is_empty(),
+            "{} sidebar targets share a name, so their letters swap on every opening:\n  {}",
+            collisions.len(),
+            collisions.join("\n  "),
+        );
+        assert_eq!(
+            anonymous, 0,
+            "{anonymous} sidebar targets have no identity, so they cannot keep a letter",
+        );
+    }
+
     /// **Our own rows stay keyed** (F003/P082/T444) — the test half of the identity rule.
     ///
     /// The sidebar is heca's biggest collection: workspaces holding columns holding panes, rebuilt

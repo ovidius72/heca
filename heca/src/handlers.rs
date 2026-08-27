@@ -3242,6 +3242,38 @@ mod letter_memory_tests {
         assert_eq!(got, vec![Some('a'), Some('s')]);
     }
 
+    /// **Open the picker, close it, open it again: the same letters.**
+    ///
+    /// This walks the full round `handle_hint_pick` performs — assign, then remember — twice over
+    /// an unchanged set of targets, which is exactly what two presses do. The single-pass tests
+    /// above cannot see this: the defect only appears once the remember step has written back.
+    ///
+    /// **It holds only while every target has a distinct name, and that is not this function's to
+    /// guarantee.** Given two targets with one name, both ask for the same remembered letter, the
+    /// first takes it, the second is refused and draws a fresh one — and the remember step then
+    /// saves the loser's letter, so the next opening trades them back, forever. That is why the
+    /// invariant is enforced where names are built (`heca_grid_ui::nav::identity_of`) rather than
+    /// patched here: no assignment rule can tell apart two things that claim to be the same thing.
+    #[test]
+    fn two_openings_of_an_unchanged_picker_hand_out_the_same_letters() {
+        let identities = ids(&["ws:0", "ws:0/pane:2", "ws:0/pane:3"]);
+        let mut remembered: HashMap<String, char> = HashMap::new();
+
+        // Press 1 — assign, then remember, the way `handle_hint_pick` does.
+        let first = assign_letters(&identities, &remembered);
+        remembered.extend(
+            identities
+                .iter()
+                .zip(first.iter())
+                .filter_map(|(id, ch)| Some((id.clone()?, (*ch)?))),
+        );
+
+        // Esc, then press 2 — nothing about the targets has changed.
+        let second = assign_letters(&identities, &remembered);
+
+        assert_eq!(second, first, "a second opening must repeat the first's letters");
+    }
+
     /// A target with no identity cannot be remembered, but still gets a letter — it just gets a
     /// fresh one each time.
     #[test]

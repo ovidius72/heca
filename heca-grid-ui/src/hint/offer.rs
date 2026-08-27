@@ -115,8 +115,7 @@ pub fn offer_hint_by_key(root: &dyn Component, key: &str, label: Option<String>)
         } else {
             declaring
         };
-        let names_itself = node.base().key.as_deref() == Some(key)
-            || node.base().scope_key.as_deref() == Some(key);
+        let names_itself = node.base().answers_to(key);
         if names_itself {
             // **Nothing here can show it.** Asked before the search below, not inside it: the four
             // steps exist to find *which widget draws this row's letter*, and one of them is the

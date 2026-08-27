@@ -29,7 +29,7 @@ pub fn fire_hint(root: &mut dyn Component, path: &[usize]) -> bool {
         return false;
     }
     let ev = crate::event::Event::Hint(crate::event::HintEvent {
-        key: node.base().key.clone(),
+        key: node.base().identity().map(str::to_string),
         bounds: node.base().bounds,
     });
     crate::component::deliver_to_path(root, path, &ev);

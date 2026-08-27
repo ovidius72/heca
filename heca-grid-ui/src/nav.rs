@@ -120,8 +120,11 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
     let mut scope_root = root;
     let mut scope_depth = 0usize;
     for (depth, step) in path.iter().enumerate() {
-        if let Some(k) = node.base().key.as_ref() {
-            scope.push(k.clone());
+        // **Whatever the ancestor declared itself as** — `key` for a row, `scope_key` for a dock or
+        // panel that names a region. Reading only `key` here is what let two docks holding the same
+        // rows produce two sets of identical names (F003/P082).
+        if let Some(k) = node.base().identity() {
+            scope.push(k.to_string());
             scope_root = node;
             scope_depth = depth;
         }
@@ -134,8 +137,8 @@ pub fn identity_of(root: &dyn Component, path: &[usize]) -> Option<String> {
     // agree. Keying the wrapper instead was a call-site fix for a missing rule, and it would have
     // had to be repeated at every wrapped control in the app.
     let node = through_wrappers(node);
-    let own = match node.base().key.as_ref() {
-        Some(k) => k.clone(),
+    let own = match node.base().identity() {
+        Some(k) => k.to_string(),
         None => {
             let name = node.text_summary()?;
             match nth_named(scope_root, &path[scope_depth..], &name) {
@@ -168,8 +171,10 @@ fn nth_named(scope_root: &dyn Component, path: &[usize], name: &str) -> usize {
             *done = true;
             return;
         }
-        // A keyed node opens its own scope, so nothing inside it counts towards this one.
-        if !here.is_empty() && node.base().key.is_some() {
+        // A node that declares a name opens its own scope, so nothing inside it counts towards this
+        // one. Read through `identity` so this agrees with the scope `identity_of` builds — a dock
+        // naming itself with `scope_key` opens a scope there, and must open one here too.
+        if !here.is_empty() && node.base().identity().is_some() {
             return;
         }
         // **An ancestor of the target never counts towards its index.** `text_summary` is the
@@ -273,7 +278,8 @@ fn through_wrappers(node: &dyn Component) -> &dyn Component {
     let mut at = node;
     // Bounded by the depth walked; a wrapper chain is two or three deep in practice.
     loop {
-        if at.base().key.is_some() || at.base().activatable {
+        // A node that names itself is not a wrapper, whichever way it declared that name.
+        if at.base().identity().is_some() || at.base().activatable {
             return at;
         }
         match at.base().children.as_slice() {
@@ -295,15 +301,17 @@ fn item_of(child: &dyn Component) -> Option<&dyn Component> {
         return None;
     }
     let at = through_wrappers(child);
-    (at.base().key.is_none() && at.base().activatable).then_some(at)
+    (at.base().identity().is_none() && at.base().activatable).then_some(at)
 }
 
 fn walk_ambiguities(node: &dyn Component, scope: &str, out: &mut Vec<Ambiguity>) {
     if skip(node) {
         return;
     }
-    // This node's children live in this node's scope, so its own key joins the prefix first.
-    let scope = match node.base().key.as_deref() {
+    // This node's children live in this node's scope, so its own declared name joins the prefix
+    // first — the same scope `identity_of` builds, so a reported ambiguity names what the picker
+    // would name.
+    let scope = match node.base().identity() {
         Some(k) if scope.is_empty() => k.to_string(),
         Some(k) => format!("{scope}/{k}"),
         None => scope.to_string(),
@@ -509,6 +517,45 @@ mod identity_tests {
             Some("col:1/pane:9/×"),
             "not ×[1] — the keyed row above it is a new scope"
         );
+    }
+
+    /// **A container that names itself with `scope_key` scopes its rows too** (F003/P082).
+    ///
+    /// A dock declares itself with `scope_key` rather than `key` — it names a region holding rows,
+    /// not a row. Naming read only `key`, so the dock contributed nothing and two docks showing the
+    /// same workspace produced two sets of identical names. Everything keyed on identity then
+    /// addressed the wrong copy: a remembered hint letter bounced between the two on every opening.
+    #[test]
+    fn a_container_that_declares_a_scope_key_names_the_rows_inside_it() {
+        let dock = |mount: &str| {
+            Flex::column()
+                .scope_key(mount)
+                .child(Flex::column().key("pane:7").child(Label::new("×")))
+        };
+        let tree = Flex::column().child(dock("left")).child(dock("right"));
+
+        assert_eq!(identity_of(&tree, &[0, 0, 0]).as_deref(), Some("left/pane:7/×"));
+        assert_eq!(
+            identity_of(&tree, &[1, 0, 0]).as_deref(),
+            Some("right/pane:7/×"),
+            "the same row in a second dock is a different thing, and must be named differently",
+        );
+    }
+
+    /// …and the container itself is called what it declared, not what it happens to contain.
+    ///
+    /// With no name of its own a dock fell back to its text, which is its decorative drag grip — so
+    /// every dock was called `⠿`, and the index disambiguating them shifted whenever a row was
+    /// added or removed.
+    #[test]
+    fn a_container_is_named_by_its_scope_key_not_by_its_decoration() {
+        let tree = Flex::column().child(
+            Flex::column()
+                .scope_key("workspaces")
+                .child(Label::new("⠿")),
+        );
+
+        assert_eq!(identity_of(&tree, &[0]).as_deref(), Some("workspaces"));
     }
 
     /// Nothing to go on: no key anywhere above, and no text of its own.

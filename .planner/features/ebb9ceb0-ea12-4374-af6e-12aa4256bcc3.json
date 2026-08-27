@@ -52,8 +52,12 @@
     }
   ],
   "createdAt": "2026-07-01T18:08:37.398Z",
-  "updatedAt": "2026-07-13T15:29:44.427Z",
+  "updatedAt": "2026-08-27T13:59:40.197Z",
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:f2720c67-3db6-4507-82df-f5b669c10418",
+      "createdAt": "2026-08-27T15:02:47.532Z"
+    },
     {
       "sessionId": "01f86c94-7f92-4e8a-b8bd-b845e9032ae7",
       "createdAt": "2026-08-27T09:54:28.651Z"

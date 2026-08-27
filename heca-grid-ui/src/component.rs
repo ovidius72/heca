@@ -386,6 +386,34 @@ pub struct Base {
     needs_layout: Cell<bool>}
 
 impl Base {
+    /// **The name this widget declares itself by** — its [`key`](Self::key), or its
+    /// [`scope_key`](Self::scope_key) when it names a region rather than a row.
+    ///
+    /// The two fields stay separate for the reasons given on each: one says *which row*, the other
+    /// *which region containing rows*, and only the first is a steppable cursor stop. But both are a
+    /// name the widget chose about itself, so **everything that names a widget asks here** and they
+    /// cannot disagree.
+    ///
+    /// This exists because they did disagree. [`nav::identity_of`](crate::nav::identity_of) read
+    /// only `key`, so a dock — which declares itself with `scope_key` — contributed nothing to its
+    /// children's names. Two docks holding the same rows produced two sets of identical identities,
+    /// and anything keyed on identity silently addressed the wrong one: a remembered hint letter
+    /// bounced between the two copies on every opening, and each dock's own name fell back to its
+    /// decorative drag grip and shifted whenever a row was added.
+    pub fn identity(&self) -> Option<&str> {
+        self.key.as_deref().or(self.scope_key.as_deref())
+    }
+
+    /// **Does this widget answer to `name`?** Either declaration counts, so a container can be
+    /// addressed by the region name it published without also inventing a row key.
+    ///
+    /// The lookup twin of [`identity`](Self::identity): that one asks what a widget is *called*,
+    /// this one asks whether a given name reaches it. Both live here so no caller writes the
+    /// `key`-or-`scope_key` test by hand and drifts from the other.
+    pub fn answers_to(&self, name: &str) -> bool {
+        self.key.as_deref() == Some(name) || self.scope_key.as_deref() == Some(name)
+    }
+
     /// A new base with default style and an empty child list.
     pub fn new() -> Self {
         Self {
